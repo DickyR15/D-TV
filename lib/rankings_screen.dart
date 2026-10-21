@@ -15,10 +15,14 @@ class RankingsScreen extends StatefulWidget {
     required this.repository,
     required this.store,
     required this.initialGroup,
+    this.initialBoardId,
+    this.embedded = false,
   });
   final AppRepository repository;
   final LocalStore store;
   final String initialGroup;
+  final String? initialBoardId;
+  final bool embedded;
 
   @override
   State<RankingsScreen> createState() => _RankingsScreenState();
@@ -84,6 +88,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
       setState(() {
         _boards = boards;
         _board =
+            boards
+                .where((board) => board.id == widget.initialBoardId)
+                .firstOrNull ??
             boards
                 .where((board) => board.groupId == widget.initialGroup)
                 .firstOrNull ??
@@ -182,7 +189,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
         )
         .toList();
     return Scaffold(
-      appBar: AppBar(
+      appBar: widget.embedded ? null : AppBar(
         title: PopupMenuButton<SourceGroup>(
           tooltip: '切換榜單站源',
           enabled: groups.length > 1,
@@ -216,7 +223,28 @@ class _RankingsScreenState extends State<RankingsScreen> {
         top: false,
         child: Column(
           children: [
-            if (boards.isNotEmpty)
+            if (widget.embedded)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        uiTraditional(_board?.name ?? '榜單'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    RefreshAction(
+                      loading: _loading || _more,
+                      tooltip: '更新榜單',
+                      onPressed: _board == null ? _initialize : () => _load(force: true),
+                    ),
+                  ],
+                ),
+              ),
+            if (!widget.embedded && boards.isNotEmpty)
               CatalogFilters(
                 key: ValueKey('ranking-boards-${_board!.groupId}'),
                 categories: [
