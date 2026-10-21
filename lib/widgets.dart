@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import 'ui_localization.dart';
 import 'package:flutter/services.dart';
 
 import 'core_bridge.dart';
@@ -494,7 +496,7 @@ class DramaTile extends StatelessWidget {
           child: SizedBox(
             height: titleHeight(context),
             child: Text(
-              drama.title,
+              uiTraditional(drama.title),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -511,7 +513,7 @@ class DramaTile extends StatelessWidget {
           child: SizedBox(
             height: subtitleHeight(context),
             child: Text(
-              subtitle ?? drama.category,
+              subtitle != null ? uiTraditional(subtitle!) : uiTraditional(drama.category),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -535,7 +537,7 @@ class DramaTile extends StatelessWidget {
           onPressed: onTap,
           selected: selected ?? false,
           label:
-              '${drama.title}，${drama.episodes}集${badge == null ? '' : '，$badge'}',
+              '${uiTraditional(drama.title)}，${drama.episodes}集${badge == null ? '' : '，$badge'}',
           child: content,
         ),
       );
@@ -543,7 +545,7 @@ class DramaTile extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${drama.title}，${drama.episodes}集',
+      label: '${uiTraditional(drama.title)}，${drama.episodes}集',
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress ?? onMore,
