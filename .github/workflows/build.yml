@@ -2,6 +2,9 @@ name: Build HGTV Android v7a
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".hgtv-build-trigger"
 
 permissions:
   contents: read
