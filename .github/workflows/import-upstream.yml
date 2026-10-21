@@ -1,0 +1,40 @@
+name: Import upstream and migrate to HGTV
+
+on:
+  push:
+    paths:
+      - ".hgtv-import-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Keep migration helper
+        run: cp scripts/hgtv_migrate.py /tmp/hgtv_migrate.py
+      - name: Fetch upstream and apply HGTV branding and Traditional Chinese localization
+        run: |
+          set -euo pipefail
+          pip install opencc-python-reimplemented Pillow
+          git clone --depth 1 https://github.com/Xanerix/guoapp.git /tmp/guoapp
+          rsync -a --delete --exclude=.git /tmp/guoapp/ ./
+          mkdir -p scripts
+          cp /tmp/hgtv_migrate.py scripts/hgtv_migrate.py
+          python scripts/hgtv_migrate.py
+          rm -f .hgtv-import-trigger
+          rm -f .github/workflows/import-upstream.yml
+          rm -f scripts/hgtv_migrate.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: migrate upstream project as HGTV with Traditional Chinese (Taiwan) and custom icon"
+          git push origin HEAD:main
