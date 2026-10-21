@@ -7,6 +7,7 @@ import 'local_store.dart';
 import 'models.dart';
 import 'ranking_models.dart';
 import 'widgets.dart';
+import 'ui_localization.dart';
 
 class RankingsScreen extends StatefulWidget {
   const RankingsScreen({
@@ -169,7 +170,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
           (item) => RankingItem(
             item.rank,
             widget.repository.catalogUpdates.current(item.drama),
-            metric: item.metric,
+            metric: uiTraditional(item.metric),
           ),
         )
         .where(
@@ -220,7 +221,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                 key: ValueKey('ranking-boards-${_board!.groupId}'),
                 categories: [
                   for (final board in boards)
-                    CatalogCategory(board.id, board.name),
+                    CatalogCategory(board.id, uiTraditional(board.name)),
                 ],
                 category: _board!.id,
                 onCategory: (id) =>
@@ -234,7 +235,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     [
-                      _board!.description,
+                      uiTraditional(_board!.description),
                       if (_updated.isNotEmpty) _updated,
                     ].join(' '),
                     style: Theme.of(context).textTheme.bodySmall,
@@ -368,7 +369,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            item.drama.title,
+                                            uiTraditional(item.drama.title),
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                             style: Theme.of(
@@ -377,7 +378,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                                           ),
                                           if (item.drama.category.isNotEmpty)
                                             Text(
-                                              item.drama.category,
+                                              uiTraditional(item.drama.category),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
