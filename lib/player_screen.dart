@@ -31,6 +31,7 @@ import 'player_interactions.dart';
 import 'player_menu.dart';
 import 'television_controls.dart';
 import 'widgets.dart';
+import 'ui_localization.dart';
 import 'sources_screen.dart';
 import 'lan_controller.dart';
 import 'lan_screen.dart';
@@ -578,7 +579,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       LanPlaybackHost(
         identity: _lanIdentity,
         title:
-            '${widget.detail.drama.title} · 第 ${widget.detail.episodes[_index].number} 集',
+            '${uiTraditional(widget.detail.drama.title)} · 第 ${widget.detail.episodes[_index].number} 集',
         stop: _stopForLan,
       ),
     );
@@ -2066,7 +2067,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (drama.episodes > 0) '共 ${drama.episodes} 集',
       if (drama.releaseStatus.isNotEmpty && drama.releaseStatus != 'unknown')
         drama.releaseLabel,
-      if (drama.category.isNotEmpty) drama.category,
+      if (drama.category.isNotEmpty) uiTraditional(drama.category),
     ];
     final body = drama.description.trim().isEmpty ? '暫無簡介' : drama.description;
     return ColoredBox(
@@ -2088,7 +2089,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      drama.title,
+                      uiTraditional(drama.title),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
