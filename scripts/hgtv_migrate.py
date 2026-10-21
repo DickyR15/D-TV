@@ -168,60 +168,12 @@ if readme.exists():
     t += "\n\n## HGTV 移植說明\n\n此儲存庫基於 [Xanerix/guoapp](https://github.com/Xanerix/guoapp) 移植，保留原始來源與第三方元件授權資訊。應用顯示名稱為 HGTV，介面文字採繁體中文（台灣用語）。\n"
     readme.write_text(cc.convert(t), encoding="utf-8")
 
-# Replace upstream multi-platform release workflow with a focused v7a APK build.
-workflow = ROOT / ".github/workflows/build.yml"
-workflow.parent.mkdir(parents=True, exist_ok=True)
-workflow.write_text("""name: Build HGTV Android v7a
-
-on:
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  build-android-v7a:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: native/go.mod
-          cache-dependency-path: native/go.sum
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.47.4'
-          channel: stable
-          cache: true
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-36'
-          accept-android-sdk-licenses: true
-      - name: Install Android NDK
-        run: sdkmanager 'ndk;28.2.13676358'
-      - name: Build APK (armeabi-v7a)
-        run: python scripts/build_android.py --abi armeabi-v7a
-      - name: Rename APK
-        run: |
-          set -euo pipefail
-          apk=$(find dist/android -maxdepth 1 -type f -name '*armeabi-v7a.apk' | head -n1)
-          test -n "$apk"
-          mv "$apk" dist/android/HGTV-armeabi-v7a.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: HGTV-Android-v7a
-          path: dist/android/HGTV-armeabi-v7a.apk
-          if-no-files-found: error
-          retention-days: 14
-""", encoding="utf-8")
+# Keep upstream workflow source as documentation here. The HGTV-specific
+# workflow is added afterward using the authorized GitHub connection because
+# the default Actions token cannot create workflow files.
+upstream_workflow = ROOT / ".github/workflows/build.yml"
+if upstream_workflow.exists():
+    shutil.move(str(upstream_workflow), str(ROOT / "UPSTREAM-build-workflow.yml"))
 
 notice = ROOT / "UPSTREAM-NOTICE.md"
 notice.write_text("""# 上游來源與聲明
