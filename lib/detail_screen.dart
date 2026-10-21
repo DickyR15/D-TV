@@ -14,6 +14,7 @@ import 'models.dart';
 import 'player_screen.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
+import 'ui_localization.dart';
 import 'sources_screen.dart';
 import 'episode_browser.dart';
 import 'follow_state.dart';
@@ -333,7 +334,7 @@ class _DetailScreenState extends State<DetailScreen> {
       child: Scaffold(
         appBar: AppBar(
           toolbarHeight: television ? 64 : null,
-          title: Text(drama.title, overflow: TextOverflow.ellipsis),
+          title: Text(uiTraditional(drama.title), overflow: TextOverflow.ellipsis),
           actions: [
             RefreshAction(
               loading: _loading,
@@ -664,7 +665,7 @@ class _DetailScreenState extends State<DetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    drama.title,
+                    uiTraditional(drama.title),
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -681,7 +682,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Text(
-                        drama.category,
+                        uiTraditional(drama.category),
                         style: TextStyle(color: colors.onSurfaceVariant),
                       ),
                     ),
@@ -805,7 +806,7 @@ class _DetailScreenState extends State<DetailScreen> {
                       children: [
                         Flexible(
                           child: Text(
-                            '${entry.label} · ${entry.drama.title}',
+                            '${entry.label} · ${uiTraditional(entry.drama.title)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
