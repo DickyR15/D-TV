@@ -1,1 +1,1 @@
-This marker triggers the one-time migration workflow and will be removed by that workflow.
+Retry migration after correcting the workflow permission boundary. This marker is removed by the migration job.
