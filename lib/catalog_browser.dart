@@ -2,17 +2,18 @@ import 'dart:math';
 
 import 'core_bridge.dart';
 import 'models.dart';
+import 'ui_localization.dart';
 
 String categoryName(String name) {
   final compact = name.trim().replaceAll(RegExp(r'\s+'), '');
   return switch (compact) {
-    'AI成人短劇' || 'AI短劇' => 'AI 短劇',
-    'AI成人漫劇' || 'AI漫劇' => 'AI 漫劇',
-    'AI換臉' => 'AI 換臉',
+    'AI成人短劇' || 'AI成人短剧' || 'AI短劇' || 'AI短剧' => 'AI 短劇',
+    'AI成人漫劇' || 'AI成人漫剧' || 'AI漫劇' || 'AI漫剧' => 'AI 漫劇',
+    'AI換臉' || 'AI换脸' => 'AI 換臉',
     'AI魔改' => 'AI 魔改',
-    'AI劇' => 'AI 劇',
+    'AI劇' || 'AI剧' => 'AI 劇',
     '' => '未分類',
-    _ => name.trim(),
+    _ => uiTraditional(name.trim()),
   };
 }
 
