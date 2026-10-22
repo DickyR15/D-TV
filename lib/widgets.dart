@@ -21,7 +21,7 @@ Future<void> saveUserChange(
     if (context.mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('未能儲存，請檢查儲存空間和許可權後重試。')));
+      ).showSnackBar(const SnackBar(content: Text('無法儲存，請檢查儲存空間與權限後再試一次。')));
     }
   }
 }
