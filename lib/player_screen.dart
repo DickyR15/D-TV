@@ -1740,7 +1740,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         ? televisionTheme(AppTheme.dark)
         : AppTheme.dark;
     final title = uiTraditional(
-      '${widget.detail.drama.title} · 第 ${widget.detail.episodes[_index].number} 集'
+      '${uiTraditional(widget.detail.drama.title)} · 第 ${widget.detail.episodes[_index].number} 集'
       '${_plan?.local == true ? ' · 本機' : ''}'
       '${widget.detail.episodes[_index].vip ? ' · VIP 試看' : ''}'
       '${(_plan?.routeIndex ?? 0) > 0 ? ' · 線路 ${_plan!.routeIndex + 1}' : ''}',
