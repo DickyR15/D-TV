@@ -1273,8 +1273,8 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Image.asset(
               'assets/brand/dtv-home-header.webp',
-              fit: BoxFit.cover,
-              alignment: Alignment.centerRight,
+              fit: BoxFit.fill,
+              alignment: Alignment.center,
               filterQuality: FilterQuality.high,
               errorBuilder: (_, _, _) => const ColoredBox(
                 color: Color(0xFF080910),
