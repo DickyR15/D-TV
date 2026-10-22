@@ -17,8 +17,6 @@ import 'playback_diagnostics.dart';
 import 'luna_exo_player.dart';
 import 'danmaku_controller.dart';
 import 'danmaku_overlay.dart';
-import 'download_picker.dart';
-import 'downloads_screen.dart';
 import 'follow_state.dart';
 import 'local_store.dart';
 import 'models.dart';
@@ -1338,39 +1336,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<void> _submitDownloadSelection(DownloadSelection selection) async {
-    if (!widget.repository.supportsDownloads ||
-        !widget.store.canDownload ||
-        widget.store.profileEpoch != _profileEpoch ||
-        widget.mediaId != null) {
-      return;
-    }
-    final added = await widget.repository.enqueueDownloads(
-      widget.detail,
-      selection.episodes,
-      quality: selection.quality,
-    );
-    if (!mounted || _closed) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(added == 0 ? '所選集數已在下載列表中' : '已加入 $added 集，已有任務自動跳過'),
-        action: SnackBarAction(
-          label: '檢視',
-          onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => DownloadsScreen(
-                  repository: widget.repository,
-                  store: widget.store,
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
   Future<void> _openPanel(PlayerMenuSection section) async {
     if (_panelOpen || _closed) return;
     _interactions.cancel();
@@ -1656,7 +1621,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Widget _buildPlayer(BuildContext context) {
     final theme = Theme.of(context);
-    final title = widget.detail.drama.title;
+    final title = uiTraditional(widget.detail.drama.title);
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
     return PopScope(
@@ -1774,8 +1739,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     final videoTheme = _television
         ? televisionTheme(AppTheme.dark)
         : AppTheme.dark;
-    final title =
-        '${widget.detail.drama.title} · 第 ${widget.detail.episodes[_index].number} 集${_plan?.local == true ? ' · 本地' : ''}${widget.detail.episodes[_index].vip ? ' · VIP 試看' : ''}${(_plan?.routeIndex ?? 0) > 0 ? ' · 線路 ${_plan!.routeIndex + 1}' : ''}';
+    final title = uiTraditional(
+      '${widget.detail.drama.title} · 第 ${widget.detail.episodes[_index].number} 集'
+      '${_plan?.local == true ? ' · 本機' : ''}'
+      '${widget.detail.episodes[_index].vip ? ' · VIP 試看' : ''}'
+      '${(_plan?.routeIndex ?? 0) > 0 ? ' · 線路 ${_plan!.routeIndex + 1}' : ''}',
+    );
     final hideOverlayForPictureInPicture = _pictureInPictureVisible;
     final Widget controls = hideOverlayForPictureInPicture
         ? const SizedBox.shrink()
@@ -2066,7 +2035,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         drama.releaseLabel,
       if (drama.category.isNotEmpty) uiTraditional(drama.category),
     ];
-    final body = drama.description.trim().isEmpty ? '暫無簡介' : drama.description;
+    final body = drama.description.trim().isEmpty ? '暫無簡介' : uiTraditional(drama.description);
     return ColoredBox(
       color: colors.surface,
       child: ListView(
@@ -2126,7 +2095,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               runSpacing: 6,
               children: [
                 for (final tag in drama.tags.take(12))
-                  Chip(label: Text(tag), visualDensity: VisualDensity.compact),
+                  Chip(label: Text(uiTraditional(tag)), visualDensity: VisualDensity.compact),
               ],
             ),
           ],
@@ -2199,26 +2168,6 @@ class _PlayerScreenState extends State<PlayerScreen>
           ],
         ),
       ),
-    );
-  }
-
-  Widget _mobileDownload() {
-    final colors = Theme.of(context).colorScheme;
-    if (!widget.repository.supportsDownloads || !widget.store.canDownload) {
-      return ColoredBox(
-        color: colors.surface,
-        child: const StatusPanel(
-          title: '下載不可用',
-          message: '當前使用者或當前環境未開放本地下載。',
-          icon: Icons.download_outlined,
-        ),
-      );
-    }
-    return DownloadPicker(
-      detail: widget.detail,
-      preferences: widget.store.downloadPreferences,
-      embedded: true,
-      onSubmit: _submitDownloadSelection,
     );
   }
 
