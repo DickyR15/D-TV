@@ -12,10 +12,6 @@ import 'catalog_sort.dart';
 import 'catalog_sort_sheet.dart';
 import 'recommendations_screen.dart';
 import 'rankings_screen.dart';
-import 'detail_screen.dart';
-import 'batch_downloads.dart';
-import 'batch_download_screen.dart';
-import 'downloads_screen.dart';
 import 'playback_launch_screen.dart';
 import 'local_store.dart';
 import 'lan_screen.dart';
@@ -67,10 +63,8 @@ class _HomeScreenState extends State<HomeScreen> {
   late final LibraryUpdater _updater;
   late final FollowUpdater _followUpdater;
   final _changedSources = <String>{};
-  final _selectedDramas = <String, Drama>{};
   Timer? _cacheRefreshTimer;
   bool _refreshingUpdatedCache = false;
-  bool _selectionMode = false;
   bool _showRecommendations = false;
   String _sourceSignature = '';
   bool _catalogLoadScheduled = false;
@@ -253,11 +247,6 @@ class _HomeScreenState extends State<HomeScreen> {
             for (final item in _items)
               updates[item.id] == null ? item : item.merge(updates[item.id]!),
           ];
-          for (final id in _selectedDramas.keys.toList()) {
-            if (updates[id] != null) {
-              _selectedDramas[id] = _selectedDramas[id]!.merge(updates[id]!);
-            }
-          }
         });
         await saveUserChange(
           context,
@@ -291,8 +280,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _pauseCatalog();
       setState(() {
         _showRecommendations = true;
-        _selectionMode = false;
-        _selectedDramas.clear();
         _search.clear();
         _searchVisible = false;
         _submittedQuery = '';
@@ -303,9 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _debounce?.cancel();
     setState(() {
       _showRecommendations = false;
-      _selectionMode = false;
-      _selectedDramas.clear();
-      _categorySelections[_group.id] = category;
+          _categorySelections[_group.id] = category;
       if (_onlineSearch) {
         _search.clear();
         _submittedQuery = '';
@@ -445,9 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _televisionBack() {
-    if (_selectionMode) {
-      _cancelSelection();
-    } else if (_tab != 0) {
+    if (_tab != 0) {
       setState(() => _tab = 0);
     } else if (_search.text.isNotEmpty) {
       _search.clear();
@@ -706,21 +689,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _openDrama(Drama drama, {bool resume = false, bool download = false}) {
+  void _openDrama(Drama drama, {bool resume = false}) {
     _pauseCatalog();
-    if (download) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => DetailScreen(
-            drama: drama,
-            repository: widget.repository,
-            store: widget.store,
-            downloadOnOpen: true,
-          ),
-        ),
-      );
-      return;
-    }
     unawaited(
       openPlaybackDirectly(
         context,
@@ -737,54 +707,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _selectedDramas.clear();
   });
 
-  void _cancelSelection() => setState(() {
-    _selectionMode = false;
-    _selectedDramas.clear();
-  });
-
-  void _selectDrama(Drama drama) {
-    if (!widget.store.canDownload ||
-        !widget.repository.supportsDownloads ||
-        !widget.store.allowsSource(drama.source)) {
-      return;
-    }
-    if (!_selectedDramas.containsKey(drama.id) &&
-        _selectedDramas.length >= BatchDownloads.maxDramas) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('一次最多選擇 50 部短劇，請分批下載')));
-      return;
-    }
-    setState(() {
-      _selectionMode = true;
-      if (_selectedDramas.remove(drama.id) == null) {
-        _selectedDramas[drama.id] = drama;
-      }
-    });
-  }
-
-  void _downloadSelected() {
-    if (!widget.store.canDownload || _selectedDramas.isEmpty) return;
-    _pauseCatalog();
-    Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => BatchDownloadScreen(
-          repository: widget.repository,
-          store: widget.store,
-          dramas: _selectedDramas.values.toList(),
-        ),
-      ),
-    );
-  }
-
   void _dramaActions(Drama drama) => showDramaActions(
     context,
     drama: drama,
     store: widget.store,
     onContinue: () => _openDrama(drama, resume: true),
-    onDownload: null,
-    onSelect: null,
   );
 
   Widget _catalogTile(
@@ -793,21 +720,18 @@ class _HomeScreenState extends State<HomeScreen> {
     VoidCallback? onFocus,
   }) {
     final following = widget.store.following(drama.id);
-    const canSelect = false;
     return DramaTile(
       key: ValueKey(drama.id),
       drama: drama,
       repository: widget.repository,
       focusNode: focusNode,
       onFocus: onFocus,
-      onTap: () => _selectionMode ? _selectDrama(drama) : _openDrama(drama),
-      onLongPress: canSelect ? () => _selectDrama(drama) : null,
+      onTap: () => _openDrama(drama),
       onMore: () => _dramaActions(drama),
       actions: DramaActionButton(
         drama: drama,
         onPressed: () => _dramaActions(drama),
       ),
-      selected: _selectionMode ? _selectedDramas.containsKey(drama.id) : null,
       badge: following == null
           ? null
           : '${following.status.label}${following.hasUpdates ? ' · ${following.updateLabel}' : ''}',
@@ -877,13 +801,7 @@ class _HomeScreenState extends State<HomeScreen> {
           appBar: AppBar(
             toolbarHeight: television ? 64 : null,
             titleSpacing: 12,
-            title: _selectionMode
-                ? const Text(
-                    '選擇短劇',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  )
-                : _tab == 0 && widget.store.sources.isNotEmpty
+            title: _tab == 0 && widget.store.sources.isNotEmpty
                 ? PopupMenuButton<SourceGroup>(
                     key: const ValueKey('source-switch'),
                     tooltip: '切換站源',
@@ -895,7 +813,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           value: group,
                           child: Row(
                             children: [
-                              Expanded(child: Text(group.name)),
+                              Expanded(child: Text(uiTraditional(group.name))),
                               if (group.id == _group.id)
                                 const Icon(Icons.check_rounded, size: 20),
                             ],
@@ -933,20 +851,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   )
                 : _brandTitle(),
             actions: [
-              if (_selectionMode) ...[
-                TextButton(
-                  key: const ValueKey('clear-catalog-selection'),
-                  onPressed: _selectedDramas.isEmpty
-                      ? null
-                      : () => setState(_selectedDramas.clear),
-                  child: const Text('清空'),
-                ),
-                TextButton(
-                  key: const ValueKey('cancel-catalog-selection'),
-                  onPressed: _cancelSelection,
-                  child: const Text('取消'),
-                ),
-              ] else ...[
                 if (_tab == 1)
                   IconButton(
                     key: const ValueKey('follow-lan-sync'),
@@ -1088,7 +992,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
-              ],
               const SizedBox(width: 8),
             ],
           ),
@@ -1115,7 +1018,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 title: '暫無可用站源',
                                 message: '請在站源管理中開啟站源，或聯絡管理員開放權限。',
                               )
-                            : _catalog(selectionInBody: desktop || television)
+                            : _catalog()
                       : _isRankingTab
                       ? RankingsScreen(
                           key: ValueKey('tv-ranking-$_tab'),
@@ -1146,8 +1049,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           bottomNavigationBar: desktop || television
               ? null
-              : _selectionMode
-              ? _selectionBar()
               : AppBottomNavigation(
                   selectedIndex: _tab,
                   onDestinationSelected: _changeTab,
@@ -1169,11 +1070,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
         );
-        if (!television && !_selectionMode) return scaffold;
+        if (!television) return scaffold;
         return PopScope(
-          canPop:
-              !_selectionMode &&
-              (!television || _isCatalogTab && _search.text.isEmpty),
+          canPop: !television || _isCatalogTab && _search.text.isEmpty,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _televisionBack();
           },
@@ -1294,7 +1193,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _catalog({required bool selectionInBody}) {
+  Widget _catalog() {
     final items = _reveal(_visible);
     final television = AppLayout.isTelevision(context);
     return Column(
@@ -1521,86 +1420,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
             ),
           ),
-          if (_selectionMode && selectionInBody)
-            _selectionBar(safeBottom: false),
         ],
       ],
-    );
-  }
-
-  Widget _selectionBar({bool safeBottom = true}) {
-    final theme = Theme.of(context);
-    final count = _selectedDramas.length;
-    return Material(
-      color: theme.colorScheme.surface,
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: theme.colorScheme.outlineVariant),
-          ),
-        ),
-        child: SafeArea(
-          top: false,
-          bottom: safeBottom,
-          minimum: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final summary = Semantics(
-                liveRegion: true,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      count == 0 ? '點選要下載的短劇' : '已選 $count 部',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      count == 0
-                          ? '最多 ${BatchDownloads.maxDramas} 部'
-                          : '下一步選擇分集和畫質',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-              final next = FilledButton(
-                key: const ValueKey('download-selected-dramas'),
-                onPressed: count == 0 ? null : _downloadSelected,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(96, 48),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                ),
-                child: const Text('下一步'),
-              );
-              if (constraints.maxWidth < 320 ||
-                  MediaQuery.textScalerOf(context).scale(14) > 21) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [summary, const SizedBox(height: 12), next],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: summary),
-                  const SizedBox(width: 16),
-                  next,
-                ],
-              );
-            },
-          ),
-        ),
-      ),
     );
   }
 
