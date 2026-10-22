@@ -130,8 +130,8 @@ int _seasonNumber(String label) {
 }
 
 String _naturalTitle(String title) =>
-    normalizedSearchText(title).replaceAllMapped(
-      RegExp(r'第([0-9零〇一二兩兩三四五六七八九十百]+)([季部])'),
+    normalizedSearchText(uiTraditional(title)).replaceAllMapped(
+      RegExp(r'第([0-9零〇一二兩三四五六七八九十百]+)([季部])'),
       (match) => '第${_seasonNumber(match[1]!)}${match[2]}',
     );
 
@@ -177,8 +177,8 @@ List<Drama> sortCatalog(Iterable<Drama> rows, CatalogView view) {
   final metrics = <String, num?>{
     for (final drama in items)
       drama.id: switch (view.sort) {
-        CatalogSort.heat => catalogMetric(drama.heat),
-        CatalogSort.views => catalogMetric(drama.views),
+        CatalogSort.heat => catalogMetric(uiTraditional(drama.heat)),
+        CatalogSort.views => catalogMetric(uiTraditional(drama.views)),
         CatalogSort.date => DateTime.tryParse(
           drama.onlineDate,
         )?.millisecondsSinceEpoch,
@@ -189,8 +189,8 @@ List<Drama> sortCatalog(Iterable<Drama> rows, CatalogView view) {
     final comparison = switch (view.sort) {
       CatalogSort.source => 0,
       CatalogSort.name => normalizedSearchText(
-        a.title,
-      ).compareTo(normalizedSearchText(b.title)),
+        uiTraditional(a.title),
+      ).compareTo(normalizedSearchText(uiTraditional(b.title))),
       CatalogSort.season => naturalTitleCompare(a.title, b.title),
       _ => _descending(metrics[a.id], metrics[b.id]),
     };
