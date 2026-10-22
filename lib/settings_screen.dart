@@ -325,7 +325,7 @@ class _StorageScreenState extends State<StorageScreen> {
       builder: (context) => AlertDialog(
         title: const Text('遷移已下載內容？'),
         content: Text(
-          '將影片、合併成品及匯出內容遷移到：\n$parent\n\n下載會先暫停，複製成功後清理舊目錄。請保證目標有足夠空間，並在完成後繼續下載。',
+          '將影片、合併成品及匯出內容移至：\n$parent\n\n下載會先暫停，複製成功後會清理舊目錄。請確認目標有足夠空間，完成後再繼續下載。',
         ),
         actions: [
           TextButton(
@@ -375,7 +375,7 @@ class _StorageScreenState extends State<StorageScreen> {
                   '剩餘 ${storageSize((_info!['free'] as num?)?.toInt() ?? -1)} · ${_info!['files'] ?? 0} 個檔案',
                 ),
                 const SizedBox(height: 24),
-                const Text('當前下載目錄'),
+                const Text('目前下載目錄'),
                 const SizedBox(height: 8),
                 SelectableText(_info!['directory'] as String? ?? ''),
                 TextButton.icon(
