@@ -571,7 +571,7 @@ class _DetailScreenState extends State<DetailScreen> {
       SourceSite.byId(drama.source).name,
       if (drama.episodes > 0) '共 ${drama.episodes} 集',
       if (drama.releaseStatus.isNotEmpty && drama.releaseStatus != 'unknown')
-        drama.releaseLabel,
+        uiTraditional(drama.releaseLabel),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -637,9 +637,9 @@ class _DetailScreenState extends State<DetailScreen> {
             padding: const EdgeInsets.only(top: 10),
             child: Text(
               [
-                if (drama.onlineDate.isNotEmpty) '${drama.onlineDate} 上線',
-                if (drama.heat.isNotEmpty) '熱度 ${drama.heat}',
-                if (drama.views.isNotEmpty) '播放 ${drama.views}',
+                if (drama.onlineDate.isNotEmpty) '${uiTraditional(drama.onlineDate)} 上線',
+                if (drama.heat.isNotEmpty) '熱度 ${uiTraditional(drama.heat)}',
+                if (drama.views.isNotEmpty) '播放 ${uiTraditional(drama.views)}',
               ].join(' · '),
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
             ),
