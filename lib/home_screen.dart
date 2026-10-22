@@ -375,7 +375,7 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 for (final mode in const {
-                  'auto': '自動識別裝置',
+                  'auto': '自動偵測裝置',
                   'television': '電視 / 遙控器',
                   'standard': '手機 / 電腦',
                 }.entries)
@@ -882,7 +882,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (television)
                     IconButton(
                       key: const ValueKey('phone-qr-search'),
-                      tooltip: '手機掃碼搜尋',
+                      tooltip: '手機 QR Code 搜尋',
                       icon: const Icon(Icons.qr_code_2_rounded),
                       onPressed: widget.store.sources.isEmpty
                           ? null
