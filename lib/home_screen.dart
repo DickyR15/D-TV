@@ -32,6 +32,7 @@ import 'follow_updater.dart';
 import 'library_updater.dart';
 import 'saved_library.dart';
 import 'ui_localization.dart';
+import 'phone_search_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.repository, required this.store});
@@ -342,6 +343,16 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!_searchVisible) _search.clear();
     });
     if (!_searchVisible && hadQuery) _searchChanged('');
+  }
+
+  Future<void> _openPhoneSearch() async {
+    final query = await showPhoneSearchDialog(context);
+    if (!mounted || query == null || query.trim().isEmpty) return;
+    _submitSearch(query);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已收到手機搜尋：$query')),
+    );
   }
 
   void _openRankings() {
@@ -896,12 +907,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          Image.asset(
+                            'assets/brand/hgtv-logo.png',
+                            width: 126,
+                            height: 46,
+                            fit: BoxFit.contain,
+                            filterQuality: FilterQuality.high,
+                          ),
+                          const SizedBox(width: 8),
                           Flexible(
                             child: Text(
-                              _group.name,
+                              uiTraditional(_group.name),
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
@@ -948,14 +968,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           : null,
                       icon: const Icon(Icons.sort_rounded),
                     ),
-                  IconButton(
-                    key: const ValueKey('open-rankings'),
-                    tooltip: '熱播榜單',
-                    onPressed: widget.store.sources.isEmpty
-                        ? null
-                        : _openRankings,
-                    icon: const Icon(Icons.leaderboard_outlined),
-                  ),
+                  if (!television)
+                    IconButton(
+                      key: const ValueKey('open-rankings'),
+                      tooltip: '熱播榜單',
+                      onPressed: widget.store.sources.isEmpty
+                          ? null
+                          : _openRankings,
+                      icon: const Icon(Icons.leaderboard_outlined),
+                    ),
                   IconButton(
                     key: const ValueKey('toggle-search'),
                     tooltip: _searchVisible ? '收起搜尋' : '搜尋',
@@ -968,6 +989,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? null
                         : _toggleSearch,
                   ),
+                  if (television)
+                    IconButton(
+                      key: const ValueKey('phone-qr-search'),
+                      tooltip: '手機掃碼搜尋',
+                      icon: const Icon(Icons.qr_code_2_rounded),
+                      onPressed: widget.store.sources.isEmpty
+                          ? null
+                          : _openPhoneSearch,
+                    ),
                 ],
                 if (_isCatalogTab &&
                     !_showRecommendations &&
@@ -1161,18 +1191,12 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  Widget _brandTitle() => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Image.asset(
-        'android/app/src/main/res/drawable/app_icon.png',
-        width: 34,
-        height: 34,
-        errorBuilder: (_, __, ___) => const Icon(Icons.live_tv_rounded, size: 32),
-      ),
-      const SizedBox(width: 8),
-      const Text('HGTV', style: TextStyle(fontWeight: FontWeight.w800)),
-    ],
+  Widget _brandTitle() => Image.asset(
+    'assets/brand/hgtv-logo.png',
+    width: 145,
+    height: 52,
+    fit: BoxFit.contain,
+    filterQuality: FilterQuality.high,
   );
 
   void _selectTelevisionDestination(int tab) {
