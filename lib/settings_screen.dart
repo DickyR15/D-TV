@@ -1,14 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'core_bridge.dart';
 import 'app_theme.dart';
-import 'background_downloads.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
 import 'app_build.dart';
@@ -18,15 +14,6 @@ import 'widgets.dart';
 import 'resource_settings_screen.dart';
 import 'lan_screen.dart';
 import 'diary_service.dart';
-
-String storageSize(int bytes) {
-  if (bytes < 0) return '暫不可用';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  if (bytes < 1024 * 1024 * 1024) {
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-}
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -250,169 +237,3 @@ class _SettingsScreenState extends State<SettingsScreen> {
   );
 }
 
-class StorageScreen extends StatefulWidget {
-  const StorageScreen({
-    super.key,
-    required this.repository,
-    required this.store,
-  });
-  final AppRepository repository;
-  final LocalStore store;
-  @override
-  State<StorageScreen> createState() => _StorageScreenState();
-}
-
-class _StorageScreenState extends State<StorageScreen> {
-  Map<String, dynamic>? _info;
-  String? _error;
-  bool _busy = false;
-  @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
-
-  Future<void> _refresh() async {
-    try {
-      final info = await widget.repository.storage();
-      if (mounted) {
-        setState(() {
-          _info = info;
-          _error = null;
-        });
-      }
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
-    }
-  }
-
-  Future<void> _move() async {
-    String? parent;
-    if (Platform.isAndroid || Platform.isIOS) {
-      final support = await getApplicationSupportDirectory();
-      final directories = <String, String>{support.path: '應用內部儲存'};
-      if (Platform.isAndroid) {
-        final external = await getExternalStorageDirectories() ?? [];
-        for (var i = 0; i < external.length; i++) {
-          directories[external[i].path] = i == 0
-              ? '裝置共享儲存（應用目錄）'
-              : 'SD 卡 ${i + 1}（應用目錄）';
-        }
-      } else {
-        final documents = await getApplicationDocumentsDirectory();
-        directories[documents.path] = '檔案 App 可見目錄';
-      }
-      if (!mounted) return;
-      parent = await showDialog<String>(
-        context: context,
-        builder: (context) => SimpleDialog(
-          title: const Text('選擇下載位置'),
-          children: [
-            for (final entry in directories.entries)
-              SimpleDialogOption(
-                onPressed: () => Navigator.pop(context, entry.key),
-                child: Text(entry.value),
-              ),
-          ],
-        ),
-      );
-    } else {
-      parent = await FilePicker.getDirectoryPath(dialogTitle: '選擇下載儲存位置');
-    }
-    if (parent == null || !mounted) return;
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('遷移已下載內容？'),
-        content: Text(
-          '將影片、合併成品及匯出內容移至：\n$parent\n\n下載會先暫停，複製成功後會清理舊目錄。請確認目標有足夠空間，完成後再繼續下載。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('遷移'),
-          ),
-        ],
-      ),
-    );
-    if (yes != true || !mounted) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.repository.moveDownloads(parent);
-      await _refresh();
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !_busy,
-    child: Scaffold(
-      appBar: AppBar(title: const Text('下載目錄與空間')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              if (_info != null) ...[
-                Text(
-                  '已使用 ${storageSize((_info!['bytes'] as num?)?.toInt() ?? 0)}',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '剩餘 ${storageSize((_info!['free'] as num?)?.toInt() ?? -1)} · ${_info!['files'] ?? 0} 個檔案',
-                ),
-                const SizedBox(height: 24),
-                const Text('目前下載目錄'),
-                const SizedBox(height: 8),
-                SelectableText(_info!['directory'] as String? ?? ''),
-                TextButton.icon(
-                  onPressed: () => Clipboard.setData(
-                    ClipboardData(text: _info!['directory'] as String? ?? ''),
-                  ),
-                  icon: const Icon(Icons.copy),
-                  label: const Text('複製路徑'),
-                ),
-                const SizedBox(height: 20),
-                const Text('在下載頁刪除不需要的分集，在本地媒體頁刪除合併成品或 Emby 匯出，可釋放空間。'),
-              ],
-              if (_busy || (_info == null && _error == null))
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: LinearProgressIndicator(),
-                ),
-              if (_busy) const Text('正在遷移，請保持應用執行…'),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text(uiTraditional(_error!)),
-                ),
-              if (widget.store.profile.admin)
-                FilledButton.icon(
-                  onPressed: _busy ? null : _move,
-                  icon: const Icon(Icons.drive_file_move_outline),
-                  label: const Text('更改並遷移目錄'),
-                ),
-              TextButton(
-                onPressed: _busy ? null : _refresh,
-                child: const Text('重新整理用量'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
