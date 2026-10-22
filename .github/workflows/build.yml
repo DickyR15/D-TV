@@ -65,10 +65,10 @@ jobs:
           set -euo pipefail
           apk=$(find dist/android -maxdepth 1 -type f -name '*armeabi-v7a.apk' | head -n1)
           test -n "$apk"
-          mv "$apk" dist/android/D-TV-armeabi-v7a.apk
+          mv "$apk" "dist/android/D TV.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: D-TV-Android-v7a
-          path: dist/android/D-TV-armeabi-v7a.apk
+          name: D TV
+          path: dist/android/D TV.apk
           if-no-files-found: error
           retention-days: 14
