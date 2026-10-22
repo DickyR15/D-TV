@@ -91,7 +91,8 @@ jobs:
             echo "::warning::NDK installation attempt $attempt failed; clearing incomplete package files before retry."
             rm -rf "$ndk_dir"
             if [ -d "$ANDROID_SDK_ROOT/.temp" ]; then
-              find "$ANDROID_SDK_ROOT/.temp" -maxdepth 1 -type f \\( -name '*.zip' -o -name '*ndk*' \\) -delete || true
+              find "$ANDROID_SDK_ROOT/.temp" -maxdepth 1 -type f -name '*.zip' -delete || true
+              find "$ANDROID_SDK_ROOT/.temp" -maxdepth 1 -type f -name '*ndk*' -delete || true
             fi
             if [ "$attempt" -lt 3 ]; then
               sleep "$((attempt * 10))"
