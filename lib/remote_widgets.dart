@@ -61,6 +61,7 @@ class RemoteTarget extends StatefulWidget {
     required this.onPressed,
     this.focusNode,
     this.onFocus,
+    this.onLongPress,
     this.autofocus = false,
     this.selected = false,
     this.label,
@@ -73,6 +74,7 @@ class RemoteTarget extends StatefulWidget {
   final VoidCallback? onPressed;
   final FocusNode? focusNode;
   final VoidCallback? onFocus;
+  final VoidCallback? onLongPress;
   final bool autofocus;
   final bool selected;
   final String? label;
@@ -129,6 +131,7 @@ class _RemoteTargetState extends State<RemoteTarget> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onPressed,
+          onLongPress: widget.onLongPress,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             padding: widget.padding,
