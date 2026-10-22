@@ -258,7 +258,11 @@ class _DetailScreenState extends State<DetailScreen> {
     final drama = _detail?.drama ?? widget.drama;
     final watched = widget.store.watched(drama.id);
     final episodes = _detail?.episodes ?? <Episode>[];
+    // 新劇預設第 1 集；有觀看記錄時使用續播集數（未看完則停在原進度）。
     final resumeIndex = resumeEpisodeIndex(episodes, watched);
+    final resumeEpisodeNumber = episodes.isEmpty
+        ? null
+        : episodes[resumeIndex].number;
     final television = AppLayout.isTelevision(context);
     final allowed =
         widget.store.profileEpoch == _profileEpoch &&
@@ -320,7 +324,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                     Expanded(
                                       child: EpisodeBrowser(
                                         episodes: episodes,
-                                        currentNumber: watched?.episode,
+                                        currentNumber: resumeEpisodeNumber,
                                         onSelected: (index) => _play(index),
                                       ),
                                     ),
@@ -355,7 +359,7 @@ class _DetailScreenState extends State<DetailScreen> {
                         SliverToBoxAdapter(
                           child: _episodeSummary(
                             episodes,
-                            currentNumber: watched?.episode,
+                            currentNumber: resumeEpisodeNumber,
                             expanded: showEpisodes,
                           ),
                         ),
@@ -366,7 +370,7 @@ class _DetailScreenState extends State<DetailScreen> {
                               episodes: episodes,
                               page: _episodePage,
                               title: '分組',
-                              currentNumber: watched?.episode,
+                              currentNumber: resumeEpisodeNumber,
                               onLocate: _locateEpisode,
                             ),
                           ),
@@ -398,7 +402,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                   key: ValueKey('episode-${episode.number}'),
                                   number: episode.number,
                                   vip: episode.vip,
-                                  current: episode.number == watched?.episode,
+                                  current: episode.number == resumeEpisodeNumber,
                                   onPressed: () => _play(start + index),
                                 );
                               }, childCount: visible.length),
