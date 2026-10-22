@@ -377,19 +377,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
                       ),
                     ),
                   ),
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: DramaActionButton(
-                    drama: item.drama,
-                    onPressed: () => showDramaActions(
-                      context,
-                      drama: item.drama,
-                      store: widget.store,
-                      onContinue: () => _openDrama(item),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
