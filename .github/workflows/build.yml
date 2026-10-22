@@ -16,6 +16,7 @@ on:
       - "pubspec.yaml"
       - "pubspec.lock"
       - "scripts/build_android.py"
+      - "scripts/prepare_tv_banner.py"
       - "analysis_options.yaml"
 
 concurrency:
@@ -77,6 +78,10 @@ jobs:
           echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
       - name: Install Android NDK
         run: sdkmanager "ndk;28.2.13676358"
+      - name: Prepare Android TV launcher banner
+        run: |
+          python -m pip install --disable-pip-version-check Pillow
+          python scripts/prepare_tv_banner.py
       - name: Build APK (armeabi-v7a)
         run: python scripts/build_android.py --abi armeabi-v7a
       - name: Rename APK
