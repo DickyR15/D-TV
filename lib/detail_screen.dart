@@ -470,7 +470,7 @@ class _DetailScreenState extends State<DetailScreen> {
     }
     return StatusPanel(
       title: _error != null ? '劇集資訊暫時不可用' : '暫時沒有可播放的集數',
-      message: _error ?? '可以更新劇集資訊後重試。',
+      message: _error == null ? '可以更新劇集資訊後重試。' : uiTraditional(_error!),
       onRetry: _load,
       secondaryAction: _sourceDiagnostics,
     );
