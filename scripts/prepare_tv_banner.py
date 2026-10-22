@@ -30,23 +30,38 @@ def main() -> None:
         image = source.convert("RGBA")
 
     width, height = image.size
-    # Keep the patch confined below the logo and to the left of the portrait.
-    # Full opacity over the letters removes the slogan and its underline;
-    # a blurred mask softly blends the edges into the existing dark artwork.
-    left = int(width * 0.125)
-    right = int(width * 0.54)
-    top = int(height * 0.585)
-    bottom = int(height * 0.735)
+
+    # The baked-in slogan is a thin strip directly below the DTV lettering.
+    # Rebuild only that strip from the nearby background pixels; do not cover
+    # the DTV logo, the red underline, or the woman's portrait with a black bar.
+    left = int(width * 0.155)
+    right = int(width * 0.49)
+    top = int(height * 0.605)
+    bottom = int(height * 0.675)
+
+    pixels = image.load()
+    repaired = image.copy()
+    repaired_pixels = repaired.load()
+    sample_top = max(0, top - max(2, int(height * 0.008)))
+    sample_bottom = min(height - 1, bottom + max(2, int(height * 0.008)))
+
+    for x in range(left, right + 1):
+        upper = pixels[x, sample_top]
+        lower = pixels[x, sample_bottom]
+        for y in range(top, bottom + 1):
+            ratio = (y - sample_top) / (sample_bottom - sample_top)
+            ratio = ratio * ratio * (3 - 2 * ratio)
+            repaired_pixels[x, y] = tuple(
+                round(upper[channel] * (1 - ratio) + lower[channel] * ratio)
+                for channel in range(4)
+            )
+
+    # Feather the repair edge so it blends into the cinematic dark background.
     mask = Image.new("L", image.size, 0)
     draw = ImageDraw.Draw(mask)
-    draw.rounded_rectangle(
-        (left, top, right, bottom),
-        radius=max(4, int(width * 0.012)),
-        fill=255,
-    )
-    mask = mask.filter(ImageFilter.GaussianBlur(max(2, int(width * 0.008))))
-    patch = Image.new("RGBA", image.size, (7, 3, 8, 255))
-    cleaned = Image.composite(patch, image, mask).convert("RGB")
+    draw.rectangle((left, top, right, bottom), fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(max(1, width * 0.0028)))
+    cleaned = Image.composite(repaired, image, mask).convert("RGB")
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     cleaned.save(OUTPUT, "WEBP", quality=90, method=6)
