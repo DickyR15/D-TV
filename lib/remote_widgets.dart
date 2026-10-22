@@ -496,6 +496,8 @@ class RemoteEpisodeButton extends StatelessWidget {
   );
 }
 
+import 'ui_localization.dart';
+
 class TelevisionSearchDialog extends StatefulWidget {
   const TelevisionSearchDialog({
     super.key,
@@ -504,10 +506,12 @@ class TelevisionSearchDialog extends StatefulWidget {
     this.suggestions,
     this.recentSearches = const [],
     this.onCancel,
+    this.onPhoneSearch,
   });
   final Future<List<String>> Function(String)? suggestions;
   final List<String> recentSearches;
   final VoidCallback? onCancel;
+  final VoidCallback? onPhoneSearch;
   final String initialValue;
   final String title;
 
@@ -516,355 +520,241 @@ class TelevisionSearchDialog extends StatefulWidget {
 }
 
 class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
-  late String _query = widget.initialValue;
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
+  Timer? _debounce;
+  int _generation = 0;
   List<String> _results = [];
   bool _searching = false;
-  Timer? _debounce;
 
-  static const _keys = [
-    'A',
-    'B',
-    'C',
-    'D',
-    'E',
-    'F',
-    'G',
-    'H',
-    'I',
-    'J',
-    'K',
-    'L',
-    'M',
-    'N',
-    'O',
-    'P',
-    'Q',
-    'R',
-    'S',
-    'T',
-    'U',
-    'V',
-    'W',
-    'X',
-    'Y',
-    'Z',
-    '1',
-    '2',
-    '3',
-    '4',
-    '5',
-    '6',
-    '7',
-    '8',
-    '9',
-    '0',
-  ];
+  String get _query => _controller.text;
 
   @override
   void initState() {
     super.initState();
-    if (_query.isNotEmpty) {
-      _fetchSuggestions(_query);
+    if (_query.trim().isNotEmpty) {
+      _fetchSuggestions(_query.trim());
     }
   }
 
   @override
   void dispose() {
+    _generation++;
     _debounce?.cancel();
+    _controller.dispose();
+    widget.onCancel?.call();
     super.dispose();
   }
 
-  void _onKeyPress(String char) {
-    setState(() => _query += char);
-    _onQueryChanged();
-  }
-
-  void _onBackspace() {
-    if (_query.isNotEmpty) {
-      setState(() => _query = _query.substring(0, _query.length - 1));
-      _onQueryChanged();
-    }
-  }
-
-  void _onClear() {
-    if (_query.isNotEmpty) {
-      setState(() {
-        _query = '';
-        _results = [];
-      });
-      _debounce?.cancel();
-    }
-  }
-
-  void _onQueryChanged() {
+  void _queryChanged(String value) {
     _debounce?.cancel();
-    final trimmed = _query.trim();
-    if (trimmed.isEmpty) {
-      setState(() => _results = []);
+    final query = value.trim();
+    final generation = ++_generation;
+    if (query.isEmpty || widget.suggestions == null) {
+      setState(() {
+        _results = [];
+        _searching = false;
+      });
+      widget.onCancel?.call();
       return;
     }
+    setState(() => _searching = true);
     _debounce = Timer(const Duration(milliseconds: 250), () {
-      _fetchSuggestions(trimmed);
+      if (generation == _generation) {
+        _fetchSuggestions(query, generation: generation);
+      }
     });
   }
 
-  Future<void> _fetchSuggestions(String text) async {
-    if (widget.suggestions == null) return;
+  Future<void> _fetchSuggestions(String query, {int? generation}) async {
+    final fetchGeneration = generation ?? ++_generation;
+    if (widget.suggestions == null || query.trim().isEmpty) return;
     setState(() => _searching = true);
     try {
-      final list = await widget.suggestions!(text);
-      if (mounted) {
-        setState(() {
-          _results = list;
-          _searching = false;
-        });
-      }
+      final values = await widget.suggestions!(query.trim());
+      if (!mounted || fetchGeneration != _generation) return;
+      setState(() {
+        _results = values
+            .where((value) => value.trim().isNotEmpty)
+            .toSet()
+            .take(12)
+            .toList();
+        _searching = false;
+      });
     } catch (_) {
-      if (mounted) setState(() => _searching = false);
+      if (!mounted || fetchGeneration != _generation) return;
+      setState(() {
+        _results = [];
+        _searching = false;
+      });
     }
   }
 
-  void _submit(String text) {
-    var target = text.trim();
-    if (target.isEmpty) return;
-    // 若使用者輸入純拼音頭字母且已成功聯想出短劇，直接點選搜尋時優先取第一部短劇全名
-    if (_results.isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(target)) {
-      target = _results.first;
-    }
-    Navigator.pop(context, target);
+  void _submit(String value) {
+    final query = value.trim();
+    if (query.isEmpty) return;
+    // 只提交使用者輸入或選取的原始劇名，不改動來源搜尋關鍵字。
+    Navigator.of(context).pop(query);
+  }
+
+  void _usePhoneSearch() {
+    final callback = widget.onPhoneSearch;
+    if (callback == null) return;
+    Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) => callback());
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final query = _query.trim();
+    final showRecent = query.isEmpty && widget.recentSearches.isNotEmpty;
     return AlertDialog(
       titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
-      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
       title: Row(
         children: [
-          Icon(Icons.tv_rounded, color: theme.colorScheme.primary),
+          Icon(Icons.search_rounded, color: theme.colorScheme.primary),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(widget.title, style: const TextStyle(fontSize: 20)),
-          ),
-          IconButton(
-            tooltip: '關閉',
-            icon: const Icon(Icons.close_rounded),
-            onPressed: () => Navigator.pop(context),
+            child: Text(
+              uiTraditional(widget.title),
+              style: const TextStyle(fontSize: 20),
+            ),
           ),
         ],
       ),
       content: SizedBox(
-        width: 820,
-        height: 520,
+        width: 660,
+        height: 430,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 頂部只讀搜尋顯示條，徹底杜絕系統軟鍵盤彈出
-            Container(
-              height: 56,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: .5,
-                ),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: .3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.search_rounded,
-                    color: theme.colorScheme.primary,
-                    size: 28,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _query.isEmpty ? '按遙控器輸入劇名拼音頭字母 (如: BFLC)' : _query,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: _query.isEmpty
-                            ? FontWeight.normal
-                            : FontWeight.bold,
-                        color: _query.isEmpty
-                            ? theme.hintColor
-                            : theme.colorScheme.onSurface,
-                        letterSpacing: _query.isEmpty ? 0 : 2,
+            TextField(
+              key: const ValueKey('tv-drama-search-input'),
+              controller: _controller,
+              autofocus: true,
+              textInputAction: TextInputAction.search,
+              onChanged: _queryChanged,
+              onSubmitted: _submit,
+              decoration: InputDecoration(
+                labelText: '劇名',
+                hintText: '輸入完整劇名',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_query.isNotEmpty)
+                      IconButton(
+                        tooltip: '清除',
+                        onPressed: () {
+                          _controller.clear();
+                          _queryChanged('');
+                        },
+                        icon: const Icon(Icons.close_rounded),
                       ),
+                    IconButton(
+                      tooltip: '搜尋',
+                      onPressed: () => _submit(_query),
+                      icon: const Icon(Icons.arrow_forward_rounded),
                     ),
-                  ),
-                  if (_query.isNotEmpty) ...[
-                    Text(
-                      '${_query.length} 字母',
-                      style: TextStyle(color: theme.hintColor, fontSize: 14),
-                    ),
-                    const SizedBox(width: 8),
                   ],
-                ],
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            // 主體區域：左側愛奇藝式字母鍵盤，右側智慧聯想與歷史
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    showRecent
+                        ? '最近搜尋'
+                        : query.isEmpty
+                        ? '輸入劇名即可搜尋'
+                        : '搜尋建議',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+                if (_searching)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 左側全字母/數字虛擬鍵盤
-                  SizedBox(
-                    width: 440,
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: GridView.builder(
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 6,
-                                  mainAxisSpacing: 8,
-                                  crossAxisSpacing: 8,
-                                  childAspectRatio: 1.4,
-                                ),
-                            itemCount: _keys.length,
-                            itemBuilder: (context, index) {
-                              final char = _keys[index];
-                              return RemoteTarget(
-                                key: ValueKey('tv-key-$char'),
-                                autofocus: index == 0,
-                                radius: 10,
-                                padding: EdgeInsets.zero,
-                                onPressed: () => _onKeyPress(char),
-                                child: Center(
-                                  child: Text(
-                                    char,
-                                    style: const TextStyle(
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // 底部三大功能鍵
-                        Row(
-                          children: [
-                            Expanded(
-                              child: RemoteButton(
-                                label: '退格',
-                                icon: Icons.backspace_outlined,
-                                onPressed: _query.isNotEmpty
-                                    ? _onBackspace
-                                    : null,
-                              ),
+              child: showRecent
+                  ? SingleChildScrollView(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final item in widget.recentSearches)
+                            RemoteButton(
+                              key: ValueKey('recent-search-$item'),
+                              label: uiTraditional(item),
+                              onPressed: () => _submit(item),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: RemoteButton(
-                                label: '清空',
-                                icon: Icons.delete_outline_rounded,
-                                onPressed: _query.isNotEmpty ? _onClear : null,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: RemoteButton(
-                                label: '搜尋',
-                                icon: Icons.search_rounded,
-                                onPressed: () => _submit(_query),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                        ],
+                      ),
+                    )
+                  : query.isEmpty
+                  ? Center(
+                      child: Text(
+                        '可以直接輸入劇名，或改用手機掃 QR Code 搜尋。',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: theme.hintColor),
+                      ),
+                    )
+                  : _results.isEmpty && !_searching
+                  ? Center(
+                      child: Text(
+                        '沒有搜尋建議；仍可直接搜尋完整劇名。',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: theme.hintColor),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: _results.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 6),
+                      itemBuilder: (context, index) {
+                        final item = _results[index];
+                        return RemoteButton(
+                          key: ValueKey('tv-search-suggestion-$index'),
+                          label: uiTraditional(item),
+                          icon: Icons.movie_outlined,
+                          onPressed: () => _submit(item),
+                        );
+                      },
                     ),
-                  ),
-                  const SizedBox(width: 20),
-                  const VerticalDivider(width: 1),
-                  const SizedBox(width: 20),
-                  // 右側聯想與匹配結果
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _query.isEmpty
-                              ? '歷史搜尋'
-                              : (_searching
-                                    ? '正在匹配...'
-                                    : '匹配結果 (${_results.length})'),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Expanded(
-                          child: _query.isEmpty
-                              ? (widget.recentSearches.isEmpty
-                                    ? Center(
-                                        child: Text(
-                                          '暫無歷史搜尋\n用左側鍵盤按首字母搜劇',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: theme.hintColor,
-                                          ),
-                                        ),
-                                      )
-                                    : SingleChildScrollView(
-                                        child: Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: [
-                                            for (final item
-                                                in widget.recentSearches)
-                                              RemoteButton(
-                                                key: ValueKey('recent-$item'),
-                                                label: item,
-                                                onPressed: () => _submit(item),
-                                              ),
-                                          ],
-                                        ),
-                                      ))
-                              : (_results.isEmpty
-                                    ? Center(
-                                        child: Text(
-                                          _searching
-                                              ? '搜尋中...'
-                                              : '按【搜尋】直接查詢 “$_query”',
-                                          style: TextStyle(
-                                            color: theme.hintColor,
-                                          ),
-                                        ),
-                                      )
-                                    : ListView.separated(
-                                        itemCount: _results.length,
-                                        separatorBuilder: (_, _) =>
-                                            const SizedBox(height: 6),
-                                        itemBuilder: (context, index) {
-                                          final item = _results[index];
-                                          return RemoteButton(
-                                            key: ValueKey('suggest-$index'),
-                                            label: item,
-                                            icon: Icons.movie_outlined,
-                                            onPressed: () => _submit(item),
-                                          );
-                                        },
-                                      )),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
             ),
           ],
         ),
       ),
+      actions: [
+        if (widget.onPhoneSearch != null)
+          TextButton.icon(
+            onPressed: _usePhoneSearch,
+            icon: const Icon(Icons.qr_code_2_rounded),
+            label: const Text('手機掃碼搜尋'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton.icon(
+          onPressed: query.isEmpty ? null : () => _submit(_query),
+          icon: const Icon(Icons.search_rounded),
+          label: const Text('搜尋'),
+        ),
+      ],
     );
   }
 }
