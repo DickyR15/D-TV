@@ -13,12 +13,14 @@
     <application
         android:label="${appLabel}"
         android:name="${applicationName}"
-        android:icon="@drawable/app_icon"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:banner="${appBanner}"
         android:usesCleartextTraffic="true"
         android:allowBackup="false">
         <activity
             android:name=".MainActivity"
+            android:icon="@mipmap/ic_launcher"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

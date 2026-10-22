@@ -9,7 +9,6 @@ import 'core_bridge.dart';
 import 'catalog_filters.dart';
 import 'catalog_browser.dart';
 import 'catalog_sort.dart';
-import 'catalog_sort_sheet.dart';
 import 'recommendations_screen.dart';
 import 'rankings_screen.dart';
 import 'playback_launch_screen.dart';
@@ -435,6 +434,21 @@ class _HomeScreenState extends State<HomeScreen> {
     _source = SourceSite.byId(widget.store.source);
     _allSources = widget.store.catalogView.allSources;
     _sourceSignature = widget.store.sources.map((site) => site.id).join(',');
+    final savedCatalogView = widget.store.catalogView;
+    if (savedCatalogView.sort != CatalogSort.date ||
+        savedCatalogView.release.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(
+          saveUserChange(
+            context,
+            () => widget.store.setCatalogView(
+              savedCatalogView.copyWith(sort: CatalogSort.date, release: ''),
+            ),
+          ),
+        );
+      });
+    }
     _browser = CatalogBrowser(widget.repository);
     _updater = LibraryUpdater(
       widget.repository,
@@ -662,17 +676,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _chooseCatalogView() async {
-    final selected = await chooseCatalogView(context, widget.store.catalogView);
-    if (selected != null && mounted) {
-      await saveUserChange(
-        context,
-        () => widget.store.setCatalogView(selected),
-      );
-      if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
-    }
-  }
-
   void _openDrama(Drama drama, {bool resume = false}) {
     _pauseCatalog();
     unawaited(
@@ -740,10 +743,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final category = _category;
     final hideVip = _hideVip;
     final onlineSearch = _onlineSearch;
-    final isTelevisionNew = AppLayout.isTelevision(context) && _tab == 0;
-    final view = isTelevisionNew
-        ? widget.store.catalogView.copyWith(sort: CatalogSort.date)
-        : widget.store.catalogView;
+    final view = widget.store.catalogView.copyWith(
+      sort: CatalogSort.date,
+      release: '',
+    );
     return sortCatalog(
       _items.where((drama) {
         if (!widget.store.allowsSource(drama.source)) return false;
@@ -767,22 +770,6 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, constraints) {
         final television = AppLayout.isTelevision(context);
         final desktop = constraints.maxWidth >= 840;
-        final destinations = [
-          const NavigationRailDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore),
-            label: Text('發現'),
-          ),
-          const NavigationRailDestination(
-            icon: Icon(Icons.bookmark_border_rounded),
-            selectedIcon: Icon(Icons.bookmark_rounded),
-            label: Text('追劇'),
-          ),
-          const NavigationRailDestination(
-            icon: Icon(Icons.history_rounded),
-            label: Text('最近觀看'),
-          ),
-        ];
         final scaffold = Scaffold(
           appBar: AppBar(
             toolbarHeight: television ? 64 : null,
@@ -811,13 +798,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Image.asset(
-                            'assets/brand/hgtv-logo.png',
-                            width: 126,
-                            height: 46,
-                            fit: BoxFit.contain,
-                            filterQuality: FilterQuality.high,
-                          ),
+                          _brandLogo(width: 126, height: 46),
                           const SizedBox(width: 8),
                           Flexible(
                             child: Text(
@@ -845,20 +826,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.sync_rounded),
                   ),
                 if (_isCatalogTab) ...[
-                  if (!_showRecommendations && (!television || _tab != 0))
-                    IconButton(
-                      tooltip: '排序與篩選 · ${widget.store.catalogView.sort.label}',
-                      onPressed: widget.store.sources.isEmpty
-                          ? null
-                          : _chooseCatalogView,
-                      color:
-                          widget.store.catalogView.sort != CatalogSort.source ||
-                              widget.store.catalogView.release.isNotEmpty
-                          ? Theme.of(context).colorScheme.primary
-                          : null,
-                      icon: const Icon(Icons.sort_rounded),
-                    ),
-                  if (!television)
+                  if (!television && !desktop)
                     IconButton(
                       key: const ValueKey('open-rankings'),
                       tooltip: '熱播榜單',
@@ -986,15 +954,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               children: [
                 if (desktop || television) ...[
-                  television
-                      ? _televisionNavigation(destinations)
-                      : NavigationRail(
-                          selectedIndex: _tab,
-                          onDestinationSelected: _changeTab,
-                          labelType: NavigationRailLabelType.all,
-                          groupAlignment: -.8,
-                          destinations: destinations,
-                        ),
+                  _sideNavigation(),
                   const VerticalDivider(width: 1, thickness: 1),
                 ],
                 Expanded(
@@ -1042,12 +1002,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     NavigationDestination(
                       icon: Icon(Icons.explore_outlined),
                       selectedIcon: Icon(Icons.explore),
-                      label: '發現',
+                      label: '分類',
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.bookmark_border_rounded),
                       selectedIcon: Icon(Icons.bookmark_rounded),
-                      label: '追劇',
+                      label: '收藏',
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.history_rounded),
@@ -1076,13 +1036,57 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  Widget _brandTitle() => Image.asset(
-    'assets/brand/hgtv-logo.png',
-    width: 145,
-    height: 52,
-    fit: BoxFit.contain,
-    filterQuality: FilterQuality.high,
-  );
+  Widget _brandLogo({required double width, required double height}) {
+    final theme = Theme.of(context);
+    if (theme.brightness == Brightness.dark) {
+      return Image.asset(
+        'assets/brand/hgtv-logo.png',
+        width: width,
+        height: height,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+      );
+    }
+
+    // The original wordmark has a dark rectangular background; use a clean
+    // icon + live text color in light mode so it blends into the app bar.
+    final iconSize = (height - 4).clamp(32.0, 48.0).toDouble();
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.asset(
+              'assets/brand/hgtv-icon.png',
+              width: iconSize,
+              height: iconSize,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Flexible(
+            child: Text(
+              'HGTV',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: theme.colorScheme.onSurface,
+                fontSize: height * .52,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.7,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _brandTitle() => _brandLogo(width: 145, height: 52);
 
   void _selectCatalogTab(int tab) {
     final shouldReload =
@@ -1104,7 +1108,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (shouldReload) _load(useCache: true);
   }
 
-  void _selectTelevisionDestination(int tab) {
+  void _selectNavigationDestination(int tab) {
     if (tab == 0 || tab == 8) {
       _selectCatalogTab(tab);
       return;
@@ -1115,18 +1119,21 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Widget _televisionNavigation(List<NavigationRailDestination> destinations) {
+  Widget _sideNavigation() {
     const entries = <({int tab, IconData icon, String label})>[
       (tab: 0, icon: Icons.fiber_new_rounded, label: '新劇'),
-      (tab: 4, icon: Icons.local_fire_department_rounded, label: '熱播榜'),
-      (tab: 8, icon: Icons.explore_rounded, label: '發現'),
+      (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
+      (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
+      (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI劇熱播榜'),
+      (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
+      (tab: 8, icon: Icons.category_rounded, label: '分類'),
       (tab: 1, icon: Icons.bookmark_border_rounded, label: '收藏'),
-      (tab: 2, icon: Icons.history_rounded, label: '播放歷史'),
+      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     final theme = Theme.of(context);
     return SizedBox(
-      width: 132,
+      width: 148,
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
         child: Column(
@@ -1136,10 +1143,10 @@ class _HomeScreenState extends State<HomeScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 5),
                 child: RemoteTarget(
-                  key: ValueKey('tv-nav-${entry.tab}'),
+                  key: ValueKey('side-nav-${entry.tab}'),
                   autofocus: index == 0,
                   selected: _tab == entry.tab,
-                  onPressed: () => _selectTelevisionDestination(entry.tab),
+                  onPressed: () => _selectNavigationDestination(entry.tab),
                   label: entry.label,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 130),
@@ -1160,19 +1167,30 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(entry.icon, size: 21,
+                        Icon(
+                          entry.icon,
+                          size: 21,
                           color: _tab == entry.tab
                               ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant),
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
                         const SizedBox(height: 3),
-                        Text(entry.label, textAlign: TextAlign.center,
-                          maxLines: 2, overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 11.5, height: 1.15,
+                        Text(
+                          entry.label,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            height: 1.15,
                             fontWeight: _tab == entry.tab
-                                ? FontWeight.w800 : FontWeight.w500,
+                                ? FontWeight.w800
+                                : FontWeight.w500,
                             color: _tab == entry.tab
                                 ? theme.colorScheme.onPrimaryContainer
-                                : theme.colorScheme.onSurface)),
+                                : theme.colorScheme.onSurface,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1242,7 +1260,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-        if (!television || _tab != 0)
+        if (MediaQuery.sizeOf(context).width < 840 || _tab == 8)
           CatalogFilters(
             key: ValueKey('filters-${_group.id}'),
             categories: _displayCategories,

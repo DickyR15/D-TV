@@ -15,7 +15,7 @@ enum CatalogSort {
 
 class CatalogView {
   const CatalogView({
-    this.sort = CatalogSort.source,
+    this.sort = CatalogSort.date,
     this.release = '',
     this.allSources = false,
   });
@@ -44,7 +44,7 @@ class CatalogView {
         CatalogSort.values
             .where((sort) => sort.name == value['sort'])
             .firstOrNull ??
-        CatalogSort.source,
+        CatalogSort.date,
     release: {'', 'finished', 'ongoing', 'unknown'}.contains(value['release'])
         ? value['release'] as String
         : '',

@@ -290,10 +290,12 @@ class DuanjuApp extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.play_circle_fill_rounded,
-                      color: Color(0xFFFF765F),
-                      size: 72,
+                    Image.asset(
+                      'assets/brand/hgtv-icon.png',
+                      width: 88,
+                      height: 88,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
                     ),
                     const SizedBox(height: 24),
                     Text(

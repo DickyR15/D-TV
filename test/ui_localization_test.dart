@@ -11,6 +11,11 @@ void main() {
     await initializeUiLocalization();
   });
 
+  test('defaults catalog sorting to online date', () {
+    expect(const CatalogView().sort, CatalogSort.date);
+    expect(CatalogView.fromJson(<String, dynamic>{}).sort, CatalogSort.date);
+  });
+
   test('converts drama categories to Taiwan Traditional Chinese', () {
     expect(
       uiTraditional('新剧、真人剧、漫剧、AI剧、剧情、反转、古装、总裁、恋爱、悬疑'),
