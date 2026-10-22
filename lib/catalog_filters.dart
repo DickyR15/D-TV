@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
 import 'models.dart';
+import 'ui_localization.dart';
 
 class CatalogFilters extends StatefulWidget {
   const CatalogFilters({
@@ -69,7 +70,7 @@ class _CatalogFiltersState extends State<CatalogFilters> {
                       padding: const EdgeInsets.only(right: 6),
                       child: ChoiceChip(
                         key: ValueKey('category-${entry.id}'),
-                        label: Text(entry.name),
+                        label: Text(uiTraditional(entry.name)),
                         selected: entry.id == widget.category,
                         showCheckmark: false,
                         side: television
@@ -93,7 +94,7 @@ class _CatalogFiltersState extends State<CatalogFilters> {
           ),
           if (widget.error != null)
             IconButton(
-              tooltip: widget.error,
+              tooltip: uiTraditional(widget.error!),
               onPressed: widget.onRetry,
               icon: Icon(
                 Icons.refresh_rounded,
