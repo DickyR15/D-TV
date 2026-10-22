@@ -11,8 +11,6 @@ Future<void> showDramaActions(
   required Drama drama,
   required LocalStore store,
   VoidCallback? onContinue,
-  VoidCallback? onDownload,
-  VoidCallback? onSelect,
   bool history = false,
 }) async {
   final epoch = store.profileEpoch;
@@ -33,10 +31,6 @@ Future<void> showDramaActions(
       ),
     if (following != null && following.hasUpdates)
       ('read', '標記 ${following.updateLabel}已讀', Icons.mark_email_read_outlined),
-    if (onDownload != null && store.canDownload)
-      ('download', '下載選集', Icons.download_outlined),
-    if (onSelect != null && store.canDownload)
-      ('select', '多選下載', Icons.checklist_rounded),
     if (history && store.watched(drama.id) != null)
       ('removeHistory', '刪除這條觀看記錄', Icons.history_toggle_off),
   ];
@@ -88,10 +82,6 @@ Future<void> showDramaActions(
       await saveUserChange(context, () => store.toggleFavorite(drama));
     case 'read':
       await saveUserChange(context, () => store.markUpdatesRead(drama.id));
-    case 'download':
-      if (store.canDownload) onDownload?.call();
-    case 'select':
-      if (store.canDownload) onSelect?.call();
     case 'removeHistory':
       await saveUserChange(context, () => store.removeHistory(drama.id));
   }
