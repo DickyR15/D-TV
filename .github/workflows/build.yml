@@ -68,7 +68,7 @@ jobs:
           mv "$apk" "dist/android/D TV.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: D TV
+          name: D TV-Android-v7a
           path: dist/android/D TV.apk
           if-no-files-found: error
           retention-days: 14
