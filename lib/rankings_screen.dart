@@ -303,7 +303,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                           const CircularProgressIndicator(),
                           if (_board?.source == 'hongguo') ...[
                             const SizedBox(height: 16),
-                            const Text('正在獲取榜單，資料未完整返回時會自動重試'),
+                            const Text('正在取得榜單，資料未完整返回時會自動重試'),
                           ],
                         ],
                       ),
@@ -311,7 +311,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   : items.isEmpty
                   ? StatusPanel(
                       title: _error == null ? '暫無榜單內容' : '榜單暫時無法載入',
-                      message: _error ?? '當前站源暫無可顯示的榜單。',
+                      message: uiTraditional(_error ?? '目前站源暫無可顯示的榜單。'),
                       onRetry: _board == null
                           ? _initialize
                           : () => _load(force: true),
