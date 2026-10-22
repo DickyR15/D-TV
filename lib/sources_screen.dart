@@ -311,7 +311,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
             Text('最近更新：${sourceTimestamp(status?.updatedAt)}'),
             if (status != null && status.count > 0)
               Text(
-                '已載入至第 ${status.page} 頁${status.hasMore ? ' · 可繼續載入' : ' · 當前分頁已載入完'}',
+                '已載入至第 ${status.page} 頁${status.hasMore ? ' · 可繼續載入' : ' · 目前分頁已載入完成'}',
               ),
             const SizedBox(height: 12),
             Wrap(
