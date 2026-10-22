@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/ui_localization.dart';
+import '../lib/catalog_sort.dart';
+import '../lib/models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +23,20 @@ void main() {
       uiTraditional('软件、用户、鼠标、网络、视频、设置、加载更多、播放历史'),
       '軟體、使用者、滑鼠、網路、影片、設定、載入更多、播放歷史',
     );
+  });
+
+  test('Traditional input can find a Simplified source title', () {
+    const drama = Drama(
+      id: 'test-drama',
+      source: 'hongguo',
+      title: '新剧里的霸总',
+      description: '一场相遇改写命运',
+      category: '真人剧',
+    );
+
+    expect(matchesDramaQuery(drama, '新劇'), isTrue);
+    expect(matchesDramaQuery(drama, '霸總'), isTrue);
+    expect(matchesDramaQuery(drama, '改寫命運'), isTrue);
   });
 
   test('keeps source identifiers and Latin labels untouched', () {
