@@ -77,7 +77,28 @@ jobs:
           echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
           echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
       - name: Install Android NDK
-        run: sdkmanager "ndk;28.2.13676358"
+        shell: bash
+        run: |
+          set -euo pipefail
+          ndk_package="ndk;28.2.13676358"
+          ndk_dir="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
+          for attempt in 1 2 3; do
+            echo "Installing Android NDK 28.2 (attempt $attempt/3)..."
+            if sdkmanager "$ndk_package" && test -x "$ndk_dir/ndk-build"; then
+              echo "Android NDK 28.2 installed successfully."
+              exit 0
+            fi
+            echo "::warning::NDK installation attempt $attempt failed; clearing incomplete package files before retry."
+            rm -rf "$ndk_dir"
+            if [ -d "$ANDROID_SDK_ROOT/.temp" ]; then
+              find "$ANDROID_SDK_ROOT/.temp" -maxdepth 1 -type f \\( -name '*.zip' -o -name '*ndk*' \\) -delete || true
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep "$((attempt * 10))"
+            fi
+          done
+          echo "::error::Android NDK 28.2 could not be installed after 3 attempts."
+          exit 1
       - name: Prepare Android TV launcher banner
         run: |
           python -m pip install --disable-pip-version-check Pillow
