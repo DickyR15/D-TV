@@ -7,8 +7,6 @@ import 'package:flutter/services.dart';
 
 import 'app_layout.dart';
 import 'core_bridge.dart';
-import 'download_picker.dart';
-import 'downloads_screen.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'player_screen.dart';
@@ -27,13 +25,11 @@ class DetailScreen extends StatefulWidget {
     required this.repository,
     required this.store,
     this.resumeOnOpen = false,
-    this.downloadOnOpen = false,
   });
   final Drama drama;
   final AppRepository repository;
   final LocalStore store;
   final bool resumeOnOpen;
-  final bool downloadOnOpen;
   @override
   State<DetailScreen> createState() => _DetailScreenState();
 }
@@ -134,8 +130,6 @@ class _DetailScreenState extends State<DetailScreen> {
               resume: true,
             ),
           );
-        } else if (widget.downloadOnOpen && widget.store.canDownload) {
-          unawaited(_download());
         }
       }
     } catch (error) {
@@ -173,61 +167,6 @@ class _DetailScreenState extends State<DetailScreen> {
       widget.repository.catalogUpdates.publish(updated);
       await saveUserChange(context, () => widget.store.refreshDrama(updated));
     } catch (_) {}
-  }
-
-  Future<void> _download() async {
-    final detail = _detail;
-    if (detail == null ||
-        !widget.store.canDownload ||
-        _profileEpoch != widget.store.profileEpoch) {
-      return;
-    }
-    final selection = await Navigator.of(context).push<DownloadSelection>(
-      MaterialPageRoute(
-        builder: (_) => DownloadPicker(
-          detail: detail,
-          preferences: widget.store.downloadPreferences,
-        ),
-      ),
-    );
-    if (selection == null ||
-        !mounted ||
-        !widget.store.canDownload ||
-        _profileEpoch != widget.store.profileEpoch) {
-      return;
-    }
-    try {
-      final added = await widget.repository.enqueueDownloads(
-        detail,
-        selection.episodes,
-        quality: selection.quality,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(added == 0 ? '所選集數已在下載列表中' : '已加入 $added 集，已有任務自動跳過'),
-          action: SnackBarAction(
-            label: '檢視',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => DownloadsScreen(
-                    repository: widget.repository,
-                    store: widget.store,
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      );
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
-      }
-    }
   }
 
   Future<void> _play(int index, {bool resume = false}) async {
