@@ -16,3 +16,5 @@
 ## 上游來源
 
 本專案移植自 [Xanerix/guoapp](https://github.com/Xanerix/guoapp)。原作者與第三方元件的授權仍以各自原始專案為準。
+
+繁體中文（台灣用語）轉換使用 OpenCC 字典，授權與來源見 [OPENCC-NOTICE.md](OPENCC-NOTICE.md)。
