@@ -2003,9 +2003,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                   borderRadius: BorderRadius.circular(8),
                   child: _mobileTab == 0
                       ? _episodePanel(compact: true)
-                      : _mobileTab == 1
-                      ? _mobileSynopsis()
-                      : _mobileDownload(),
+                      : _mobileSynopsis(),
                 ),
               ),
             ),
@@ -2023,7 +2021,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         children: [
           _mobileTabButton(0, '選集'),
           _mobileTabButton(1, '簡介'),
-          _mobileTabButton(2, '下載'),
         ],
       ),
     ),
