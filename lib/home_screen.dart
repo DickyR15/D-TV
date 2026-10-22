@@ -404,8 +404,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _televisionBack() {
-    if (_exitConfirmationShowing) return;
-
     if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
@@ -415,67 +413,50 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final now = DateTime.now();
     final previous = _lastBackAt;
-    if (previous == null ||
-        now.difference(previous) > const Duration(seconds: 2)) {
-      // The first Back press returns to the Red Fruit hot list if needed.
-      // The second Back press opens the exit confirmation dialog.
-      if (_tab != 4) {
-        _selectNavigationDestination(4);
-        _navigationFocusNodes[4]?.requestFocus();
-      }
-      _lastBackAt = now;
+    if (previous != null &&
+        now.difference(previous) <= const Duration(seconds: 2)) {
+      _lastBackAt = null;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      unawaited(SystemNavigator.pop());
       return;
     }
 
-    _lastBackAt = null;
-    unawaited(_confirmTelevisionExit());
-  }
-
-  Future<void> _confirmTelevisionExit() async {
-    if (!mounted || _exitConfirmationShowing) return;
-    _exitConfirmationShowing = true;
-    try {
-      final shouldExit = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('確定要離開 D TV 嗎？'),
-          actions: [
-            FilledButton(
-              autofocus: true,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFFF3D45),
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('否'),
-            ),
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Theme.of(dialogContext).colorScheme.onSurface,
-                side: BorderSide(
-                  color: Theme.of(dialogContext).colorScheme.outline,
-                  width: 1.5,
+    // First Back press returns to New Drama and shows a SmartTube-style toast.
+    if (_tab != 0) {
+      _selectCatalogTab(0);
+      _navigationFocusNodes[0]?.requestFocus();
+    }
+    _lastBackAt = now;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+          backgroundColor: const Color(0xEE171920),
+          margin: const EdgeInsets.fromLTRB(28, 0, 28, 26),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Color(0x44FFFFFF)),
+          ),
+          content: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.exit_to_app_rounded, color: Colors.white, size: 22),
+              SizedBox(width: 12),
+              Text(
+                '再按一次即可結束本程式',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('是'),
-            ),
-          ],
+            ],
+          ),
         ),
       );
-      if (shouldExit == true) await SystemNavigator.pop();
-    } finally {
-      _exitConfirmationShowing = false;
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_initialTabResolved) return;
-    _initialTabResolved = true;
-    // TV starts on the main Red Fruit hot list; mobile keeps the category view.
-    if (AppLayout.isTelevision(context)) _tab = 4;
   }
 
   @override
@@ -846,7 +827,15 @@ class _HomeScreenState extends State<HomeScreen> {
             .toDouble();
         final bannerHeight = _brandBannerHeight(constraints.maxWidth);
         final scaffold = Scaffold(
-          appBar: AppBar(
+          appBar: television
+              ? PreferredSize(
+                  preferredSize: const Size.fromHeight(420),
+                  child: _televisionHero(
+                    width: constraints.maxWidth,
+                    height: 420,
+                  ),
+                )
+              : AppBar(
             toolbarHeight: wide ? _brandBannerHeight(constraints.maxWidth) + 12 : television ? 64 : null,
             titleSpacing: 12,
             title: wide
@@ -1234,6 +1223,255 @@ class _HomeScreenState extends State<HomeScreen> {
         .clamp(300.0, 980.0)
         .toDouble();
     return (bannerWidth / (960 / 180)).clamp(100.0, 180.0).toDouble();
+  }
+
+  Widget _heroAction({
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return RemoteTarget(
+      key: ValueKey('tv-hero-action-$label'),
+      label: label,
+      onPressed: onPressed,
+      radius: 15,
+      padding: EdgeInsets.zero,
+      borderWidth: 2,
+      outlined: true,
+      child: Container(
+        height: 50,
+        padding: const EdgeInsets.symmetric(horizontal: 15),
+        decoration: BoxDecoration(
+          color: const Color(0xB8171922),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 22),
+            const SizedBox(width: 9),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Cinematic full-width Google TV hero. Branding, slogan and controls sit
+  /// over the drama artwork instead of being split into separate AppBar cards.
+  Widget _televisionHero({required double width, required double height}) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ClipRect(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/brand/dtv-home-header.webp',
+              fit: BoxFit.cover,
+              alignment: Alignment.centerRight,
+              filterQuality: FilterQuality.high,
+              errorBuilder: (_, _, _) => const ColoredBox(
+                color: Color(0xFF080910),
+              ),
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  stops: [0, .36, .55, .74, 1],
+                  colors: [
+                    Color(0xFF07080D),
+                    Color(0xF707080D),
+                    Color(0x9907080D),
+                    Color(0x3307080D),
+                    Color(0x0007080D),
+                  ],
+                ),
+              ),
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  stops: [0, .22, .58, 1],
+                  colors: [
+                    Color(0xF9080910),
+                    Color(0xA9080910),
+                    Color(0x30080910),
+                    Color(0x00080910),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 24,
+              left: 30,
+              child: _brandLogo(width: 250, height: 76),
+            ),
+            Positioned(
+              top: 26,
+              right: 26,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isCatalogTab || _isRankingTab) ...[
+                    _heroAction(
+                      label: '搜尋',
+                      icon: Icons.search_rounded,
+                      onPressed: _televisionSearch,
+                    ),
+                    const SizedBox(width: 10),
+                    _heroAction(
+                      label: '手機掃碼',
+                      icon: Icons.qr_code_2_rounded,
+                      onPressed: _openPhoneSearch,
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  PopupMenuButton<String>(
+                    tooltip: '更多',
+                    onSelected: (value) {
+                      if (value == 'update') {
+                        unawaited(_refreshCatalog());
+                      } else if (value == 'sources') {
+                        unawaited(_manageSources());
+                      } else if (value == 'settings') {
+                        Navigator.push<void>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => SettingsScreen(
+                              repository: widget.repository,
+                              store: widget.store,
+                            ),
+                          ),
+                        );
+                      } else if (value == 'users') {
+                        Navigator.push<void>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProfilesScreen(store: widget.store),
+                          ),
+                        );
+                      } else if (value == 'about') {
+                        showAboutDialog(
+                          context: context,
+                          applicationName: appName,
+                          applicationVersion: AppLayout.versionOf(context),
+                          applicationIcon: const _DtvBrandMark(size: 56),
+                          children: const [Text('作者：R15')],
+                        );
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      if (_isCatalogTab && !_showRecommendations)
+                        const PopupMenuItem(
+                          value: 'update',
+                          child: Text('更新劇庫'),
+                        ),
+                      if (widget.repository.supportsSourceManagement)
+                        const PopupMenuItem(
+                          value: 'sources',
+                          child: Text('片源管理'),
+                        ),
+                      const PopupMenuItem(
+                        value: 'users',
+                        child: Text('使用者管理'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'settings',
+                        child: Text('設定與備份'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'about',
+                        child: Text('關於$appName'),
+                      ),
+                    ],
+                    child: Container(
+                      width: 54,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: const Color(0xB8171922),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0x66FFFFFF)),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.more_horiz_rounded,
+                        color: Colors.white,
+                        size: 27,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 42,
+              bottom: 42,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: width * .48),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '精彩隨時',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: .95),
+                        fontSize: 25,
+                        fontWeight: FontWeight.w700,
+                        height: 1.1,
+                        shadows: const [
+                          Shadow(color: Colors.black87, blurRadius: 14),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '大屏更過癮',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: (height * .105).clamp(34.0, 48.0),
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.2,
+                        height: 1.08,
+                        shadows: const [
+                          Shadow(color: Colors.black87, blurRadius: 18),
+                          Shadow(color: Color(0x88FF2C55), blurRadius: 22),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 3,
+              child: ColoredBox(
+                color: theme.colorScheme.primary.withValues(alpha: .82),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Shared cinematic D TV header used across all wide-screen sections.
