@@ -1,1 +1,1 @@
-Final HGTV 0.2.79+89 validation after Taiwan terminology polish, localized playback/errors, and TV catalog top-reset. Run OpenCC/search tests and build Android ARMv7 v7a APK.
+Final v7a validation for Taiwan Traditional Chinese UI and system locale zh_TW. Include latest main commit 874d05606adf09e180104960ee13d16c4ad23403.
