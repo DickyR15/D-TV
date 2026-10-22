@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
+
 /// 將來源站提供的簡體中文轉為台灣常用繁體中文。
 /// 僅處理畫面顯示文字；API 的分類 ID、查詢參數與原始資料不修改。
 const Map<String, String> _twPhrases = {
@@ -420,12 +424,153 @@ const Map<String, String> _twCharacters = {
   '真': '真',
 };
 
-String uiTraditional(String value) {
+String _uiTraditionalFallback(String value) {
   var result = value;
   for (final entry in _twPhrases.entries) {
     result = result.replaceAll(entry.key, entry.value);
   }
   for (final entry in _twCharacters.entries) {
+    result = result.replaceAll(entry.key, entry.value);
+  }
+  const restorations = {
+    '皇後': '皇后',
+    '太後': '太后',
+    '王後': '王后',
+    '頭發': '頭髮',
+    '白發': '白髮',
+    '長發': '長髮',
+    '短發': '短髮',
+    '理發': '理髮',
+    '染發': '染髮',
+    '洗發': '洗髮',
+    '發型': '髮型',
+    '頭發型': '頭髮型',
+    '公裡': '公里',
+    '里程': '里程',
+  };
+  for (final entry in restorations.entries) {
+    result = result.replaceAll(entry.key, entry.value);
+  }
+  return result;
+}
+
+
+class _OpenCcNode {
+  final Map<int, _OpenCcNode> children = {};
+  String? value;
+}
+
+_OpenCcNode? _openCcS2t;
+_OpenCcNode? _openCcTaiwan;
+bool _openCcReady = false;
+
+/// Load OpenCC dictionaries bundled in the APK; no network is used at runtime.
+Future<void> initializeUiLocalization() async {
+  final sourceFiles = <String, String>{};
+  for (final name in const [
+    'STCharacters.txt',
+    'STPhrases.txt',
+    'TWPhrases.txt',
+    'TWVariantsPhrases.txt',
+    'TWVariants.txt',
+  ]) {
+    sourceFiles[name] = await rootBundle.loadString('assets/opencc/$name');
+  }
+
+  final characterMap = _parseOpenCc(sourceFiles['STCharacters.txt']!);
+  final phraseMap = _parseOpenCc(sourceFiles['STPhrases.txt']!);
+  final taiwanPhraseMap = _parseOpenCc(sourceFiles['TWPhrases.txt']!);
+  final variantPhraseMap =
+      _parseOpenCc(sourceFiles['TWVariantsPhrases.txt']!);
+  final variantMap = _parseOpenCc(sourceFiles['TWVariants.txt']!);
+
+  final s2t = _OpenCcNode();
+  _insertOpenCc(s2t, characterMap, overwrite: false);
+  // OpenCC phrase entries take precedence over individual character mappings.
+  _insertOpenCc(s2t, phraseMap, overwrite: true);
+
+  final taiwan = _OpenCcNode();
+  // The first matching dictionary has precedence, as in OpenCC's s2twp chain.
+  _insertOpenCc(taiwan, taiwanPhraseMap, overwrite: false);
+  _insertOpenCc(taiwan, variantPhraseMap, overwrite: false);
+  _insertOpenCc(taiwan, variantMap, overwrite: false);
+
+  _openCcS2t = s2t;
+  _openCcTaiwan = taiwan;
+  _openCcReady = true;
+}
+
+Map<String, String> _parseOpenCc(String content) {
+  final result = <String, String>{};
+  for (final line in const LineSplitter().convert(content)) {
+    if (line.isEmpty || line.startsWith('#')) continue;
+    final separator = line.indexOf('\t');
+    if (separator <= 0 || separator == line.length - 1) continue;
+    final key = line.substring(0, separator);
+    final values = line.substring(separator + 1).trim().split(RegExp(r'\s+'));
+    if (key.isEmpty || values.isEmpty || values.first.isEmpty) continue;
+    result[key] = values.first;
+  }
+  return result;
+}
+
+void _insertOpenCc(
+  _OpenCcNode root,
+  Map<String, String> dictionary, {
+  required bool overwrite,
+}) {
+  for (final entry in dictionary.entries) {
+    var node = root;
+    for (final rune in entry.key.runes) {
+      node = node.children.putIfAbsent(rune, _OpenCcNode.new);
+    }
+    if (overwrite || node.value == null) node.value = entry.value;
+  }
+}
+
+String _convertOpenCc(String input, _OpenCcNode root) {
+  final runes = input.runes.toList(growable: false);
+  final output = StringBuffer();
+  var index = 0;
+  while (index < runes.length) {
+    var node = root;
+    var cursor = index;
+    String? bestValue;
+    var bestEnd = index;
+    while (cursor < runes.length) {
+      final next = node.children[runes[cursor]];
+      if (next == null) break;
+      node = next;
+      cursor++;
+      if (node.value != null) {
+        bestValue = node.value;
+        bestEnd = cursor;
+      }
+    }
+    if (bestValue != null) {
+      output.write(bestValue);
+      index = bestEnd;
+    } else {
+      output.write(String.fromCharCode(runes[index]));
+      index++;
+    }
+  }
+  return output.toString();
+}
+
+/// Convert source-site text to Taiwan Traditional Chinese for display only.
+/// API identifiers, category IDs, request arguments, and raw records stay intact.
+String uiTraditional(String value) {
+  final s2t = _openCcS2t;
+  final taiwan = _openCcTaiwan;
+  if (!_openCcReady || s2t == null || taiwan == null) {
+    return _uiTraditionalFallback(value);
+  }
+
+  var result = _convertOpenCc(value, s2t);
+  result = _convertOpenCc(result, taiwan);
+  // HGTV-specific terminology that is not part of the general OpenCC dictionaries.
+  for (final entry in _twPhrases.entries) {
     result = result.replaceAll(entry.key, entry.value);
   }
   const restorations = {
