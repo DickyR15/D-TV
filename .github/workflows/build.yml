@@ -55,7 +55,7 @@ jobs:
       - name: Test Taiwan Traditional Chinese conversion
         run: |
           flutter pub get
-          flutter test test/ui_localization_test.dart test/playback_preferences_test.dart
+          flutter test test/ui_localization_test.dart test/playback_preferences_test.dart test/resume_episode_test.dart
       - name: Set up Android signing (optional)
         shell: bash
         env:
