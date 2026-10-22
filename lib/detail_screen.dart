@@ -724,7 +724,7 @@ class _DetailScreenState extends State<DetailScreen> {
                         vertical: 5,
                       ),
                       child: Text(
-                        tag,
+                        uiTraditional(tag),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -735,7 +735,7 @@ class _DetailScreenState extends State<DetailScreen> {
         if (drama.description.isNotEmpty) ...[
           const SizedBox(height: 12),
           Text(
-            drama.description,
+            uiTraditional(drama.description),
             maxLines: _expandedDescription ? null : 3,
             overflow: _expandedDescription
                 ? TextOverflow.visible
@@ -755,7 +755,7 @@ class _DetailScreenState extends State<DetailScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              _detail!.warning,
+              uiTraditional(_detail!.warning),
               style: TextStyle(color: colors.error),
             ),
           ),
