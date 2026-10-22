@@ -267,17 +267,6 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                         : (value) => setState(() => _interval = value.round()),
                   ),
                   const SizedBox(height: 16),
-                  _count('同時下載數量', _downloads, (value) => _downloads = value),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _folders,
-                    title: const Text('按站源分類儲存'),
-                    subtitle: const Text('新任務放入各站源的子目錄，已有下載繼續使用原位置。'),
-                    onChanged: _busy
-                        ? null
-                        : (value) => setState(() => _folders = value),
-                  ),
                   if (_error != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
