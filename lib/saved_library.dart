@@ -98,7 +98,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
       ),
       badge: badge,
       subtitle: watched == null
-          ? SourceSite.byId(drama.source).name
+          ? uiTraditional(SourceSite.byId(drama.source).name)
           : '第 ${watched.episode} 集 · ${formatPosition(watched.position)}',
     );
   }
