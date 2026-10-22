@@ -54,7 +54,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         final accepted = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('從備份恢復使用者與記錄？'),
+            title: const Text('從備份還原使用者與記錄？'),
             content: const Text(
               '這份備份會替換使用者配置、追劇收藏、觀看紀錄與偏好設定。建議先匯出目前配置。',
             ),
@@ -134,7 +134,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   String _permissionsLabel(LocalProfile profile) {
-    if (profile.admin) return '管理員 · 全部許可權';
+    if (profile.admin) return '管理員 · 所有權限';
     final sources = profile.sources
         .where(SourceSite.isAvailable)
         .map((id) => uiTraditional(SourceSite.byId(id).name))
@@ -154,7 +154,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
             padding: const EdgeInsets.all(20),
             children: [
               if (widget.store.configurationError != null) ...[
-                Text('需要恢復本地配置', style: Theme.of(context).textTheme.titleLarge),
+                Text('需要還原本機設定', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
                 Text(widget.store.configurationError!),
                 const SizedBox(height: 12),
@@ -169,7 +169,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 ),
                 TextButton(
                   onPressed: _busy ? null : () => _recover(reload: true),
-                  child: const Text('重新讀取配置'),
+                  child: const Text('重新讀取設定'),
                 ),
               ] else ...[
                 Text(
@@ -419,7 +419,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
               ),
             const SizedBox(height: 20),
             if (widget.profile?.admin != true) ...[
-              Text('允許訪問的站源', style: Theme.of(context).textTheme.titleMedium),
+              Text('允許使用的片源', style: Theme.of(context).textTheme.titleMedium),
               for (final source in SourceSite.values)
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
