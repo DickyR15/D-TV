@@ -2103,7 +2103,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           Text(body, style: const TextStyle(height: 1.55)),
           if (widget.detail.warning.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text(widget.detail.warning, style: TextStyle(color: colors.error)),
+            Text(uiTraditional(widget.detail.warning), style: TextStyle(color: colors.error)),
           ],
         ],
       ),
