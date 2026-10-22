@@ -1024,6 +1024,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? SettingsScreen(
                           repository: widget.repository,
                           store: widget.store,
+                          embedded: true,
                         )
                       : SavedLibrary(
                           key: ValueKey('saved-tab-$_tab'),
