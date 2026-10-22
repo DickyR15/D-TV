@@ -8,6 +8,7 @@ import 'core_bridge.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'source_status.dart';
+import 'ui_localization.dart';
 
 String sourceTimestamp(DateTime? value) {
   if (value == null) return '尚無記錄';
@@ -143,16 +144,16 @@ class _SourcesScreenState extends State<SourcesScreen> {
   }
 
   Future<void> _copy(SourceSite source, SourceStatus status) async {
-    final text = StringBuffer('${source.name}\n');
+    final text = StringBuffer('${uiTraditional(source.name)}\n');
     text.writeln(
       '快取 ${status.count} 部，更新 ${sourceTimestamp(status.updatedAt)}',
     );
     final health = status.health;
     if (health != null) {
-      text.writeln('${health.label} · ${sourceTimestamp(health.checkedAt)}');
+      text.writeln('${uiTraditional(health.label)} · ${sourceTimestamp(health.checkedAt)}');
       if (health.sample.isNotEmpty) text.writeln('檢測劇集：${health.sample}');
       for (final step in health.steps) {
-        text.writeln('${step.name}：${step.message}');
+        text.writeln('${uiTraditional(step.name)}：${uiTraditional(step.message)}');
         text.writeln(
           '${step.host} HTTP ${step.httpStatus} · ${step.elapsedMs} ms',
         );
@@ -256,7 +257,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
         const SizedBox(width: 12),
         Expanded(
           child: Text(
-            source.name,
+            uiTraditional(source.name),
             style: Theme.of(context).textTheme.titleLarge,
           ),
         ),
@@ -336,7 +337,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                     child: const Text('停止'),
                   ),
                 PopupMenuButton<String>(
-                  tooltip: '${source.name}更多操作',
+                  tooltip: '${uiTraditional(source.name)}更多操作',
                   enabled: enabled,
                   onSelected: (operation) => _run(source, operation),
                   itemBuilder: (_) => [
@@ -446,7 +447,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(health.label),
+                                    Text(uiTraditional(health.label)),
                                     Text(
                                       sourceTimestamp(health.checkedAt),
                                       style: Theme.of(
@@ -476,7 +477,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 ],
               ),
               if (healthExpanded) ...[
-                if (health.sample.isNotEmpty) Text('檢測劇集：${health.sample}'),
+                if (health.sample.isNotEmpty) Text('檢測劇集：${uiTraditional(health.sample)}'),
                 for (final step in health.steps)
                   Padding(
                     padding: const EdgeInsets.only(top: 10),
@@ -497,7 +498,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('${step.name}：${step.message}'),
+                              Text('${uiTraditional(step.name)}：${uiTraditional(step.message)}'),
                               if (step.host.isNotEmpty || step.httpStatus > 0)
                                 Text(
                                   '${step.host}${step.httpStatus > 0 ? ' · HTTP ${step.httpStatus}' : ''} · ${step.elapsedMs} ms',
