@@ -92,6 +92,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   final _health = PlaybackHealth();
   Timer? _saveTimer;
   Timer? _healthTimer;
+  Timer? _syncDiagnosticTimer;
   Timer? _errorTimer;
   Timer? _pictureInPictureExitTimer;
   Future<void> _operations = Future<void>.value();
@@ -972,6 +973,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _seekSequence++;
     _danmaku.setPlan(null);
     _acceptErrors = false;
+    _syncDiagnosticTimer?.cancel();
+    _syncDiagnosticTimer = null;
     _pendingError = false;
     _errorTimer?.cancel();
     _health.reset();
@@ -1093,7 +1096,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             }
             await platform.setProperty('vd-lavc-fast', 'yes');
             await platform.setProperty('video-sync', 'audio');
-            await platform.setProperty('framedrop', 'vo');
+            // Keep TV playback real-time when frames fall behind the audio clock.
+            // Decoder-level dropping is more useful than VO-only dropping when
+            // decoding/rendering cannot keep up on lower-powered TV hardware.
+            await platform.setProperty('framedrop', _television ? 'decoder' : 'vo');
           } else if (Platform.isWindows) {
             await platform.setProperty('hwdec', 'd3d11va-copy');
           }
@@ -1132,6 +1138,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           return;
         }
         _openedIndex = index;
+        _startSyncDiagnostics();
         _enhancement.mediaReady();
         _attachLanPlayback();
         _health.reset();
@@ -1180,6 +1187,50 @@ class _PlayerScreenState extends State<PlayerScreen>
         await _releasePlayback(retained!.session, 'fallback_previous');
       }
     }
+  }
+
+  void _startSyncDiagnostics() {
+    _syncDiagnosticTimer?.cancel();
+    if (!_televisionDecoderApplies || _player.platform is! NativePlayer) {
+      return;
+    }
+    unawaited(_logPlaybackSyncHealth());
+    _syncDiagnosticTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!_closed && _acceptErrors && _foreground && _player.state.playing) {
+        unawaited(_logPlaybackSyncHealth());
+      }
+    });
+  }
+
+  Future<void> _logPlaybackSyncHealth() async {
+    final platform = _player.platform;
+    if (_closed || !_televisionDecoderApplies || platform is! NativePlayer) {
+      return;
+    }
+    const properties = <String>[
+      'avsync',
+      'total-avsync-change',
+      'decoder-frame-drop-count',
+      'frame-drop-count',
+      'mistimed-frame-count',
+      'hwdec-current',
+      'current-vo',
+      'container-fps',
+    ];
+    final values = <String>[];
+    for (final property in properties) {
+      try {
+        final value = await platform.getProperty(property);
+        values.add('$property=$value');
+      } catch (_) {
+        values.add('$property=n/a');
+      }
+    }
+    if (_closed) return;
+    DiaryService.add(
+      '[Sync] generation=$_generation decoder=${_televisionDecoder.name} '
+      'video-sync=audio framedrop=decoder ${values.join(' ')}',
+    );
   }
 
   Future<void> _logVideoOutput(VideoParams parameters) async {
@@ -1565,6 +1616,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
     _healthTimer?.cancel();
+    _syncDiagnosticTimer?.cancel();
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
     if (_pictureInPictureHandlerInstalled) {
