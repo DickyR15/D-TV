@@ -1,1 +1,1 @@
-Final build: current main includes zh_TW locale, Taiwan QR Code wording, OpenCC conversion test, TV sidebar rankings, phone search, and download-free visible UI.
+Final release validation for current main: Taiwan zh_TW locale, OpenCC Traditional conversion, phone QR Code search labels, left-side ranking navigation, and no visible downloads UI. Build only armeabi-v7a.
