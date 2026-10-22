@@ -26,6 +26,7 @@ dependencies:
   window_manager: ^0.5.1
   nsd: 5.0.1
   package_info_plus: ^10.2.1
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
