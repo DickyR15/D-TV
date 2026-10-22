@@ -24,4 +24,4 @@ class BuildVariant:
 
 def add_variant_argument(parser):
     parser.add_argument('--all-sources', action='store_true',
-                        help='構建包含全部站源的HGTV；預設構建僅紅果的HGTV')
+                        help='構建包含全部站源的 D TV；預設構建僅紅果的 D TV')
