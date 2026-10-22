@@ -12,6 +12,7 @@ import 'catalog_sort.dart';
 import 'recommendations_screen.dart';
 import 'rankings_screen.dart';
 import 'playback_launch_screen.dart';
+import 'detail_screen.dart';
 import 'local_store.dart';
 import 'lan_screen.dart';
 import 'models.dart';
@@ -728,12 +729,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openDrama(Drama drama, {bool resume = false}) {
     _pauseCatalog();
-    unawaited(
-      openPlaybackDirectly(
-        context,
-        drama: drama,
-        repository: widget.repository,
-        store: widget.store,
+    if (resume) {
+      // 觀看記錄／操作選單的「繼續觀看」維持一鍵續播。
+      unawaited(
+        openPlaybackDirectly(
+          context,
+          drama: drama,
+          repository: widget.repository,
+          store: widget.store,
+        ),
+      );
+      return;
+    }
+    // 一般海報點擊先進入劇情頁：新劇從第 1 集開始，有記錄則定位續播集數。
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DetailScreen(
+          drama: drama,
+          repository: widget.repository,
+          store: widget.store,
+        ),
       ),
     );
   }
