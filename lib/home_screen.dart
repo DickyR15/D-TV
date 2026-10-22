@@ -321,7 +321,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openPhoneSearch() async {
     final query = await showPhoneSearchDialog(context);
     if (!mounted || query == null || query.trim().isEmpty) return;
-    _submitSearch(query);
+    _submitHeaderSearch(query);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('已收到手機搜尋：${uiTraditional(query)}')),
@@ -359,6 +359,23 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted && (!_onlineSearch || _submittedQuery.isEmpty)) {
       await _load(useCache: true);
     }
+  }
+
+  void _submitHeaderSearch(String value) {
+    final query = value.trim();
+    if (query.isEmpty) return;
+    if (_isRankingTab) {
+      setState(() {
+        _tab = AppLayout.isTelevision(context) ? 8 : 0;
+        _showRecommendations = false;
+        _categorySelections[_group.id] = '';
+        _search.clear();
+        _searchVisible = false;
+        _submittedQuery = '';
+        _error = null;
+      });
+    }
+    _submitSearch(query);
   }
 
   Future<void> _chooseDisplayMode() async {
@@ -770,54 +787,137 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, constraints) {
         final television = AppLayout.isTelevision(context);
         final desktop = constraints.maxWidth >= 840;
+        final wide = constraints.maxWidth >= 1200;
         final scaffold = Scaffold(
           appBar: AppBar(
-            toolbarHeight: television ? 64 : null,
+            toolbarHeight: wide ? 76 : television ? 64 : null,
             titleSpacing: 12,
-            title: _tab == 0 && widget.store.sources.isNotEmpty
-                ? PopupMenuButton<SourceGroup>(
-                    key: const ValueKey('source-switch'),
-                    tooltip: '切換片源',
-                    enabled: _sourceGroups.length > 1,
-                    onSelected: _changeGroup,
-                    itemBuilder: (_) => [
-                      for (final group in _sourceGroups)
-                        PopupMenuItem(
-                          value: group,
-                          child: Row(
-                            children: [
-                              Expanded(child: Text(uiTraditional(group.name))),
-                              if (group.id == _group.id)
-                                const Icon(Icons.check_rounded, size: 20),
-                            ],
+            title: wide
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _brandLogo(width: 164, height: 52),
+                      const SizedBox(width: 16),
+                      Text(
+                        '發現好劇',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  )
+                : (
+                    _tab == 0 && widget.store.sources.isNotEmpty
+                                    ? PopupMenuButton<SourceGroup>(
+                                        key: const ValueKey('source-switch'),
+                                        tooltip: '切換片源',
+                                        enabled: _sourceGroups.length > 1,
+                                        onSelected: _changeGroup,
+                                        itemBuilder: (_) => [
+                                          for (final group in _sourceGroups)
+                                            PopupMenuItem(
+                                              value: group,
+                                              child: Row(
+                                                children: [
+                                                  Expanded(child: Text(uiTraditional(group.name))),
+                                                  if (group.id == _group.id)
+                                                    const Icon(Icons.check_rounded, size: 20),
+                                                ],
+                                              ),
+                                            ),
+                                        ],
+                                        child: SizedBox(
+                                          height: 48,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              _brandLogo(width: 126, height: 46),
+                                              const SizedBox(width: 8),
+                                              Flexible(
+                                                child: Text(
+                                                  uiTraditional(_group.name),
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (_sourceGroups.length > 1)
+                                                const Icon(Icons.expand_more_rounded),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    : _brandTitle()
+                  ),
+            actions: [
+                if (wide && (_isCatalogTab || _isRankingTab)) ...[
+                  SizedBox(
+                    width: constraints.maxWidth >= 1450 ? 340 : 260,
+                    height: 48,
+                    child: TextField(
+                      controller: _search,
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: _submitHeaderSearch,
+                      decoration: InputDecoration(
+                        hintText: '搜尋短劇',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        isDense: true,
+                        filled: true,
+                        fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
+                            width: 1.5,
                           ),
                         ),
-                    ],
-                    child: SizedBox(
-                      height: 48,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _brandLogo(width: 126, height: 46),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              uiTraditional(_group.name),
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          if (_sourceGroups.length > 1)
-                            const Icon(Icons.expand_more_rounded),
-                        ],
                       ),
                     ),
-                  )
-                : _brandTitle(),
-            actions: [
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 48,
+                    child: FilledButton.tonal(
+                      onPressed: () => _submitHeaderSearch(_search.text),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text('搜尋'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 48,
+                    child: FilledButton.tonalIcon(
+                      onPressed: _openPhoneSearch,
+                      icon: const Icon(Icons.qr_code_2_rounded),
+                      label: const Text('手機掃碼'),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 if (_tab == 1)
                   IconButton(
                     key: const ValueKey('follow-lan-sync'),
@@ -835,7 +935,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           : _openRankings,
                       icon: const Icon(Icons.leaderboard_outlined),
                     ),
-                  IconButton(
+                  if (!wide)
+                    IconButton(
                     key: const ValueKey('toggle-search'),
                     tooltip: _searchVisible ? '收起搜尋' : '搜尋',
                     icon: Icon(
@@ -847,7 +948,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? null
                         : _toggleSearch,
                   ),
-                  if (television)
+                  if (television && !wide)
                     IconButton(
                       key: const ValueKey('phone-qr-search'),
                       tooltip: '手機掃描 QR Code',
@@ -859,7 +960,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
                 if (_isCatalogTab &&
                     !_showRecommendations &&
-                    constraints.maxWidth >= 400)
+                    constraints.maxWidth >= 400 &&
+                    !wide)
                   RefreshAction(
                     key: const ValueKey('catalog-refresh'),
                     loading:

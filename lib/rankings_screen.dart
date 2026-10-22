@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
+import 'app_layout.dart';
+
 import 'catalog_filters.dart';
 import 'core_bridge.dart';
 import 'detail_screen.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'ranking_models.dart';
+import 'remote_widgets.dart';
 import 'widgets.dart';
 import 'ui_localization.dart';
 
@@ -164,9 +167,363 @@ class _RankingsScreenState extends State<RankingsScreen> {
     _load();
   }
 
+  String _boardTitle(RankingBoard? board) => switch (board?.id) {
+    'hongguo-hot' => '紅果・熱播榜',
+    'hongguo-real' => '真人劇熱播榜',
+    'hongguo-ai' => 'AI劇熱播榜',
+    'hongguo-comic' => '漫劇熱播榜',
+    _ => uiTraditional(board?.name ?? '榜單'),
+  };
+
+  void _openDrama(RankingItem item) {
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DetailScreen(
+          drama: item.drama,
+          repository: widget.repository,
+          store: widget.store,
+        ),
+      ),
+    );
+  }
+
+  Widget _loadMoreFooter() => Center(
+    child: _more
+        ? const Padding(
+            padding: EdgeInsets.all(16),
+            child: CircularProgressIndicator(),
+          )
+        : _hasMore
+        ? OutlinedButton.icon(
+            onPressed: () => _load(more: true),
+            icon: const Icon(Icons.expand_more_rounded),
+            label: const Text('載入更多'),
+          )
+        : const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('已顯示全部榜單'),
+          ),
+  );
+
+  Widget _rankingList(List<RankingItem> items) => RefreshIndicator(
+    onRefresh: () => _load(force: true),
+    child: ListView.builder(
+      key: ValueKey('ranking-${_board!.id}'),
+      controller: _scroll,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+      itemCount: items.length + 1,
+      itemBuilder: (context, index) {
+        if (index == items.length) return _loadMoreFooter();
+        final item = items[index];
+        return Card(
+          child: InkWell(
+            key: ValueKey('rank-${item.rank}-${item.drama.id}'),
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _openDrama(item),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 36,
+                    child: Text(
+                      '${item.rank}',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        color: item.rank <= 3
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 72,
+                    height: 108,
+                    child: DramaCover(
+                      drama: item.drama,
+                      repository: widget.repository,
+                      radius: 8,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          uiTraditional(item.drama.title),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        if (item.drama.category.isNotEmpty)
+                          Text(
+                            uiTraditional(item.drama.category),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        if (item.metric.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              item.metric,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+
+  Widget _rankingTile(
+    RankingItem item, {
+    required double posterWidth,
+    required bool remote,
+    FocusNode? focusNode,
+    VoidCallback? onFocus,
+  }) {
+    final theme = Theme.of(context);
+    final badgeBackground = switch (item.rank) {
+      1 => const Color(0xFFFFD166),
+      2 => const Color(0xFFE0E5EB),
+      3 => const Color(0xFFCD9365),
+      _ => const Color(0xB8202328),
+    };
+    final badgeForeground = item.rank <= 2
+        ? const Color(0xFF252328)
+        : Colors.white;
+    final card = Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: posterWidth * 1.5,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                DramaCover(
+                  drama: item.drama,
+                  repository: widget.repository,
+                  radius: 0,
+                  showGradient: false,
+                  showEpisodeBadge: false,
+                ),
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: badgeBackground,
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Text(
+                      '${item.rank}',
+                      style: TextStyle(
+                        color: badgeForeground,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(9, 8, 9, 7),
+              child: Text(
+                uiTraditional(item.drama.title),
+                key: ValueKey('rank-title-${item.rank}-${item.drama.id}'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  height: 1.25,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (remote) {
+      return RemoteTarget(
+        key: ValueKey('rank-${item.rank}-${item.drama.id}'),
+        focusNode: focusNode,
+        onFocus: onFocus,
+        onPressed: () => _openDrama(item),
+        label: '第 ${item.rank} 名，${uiTraditional(item.drama.title)}',
+        padding: const EdgeInsets.all(2),
+        radius: 15,
+        borderWidth: 2,
+        outlined: true,
+        child: card,
+      );
+    }
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: ValueKey('rank-${item.rank}-${item.drama.id}'),
+        onTap: () => _openDrama(item),
+        borderRadius: BorderRadius.circular(14),
+        child: card,
+      ),
+    );
+  }
+
+  Widget _rankingGrid(List<RankingItem> items, double width) {
+    final television = AppLayout.isTelevision(context);
+    final columns = (width / 255).floor().clamp(2, 5);
+    const spacing = 14.0;
+    const horizontalPadding = 18.0;
+    final posterWidth =
+        (width - horizontalPadding * 2 - spacing * (columns - 1)) / columns;
+    final itemExtent = posterWidth * 1.5 + 66;
+    final footer = Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 18),
+      child: _loadMoreFooter(),
+    );
+    if (television) {
+      return RemoteGrid(
+        key: ValueKey('ranking-grid-${_board!.id}'),
+        itemKeys: items.map((item) => item.drama.id).toList(),
+        columns: columns,
+        itemExtent: itemExtent,
+        spacing: spacing,
+        padding: const EdgeInsets.fromLTRB(
+          horizontalPadding,
+          0,
+          horizontalPadding,
+          12,
+        ),
+        controller: _scroll,
+        autofocus: true,
+        itemBuilder: (context, index, focusNode, onFocus) => _rankingTile(
+          items[index],
+          posterWidth: posterWidth - 4,
+          remote: true,
+          focusNode: focusNode,
+          onFocus: onFocus,
+        ),
+        footer: footer,
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: () => _load(force: true),
+      child: CustomScrollView(
+        key: ValueKey('ranking-grid-${_board!.id}'),
+        controller: _scroll,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              horizontalPadding,
+              0,
+              horizontalPadding,
+              8,
+            ),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisExtent: itemExtent,
+                crossAxisSpacing: spacing,
+                mainAxisSpacing: spacing,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => _rankingTile(
+                  items[index],
+                  posterWidth: posterWidth,
+                  remote: false,
+                ),
+                childCount: items.length,
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(child: footer),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _scrollToTop() async {
+    if (!_scroll.hasClients) return;
+    await _scroll.animateTo(
+      0,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Widget _wideFooter(int count) {
+    final theme = Theme.of(context);
+    final status = _more
+        ? '正在載入更多…'
+        : _hasMore
+        ? '上滑載入更多'
+        : '已顯示全部短劇';
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: 64,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
+        ),
+        child: Row(
+          children: [
+            FilledButton.tonalIcon(
+              onPressed: _scrollToTop,
+              icon: const Icon(Icons.keyboard_double_arrow_up_rounded),
+              label: const Text('回到頂部'),
+            ),
+            const Spacer(),
+            Text(
+              '已載入 $count 部短劇 · $status',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const Spacer(),
+            FilledButton.tonalIcon(
+              onPressed: _loading || _more ? null : () => _load(force: true),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('重新整理'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= 1200;
     final groups = SourceGroup.fromSources(
+
       _boards.map((board) => SourceSite.byId(board.source)).toSet(),
     );
     final boards = _boards
@@ -219,33 +576,49 @@ class _RankingsScreenState extends State<RankingsScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: wide ? _wideFooter(items.length) : null,
       body: SafeArea(
         top: false,
         child: Column(
           children: [
             if (widget.embedded)
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                padding: EdgeInsets.fromLTRB(18, wide ? 14 : 8, 18, 8),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
-                      child: Text(
-                        uiTraditional(_board?.name ?? '榜單'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _boardTitle(_board),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '已載入 ${items.length} 部短劇',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    RefreshAction(
-                      loading: _loading || _more,
-                      tooltip: '更新榜單',
-                      onPressed: _board == null ? _initialize : () => _load(force: true),
-                    ),
+                    if (!wide)
+                      RefreshAction(
+                        loading: _loading || _more,
+                        tooltip: '更新榜單',
+                        onPressed: _board == null ? _initialize : () => _load(force: true),
+                      ),
                   ],
                 ),
               ),
-            // Keep board switching available in the consolidated TV ranking entry.
-            if (boards.isNotEmpty)
+            if (!widget.embedded && boards.isNotEmpty)
               CatalogFilters(
                 key: ValueKey('ranking-boards-${_board!.groupId}'),
                 categories: [
@@ -257,7 +630,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     _select(boards.firstWhere((board) => board.id == id)),
                 onRetry: () => _load(force: true),
               ),
-            if (_board != null)
+            if (_board != null && !widget.embedded)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Align(
@@ -317,126 +690,15 @@ class _RankingsScreenState extends State<RankingsScreen> {
                           ? _initialize
                           : () => _load(force: true),
                     )
-                  : RefreshIndicator(
-                      onRefresh: () => _load(force: true),
-                      child: ListView.builder(
-                        key: ValueKey('ranking-${_board!.id}'),
-                        controller: _scroll,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-                        itemCount: items.length + 1,
-                        itemBuilder: (context, index) {
-                          if (index == items.length) {
-                            return Center(
-                              child: _more
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(16),
-                                      child: CircularProgressIndicator(),
-                                    )
-                                  : _hasMore
-                                  ? OutlinedButton(
-                                      onPressed: () => _load(more: true),
-                                      child: const Text('載入更多'),
-                                    )
-                                  : const Padding(
-                                      padding: EdgeInsets.all(16),
-                                      child: Text('已顯示全部榜單'),
-                                    ),
-                            );
-                          }
-                          final item = items[index];
-                          return Card(
-                            child: InkWell(
-                              key: ValueKey(
-                                'rank-${item.rank}-${item.drama.id}',
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () => Navigator.push<void>(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => DetailScreen(
-                                    drama: item.drama,
-                                    repository: widget.repository,
-                                    store: widget.store,
-                                  ),
-                                ),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 36,
-                                      child: Text(
-                                        '${item.rank}',
-                                        style: TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.w800,
-                                          color: item.rank <= 3
-                                              ? Theme.of(
-                                                  context,
-                                                ).colorScheme.primary
-                                              : Theme.of(
-                                                  context,
-                                                ).colorScheme.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      width: 72,
-                                      height: 108,
-                                      child: DramaCover(
-                                        drama: item.drama,
-                                        repository: widget.repository,
-                                        radius: 8,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            uiTraditional(item.drama.title),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(
-                                              context,
-                                            ).textTheme.titleMedium,
-                                          ),
-                                          if (item.drama.category.isNotEmpty)
-                                            Text(
-                                              uiTraditional(item.drama.category),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          if (item.metric.isNotEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                top: 8,
-                                              ),
-                                              child: Text(
-                                                item.metric,
-                                                style: TextStyle(
-                                                  color: Theme.of(
-                                                    context,
-                                                  ).colorScheme.primary,
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    const Icon(Icons.chevron_right_rounded),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth >= 1200) {
+                          return _rankingGrid(items, constraints.maxWidth);
+                        }
+                        return _rankingList(items);
+                      },
                     ),
+
             ),
           ],
         ),
