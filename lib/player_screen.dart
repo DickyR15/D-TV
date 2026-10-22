@@ -1035,7 +1035,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           return;
         }
         if (plan.url.isEmpty) {
-          throw AppFailure('站源未返回播放地址，請重試');
+          throw AppFailure('片源未提供播放網址，請重試');
         }
         final platform = _player.platform;
         if (platform is NativePlayer) {
