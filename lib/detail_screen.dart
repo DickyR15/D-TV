@@ -486,20 +486,6 @@ class _DetailScreenState extends State<DetailScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                   child: Row(
                     children: [
-                      if (widget.repository.supportsDownloads &&
-                          widget.store.canDownload) ...[
-                        IconButton.filledTonal(
-                          tooltip: '下載選集',
-                          onPressed: allowed && !_loading && episodes.isNotEmpty
-                              ? _download
-                              : null,
-                          style: IconButton.styleFrom(
-                            minimumSize: const Size(52, 52),
-                          ),
-                          icon: const Icon(Icons.download_rounded),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
                       Expanded(
                         child: FilledButton.icon(
                           key: const ValueKey('start-play'),
