@@ -845,7 +845,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.sync_rounded),
                   ),
                 if (_isCatalogTab) ...[
-                  if (!_showRecommendations)
+                  if (!_showRecommendations && (!television || _tab != 0))
                     IconButton(
                       tooltip: '排序與篩選 · ${widget.store.catalogView.sort.label}',
                       onPressed: widget.store.sources.isEmpty

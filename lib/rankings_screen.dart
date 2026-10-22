@@ -244,7 +244,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   ],
                 ),
               ),
-            if (boards.isNotEmpty)
+            if (!widget.embedded && boards.isNotEmpty)
               CatalogFilters(
                 key: ValueKey('ranking-boards-${_board!.groupId}'),
                 categories: [
