@@ -1,7 +1,7 @@
 name: hgtv
 description: HGTV 短劇播放器（繁體中文台灣版）
 publish_to: none
-version: 0.2.79+89
+version: 0.2.80+90
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
