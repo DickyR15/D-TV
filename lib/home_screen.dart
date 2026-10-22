@@ -1245,7 +1245,7 @@ class _HomeScreenState extends State<HomeScreen> {
           key: ValueKey('filters-${_group.id}'),
           categories: _displayCategories,
           category: _displayCategory,
-          error: _categoriesError,
+          error: _categoriesError == null ? null : uiTraditional(_categoriesError!),
           onCategory: _changeCategory,
           onRetry: () => _loadCategories(force: true),
           trailing: Row(
