@@ -169,9 +169,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }
 
   String _boardTitle(RankingBoard? board) => switch (board?.id) {
-    'hongguo-hot' => '紅果・熱播榜',
-    'hongguo-real' => '真人劇熱播榜',
-    'hongguo-ai' => 'AI劇熱播榜',
+    'hongguo-hot' => '紅果熱播榜',
+    'hongguo-real' => '真人熱播榜',
+    'hongguo-ai' => 'AI熱播榜',
     'hongguo-comic' => '漫劇熱播榜',
     _ => uiTraditional(board?.name ?? '榜單'),
   };
