@@ -43,3 +43,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/video_enhancement/
+    - android/app/src/main/res/drawable/app_icon.png
