@@ -1101,6 +1101,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _categorySelections[_group.id] = '';
       _error = null;
     });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
     if (shouldReload) _load(useCache: true);
   }
 
