@@ -8,6 +8,7 @@ import 'local_store.dart';
 import 'models.dart';
 import 'playback_launch_screen.dart';
 import 'widgets.dart';
+import 'ui_localization.dart';
 
 class RecommendationsScreen extends StatefulWidget {
   const RecommendationsScreen({
@@ -147,7 +148,7 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    _error!,
+                    uiTraditional(_error!),
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                     ),
