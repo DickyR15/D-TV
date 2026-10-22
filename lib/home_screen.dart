@@ -1224,7 +1224,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Icons.history_rounded,
                                 size: 16,
                               ),
-                              label: Text(query),
+                              label: Text(uiTraditional(query)),
                               onPressed: () => _submitSearch(query),
                             ),
                           ),
