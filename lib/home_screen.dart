@@ -421,6 +421,7 @@ class _HomeScreenState extends State<HomeScreen> {
             : '篩選目前已載入的短劇',
         recentSearches: widget.store.recentSearches,
         onCancel: () => unawaited(widget.repository.cancelSuggestions()),
+        onPhoneSearch: () => unawaited(_openPhoneSearch()),
         suggestions: _searchSuggestions ? widget.repository.suggestions : null,
       ),
     );
