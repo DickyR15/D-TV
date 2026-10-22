@@ -1,1 +1,1 @@
-Final v7a validation for latest main commit 9fe487be46a06a30375db3799530a8781448e84d. Verify Taiwan Traditional Chinese conversion tests and package HGTV-armeabi-v7a.apk.
+Final HGTV 0.2.79+89 validation after Taiwan terminology polish, localized playback/errors, and TV catalog top-reset. Run OpenCC/search tests and build Android ARMv7 v7a APK.
