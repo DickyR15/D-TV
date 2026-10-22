@@ -1230,6 +1230,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// The complete logo, woman portrait and larger Taiwan Traditional Chinese
   /// slogan live in one purpose-built panoramic asset.
   Widget _homeBrandBanner({required double width, required double height}) {
+    final sloganSize = (height * .19).clamp(18.0, 34.0).toDouble();
     return Container(
       width: width,
       height: height,
@@ -1248,16 +1249,74 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(11),
-        child: Image.asset(
-          'assets/brand/dtv-home-header.webp',
-          fit: BoxFit.fill,
-          filterQuality: FilterQuality.high,
-          errorBuilder: (_, error, stack) => Container(
-            color: const Color(0xFF080910),
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: _brandLogo(width: width * .42, height: height * .78),
-          ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/brand/dtv-home-header.webp',
+              fit: BoxFit.fill,
+              filterQuality: FilterQuality.high,
+              errorBuilder: (_, error, stack) => Container(
+                color: const Color(0xFF080910),
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: _brandLogo(width: width * .42, height: height * .78),
+              ),
+            ),
+            // Mask the small slogan baked into the image and redraw it larger
+            // for Google TV viewing distance. Keep the DTV logo and portrait.
+            Positioned(
+              left: 0,
+              bottom: 0,
+              width: width * .78,
+              height: height * .35,
+              child: Container(
+                alignment: Alignment.bottomLeft,
+                padding: EdgeInsets.only(
+                  left: width * .025,
+                  right: width * .025,
+                  bottom: height * .025,
+                  top: height * .025,
+                ),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Color(0xF5080910),
+                      Color(0xE8080910),
+                      Color(0x00080910),
+                    ],
+                    stops: [0, .68, 1],
+                  ),
+                ),
+                child: Text(
+                  '精彩隨時　大屏更過癮',
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: sloganSize,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                    letterSpacing: .5,
+                    shadows: const [
+                      Shadow(
+                        color: Color(0xFFFF243F),
+                        blurRadius: 10,
+                      ),
+                      Shadow(
+                        color: Color(0xFF000000),
+                        blurRadius: 4,
+                        offset: Offset(1, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
