@@ -13,6 +13,7 @@ import 'local_store.dart';
 import 'profiles_screen.dart';
 import 'app_build.dart';
 import 'sources_screen.dart';
+import 'ui_localization.dart';
 import 'widgets.dart';
 import 'resource_settings_screen.dart';
 import 'lan_screen.dart';
@@ -178,7 +179,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ListTile(
                 leading: const Icon(Icons.people_outline),
                 title: const Text('使用者管理'),
-                subtitle: Text('當前：${widget.store.profile.name}'),
+                subtitle: Text('目前：${uiTraditional(widget.store.profile.name)}'),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
@@ -233,11 +234,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _busy ? null : () => _backup(true),
                 ),
               ],
-              if (Platform.isIOS)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('iOS 下載和媒體處理需要保持應用在前臺；切到後臺會暫停，回到前臺後可繼續。'),
-                ),
               if (_busy) const LinearProgressIndicator(),
               if (_message != null)
                 Padding(
