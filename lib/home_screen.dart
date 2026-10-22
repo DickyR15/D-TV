@@ -52,7 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasMore = true;
   String? _error;
   int _generation = 0;
-  int _tab = 4;
+  int _tab = 0;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
   late final CatalogBrowser _browser;
@@ -404,40 +404,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _televisionBack() {
     if (_exitConfirmationShowing) return;
-    if (_tab != 0) {
-      _selectCatalogTab(0);
-      _navigationFocusNodes[0]?.requestFocus();
-      _lastBackAt = DateTime.now();
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('再按一次返回鍵，確認是否離開 D TV'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      return;
-    }
+
     if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
       _lastBackAt = null;
       return;
     }
+
     final now = DateTime.now();
     final previous = _lastBackAt;
-    if (previous == null || now.difference(previous) > const Duration(seconds: 2)) {
+    if (previous == null ||
+        now.difference(previous) > const Duration(seconds: 2)) {
+      // The first Back press returns to New Drama if needed. Do not show the
+      // bottom SnackBar; the second Back press opens the confirmation dialog.
+      if (_tab != 0) {
+        _selectCatalogTab(0);
+        _navigationFocusNodes[0]?.requestFocus();
+      }
       _lastBackAt = now;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('再按一次返回鍵，確認是否離開 D TV'),
-            duration: Duration(seconds: 2),
-          ),
-        );
       return;
     }
+
     _lastBackAt = null;
     unawaited(_confirmTelevisionExit());
   }
@@ -449,15 +437,25 @@ class _HomeScreenState extends State<HomeScreen> {
       final shouldExit = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('您確定要離開了嗎？'),
-          content: const Text('確定要離開 D TV 嗎？'),
+          title: const Text('確定要離開 D TV 嗎？'),
           actions: [
-            TextButton(
+            FilledButton(
               autofocus: true,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFF3D45),
+                foregroundColor: Colors.white,
+              ),
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: const Text('否'),
             ),
-            FilledButton(
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(dialogContext).colorScheme.onSurface,
+                side: BorderSide(
+                  color: Theme.of(dialogContext).colorScheme.outline,
+                  width: 1.5,
+                ),
+              ),
               onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('是'),
             ),
@@ -1512,8 +1510,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-        if (television && _tab == 0 && !_showRecommendations && _search.text.trim().isEmpty)
-          _homeHero(),
         if (_showRecommendations)
           Expanded(
             child: GestureDetector(
@@ -1663,80 +1659,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ],
-    );
-  }
-
-  Widget _homeHero() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
-      child: SizedBox(
-        height: 238,
-        width: double.infinity,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset(
-                'assets/brand/dtv-tv-banner.webp',
-                fit: BoxFit.cover,
-                alignment: const Alignment(1, -0.18),
-                errorBuilder: (_, __, ___) => const ColoredBox(
-                  color: Color(0xFF1A1015),
-                  child: SizedBox.expand(),
-                ),
-              ),
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    stops: [0, 0.48, 1],
-                    colors: [
-                      Color(0xFF0A080B),
-                      Color(0xF20A080B),
-                      Color(0x080A080B),
-                    ],
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(30, 18, 24, 18),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: SizedBox(
-                    width: 440,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '精彩，從這裡開始',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '海量短劇，隨選隨看',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: const Color(0xFFE7DDE1),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 

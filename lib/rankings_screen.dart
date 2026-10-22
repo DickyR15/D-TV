@@ -434,7 +434,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
           12,
         ),
         controller: _scroll,
-        autofocus: true,
+        // Keep focus on the left navigation while switching ranking tabs.
+        // ArrowRight explicitly enters the poster grid.
+        autofocus: false,
         itemBuilder: (context, index, focusNode, onFocus) => _rankingTile(
           items[index],
           posterWidth: posterWidth - 4,
