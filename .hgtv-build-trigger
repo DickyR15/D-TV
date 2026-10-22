@@ -1,1 +1,1 @@
-Final validation after profile/download UI cleanup and Taiwan Traditional Chinese conversion. Build release 0.2.79+89 for Android ARMv7.
+Final validation: OpenCC Taiwan Traditional Chinese UI, Traditional-input matching against source titles, simplified TV navigation, no exposed downloads, and QR search. Build Android armeabi-v7a.
