@@ -442,7 +442,16 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_exitConfirmationShowing) return;
     if (_tab != 0) {
       _selectCatalogTab(0);
-      _lastBackAt = null;
+      _navigationFocusNodes[0]?.requestFocus();
+      _lastBackAt = DateTime.now();
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('再按一次返回鍵，確認是否離開 D TV'),
+            duration: Duration(seconds: 2),
+          ),
+        );
       return;
     }
     if (_search.text.isNotEmpty) {
