@@ -96,7 +96,7 @@ class PhoneSearchServer {
         await _respond(
           request,
           HttpStatus.forbidden,
-          _page('連線已失效', '請回到電視重新開啟手機 QR Code 搜尋。'),
+          _page('連線已失效', '請回到電視重新開啟手機掃描 QR Code。'),
         );
         return;
       }
@@ -268,7 +268,7 @@ class _PhoneSearchDialogState extends State<_PhoneSearchDialog> {
     final colors = Theme.of(context).colorScheme;
     final url = widget.server.url.toString();
     return AlertDialog(
-      title: const Text('手機 QR Code 搜尋'),
+      title: const Text('手機掃描 QR Code'),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
