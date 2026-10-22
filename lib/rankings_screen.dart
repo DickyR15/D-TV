@@ -197,7 +197,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
               _select(_boards.firstWhere((board) => board.groupId == group.id)),
           itemBuilder: (_) => [
             for (final group in groups)
-              PopupMenuItem(value: group, child: Text(group.name)),
+              PopupMenuItem(value: group, child: Text(uiTraditional(group.name))),
           ],
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -205,7 +205,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
               Text(
                 _board == null
                     ? '榜單'
-                    : '${SourceSite.byId(_board!.source).groupName}榜單',
+                    : '${uiTraditional(SourceSite.byId(_board!.source).groupName)}榜單',
               ),
               if (groups.length > 1) const Icon(Icons.expand_more_rounded),
             ],
@@ -264,7 +264,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   child: Text(
                     [
                       uiTraditional(_board!.description),
-                      if (_updated.isNotEmpty) _updated,
+                      if (_updated.isNotEmpty) uiTraditional(_updated),
                     ].join(' '),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -279,7 +279,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        _error!,
+                        uiTraditional(_error!),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.error,
                         ),
