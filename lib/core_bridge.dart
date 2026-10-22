@@ -37,7 +37,7 @@ String _nativeRequest(String body) {
   } else if (Platform.isIOS) {
     library = DynamicLibrary.process();
   } else {
-    throw UnsupportedError('當前首版支援 Android 手機和 Windows 電腦');
+    throw UnsupportedError('目前版本支援 Android 電視與手機');
   }
   final request = library.lookupFunction<_NativeRequest, _DartRequest>(
     'DuanjuRequest',
@@ -48,7 +48,7 @@ String _nativeRequest(String body) {
   try {
     output = request(input);
     if (output == nullptr) {
-      throw StateError('本地核心沒有返回結果');
+      throw StateError('本機核心沒有傳回結果');
     }
     return output.toDartString();
   } finally {
@@ -71,7 +71,7 @@ abstract class AppRepository {
   Future<Map<String, dynamic>> lan(
     String command,
     Map<String, dynamic> payload,
-  ) async => throw AppFailure('當前環境不支援裝置互聯');
+  ) async => throw AppFailure('目前環境不支援裝置互聯');
   Future<PlaybackPlan?> prepareHandoff(
     Drama drama,
     Episode episode, {
@@ -81,7 +81,7 @@ abstract class AppRepository {
   Future<ResourceSettings> resourceSettings() async => const ResourceSettings();
   Future<ResourceSettings> saveResourceSettings(
     ResourceSettings settings,
-  ) async => throw AppFailure('當前環境不支援資源設定');
+  ) async => throw AppFailure('目前環境不支援資源設定');
   final catalogUpdates = CatalogUpdates();
   Future<void> cancelPreload() async {}
   Future<PlaybackPlan?> preload(
@@ -95,7 +95,7 @@ abstract class AppRepository {
     PlaybackPlan plan, {
     required int startMs,
     required int durationMs,
-  }) async => throw AppFailure('當前環境不支援彈幕');
+  }) async => throw AppFailure('目前環境不支援彈幕');
   Future<void> cancelCatalog() async {}
   Future<void> cancelSuggestions() async {}
   Future<void> cancelRecommendations() async {}
@@ -105,13 +105,13 @@ abstract class AppRepository {
     String genre, {
     bool more = false,
     bool force = false,
-  }) async => throw AppFailure('當前環境不支援紅果推薦');
+  }) async => throw AppFailure('目前環境不支援紅果推薦');
   Future<List<RankingBoard>> rankingBoards() async => const [];
   Future<RankingPage> rankings(
     String board, {
     int page = 1,
     bool force = false,
-  }) async => throw AppFailure('當前環境不支援榜單');
+  }) async => throw AppFailure('目前環境不支援榜單');
   Future<List<CatalogCategory>> categories(
     String source, {
     bool force = false,
@@ -123,15 +123,15 @@ abstract class AppRepository {
     String source,
     String operation, {
     Drama? drama,
-  }) async => throw AppFailure('當前環境不支援站源管理');
+  }) async => throw AppFailure('目前環境不支援片源管理');
   Future<SourceStatus> cancelSourceJob(String source) async =>
-      throw AppFailure('當前環境不支援站源管理');
+      throw AppFailure('目前環境不支援片源管理');
   Future<List<String>> suggestions(String query) async => const [];
   Future<Map<String, dynamic>> storage() async => {};
   Future<String> downloadDirectory() async =>
       (await storage())['directory'] as String? ?? '';
   Future<void> moveDownloads(String directory) async =>
-      throw AppFailure('當前環境不支援遷移');
+      throw AppFailure('目前環境不支援遷移');
   Future<int> workLease(String id, String command) async => 0;
   bool get supportsDownloads => false;
   Future<List<DownloadJob>> downloads() async => [];
@@ -139,14 +139,14 @@ abstract class AppRepository {
     DramaDetail detail,
     List<Episode> episodes, {
     int quality = 0,
-  }) async => throw AppFailure('當前環境不支援下載');
+  }) async => throw AppFailure('目前環境不支援下載');
   Future<void> controlDownloads(String command, {String id = ''}) async {}
   Future<DownloadBatchResult> controlDownloadBatch(
     String command,
     List<String> ids, {
     Map<String, String> expectedVersions = const {},
   }) async {
-    if (expectedVersions.isNotEmpty) throw AppFailure('當前環境不支援校驗後清理原分集');
+    if (expectedVersions.isNotEmpty) throw AppFailure('目前環境不支援校驗後清理原分集');
     final completed = <String>[], failures = <String, String>{};
     for (final id in ids.toSet()) {
       try {
@@ -425,7 +425,7 @@ class NativeRepository extends AppRepository {
     Drama? drama,
   }) async {
     _authorize(source);
-    if (drama != null && drama.source != source) throw AppFailure('站源與劇集不匹配');
+    if (drama != null && drama.source != source) throw AppFailure('片源與劇集不相符');
     final epoch = access?.profileEpoch;
     await BackgroundDownloads.ensureStarted();
     if (epoch != access?.profileEpoch) throw AppFailure('使用者已切換，請重新操作');
@@ -447,19 +447,19 @@ class NativeRepository extends AppRepository {
 
   void _authorize(String source, {bool download = false}) {
     if (!SourceSite.isAvailable(source)) {
-      throw AppFailure('當前版本不包含此站源');
+      throw AppFailure('目前版本不包含此片源');
     }
     if (access == null) return;
     if (access!.locked ||
         !access!.allowsSource(source) ||
         download && !access!.canDownload) {
-      throw AppFailure('當前使用者沒有此操作許可權');
+      throw AppFailure('目前使用者沒有執行此操作的權限');
     }
   }
 
   void _downloadPermission() {
     if (access != null && (access!.locked || !access!.canDownload)) {
-      throw AppFailure('當前使用者僅支援線上觀看');
+      throw AppFailure('目前使用者僅能線上觀看');
     }
   }
 
@@ -491,7 +491,7 @@ class NativeRepository extends AppRepository {
   Future<void> moveDownloads(String directory) async {
     _downloadPermission();
     if (access != null && !access!.profile.admin) {
-      throw AppFailure('僅管理員可更改下載目錄');
+      throw AppFailure('只有管理員可以變更下載資料夾');
     }
     await BackgroundDownloads.ensureStarted();
     await workLease('storage', 'start');
@@ -532,7 +532,7 @@ class NativeRepository extends AppRepository {
                 'disconnect',
               }.contains(input['command']);
       final epoch = access?.profileEpoch;
-      if (!unrestricted && access?.locked == true) throw AppFailure('請先解鎖當前使用者');
+      if (!unrestricted && access?.locked == true) throw AppFailure('請先解鎖目前使用者');
       if (action == 'rankings') {
         _authorize(RankingBoard.sourceForID(input['board'] as String));
       }
@@ -638,9 +638,9 @@ class NativeRepository extends AppRepository {
           }).catchError((Object _) => <String, dynamic>{}),
         );
       }
-      throw AppFailure('站源響應超時，請重試');
+      throw AppFailure('片源回應逾時，請重試');
     } catch (_) {
-      throw AppFailure('本地核心載入失敗，請使用完整安裝包重新安裝');
+      throw AppFailure('本機核心載入失敗，請使用完整安裝包重新安裝');
     }
   }
 
@@ -655,7 +655,7 @@ class NativeRepository extends AppRepository {
       'directory': directory.path,
     });
     if (build['allSources'] != allSourcesEnabled) {
-      throw AppFailure('應用與原生核心的站源版本不一致，請使用完整安裝包重新安裝');
+      throw AppFailure('應用程式與原生核心的片源版本不一致，請使用完整安裝包重新安裝');
     }
     if (!background) await BackgroundDownloads.prepare();
     if (!background) {
@@ -850,7 +850,7 @@ class NativeRepository extends AppRepository {
     if (ids.isEmpty || ids.length > 500) throw AppFailure('每批請選擇 1 至 500 個任務');
     final visible = (await downloads()).map((job) => job.id).toSet();
     if (ids.any((id) => !visible.contains(id))) {
-      throw AppFailure('部分任務已刪除或當前使用者無權操作，請重新整理');
+      throw AppFailure('部分任務已刪除或目前使用者無權操作，請重新整理');
     }
     if (command == 'resume') await BackgroundDownloads.ensureStarted();
     if (epoch != access?.profileEpoch) throw AppFailure('使用者已切換，請重新操作');
@@ -885,7 +885,7 @@ class NativeRepository extends AppRepository {
         return;
       }
       if (!visible.any((job) => job.id == id)) {
-        throw AppFailure('當前使用者沒有此下載任務許可權');
+        throw AppFailure('目前使用者沒有此下載任務的權限');
       }
     }
     await _call({
