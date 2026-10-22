@@ -8,7 +8,6 @@
     <item
         android:width="160dp"
         android:height="160dp"
-        android:gravity="center">
-        <bitmap android:src="@drawable/dtv_icon" android:gravity="fill" />
-    </item>
+        android:gravity="center"
+        android:drawable="@drawable/dtv_icon" />
 </layer-list>
