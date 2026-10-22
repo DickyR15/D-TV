@@ -39,6 +39,10 @@ void main() {
     expect(matchesDramaQuery(drama, '改寫命運'), isTrue);
   });
 
+  test('uses Taiwan wording for QR code terminology', () {
+    expect(uiTraditional('二維碼、掃碼、手機'), 'QR Code、掃描、手機');
+  });
+
   test('keeps source identifiers and Latin labels untouched', () {
     expect(uiTraditional('hongguo-hot / HGTV / AI'), 'hongguo-hot / HGTV / AI');
   });
