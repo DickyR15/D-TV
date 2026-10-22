@@ -244,7 +244,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   ],
                 ),
               ),
-            if (!widget.embedded && boards.isNotEmpty)
+            // Keep board switching available in the consolidated TV ranking entry.
+            if (boards.isNotEmpty)
               CatalogFilters(
                 key: ValueKey('ranking-boards-${_board!.groupId}'),
                 categories: [
