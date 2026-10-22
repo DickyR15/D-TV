@@ -528,7 +528,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         requested: requested && !active,
       );
       if (!supported || (!active && !requested)) {
-        _notice('當前裝置不支援畫中畫');
+        _notice('目前裝置不支援子母畫面');
       } else if (requested && !active) {
         _pictureInPictureExitTimer?.cancel();
         _pictureInPictureExitTimer = Timer(const Duration(seconds: 2), () {
@@ -544,7 +544,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _notice('無法進入畫中畫，請檢查系統許可權');
     } on MissingPluginException {
       _setPictureInPictureStatus(supported: false, requested: false);
-      _notice('當前平臺不支援畫中畫');
+      _notice('目前平台不支援子母畫面');
     }
   }
 
@@ -853,8 +853,8 @@ class _PlayerScreenState extends State<PlayerScreen>
           _localFailure = current.local;
           _error = current.local
               ? widget.allowOnlineFallback
-                    ? '本地影片讀取失敗，請重試或重新下載；也可以手動改為線上播放。'
-                    : '本地成品讀取失敗，請重試或重新生成。'
+                    ? '本機影片讀取失敗，請重試；也可以手動改為線上播放。'
+                    : '本機影片讀取失敗，請重試或改為線上播放。'
               : '自動恢復未成功，請檢查網路後重試，也可換一集或選擇其他清晰度。';
         });
       }
@@ -1273,7 +1273,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _setPreferences(PlaybackPreferences preferences) async {
     if (_closed || widget.store.profileEpoch != _profileEpoch) {
-      throw StateError('當前使用者已變更');
+      throw StateError('目前使用者已變更');
     }
     _interactions.cancel();
     final nextPreferences = preferences.copyWith(
@@ -1518,7 +1518,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         data: televisionTheme(AppTheme.dark),
         child: AlertDialog(
           title: Text(enabled ? '開啟相容渲染模式？' : '關閉相容渲染模式？'),
-          content: const Text('需要重啟應用才能生效，正在進行的下載會中斷。'),
+          content: const Text('需要重新啟動 App 才會生效，播放會中斷。'),
           actions: [
             TextButton(
               autofocus: true,
