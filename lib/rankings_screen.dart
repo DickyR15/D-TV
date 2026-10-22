@@ -396,7 +396,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   Widget _rankingGrid(List<RankingItem> items, double width) {
     final television = AppLayout.isTelevision(context);
-    final columns = (width / 255).floor().clamp(2, 5);
+    final columns = width >= 620 ? 5 : width >= 420 ? 3 : 2;
     const spacing = 14.0;
     const horizontalPadding = 18.0;
     final posterWidth =
@@ -521,7 +521,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 1200;
+    final wide = AppLayout.isTelevision(context) || MediaQuery.sizeOf(context).width >= 840;
     final groups = SourceGroup.fromSources(
 
       _boards.map((board) => SourceSite.byId(board.source)).toSet(),
@@ -692,7 +692,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     )
                   : LayoutBuilder(
                       builder: (context, constraints) {
-                        if (constraints.maxWidth >= 1200) {
+                        if (wide) {
                           return _rankingGrid(items, constraints.maxWidth);
                         }
                         return _rankingList(items);

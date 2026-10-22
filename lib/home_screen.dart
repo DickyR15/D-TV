@@ -42,6 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _revealBatch = 60;
   final _search = TextEditingController();
   final _scroll = ScrollController();
+  final Map<int, FocusNode> _navigationFocusNodes = {};
   Timer? _debounce;
   late SourceSite _source;
   bool _allSources = false;
@@ -500,6 +501,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _search.dispose();
     _scroll.removeListener(_onCatalogScroll);
     _scroll.dispose();
+    for (final node in _navigationFocusNodes.values) {
+      node.dispose();
+    }
+    _navigationFocusNodes.clear();
     super.dispose();
   }
 
@@ -787,7 +792,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, constraints) {
         final television = AppLayout.isTelevision(context);
         final desktop = constraints.maxWidth >= 840;
-        final wide = constraints.maxWidth >= 1200;
+        final wide = television || desktop;
         final scaffold = Scaffold(
           appBar: AppBar(
             toolbarHeight: wide ? 76 : television ? 64 : null,
@@ -1160,13 +1165,22 @@ class _HomeScreenState extends State<HomeScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.asset(
-              'assets/brand/hgtv-icon.png',
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
               width: iconSize,
               height: iconSize,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
+              child: ClipRect(
+                child: Transform.scale(
+                  scale: 1.10,
+                  child: Image.asset(
+                    'assets/brand/hgtv-icon.png',
+                    width: iconSize,
+                    height: iconSize,
+                    fit: BoxFit.cover,
+                    filterQuality: FilterQuality.high,
+                  ),
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 7),
@@ -1233,8 +1247,6 @@ class _HomeScreenState extends State<HomeScreen> {
       (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
-    // Desktop/tablet navigation starts with the four requested ranking boards;
-    // the catalog page is named 分類 in this non-TV layout.
     const desktopEntries = <({int tab, IconData icon, String label})>[
       (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
       (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
@@ -1245,7 +1257,8 @@ class _HomeScreenState extends State<HomeScreen> {
       (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
-    final entries = AppLayout.isTelevision(context) ? tvEntries : desktopEntries;
+    final television = AppLayout.isTelevision(context);
+    final entries = television ? tvEntries : desktopEntries;
     final theme = Theme.of(context);
     return SizedBox(
       width: 148,
@@ -1259,27 +1272,25 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.only(bottom: 5),
                 child: RemoteTarget(
                   key: ValueKey('side-nav-${entry.tab}'),
-                  autofocus: index == 0,
+                  focusNode: _navigationFocusNodes.putIfAbsent(
+                    entry.tab,
+                    () => FocusNode(debugLabel: 'HGTV navigation ${entry.tab}'),
+                  ),
+                  autofocus: television && index == 0,
                   selected: _tab == entry.tab,
-                  onPressed: () => _selectNavigationDestination(entry.tab),
+                  onPressed: () {
+                    _navigationFocusNodes[entry.tab]?.requestFocus();
+                    _selectNavigationDestination(entry.tab);
+                  },
                   label: entry.label,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 130),
-                    constraints: const BoxConstraints(minHeight: 55),
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: _tab == entry.tab
-                          ? theme.colorScheme.primaryContainer
-                          : theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _tab == entry.tab
-                            ? theme.colorScheme.primary
-                            : Colors.transparent,
-                        width: 1.5,
-                      ),
-                    ),
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+                  radius: 12,
+                  borderWidth: 2,
+                  outlined: true,
+                  child: SizedBox(
+                    height: 55,
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
