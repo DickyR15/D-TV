@@ -73,7 +73,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         if (accepted != true || !mounted) return;
         final pin = await showDialog<String>(
           context: context,
-          builder: (_) => const _PasswordDialog(name: '管理員（原配置或備份中的密碼）'),
+          builder: (_) => const _PasswordDialog(name: '管理員（原設定或備份中的密碼）'),
         );
         if (pin == null || !mounted) return;
         await widget.store.recoverBackup(content, pin: pin);
@@ -156,7 +156,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
               if (widget.store.configurationError != null) ...[
                 Text('需要還原本機設定', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
-                Text(widget.store.configurationError!),
+                Text(uiTraditional(widget.store.configurationError!)),
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: _busy ? null : () => _recover(),
