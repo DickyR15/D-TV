@@ -14,7 +14,6 @@ import 'recommendations_screen.dart';
 import 'rankings_screen.dart';
 import 'detail_screen.dart';
 import 'playback_launch_screen.dart';
-import 'downloads_screen.dart';
 import 'local_store.dart';
 import 'lan_screen.dart';
 import 'models.dart';
@@ -25,12 +24,11 @@ import 'settings_screen.dart';
 import 'profiles_screen.dart';
 import 'search_input.dart';
 import 'sources_screen.dart';
-import 'batch_download_screen.dart';
-import 'batch_downloads.dart';
 import 'drama_actions.dart';
 import 'follow_updater.dart';
 import 'library_updater.dart';
 import 'saved_library.dart';
+import 'ui_localization.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.repository, required this.store});
@@ -75,6 +73,17 @@ class _HomeScreenState extends State<HomeScreen> {
   int _revealed = _revealBatch;
   int? _revealKey;
   bool _hiddenItems = false;
+  bool _initialCategoryApplied = false;
+
+  bool get _isCatalogTab => _tab == 0 || _tab == 8;
+  bool get _isRankingTab => _tab >= 4 && _tab <= 7;
+  String? get _rankingBoardId => switch (_tab) {
+    4 => 'hongguo-hot',
+    5 => 'hongguo-real',
+    6 => 'hongguo-ai',
+    7 => 'hongguo-comic',
+    _ => null,
+  };
 
   List<SourceGroup> get _sourceGroups {
     final groups = SourceGroup.fromSources(widget.store.sources);
@@ -140,6 +149,16 @@ class _HomeScreenState extends State<HomeScreen> {
       _categoriesLoading = false;
       _categoriesError = error;
     });
+    if (!_initialCategoryApplied && group.id == 'hongguo') {
+      _initialCategoryApplied = true;
+      final latest = _categories.where(
+        (entry) => uiTraditional(entry.name).trim() == '新劇',
+      ).firstOrNull;
+      if (latest != null) {
+        _changeCategory(latest.id);
+        return;
+      }
+    }
     if (!_showRecommendations &&
         _category.isNotEmpty &&
         !_categories.any((entry) => entry.id == _category)) {
@@ -844,12 +863,6 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.history_rounded),
             label: Text('最近觀看'),
           ),
-          if (widget.store.canDownload)
-            const NavigationRailDestination(
-              icon: Icon(Icons.download_outlined),
-              selectedIcon: Icon(Icons.download_rounded),
-              label: Text('下載'),
-            ),
         ];
         final scaffold = Scaffold(
           appBar: AppBar(
@@ -900,7 +913,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   )
-                : const Text(appName),
+                : _brandTitle(),
             actions: [
               if (_selectionMode) ...[
                 TextButton(
@@ -923,7 +936,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: () => openLanSync(context),
                     icon: const Icon(Icons.sync_rounded),
                   ),
-                if (_tab == 0) ...[
+                if (_isCatalogTab) ...[
                   if (!_showRecommendations)
                     IconButton(
                       tooltip: '排序與篩選 · ${widget.store.catalogView.sort.label}',
@@ -939,23 +952,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   IconButton(
                     key: const ValueKey('open-rankings'),
-                    tooltip: '榜單',
+                    tooltip: '熱播榜單',
                     onPressed: widget.store.sources.isEmpty
                         ? null
                         : _openRankings,
                     icon: const Icon(Icons.leaderboard_outlined),
                   ),
-                  if (!_showRecommendations &&
-                      widget.store.canDownload &&
-                      widget.repository.supportsDownloads)
-                    IconButton(
-                      key: const ValueKey('select-catalog-dramas'),
-                      tooltip: '多選下載',
-                      onPressed: widget.store.sources.isEmpty
-                          ? null
-                          : () => setState(() => _selectionMode = true),
-                      icon: const Icon(Icons.checklist_rounded),
-                    ),
                   IconButton(
                     key: const ValueKey('toggle-search'),
                     tooltip: _searchVisible ? '收起搜尋' : '搜尋',
@@ -969,7 +971,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         : _toggleSearch,
                   ),
                 ],
-                if (_tab == 0 &&
+                if (_isCatalogTab &&
                     !_showRecommendations &&
                     constraints.maxWidth >= 400)
                   RefreshAction(
@@ -1029,7 +1031,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                   },
                   itemBuilder: (_) => [
-                    if (_tab == 0 &&
+                    if (_isCatalogTab &&
                         !_showRecommendations &&
                         constraints.maxWidth < 400)
                       PopupMenuItem(
@@ -1079,18 +1081,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   const VerticalDivider(width: 1, thickness: 1),
                 ],
                 Expanded(
-                  child: _tab == 0
+                  child: _isCatalogTab
                       ? widget.store.sources.isEmpty
                             ? const StatusPanel(
                                 title: '暫無可用站源',
-                                message: '請在站源管理中開啟站源，或聯絡管理員開放許可權。',
+                                message: '請在站源管理中開啟站源，或聯絡管理員開放權限。',
                               )
                             : _catalog(selectionInBody: desktop || television)
-                      : _tab == 3
-                      ? DownloadsScreen(
+                      : _isRankingTab
+                      ? RankingsScreen(
+                          key: ValueKey('tv-ranking-$_tab'),
                           repository: widget.repository,
                           store: widget.store,
+                          initialGroup: 'hongguo',
+                          initialBoardId: _rankingBoardId,
                           embedded: true,
+                        )
+                      : _tab == 9
+                      ? SettingsScreen(
+                          repository: widget.repository,
+                          store: widget.store,
                         )
                       : SavedLibrary(
                           key: ValueKey('saved-tab-$_tab'),
@@ -1100,11 +1110,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onOpen: _openDrama,
                           onContinue: (drama) =>
                               _openDrama(drama, resume: true),
-                          onDownload:
-                              widget.repository.supportsDownloads &&
-                                  widget.store.canDownload
-                              ? (drama) => _openDrama(drama, download: true)
-                              : null,
+                          onDownload: null,
                         ),
                 ),
               ],
@@ -1132,12 +1138,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icon(Icons.history_rounded),
                       label: '最近觀看',
                     ),
-                    if (widget.store.canDownload)
-                      NavigationDestination(
-                        icon: Icon(Icons.download_outlined),
-                        selectedIcon: Icon(Icons.download_rounded),
-                        label: '下載',
-                      ),
                   ],
                 ),
         );
@@ -1145,7 +1145,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return PopScope(
           canPop:
               !_selectionMode &&
-              (!television || _tab == 0 && _search.text.isEmpty),
+              (!television || _isCatalogTab && _search.text.isEmpty),
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _televisionBack();
           },
@@ -1163,45 +1163,104 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
+  Widget _brandTitle() => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Image.asset(
+        'android/app/src/main/res/drawable/app_icon.png',
+        width: 34,
+        height: 34,
+        errorBuilder: (_, __, ___) => const Icon(Icons.live_tv_rounded, size: 32),
+      ),
+      const SizedBox(width: 8),
+      const Text('HGTV', style: TextStyle(fontWeight: FontWeight.w800)),
+    ],
+  );
+
+  void _selectTelevisionDestination(int tab) {
+    if (tab == 0 || tab == 8) {
+      setState(() => _tab = tab);
+      if (tab == 8 && (_category.isNotEmpty || _showRecommendations)) {
+        _changeCategory('');
+      } else if (tab == 0) {
+        final latest = _categories.where(
+          (entry) => uiTraditional(entry.name).trim() == '新劇',
+        ).firstOrNull;
+        if (latest != null && _category != latest.id) {
+          _changeCategory(latest.id);
+        }
+      }
+      return;
+    }
+    _pauseCatalog();
+    setState(() {
+      _tab = tab;
+      _selectionMode = false;
+      _selectedDramas.clear();
+    });
+  }
+
   Widget _televisionNavigation(List<NavigationRailDestination> destinations) {
-    final theme = NavigationRailTheme.of(context);
+    const entries = <({int tab, IconData icon, String label})>[
+      (tab: 0, icon: Icons.fiber_new_rounded, label: '新劇'),
+      (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
+      (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
+      (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI 劇熱播榜'),
+      (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
+      (tab: 8, icon: Icons.explore_rounded, label: '發現'),
+      (tab: 1, icon: Icons.bookmark_border_rounded, label: '收藏'),
+      (tab: 2, icon: Icons.history_rounded, label: '播放歷史'),
+      (tab: 9, icon: Icons.settings_rounded, label: '設定'),
+    ];
+    final theme = Theme.of(context);
     return SizedBox(
-      width: 96,
+      width: 132,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final (index, destination) in destinations.indexed)
+            for (final (index, entry) in entries.indexed)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: 5),
                 child: RemoteTarget(
-                  key: ValueKey('tv-nav-$index'),
+                  key: ValueKey('tv-nav-${entry.tab}'),
                   autofocus: index == 0,
-                  onPressed: () => _changeTab(index),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
+                  selected: _tab == entry.tab,
+                  onPressed: () => _selectTelevisionDestination(entry.tab),
+                  label: entry.label,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 130),
+                    constraints: const BoxConstraints(minHeight: 55),
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: _tab == entry.tab
+                          ? theme.colorScheme.primaryContainer
+                          : theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _tab == entry.tab
+                            ? theme.colorScheme.primary
+                            : Colors.transparent,
+                        width: 1.5,
+                      ),
+                    ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconTheme.merge(
-                          data:
-                              (index == _tab
-                                  ? theme.selectedIconTheme
-                                  : theme.unselectedIconTheme) ??
-                              const IconThemeData(),
-                          child: index == _tab
-                              ? destination.selectedIcon
-                              : destination.icon,
-                        ),
-                        const SizedBox(height: 4),
-                        DefaultTextStyle.merge(
-                          textAlign: TextAlign.center,
-                          style: index == _tab
-                              ? theme.selectedLabelTextStyle
-                              : theme.unselectedLabelTextStyle,
-                          child: destination.label,
-                        ),
+                        Icon(entry.icon, size: 21,
+                          color: _tab == entry.tab
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant),
+                        const SizedBox(height: 3),
+                        Text(entry.label, textAlign: TextAlign.center,
+                          maxLines: 2, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11.5, height: 1.15,
+                            fontWeight: _tab == entry.tab
+                                ? FontWeight.w800 : FontWeight.w500,
+                            color: _tab == entry.tab
+                                ? theme.colorScheme.onPrimaryContainer
+                                : theme.colorScheme.onSurface)),
                       ],
                     ),
                   ),
