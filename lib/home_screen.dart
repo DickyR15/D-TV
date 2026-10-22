@@ -772,12 +772,8 @@ class _HomeScreenState extends State<HomeScreen> {
     drama: drama,
     store: widget.store,
     onContinue: () => _openDrama(drama, resume: true),
-    onDownload: widget.repository.supportsDownloads && widget.store.canDownload
-        ? () => _openDrama(drama, download: true)
-        : null,
-    onSelect: widget.repository.supportsDownloads && widget.store.canDownload
-        ? () => _selectDrama(drama)
-        : null,
+    onDownload: null,
+    onSelect: null,
   );
 
   Widget _catalogTile(
@@ -786,8 +782,7 @@ class _HomeScreenState extends State<HomeScreen> {
     VoidCallback? onFocus,
   }) {
     final following = widget.store.following(drama.id);
-    final canSelect =
-        widget.store.canDownload && widget.repository.supportsDownloads;
+    const canSelect = false;
     return DramaTile(
       key: ValueKey(drama.id),
       drama: drama,
