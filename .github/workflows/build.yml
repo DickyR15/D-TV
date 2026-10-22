@@ -1,4 +1,4 @@
-name: Build HGTV Android v7a
+name: Build D TV Android v7a
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ on:
       - "analysis_options.yaml"
 
 concurrency:
-  group: hgtv-v7a-${{ github.ref }}
+  group: dtv-v7a-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -53,7 +53,7 @@ jobs:
       - name: Test Taiwan Traditional Chinese conversion
         run: |
           flutter pub get
-          flutter test test/ui_localization_test.dart test/playback_preferences_test.dart
+          flutter test test/ui_localization_test.dart test/playback_preferences_test.dart test/app_build_test.dart
       - name: Install Android NDK
         run: sdkmanager "ndk;28.2.13676358"
       - name: Build APK (armeabi-v7a)
@@ -64,10 +64,10 @@ jobs:
           set -euo pipefail
           apk=$(find dist/android -maxdepth 1 -type f -name '*armeabi-v7a.apk' | head -n1)
           test -n "$apk"
-          mv "$apk" dist/android/HGTV-armeabi-v7a.apk
+          mv "$apk" dist/android/D-TV-armeabi-v7a.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: HGTV-Android-v7a
-          path: dist/android/HGTV-armeabi-v7a.apk
+          name: D-TV-Android-v7a
+          path: dist/android/D-TV-armeabi-v7a.apk
           if-no-files-found: error
           retention-days: 14
