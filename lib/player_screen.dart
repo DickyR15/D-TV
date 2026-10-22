@@ -673,7 +673,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (mounted && !_closed) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        ).showSnackBar(SnackBar(content: Text(uiTraditional(error.toString()))));
       }
     } finally {
       if (mounted && !_closed) setState(() => _panelOpen = false);
@@ -1862,9 +1862,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                   color: Colors.black.withValues(alpha: .9),
                   child: StatusPanel(
                     title: '暫時無法播放',
-                    message: _error!,
+                    message: uiTraditional(_error!),
                     onRetry: () => _retry(),
-                    action: _localFailure ? '重試本地播放' : '重試播放',
+                    action: _localFailure ? '重試本機播放' : '重試播放',
                     secondaryAction: Wrap(
                       spacing: 12,
                       runSpacing: 10,
