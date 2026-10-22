@@ -252,14 +252,14 @@ void _validateCell(String field, LanCell cell) {
   for (final candidate in cell.values) {
     final value = candidate.value;
     if (field == 'member') {
-      if (value is! bool) throw const FormatException('追劇成員欄位無效');
+      if (value is! bool) throw const FormatException('收藏成員欄位無效');
     } else if (field == 'status') {
       final status = lanMap(value);
       if (status.length != 2 ||
           !FollowStatus.values.any((value) => value.name == status['status']) ||
           status['manual'] is! bool ||
           status['manual'] == true && status['status'] != 'watched') {
-        throw const FormatException('追劇狀態無效');
+        throw const FormatException('收藏狀態無效');
       }
     } else if (value != null) {
       final progress = lanMap(value);

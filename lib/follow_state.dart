@@ -169,7 +169,7 @@ class FollowState {
         read != null && (read is! int || read < 0 || read > known) ||
         manual is! bool ||
         manual && status != FollowStatus.watched) {
-      throw const FormatException('追劇狀態無效');
+      throw const FormatException('收藏狀態無效');
     }
     return FollowState(
       status: status,
@@ -255,7 +255,7 @@ class FollowCheck {
         json[0] is! int ||
         json[1] is! int ||
         (json[1] as int) < 0) {
-      throw const FormatException('追劇檢查記錄無效');
+      throw const FormatException('收藏檢查記錄無效');
     }
     return FollowCheck(
       DateTime.fromMillisecondsSinceEpoch(json[0] as int),

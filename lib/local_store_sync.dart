@@ -35,7 +35,7 @@ extension LocalStoreSync on LocalStore {
         .toSet();
     if (favorites.length != followed.length ||
         !followed.containsAll(favorites)) {
-      throw const FormatException('備份同步記錄與追劇列表不一致');
+      throw const FormatException('備份同步記錄與收藏列表不一致');
     }
     return records;
   }
@@ -185,7 +185,7 @@ extension LocalStoreSync on LocalStore {
       }
       if (favorites.length > 20000 ||
           document.records.length > LanDocument.limit) {
-        throw StateError('合併後的追劇記錄超過本機上限，原記錄已保留');
+        throw StateError('合併後的收藏記錄超過本機上限，原記錄已保留');
       }
       final sorted = history.values.toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));

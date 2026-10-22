@@ -562,7 +562,7 @@ class LocalStore extends ChangeNotifier {
         entries.remove(drama.id);
         states.remove(drama.id);
       } else {
-        if (entries.length >= 20000) throw StateError('追劇數量已達上限，請先整理追劇');
+        if (entries.length >= 20000) throw StateError('收藏數量已達上限，請先整理收藏');
         entries[drama.id] = drama;
         states[drama.id] = FollowState.initial(drama, _history[drama.id]);
       }
@@ -586,7 +586,7 @@ class LocalStore extends ChangeNotifier {
     return _queue(() async {
       if (!allowsSource(drama.source) || epoch != _epoch) return;
       if (!_favorites.containsKey(drama.id) && _favorites.length >= 20000) {
-        throw StateError('追劇數量已達上限，請先整理追劇');
+        throw StateError('收藏數量已達上限，請先整理收藏');
       }
       final current = _favorites[drama.id]?.merge(drama) ?? drama;
       final entries = Map.of(_favorites)..[drama.id] = current;
@@ -1078,7 +1078,7 @@ class LocalStore extends ChangeNotifier {
       _readBackupFollowSync(library);
       if (states.length > 20000 ||
           states.keys.any((id) => id is! String || !favoriteIds.contains(id))) {
-        throw const FormatException('備份追劇狀態無效');
+        throw const FormatException('備份收藏狀態無效');
       }
       for (final row in states.values) {
         FollowState.fromJson(Map<String, dynamic>.from(row as Map));

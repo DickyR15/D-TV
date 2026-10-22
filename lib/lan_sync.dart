@@ -250,7 +250,7 @@ extension LanSynchronization on LanController {
     }
     if (result.length > LanDocument.limit ||
         result.values.where((record) => record.followed).length > 20000) {
-      throw StateError('合併後的追劇記錄超過儲存上限，請先整理追劇');
+      throw StateError('合併後的收藏記錄超過儲存上限，請先整理收藏');
     }
     _checkSync(ticket, remote);
     if (store.lanDocument.hashFor(sources) != localBase) {

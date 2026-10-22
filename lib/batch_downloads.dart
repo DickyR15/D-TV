@@ -125,7 +125,7 @@ class BatchDownloads extends ChangeNotifier {
           if (!_valid || !store.allowsSource(item.drama.source)) break;
           if (detail.drama.id != item.drama.id ||
               detail.drama.source != item.drama.source) {
-            throw AppFailure('返回的劇集資訊不匹配，請重試');
+            throw AppFailure('返回的劇集資訊不符合，請重試');
           }
           if (detail.episodes.isEmpty ||
               detail.episodes.any((episode) => episode.number <= 0)) {
@@ -152,7 +152,7 @@ class BatchDownloads extends ChangeNotifier {
               if (item.detail != null) item.detail!.drama,
           ]);
         } catch (_) {
-          warning = '分集已讀取，但追劇資料未能儲存；請檢查儲存空間後重試。';
+          warning = '分集已讀取，但收藏資料未能儲存；請檢查儲存空間後重試。';
         }
       }
     } finally {
