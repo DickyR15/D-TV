@@ -1,6 +1,6 @@
-# HGTV
+# D TV
 
-**HGTV 是 Android TV 專用短劇應用。** 目前只建置 Android ARMv7（`armeabi-v7a`），介面採繁體中文（台灣用語）。
+**D TV 是 Android TV 專用短劇應用。** 目前只建置 Android ARMv7（`armeabi-v7a`），介面採繁體中文（台灣用語）。
 
 ## 功能
 
@@ -11,7 +11,7 @@
 
 ## 取得 APK
 
-至 [GitHub Actions](https://github.com/DickyR15/HGTV/actions) 開啟 **Build HGTV Android v7a**。建置成功後，在該次執行的 Artifacts 下載 `HGTV-armeabi-v7a.apk`。
+至 [GitHub Actions](https://github.com/DickyR15/HGTV/actions) 開啟 **Build D TV Android v7a**。建置成功後，在該次執行的 Artifacts 下載 `D-TV-armeabi-v7a.apk`。
 
 ## 上游來源
 
