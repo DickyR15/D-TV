@@ -106,7 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (online.isEmpty) {
       return '篩選本機已更新劇庫';
     }
-    final names = online.map((source) => source.name).join('、');
+    final names = online.map((source) => uiTraditional(source.name)).join('、');
     return online.length == _group.sources.length
         ? '搜尋$names'
         : '搜尋$names及本機劇庫';
@@ -336,7 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _submitSearch(query);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已收到手機搜尋：$query')),
+      SnackBar(content: Text('已收到手機搜尋：${uiTraditional(query)}')),
     );
   }
 
@@ -417,7 +417,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: _group.id == 'all'
             ? '搜尋已開放站源'
             : _onlineSearch
-            ? '搜尋${_group.name}短劇'
+            ? '搜尋${uiTraditional(_group.name)}短劇'
             : '篩選當前已載入短劇',
         recentSearches: widget.store.recentSearches,
         onCancel: () => unawaited(widget.repository.cancelSuggestions()),
@@ -1294,7 +1294,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   : _items.isEmpty && _error != null
                   ? StatusPanel(
                       title: '暫時無法載入',
-                      message: _error!,
+                      message: uiTraditional(_error!),
                       onRetry: () => _load(force: true),
                       secondaryAction:
                           widget.repository.supportsSourceManagement
