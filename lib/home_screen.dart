@@ -381,42 +381,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _submitSearch(query);
   }
 
-  Future<void> _chooseDisplayMode() async {
-    final selection = await showDialog<String>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('介面模式'),
-        children: [
-          RadioGroup<String>(
-            groupValue: widget.store.displayMode,
-            onChanged: (value) => Navigator.pop(context, value),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final mode in const {
-                  'auto': '自動偵測裝置',
-                  'television': '電視 / 遙控器',
-                  'standard': '手機 / 電腦',
-                }.entries)
-                  RadioListTile<String>(
-                    value: mode.key,
-                    autofocus: mode.key == widget.store.displayMode,
-                    title: Text(mode.value),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-    if (selection != null && mounted) {
-      await saveUserChange(
-        context,
-        () => widget.store.setDisplayMode(selection),
-      );
-    }
-  }
-
   Future<void> _televisionSearch() async {
     final query = await showDialog<String>(
       context: context,
@@ -870,29 +834,16 @@ class _HomeScreenState extends State<HomeScreen> {
         final wide = television || desktop;
         final scaffold = Scaffold(
           appBar: AppBar(
-            toolbarHeight: wide ? 76 : television ? 64 : null,
+            toolbarHeight: wide ? (television ? 146 : 140) : television ? 64 : null,
             titleSpacing: 12,
             title: wide
-                ? (television
-                    ? Text(
-                        '發現好劇',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      )
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _brandLogo(width: 164, height: 52),
-                          const SizedBox(width: 16),
-                          Text(
-                            '發現好劇',
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ))
+                ? _homeBrandBanner(
+                    width: (constraints.maxWidth -
+                            (constraints.maxWidth >= 1450 ? 600.0 : 530.0))
+                        .clamp(300.0, 980.0)
+                        .toDouble(),
+                    height: 132,
+                  )
                 : (
                     _tab == 0 && widget.store.sources.isNotEmpty
                                     ? PopupMenuButton<SourceGroup>(
@@ -1104,8 +1055,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           builder: (_) => ProfilesScreen(store: widget.store),
                         ),
                       );
-                    } else if (value == 'display') {
-                      _chooseDisplayMode();
                     } else if (value == 'about') {
                       showAboutDialog(
                         context: context,
@@ -1141,7 +1090,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       value: 'settings',
                       child: Text('設定與備份'),
                     ),
-                    const PopupMenuItem(value: 'display', child: Text('介面模式')),
                     const PopupMenuItem(
                       value: 'about',
                       child: Text('關於$appName'),
@@ -1268,6 +1216,118 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _brandTitle() => _brandLogo(width: 145, height: 52);
 
+  /// Persistent brand header shared by the TV / desktop views.
+  /// The slogan is redrawn larger over the original banner so it remains
+  /// readable at living-room viewing distance.
+  Widget _homeBrandBanner({required double width, required double height}) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFF080910),
+            border: Border.all(color: const Color(0x66FF3658), width: 1),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x22F52245),
+                blurRadius: 12,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                'assets/brand/dtv-tv-banner.webp',
+                fit: BoxFit.fill,
+                filterQuality: FilterQuality.high,
+                errorBuilder: (_, error, stack) => Container(
+                  color: const Color(0xFF080910),
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: _brandLogo(width: width * .42, height: height * .78),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: width * .36,
+                bottom: 0,
+                height: 54,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0x0010080B),
+                        const Color(0xE810080B),
+                        const Color(0xF508080C),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: width * .055,
+                bottom: 7,
+                child: Text(
+                  '精彩隨時  大屏更過癮',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: height >= 125 ? 23 : 19,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.0,
+                    shadows: const [
+                      Shadow(
+                        color: Color(0xFFFF263F),
+                        blurRadius: 10,
+                        offset: Offset(0, 0),
+                      ),
+                      Shadow(
+                        color: Color(0xD9000000),
+                        blurRadius: 3,
+                        offset: Offset(1, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: width * .055,
+                bottom: 3,
+                child: Container(
+                  height: 2,
+                  width: width * .42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF3658),
+                    borderRadius: BorderRadius.circular(2),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0xAAFF2348), blurRadius: 7),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: 3,
+                child: Container(color: const Color(0x66FF3658)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
   void _selectCatalogTab(int tab) {
     final shouldReload =
         _category.isNotEmpty ||
@@ -1314,11 +1374,11 @@ class _HomeScreenState extends State<HomeScreen> {
     const desktopEntries = <({int tab, IconData icon, String label})>[
       (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 1, icon: Icons.bookmark_border_rounded, label: '我的收藏'),
-      (tab: 0, icon: Icons.category_rounded, label: '分類'),
       (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
       (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI劇熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
+      (tab: 0, icon: Icons.category_rounded, label: '分類'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     final television = AppLayout.isTelevision(context);
