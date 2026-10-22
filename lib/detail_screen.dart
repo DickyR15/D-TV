@@ -184,7 +184,7 @@ class _DetailScreenState extends State<DetailScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('這是一集 VIP 內容'),
-          content: const Text('站源可能只提供試看或限制播放。'),
+          content: const Text('片源可能只提供試看或有播放限制。'),
           actions: [
             TextButton(
               autofocus: AppLayout.isTelevision(context),
@@ -292,7 +292,7 @@ class _DetailScreenState extends State<DetailScreen> {
                 builder: (context, constraints) {
                   if (!allowed) {
                     return const StatusPanel(
-                      title: '當前使用者無權訪問',
+                      title: '目前使用者無權存取',
                       message: '請返回劇庫後重新選擇。',
                     );
                   }
@@ -482,7 +482,7 @@ class _DetailScreenState extends State<DetailScreen> {
     required bool expanded,
   }) {
     final colors = Theme.of(context).colorScheme;
-    final current = currentNumber == null ? '' : ' · 當前第 $currentNumber 集';
+    final current = currentNumber == null ? '' : ' · 目前第 $currentNumber 集';
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
       child: Material(
