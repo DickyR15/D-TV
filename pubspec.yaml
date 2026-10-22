@@ -45,4 +45,5 @@ flutter:
   assets:
     - assets/video_enhancement/
     - assets/brand/
+    - assets/opencc/
     - android/app/src/main/res/drawable/app_icon.png
