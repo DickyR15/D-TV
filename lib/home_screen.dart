@@ -421,7 +421,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _televisionBack() {
     if (_tab != 0) {
-      setState(() => _tab = 0);
+      _selectCatalogTab(0);
     } else if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
@@ -1059,7 +1059,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         if (!television) return scaffold;
         return PopScope(
-          canPop: !television || _isCatalogTab && _search.text.isEmpty,
+          canPop: !television || _tab == 0 && _search.text.isEmpty,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _televisionBack();
           },
