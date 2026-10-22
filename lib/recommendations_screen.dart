@@ -165,13 +165,13 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
           ),
         Expanded(
           child: !widget.store.allowsSource('hongguo')
-              ? const StatusPanel(title: '當前使用者未開放紅果', message: '可在使用者管理中調整站源許可權。')
+              ? const StatusPanel(title: '目前使用者未開放紅果', message: '可在使用者管理中調整站源權限。')
               : _loading && _items.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : _items.isEmpty
               ? StatusPanel(
                   title: _error == null ? '暫無推薦' : '推薦暫時無法載入',
-                  message: _error ?? '稍後重新整理可獲取新的推薦。',
+                  message: uiTraditional(_error ?? '稍後重新整理即可取得新的推薦。'),
                   onRetry: () => _load(force: true),
                 )
               : LayoutBuilder(
