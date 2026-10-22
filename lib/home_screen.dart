@@ -53,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   int _generation = 0;
   int _tab = 0;
+  bool _initialTabResolved = false;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
   late final CatalogBrowser _browser;
@@ -416,11 +417,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final previous = _lastBackAt;
     if (previous == null ||
         now.difference(previous) > const Duration(seconds: 2)) {
-      // The first Back press returns to New Drama if needed. Do not show the
-      // bottom SnackBar; the second Back press opens the confirmation dialog.
-      if (_tab != 0) {
-        _selectCatalogTab(0);
-        _navigationFocusNodes[0]?.requestFocus();
+      // The first Back press returns to the Red Fruit hot list if needed.
+      // The second Back press opens the exit confirmation dialog.
+      if (_tab != 4) {
+        _selectNavigationDestination(4);
+        _navigationFocusNodes[4]?.requestFocus();
       }
       _lastBackAt = now;
       return;
@@ -466,6 +467,15 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       _exitConfirmationShowing = false;
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialTabResolved) return;
+    _initialTabResolved = true;
+    // TV starts on the main Red Fruit hot list; mobile keeps the category view.
+    if (AppLayout.isTelevision(context)) _tab = 4;
   }
 
   @override
@@ -1357,10 +1367,9 @@ class _HomeScreenState extends State<HomeScreen> {
     const tvEntries = <({int tab, IconData icon, String label})>[
       (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 1, icon: Icons.bookmark_border_rounded, label: '我的收藏'),
-      (tab: 0, icon: Icons.fiber_new_rounded, label: '新劇'),
       (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
-      (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
-      (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI劇熱播榜'),
+      (tab: 5, icon: Icons.people_alt_rounded, label: '真人熱播榜'),
+      (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
       (tab: 8, icon: Icons.category_rounded, label: '分類'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
@@ -1369,8 +1378,8 @@ class _HomeScreenState extends State<HomeScreen> {
       (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 1, icon: Icons.bookmark_border_rounded, label: '我的收藏'),
       (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
-      (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
-      (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI劇熱播榜'),
+      (tab: 5, icon: Icons.people_alt_rounded, label: '真人熱播榜'),
+      (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
       (tab: 0, icon: Icons.category_rounded, label: '分類'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
