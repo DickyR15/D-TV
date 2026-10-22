@@ -742,7 +742,7 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
           TextButton.icon(
             onPressed: _usePhoneSearch,
             icon: const Icon(Icons.qr_code_2_rounded),
-            label: const Text('手機掃碼搜尋'),
+            label: const Text('手機 QR Code 搜尋'),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
