@@ -1202,24 +1202,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _sideNavigation() {
     const tvEntries = <({int tab, IconData icon, String label})>[
+      // Most-used personal destinations come first for TV remote navigation.
+      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
+      (tab: 1, icon: Icons.bookmark_border_rounded, label: '我的收藏'),
       (tab: 0, icon: Icons.fiber_new_rounded, label: '新劇'),
       (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
       (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI劇熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
       (tab: 8, icon: Icons.category_rounded, label: '分類'),
-      (tab: 1, icon: Icons.bookmark_border_rounded, label: '收藏'),
-      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     const desktopEntries = <({int tab, IconData icon, String label})>[
+      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
+      (tab: 1, icon: Icons.bookmark_border_rounded, label: '我的收藏'),
+      (tab: 0, icon: Icons.category_rounded, label: '分類'),
       (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
       (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI劇熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
-      (tab: 0, icon: Icons.category_rounded, label: '分類'),
-      (tab: 1, icon: Icons.bookmark_border_rounded, label: '收藏'),
-      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     final television = AppLayout.isTelevision(context);
