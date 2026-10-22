@@ -3,8 +3,19 @@ name: Build HGTV Android v7a
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     paths:
-      - ".hgtv-build-trigger"
+      - ".github/workflows/build.yml"
+      - "lib/**"
+      - "native/**"
+      - "android/**"
+      - "assets/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "scripts/build_android.py"
+      - "analysis_options.yaml"
 
 permissions:
   contents: read
