@@ -1,4 +1,5 @@
 name: Build D TV Android v7a
+run-name: 'D TV Android v7a rebuild · ${{ github.sha }}'
 
 on:
   workflow_dispatch:
