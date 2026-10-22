@@ -5,6 +5,7 @@ import 'app_layout.dart';
 import 'catalog_filters.dart';
 import 'core_bridge.dart';
 import 'detail_screen.dart';
+import 'drama_actions.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'ranking_models.dart';
@@ -344,6 +345,19 @@ class _RankingsScreenState extends State<RankingsScreen> {
                         fontSize: 14,
                         fontWeight: FontWeight.w800,
                       ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: DramaActionButton(
+                    drama: item.drama,
+                    onPressed: () => showDramaActions(
+                      context,
+                      drama: item.drama,
+                      store: widget.store,
+                      onContinue: () => _openDrama(item),
                     ),
                   ),
                 ),

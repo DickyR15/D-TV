@@ -190,7 +190,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
       final controlsEnabled =
           !_busy && !_cancelling && !link.syncing && !link.store.locked;
       return Scaffold(
-        appBar: AppBar(title: const Text('追劇同步')),
+        appBar: AppBar(title: const Text('收藏同步')),
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
@@ -289,7 +289,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                       SwitchListTile.adaptive(
                         key: const ValueKey('lan-auto-sync'),
                         title: const Text('自動同步'),
-                        subtitle: const Text('同步追劇、觀看狀態和這些劇目的續播進度'),
+                        subtitle: const Text('同步收藏、觀看狀態和這些劇目的續播進度'),
                         value: link.autoSync,
                         onChanged: controlsEnabled
                             ? (value) => _perform(() => link.setAutoSync(value))
@@ -846,8 +846,8 @@ class _LanManualState extends State<_LanManual> {
                                 padding: const EdgeInsets.only(top: 16),
                                 child: Text(
                                   _mode == LanSyncMode.push
-                                      ? '將覆蓋 $name 的目前使用者紀錄；移除 ${preview.remoteCount.removed} 部追劇。'
-                                      : '將覆蓋本機目前使用者紀錄；移除 ${preview.localCount.removed} 部追劇。',
+                                      ? '將覆蓋 $name 的目前使用者紀錄；移除 ${preview.remoteCount.removed} 部收藏短劇。'
+                                      : '將覆蓋本機目前使用者紀錄；移除 ${preview.localCount.removed} 部收藏短劇。',
                                 ),
                               ),
                           ],
@@ -898,7 +898,7 @@ class _LanConflicts extends StatelessWidget {
   final LanController controller;
 
   String _value(String field, Object? value) {
-    if (field == 'member') return value == true ? '保留追劇' : '取消追劇';
+    if (field == 'member') return value == true ? '保留收藏' : '取消收藏';
     if (value == null) return '清空續播進度';
     final row = lanMap(value);
     if (field == 'status') {
@@ -955,7 +955,7 @@ class _LanConflicts extends StatelessWidget {
                                     bottom: 4,
                                   ),
                                   child: Text(switch (field.key) {
-                                    'member' => '追劇列表',
+                                    'member' => '收藏列表',
                                     'status' => '觀看狀態',
                                     _ => '續播進度',
                                   }),

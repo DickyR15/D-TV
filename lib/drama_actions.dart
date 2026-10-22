@@ -18,7 +18,7 @@ Future<void> showDramaActions(
   final choices = <(String, String, IconData)>[
     if (onContinue != null && store.watched(drama.id) != null)
       ('continue', '繼續觀看', Icons.play_arrow_rounded),
-    ('favorite', following == null ? '加入追劇' : '取消追劇', Icons.bookmark_outline),
+    ('favorite', following == null ? '加入收藏' : '取消收藏', Icons.bookmark_outline),
     for (final status in FollowStatus.values)
       (
         'status:${status.name}',

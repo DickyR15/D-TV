@@ -1025,7 +1025,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (_tab == 1)
                   IconButton(
                     key: const ValueKey('follow-lan-sync'),
-                    tooltip: '追劇同步',
+                    tooltip: '收藏同步',
                     onPressed: () => openLanSync(context),
                     icon: const Icon(Icons.sync_rounded),
                   ),
@@ -1301,24 +1301,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _sideNavigation() {
     const tvEntries = <({int tab, IconData icon, String label})>[
+      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
+      (tab: 1, icon: Icons.bookmark_border_rounded, label: '我的收藏'),
       (tab: 0, icon: Icons.fiber_new_rounded, label: '新劇'),
       (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
       (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI劇熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
       (tab: 8, icon: Icons.category_rounded, label: '分類'),
-      (tab: 1, icon: Icons.bookmark_border_rounded, label: '收藏'),
-      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     const desktopEntries = <({int tab, IconData icon, String label})>[
+      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
+      (tab: 1, icon: Icons.bookmark_border_rounded, label: '我的收藏'),
+      (tab: 0, icon: Icons.category_rounded, label: '分類'),
       (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
       (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI劇熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
-      (tab: 0, icon: Icons.category_rounded, label: '分類'),
-      (tab: 1, icon: Icons.bookmark_border_rounded, label: '收藏'),
-      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     final television = AppLayout.isTelevision(context);
@@ -1561,7 +1561,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     )
                   : items.isEmpty
                   ? StatusPanel(
-                      title: '沒有找到匹配的短劇',
+                      title: '沒有找到符合的短劇',
                       message: _hideVip
                           ? '可以換個搜尋詞，或顯示 VIP 內容。'
                           : widget.store.sources.length > 1

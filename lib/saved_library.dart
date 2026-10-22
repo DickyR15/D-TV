@@ -47,7 +47,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空觀看記錄？'),
-        content: const Text('這會刪除當前使用者的觀看進度，追劇狀態和手動已看標記會保留。'),
+        content: const Text('這會刪除當前使用者的觀看進度，收藏狀態和手動已看標記會保留。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -85,7 +85,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
       repository: widget.repository,
       focusNode: focusNode,
       onFocus: onFocus,
-      onTap: () => widget.onOpen(drama),
+      onTap: () => widget.history ? widget.onContinue(drama) : widget.onOpen(drama),
       onMore: () => _actions(drama),
       actions: DramaActionButton(
         drama: drama,
@@ -115,16 +115,6 @@ class _SavedLibraryState extends State<SavedLibrary> {
                 ? state?.hasUpdates == true
                 : state?.status.name == _filter);
       }).toList();
-      final ids = items.map((drama) => drama.id).toSet();
-      final resume = history
-          .where(
-            (entry) =>
-                ids.contains(entry.drama.id) &&
-                (!entry.finished ||
-                    entry.drama.episodes <= 0 ||
-                    entry.episode < entry.drama.episodes),
-          )
-          .firstOrNull;
       final header = [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
@@ -132,7 +122,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
             children: [
               Expanded(
                 child: Text(
-                  '${widget.history ? '最近觀看' : '我的追劇'} · ${all.length}',
+                  '${widget.history ? '最近觀看' : '我的收藏'} · ${all.length}',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
@@ -156,7 +146,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
               onChanged: (_) => setState(() {}),
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: widget.history ? '搜尋觀看記錄' : '搜尋追劇',
+                hintText: widget.history ? '搜尋觀看記錄' : '搜尋收藏',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: _search.text.isEmpty
                     ? null
@@ -193,34 +183,14 @@ class _SavedLibraryState extends State<SavedLibrary> {
               ],
             ),
           ),
-        if (resume != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Card(
-              margin: EdgeInsets.zero,
-              child: ListTile(
-                key: const ValueKey('continue-watching'),
-                leading: const Icon(Icons.play_circle_outline),
-                title: Text(
-                  '繼續觀看 · ${uiTraditional(resume.drama.title)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  '第 ${resume.episode} 集 · ${formatPosition(resume.position)}',
-                ),
-                onTap: () => widget.onContinue(resume.drama),
-              ),
-            ),
-          ),
       ];
       final empty = StatusPanel(
         title: all.isEmpty
             ? widget.history
                   ? '還沒有觀看記錄'
-                  : '還沒有追劇'
-            : '沒有匹配的記錄',
-        message: all.isEmpty ? '去發現頁，挑一部喜歡的短劇。' : '可以更換搜尋詞或篩選條件。',
+                  : '還沒有收藏'
+            : '沒有符合的紀錄',
+        message: all.isEmpty ? '去挑一部喜歡的短劇' : '可以更換搜尋詞或篩選條件。',
         icon: widget.history
             ? Icons.history_rounded
             : Icons.bookmark_border_rounded,
