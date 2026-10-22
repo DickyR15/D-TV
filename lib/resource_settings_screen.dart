@@ -1,80 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'core_bridge.dart';
-import 'download_preferences.dart';
 import 'local_store.dart';
 import 'resource_settings.dart';
 import 'widgets.dart';
-
-class DownloadPreferencesScreen extends StatelessWidget {
-  const DownloadPreferencesScreen({super.key, required this.store});
-  final LocalStore store;
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: store,
-    builder: (context, _) {
-      final preferences = store.downloadPreferences;
-      return Scaffold(
-        appBar: AppBar(title: const Text('下載偏好')),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680),
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                ListTile(
-                  title: const Text('預設畫質'),
-                  subtitle: const Text('指定畫質不可用時，使用源站提供的可用版本。'),
-                ),
-                DropdownButtonFormField<int>(
-                  initialValue: preferences.quality,
-                  decoration: const InputDecoration(labelText: '下載畫質'),
-                  items: [
-                    for (final value in DownloadPreferences.qualities)
-                      DropdownMenuItem(
-                        value: value,
-                        child: Text(value == 0 ? '自動 · 優先高畫質' : '${value}P'),
-                      ),
-                  ],
-                  onChanged: !store.canDownload
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            saveUserChange(
-                              context,
-                              () => store.setDownloadPreferences(
-                                preferences.copyWith(quality: value),
-                              ),
-                            );
-                          }
-                        },
-                ),
-                const SizedBox(height: 12),
-                SwitchListTile(
-                  value: preferences.includeVip,
-                  title: const Text('預設包含 VIP 集'),
-                  subtitle: const Text('VIP 集可能僅提供試看內容；下載前仍可調整選擇。'),
-                  onChanged: !store.canDownload
-                      ? null
-                      : (value) => saveUserChange(
-                          context,
-                          () => store.setDownloadPreferences(
-                            preferences.copyWith(includeVip: value),
-                          ),
-                        ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('偏好儲存在當前使用者中，應用於下載選集、批次下載和更新本劇。'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
+import 'ui_localization.dart';
 
 class ResourceSettingsScreen extends StatefulWidget {
   const ResourceSettingsScreen({
@@ -153,7 +83,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
       setState(() => _settings = settings);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('設定已儲存，將用於後續請求和下載任務')));
+      ).showSnackBar(const SnackBar(content: Text('設定已儲存，將套用於後續連線與目錄請求')));
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
@@ -188,7 +118,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
       ],
     ),
     body: !_allowed
-        ? const StatusPanel(title: '需要管理員許可權', message: '請返回後切換管理員。')
+        ? const StatusPanel(title: '需要管理員權限', message: '請返回並切換至管理員帳號。')
         : _settings == null
         ? _error == null
               ? const Center(child: CircularProgressIndicator())
@@ -203,7 +133,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                   if (_settings!.warning.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16),
-                      child: Text(_settings!.warning),
+                      child: Text(uiTraditional(_settings!.warning)),
                     ),
                   DropdownButtonFormField<String>(
                     initialValue: _mode,
@@ -222,8 +152,8 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Text(
                         _settings!.systemProxyStatus.isEmpty
-                            ? '使用系統靜態代理；未配置時使用環境變數或直連。'
-                            : _settings!.systemProxyStatus,
+                            ? '使用系統靜態代理；未設定時使用環境變數或直連。'
+                            : uiTraditional(_settings!.systemProxyStatus),
                       ),
                     ),
                   if (_mode == 'manual')
@@ -237,7 +167,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                         decoration: InputDecoration(
                           labelText: '代理地址',
                           hintText: 'http://127.0.0.1:7890',
-                          helperText: '支援 HTTP、HTTPS、SOCKS5；僅儲存在本機，不進入配置備份。',
+                          helperText: '支援 HTTP、HTTPS、SOCKS5；僅儲存在本機，不會納入設定備份。',
                           helperMaxLines: 3,
                           suffixIcon: IconButton(
                             tooltip: _showProxy ? '隱藏代理地址' : '顯示代理地址',
@@ -271,7 +201,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Text(
-                        _error!,
+                        uiTraditional(_error!),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.error,
                         ),
