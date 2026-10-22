@@ -1219,114 +1219,42 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Persistent brand header shared by the TV / desktop views.
   /// The slogan is redrawn larger over the original banner so it remains
   /// readable at living-room viewing distance.
+  /// Shared cinematic D TV header used across all wide-screen sections.
+  /// The complete logo, woman portrait and larger Taiwan Traditional Chinese
+  /// slogan live in one purpose-built panoramic asset.
   Widget _homeBrandBanner({required double width, required double height}) {
-    final theme = Theme.of(context);
-    return SizedBox(
+    return Container(
       width: width,
       height: height,
-      child: ClipRRect(
+      padding: const EdgeInsets.all(1),
+      decoration: BoxDecoration(
+        color: const Color(0xFF080910),
         borderRadius: BorderRadius.circular(12),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: const Color(0xFF080910),
-            border: Border.all(color: const Color(0x66FF3658), width: 1),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x22F52245),
-                blurRadius: 12,
-                spreadRadius: 1,
-              ),
-            ],
+        border: Border.all(color: const Color(0x66FF3658), width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x22F52245),
+            blurRadius: 12,
+            spreadRadius: 1,
           ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset(
-                'assets/brand/dtv-tv-banner.webp',
-                fit: BoxFit.fill,
-                filterQuality: FilterQuality.high,
-                errorBuilder: (_, error, stack) => Container(
-                  color: const Color(0xFF080910),
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: _brandLogo(width: width * .42, height: height * .78),
-                ),
-              ),
-              Positioned(
-                left: 0,
-                right: width * .36,
-                bottom: 0,
-                height: 54,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        const Color(0x0010080B),
-                        const Color(0xE810080B),
-                        const Color(0xF508080C),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: width * .055,
-                bottom: 7,
-                child: Text(
-                  '精彩隨時  大屏更過癮',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: height >= 125 ? 23 : 19,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.0,
-                    shadows: const [
-                      Shadow(
-                        color: Color(0xFFFF263F),
-                        blurRadius: 10,
-                        offset: Offset(0, 0),
-                      ),
-                      Shadow(
-                        color: Color(0xD9000000),
-                        blurRadius: 3,
-                        offset: Offset(1, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                left: width * .055,
-                bottom: 3,
-                child: Container(
-                  height: 2,
-                  width: width * .42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF3658),
-                    borderRadius: BorderRadius.circular(2),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0xAAFF2348), blurRadius: 7),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 0,
-                right: 0,
-                bottom: 0,
-                width: 3,
-                child: Container(color: const Color(0x66FF3658)),
-              ),
-            ],
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(11),
+        child: Image.asset(
+          'assets/brand/dtv-home-header.webp',
+          fit: BoxFit.fill,
+          filterQuality: FilterQuality.high,
+          errorBuilder: (_, error, stack) => Container(
+            color: const Color(0xFF080910),
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: _brandLogo(width: width * .42, height: height * .78),
           ),
         ),
       ),
     );
   }
-
 
   void _selectCatalogTab(int tab) {
     final shouldReload =
