@@ -52,7 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _hasMore = true;
   String? _error;
   int _generation = 0;
-  int _tab = 0;
+  int _tab = 4;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
   late final CatalogBrowser _browser;
@@ -671,9 +671,23 @@ class _HomeScreenState extends State<HomeScreen> {
       _loading = _loadingMore = false;
     }
     setState(() {});
-    if (_onlineSearch && query.trim().isEmpty) {
-      _debounce = Timer(const Duration(milliseconds: 300), () => _load());
+    final normalized = query.trim();
+    if (normalized.isEmpty) {
+      if (_onlineSearch) {
+        _debounce = Timer(const Duration(milliseconds: 300), () => _load());
+      }
+      return;
     }
+    if (normalized.length > 100) return;
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      if (!mounted ||
+          _search.text.trim() != normalized ||
+          !_search.value.composing.isCollapsed ||
+          (normalized == _submittedQuery && !_loading && !_loadingMore)) {
+        return;
+      }
+      _submitHeaderSearch(normalized);
+    });
   }
 
   void _submitSearch(String query) {
@@ -864,6 +878,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: TextField(
                       controller: _search,
                       textInputAction: TextInputAction.search,
+                      onChanged: _searchChanged,
                       onSubmitted: _submitHeaderSearch,
                       decoration: InputDecoration(
                         hintText: '搜尋短劇',
@@ -1012,13 +1027,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         context: context,
                         applicationName: appName,
                         applicationVersion: AppLayout.versionOf(context),
-                        applicationIcon: const Icon(
-                          Icons.play_circle_filled_rounded,
-                          size: 48,
-                          color: Color(0xFFFF765F),
+                        applicationIcon: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.asset(
+                            'assets/brand/hgtv-icon.png',
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.high,
+                          ),
                         ),
-                        children: [
-                          const Text('獨立執行，開啟即可瀏覽和播放。觀看紀錄與追劇收藏會儲存在這台裝置。'),
+                        children: const [
+                          Text('作者：R15'),
                         ],
                       );
                     }

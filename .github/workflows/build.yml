@@ -53,7 +53,7 @@ jobs:
       - name: Test Taiwan Traditional Chinese conversion
         run: |
           flutter pub get
-          flutter test test/ui_localization_test.dart
+          flutter test test/ui_localization_test.dart test/playback_preferences_test.dart
       - name: Install Android NDK
         run: sdkmanager "ndk;28.2.13676358"
       - name: Build APK (armeabi-v7a)

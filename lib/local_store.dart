@@ -380,6 +380,28 @@ class LocalStore extends ChangeNotifier {
     }
   }
 
+  /// One-time migration: old app versions defaulted to showing danmaku.
+  /// Preserve the user's future manual choice after this migration is recorded.
+  bool get needsDanmakuDefaultOffMigration =>
+      !locked && _bool(_key('danmakuDefaultOffV1')) != true;
+
+  Future<void> migrateDanmakuDefaultOff() {
+    final epoch = _epoch;
+    return _queue(() async {
+      if (locked ||
+          epoch != _epoch ||
+          _bool(_key('danmakuDefaultOffV1')) == true) {
+        return;
+      }
+      final migrated = playbackPreferences.copyWith(danmaku: false);
+      await _commit({
+        _key('playback'): jsonEncode(migrated.toJson()),
+        _key('danmakuDefaultOffV1'): true,
+      });
+      _notify();
+    });
+  }
+
   CatalogView get catalogView {
     if (locked) return const CatalogView();
     try {

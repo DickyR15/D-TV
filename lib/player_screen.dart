@@ -172,10 +172,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     _index = widget.initialIndex;
     _profileEpoch = widget.handoff?.profileEpoch ?? widget.store.profileEpoch;
     final preferences = widget.store.playbackPreferences;
+    final migrateDanmakuDefault =
+        widget.store.needsDanmakuDefaultOffMigration;
+    if (migrateDanmakuDefault) {
+      unawaited(widget.store.migrateDanmakuDefaultOff());
+    }
     _speed = preferences.speed;
     _requestedQuality = preferences.quality;
     _autoAdvance = true;
-    _danmakuEnabled = preferences.danmaku;
+    _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
     _preloadEnabled = true;
     _televisionDecoder = preferences.televisionDecoder;
     _loader = PlaybackLoader(widget.repository);
