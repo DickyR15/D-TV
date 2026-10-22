@@ -908,21 +908,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 8),
                   SizedBox(
                     height: 48,
-                    child: FilledButton.tonal(
-                      onPressed: () => _submitHeaderSearch(_search.text),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 48),
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: const Text('搜尋'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    height: 48,
                     child: FilledButton.tonalIcon(
                       onPressed: _openPhoneSearch,
                       icon: const Icon(Icons.qr_code_2_rounded),
@@ -1296,8 +1281,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     entry.tab,
                     () => FocusNode(debugLabel: 'HGTV navigation ${entry.tab}'),
                   ),
-                  autofocus: television && index == 0,
+                  autofocus: television && _tab == entry.tab,
                   selected: _tab == entry.tab,
+                  onFocus: () {
+                    if (_tab != entry.tab) {
+                      _selectNavigationDestination(entry.tab);
+                    }
+                  },
                   onPressed: () {
                     _navigationFocusNodes[entry.tab]?.requestFocus();
                     _selectNavigationDestination(entry.tab);
