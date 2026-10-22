@@ -1,4 +1,5 @@
 import 'models.dart';
+import 'ui_localization.dart';
 
 enum CatalogSort {
   source('預設順序'),
@@ -65,9 +66,10 @@ String normalizedSearchText(String text) {
 
 bool matchesDramaQuery(Drama drama, String query) {
   final fields = normalizedSearchText(
-    '${drama.title} ${drama.description} ${drama.tags.join(' ')}',
+    '${uiTraditional(drama.title)} ${uiTraditional(drama.description)} '
+    '${drama.tags.map(uiTraditional).join(' ')}',
   );
-  final terms = query
+  final terms = uiTraditional(query)
       .trim()
       .split(RegExp(r'\s+'))
       .map(normalizedSearchText)
