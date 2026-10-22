@@ -165,7 +165,7 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
           ),
         Expanded(
           child: !widget.store.allowsSource('hongguo')
-              ? const StatusPanel(title: '目前使用者未開放紅果', message: '可在使用者管理中調整站源權限。')
+              ? const StatusPanel(title: '目前使用者無法使用紅果片源', message: '可在使用者管理中調整片源權限。')
               : _loading && _items.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : _items.isEmpty
