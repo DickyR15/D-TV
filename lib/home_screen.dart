@@ -1015,7 +1015,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         applicationIcon: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: Image.asset(
-                            'assets/brand/hgtv-icon.png',
+                            'assets/brand/dtv-icon.png',
                             width: 56,
                             height: 56,
                             fit: BoxFit.cover,
@@ -1152,7 +1152,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Theme.of(context);
     if (theme.brightness == Brightness.dark) {
       return Image.asset(
-        'assets/brand/hgtv-logo.png',
+        'assets/brand/dtv-logo.png',
         width: width,
         height: height,
         fit: BoxFit.contain,
@@ -1178,7 +1178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Transform.scale(
                   scale: 1.10,
                   child: Image.asset(
-                    'assets/brand/hgtv-icon.png',
+                    'assets/brand/dtv-icon.png',
                     width: iconSize,
                     height: iconSize,
                     fit: BoxFit.cover,
@@ -1191,7 +1191,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 7),
           Flexible(
             child: Text(
-              'HGTV',
+              'D TV',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -1279,7 +1279,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   key: ValueKey('side-nav-${entry.tab}'),
                   focusNode: _navigationFocusNodes.putIfAbsent(
                     entry.tab,
-                    () => FocusNode(debugLabel: 'HGTV navigation ${entry.tab}'),
+                    () => FocusNode(debugLabel: 'D TV navigation ${entry.tab}'),
                   ),
                   autofocus: television && _tab == entry.tab,
                   selected: _tab == entry.tab,
