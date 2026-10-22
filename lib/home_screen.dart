@@ -1012,17 +1012,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         context: context,
                         applicationName: appName,
                         applicationVersion: AppLayout.versionOf(context),
-                        applicationIcon: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.asset(
-                            'assets/brand/dtv-icon.png',
-                            width: 56,
-                            height: 56,
-                            fit: BoxFit.cover,
-                            filterQuality: FilterQuality.high,
-                          ),
-                        ),
-                        children: const [
+                        applicationIcon: const _DtvBrandMark(size: 56),
+                         children: const [
                           Text('作者：R15'),
                         ],
                       );
@@ -1150,45 +1141,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _brandLogo({required double width, required double height}) {
     final theme = Theme.of(context);
-    if (theme.brightness == Brightness.dark) {
-      return Image.asset(
-        'assets/brand/dtv-logo.png',
-        width: width,
-        height: height,
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.high,
-      );
-    }
-
-    // The original wordmark has a dark rectangular background; use a clean
-    // icon + live text color in light mode so it blends into the app bar.
-    final iconSize = (height - 4).clamp(32.0, 48.0).toDouble();
     return SizedBox(
       width: width,
       height: height,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              width: iconSize,
-              height: iconSize,
-              child: ClipRect(
-                child: Transform.scale(
-                  scale: 1.10,
-                  child: Image.asset(
-                    'assets/brand/dtv-icon.png',
-                    width: iconSize,
-                    height: iconSize,
-                    fit: BoxFit.cover,
-                    filterQuality: FilterQuality.high,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 7),
+          _DtvBrandMark(size: height * 0.92),
+          const SizedBox(width: 8),
           Flexible(
             child: Text(
               'D TV',
@@ -1592,4 +1552,87 @@ class _HomeScreenState extends State<HomeScreen> {
           _catalogTile(items[index], focusNode: node, onFocus: onFocus),
     );
   }
+}
+
+
+/// Reusable D TV mark rendered as vector artwork, so the UI never falls back
+/// to the former HGTV bitmap logo on any theme.
+class _DtvBrandMark extends StatelessWidget {
+  const _DtvBrandMark({this.size = 48});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(painter: const _DtvMarkPainter()),
+      );
+}
+
+class _DtvMarkPainter extends CustomPainter {
+  const _DtvMarkPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final side = size.width < size.height ? size.width : size.height;
+    final dx = (size.width - side) / 2;
+    final dy = (size.height - side) / 2;
+    canvas.save();
+    canvas.translate(dx, dy);
+    final rect = Offset.zero & Size(side, side);
+    final outer = Path()
+      ..moveTo(side * .17, side * .10)
+      ..lineTo(side * .52, side * .10)
+      ..cubicTo(side * .86, side * .10, side * .93, side * .32,
+          side * .93, side * .50)
+      ..cubicTo(side * .93, side * .69, side * .86, side * .90,
+          side * .52, side * .90)
+      ..lineTo(side * .17, side * .90)
+      ..close();
+
+    canvas.saveLayer(rect, Paint());
+    canvas.drawPath(
+      outer,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFF343E), Color(0xFFD80729), Color(0xFF8D061B)],
+        ).createShader(rect),
+    );
+    canvas.save();
+    canvas.clipPath(outer);
+    final gloss = Path()
+      ..moveTo(side * .17, side * .10)
+      ..lineTo(side * .31, side * .10)
+      ..lineTo(side * .63, side * .90)
+      ..lineTo(side * .48, side * .90)
+      ..close();
+    canvas.drawPath(gloss, Paint()..color = const Color(0x2BFFFFFF));
+    canvas.restore();
+
+    final hole = Path()
+      ..moveTo(side * .34, side * .25)
+      ..lineTo(side * .52, side * .25)
+      ..cubicTo(side * .72, side * .25, side * .78, side * .38,
+          side * .78, side * .50)
+      ..cubicTo(side * .78, side * .63, side * .72, side * .75,
+          side * .52, side * .75)
+      ..lineTo(side * .34, side * .75)
+      ..close();
+    canvas.drawPath(hole, Paint()..blendMode = BlendMode.clear);
+    canvas.restore();
+
+    final play = Path()
+      ..moveTo(side * .45, side * .37)
+      ..lineTo(side * .45, side * .63)
+      ..lineTo(side * .63, side * .50)
+      ..close();
+    canvas.drawPath(play, Paint()..color = const Color(0xFFFF4057));
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _DtvMarkPainter oldDelegate) => false;
 }
