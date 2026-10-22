@@ -418,7 +418,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ? '搜尋可用片源'
             : _onlineSearch
             ? '搜尋${uiTraditional(_group.name)}短劇'
-            : '篩選當前已載入短劇',
+            : '篩選目前已載入的短劇',
         recentSearches: widget.store.recentSearches,
         onCancel: () => unawaited(widget.repository.cancelSuggestions()),
         suggestions: _searchSuggestions ? widget.repository.suggestions : null,
@@ -949,7 +949,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: Color(0xFFFF765F),
                         ),
                         children: [
-                          const Text('獨立執行，開啟即可瀏覽和播放。觀看記錄與追劇收藏儲存在當前裝置。'),
+                          const Text('獨立執行，開啟即可瀏覽和播放。觀看紀錄與追劇收藏會儲存在這台裝置。'),
                         ],
                       );
                     }
