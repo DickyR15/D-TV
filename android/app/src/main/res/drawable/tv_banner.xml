@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- D TV uses a dedicated wide raster banner. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#101114" />
+            <solid android:color="#08090D" />
         </shape>
     </item>
     <item
-        android:width="108dp"
-        android:height="108dp"
+        android:width="144dp"
+        android:height="144dp"
         android:gravity="center">
         <bitmap
             android:src="@drawable/app_icon"
