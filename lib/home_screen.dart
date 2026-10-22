@@ -882,7 +882,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (television)
                     IconButton(
                       key: const ValueKey('phone-qr-search'),
-                      tooltip: '手機 QR Code 搜尋',
+                      tooltip: '手機掃描 QR Code',
                       icon: const Icon(Icons.qr_code_2_rounded),
                       onPressed: widget.store.sources.isEmpty
                           ? null
@@ -1118,10 +1118,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _televisionNavigation(List<NavigationRailDestination> destinations) {
     const entries = <({int tab, IconData icon, String label})>[
       (tab: 0, icon: Icons.fiber_new_rounded, label: '新劇'),
-      (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
-      (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
-      (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI 劇熱播榜'),
-      (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
+      (tab: 4, icon: Icons.local_fire_department_rounded, label: '熱播榜'),
       (tab: 8, icon: Icons.explore_rounded, label: '發現'),
       (tab: 1, icon: Icons.bookmark_border_rounded, label: '收藏'),
       (tab: 2, icon: Icons.history_rounded, label: '播放歷史'),
