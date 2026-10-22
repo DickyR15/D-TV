@@ -13,16 +13,16 @@
     <application
         android:label="${appLabel}"
         android:name="${applicationName}"
-        android:icon="@drawable/dtv_icon"
-        android:roundIcon="@drawable/dtv_icon"
-        android:logo="@drawable/dtv_icon"
+        android:icon="@mipmap/ic_dtv"
+        android:roundIcon="@mipmap/ic_dtv"
+        android:logo="@mipmap/ic_dtv"
         android:banner="${appBanner}"
         android:usesCleartextTraffic="true"
         android:allowBackup="false">
         <activity
             android:name=".MainActivity"
-            android:icon="@drawable/dtv_icon"
-            android:logo="@drawable/dtv_icon"
+            android:icon="@mipmap/ic_dtv"
+            android:logo="@mipmap/ic_dtv"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
