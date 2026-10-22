@@ -39,6 +39,34 @@ void main() {
     expect(matchesDramaQuery(drama, '改寫命運'), isTrue);
   });
 
+  test('sorts Simplified source season titles in natural order', () {
+    const rows = [
+      Drama(id: 'season-10', source: 'hongguo', title: '第10季'),
+      Drama(id: 'season-2', source: 'hongguo', title: '第2季'),
+    ];
+
+    final sorted = sortCatalog(
+      rows,
+      const CatalogView(sort: CatalogSort.season),
+    );
+
+    expect(sorted.map((drama) => drama.id), ['season-2', 'season-10']);
+  });
+
+  test('sorts heat metrics even when the source uses Simplified units', () {
+    const rows = [
+      Drama(id: 'heat-2', source: 'hongguo', title: '短劇甲', heat: '2万'),
+      Drama(id: 'heat-12', source: 'hongguo', title: '短劇乙', heat: '12万'),
+    ];
+
+    final sorted = sortCatalog(
+      rows,
+      const CatalogView(sort: CatalogSort.heat),
+    );
+
+    expect(sorted.map((drama) => drama.id), ['heat-12', 'heat-2']);
+  });
+
   test('uses Taiwan wording for QR code terminology', () {
     expect(uiTraditional('二維碼、掃碼、手機'), 'QR Code、掃描、手機');
   });
