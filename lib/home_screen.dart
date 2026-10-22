@@ -71,7 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int _revealed = _revealBatch;
   int? _revealKey;
   bool _hiddenItems = false;
-  bool _initialCategoryApplied = false;
 
   bool get _isCatalogTab => _tab == 0 || _tab == 8;
   bool get _isRankingTab => _tab >= 4 && _tab <= 7;
@@ -147,16 +146,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _categoriesLoading = false;
       _categoriesError = error;
     });
-    if (!_initialCategoryApplied && group.id == 'hongguo') {
-      _initialCategoryApplied = true;
-      final latest = _categories.where(
-        (entry) => uiTraditional(entry.name).trim() == '新劇',
-      ).firstOrNull;
-      if (latest != null) {
-        _changeCategory(latest.id);
-        return;
-      }
-    }
     if (!_showRecommendations &&
         _category.isNotEmpty &&
         !_categories.any((entry) => entry.id == _category)) {
@@ -751,6 +740,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final category = _category;
     final hideVip = _hideVip;
     final onlineSearch = _onlineSearch;
+    final isTelevisionNew = AppLayout.isTelevision(context) && _tab == 0;
+    final view = isTelevisionNew
+        ? widget.store.catalogView.copyWith(sort: CatalogSort.date)
+        : widget.store.catalogView;
     return sortCatalog(
       _items.where((drama) {
         if (!widget.store.allowsSource(drama.source)) return false;
@@ -763,7 +756,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
         return onlineSearch || query.isEmpty || matchesDramaQuery(drama, query);
       }),
-      widget.store.catalogView,
+      view,
     );
   }
 
@@ -1092,19 +1085,28 @@ class _HomeScreenState extends State<HomeScreen> {
     filterQuality: FilterQuality.high,
   );
 
+  void _selectCatalogTab(int tab) {
+    final shouldReload =
+        _category.isNotEmpty ||
+        _showRecommendations ||
+        _search.text.trim().isNotEmpty ||
+        _submittedQuery.isNotEmpty;
+    _debounce?.cancel();
+    setState(() {
+      _tab = tab;
+      _showRecommendations = false;
+      _search.clear();
+      _searchVisible = false;
+      _submittedQuery = '';
+      _categorySelections[_group.id] = '';
+      _error = null;
+    });
+    if (shouldReload) _load(useCache: true);
+  }
+
   void _selectTelevisionDestination(int tab) {
     if (tab == 0 || tab == 8) {
-      setState(() => _tab = tab);
-      if (tab == 8 && (_category.isNotEmpty || _showRecommendations)) {
-        _changeCategory('');
-      } else if (tab == 0) {
-        final latest = _categories.where(
-          (entry) => uiTraditional(entry.name).trim() == '新劇',
-        ).firstOrNull;
-        if (latest != null && _category != latest.id) {
-          _changeCategory(latest.id);
-        }
-      }
+      _selectCatalogTab(tab);
       return;
     }
     _pauseCatalog();
@@ -1243,28 +1245,29 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-        CatalogFilters(
-          key: ValueKey('filters-${_group.id}'),
-          categories: _displayCategories,
-          category: _displayCategory,
-          error: _categoriesError == null ? null : uiTraditional(_categoriesError!),
-          onCategory: _changeCategory,
-          onRetry: () => _loadCategories(force: true),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_supportsVipFilter)
-                IconButton(
-                  tooltip: widget.store.hideVip ? 'VIP：隱藏' : 'VIP：顯示',
-                  onPressed: () => saveUserChange(
-                    context,
-                    () => widget.store.setHideVip(!widget.store.hideVip),
+        if (!television || _tab != 0)
+          CatalogFilters(
+            key: ValueKey('filters-${_group.id}'),
+            categories: _displayCategories,
+            category: _displayCategory,
+            error: _categoriesError == null ? null : uiTraditional(_categoriesError!),
+            onCategory: _changeCategory,
+            onRetry: () => _loadCategories(force: true),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_supportsVipFilter)
+                  IconButton(
+                    tooltip: widget.store.hideVip ? 'VIP：隱藏' : 'VIP：顯示',
+                    onPressed: () => saveUserChange(
+                      context,
+                      () => widget.store.setHideVip(!widget.store.hideVip),
+                    ),
+                    icon: VipIcon(hidden: widget.store.hideVip),
                   ),
-                  icon: VipIcon(hidden: widget.store.hideVip),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
         if (_showRecommendations)
           Expanded(
             child: GestureDetector(
