@@ -186,7 +186,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
           ? viewPaddingBottom
           : paddingBottom;
       return Scaffold(
-        appBar: AppBar(title: const Text('站源管理')),
+        appBar: AppBar(title: const Text('片源管理')),
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 960),
@@ -198,13 +198,13 @@ class _SourcesScreenState extends State<SourcesScreen> {
                   const Padding(
                     padding: EdgeInsets.only(bottom: 16),
                     child: Text(
-                      '各站源可分別更新和檢測。更新會查詢新劇、繼續載入一頁歷史內容，並分批補齊資料；離開此頁後任務繼續。',
+                      '各片源可分別更新與檢測。更新會查詢新劇、續載一頁歷史內容，並分批補齊資料；離開此頁後工作仍會繼續。',
                     ),
                   ),
                   if (sources.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(24),
-                      child: Text('當前使用者沒有可用站源'),
+                      child: Text('目前使用者沒有可用片源'),
                     ),
                   for (final group in SourceGroup.fromSources(sources))
                     if (group.id == 'huangguo')
@@ -547,6 +547,6 @@ class SourceDiagnosticsButton extends StatelessWidget {
       ),
     ),
     icon: const Icon(Icons.network_check),
-    label: const Text('站源診斷'),
+    label: const Text('片源診斷'),
   );
 }
