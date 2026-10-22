@@ -65,10 +65,15 @@ jobs:
           set -euo pipefail
           apk=$(find dist/android -maxdepth 1 -type f -name '*armeabi-v7a.apk' | head -n1)
           test -n "$apk"
-          mv "$apk" "dist/android/D TV.apk"
+          version=$(sed -n "s/^version: *['\"]\?\([^'\"]*\)['\"]\?$/\1/p" pubspec.yaml | head -n1)
+          version="${version%%+*}"
+          test -n "$version"
+          output="dist/android/D TV-Android-v7a_v${version}.apk"
+          mv "$apk" "$output"
+          echo "APK_OUTPUT=$output" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         with:
           name: D TV-Android-v7a
-          path: dist/android/D TV.apk
+          path: ${{ env.APK_OUTPUT }}
           if-no-files-found: error
           retention-days: 14
