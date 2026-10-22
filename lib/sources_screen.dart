@@ -289,7 +289,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    closedError,
+                    uiTraditional(closedError),
                     style: TextStyle(color: colors.error),
                   ),
                 ),
@@ -370,12 +370,12 @@ class _SourcesScreenState extends State<SourcesScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                '${status?.stage ?? '準備中'}${(status?.total ?? 0) > 0 ? ' · ${status!.completed}/${status.total}' : ''}',
+                '${uiTraditional(status?.stage ?? '準備中')}${(status?.total ?? 0) > 0 ? ' · ${status!.completed}/${status.total}' : ''}',
               ),
             ] else if (status != null && status.stage.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                '${status.stage}${status.added > 0 ? ' · 新增 ${status.added} 部' : ''}',
+                '${uiTraditional(status.stage)}${status.added > 0 ? ' · 新增 ${status.added} 部' : ''}',
               ),
             ],
             if (seconds > 0)
@@ -390,7 +390,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: SelectableText(
-                  error,
+                  uiTraditional(error),
                   style: TextStyle(color: colors.error),
                 ),
               ),
@@ -401,7 +401,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      status.storageError,
+                      uiTraditional(status.storageError),
                       style: TextStyle(color: colors.error),
                     ),
                     TextButton.icon(
