@@ -8,6 +8,7 @@ import 'local_store.dart';
 import 'models.dart';
 import 'player_screen.dart';
 import 'widgets.dart';
+import 'ui_localization.dart';
 
 Future<void> openPlaybackDirectly(
   BuildContext context, {
@@ -210,7 +211,7 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.drama.title)),
+    appBar: AppBar(title: Text(uiTraditional(widget.drama.title))),
     body: SafeArea(
       top: false,
       child: _error == null
@@ -226,7 +227,7 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
             )
           : StatusPanel(
               title: '暫時無法播放',
-              message: _error!,
+              message: uiTraditional(_error!),
               onRetry: _load,
               action: '重試',
               icon: Icons.play_disabled_rounded,
