@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_layout.dart';
+import 'ui_localization.dart';
 
 class RemoteTextInput extends StatelessWidget {
   const RemoteTextInput({super.key, required this.child});
@@ -495,8 +496,6 @@ class RemoteEpisodeButton extends StatelessWidget {
     ),
   );
 }
-
-import 'ui_localization.dart';
 
 class TelevisionSearchDialog extends StatefulWidget {
   const TelevisionSearchDialog({
