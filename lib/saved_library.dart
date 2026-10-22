@@ -19,7 +19,6 @@ class SavedLibrary extends StatefulWidget {
     required this.history,
     required this.onOpen,
     required this.onContinue,
-    this.onDownload,
   });
 
   final AppRepository repository;
@@ -27,7 +26,6 @@ class SavedLibrary extends StatefulWidget {
   final bool history;
   final ValueChanged<Drama> onOpen;
   final ValueChanged<Drama> onContinue;
-  final ValueChanged<Drama>? onDownload;
 
   @override
   State<SavedLibrary> createState() => _SavedLibraryState();
@@ -73,9 +71,6 @@ class _SavedLibraryState extends State<SavedLibrary> {
     store: widget.store,
     history: widget.history,
     onContinue: () => widget.onContinue(drama),
-    onDownload: widget.onDownload == null
-        ? null
-        : () => widget.onDownload!(drama),
   );
 
   Widget _tile(Drama drama, {FocusNode? focusNode, VoidCallback? onFocus}) {
