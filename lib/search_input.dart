@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'ui_localization.dart';
+
 class SearchInput extends StatefulWidget {
   const SearchInput({
     super.key,
@@ -198,7 +200,7 @@ class _SearchInputState extends State<SearchInput> {
                   key: ValueKey('search-suggestion-$index'),
                   selected: AutocompleteHighlightedOption.of(context) == index,
                   leading: const Icon(Icons.search, size: 18),
-                  title: _highlight(values[index]),
+                  title: _highlight(uiTraditional(values[index])),
                   onTap: () => selected(values[index]),
                 ),
               ),
