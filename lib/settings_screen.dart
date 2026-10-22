@@ -240,7 +240,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (_message != null)
                 Padding(
                   padding: const EdgeInsets.all(16),
-                  child: SelectableText(_message!),
+                  child: SelectableText(uiTraditional(_message!)),
                 ),
             ],
           ),
