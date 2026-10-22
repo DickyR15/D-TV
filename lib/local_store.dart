@@ -72,7 +72,7 @@ class LocalStore extends ChangeNotifier {
       _loadSeriesCandidates();
       _queue(() => _moveSeriesCandidates().catchError((Object _) {}));
     } catch (_) {
-      _block('本地使用者配置損壞，已鎖定訪問。原始記錄已保留，請重新讀取或從備份恢復。');
+      _block('本機使用者設定損毀，已鎖定存取。原始紀錄已保留，請重新讀取或從備份還原。');
     }
   }
 
@@ -157,12 +157,12 @@ class LocalStore extends ChangeNotifier {
 
   Future<void> setSourceEnabled(String source, bool enabled) {
     if (!SourceSite.isAvailable(source)) {
-      return Future.error(StateError('站源無效'));
+      return Future.error(StateError('片源設定無效'));
     }
     final epoch = _epoch;
     return _queue(() async {
       _requireAdmin();
-      if (epoch != _epoch) throw StateError('當前使用者已變更，請重試');
+      if (epoch != _epoch) throw StateError('目前使用者已變更，請重試');
       final switches = {..._sourceSwitches, source: enabled};
       await _commit({'sourceSwitches': jsonEncode(switches)});
       _sourceSwitches = switches;
@@ -412,7 +412,7 @@ class LocalStore extends ChangeNotifier {
     final epoch = _epoch;
     return _queue(() async {
       if (!allowsSource(source) || epoch != _epoch) {
-        throw StateError('當前使用者沒有此站源許可權');
+        throw StateError('目前使用者沒有此片源的使用權限');
       }
       await _commit({
         _key('source'): source,
@@ -452,7 +452,7 @@ class LocalStore extends ChangeNotifier {
     Set<String> clearSyncProgress = const {},
   }) async {
     final snapshot = _snapshot;
-    if (snapshot == null) throw StateError('請先恢復本地配置');
+    if (snapshot == null) throw StateError('請先還原本機設定');
     final values = replace ? <String, Object>{} : snapshot.values;
     for (final key in remove) {
       values.remove(key);
@@ -494,7 +494,7 @@ class LocalStore extends ChangeNotifier {
     final epoch = _epoch;
     return _queue(() async {
       if (admin) _requireAdmin();
-      if (locked || epoch != _epoch) throw StateError('當前使用者已變更，請重試');
+      if (locked || epoch != _epoch) throw StateError('目前使用者已變更，請重試');
       await _commit({key: value});
       _notify();
     });
@@ -508,7 +508,7 @@ class LocalStore extends ChangeNotifier {
       _setting('forceLogin', value, admin: true);
   Future<void> setHideVip(bool value) => _setting(_key('hideVip'), value);
   Future<void> setSource(String value) {
-    if (!allowsSource(value)) return Future.error(StateError('當前使用者沒有此站源許可權'));
+    if (!allowsSource(value)) return Future.error(StateError('目前使用者沒有此片源的使用權限'));
     return _setting(_key('source'), value);
   }
 
@@ -862,7 +862,7 @@ class LocalStore extends ChangeNotifier {
   }
 
   Future<void> switchProfile(String id, {String pin = ''}) => _queue(() async {
-    if (_configurationError != null) throw StateError('本地使用者配置損壞，請先恢復');
+    if (_configurationError != null) throw StateError('本機使用者設定損毀，請先還原');
     final target = _profiles.firstWhere((profile) => profile.id == id);
     await _checkPin(target, pin);
     await _commit({'activeProfile': id});
@@ -895,14 +895,14 @@ class LocalStore extends ChangeNotifier {
       throw StateError('使用者名稱需要 1 至 40 個字元');
     }
     if (sources.any((source) => !SourceSite.isKnown(source))) {
-      throw StateError('站源無效');
+      throw StateError('片源設定無效');
     }
     if (targetId != 'default' &&
         !_profiles.firstWhere((profile) => profile.admin).protected) {
       throw StateError('請先為管理員設定密碼，再建立或修改其他使用者');
     }
     if (old == null && _profiles.length >= 20) {
-      throw StateError('最多支援 20 個本地使用者');
+      throw StateError('最多支援 20 個本機使用者');
     }
     var salt = old?.salt ?? '', hash = old?.pinHash ?? '';
     if (pin != null) {
