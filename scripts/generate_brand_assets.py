@@ -1,36 +1,33 @@
+#!/usr/bin/env python3
+"""將已確認的 HGTV 圖示套用到 Android 啟動資源。
+
+Android TV 橫幅改由 res/drawable/tv_banner.xml 提供，避免重新生成另一套
+與 HGTV 品牌不一致的圖示或 PNG 橫幅。
+"""
 import argparse
-import json
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 root = Path(__file__).resolve().parents[1]
-parser = argparse.ArgumentParser(description='從統一圖形生成HGTV / HGTV平臺資源；需要 Pillow。')
-parser.add_argument('--output', type=Path, default=root)
-parser.add_argument('--font', type=Path, default=Path('/System/Library/Fonts/PingFang.ttc'))
-options = parser.parse_args()
-output = options.output
-icon = Image.new('RGB', (1024, 1024), '#101114')
-draw = ImageDraw.Draw(icon)
-draw.rounded_rectangle((110, 110, 914, 914), radius=236, fill='#FF765F')
-draw.polygon([(418, 303), (418, 721), (734, 512)], fill='white')
+parser = argparse.ArgumentParser(description="套用既有 HGTV Android 圖示。")
+parser.add_argument("--output", type=Path, default=root)
+args = parser.parse_args()
 
-def save(image, name):
-    destination = output / name
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    image.save(destination)
+source = root / "assets/brand/hgtv-icon.png"
+if not source.is_file():
+    raise SystemExit(f"找不到既有 HGTV 圖示：{source}")
 
-contents = json.loads((root / 'ios/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json').read_text())
-for entry in contents['images']:
-    if 'filename' in entry:
-        size = round(float(entry['size'].split('x')[0]) * float(entry['scale'].rstrip('x')))
-        save(icon.resize((size, size), Image.Resampling.LANCZOS),
-             'ios/Runner/Assets.xcassets/AppIcon.appiconset/' + entry['filename'])
-save(icon.resize((256, 256), Image.Resampling.LANCZOS), 'windows/runner/resources/app_icon.ico')
-font = ImageFont.truetype(str(options.font), 76)
-for name, resource in [('HGTV', 'tv_banner'), ('HGTV', 'tv_banner_all_sources')]:
-    banner = Image.new('RGB', (640, 360), '#101114')
-    banner.paste(icon.resize((180, 180), Image.Resampling.LANCZOS), (44, 90))
-    draw = ImageDraw.Draw(banner)
-    draw.text((255, 128), name, font=font, fill='white')
-    save(banner, f'android/app/src/main/res/drawable-xhdpi/{resource}.png')
+with Image.open(source) as image:
+    icon = image.convert("RGBA")
+    width, height = icon.size
+    side = min(width, height)
+    left = (width - side) // 2
+    top = (height - side) // 2
+    icon = icon.crop((left, top, left + side, top + side))
+    icon = icon.resize((192, 192), Image.Resampling.LANCZOS)
+
+destination = args.output / "android/app/src/main/res/drawable/app_icon.png"
+destination.parent.mkdir(parents=True, exist_ok=True)
+icon.save(destination, format="PNG", optimize=True)
+print(f"已套用既有 HGTV 圖示：{destination}")
