@@ -197,7 +197,7 @@ class _LocalMediaScreenState extends State<LocalMediaScreen> {
           .toList();
       return Scaffold(
         appBar: AppBar(
-          title: const Text('本地媒體'),
+          title: const Text('本機媒體'),
           actions: [
             IconButton(
               tooltip: '重新整理',
@@ -438,7 +438,7 @@ class _LocalFileRepository extends AppRepository {
     Drama drama,
     Episode episode, {
     int quality = 0,
-  }) => throw AppFailure('此成品僅支援本地播放');
+  }) => throw AppFailure('此成品僅支援本機播放');
   @override
   Future<PlaybackPlan> fallback(PlaybackPlan current) => _plan();
   @override
