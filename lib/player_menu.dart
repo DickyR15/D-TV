@@ -302,7 +302,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
                   ? Icons.bookmark_rounded
                   : Icons.bookmark_border_rounded,
             ),
-            label: Text(widget.favorite ? '取消追劇' : '加入追劇'),
+            label: Text(widget.favorite ? '取消收藏' : '加入收藏'),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(

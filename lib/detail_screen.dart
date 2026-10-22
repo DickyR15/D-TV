@@ -768,7 +768,7 @@ class _DetailScreenState extends State<DetailScreen> {
       children: [
         PopupMenuButton<String>(
           key: const ValueKey('follow-status'),
-          tooltip: '追劇與觀看狀態',
+          tooltip: '收藏與觀看狀態',
           onSelected: (value) async {
             if (_profileEpoch != widget.store.profileEpoch) return;
             if (value == 'remove') {
@@ -794,7 +794,7 @@ class _DetailScreenState extends State<DetailScreen> {
                 child: Text(status.label),
               ),
             if (state != null)
-              const PopupMenuItem(value: 'remove', child: Text('取消追劇')),
+              const PopupMenuItem(value: 'remove', child: Text('取消收藏')),
           ],
           child: Container(
             constraints: const BoxConstraints(minHeight: 48),
@@ -817,7 +817,7 @@ class _DetailScreenState extends State<DetailScreen> {
                   size: 20,
                 ),
                 const SizedBox(width: 8),
-                Text(state?.label ?? '加入追劇'),
+                Text(state?.label ?? '加入收藏'),
                 const SizedBox(width: 4),
                 const Icon(Icons.expand_more_rounded, size: 18),
               ],

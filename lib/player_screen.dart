@@ -1319,7 +1319,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       await widget.store.toggleFavorite(widget.detail.drama);
       if (mounted && !_closed) setState(() {});
     } catch (_) {
-      _notice('追劇記錄未能儲存，請檢查儲存空間後重試');
+      _notice('收藏記錄未能儲存，請檢查儲存空間後重試');
     }
   }
 
@@ -2119,7 +2119,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final state = widget.store.following(drama.id);
     return PopupMenuButton<String>(
       key: const ValueKey('player-follow-status'),
-      tooltip: '追劇與觀看狀態',
+      tooltip: '收藏與觀看狀態',
       onSelected: (value) async {
         if (_profileEpoch != widget.store.profileEpoch) return;
         if (value == 'remove') {
@@ -2146,7 +2146,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             child: Text(status.label),
           ),
         if (state != null)
-          const PopupMenuItem(value: 'remove', child: Text('取消追劇')),
+          const PopupMenuItem(value: 'remove', child: Text('取消收藏')),
       ],
       child: Container(
         constraints: const BoxConstraints(minHeight: 36),
@@ -2167,7 +2167,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               size: 18,
             ),
             const SizedBox(width: 6),
-            Text(state?.label ?? '加入追劇'),
+            Text(state?.label ?? '加入收藏'),
             const SizedBox(width: 2),
             const Icon(Icons.expand_more_rounded, size: 16),
           ],

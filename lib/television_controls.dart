@@ -742,7 +742,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
             Text(preloadStatus, style: const TextStyle(fontSize: 14)),
             const SizedBox(height: 20),
             RemoteButton(
-              label: favorite ? '取消追劇' : '加入追劇',
+              label: favorite ? '取消收藏' : '加入收藏',
               icon: favorite
                   ? Icons.bookmark_rounded
                   : Icons.bookmark_border_rounded,

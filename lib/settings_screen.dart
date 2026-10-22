@@ -98,7 +98,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (context) => AlertDialog(
             title: const Text('還原備份？'),
             content: Text(
-              '包含 ${(data['profiles'] as List).length} 個使用者。還原會取代本機使用者、追劇清單、觀看紀錄與偏好設定；其他影片檔案不會一併處理。完成後請使用備份內的管理員密碼登入。',
+              '包含 ${(data['profiles'] as List).length} 個使用者。還原會取代本機使用者、收藏清單、觀看紀錄與偏好設定；其他影片檔案不會一併處理。完成後請使用備份內的管理員密碼登入。',
             ),
             actions: [
               TextButton(
@@ -138,7 +138,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 key: const ValueKey('lan-settings'),
                 leading: const Icon(Icons.devices_rounded),
                 title: const Text('裝置互聯'),
-                subtitle: const Text('區域網自動同步追劇與推送播放'),
+                subtitle: const Text('區域網自動同步收藏與推送播放'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => openLanSync(context),
               ),
@@ -215,7 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.backup_outlined),
                   title: const Text('匯出設定備份'),
-                  subtitle: const Text('包含本機使用者、追劇清單、觀看紀錄與設定，不含影片檔案'),
+                  subtitle: const Text('包含本機使用者、收藏清單、觀看紀錄與設定，不含影片檔案'),
                   onTap: _busy ? null : () => _backup(false),
                 ),
                 ListTile(

@@ -56,7 +56,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           builder: (context) => AlertDialog(
             title: const Text('從備份還原使用者與記錄？'),
             content: const Text(
-              '這份備份會取代使用者設定、追劇收藏、觀看紀錄與偏好。建議先匯出目前設定。',
+              '這份備份會取代使用者設定、收藏清單、觀看紀錄與偏好。建議先匯出目前設定。',
             ),
             actions: [
               TextButton(
@@ -179,7 +179,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
-                const Text('各使用者的追劇收藏與觀看紀錄獨立儲存。'),
+                const Text('各使用者的收藏清單與觀看紀錄獨立儲存。'),
                 if (!widget.store.locked && widget.store.profile.admin) ...[
                   const SizedBox(height: 12),
                   SwitchListTile(
@@ -358,7 +358,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('刪除此使用者？'),
-        content: const Text('會同時刪除該使用者的追劇收藏與觀看紀錄。'),
+        content: const Text('會同時刪除該使用者的收藏清單與觀看紀錄。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
