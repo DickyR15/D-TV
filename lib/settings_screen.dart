@@ -194,40 +194,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => DiaryService.showDiaryDialog(context),
               ),
-              if (widget.store.canDownload)
-                ListTile(
-                  leading: const Icon(Icons.download_outlined),
-                  title: const Text('下載偏好'),
-                  subtitle: Text(widget.store.downloadPreferences.qualityLabel),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          DownloadPreferencesScreen(store: widget.store),
-                    ),
-                  ),
-                ),
-              if (widget.store.canDownload)
-                ListTile(
-                  leading: const Icon(Icons.folder_outlined),
-                  title: const Text('下載目錄與空間'),
-                  subtitle: const Text('檢視儲存用量、遷移已下載檔案'),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => StorageScreen(
-                        repository: widget.repository,
-                        store: widget.store,
-                      ),
-                    ),
-                  ),
-                ),
               if (widget.store.profile.admin) ...[
                 ListTile(
                   leading: const Icon(Icons.settings_ethernet_rounded),
                   title: const Text('網路與資源'),
-                  subtitle: const Text('代理、目錄請求間隔、下載併發與站源目錄'),
+                  subtitle: const Text('代理、目錄請求間隔與站源目錄'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.push(
                     context,
@@ -238,27 +209,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
-                ),
-                SwitchListTile(
-                  value: widget.store.autoExport,
-                  title: const Text('下載完成後自動匯出 Emby'),
-                  subtitle: const Text(
-                    '在下載目錄的 exports 中生成影片和海報 URL 後設資料，可將該目錄加入 Emby 媒體庫。',
-                  ),
-                  onChanged: _busy
-                      ? null
-                      : (value) async {
-                          try {
-                            if (value) {
-                              await BackgroundDownloads.ensureStarted();
-                            }
-                            await widget.store.setAutoExport(value);
-                          } catch (error) {
-                            if (mounted) {
-                              setState(() => _message = error.toString());
-                            }
-                          }
-                        },
                 ),
                 SwitchListTile(
                   value: widget.store.exportPosters,
