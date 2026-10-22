@@ -86,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<SourceGroup> get _sourceGroups {
     final groups = SourceGroup.fromSources(widget.store.sources);
     return [
-      if (groups.length > 1) SourceGroup('all', '全部站源', widget.store.sources),
+      if (groups.length > 1) SourceGroup('all', '所有片源', widget.store.sources),
       ...groups,
     ];
   }
@@ -415,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (_) => TelevisionSearchDialog(
         initialValue: _search.text,
         title: _group.id == 'all'
-            ? '搜尋已開放站源'
+            ? '搜尋可用片源'
             : _onlineSearch
             ? '搜尋${uiTraditional(_group.name)}短劇'
             : '篩選當前已載入短劇',
@@ -796,7 +796,7 @@ class _HomeScreenState extends State<HomeScreen> {
             title: _tab == 0 && widget.store.sources.isNotEmpty
                 ? PopupMenuButton<SourceGroup>(
                     key: const ValueKey('source-switch'),
-                    tooltip: '切換站源',
+                    tooltip: '切換片源',
                     enabled: _sourceGroups.length > 1,
                     onSelected: _changeGroup,
                     itemBuilder: (_) => [
@@ -970,7 +970,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (widget.repository.supportsSourceManagement)
                       const PopupMenuItem(
                         value: 'sources',
-                        child: Text('站源管理'),
+                        child: Text('片源管理'),
                       ),
                     const PopupMenuItem(value: 'users', child: Text('使用者管理')),
                     const PopupMenuItem(
@@ -1007,8 +1007,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: _isCatalogTab
                       ? widget.store.sources.isEmpty
                             ? const StatusPanel(
-                                title: '暫無可用站源',
-                                message: '請在站源管理中開啟站源，或聯絡管理員開放權限。',
+                                title: '暫無可用片源',
+                                message: '請到片源管理開啟片源，或請管理員確認使用權限。',
                               )
                             : _catalog()
                       : _isRankingTab
@@ -1301,7 +1301,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           widget.repository.supportsSourceManagement
                           ? TextButton(
                               onPressed: _manageSources,
-                              child: const Text('站源診斷'),
+                              child: const Text('片源診斷'),
                             )
                           : null,
                       icon: Icons.wifi_off_rounded,
@@ -1312,7 +1312,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       message: _hideVip
                           ? '可以換個搜尋詞，或顯示 VIP 內容。'
                           : widget.store.sources.length > 1
-                          ? '可以換個搜尋詞或切換站源。'
+                          ? '可以換個搜尋詞，或改用其他片源。'
                           : '可以換個搜尋詞，或重新整理後重試。',
                       onRetry:
                           _hasMore &&
