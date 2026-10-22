@@ -832,17 +832,19 @@ class _HomeScreenState extends State<HomeScreen> {
         final television = AppLayout.isTelevision(context);
         final desktop = constraints.maxWidth >= 840;
         final wide = television || desktop;
+        final bannerWidth = (constraints.maxWidth -
+                (constraints.maxWidth >= 1450 ? 600.0 : 530.0))
+            .clamp(300.0, 980.0)
+            .toDouble();
+        final bannerHeight = _brandBannerHeight(constraints.maxWidth);
         final scaffold = Scaffold(
           appBar: AppBar(
-            toolbarHeight: wide ? (television ? 146 : 140) : television ? 64 : null,
+            toolbarHeight: wide ? _brandBannerHeight(constraints.maxWidth) + 12 : television ? 64 : null,
             titleSpacing: 12,
             title: wide
                 ? _homeBrandBanner(
-                    width: (constraints.maxWidth -
-                            (constraints.maxWidth >= 1450 ? 600.0 : 530.0))
-                        .clamp(300.0, 980.0)
-                        .toDouble(),
-                    height: 132,
+                    width: bannerWidth,
+                    height: bannerHeight,
                   )
                 : (
                     _tab == 0 && widget.store.sources.isNotEmpty
@@ -1219,6 +1221,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Persistent brand header shared by the TV / desktop views.
   /// The slogan is redrawn larger over the original banner so it remains
   /// readable at living-room viewing distance.
+  double _brandBannerHeight(double width) {
+    final bannerWidth = (width - (width >= 1450 ? 600.0 : 530.0))
+        .clamp(300.0, 980.0)
+        .toDouble();
+    return (bannerWidth / (960 / 180)).clamp(100.0, 180.0).toDouble();
+  }
+
   /// Shared cinematic D TV header used across all wide-screen sections.
   /// The complete logo, woman portrait and larger Taiwan Traditional Chinese
   /// slogan live in one purpose-built panoramic asset.
