@@ -89,9 +89,51 @@ class RemoteTarget extends StatefulWidget {
 
 class _RemoteTargetState extends State<RemoteTarget> {
   bool _focused = false;
+  bool _activateHeld = false;
+  bool _longPressFired = false;
+  Timer? _longPressTimer;
+
+  KeyEventResult _handleActivationKey(FocusNode node, KeyEvent event) {
+    if (widget.onLongPress == null) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (![
+      LogicalKeyboardKey.select,
+      LogicalKeyboardKey.enter,
+      LogicalKeyboardKey.numpadEnter,
+      LogicalKeyboardKey.space,
+    ].contains(key)) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent && !_activateHeld) {
+      _activateHeld = true;
+      _longPressFired = false;
+      _longPressTimer?.cancel();
+      _longPressTimer = Timer(const Duration(milliseconds: 650), () {
+        if (!mounted || !_activateHeld || widget.onLongPress == null) return;
+        _longPressFired = true;
+        widget.onLongPress?.call();
+      });
+      return KeyEventResult.handled;
+    }
+    if (event is KeyRepeatEvent) {
+      return _activateHeld ? KeyEventResult.handled : KeyEventResult.ignored;
+    }
+    if (event is KeyUpEvent && _activateHeld) {
+      _longPressTimer?.cancel();
+      if (!_longPressFired) widget.onPressed?.call();
+      _activateHeld = false;
+      _longPressFired = false;
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
 
   @override
-  Widget build(BuildContext context) => FocusableActionDetector(
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    onKeyEvent: _handleActivationKey,
+    child: FocusableActionDetector(
     focusNode: widget.focusNode,
     autofocus: widget.autofocus,
     enabled: widget.onPressed != null,
@@ -104,6 +146,11 @@ class _RemoteTargetState extends State<RemoteTarget> {
       ),
     },
     onFocusChange: (focused) {
+      if (!focused) {
+        _longPressTimer?.cancel();
+        _activateHeld = false;
+        _longPressFired = false;
+      }
       if (mounted) {
         setState(() => _focused = focused);
       }
@@ -160,7 +207,14 @@ class _RemoteTargetState extends State<RemoteTarget> {
         ),
       ),
     ),
+  ),
   );
+
+  @override
+  void dispose() {
+    _longPressTimer?.cancel();
+    super.dispose();
+  }
 }
 
 class RemoteButton extends StatelessWidget {
