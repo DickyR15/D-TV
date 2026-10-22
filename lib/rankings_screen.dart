@@ -297,6 +297,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
     VoidCallback? onFocus,
   }) {
     final theme = Theme.of(context);
+    final following = widget.store.following(item.drama.id);
     final badgeBackground = switch (item.rank) {
       1 => const Color(0xFFFFD166),
       2 => const Color(0xFFE0E5EB),
@@ -348,6 +349,34 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     ),
                   ),
                 ),
+                if (following != null)
+                  Positioned(
+                    left: 8,
+                    right: 8,
+                    bottom: 8,
+                    child: Align(
+                      alignment: Alignment.bottomLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xE61A1118),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0x66FFFFFF)),
+                        ),
+                        child: Text(
+                          '${following.status.label}${following.hasUpdates ? ' · ${following.updateLabel}' : ''}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 Positioned(
                   top: 4,
                   right: 4,
@@ -389,7 +418,13 @@ class _RankingsScreenState extends State<RankingsScreen> {
         focusNode: focusNode,
         onFocus: onFocus,
         onPressed: () => _openDrama(item),
-        label: '第 ${item.rank} 名，${uiTraditional(item.drama.title)}',
+        onLongPress: () => showDramaActions(
+          context,
+          drama: item.drama,
+          store: widget.store,
+          onContinue: () => _openDrama(item),
+        ),
+        label: '第 ${item.rank} 名，${uiTraditional(item.drama.title)}，長按開啟標記選單',
         padding: const EdgeInsets.all(2),
         radius: 15,
         borderWidth: 2,
@@ -402,6 +437,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
       child: InkWell(
         key: ValueKey('rank-${item.rank}-${item.drama.id}'),
         onTap: () => _openDrama(item),
+        onLongPress: () => showDramaActions(
+          context,
+          drama: item.drama,
+          store: widget.store,
+          onContinue: () => _openDrama(item),
+        ),
         borderRadius: BorderRadius.circular(14),
         child: card,
       ),
