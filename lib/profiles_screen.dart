@@ -437,7 +437,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
                   },
                 ),
             ] else
-              const Text('管理員可以訪問全部站源和功能。建立其他使用者前需要先設定管理員密碼。'),
+              const Text('管理員可存取所有片源及功能。建立其他使用者前，請先設定管理員密碼。'),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
