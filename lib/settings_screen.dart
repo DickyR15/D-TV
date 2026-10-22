@@ -110,7 +110,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (context) => AlertDialog(
             title: const Text('恢復備份？'),
             content: Text(
-              '包含 ${(data['profiles'] as List).length} 個使用者。將替換本機的使用者、追劇、觀看記錄和偏好設定；已下載影片保留。恢復後使用備份內的管理員密碼登入。',
+              '包含 ${(data['profiles'] as List).length} 個使用者。還原會取代本機使用者、追劇清單、觀看紀錄與偏好設定；其他影片檔案不會一併處理。完成後請使用備份內的管理員密碼登入。',
             ),
             actions: [
               TextButton(
@@ -157,7 +157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (widget.repository.supportsSourceManagement)
                 ListTile(
                   leading: const Icon(Icons.dns_outlined),
-                  title: const Text('站源管理'),
+                  title: const Text('片源管理'),
                   subtitle: const Text('獨立更新、連線與播放檢測'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.push(
@@ -201,7 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.settings_ethernet_rounded),
                   title: const Text('網路與資源'),
-                  subtitle: const Text('代理、目錄請求間隔與站源目錄'),
+                  subtitle: const Text('代理、目錄請求間隔與片源目錄'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.push(
                     context,
@@ -227,7 +227,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.backup_outlined),
                   title: const Text('匯出配置備份'),
-                  subtitle: const Text('包含本地使用者、追劇、歷史和設定，不含影片檔案'),
+                  subtitle: const Text('包含本機使用者、追劇清單、觀看紀錄與設定，不含影片檔案'),
                   onTap: _busy ? null : () => _backup(false),
                 ),
                 ListTile(
