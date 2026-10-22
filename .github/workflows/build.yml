@@ -55,7 +55,7 @@ jobs:
         run: |
           flutter pub get
           flutter test test/ui_localization_test.dart test/playback_preferences_test.dart
-      - name: Set up Android signing
+      - name: Set up Android signing (optional)
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -65,8 +65,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
-            echo "::error::Add ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD in GitHub repository settings before building."
-            exit 1
+            echo "::warning::Release signing secrets are not configured; building with the Gradle debug signing fallback. For stable in-place updates, configure ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD."
+            exit 0
           fi
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/dtv-release.jks"
           test -s "$RUNNER_TEMP/dtv-release.jks"
