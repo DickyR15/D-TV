@@ -1,17 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- D TV uses a dedicated wide raster banner. -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="#08090D" />
-        </shape>
-    </item>
-    <item
-        android:width="144dp"
-        android:height="144dp"
-        android:gravity="center">
-        <bitmap
-            android:src="@drawable/app_icon"
-            android:gravity="fill" />
-    </item>
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#07080D" android:pathData="M0,0 H320 V180 H0 Z"/>
+    <path android:fillColor="#16040A" android:pathData="M0,0 H42 L98,180 H62 Z"/>
+    <path android:fillColor="#720514" android:pathData="M0,0 H11 L67,180 H55 Z"/>
+    <path android:fillColor="#F20D2F"
+        android:pathData="M34,38 H88 C118,38 132,58 132,90 C132,122 118,142 88,142 H34 Z"/>
+    <path android:fillColor="#07080D"
+        android:pathData="M54,56 H85 C103,56 114,68 114,90 C114,112 103,124 85,124 H54 Z"/>
+    <path android:fillColor="#FF4057" android:pathData="M72,73 L72,107 L96,90 Z"/>
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.14"
+        android:pathData="M34,38 H50 L94,142 H76 Z"/>
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.10"
+        android:pathData="M153,54 H169 C185,54 193,64 193,90 C193,116 185,126 169,126 H153 Z M165,66 H169 C177,66 181,72 181,90 C181,108 177,114 169,114 H165 Z"
+        android:fillType="evenOdd"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M198,54 H235 V66 H222 V126 H210 V66 H198 Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M238,54 H251 L263,103 L275,54 H288 L270,126 H256 Z"/>
+    <path android:fillColor="#D20C28" android:pathData="M153,139 H220 V143 H153 Z"/>
+    <path android:fillColor="#BFC0C8" android:fillAlpha="0.78"
+        android:pathData="M154,153 H157 V166 H154 Z M161,153 H169 V156 H164 V158 H168 V161 H164 V163 H169 V166 H161 Z M171,153 H174 L177,162 L180,153 H183 L178,166 H175 Z M185,153 H188 V166 H185 Z M190,153 H198 V156 H190 Z M193,156 H196 V166 H193 Z M200,153 H203 V163 H209 V166 H200 Z M212,153 H215 L219,162 L222,153 H225 V166 H222 V160 L220,166 H218 L215,160 V166 H212 Z M228,153 H236 V156 H231 V158 H235 V161 H231 V163 H236 V166 H228 Z M239,153 H242 V166 H239 Z M245,153 H248 L253,161 V153 H256 V166 H253 L248,158 V166 H245 Z"/>
+</vector>
