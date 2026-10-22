@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'local_profiles.dart';
 import 'local_store.dart';
+import 'ui_localization.dart';
 import 'models.dart';
 import 'app_build.dart';
 
@@ -55,7 +56,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           builder: (context) => AlertDialog(
             title: const Text('從備份恢復使用者與記錄？'),
             content: const Text(
-              '將使用這份備份替換損壞的使用者配置、追劇、觀看記錄和偏好。建議先匯出原始配置；已下載影片保留。',
+              '這份備份會替換使用者配置、追劇收藏、觀看紀錄與偏好設定。建議先匯出目前配置。',
             ),
             actions: [
               TextButton(
@@ -89,7 +90,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     if (profile.protected) {
       final value = await showDialog<String>(
         context: context,
-        builder: (_) => _PasswordDialog(name: profile.name),
+        builder: (_) => _PasswordDialog(name: uiTraditional(profile.name)),
       );
       if (value == null || !mounted) return;
       pin = value;
@@ -136,9 +137,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     if (profile.admin) return '管理員 · 全部許可權';
     final sources = profile.sources
         .where(SourceSite.isAvailable)
-        .map((id) => SourceSite.byId(id).name)
+        .map((id) => uiTraditional(SourceSite.byId(id).name))
         .join(' / ');
-    return '${sources.isEmpty ? '未開放站源' : sources} · ${profile.download ? '可下載' : '僅線上觀看'}';
+    return sources.isEmpty ? '尚未開放片源' : '可用片源：$sources';
   }
 
   @override
@@ -174,11 +175,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 Text(
                   widget.locked
                       ? '選擇使用者並輸入密碼'
-                      : '當前使用者：${widget.store.profile.name}',
+                      : '目前使用者：${uiTraditional(widget.store.profile.name)}',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
-                const Text('各使用者的追劇和觀看記錄獨立儲存，下載檔案由本機共享。'),
+                const Text('各使用者的追劇收藏與觀看紀錄獨立儲存。'),
                 if (!widget.store.locked && widget.store.profile.admin) ...[
                   const SizedBox(height: 12),
                   SwitchListTile(
@@ -203,7 +204,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Text(
-                    _error!,
+                    uiTraditional(_error!),
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                     ),
@@ -221,7 +222,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                           ? Icons.admin_panel_settings_outlined
                           : Icons.person_outline,
                     ),
-                    title: Text(profile.name),
+                    title: Text(uiTraditional(profile.name)),
                     subtitle: Text(_permissionsLabel(profile)),
                     onTap: _busy ? null : () => _switch(profile),
                     trailing: !widget.store.locked && widget.store.profile.admin
@@ -315,7 +316,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
       (widget.profile?.sources ??
               widget.store.sources.map((s) => s.id).toList())
           .toSet();
-  late bool _download = widget.profile?.download ?? true;
+  late bool _download = widget.profile?.download ?? false;
   bool _clearPin = false, _busy = false;
   String? _error;
   @override
@@ -357,7 +358,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('刪除此使用者？'),
-        content: const Text('會同時刪除該使用者的追劇和觀看記錄。下載檔案會保留。'),
+        content: const Text('會同時刪除該使用者的追劇收藏與觀看紀錄。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -423,7 +424,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: Text(source.name),
+                  title: Text(uiTraditional(source.name)),
                   value: _sources.contains(source.id),
                   onChanged: (value) {
                     setState(() {
@@ -435,20 +436,13 @@ class _ProfileEditorState extends State<ProfileEditor> {
                     });
                   },
                 ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('允許下載和本地媒體'),
-                subtitle: Text(_download ? '可下載、合併和匯出' : '僅線上觀看，隱藏下載入口'),
-                value: _download,
-                onChanged: (v) => setState(() => _download = v),
-              ),
             ] else
               const Text('管理員可以訪問全部站源和功能。建立其他使用者前需要先設定管理員密碼。'),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
-                  _error!,
+                  uiTraditional(_error!),
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
