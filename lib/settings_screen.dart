@@ -33,9 +33,11 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     required this.repository,
     required this.store,
+    this.embedded = false,
   });
   final AppRepository repository;
   final LocalStore store;
+  final bool embedded;
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -137,7 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
     builder: (_, _) => Scaffold(
-      appBar: AppBar(title: const Text('設定與備份')),
+      appBar: widget.embedded ? null : AppBar(title: const Text('設定與備份')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
