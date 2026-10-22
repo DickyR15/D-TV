@@ -4,6 +4,7 @@ import 'follow_state.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'widgets.dart';
+import 'ui_localization.dart';
 
 Future<void> showDramaActions(
   BuildContext context, {
@@ -42,7 +43,7 @@ Future<void> showDramaActions(
   final choice = await showDialog<String>(
     context: context,
     builder: (context) => SimpleDialog(
-      title: Text(drama.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+      title: Text(uiTraditional(drama.title), maxLines: 2, overflow: TextOverflow.ellipsis),
       children: [
         for (final entry in choices.indexed)
           SimpleDialogOption(
@@ -108,7 +109,7 @@ class DramaActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton.filledTonal(
     key: ValueKey('drama-actions-${drama.id}'),
-    tooltip: '${drama.title} · 更多操作',
+    tooltip: '${uiTraditional(drama.title)} · 更多操作',
     onPressed: onPressed,
     icon: const Icon(Icons.more_horiz_rounded, size: 20),
     style: IconButton.styleFrom(
