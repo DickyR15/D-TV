@@ -20,9 +20,15 @@ import 'lan_controller.dart';
 import 'player_screen.dart';
 import 'video_enhancement_assets.dart';
 import 'diary_service.dart';
+import 'ui_localization.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await initializeUiLocalization();
+  } catch (_) {
+    // Keep the built-in fallback dictionary if bundled conversion data cannot load.
+  }
   if (Platform.isAndroid) {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemBars(Brightness.dark));
