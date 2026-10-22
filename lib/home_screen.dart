@@ -1211,7 +1211,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         if (!television) return scaffold;
         return PopScope(
-          canPop: false,
+          canPop: !television,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _televisionBack();
           },
