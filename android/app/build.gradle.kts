@@ -45,7 +45,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["appLabel"] = "D TV"
-        manifestPlaceholders["appBanner"] = "@drawable/tv_banner"
+        manifestPlaceholders["appBanner"] = "@drawable/dtv_tv_banner"
     }
 
     signingConfigs {

@@ -71,6 +71,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _revealed = _revealBatch;
   int? _revealKey;
   bool _hiddenItems = false;
+  DateTime? _lastBackAt;
+  bool _exitConfirmationShowing = false;
 
   bool get _isCatalogTab => _tab == 0 || _tab == 8;
   bool get _isRankingTab => _tab >= 4 && _tab <= 7;
@@ -437,11 +439,61 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _televisionBack() {
+    if (_exitConfirmationShowing) return;
     if (_tab != 0) {
       _selectCatalogTab(0);
-    } else if (_search.text.isNotEmpty) {
+      _lastBackAt = null;
+      return;
+    }
+    if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
+      _lastBackAt = null;
+      return;
+    }
+    final now = DateTime.now();
+    final previous = _lastBackAt;
+    if (previous == null || now.difference(previous) > const Duration(seconds: 2)) {
+      _lastBackAt = now;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('再按一次返回鍵，確認是否離開 D TV'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      return;
+    }
+    _lastBackAt = null;
+    unawaited(_confirmTelevisionExit());
+  }
+
+  Future<void> _confirmTelevisionExit() async {
+    if (!mounted || _exitConfirmationShowing) return;
+    _exitConfirmationShowing = true;
+    try {
+      final shouldExit = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('您確定要離開了嗎？'),
+          content: const Text('確定要離開 D TV 嗎？'),
+          actions: [
+            TextButton(
+              autofocus: true,
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('否'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('是'),
+            ),
+          ],
+        ),
+      );
+      if (shouldExit == true) await SystemNavigator.pop();
+    } finally {
+      _exitConfirmationShowing = false;
     }
   }
 
@@ -812,19 +864,26 @@ class _HomeScreenState extends State<HomeScreen> {
             toolbarHeight: wide ? 76 : television ? 64 : null,
             titleSpacing: 12,
             title: wide
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _brandLogo(width: 164, height: 52),
-                      const SizedBox(width: 16),
-                      Text(
+                ? (television
+                    ? Text(
                         '發現好劇',
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
-                      ),
-                    ],
-                  )
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _brandLogo(width: 164, height: 52),
+                          const SizedBox(width: 16),
+                          Text(
+                            '發現好劇',
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ))
                 : (
                     _tab == 0 && widget.store.sources.isNotEmpty
                                     ? PopupMenuButton<SourceGroup>(
@@ -875,35 +934,66 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(
                     width: constraints.maxWidth >= 1450 ? 340 : 260,
                     height: 48,
-                    child: TextField(
-                      controller: _search,
-                      textInputAction: TextInputAction.search,
-                      onChanged: _searchChanged,
-                      onSubmitted: _submitHeaderSearch,
-                      decoration: InputDecoration(
-                        hintText: '搜尋短劇',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        isDense: true,
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: Theme.of(context).colorScheme.primary,
-                            width: 1.5,
+                    child: television
+                        ? RemoteTarget(
+                            key: const ValueKey('tv-search-trigger'),
+                            label: '搜尋短劇',
+                            onPressed: _televisionSearch,
+                            padding: EdgeInsets.zero,
+                            radius: 14,
+                            borderWidth: 2,
+                            outlined: true,
+                            child: Container(
+                              height: 48,
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.search_rounded),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    '搜尋短劇',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : TextField(
+                            controller: _search,
+                            textInputAction: TextInputAction.search,
+                            onChanged: _searchChanged,
+                            onSubmitted: _submitHeaderSearch,
+                            decoration: InputDecoration(
+                              hintText: '搜尋短劇',
+                              prefixIcon: const Icon(Icons.search_rounded),
+                              isDense: true,
+                              filled: true,
+                              fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
                   ),
                   const SizedBox(width: 8),
                   SizedBox(
@@ -1121,7 +1211,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         if (!television) return scaffold;
         return PopScope(
-          canPop: !television || _tab == 0 && _search.text.isEmpty,
+          canPop: false,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _televisionBack();
           },
@@ -1202,98 +1292,134 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _sideNavigation() {
     const tvEntries = <({int tab, IconData icon, String label})>[
-      // Most-used personal destinations come first for TV remote navigation.
-      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
-      (tab: 1, icon: Icons.bookmark_border_rounded, label: '我的收藏'),
       (tab: 0, icon: Icons.fiber_new_rounded, label: '新劇'),
       (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
       (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI劇熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
       (tab: 8, icon: Icons.category_rounded, label: '分類'),
+      (tab: 1, icon: Icons.bookmark_border_rounded, label: '收藏'),
+      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     const desktopEntries = <({int tab, IconData icon, String label})>[
-      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
-      (tab: 1, icon: Icons.bookmark_border_rounded, label: '我的收藏'),
-      (tab: 0, icon: Icons.category_rounded, label: '分類'),
       (tab: 4, icon: Icons.local_fire_department_rounded, label: '紅果熱播榜'),
       (tab: 5, icon: Icons.people_alt_rounded, label: '真人劇熱播榜'),
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI劇熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
+      (tab: 0, icon: Icons.category_rounded, label: '分類'),
+      (tab: 1, icon: Icons.bookmark_border_rounded, label: '收藏'),
+      (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
       (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     final television = AppLayout.isTelevision(context);
     final entries = television ? tvEntries : desktopEntries;
     final theme = Theme.of(context);
-    return SizedBox(
-      width: 148,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final (index, entry) in entries.indexed)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 5),
-                child: RemoteTarget(
-                  key: ValueKey('side-nav-${entry.tab}'),
-                  focusNode: _navigationFocusNodes.putIfAbsent(
-                    entry.tab,
-                    () => FocusNode(debugLabel: 'D TV navigation ${entry.tab}'),
-                  ),
-                  autofocus: television && _tab == entry.tab,
-                  selected: _tab == entry.tab,
-                  onFocus: () {
-                    if (_tab != entry.tab) {
+
+    KeyEventResult handleNavigationKey(FocusNode node, KeyEvent event) {
+      if (!television ||
+          (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+        return KeyEventResult.ignored;
+      }
+      final activeIndex = entries.indexWhere(
+        (entry) => _navigationFocusNodes[entry.tab]?.hasPrimaryFocus ?? false,
+      );
+      if (activeIndex < 0) return KeyEventResult.ignored;
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+        final step = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
+        final nextIndex = (activeIndex + step).clamp(0, entries.length - 1);
+        if (nextIndex != activeIndex) {
+          final nextEntry = entries[nextIndex];
+          _navigationFocusNodes[nextEntry.tab]?.requestFocus();
+          _selectNavigationDestination(nextEntry.tab);
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowRight) {
+        FocusScope.of(context).focusInDirection(TraversalDirection.right);
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowLeft) return KeyEventResult.handled;
+      return KeyEventResult.ignored;
+    }
+
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: handleNavigationKey,
+      child: SizedBox(
+        width: television ? 176 : 148,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final entry in entries)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 5),
+                  child: RemoteTarget(
+                    key: ValueKey('side-nav-${entry.tab}'),
+                    focusNode: _navigationFocusNodes.putIfAbsent(
+                      entry.tab,
+                      () => FocusNode(debugLabel: 'D TV navigation ${entry.tab}'),
+                    ),
+                    autofocus: television && _tab == entry.tab,
+                    selected: _tab == entry.tab,
+                    onFocus: () {
+                      if (_tab != entry.tab) {
+                        _selectNavigationDestination(entry.tab);
+                      }
+                    },
+                    onPressed: () {
+                      _navigationFocusNodes[entry.tab]?.requestFocus();
                       _selectNavigationDestination(entry.tab);
-                    }
-                  },
-                  onPressed: () {
-                    _navigationFocusNodes[entry.tab]?.requestFocus();
-                    _selectNavigationDestination(entry.tab);
-                  },
-                  label: entry.label,
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
-                  radius: 12,
-                  borderWidth: 2,
-                  outlined: true,
-                  child: SizedBox(
-                    height: 55,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          entry.icon,
-                          size: 21,
-                          color: _tab == entry.tab
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          entry.label,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            height: 1.15,
-                            fontWeight: _tab == entry.tab
-                                ? FontWeight.w800
-                                : FontWeight.w500,
+                    },
+                    label: entry.label,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: television ? 7 : 5,
+                      vertical: 7,
+                    ),
+                    radius: 12,
+                    borderWidth: 2,
+                    outlined: true,
+                    child: SizedBox(
+                      height: television ? 62 : 55,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            entry.icon,
+                            size: television ? 24 : 21,
                             color: _tab == entry.tab
-                                ? theme.colorScheme.onPrimaryContainer
-                                : theme.colorScheme.onSurface,
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurfaceVariant,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 3),
+                          Text(
+                            entry.label,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: television ? 16 : 11.5,
+                              height: 1.12,
+                              fontWeight: _tab == entry.tab
+                                  ? FontWeight.w800
+                                  : FontWeight.w500,
+                              color: _tab == entry.tab
+                                  ? theme.colorScheme.onPrimaryContainer
+                                  : theme.colorScheme.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1380,6 +1506,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
+        if (television && _tab == 0 && !_showRecommendations && _search.text.trim().isEmpty)
+          _homeHero(),
         if (_showRecommendations)
           Expanded(
             child: GestureDetector(
@@ -1529,6 +1657,80 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _homeHero() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
+      child: SizedBox(
+        height: 238,
+        width: double.infinity,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                'assets/brand/dtv-tv-banner.webp',
+                fit: BoxFit.cover,
+                alignment: const Alignment(1, -0.18),
+                errorBuilder: (_, __, ___) => const ColoredBox(
+                  color: Color(0xFF1A1015),
+                  child: SizedBox.expand(),
+                ),
+              ),
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    stops: [0, 0.48, 1],
+                    colors: [
+                      Color(0xFF0A080B),
+                      Color(0xF20A080B),
+                      Color(0x080A080B),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(30, 18, 24, 18),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SizedBox(
+                    width: 440,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '精彩，從這裡開始',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          '海量短劇，隨選隨看',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: const Color(0xFFE7DDE1),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

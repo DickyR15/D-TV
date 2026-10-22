@@ -126,7 +126,7 @@ class PhoneSearchServer {
         await _respond(
           request,
           HttpStatus.ok,
-          _page('搜尋已送出', '已將「' + _escape(query) + '」送到 HGTV 電視，現在可以關閉此頁。'),
+          _page('搜尋已送出', '已將「' + _escape(query) + '」送到 D TV 電視，現在可以關閉此頁。'),
         );
         if (!_closed) _queries.add(query);
         return;
@@ -135,7 +135,7 @@ class PhoneSearchServer {
       await _respond(
         request,
         HttpStatus.notFound,
-        _page('找不到頁面', '請使用 HGTV 電視畫面上的 QR Code。'),
+        _page('找不到頁面', '請使用 D TV 電視畫面上的 QR Code。'),
       );
     } catch (_) {
       try {
@@ -164,7 +164,7 @@ class PhoneSearchServer {
   String _page(String title, String message) => '''
 <!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>$title · HGTV</title>
+<title>$title · D TV</title>
 <style>
 body{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;background:#111216;color:#f7f7fa;margin:0;min-height:100vh;display:grid;place-items:center}
 main{width:min(88vw,480px);background:#202127;border-radius:22px;padding:28px;box-sizing:border-box}
@@ -175,7 +175,7 @@ h1{font-size:25px;margin:0 0 16px;color:#ff8b77}p{font-size:17px;line-height:1.7
   static const String _searchForm = '''
 <!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HGTV 手機搜尋</title>
+<title>D TV 手機搜尋</title>
 <style>
 :root{color-scheme:dark}*{box-sizing:border-box}
 body{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;background:#111216;color:#f7f7fa;margin:0;min-height:100vh;display:grid;place-items:center}
@@ -186,12 +186,12 @@ input{width:100%;font:inherit;font-size:19px;padding:15px 14px;margin:16px 0 12p
 input:focus{border-color:#ff8b77;box-shadow:0 0 0 2px #ff8b7733}
 button{width:100%;padding:15px;border:0;border-radius:12px;background:#ff8b77;color:#251715;font:inherit;font-size:18px;font-weight:800}
 footer{margin-top:18px;font-size:13px;color:#a8a9b3}
-</style></head><body><main><div class="brand">HGTV</div><h1>手機搜尋短劇</h1>
+</style></head><body><main><div class="brand">D TV</div><h1>手機搜尋短劇</h1>
 <p>輸入劇名並送出，電視會自動顯示搜尋結果。請保持手機與電視連線至同一個區域網路。</p>
 <form method="post" action="/submit?token=TOKEN_PLACEHOLDER">
 <label for="q">短劇名稱</label><input id="q" name="q" type="search" maxlength="100" placeholder="輸入想看的劇名" autocomplete="off" required autofocus>
-<button type="submit">搜尋 HGTV</button></form>
-<footer>此頁面只會在目前的 HGTV 搜尋工作階段使用。</footer></main></body></html>
+<button type="submit">搜尋 D TV</button></form>
+<footer>此頁面只會在目前的 D TV 搜尋工作階段使用。</footer></main></body></html>
 ''';
 
   Future<void> close() async {
@@ -266,59 +266,89 @@ class _PhoneSearchDialogState extends State<_PhoneSearchDialog> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final size = MediaQuery.sizeOf(context);
     final url = widget.server.url.toString();
-    return AlertDialog(
-      title: const Text('手機掃描 QR Code'),
-      content: SizedBox(
-        width: 480,
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 480, maxHeight: size.height * 0.82),
         child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '手機掃描 QR Code',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'D TV',
+                    style: TextStyle(
+                      color: colors.primary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: QrImageView(
                   data: url,
                   version: QrVersions.auto,
-                  size: 220,
+                  size: 172,
                   backgroundColor: Colors.white,
-                  semanticsLabel: '掃描以開啟 HGTV 手機搜尋',
+                  semanticsLabel: '掃描以開啟 D TV 手機搜尋',
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               Text(
-                '使用手機相機掃描 QR Code，輸入劇名後按「搜尋 HGTV」。電視收到搜尋後會自動關閉此視窗。',
+                '使用手機相機掃描，輸入劇名並送出；電視收到搜尋後會自動關閉此視窗。',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              const SizedBox(height: 12),
-              SelectableText(
+              const SizedBox(height: 10),
+              Text(
                 url,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: colors.primary, fontSize: 13),
+                style: TextStyle(color: colors.primary, fontSize: 12),
               ),
               const SizedBox(height: 8),
               Text(
-                '請讓手機與電視連線到同一個 Wi-Fi／區域網路。部分路由器的訪客網路會阻止裝置互相連線。',
+                '手機與電視需連線至同一個 Wi-Fi／區域網路。',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: colors.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  autofocus: true,
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('取消'),
                 ),
               ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-      ],
     );
   }
 }
