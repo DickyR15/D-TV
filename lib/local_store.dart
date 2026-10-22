@@ -98,7 +98,7 @@ class LocalStore extends ChangeNotifier {
     _configurationError = message;
     _locked = true;
     _profiles = [
-      const LocalProfile(id: 'default', name: '配置待恢復', download: false),
+      const LocalProfile(id: 'default', name: '設定待還原', download: false),
     ];
     _current = 'default';
     _history.clear();
