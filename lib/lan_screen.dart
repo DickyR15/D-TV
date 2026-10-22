@@ -495,7 +495,7 @@ class _LanDevicesState extends State<_LanDevices> {
     });
     try {
       if (_epoch != link.store.profileEpoch || link.store.locked) {
-        throw StateError('當前使用者已變更');
+        throw StateError('目前使用者已變更');
       }
       final selected = peer ?? await link.probe(_address.text);
       if (!mounted || _epoch != link.store.profileEpoch || link.store.locked) {
@@ -846,8 +846,8 @@ class _LanManualState extends State<_LanManual> {
                                 padding: const EdgeInsets.only(top: 16),
                                 child: Text(
                                   _mode == LanSyncMode.push
-                                      ? '將覆蓋 $name 的當前使用者記錄；移除 ${preview.remoteCount.removed} 部追劇。'
-                                      : '將覆蓋本機當前使用者記錄；移除 ${preview.localCount.removed} 部追劇。',
+                                      ? '將覆蓋 $name 的目前使用者紀錄；移除 ${preview.remoteCount.removed} 部追劇。'
+                                      : '將覆蓋本機目前使用者紀錄；移除 ${preview.localCount.removed} 部追劇。',
                                 ),
                               ),
                           ],
@@ -1088,7 +1088,7 @@ class _LanPushPanelState extends State<_LanPushPanel> {
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('切換對方正在播放的內容？'),
-                  content: Text('對方正在播放“$title”，繼續後將接續本機當前分集。'),
+                  content: Text('對方正在播放“$title”，繼續後將接續本機目前集數。'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context, false),
