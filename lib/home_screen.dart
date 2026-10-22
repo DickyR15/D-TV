@@ -763,10 +763,6 @@ class _HomeScreenState extends State<HomeScreen> {
       onFocus: onFocus,
       onTap: () => _openDrama(drama),
       onMore: () => _dramaActions(drama),
-      actions: DramaActionButton(
-        drama: drama,
-        onPressed: () => _dramaActions(drama),
-      ),
       badge: following == null
           ? null
           : '${following.status.label}${following.hasUpdates ? ' · ${following.updateLabel}' : ''}',
