@@ -82,7 +82,7 @@ Future<void> openPlaybackDirectly(
     final message = error is AppFailure ? error.message : '暫時無法播放，請重試';
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: Text(uiTraditional(message))));
   }
 }
 
