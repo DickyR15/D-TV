@@ -155,7 +155,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     televisionDecoder: _televisionDecoder,
   );
   String get _qualityLabel => _plan?.local == true
-      ? '本地原畫'
+      ? '本機原畫'
       : _requestedQuality == 0
       ? '自動'
       : '${_requestedQuality}P';
