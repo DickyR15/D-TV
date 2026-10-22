@@ -285,35 +285,26 @@ class DuanjuApp extends StatelessWidget {
                 )
         : Scaffold(
             body: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset(
-                      'assets/brand/hgtv-icon.png',
-                      width: 88,
-                      height: 88,
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.high,
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      bootstrapError ?? '正在開啟$appName',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 18),
-                    ),
-                    const SizedBox(height: 24),
-                    if (bootstrapError == null)
-                      const CircularProgressIndicator()
-                    else
-                      FilledButton(
-                        onPressed: onRetry,
-                        child: const Text('重新開啟'),
+              child: bootstrapError == null
+                  ? const CircularProgressIndicator()
+                  : Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            bootstrapError!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            onPressed: onRetry,
+                            child: const Text('重新開啟'),
+                          ),
+                        ],
                       ),
-                  ],
-                ),
-              ),
+                    ),
             ),
           ),
   );
