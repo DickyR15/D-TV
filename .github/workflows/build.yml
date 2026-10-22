@@ -17,6 +17,10 @@ on:
       - "scripts/build_android.py"
       - "analysis_options.yaml"
 
+concurrency:
+  group: hgtv-v7a-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
