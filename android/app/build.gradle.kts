@@ -44,8 +44,8 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["appLabel"] = "HGTV"
-        manifestPlaceholders["appBanner"] = "@drawable/app_icon"
+        manifestPlaceholders["appLabel"] = "D TV"
+        manifestPlaceholders["appBanner"] = "@drawable/tv_banner"
     }
 
     signingConfigs {
@@ -91,7 +91,7 @@ tasks.withType<JavaCompile>().configureEach {
             if (registrant.exists()) {
                 val generated = registrant.readText()
                 val integrationPlugin = Regex(
-                    """(?s)    try \{\s*flutterEngine\.getPlugins\(\)\.add\(new dev\.flutter\.plugins\.integration_test\.IntegrationTestPlugin\(\)\);\s*\} catch \(Exception e\) \{[^}]*\}\s*"""
+                    """(?s)    try \\{\\s*flutterEngine\\.getPlugins\\(\\)\\.add\\(new dev\\.flutter\\.plugins\\.integration_test\\.IntegrationTestPlugin\\(\\)\\);\\s*\\} catch \\(Exception e\\) \\{[^}]*\\}\\s*"""
                 )
                 val release = generated.replace(integrationPlugin, "")
                 if (release != generated) registrant.writeText(release)
