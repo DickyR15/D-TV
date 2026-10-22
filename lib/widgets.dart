@@ -534,12 +534,14 @@ class DramaTile extends StatelessWidget {
     if (television) {
       return CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.contextMenu): ?onMore,
+          if (onMore != null)
+            const SingleActivator(LogicalKeyboardKey.contextMenu): onMore!,
         },
         child: RemoteTarget(
           focusNode: focusNode,
           onFocus: onFocus,
           onPressed: onTap,
+          onLongPress: onLongPress ?? onMore,
           selected: selected ?? false,
           label:
               '${uiTraditional(drama.title)}，${drama.episodes}集${badge == null ? '' : '，$badge'}',
