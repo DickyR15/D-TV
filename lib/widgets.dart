@@ -583,14 +583,14 @@ class StatusPanel extends StatelessWidget {
           Icon(icon, size: 56, color: Theme.of(context).colorScheme.primary),
           const SizedBox(height: 20),
           Text(
-            title,
+            uiTraditional(title),
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleLarge,
           ),
           if (message.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
-              message,
+              uiTraditional(message),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -603,7 +603,7 @@ class StatusPanel extends StatelessWidget {
               autofocus: AppLayout.isTelevision(context),
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
-              label: Text(action),
+              label: Text(uiTraditional(action)),
             ),
           ],
           if (secondaryAction != null) ...[
