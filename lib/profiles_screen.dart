@@ -56,7 +56,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           builder: (context) => AlertDialog(
             title: const Text('從備份還原使用者與記錄？'),
             content: const Text(
-              '這份備份會替換使用者配置、追劇收藏、觀看紀錄與偏好設定。建議先匯出目前配置。',
+              '這份備份會取代使用者設定、追劇收藏、觀看紀錄與偏好。建議先匯出目前設定。',
             ),
             actions: [
               TextButton(
@@ -165,7 +165,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 ),
                 OutlinedButton(
                   onPressed: _busy ? null : () => _recover(export: true),
-                  child: const Text('匯出原始配置'),
+                  child: const Text('匯出原始設定'),
                 ),
                 TextButton(
                   onPressed: _busy ? null : () => _recover(reload: true),
