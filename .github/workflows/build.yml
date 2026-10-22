@@ -18,8 +18,8 @@ on:
       - "analysis_options.yaml"
 
 concurrency:
-  group: dtv-v7a-${{ github.ref }}
-  cancel-in-progress: true
+  group: dtv-v7a-rebrand-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
