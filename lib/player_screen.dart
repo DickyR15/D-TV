@@ -541,7 +541,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
     } on PlatformException {
       _setPictureInPictureStatus(requested: false);
-      _notice('無法進入畫中畫，請檢查系統許可權');
+      _notice('無法進入子母畫面，請檢查系統權限');
     } on MissingPluginException {
       _setPictureInPictureStatus(supported: false, requested: false);
       _notice('目前平台不支援子母畫面');
