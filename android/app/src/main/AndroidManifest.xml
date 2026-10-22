@@ -15,12 +15,14 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
+        android:logo="@mipmap/ic_launcher"
         android:banner="${appBanner}"
         android:usesCleartextTraffic="true"
         android:allowBackup="false">
         <activity
             android:name=".MainActivity"
             android:icon="@mipmap/ic_launcher"
+            android:logo="@mipmap/ic_launcher"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
