@@ -395,7 +395,7 @@ class _StorageScreenState extends State<StorageScreen> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text(_error!),
+                  child: Text(uiTraditional(_error!)),
                 ),
               if (widget.store.profile.admin)
                 FilledButton.icon(
