@@ -1028,7 +1028,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           onOpen: _openDrama,
                           onContinue: (drama) =>
                               _openDrama(drama, resume: true),
-                          onDownload: null,
                         ),
                 ),
               ],
