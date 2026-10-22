@@ -617,8 +617,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _search.clear();
     setState(() {
       _showRecommendations = false;
-      _selectionMode = false;
-      _selectedDramas.clear();
       _source = source;
       _allSources = allSources;
       _items = [];
@@ -641,8 +639,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _searchChanged(String query) {
     _debounce?.cancel();
-    _selectionMode = false;
-    _selectedDramas.clear();
     if (_onlineSearch && (_loading || _loadingMore)) {
       _generation++;
       unawaited(_browser.cancel());
@@ -659,8 +655,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _showRecommendations = false;
       _categorySelections[_group.id] = '';
     }
-    _selectionMode = false;
-    _selectedDramas.clear();
     _search.text = query.trim();
     _debounce?.cancel();
     if (_search.text.isNotEmpty) {
@@ -703,8 +697,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _changeTab(int tab) => setState(() {
     _tab = tab;
-    _selectionMode = false;
-    _selectedDramas.clear();
   });
 
   void _dramaActions(Drama drama) => showDramaActions(
@@ -1116,8 +1108,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _pauseCatalog();
     setState(() {
       _tab = tab;
-      _selectionMode = false;
-      _selectedDramas.clear();
     });
   }
 
