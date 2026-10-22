@@ -9,6 +9,7 @@ import 'local_store.dart';
 import 'models.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
+import 'ui_localization.dart';
 
 class SavedLibrary extends StatefulWidget {
   const SavedLibrary({
@@ -206,7 +207,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                 key: const ValueKey('continue-watching'),
                 leading: const Icon(Icons.play_circle_outline),
                 title: Text(
-                  '繼續觀看 · ${resume.drama.title}',
+                  '繼續觀看 · ${uiTraditional(resume.drama.title)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
