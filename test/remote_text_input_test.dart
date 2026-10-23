@@ -1,5 +1,5 @@
-import 'package:duanju_app/app_layout.dart';
-import 'package:duanju_app/remote_widgets.dart';
+import 'package:hgtv/app_layout.dart';
+import 'package:hgtv/remote_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
