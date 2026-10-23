@@ -80,6 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int? _visibleCacheKey;
   List<Drama> _visibleCache = const [];
   DateTime? _lastBackAt;
+  DateTime? _lastHandledBackEventAt;
   DateTime? _ignoreExitPromptUntil;
   bool _playbackRouteActive = false;
   bool _exitConfirmationShowing = false;
@@ -468,6 +469,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _televisionBack() {
     final now = DateTime.now();
+
+    // Android TV can report the same physical Back press through both the
+    // platform pop callback and keyboard shortcuts. Handle that press once.
+    final lastHandled = _lastHandledBackEventAt;
+    if (lastHandled != null &&
+        now.difference(lastHandled) < const Duration(milliseconds: 250)) {
+      return;
+    }
+    _lastHandledBackEventAt = now;
+
     final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     final ignoreUntil = _ignoreExitPromptUntil;
     if (_playbackRouteActive ||
@@ -495,7 +506,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final previous = _lastBackAt;
     if (previous != null &&
-        now.difference(previous) <= const Duration(seconds: 2)) {
+        now.difference(previous) <= const Duration(seconds: 3)) {
       _lastBackAt = null;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       unawaited(SystemNavigator.pop());
@@ -514,7 +525,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ..showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
           backgroundColor: const Color(0xEE171920),
           margin: const EdgeInsets.fromLTRB(28, 0, 28, 26),
           shape: RoundedRectangleBorder(
@@ -524,10 +535,10 @@ class _HomeScreenState extends State<HomeScreen> {
           content: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.exit_to_app_rounded, color: Colors.white, size: 22),
+              _DtvBrandMark(size: 24),
               SizedBox(width: 12),
               Text(
-                '再按一次即可結束本程式',
+                '再按一次返回鍵即可退出 D TV',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 16,
@@ -1312,10 +1323,8 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           child: CallbackShortcuts(
             bindings: {
-              const SingleActivator(LogicalKeyboardKey.escape): () =>
-                  Navigator.of(context).maybePop(),
-              const SingleActivator(LogicalKeyboardKey.goBack): () =>
-                  Navigator.of(context).maybePop(),
+              const SingleActivator(LogicalKeyboardKey.escape): _televisionBack,
+              const SingleActivator(LogicalKeyboardKey.goBack): _televisionBack,
             },
             child: scaffold,
           ),
