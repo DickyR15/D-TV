@@ -1,5 +1,5 @@
 name: Build D TV Android v7a
-run-name: 'D TV Android v7a v0.2.104+116 MPV + MPV Embed A/V Sync Test'
+run-name: 'D TV Android v7a v0.2.105+117 MPV + MPV Embed A/V Sync Test'
 
 on:
   workflow_dispatch:

@@ -1489,6 +1489,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     autofocus: television && _tab == entry.tab,
                     selected: _tab == entry.tab,
+                    // On real Android TV, keep focused navigation entries away
+                    // from the top brand area when returning from the bottom.
+                    scrollAlignment: television ? 0.32 : 0,
+                    scrollAlignmentPolicy: television
+                        ? ScrollPositionAlignmentPolicy.explicit
+                        : null,
                     onFocus: () {
                       if (_tab != entry.tab) {
                         _selectNavigationDestination(entry.tab);

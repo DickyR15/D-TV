@@ -69,6 +69,8 @@ class RemoteTarget extends StatefulWidget {
     this.padding = const EdgeInsets.all(4),
     this.borderWidth = 3,
     this.outlined = false,
+    this.scrollAlignment = 0,
+    this.scrollAlignmentPolicy,
   });
   final Widget child;
   final VoidCallback? onPressed;
@@ -82,6 +84,8 @@ class RemoteTarget extends StatefulWidget {
   final EdgeInsetsGeometry padding;
   final double borderWidth;
   final bool outlined;
+  final double scrollAlignment;
+  final ScrollPositionAlignmentPolicy? scrollAlignmentPolicy;
 
   @override
   State<RemoteTarget> createState() => _RemoteTargetState();
@@ -160,7 +164,10 @@ class _RemoteTargetState extends State<RemoteTarget> {
           if (mounted && _focused) {
             Scrollable.ensureVisible(
               context,
-              alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+              alignment: widget.scrollAlignment,
+              alignmentPolicy:
+                  widget.scrollAlignmentPolicy ??
+                  ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
             );
           }
         });
