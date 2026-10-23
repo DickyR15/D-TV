@@ -88,13 +88,8 @@ class _SavedLibraryState extends State<SavedLibrary> {
       onTap: () => widget.history ? widget.onContinue(drama) : widget.onOpen(drama),
       onMore: () => _actions(drama),
       onLongPress: () => _actions(drama),
-      // 收藏頁改用長按開啟標記選單；最近觀看保留原本的操作鈕。
-      actions: widget.history
-          ? DramaActionButton(
-              drama: drama,
-              onPressed: () => _actions(drama),
-            )
-          : null,
+      // 收藏與最近觀看皆以長按開啟標記選單，不顯示三點操作鈕。
+      actions: null,
       badge: badge,
       subtitle: watched == null
           ? uiTraditional(SourceSite.byId(drama.source).name)
