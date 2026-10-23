@@ -1,5 +1,10 @@
 # 更新日誌
 
+## 0.2.129+141
+
+- 依據 Onn. 4K Pro 播放紀錄，串流專用 HTTP 連線改為有限量 Keep-Alive 重用，降低 MPV 重讀 MP4 Range 時反覆 TCP／TLS 握手造成的延遲。
+- 播放工作階段釋放時取消該工作階段的請求，並清除閒置連線；保留 8 秒 TCP、TLS 握手及回應標頭逾時，以及 16 條總閒置連線、每個主機 4 條的上限。
+
 ## 0.2.128+140
 
 - 修正上一版 Android TV 封裝失敗：`showAboutDialog()` 回傳 `void`，移除不合法的 `.whenComplete()` 呼叫。

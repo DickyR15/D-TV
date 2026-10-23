@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -241,15 +242,15 @@ func TestNativeStreamDiagnosticsCancellationAndHTTPFailure(t *testing.T) {
 	}
 }
 
-func TestNativeStreamTransportUsesFreshConnectionsAndBoundedTimeouts(t *testing.T) {
+func TestNativeStreamTransportReusesConnectionsAndBoundsTimeouts(t *testing.T) {
 	base := &http.Transport{
 		MaxIdleConnsPerHost: 8,
 		TLSHandshakeTimeout: 20 * time.Second,
 		ResponseHeaderTimeout: 20 * time.Second,
 	}
 	stream := newNativeStreamTransport(base)
-	if !stream.DisableKeepAlives {
-		t.Fatal("native media transport should not reuse idle upstream connections")
+	if stream.DisableKeepAlives {
+		t.Fatal("native media transport should reuse idle upstream connections")
 	}
 	if stream.DialContext == nil {
 		t.Fatal("native media transport should bound TCP connection attempts")
@@ -260,10 +261,45 @@ func TestNativeStreamTransportUsesFreshConnectionsAndBoundedTimeouts(t *testing.
 	if stream.ResponseHeaderTimeout != nativeStreamResponseHeaderTimeout {
 		t.Fatalf("response header timeout=%s, want %s", stream.ResponseHeaderTimeout, nativeStreamResponseHeaderTimeout)
 	}
-	if stream.MaxIdleConns != 0 || stream.MaxIdleConnsPerHost != 0 {
-		t.Fatalf("native media transport unexpectedly retains idle connections: global=%d per-host=%d", stream.MaxIdleConns, stream.MaxIdleConnsPerHost)
+	if stream.MaxIdleConns != nativeStreamMaxIdleConnections || stream.MaxIdleConnsPerHost != nativeStreamMaxIdlePerHost || stream.IdleConnTimeout != nativeStreamIdleConnTimeout {
+		t.Fatalf("unexpected idle connection policy: global=%d per-host=%d timeout=%s", stream.MaxIdleConns, stream.MaxIdleConnsPerHost, stream.IdleConnTimeout)
 	}
 	if base.DisableKeepAlives || base.DialContext != nil || base.TLSHandshakeTimeout != 20*time.Second || base.ResponseHeaderTimeout != 20*time.Second || base.MaxIdleConnsPerHost != 8 {
 		t.Fatal("creating the native media transport mutated the shared transport")
+	}
+}
+
+func TestNativeStreamTransportReusesAnIdleConnection(t *testing.T) {
+	var opened atomic.Int32
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_, _ = io.WriteString(writer, "ok")
+	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			opened.Add(1)
+		}
+	}
+	server.Start()
+	defer server.Close()
+
+	transport := newNativeStreamTransport(http.DefaultTransport.(*http.Transport).Clone())
+	client := &http.Client{Transport: transport}
+	defer client.CloseIdleConnections()
+	for i := 0; i < 2; i++ {
+		response, err := client.Get(server.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.Copy(io.Discard, response.Body); err != nil {
+			response.Body.Close()
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("request %d returned status %d", i+1, response.StatusCode)
+		}
+	}
+	if got := opened.Load(); got != 1 {
+		t.Fatalf("opened %d TCP connections for two sequential reads, want one reused connection", got)
 	}
 }

@@ -53,16 +53,22 @@ type nativeStreamServer struct {
 }
 
 const (
-	nativeStreamDialTimeout          = 8 * time.Second
-	nativeStreamTLSHandshakeTimeout  = 8 * time.Second
+	nativeStreamDialTimeout           = 8 * time.Second
+	nativeStreamTLSHandshakeTimeout   = 8 * time.Second
 	nativeStreamResponseHeaderTimeout = 8 * time.Second
+	nativeStreamMaxIdleConnections    = 16
+	nativeStreamMaxIdlePerHost         = 4
+	nativeStreamIdleConnTimeout       = 45 * time.Second
 )
 
 func newNativeStreamTransport(base *http.Transport) *http.Transport {
 	transport := base.Clone()
-	transport.DisableKeepAlives = true
-	transport.MaxIdleConns = 0
-	transport.MaxIdleConnsPerHost = 0
+	// MPV can issue several Range requests while seeking or filling its demuxer.
+	// Reusing the same CDN connection avoids paying TCP/TLS setup for every read.
+	transport.DisableKeepAlives = false
+	transport.MaxIdleConns = nativeStreamMaxIdleConnections
+	transport.MaxIdleConnsPerHost = nativeStreamMaxIdlePerHost
+	transport.IdleConnTimeout = nativeStreamIdleConnTimeout
 	dialer := &net.Dialer{Timeout: nativeStreamDialTimeout}
 	transport.DialContext = dialer.DialContext
 	transport.TLSHandshakeTimeout = nativeStreamTLSHandshakeTimeout
@@ -163,11 +169,17 @@ func (stream *nativeStreamServer) nativeCancel(session *nativeStreamSession, rea
 
 func (stream *nativeStreamServer) nativeRelease(token string) {
 	stream.mu.Lock()
+	_, exists := stream.sessions[token]
 	if session := stream.sessions[token]; session != nil {
 		stream.nativeCancel(session, "release")
 		delete(stream.sessions, token)
 	}
 	stream.mu.Unlock()
+	if exists && stream.downloader.streamClient != nil {
+		// Active requests are canceled with the session context; discard only
+		// idle pooled sockets so a later episode cannot inherit stale idle state.
+		stream.downloader.streamClient.CloseIdleConnections()
+	}
 }
 
 func (stream *nativeStreamServer) nativeAsset(token string, session *nativeStreamSession, asset nativeStreamAsset) string {
