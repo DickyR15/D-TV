@@ -1282,14 +1282,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         () => _resetBackConfirmation(ignoreTrailingBack: true),
                       );
                     } else if (value == 'about') {
+                      // showAboutDialog returns void (not a Future).
+                      // The parent Back handler already ignores the underlying
+                      // home route while this dialog is on top.
                       showAboutDialog(
                         context: context,
                         applicationName: appName,
                         applicationVersion: AppLayout.versionOf(context),
                         applicationIcon: const _DtvBrandMark(size: 56),
                         children: const [Text('作者：R15')],
-                      ).whenComplete(
-                        () => _resetBackConfirmation(ignoreTrailingBack: true),
                       );
                     }
                   },
