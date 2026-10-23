@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 
@@ -119,7 +119,7 @@ class DiaryService {
         final result = await const MethodChannel('duanju/device')
             .invokeMapMethod<String, dynamic>(
           'exportPlaybackLog',
-          <String, dynamic>{'text': '$content\\n'},
+          <String, dynamic>{'text': '$content\n'},
         );
         savedPath = result?['path'] as String?;
       } else {
@@ -128,7 +128,7 @@ class DiaryService {
           fileName: fileName,
           type: FileType.custom,
           allowedExtensions: const ['txt'],
-          bytes: Uint8List.fromList(utf8.encode('$content\\n')),
+          bytes: Uint8List.fromList(utf8.encode('$content\n')),
         );
         if (savedPath == null) return;
       }
@@ -142,7 +142,7 @@ class DiaryService {
         builder: (dialogContext) => AlertDialog(
           title: const Text('日誌匯出成功'),
           content: SelectableText(
-            '已儲存播放診斷日誌：\\n$location\\n\\n請從檔案管理器開啟 Downloads/D-TV 資料夾，將 TXT 檔傳到電腦後上傳到 ChatGPT。',
+            '已儲存播放診斷日誌：\n$location\n\n請從檔案管理器開啟 Downloads/D-TV 資料夾，將 TXT 檔傳到電腦後上傳到 ChatGPT。',
           ),
           actions: [
             TextButton(
