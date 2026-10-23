@@ -165,7 +165,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         _seekValue != null) {
       return;
     }
-    _hideTimer = Timer(const Duration(seconds: 4), () {
+    _hideTimer = Timer(const Duration(seconds: 3), () {
       if (mounted &&
           widget.enabled &&
           !widget.panelOpen &&

@@ -84,6 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _ignoreExitPromptUntil;
   bool _playbackRouteActive = false;
   bool _exitConfirmationShowing = false;
+  bool _homePopupOpen = false;
   PhoneSearchServer? _phoneSearchServer;
   StreamSubscription<String>? _phoneSearchSubscription;
   Future<PhoneSearchServer>? _phoneSearchServerStarting;
@@ -397,6 +398,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openRankings() {
+    _resetBackConfirmation();
     _pauseCatalog();
     Navigator.push<void>(
       context,
@@ -407,10 +409,11 @@ class _HomeScreenState extends State<HomeScreen> {
           initialGroup: _group.id,
         ),
       ),
-    );
+    ).whenComplete(() => _resetBackConfirmation(ignoreTrailingBack: true));
   }
 
   Future<void> _manageSources() async {
+    _resetBackConfirmation();
     _pauseCatalog();
     await Navigator.push<void>(
       context,
@@ -422,6 +425,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+    _resetBackConfirmation(ignoreTrailingBack: true);
     if (!mounted) return;
     await _loadCategories();
     if (mounted && (!_onlineSearch || _submittedQuery.isEmpty)) {
@@ -447,6 +451,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _televisionSearch() async {
+    _resetBackConfirmation();
     final query = await showDialog<String>(
       context: context,
       builder: (_) => TelevisionSearchDialog(
@@ -462,9 +467,38 @@ class _HomeScreenState extends State<HomeScreen> {
         suggestions: _searchSuggestions ? widget.repository.suggestions : null,
       ),
     );
+    _resetBackConfirmation(ignoreTrailingBack: true);
     if (query != null && mounted) {
       _submitSearch(query);
     }
+  }
+
+  void _resetBackConfirmation({bool ignoreTrailingBack = false}) {
+    _lastBackAt = null;
+    _ignoreExitPromptUntil = ignoreTrailingBack
+        ? DateTime.now().add(const Duration(milliseconds: 500))
+        : null;
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
+  }
+
+  void _homePopupOpened() {
+    _homePopupOpen = true;
+    _resetBackConfirmation();
+  }
+
+  void _homePopupSelected() {
+    _homePopupOpen = false;
+    _resetBackConfirmation();
+  }
+
+  void _homePopupCanceled() {
+    _homePopupOpen = false;
+    // PopupMenuRoute can consume Back before the home PopScope receives the
+    // same physical key. Suppress that trailing event so it cannot look like
+    // the first press of the app-exit confirmation.
+    _resetBackConfirmation(ignoreTrailingBack: true);
   }
 
   void _televisionBack() {
@@ -480,11 +514,22 @@ class _HomeScreenState extends State<HomeScreen> {
     _lastHandledBackEventAt = now;
 
     final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+
+    // Menus are routes too. A Back press here belongs to the open menu, not
+    // to the home screen's double-Back-to-exit behavior.
+    if (_homePopupOpen) {
+      _resetBackConfirmation(ignoreTrailingBack: true);
+      if (!routeIsCurrent && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+
     final ignoreUntil = _ignoreExitPromptUntil;
     if (_playbackRouteActive ||
         (ignoreUntil != null && now.isBefore(ignoreUntil))) {
-      // A Back key used to close playback must not also trigger the home
-      // screen's "press again to exit" prompt.
+      // A Back key that belongs to a nested route must not trigger the
+      // home screen's "press again to exit" prompt.
       _lastBackAt = null;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       // Some TV remotes deliver Back as a keyboard shortcut while focus
@@ -492,6 +537,17 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_playbackRouteActive &&
           !routeIsCurrent &&
           Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+
+    // Settings, source management, dialogs and popup routes must close first.
+    // Never show the app-exit prompt while the home route is not on top.
+    if (!routeIsCurrent) {
+      _lastBackAt = null;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
       return;
@@ -997,7 +1053,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                         key: const ValueKey('source-switch'),
                                         tooltip: '切換片源',
                                         enabled: _sourceGroups.length > 1,
-                                        onSelected: _changeGroup,
+                                        onOpened: _homePopupOpened,
+                                        onCanceled: _homePopupCanceled,
+                                        onSelected: (group) {
+                                          _homePopupSelected();
+                                          _changeGroup(group);
+                                        },
                                         itemBuilder: (_) => [
                                           for (final group in _sourceGroups)
                                             PopupMenuItem(
@@ -1180,7 +1241,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 PopupMenuButton<String>(
                   tooltip: '更多',
+                  onOpened: _homePopupOpened,
+                  onCanceled: _homePopupCanceled,
                   onSelected: (value) {
+                    _homePopupSelected();
                     if (value == 'update') {
                       _refreshCatalog();
                     } else if (value == 'sources') {

@@ -137,7 +137,7 @@ class _TelevisionControlsState extends State<TelevisionControls> {
   void _scheduleHide() {
     _hideTimer?.cancel();
     if (!widget.enabled || _panelOpen) return;
-    _hideTimer = Timer(const Duration(seconds: 5), () {
+    _hideTimer = Timer(const Duration(seconds: 3), () {
       if (mounted &&
           widget.enabled &&
           !_panelOpen &&
