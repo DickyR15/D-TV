@@ -1,5 +1,5 @@
 name: Build D TV Android v7a
-run-name: 'D TV Android v7a v0.2.106+118 MPV Embed Default + Standard Diagnostic'
+run-name: 'D TV Android v7a v0.2.107+119 MPV Embed Default + Standard Diagnostic'
 
 on:
   workflow_dispatch:

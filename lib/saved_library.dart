@@ -94,6 +94,9 @@ class _SavedLibraryState extends State<SavedLibrary> {
       subtitle: watched == null
           ? uiTraditional(SourceSite.byId(drama.source).name)
           : '第 ${watched.episode} 集 · ${formatPosition(watched.position)}',
+      remotePadding: AppLayout.isTelevision(context)
+          ? const EdgeInsets.all(2)
+          : const EdgeInsets.all(4),
     );
   }
 
@@ -197,10 +200,13 @@ class _SavedLibraryState extends State<SavedLibrary> {
       return LayoutBuilder(
         builder: (context, constraints) {
           if (AppLayout.isTelevision(context)) {
-            final columns = ((constraints.maxWidth - 36) / 150).floor().clamp(
-              1,
-              8,
-            );
+            // Use the same poster count and cell width as the ranking boards:
+            // wide TV=5 columns, medium=3, narrow=2.
+            final columns = constraints.maxWidth >= 620
+                ? 5
+                : constraints.maxWidth >= 420
+                ? 3
+                : 2;
             final tileWidth =
                 (constraints.maxWidth - 36 - (columns - 1) * 14) / columns;
             return Column(
@@ -220,8 +226,11 @@ class _SavedLibraryState extends State<SavedLibrary> {
                           ),
                           itemKeys: items.map((item) => item.id).toList(),
                           columns: columns,
-                          itemExtent:
-                              DramaTile.extentFor(context, tileWidth - 14) + 14,
+                          itemExtent: DramaTile.extentFor(
+                                context,
+                                tileWidth - 4,
+                              ) +
+                              4,
                           itemBuilder: (_, index, node, onFocus) => _tile(
                             items[index],
                             focusNode: node,

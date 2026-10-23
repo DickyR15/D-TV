@@ -426,6 +426,7 @@ class DramaTile extends StatelessWidget {
     this.selected,
     this.onMore,
     this.onLongPress,
+    this.remotePadding = const EdgeInsets.all(4),
   });
   final Drama drama;
   final AppRepository repository;
@@ -438,6 +439,8 @@ class DramaTile extends StatelessWidget {
   final bool? selected;
   final VoidCallback? onMore;
   final VoidCallback? onLongPress;
+  /// Padding around a TV focus target; can match custom poster grids.
+  final EdgeInsets remotePadding;
 
   static double titleHeight(BuildContext context) =>
       MediaQuery.textScalerOf(
@@ -569,6 +572,7 @@ class DramaTile extends StatelessWidget {
           selected: selected ?? false,
           label:
               '${uiTraditional(drama.title)}，${drama.episodes}集${badge == null ? '' : '，$badge'}',
+          padding: remotePadding,
           child: content,
         ),
       );
