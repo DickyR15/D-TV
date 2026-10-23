@@ -11,6 +11,8 @@ from app_build import BuildVariant, add_variant_argument
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument('--abi', action='append', choices=['arm64-v8a', 'armeabi-v7a', 'x86_64'])
+parser.add_argument('--player-engine', choices=['exo', 'mpv_embed'], default='exo',
+                    help='Android 播放引擎：exo 或 MPV mediacodec_embed 測試模式')
 add_variant_argument(parser)
 options = parser.parse_args()
 variant = BuildVariant(options.all_sources)
@@ -27,7 +29,11 @@ abi_args = [item for abi in options.abi or [] for item in ['--abi', abi]]
 subprocess.run([sys.executable, str(root / 'scripts' / 'build_native.py'), '--platform', 'android', *abi_args, *variant.arguments],
                cwd=root, env=env, check=True)
 subprocess.run([flutter, 'pub', 'get'], cwd=root, env=env, check=True)
-build_args = [flutter, 'build', 'apk', '--release', '--split-per-abi', '--no-pub', *variant.flutter_arguments]
+build_args = [
+    flutter, 'build', 'apk', '--release', '--split-per-abi', '--no-pub',
+    *variant.flutter_arguments,
+    '--dart-define=DTV_ANDROID_PLAYER=' + options.player_engine,
+]
 if options.abi:
     targets = {'arm64-v8a': 'android-arm64', 'armeabi-v7a': 'android-arm', 'x86_64': 'android-x64'}
     build_args += ['--target-platform', ','.join(targets[abi] for abi in options.abi)]

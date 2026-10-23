@@ -36,6 +36,11 @@ import 'lan_screen.dart';
 import 'video_enhancement.dart';
 import 'video_output_size.dart';
 
+const _androidPlayerEngine = String.fromEnvironment(
+  'DTV_ANDROID_PLAYER',
+  defaultValue: 'exo',
+);
+
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -136,6 +141,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   // Android is using the official video_player / ExoPlayer backend.
   // MPV-specific settings only apply when the active backend actually exposes
   // MPV's native platform. Android now defaults to the ExoPlayer backend.
+  bool get _mpvEmbedBackend =>
+      Platform.isAndroid &&
+      _androidPlayerEngine == 'mpv_embed' &&
+      widget.playerFactory == null &&
+      widget.videoBuilder == null;
   bool get _televisionDecoderApplies =>
       Platform.isAndroid && _television && _player.platform is NativePlayer;
   bool get _televisionRenderingApplies =>
@@ -196,8 +206,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmaku = DanmakuController(widget.repository)
       ..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
+    final useMpvEmbed = _mpvEmbedBackend;
     final useExoPlayer =
-        Platform.isAndroid && widget.videoBuilder == null;
+        Platform.isAndroid &&
+        widget.videoBuilder == null &&
+        widget.playerFactory == null &&
+        !useMpvEmbed;
     _player =
         widget.playerFactory?.call() ??
         (useExoPlayer
@@ -210,14 +224,19 @@ class _PlayerScreenState extends State<PlayerScreen>
               ));
     final exoPlayer = _player is LunaExoPlayer;
     DiaryService.add(
-      '[Player] backend=${exoPlayer ? 'video_player/ExoPlayer' : 'media_kit/MPV'}',
+      '[Player] backend=${exoPlayer
+          ? 'video_player/ExoPlayer'
+          : useMpvEmbed
+          ? 'media_kit/MPV (mediacodec_embed)'
+          : 'media_kit/MPV'}',
     );
     _video = widget.videoBuilder == null && !exoPlayer
         ? VideoController(
             _player,
             configuration: VideoControllerConfiguration(
               enableHardwareAcceleration: !Platform.isIOS,
-              // Keep the MPV Surface path configurable on custom/test backends.
+              vo: useMpvEmbed ? 'mediacodec_embed' : null,
+              hwdec: useMpvEmbed ? 'mediacodec' : null,
               androidAttachSurfaceAfterVideoParameters: false,
             ),
           )
@@ -1070,32 +1089,38 @@ class _PlayerScreenState extends State<PlayerScreen>
                   _televisionDecoder == TelevisionDecoder.optimized;
               await platform.setProperty(
                 'hwdec',
-                _televisionDecoder == TelevisionDecoder.software
+                _mpvEmbedBackend
+                    ? 'mediacodec'
+                    : _televisionDecoder == TelevisionDecoder.software
                     ? 'no'
                     : 'mediacodec-copy',
               );
               await platform.setProperty('hwdec-codecs', 'all');
-              await platform.setProperty(
-                'opengl-pbo',
-                optimized ? 'yes' : 'no',
-              );
-              await platform.setProperty(
-                'video-latency-hacks',
-                optimized ? 'yes' : 'no',
-              );
-              await platform.setProperty('scale', 'bilinear');
-              await platform.setProperty('cscale', 'bilinear');
-              await platform.setProperty('dscale', 'bilinear');
-              await platform.setProperty('correct-downscaling', 'no');
-              await platform.setProperty(
-                'vd-lavc-skiploopfilter',
-                optimized ? 'all' : 'default',
-              );
-              await platform.setProperty(
-                'vd-lavc-skipidct',
-                optimized ? 'all' : 'default',
-              );
-              await platform.setProperty('vd-lavc-threads', '2');
+              if (_mpvEmbedBackend) {
+                await platform.setProperty('vd-lavc-threads', '4');
+              } else {
+                await platform.setProperty(
+                  'opengl-pbo',
+                  optimized ? 'yes' : 'no',
+                );
+                await platform.setProperty(
+                  'video-latency-hacks',
+                  optimized ? 'yes' : 'no',
+                );
+                await platform.setProperty('scale', 'bilinear');
+                await platform.setProperty('cscale', 'bilinear');
+                await platform.setProperty('dscale', 'bilinear');
+                await platform.setProperty('correct-downscaling', 'no');
+                await platform.setProperty(
+                  'vd-lavc-skiploopfilter',
+                  optimized ? 'all' : 'default',
+                );
+                await platform.setProperty(
+                  'vd-lavc-skipidct',
+                  optimized ? 'all' : 'default',
+                );
+                await platform.setProperty('vd-lavc-threads', '2');
+              }
               await platform.setProperty(
                 'demuxer-max-bytes',
                 '${4 * 1024 * 1024}',
@@ -1106,9 +1131,14 @@ class _PlayerScreenState extends State<PlayerScreen>
               );
               await platform.setProperty('demuxer-readahead-secs', '5');
             } else {
-              await platform.setProperty('hwdec', 'auto-safe');
+              await platform.setProperty(
+                'hwdec',
+                _mpvEmbedBackend ? 'mediacodec' : 'auto-safe',
+              );
               await platform.setProperty('hwdec-codecs', 'all');
-              await platform.setProperty('vd-lavc-skiploopfilter', 'nonkey');
+              if (!_mpvEmbedBackend) {
+                await platform.setProperty('vd-lavc-skiploopfilter', 'nonkey');
+              }
               await platform.setProperty('vd-lavc-threads', '4');
             }
             await platform.setProperty('vd-lavc-fast', 'yes');
@@ -1552,7 +1582,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                 unawaited(_enhancement.toggleCompare());
                 Navigator.pop(menuContext);
               },
-              decoder: _televisionDecoderApplies ? _televisionDecoder : null,
+              decoder: _televisionDecoderApplies && !_mpvEmbedBackend
+                  ? _televisionDecoder
+                  : null,
               compatibleRendering: compatibleRendering,
             ),
           ),

@@ -1,5 +1,11 @@
 # 更新日誌
 
+## 0.2.98+110
+
+- Android A/B 測試建置：預設 ExoPlayer 路線維持不變，另提供 MPV `mediacodec_embed + mediacodec` 原生 Surface 版本，專門驗證 Amlogic 電視盒的硬解與 GPU 影格拷貝問題。
+- MPV Embed 測試版由 `VideoControllerConfiguration` 設定 `vo`、`hwdec`，交由 media_kit_video 管理 `wid`／Surface 生命週期，避免只動態設定 `vo` 而未建立原生 Surface。
+- Android 編譯工作會同時產生 ExoPlayer 與 MPV Embed 兩個 APK，方便在同一台 Onn. 4K Pro 上比較。
+
 ## 0.2.97+109
 
 - Android 預設改用 Flutter 官方 `video_player`（Android 底層 ExoPlayer），Windows 等非 Android 平台繼續使用 media_kit／MPV。
