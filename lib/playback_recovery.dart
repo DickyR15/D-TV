@@ -3,26 +3,29 @@ import 'models.dart';
 enum PlaybackRecoveryAction { alternative, refresh, stop }
 
 class PlaybackRecovery {
-  static const maxAttempts = 3;
-  int _attempts = 0;
+  // A media source may expose more than three mirrors/quality URLs.
+  // Exhaust those routes before forcing a fresh resolution, while keeping
+  // retries bounded if a provider returns an unusually large candidate list.
+  static const maxAlternativeAttempts = 12;
+  int _alternativeAttempts = 0;
   bool _refreshed = false;
 
   void reset() {
-    _attempts = 0;
+    _alternativeAttempts = 0;
     _refreshed = false;
   }
 
   PlaybackRecoveryAction next(PlaybackPlan plan) {
-    if (_attempts >= maxAttempts) {
-      return PlaybackRecoveryAction.stop;
-    }
-    if (plan.hasAlternative) {
-      _attempts++;
+    if (plan.hasAlternative &&
+        _alternativeAttempts < maxAlternativeAttempts) {
+      _alternativeAttempts++;
       return PlaybackRecoveryAction.alternative;
     }
     if (!_refreshed) {
-      _attempts++;
       _refreshed = true;
+      // A refreshed resolution can return new signed URLs, so allow the new
+      // route set one bounded pass too.
+      _alternativeAttempts = 0;
       return PlaybackRecoveryAction.refresh;
     }
     return PlaybackRecoveryAction.stop;

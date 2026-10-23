@@ -384,7 +384,10 @@ class _PlayerScreenState extends State<PlayerScreen>
           _error == null &&
           _health.stalled(
             position: _player.state.position,
-            playing: _player.state.playing && _playIntent,
+            // A stalled network stream may enter buffering and flip
+            // playing=false; still let the health watchdog detect it.
+            playing: _playIntent &&
+                (_player.state.playing || _player.state.buffering),
             foreground: _foreground,
             now: DateTime.now(),
           )) {

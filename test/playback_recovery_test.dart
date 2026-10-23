@@ -10,12 +10,14 @@ void main() {
     routeCount: count,
   );
 
-  test('tries alternate routes before one fresh resolution, then stops', () {
+  test('tries every route before refreshing, then tries the fresh route set', () {
     final recovery = PlaybackRecovery();
     expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
     expect(recovery.next(route(1)), PlaybackRecoveryAction.alternative);
     expect(recovery.next(route(2)), PlaybackRecoveryAction.refresh);
-    expect(recovery.next(route(0)), PlaybackRecoveryAction.stop);
+    expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
+    expect(recovery.next(route(1)), PlaybackRecoveryAction.alternative);
+    expect(recovery.next(route(2)), PlaybackRecoveryAction.stop);
     recovery.reset();
     expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
   });
@@ -27,15 +29,33 @@ void main() {
     expect(recovery.next(route(0, count: 1)), PlaybackRecoveryAction.stop);
   });
 
-  test('many failing alternatives cannot exceed the automatic retry limit', () {
+  test('all available alternatives are tried before one refresh', () {
     final recovery = PlaybackRecovery();
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 9; i++) {
       expect(
         recovery.next(route(i, count: 10)),
         PlaybackRecoveryAction.alternative,
       );
     }
-    expect(recovery.next(route(3, count: 10)), PlaybackRecoveryAction.stop);
+    expect(recovery.next(route(9, count: 10)), PlaybackRecoveryAction.refresh);
+    for (var i = 0; i < 9; i++) {
+      expect(
+        recovery.next(route(i, count: 10)),
+        PlaybackRecoveryAction.alternative,
+      );
+    }
+    expect(recovery.next(route(9, count: 10)), PlaybackRecoveryAction.stop);
+  });
+
+  test('large route lists remain bounded per resolution', () {
+    final recovery = PlaybackRecovery();
+    for (var i = 0; i < PlaybackRecovery.maxAlternativeAttempts; i++) {
+      expect(
+        recovery.next(route(i, count: 100)),
+        PlaybackRecoveryAction.alternative,
+      );
+    }
+    expect(recovery.next(route(12, count: 100)), PlaybackRecoveryAction.refresh);
   });
 
   test(
