@@ -132,7 +132,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _rotating = false;
   bool _television = false;
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.optimized;
-  bool get _televisionDecoderApplies => Platform.isAndroid && _television;
+  // MPV-specific decoder properties must never be shown or applied when
+  // Android is using the official video_player / ExoPlayer backend.
+  bool get _televisionDecoderApplies =>
+      Platform.isAndroid && _television && _player.platform is NativePlayer;
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
       _pictureInPictureActive || _pictureInPictureRequested;
@@ -189,15 +192,23 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmaku = DanmakuController(widget.repository)
       ..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
+    // On Android, route playback through Flutter's officially maintained
+    // video_player plugin (AndroidX ExoPlayer/Media3). Keep media_kit/MPV for
+    // platforms where video_player has no supported backend, such as Windows.
     _player =
         widget.playerFactory?.call() ??
-        Player(
-          configuration: const PlayerConfiguration(
-            bufferSize: 32 * 1024 * 1024,
-            logLevel: MPVLogLevel.error,
-          ),
-        );
-    _video = widget.videoBuilder == null
+        (Platform.isAndroid
+            ? LunaExoPlayer()
+            : Player(
+                configuration: const PlayerConfiguration(
+                  bufferSize: 32 * 1024 * 1024,
+                  logLevel: MPVLogLevel.error,
+                ),
+              ));
+    DiaryService.add(
+      '[Player] backend=${_player is LunaExoPlayer ? 'video_player/ExoPlayer' : 'media_kit/MPV'}',
+    );
+    _video = widget.videoBuilder == null && _player is! LunaExoPlayer
         ? VideoController(
             _player,
             configuration: VideoControllerConfiguration(
