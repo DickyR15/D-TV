@@ -175,7 +175,25 @@ class LunaExoPlayer implements Player {
         .toList();
     final normalizedPath = (uri?.path ?? url).toLowerCase();
     final knownNonHlsFormat = RegExp(
-      r'\.(mp4|m4v|mov|webm|mkv|mp3|m4a|aac|ts|mpd)      try {
+      r'\.(mp4|m4v|mov|webm|mkv|mp3|m4a|aac|ts|mpd)(?:$|[?#])',
+    ).hasMatch(normalizedPath);
+    bool isHls =
+        normalizedPath.contains('.m3u8') ||
+        normalizedPath.contains('hls') ||
+        normalizedHeaders.any(
+          (entry) =>
+              entry.key == 'accept' &&
+              entry.value.toLowerCase().contains('mpegurl'),
+        );
+
+    // ExoPlayer already detects common container formats. Avoid an extra
+    // network probe for direct MP4/TS/DASH URLs, especially local proxy links;
+    // only sniff extensionless/unknown URLs that might be HLS playlists.
+    if (!isHls &&
+        !knownNonHlsFormat &&
+        uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https')) {
+      try {
         final client = HttpClient()
           ..connectionTimeout = const Duration(seconds: 3);
         final req = await client.getUrl(uri);
