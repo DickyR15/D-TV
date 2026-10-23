@@ -1,34 +1,30 @@
 import 'models.dart';
 
-enum PlaybackRecoveryAction { alternative, refresh, stop }
+enum PlaybackRecoveryAction { alternative, refresh, recreatePlayer, stop }
 
 class PlaybackRecovery {
-  // A media source may expose more than three mirrors/quality URLs.
-  // Exhaust those routes before forcing a fresh resolution, while keeping
-  // retries bounded if a provider returns an unusually large candidate list.
+  // A source can expose many URLs, but a single player should only cycle
+  // through them once. When exhausted, recreate the MPV instance instead of
+  // resolving the same list again inside a player that may be stuck.
   static const maxAlternativeAttempts = 12;
   int _alternativeAttempts = 0;
-  bool _refreshed = false;
 
   void reset() {
     _alternativeAttempts = 0;
-    _refreshed = false;
   }
 
-  PlaybackRecoveryAction next(PlaybackPlan plan) {
+  PlaybackRecoveryAction next(
+    PlaybackPlan plan, {
+    bool allowPlayerRecreate = true,
+  }) {
     if (plan.hasAlternative &&
         _alternativeAttempts < maxAlternativeAttempts) {
       _alternativeAttempts++;
       return PlaybackRecoveryAction.alternative;
     }
-    if (!_refreshed) {
-      _refreshed = true;
-      // A refreshed resolution can return new signed URLs, so allow the new
-      // route set one bounded pass too.
-      _alternativeAttempts = 0;
-      return PlaybackRecoveryAction.refresh;
-    }
-    return PlaybackRecoveryAction.stop;
+    return allowPlayerRecreate
+        ? PlaybackRecoveryAction.recreatePlayer
+        : PlaybackRecoveryAction.stop;
   }
 }
 

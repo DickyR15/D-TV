@@ -10,26 +10,7 @@ void main() {
     routeCount: count,
   );
 
-  test('tries every route before refreshing, then tries the fresh route set', () {
-    final recovery = PlaybackRecovery();
-    expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
-    expect(recovery.next(route(1)), PlaybackRecoveryAction.alternative);
-    expect(recovery.next(route(2)), PlaybackRecoveryAction.refresh);
-    expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
-    expect(recovery.next(route(1)), PlaybackRecoveryAction.alternative);
-    expect(recovery.next(route(2)), PlaybackRecoveryAction.stop);
-    recovery.reset();
-    expect(recovery.next(route(0)), PlaybackRecoveryAction.alternative);
-  });
-
-  test('one-route sources refresh once without endless retrying', () {
-    final recovery = PlaybackRecovery();
-    expect(recovery.next(route(0, count: 1)), PlaybackRecoveryAction.refresh);
-    expect(recovery.next(route(0, count: 1)), PlaybackRecoveryAction.stop);
-    expect(recovery.next(route(0, count: 1)), PlaybackRecoveryAction.stop);
-  });
-
-  test('all available alternatives are tried before one refresh', () {
+  test('tries routes once, then recreates the player instead of wrapping to route 1', () {
     final recovery = PlaybackRecovery();
     for (var i = 0; i < 9; i++) {
       expect(
@@ -37,17 +18,38 @@ void main() {
         PlaybackRecoveryAction.alternative,
       );
     }
-    expect(recovery.next(route(9, count: 10)), PlaybackRecoveryAction.refresh);
+    expect(recovery.next(route(9, count: 10)), PlaybackRecoveryAction.recreatePlayer);
+
+    // The replacement screen is only allowed one full route pass.
+    final replacement = PlaybackRecovery();
     for (var i = 0; i < 9; i++) {
       expect(
-        recovery.next(route(i, count: 10)),
+        replacement.next(route(i, count: 10)),
         PlaybackRecoveryAction.alternative,
       );
     }
-    expect(recovery.next(route(9, count: 10)), PlaybackRecoveryAction.stop);
+    expect(
+      replacement.next(route(9, count: 10), allowPlayerRecreate: false),
+      PlaybackRecoveryAction.stop,
+    );
   });
 
-  test('large route lists remain bounded per resolution', () {
+  test('one-route sources recreate the player once without endless retrying', () {
+    final recovery = PlaybackRecovery();
+    expect(
+      recovery.next(route(0, count: 1)),
+      PlaybackRecoveryAction.recreatePlayer,
+    );
+    expect(
+      PlaybackRecovery().next(
+        route(0, count: 1),
+        allowPlayerRecreate: false,
+      ),
+      PlaybackRecoveryAction.stop,
+    );
+  });
+
+  test('large route lists remain bounded per player', () {
     final recovery = PlaybackRecovery();
     for (var i = 0; i < PlaybackRecovery.maxAlternativeAttempts; i++) {
       expect(
@@ -55,7 +57,17 @@ void main() {
         PlaybackRecoveryAction.alternative,
       );
     }
-    expect(recovery.next(route(12, count: 100)), PlaybackRecoveryAction.refresh);
+    expect(
+      recovery.next(route(12, count: 100)),
+      PlaybackRecoveryAction.recreatePlayer,
+    );
+    expect(
+      PlaybackRecovery().next(
+        route(12, count: 100),
+        allowPlayerRecreate: false,
+      ),
+      PlaybackRecoveryAction.stop,
+    );
   });
 
   test(

@@ -56,6 +56,7 @@ class PlayerScreen extends StatefulWidget {
     this.playerFactory,
     this.videoBuilder,
     this.handoff,
+    this.recoveryRestarted = false,
   });
   final DramaDetail detail;
   final int initialIndex;
@@ -66,6 +67,8 @@ class PlayerScreen extends StatefulWidget {
   final AppRepository repository;
   final LocalStore store;
   final LanIncomingPlayback? handoff;
+  /// True after the one automatic clean-player restart has already been used.
+  final bool recoveryRestarted;
   @visibleForTesting
   final Player Function()? playerFactory;
   @visibleForTesting
@@ -909,10 +912,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     final position = _currentPosition;
     final action = current.local
         ? PlaybackRecoveryAction.stop
-        : _recovery.next(current);
+        : _recovery.next(
+            current,
+            allowPlayerRecreate:
+                !widget.recoveryRestarted &&
+                widget.handoff == null &&
+                widget.playerFactory == null &&
+                widget.videoBuilder == null,
+          );
     DiaryService.add(
       '[Recovery] start reason=$reason action=${action.name} generation=$_generation route=${current.routeIndex}/${current.routeCount} session=${playbackDiagnosticId(current.session)} position=${_player.state.position.inMilliseconds} duration=${_player.state.duration.inMilliseconds} buffering=${_player.state.buffering}',
     );
+    if (action == PlaybackRecoveryAction.recreatePlayer) {
+      await _recreatePlayerForRecovery(current, position);
+      return;
+    }
     if (action == PlaybackRecoveryAction.stop) {
       _resumePosition = position;
       final ticket = _generation;
@@ -946,6 +960,61 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     await _play(_index, position: position, recoveryAction: action);
+  }
+
+  Future<void> _recreatePlayerForRecovery(
+    PlaybackPlan current,
+    double position,
+  ) async {
+    final ticket = _generation;
+    try {
+      await _serialize(() async {
+        if (_closed || ticket != _generation) return;
+        await _saveProgress(flush: true);
+        await _enhancement.beforeMedia();
+        if (_closed || ticket != _generation) return;
+        _openedIndex = -1;
+        await _player.stop();
+        if (identical(_plan, current)) _plan = null;
+        _danmaku.setPlan(null);
+        await _releasePlayback(current.session, 'recovery_recreate_player');
+      });
+    } catch (error) {
+      DiaryService.add(
+        '[Recovery] recreate_player_prepare_failed error=${playbackDiagnosticError(error)}',
+      );
+      if (mounted && !_closed && ticket == _generation) {
+        setState(() {
+          _loading = false;
+          _showLoadingOverlay = false;
+          _error = '備用線路已耗盡，重新啟動播放器失敗；請退出播放後重新進入。';
+        });
+      }
+      return;
+    }
+    if (!mounted || _closed || ticket != _generation) return;
+    DiaryService.add(
+      '[Recovery] recreate_player_screen generation=$ticket position_ms=${(position * 1000).round()} restarted=false',
+    );
+    final route = PageRouteBuilder<void>(
+      settings: const RouteSettings(name: 'DTVPlaybackRecoveryRestart'),
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+      pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(
+        detail: widget.detail,
+        initialIndex: _index,
+        initialPosition: position,
+        localOnly: widget.localOnly,
+        allowOnlineFallback: widget.allowOnlineFallback,
+        mediaId: widget.mediaId,
+        repository: widget.repository,
+        store: widget.store,
+        recoveryRestarted: true,
+      ),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+          child,
+    );
+    unawaited(Navigator.of(context).pushReplacement<void, void>(route));
   }
 
   void _togglePlayback() {
