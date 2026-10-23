@@ -43,6 +43,11 @@ class CatalogBrowser {
   final _library = <String, Map<String, Drama>>{};
   final _sessions = <String, _CatalogSession>{};
   final _cachedReads = <String, Future<CatalogPage>>{};
+  // Category chips are rebuilt whenever the home screen rebuilds. Cache both
+  // the merged choices and each source's distinct local category names so we
+  // never rescan every cached drama just because focus or tabs changed.
+  final _choicesCache = <String, List<_CatalogChoice>>{};
+  final _localCategoryNames = <String, Set<String>>{};
   int _generation = 0;
 
   Future<CatalogPage> cached(String source, {String category = ''}) {
@@ -62,12 +67,38 @@ class CatalogBrowser {
     return repository.cancelCatalog();
   }
 
+  void _invalidateChoices() => _choicesCache.clear();
+
+  void _refreshLocalCategoryNames(String source) {
+    final library = _library[source];
+    _localCategoryNames[source] = {
+      if (library != null)
+        for (final drama in library.values) categoryName(drama.category),
+    };
+  }
+
   void _remember(String source, Iterable<Drama> items) {
     final library = _library.putIfAbsent(source, () => {});
+    final knownNames = _localCategoryNames.putIfAbsent(
+      source,
+      () => {for (final drama in library.values) categoryName(drama.category)},
+    );
+    var choicesChanged = false;
     for (final drama in items) {
-      if (drama.source == source) {
-        library[drama.id] = library[drama.id]?.merge(drama) ?? drama;
+      if (drama.source != source) continue;
+      final previous = library[drama.id];
+      final merged = previous?.merge(drama) ?? drama;
+      final mergedName = categoryName(merged.category);
+      if (previous == null) {
+        if (knownNames.add(mergedName)) choicesChanged = true;
+      } else if (categoryName(previous.category) != mergedName) {
+        choicesChanged = true;
       }
+      library[drama.id] = merged;
+    }
+    if (choicesChanged) {
+      _invalidateChoices();
+      _refreshLocalCategoryNames(source);
     }
   }
 
@@ -77,10 +108,21 @@ class CatalogBrowser {
 
   void updateDramas(Iterable<Drama> dramas) {
     final updates = {for (final drama in dramas) drama.id: drama};
+    final categoryChangedSources = <String>{};
     for (final drama in updates.values) {
       final library = _library[drama.source];
-      if (library?.containsKey(drama.id) == true) {
-        library![drama.id] = library[drama.id]!.merge(drama);
+      final previous = library?[drama.id];
+      if (library == null || previous == null) continue;
+      final merged = previous.merge(drama);
+      if (categoryName(previous.category) != categoryName(merged.category)) {
+        categoryChangedSources.add(drama.source);
+      }
+      library[drama.id] = merged;
+    }
+    if (categoryChangedSources.isNotEmpty) {
+      _invalidateChoices();
+      for (final source in categoryChangedSources) {
+        _refreshLocalCategoryNames(source);
       }
     }
     for (final session in _sessions.values) {
@@ -122,6 +164,7 @@ class CatalogBrowser {
           source.id,
           force: force,
         );
+        _invalidateChoices();
       } catch (_) {
         failures.add(source.groupName);
       }
@@ -130,6 +173,11 @@ class CatalogBrowser {
   }
 
   List<_CatalogChoice> _choices(SourceGroup group) {
+    final cacheKey =
+        '${group.id}|${group.sources.map((source) => source.id).join(',')}';
+    final cached = _choicesCache[cacheKey];
+    if (cached != null) return cached;
+
     final choices = <String, _CatalogChoice>{};
     for (final source in group.sources) {
       for (final category in _menus[source.id] ?? const <CatalogCategory>[]) {
@@ -144,8 +192,7 @@ class CatalogBrowser {
     }
     final names = {
       for (final source in group.sources)
-        for (final item in _library[source.id]?.values ?? const <Drama>[])
-          categoryName(item.category),
+        ...?_localCategoryNames[source.id],
     }.toList()..sort();
     for (final name in names) {
       choices.putIfAbsent(
@@ -153,7 +200,9 @@ class CatalogBrowser {
         () => _CatalogChoice(CatalogCategory('local:$name', name, local: true)),
       );
     }
-    return choices.values.toList();
+    final result = choices.values.toList();
+    _choicesCache[cacheKey] = result;
+    return result;
   }
 
   List<CatalogCategory> categories(SourceGroup group) => [

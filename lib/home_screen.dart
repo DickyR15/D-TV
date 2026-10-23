@@ -76,6 +76,9 @@ class _HomeScreenState extends State<HomeScreen> {
   int _revealed = _revealBatch;
   int? _revealKey;
   bool _hiddenItems = false;
+  List<Drama>? _visibleCacheItems;
+  int? _visibleCacheKey;
+  List<Drama> _visibleCache = const [];
   DateTime? _lastBackAt;
   DateTime? _ignoreExitPromptUntil;
   bool _playbackRouteActive = false;
@@ -844,11 +847,29 @@ class _HomeScreenState extends State<HomeScreen> {
     final category = _category;
     final hideVip = _hideVip;
     final onlineSearch = _onlineSearch;
+    final groupSources = _group.sources
+        .map((source) => source.id)
+        .join(',');
+    final cacheKey = Object.hash(
+      _group.id,
+      groupSources,
+      _sourceSignature,
+      category,
+      query,
+      hideVip,
+      onlineSearch,
+      widget.store.profileEpoch,
+    );
+    if (identical(_visibleCacheItems, _items) &&
+        _visibleCacheKey == cacheKey) {
+      return _visibleCache;
+    }
+
     final view = widget.store.catalogView.copyWith(
       sort: CatalogSort.date,
       release: '',
     );
-    return sortCatalog(
+    final result = sortCatalog(
       _items.where((drama) {
         if (!widget.store.allowsSource(drama.source)) return false;
         if (category.startsWith('local:') &&
@@ -862,6 +883,10 @@ class _HomeScreenState extends State<HomeScreen> {
       }),
       view,
     );
+    _visibleCacheItems = _items;
+    _visibleCacheKey = cacheKey;
+    _visibleCache = result;
+    return result;
   }
 
   @override

@@ -98,6 +98,53 @@ void main() {
   );
 
   test(
+    'category choices reuse cached results and refresh when new local categories arrive',
+    () async {
+      final repository = CategoryRepository();
+      repository.cachedPages['hongguo'] = CatalogPage(const [
+        Drama(
+          id: 'hongguo:cached-city',
+          source: 'hongguo',
+          title: '都市短劇',
+          category: '都市',
+        ),
+      ]);
+      final browser = CatalogBrowser(repository);
+      const group = SourceGroup('hongguo', '紅果', [SourceSite.hongguo]);
+
+      await browser.loadCategories(group);
+      final first = browser.categories(group);
+      final second = browser.categories(group);
+      expect(identical(first[1], second[1]), isTrue);
+      expect(
+        first.map((category) => category.name),
+        contains('都市'),
+      );
+
+      repository.cachedPages['hongguo'] = CatalogPage(const [
+        Drama(
+          id: 'hongguo:cached-city',
+          source: 'hongguo',
+          title: '都市短劇',
+          category: '都市',
+        ),
+        Drama(
+          id: 'hongguo:cached-scifi',
+          source: 'hongguo',
+          title: '科幻短劇',
+          category: '科幻',
+        ),
+      ]);
+      await browser.loadCategories(group, cacheOnly: true);
+
+      expect(
+        browser.categories(group).map((category) => category.name),
+        contains('科幻'),
+      );
+    },
+  );
+
+  test(
     'group pagination retries failed member without skipping or reloading exhausted members',
     () async {
       final repository = CategoryRepository()
