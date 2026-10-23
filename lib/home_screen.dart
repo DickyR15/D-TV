@@ -1325,17 +1325,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 7),
-                Text(
-                  '短劇隨選・精彩立即播放',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 13,
-                    height: 1,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: .5,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const _DtvBrandMark(size: 14),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        '短劇隨選・精彩立即播放',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 13,
+                          height: 1,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: .5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

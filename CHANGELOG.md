@@ -1,5 +1,10 @@
 # 更新日誌
 
+## 0.2.116+128
+
+- Android TV 與 Android 模擬器頂部品牌列的單行標語前新增小型 D TV Logo；保留原本標頭高度，不增加海報區域遮擋。
+- 保留 SmartTube 風格返回操作：第一次返回切回紅果熱播榜，兩秒內再次返回才結束程式。
+
 ## 0.2.115+127
 
 - 紅果原有 App 播放 API 失敗時，新增另一條官方多清晰度取流備援：`multi_video_model/preload/v1` 與其 `fallback_api`。
