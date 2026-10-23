@@ -295,7 +295,6 @@ class DiaryService {
               onPressed: () => copyToClipboard(dialogContext),
             ),
             FilledButton(
-              autofocus: true,
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('關閉'),
             ),
