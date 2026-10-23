@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -44,6 +45,7 @@ class _DetailScreenState extends State<DetailScreen> {
   bool _episodesExpanded = false;
   final _episodeAnchor = GlobalKey();
   final _detailScroll = ScrollController();
+  final _startPlayFocus = FocusNode(debugLabel: 'detail-start-play');
   bool _initialActionHandled = false;
   late final int _profileEpoch;
   Widget? get _sourceDiagnostics => widget.repository.supportsSourceManagement
@@ -74,6 +76,7 @@ class _DetailScreenState extends State<DetailScreen> {
   @override
   void dispose() {
     _detailScroll.dispose();
+    _startPlayFocus.dispose();
     widget.store.removeListener(_onStoreChanged);
     _generation++;
     super.dispose();
@@ -110,6 +113,19 @@ class _DetailScreenState extends State<DetailScreen> {
               widget.store.watched(merged.id),
             ) ~/
             episodePageSize;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            generation != _generation ||
+            widget.resumeOnOpen ||
+            _loading ||
+            _error != null ||
+            (_detail?.episodes.isEmpty ?? true)) {
+          return;
+        }
+        if (_shouldAutofocusPlay(context)) {
+          _startPlayFocus.requestFocus();
+        }
       });
       widget.repository.catalogUpdates.publish(merged, retryCover: true);
       unawaited(_supplement(merged, generation));
@@ -264,6 +280,7 @@ class _DetailScreenState extends State<DetailScreen> {
         ? null
         : episodes[resumeIndex].number;
     final television = AppLayout.isTelevision(context);
+    final playAutofocus = _shouldAutofocusPlay(context);
     final allowed =
         widget.store.profileEpoch == _profileEpoch &&
         widget.store.allowsSource(drama.source);
@@ -432,7 +449,8 @@ class _DetailScreenState extends State<DetailScreen> {
                       Expanded(
                         child: FilledButton.icon(
                           key: const ValueKey('start-play'),
-                          autofocus: television,
+                          focusNode: playAutofocus ? _startPlayFocus : null,
+                          autofocus: playAutofocus,
                           style: FilledButton.styleFrom(
                             minimumSize: const Size(0, 52),
                             padding: const EdgeInsets.symmetric(
@@ -461,6 +479,11 @@ class _DetailScreenState extends State<DetailScreen> {
         ),
       ),
     );
+  }
+
+  bool _shouldAutofocusPlay(BuildContext context) {
+    return AppLayout.isTelevision(context) ||
+        (Platform.isAndroid && MediaQuery.sizeOf(context).width >= 840);
   }
 
   Widget _episodeStatus() {

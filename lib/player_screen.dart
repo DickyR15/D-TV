@@ -14,7 +14,6 @@ import 'app_theme.dart';
 import 'core_bridge.dart';
 import 'diary_service.dart';
 import 'playback_diagnostics.dart';
-import 'luna_exo_player.dart';
 import 'danmaku_controller.dart';
 import 'danmaku_overlay.dart';
 import 'follow_state.dart';
@@ -134,8 +133,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.optimized;
   // MPV-specific decoder properties must never be shown or applied when
   // Android is using the official video_player / ExoPlayer backend.
-  bool get _televisionDecoderApplies =>
-      Platform.isAndroid && _television && _player.platform is NativePlayer;
+  bool get _televisionDecoderApplies => Platform.isAndroid && _television;
   bool get _televisionRenderingApplies => Platform.isAndroid && _television;
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
@@ -193,23 +191,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmaku = DanmakuController(widget.repository)
       ..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
-    // On Android, route playback through Flutter's officially maintained
-    // video_player plugin (AndroidX ExoPlayer/Media3). Keep media_kit/MPV for
-    // platforms where video_player has no supported backend, such as Windows.
     _player =
         widget.playerFactory?.call() ??
-        (Platform.isAndroid
-            ? LunaExoPlayer()
-            : Player(
-                configuration: const PlayerConfiguration(
-                  bufferSize: 32 * 1024 * 1024,
-                  logLevel: MPVLogLevel.error,
-                ),
-              ));
-    DiaryService.add(
-      '[Player] backend=${_player is LunaExoPlayer ? 'video_player/ExoPlayer' : 'media_kit/MPV'}',
-    );
-    _video = widget.videoBuilder == null && _player is! LunaExoPlayer
+        Player(
+          configuration: const PlayerConfiguration(
+            bufferSize: 32 * 1024 * 1024,
+            logLevel: MPVLogLevel.error,
+          ),
+        );
+    DiaryService.add('[Player] backend=media_kit/MPV');
+    _video = widget.videoBuilder == null
         ? VideoController(
             _player,
             configuration: VideoControllerConfiguration(
@@ -1900,12 +1891,6 @@ class _PlayerScreenState extends State<PlayerScreen>
             children: [
               if (widget.videoBuilder != null)
                 widget.videoBuilder!(layeredControls)
-              else if (_player is LunaExoPlayer)
-                LunaExoVideoView(
-                  player: _player,
-                  fit: BoxFit.contain,
-                  controls: (_) => layeredControls,
-                )
               else
                 Video(
                   controller: _video!,

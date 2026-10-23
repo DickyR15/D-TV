@@ -7,7 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 export 'app_build.dart';
 
-const appVersion = '0.2.93';
+const appVersion = '0.2.94';
 
 ThemeData televisionTheme(ThemeData theme) {
   final colors = theme.colorScheme;
