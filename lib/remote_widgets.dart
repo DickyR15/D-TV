@@ -190,26 +190,41 @@ class _RemoteTargetState extends State<RemoteTarget> {
             duration: const Duration(milliseconds: 120),
             padding: widget.padding,
             decoration: BoxDecoration(
+              // Selected items are teal; focus stays a neutral surface with
+              // the existing orange outline. Both states remain visible when
+              // a selected item also has keyboard focus.
               color: widget.selected
-                  ? Theme.of(context).colorScheme.primaryContainer
-                  : _focused && widget.outlined
-                  ? Theme.of(context).colorScheme.surfaceContainerHighest
+                  ? Theme.of(context).colorScheme.secondaryContainer
                   : _focused
-                  ? Theme.of(context).colorScheme.primaryContainer
+                  ? Theme.of(context).colorScheme.surfaceContainerHighest
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(widget.radius),
               border: Border.all(
                 color: _focused
                     ? Theme.of(context).colorScheme.primary
                     : widget.selected
-                    ? Theme.of(context).colorScheme.primary
+                    ? Theme.of(context).colorScheme.secondary
                     : widget.outlined
                     ? Theme.of(context).colorScheme.outlineVariant
                     : Colors.transparent,
                 width: widget.borderWidth,
               ),
             ),
-            child: ExcludeFocus(child: widget.child),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(
+                color: widget.selected
+                    ? Theme.of(context).colorScheme.onSecondaryContainer
+                    : Theme.of(context).colorScheme.onSurface,
+              ),
+              child: IconTheme.merge(
+                data: IconThemeData(
+                  color: widget.selected
+                      ? Theme.of(context).colorScheme.onSecondaryContainer
+                      : Theme.of(context).colorScheme.onSurface,
+                ),
+                child: ExcludeFocus(child: widget.child),
+              ),
+            ),
           ),
         ),
       ),
@@ -260,6 +275,8 @@ class RemoteButton extends StatelessWidget {
               fontSize: 17,
               color: onPressed == null
                   ? Theme.of(context).disabledColor
+                  : selected
+                  ? Theme.of(context).colorScheme.onSecondaryContainer
                   : Theme.of(context).colorScheme.onSurface,
             ),
           ),

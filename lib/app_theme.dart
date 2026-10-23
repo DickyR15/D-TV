@@ -47,6 +47,18 @@ abstract final class AppTheme {
       onPrimaryContainer: dark
           ? const Color(0xFFFFE0D8)
           : const Color(0xFF4B160D),
+      secondary: dark
+          ? const Color(0xFF80CBC4)
+          : const Color(0xFF00695C),
+      onSecondary: dark
+          ? const Color(0xFF003731)
+          : Colors.white,
+      secondaryContainer: dark
+          ? const Color(0xFF064B45)
+          : const Color(0xFFCDEFE8),
+      onSecondaryContainer: dark
+          ? const Color(0xFFD0F4EE)
+          : const Color(0xFF003B33),
       tertiary: dark ? const Color(0xFFF6C86B) : const Color(0xFF805500),
       surface: dark ? const Color(0xFF16171B) : Colors.white,
       onSurface: dark ? const Color(0xFFF2F0F4) : const Color(0xFF252328),
@@ -84,6 +96,20 @@ abstract final class AppTheme {
         systemOverlayStyle: systemBars(brightness),
       ),
       dividerTheme: DividerThemeData(color: scheme.outlineVariant),
+      chipTheme: ChipThemeData(
+        backgroundColor: scheme.surfaceContainer,
+        selectedColor: scheme.secondaryContainer,
+        labelStyle: TextStyle(color: scheme.onSurface),
+        secondaryLabelStyle: TextStyle(
+          color: scheme.onSecondaryContainer,
+          fontWeight: FontWeight.w700,
+        ),
+        checkmarkColor: scheme.onSecondaryContainer,
+        side: BorderSide(color: scheme.outlineVariant),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: background,
         useIndicator: false,

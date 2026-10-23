@@ -16,9 +16,12 @@ ThemeData televisionTheme(ThemeData theme) {
         ? BorderSide(color: colors.primary, width: 3)
         : null,
   );
+  // Focus is a navigation state, not a selected state. Keep its fill neutral
+  // and use the orange border as a clear focus marker.
   final focusBackground = WidgetStateProperty.resolveWith<Color?>(
-    (states) =>
-        states.contains(WidgetState.focused) ? colors.primaryContainer : null,
+    (states) => states.contains(WidgetState.focused)
+        ? colors.surfaceContainerHighest
+        : null,
   );
   final button = ButtonStyle(
     side: focusSide,
@@ -26,7 +29,7 @@ ThemeData televisionTheme(ThemeData theme) {
     textStyle: const WidgetStatePropertyAll(TextStyle(fontSize: 17)),
   );
   return theme.copyWith(
-    focusColor: colors.primaryContainer,
+    focusColor: colors.surfaceContainerHighest,
     iconButtonTheme: IconButtonThemeData(
       style: button.copyWith(backgroundColor: focusBackground),
     ),

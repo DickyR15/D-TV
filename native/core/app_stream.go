@@ -52,8 +52,23 @@ type nativeStreamServer struct {
 	server     *http.Server
 }
 
+const nativeStreamResponseHeaderTimeout = 10 * time.Second
+
+func newNativeStreamTransport(base *http.Transport) *http.Transport {
+	transport := base.Clone()
+	transport.DisableKeepAlives = true
+	transport.MaxIdleConns = 0
+	transport.MaxIdleConnsPerHost = 0
+	transport.ResponseHeaderTimeout = nativeStreamResponseHeaderTimeout
+	return transport
+}
+
 func (stream *nativeStreamServer) nativeRequest(request *http.Request) (*http.Response, error) {
-	client := *stream.downloader.client
+	sourceClient := stream.downloader.streamClient
+	if sourceClient == nil {
+		sourceClient = stream.downloader.client
+	}
+	client := *sourceClient
 	client.Timeout = 0
 	info, _ := request.Context().Value(nativeStreamDiagnosticKey{}).(nativeStreamDiagnostic)
 	if info.started.IsZero() {

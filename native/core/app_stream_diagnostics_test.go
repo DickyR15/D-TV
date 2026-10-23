@@ -240,3 +240,23 @@ func TestNativeStreamDiagnosticsCancellationAndHTTPFailure(t *testing.T) {
 		t.Fatal("deadline classification lost")
 	}
 }
+
+func TestNativeStreamTransportUsesFreshConnectionsAndShortHeaderTimeout(t *testing.T) {
+	base := &http.Transport{
+		MaxIdleConnsPerHost: 8,
+		ResponseHeaderTimeout: 20 * time.Second,
+	}
+	stream := newNativeStreamTransport(base)
+	if !stream.DisableKeepAlives {
+		t.Fatal("native media transport should not reuse idle upstream connections")
+	}
+	if stream.ResponseHeaderTimeout != nativeStreamResponseHeaderTimeout {
+		t.Fatalf("response header timeout=%s, want %s", stream.ResponseHeaderTimeout, nativeStreamResponseHeaderTimeout)
+	}
+	if stream.MaxIdleConns != 0 || stream.MaxIdleConnsPerHost != 0 {
+		t.Fatalf("native media transport unexpectedly retains idle connections: global=%d per-host=%d", stream.MaxIdleConns, stream.MaxIdleConnsPerHost)
+	}
+	if base.DisableKeepAlives || base.ResponseHeaderTimeout != 20*time.Second || base.MaxIdleConnsPerHost != 8 {
+		t.Fatal("creating the native media transport mutated the shared transport")
+	}
+}

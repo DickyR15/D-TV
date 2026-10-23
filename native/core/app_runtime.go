@@ -48,6 +48,7 @@ type Downloader struct {
 	rankings              rankingCache
 	cfg                   Config
 	client                *http.Client
+	streamClient          *http.Client
 	huangdouDetails       map[string]huangdouDetailEntry
 	huangdouDetailPending map[string]*huangdouDetailCall
 	providerMu            sync.Mutex
@@ -266,16 +267,27 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	transport.ResponseHeaderTimeout = 20 * time.Second
 	transport.Proxy = router.proxy
 	cdn := newCDNTransport(transport, newDNSResolver(transport))
-	d.client = &http.Client{Transport: newHuangguoBrowserTransport(cdn, d), Timeout: 45 * time.Second,
-		CheckRedirect: func(request *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return errors.New("站源重定向次数过多")
-			}
-			if len(via) > 0 && !strings.EqualFold(request.URL.Host, via[0].URL.Host) {
-				request.Header.Del("X-Preview-Token")
-			}
-			return nil
-		}}
+	checkRedirect := func(request *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("站源重定向次数过多")
+		}
+		if len(via) > 0 && !strings.EqualFold(request.URL.Host, via[0].URL.Host) {
+			request.Header.Del("X-Preview-Token")
+		}
+		return nil
+	}
+	d.client = &http.Client{
+		Transport: newHuangguoBrowserTransport(cdn, d),
+		Timeout: 45 * time.Second,
+		CheckRedirect: checkRedirect,
+	}
+	streamTransport := newNativeStreamTransport(transport)
+	streamCDN := newCDNTransport(streamTransport, newDNSResolver(streamTransport))
+	d.streamClient = &http.Client{
+		Transport: newHuangguoBrowserTransport(streamCDN, d),
+		Timeout: 45 * time.Second,
+		CheckRedirect: checkRedirect,
+	}
 	engine := &nativeEngine{downloader: d, directory: directory, catalogs: map[string][]nativeDrama{}, catalogStates: map[string]nativeCatalogState{}}
 	engine.loadResourceSettings()
 	d.loadRankingCache()
