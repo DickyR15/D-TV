@@ -33,10 +33,10 @@ class SourceHealth {
   final String state, sample;
   final List<SourceHealthStep> steps;
   String get label => switch (state) {
-    'ok' => '連線檢測透過',
+    'ok' => '連線檢測通過',
     'catalogOnly' => '目錄正常 · 播放未檢測',
     'checking' => '檢測中',
-    'failed' => '檢測未透過',
+    'failed' => '檢測未通過',
     _ => '尚未檢測',
   };
 }

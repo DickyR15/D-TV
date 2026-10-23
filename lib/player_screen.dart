@@ -42,6 +42,10 @@ const _androidPlayerEngine = String.fromEnvironment(
   defaultValue: 'mpv_embed',
 );
 
+// Never leave the loading overlay spinning indefinitely if MPV does not
+// complete the file-open future for an unavailable or stalled upstream stream.
+const _playbackOpenTimeout = Duration(seconds: 25);
+
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     super.key,
@@ -387,10 +391,10 @@ class _PlayerScreenState extends State<PlayerScreen>
           _error == null &&
           _health.stalled(
             position: _player.state.position,
-            // A stalled network stream may enter buffering and flip
-            // playing=false; still let the health watchdog detect it.
-            playing: _playIntent &&
-                (_player.state.playing || _player.state.buffering),
+            // Use the user's playback intent, not MPV's transient playing /
+            // buffering flags. Those native flags may flicker during a network
+            // stall and repeatedly reset the watchdog.
+            intendedToPlay: _playIntent && !_player.state.completed,
             foreground: _foreground,
             now: DateTime.now(),
           )) {
@@ -1167,6 +1171,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     PlaybackPlan? prepared;
     PlaybackPlan? retained;
     bool installed = false;
+    var openTimedOut = false;
     try {
       final cleanupClock = Stopwatch()..start();
       await _serialize(() async {
@@ -1211,6 +1216,19 @@ class _PlayerScreenState extends State<PlayerScreen>
             );
       resolveMs = resolveClock.elapsedMilliseconds;
       if (prepared == null) {
+        // A superseded request should stay silent, but a null result for the
+        // current request must not leave the loading overlay spinning forever.
+        if (mounted && !_closed && ticket == _generation) {
+          DiaryService.add(
+            '[Play] empty_plan generation=$ticket resolveMs=$resolveMs',
+          );
+          _loadingOverlayTimer?.cancel();
+          setState(() {
+            _loading = false;
+            _showLoadingOverlay = false;
+            _error = '沒有取得可播放的影片網址，請重試或更換片源。';
+          });
+        }
         return;
       }
       final plan = prepared;
@@ -1324,16 +1342,33 @@ class _PlayerScreenState extends State<PlayerScreen>
           '[Play] open generation=$ticket route=${plan.routeIndex}/${plan.routeCount} session=${playbackDiagnosticId(plan.session)} url=${playbackDiagnosticUrl(plan.url)} headers=${plan.headers.keys.toList()}',
         );
         final openClock = Stopwatch()..start();
-        await _player.open(
-          Media(
-            plan.url,
-            httpHeaders: plan.headers,
-            start: position > 0
-                ? Duration(milliseconds: (position * 1000).round())
-                : null,
-          ),
-          play: _foreground && _playIntent,
-        );
+        await _player
+            .open(
+              Media(
+                plan.url,
+                httpHeaders: plan.headers,
+                start: position > 0
+                    ? Duration(milliseconds: (position * 1000).round())
+                    : null,
+              ),
+              play: _foreground && _playIntent,
+            )
+            .timeout(
+              _playbackOpenTimeout,
+              onTimeout: () async {
+                openTimedOut = true;
+                // Stop the pending native load before the existing recovery
+                // pipeline switches routes or recreates the player.
+                try {
+                  await _player
+                      .stop()
+                      .timeout(const Duration(seconds: 2));
+                } catch (_) {}
+                throw TimeoutException(
+                  'MPV 開啟串流超過 ${_playbackOpenTimeout.inSeconds} 秒',
+                );
+              },
+            );
         openMs = openClock.elapsedMilliseconds;
         if (_closed || ticket != _generation) {
           return;
@@ -1366,7 +1401,16 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (!_closed && mounted && ticket == _generation) {
         if (prepared != null && identical(_plan, prepared)) {
           _acceptErrors = true;
-          _queueRecovery(reason: 'open_exception');
+          if (openTimedOut) {
+            DiaryService.add(
+              '[Recovery] open_timeout generation=$ticket timeoutMs=${_playbackOpenTimeout.inMilliseconds}',
+            );
+            // A confirmed open stall should immediately use the existing
+            // alternate-route/player-recreation flow.
+            unawaited(_recover(reason: 'open_timeout'));
+          } else {
+            _queueRecovery(reason: 'open_exception');
+          }
         } else {
           if (prepared != null) {
             await _releasePlayback(prepared.session, 'failed_preparation');

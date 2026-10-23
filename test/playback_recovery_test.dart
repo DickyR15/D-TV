@@ -1,5 +1,5 @@
-import 'package:duanju_app/models.dart';
-import 'package:duanju_app/playback_recovery.dart';
+import 'package:hgtv/models.dart';
+import 'package:hgtv/playback_recovery.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -77,12 +77,12 @@ void main() {
       final start = DateTime(2026, 9, 18);
       bool stalled(
         int seconds, {
-        bool playing = true,
+        bool intendedToPlay = true,
         bool foreground = true,
         int position = 5,
       }) => health.stalled(
         position: Duration(seconds: position),
-        playing: playing,
+        intendedToPlay: intendedToPlay,
         foreground: foreground,
         now: start.add(Duration(seconds: seconds)),
       );
@@ -91,8 +91,8 @@ void main() {
       expect(stalled(20), isTrue);
       expect(stalled(21, position: 6), isFalse);
       expect(stalled(40, position: 6), isFalse);
-      expect(stalled(60, playing: false, position: 6), isFalse);
-      expect(stalled(80, playing: false, position: 6), isFalse);
+      expect(stalled(60, intendedToPlay: false, position: 6), isFalse);
+      expect(stalled(80, intendedToPlay: false, position: 6), isFalse);
       expect(stalled(100, foreground: false, position: 6), isFalse);
       expect(stalled(101, position: 6), isFalse);
       health.reset();

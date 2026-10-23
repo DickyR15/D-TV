@@ -55,7 +55,7 @@ jobs:
       - name: Test Taiwan Traditional Chinese conversion
         run: |
           flutter pub get
-          flutter test test/ui_localization_test.dart test/playback_preferences_test.dart test/resume_episode_test.dart test/catalog_categories_test.dart test/remote_text_input_test.dart
+          flutter test test/ui_localization_test.dart test/playback_preferences_test.dart test/resume_episode_test.dart test/catalog_categories_test.dart test/remote_text_input_test.dart test/playback_recovery_test.dart test/source_status_test.dart
       - name: Test native core
         working-directory: native
         run: go test ./...

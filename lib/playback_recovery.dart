@@ -40,11 +40,11 @@ class PlaybackHealth {
 
   bool stalled({
     required Duration position,
-    required bool playing,
+    required bool intendedToPlay,
     required bool foreground,
     required DateTime now,
   }) {
-    if (!playing || !foreground || position != _position) {
+    if (!intendedToPlay || !foreground || position != _position) {
       _position = position;
       _lastProgress = now;
       return false;
