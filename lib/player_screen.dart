@@ -136,6 +136,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   // Android is using the official video_player / ExoPlayer backend.
   bool get _televisionDecoderApplies =>
       Platform.isAndroid && _television && _player.platform is NativePlayer;
+  bool get _televisionRenderingApplies => Platform.isAndroid && _television;
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
       _pictureInPictureActive || _pictureInPictureRequested;
@@ -1518,7 +1519,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() => _panelOpen = true);
     TelevisionPlaybackSetting? selection;
     try {
-      final compatibleRendering = _televisionDecoderApplies
+      final compatibleRendering = _televisionRenderingApplies
           ? await AppDevice.compatibleRendering()
           : null;
       if (!context.mounted || _closed) return;
