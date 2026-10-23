@@ -423,10 +423,10 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // First Back press returns to New Drama and shows a SmartTube-style toast.
-    if (_tab != 0) {
-      _selectCatalogTab(0);
-      _navigationFocusNodes[0]?.requestFocus();
+    // First Back press returns to Redfruit Hot and shows a SmartTube-style toast.
+    if (_tab != 4) {
+      _selectNavigationDestination(4);
+      _navigationFocusNodes[4]?.requestFocus();
     }
     _lastBackAt = now;
     final messenger = ScaffoldMessenger.of(context);
@@ -499,6 +499,19 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       _loading = false;
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialTabResolved) return;
+    _initialTabResolved = true;
+
+    // Large-screen layouts open directly on the Redfruit Hot ranking.
+    // Narrow/mobile layouts keep the catalog tab so bottom navigation remains valid.
+    final wideHome = AppLayout.isTelevision(context) ||
+        MediaQuery.sizeOf(context).width >= 840;
+    if (wideHome) _tab = 4;
   }
 
   @override
