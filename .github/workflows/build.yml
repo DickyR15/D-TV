@@ -1,5 +1,5 @@
 name: Build D TV Android v7a
-run-name: 'D TV Android v7a v0.2.114+126 Playback Route Probe + Category Performance'
+run-name: 'D TV Android v7a v0.2.115+127 Multi-Model Fallback + MPV Embed Only'
 
 on:
   workflow_dispatch:
@@ -119,23 +119,10 @@ jobs:
           output="dist/android/D TV-Android-v7a_v${version}_MPV.apk"
           cp "$apk" "$output"
           echo "Built official default (MPV Embed): $output"
-      - name: Build Standard MPV diagnostic APK (armeabi-v7a, not default)
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/build_android.py --abi armeabi-v7a --player-engine mpv
-          version_full=$(sed -n "s/^version: *['\"]\?\([^'\"]*\)['\"]\?$/\1/p" pubspec.yaml | head -n1)
-          version="${version_full%%+*}"
-          apk=$(find dist/android -maxdepth 1 -type f -name "*-${version_full}-armeabi-v7a.apk" -print -quit)
-          test -n "$apk" && test -f "$apk"
-          output="dist/android/D TV-Android-v7a_v${version}_MPV-Standard-Test.apk"
-          cp "$apk" "$output"
-          echo "Built comparison only (standard MPV): $output"
       - uses: actions/upload-artifact@v4
         with:
           name: D TV-Android-v7a-MPV-Embed-Default
           path: |
             dist/android/D TV-Android-v7a_v*_MPV.apk
-            dist/android/D TV-Android-v7a_v*_MPV-Standard-Test.apk
           if-no-files-found: error
           retention-days: 14
