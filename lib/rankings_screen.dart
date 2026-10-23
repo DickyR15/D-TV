@@ -438,9 +438,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
     );
   }
 
-  /// Match the category poster grid to the standard TV poster grid cell.
+  /// Keep ranking poster density in sync with the wide category grid.
   int _posterColumns(double width) =>
-      ((width - 36) / 150).floor().clamp(1, 8);
+      width >= 620 ? 5 : width >= 420 ? 3 : 2;
 
   Widget _rankingGrid(List<RankingItem> items, double width) {
     final television = AppLayout.isTelevision(context);
