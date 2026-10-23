@@ -5,14 +5,14 @@ import 'package:hgtv/app_theme.dart';
 import 'package:hgtv/remote_widgets.dart';
 
 void main() {
-  test('selected chips use a teal container distinct from the orange focus palette', () {
+  test('selected chips use a teal container distinct from the blue-cyan focus palette', () {
     for (final theme in [AppTheme.light, AppTheme.dark]) {
       expect(theme.chipTheme.selectedColor, theme.colorScheme.secondaryContainer);
       expect(theme.colorScheme.secondaryContainer, isNot(theme.colorScheme.primaryContainer));
     }
   });
 
-  testWidgets('TV selected state stays teal while focus uses a neutral fill and orange outline', (tester) async {
+  testWidgets('TV selected state stays teal while focus uses a neutral fill and blue-cyan outline', (tester) async {
     const selectedKey = ValueKey('selected-option');
     const focusKey = ValueKey('focus-only-option');
     final focusNode = FocusNode(debugLabel: 'focus-only-option');
@@ -67,4 +67,27 @@ void main() {
     expect(focusedDecoration.border!.top.color, colors.primary);
     expect(selectedDecoration.color, isNot(focusedDecoration.color));
   });
+
+  testWidgets('selected remote buttons show an explicit check indicator', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: const Scaffold(
+          body: Center(
+            child: RemoteButton(
+              label: '高清',
+              selected: true,
+              onPressed: _noop,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+  });
 }
+
+void _noop() {}

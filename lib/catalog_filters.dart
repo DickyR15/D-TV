@@ -72,18 +72,27 @@ class _CatalogFiltersState extends State<CatalogFilters> {
                         key: ValueKey('category-${entry.id}'),
                         label: Text(uiTraditional(entry.name)),
                         selected: entry.id == widget.category,
-                        showCheckmark: false,
+                        showCheckmark: true,
                         side: television
-                            ? WidgetStateBorderSide.resolveWith(
-                                (states) => states.contains(WidgetState.focused)
-                                    ? BorderSide(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                        width: 3,
-                                      )
-                                    : null,
-                              )
+                            ? WidgetStateBorderSide.resolveWith((states) {
+                                final colors = Theme.of(context).colorScheme;
+                                if (states.contains(WidgetState.focused)) {
+                                  return BorderSide(
+                                    color: colors.primary,
+                                    width: 3,
+                                  );
+                                }
+                                if (states.contains(WidgetState.selected)) {
+                                  return BorderSide(
+                                    color: colors.secondary,
+                                    width: 2,
+                                  );
+                                }
+                                return BorderSide(
+                                  color: colors.outlineVariant,
+                                  width: 1,
+                                );
+                              })
                             : null,
                         onSelected: (_) => widget.onCategory(entry.id),
                       ),

@@ -37,16 +37,16 @@ abstract final class AppTheme {
     final dark = brightness == Brightness.dark;
     final background = dark ? const Color(0xFF101114) : const Color(0xFFFAF8F6);
     final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFFFF664F),
+      seedColor: const Color(0xFF0097C2),
       brightness: brightness,
-      primary: dark ? const Color(0xFFFF765F) : const Color(0xFFAD3826),
-      onPrimary: dark ? const Color(0xFF3B0E07) : Colors.white,
+      primary: dark ? const Color(0xFF6CD9F0) : const Color(0xFF006B87),
+      onPrimary: dark ? const Color(0xFF003642) : Colors.white,
       primaryContainer: dark
-          ? const Color(0xFF5C3027)
-          : const Color(0xFFFFE0D8),
+          ? const Color(0xFF004D60)
+          : const Color(0xFFCBF3FF),
       onPrimaryContainer: dark
-          ? const Color(0xFFFFE0D8)
-          : const Color(0xFF4B160D),
+          ? const Color(0xFFC7F4FF)
+          : const Color(0xFF001F28),
       secondary: dark
           ? const Color(0xFF80CBC4)
           : const Color(0xFF00695C),

@@ -190,9 +190,8 @@ class _RemoteTargetState extends State<RemoteTarget> {
             duration: const Duration(milliseconds: 120),
             padding: widget.padding,
             decoration: BoxDecoration(
-              // Selected items are teal; focus stays a neutral surface with
-              // the existing orange outline. Both states remain visible when
-              // a selected item also has keyboard focus.
+              // Selection uses a teal fill; keyboard focus uses a blue-cyan outline.
+              // They remain visually distinct even when both states are active.
               color: widget.selected
                   ? Theme.of(context).colorScheme.secondaryContainer
                   : _focused
@@ -280,6 +279,10 @@ class RemoteButton extends StatelessWidget {
                   : Theme.of(context).colorScheme.onSurface,
             ),
           ),
+          if (selected) ...[
+            const SizedBox(width: 8),
+            const Icon(Icons.check_circle_rounded, size: 18),
+          ],
         ],
       ),
     ),
