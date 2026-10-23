@@ -1,5 +1,5 @@
 name: Build D TV Android v7a
-run-name: 'D TV Android v7a v0.2.110+122 TV Back Navigation + Stream Optimization'
+run-name: 'D TV Android v7a v0.2.111+123 DPad Focus Routing Fix'
 
 on:
   workflow_dispatch:

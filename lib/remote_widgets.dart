@@ -269,6 +269,17 @@ class RemoteButton extends StatelessWidget {
   );
 }
 
+/// Explicit entry point for the first poster in a TV grid.
+class RemoteGridFocusController {
+  Object? _owner;
+  VoidCallback? _focusFirst;
+  bool get hasItems => _focusFirst != null;
+  void focusFirst() => _focusFirst?.call();
+  void clear() { _owner = null; _focusFirst = null; }
+  void _bind(Object owner, VoidCallback? callback) { _owner = owner; _focusFirst = callback; }
+  void _unbind(Object owner) { if (identical(_owner, owner)) { _owner = null; _focusFirst = null; } }
+}
+
 class RemoteGrid extends StatefulWidget {
   const RemoteGrid({
     super.key,
@@ -282,6 +293,8 @@ class RemoteGrid extends StatefulWidget {
     this.footer,
     this.initialIndex = 0,
     this.autofocus = false,
+    this.focusController,
+    this.onExitLeft,
   });
   final List<String> itemKeys;
   final int columns;
@@ -292,6 +305,8 @@ class RemoteGrid extends StatefulWidget {
   final Widget? footer;
   final int initialIndex;
   final bool autofocus;
+  final RemoteGridFocusController? focusController;
+  final VoidCallback? onExitLeft;
   final Widget Function(BuildContext, int, FocusNode, VoidCallback) itemBuilder;
 
   @override
@@ -301,10 +316,20 @@ class RemoteGrid extends StatefulWidget {
 class _RemoteGridState extends State<RemoteGrid> {
   final _ownScroll = ScrollController();
   final _nodes = <String, FocusNode>{};
+  final Object _focusControllerOwner = Object();
   String? _focused;
   String? _target;
   int _generation = 0;
   ScrollController get _scroll => widget.controller ?? _ownScroll;
+
+  void _syncFocusController() {
+    widget.focusController?._bind(
+      _focusControllerOwner,
+      widget.itemKeys.isEmpty ? null : () {
+        if (mounted && widget.itemKeys.isNotEmpty) _focusAt(0);
+      },
+    );
+  }
 
   FocusNode _node(int index) => _nodes.putIfAbsent(
     widget.itemKeys[index],
@@ -314,6 +339,7 @@ class _RemoteGridState extends State<RemoteGrid> {
   @override
   void initState() {
     super.initState();
+    _syncFocusController();
     if (widget.autofocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && widget.itemKeys.isNotEmpty) {
@@ -423,7 +449,12 @@ class _RemoteGridState extends State<RemoteGrid> {
       }
       next = index + 1;
     } else if (key == LogicalKeyboardKey.arrowLeft) {
-      if (index % widget.columns == 0) return KeyEventResult.ignored;
+      if (index % widget.columns == 0) {
+        final exitLeft = widget.onExitLeft;
+        if (exitLeft == null) return KeyEventResult.ignored;
+        exitLeft();
+        return KeyEventResult.handled;
+      }
       next = index - 1;
     } else {
       return KeyEventResult.ignored;
@@ -438,6 +469,11 @@ class _RemoteGridState extends State<RemoteGrid> {
   @override
   void didUpdateWidget(covariant RemoteGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusController != widget.focusController) {
+      oldWidget.focusController?._unbind(_focusControllerOwner);
+    }
+    _syncFocusController();
+    if (widget.itemKeys.isEmpty) widget.focusController?.clear();
     final removed = _nodes.keys
         .where((key) => !widget.itemKeys.contains(key))
         .toList();
@@ -463,6 +499,7 @@ class _RemoteGridState extends State<RemoteGrid> {
   @override
   void dispose() {
     _generation++;
+    widget.focusController?._unbind(_focusControllerOwner);
     for (final node in _nodes.values) {
       node.dispose();
     }

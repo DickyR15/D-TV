@@ -24,12 +24,14 @@ class RankingsScreen extends StatefulWidget {
     required this.initialGroup,
     this.initialBoardId,
     this.embedded = false,
+    this.onExitLeft,
   });
   final AppRepository repository;
   final LocalStore store;
   final String initialGroup;
   final String? initialBoardId;
   final bool embedded;
+  final VoidCallback? onExitLeft;
 
   @override
   State<RankingsScreen> createState() => _RankingsScreenState();
@@ -468,9 +470,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
           12,
         ),
         controller: _scroll,
-        // Keep focus on the left navigation while switching ranking tabs.
-        // ArrowRight explicitly enters the poster grid.
+        // Return left-edge focus to the active ranking in the side navigation.
         autofocus: false,
+        onExitLeft: widget.onExitLeft,
         itemBuilder: (context, index, focusNode, onFocus) => _rankingTile(
           items[index],
           posterWidth: posterWidth - 4,

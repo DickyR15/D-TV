@@ -19,6 +19,9 @@ class SavedLibrary extends StatefulWidget {
     required this.history,
     required this.onOpen,
     required this.onContinue,
+    this.gridFocusController,
+    this.searchFocusNode,
+    this.onExitLeft,
   });
 
   final AppRepository repository;
@@ -26,6 +29,9 @@ class SavedLibrary extends StatefulWidget {
   final bool history;
   final ValueChanged<Drama> onOpen;
   final ValueChanged<Drama> onContinue;
+  final RemoteGridFocusController? gridFocusController;
+  final FocusNode? searchFocusNode;
+  final VoidCallback? onExitLeft;
 
   @override
   State<SavedLibrary> createState() => _SavedLibraryState();
@@ -145,6 +151,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                 widget.history ? 'history-search' : 'favorites-search',
               ),
               controller: _search,
+              focusNode: widget.searchFocusNode,
               onChanged: (_) => setState(() {}),
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
@@ -186,6 +193,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
             ),
           ),
       ];
+      if (items.isEmpty) widget.gridFocusController?.clear();
       final empty = StatusPanel(
         title: all.isEmpty
             ? widget.history
@@ -226,6 +234,8 @@ class _SavedLibraryState extends State<SavedLibrary> {
                           ),
                           itemKeys: items.map((item) => item.id).toList(),
                           columns: columns,
+                          focusController: widget.gridFocusController,
+                          onExitLeft: widget.onExitLeft,
                           itemExtent: DramaTile.extentFor(
                                 context,
                                 tileWidth - 4,

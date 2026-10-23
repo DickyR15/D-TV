@@ -45,6 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final _search = TextEditingController();
   final _scroll = ScrollController();
   final Map<int, FocusNode> _navigationFocusNodes = {};
+  final RemoteGridFocusController _savedGridFocus = RemoteGridFocusController();
+  final FocusNode _savedSearchFocusNode = FocusNode(debugLabel: 'saved-library-search');
   Timer? _debounce;
   late SourceSite _source;
   bool _allSources = false;
@@ -554,6 +556,7 @@ class _HomeScreenState extends State<HomeScreen> {
       node.dispose();
     }
     _navigationFocusNodes.clear();
+    _savedSearchFocusNode.dispose();
     super.dispose();
   }
 
@@ -1170,6 +1173,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           initialGroup: 'hongguo',
                           initialBoardId: _rankingBoardId,
                           embedded: true,
+                          onExitLeft: _focusCurrentNavigation,
                         )
                       : _tab == 9
                       ? SettingsScreen(
@@ -1185,6 +1189,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           onOpen: _openDrama,
                           onContinue: (drama) =>
                               _openDrama(drama, resume: true),
+                          gridFocusController: _savedGridFocus,
+                          searchFocusNode: _savedSearchFocusNode,
+                          onExitLeft: _focusCurrentNavigation,
                         ),
                 ),
               ],
@@ -1438,6 +1445,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (shouldReload) _load(useCache: true);
   }
 
+  void _focusCurrentNavigation() {
+    _navigationFocusNodes[_tab]?.requestFocus();
+  }
+
   void _selectNavigationDestination(int tab) {
     if (tab == 0 || tab == 8) {
       _selectCatalogTab(tab);
@@ -1495,6 +1506,15 @@ class _HomeScreenState extends State<HomeScreen> {
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowRight) {
+        if (_tab == 1 || _tab == 2) {
+          // Enter the first poster directly; only use search when there are no matches.
+          if (_savedGridFocus.hasItems) {
+            _savedGridFocus.focusFirst();
+          } else {
+            _savedSearchFocusNode.requestFocus();
+          }
+          return KeyEventResult.handled;
+        }
         FocusScope.of(context).focusInDirection(TraversalDirection.right);
         return KeyEventResult.handled;
       }
@@ -1859,6 +1879,7 @@ class _HomeScreenState extends State<HomeScreen> {
       itemExtent: DramaTile.extentFor(context, tileWidth - 14) + 14,
       controller: controller,
       footer: footer,
+      onExitLeft: _focusCurrentNavigation,
       padding: const EdgeInsets.fromLTRB(18, 2, 18, 18),
       itemBuilder: (_, index, node, onFocus) =>
           _catalogTile(items[index], focusNode: node, onFocus: onFocus),
