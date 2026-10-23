@@ -11,8 +11,8 @@ from app_build import BuildVariant, add_variant_argument
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument('--abi', action='append', choices=['arm64-v8a', 'armeabi-v7a', 'x86_64'])
-parser.add_argument('--player-engine', choices=['mpv', 'exo', 'mpv_embed'], default='mpv',
-                    help='Android 播放引擎：exo 或 MPV mediacodec_embed 測試模式')
+parser.add_argument('--player-engine', choices=['mpv', 'exo', 'mpv_embed'], default='mpv_embed',
+                    help='Android 播放引擎：預設使用已在 Android TV 驗證的 MPV mediacodec_embed 路徑；mpv 僅作對照測試')
 add_variant_argument(parser)
 options = parser.parse_args()
 variant = BuildVariant(options.all_sources)

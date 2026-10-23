@@ -1,5 +1,12 @@
 # 更新日誌
 
+## 0.2.106+118
+
+- 依 Onn. 4K Pro 實測結果，正式 Android 預設播放器改為已正常播放的 MPV Embed（mediacodec_embed 原生 Surface）。
+- APK 預設檔名 `D TV-Android-v7a_v0.2.106_MPV.apk` 現在代表 MPV Embed 穩定路徑；標準 MPV 另命名為 `MPV-Standard-Test.apk`，只供影音同步對照，不再當作正式預設版。
+- `scripts/build_android.py` 與未指定 `DTV_ANDROID_PLAYER` 的 Android 編譯同樣預設 MPV Embed，避免後續手動建置意外回到已知異常路徑。
+- 保留標準 MPV 診斷版與實際播放 Log，供日後比較 Surface／GPU 輸出差異。
+
 ## 0.2.105+117
 
 - 修正 Android TV 左側導覽列焦點捲動定位，避免從底部往上回到「最近觀看」時，焦點項目被頂部品牌區遮擋。

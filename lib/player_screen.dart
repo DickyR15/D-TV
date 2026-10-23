@@ -38,7 +38,8 @@ import 'video_output_size.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
-  defaultValue: 'mpv',
+  // Prefer the Android native Surface route verified on Onn. 4K Pro.
+  defaultValue: 'mpv_embed',
 );
 
 class PlayerScreen extends StatefulWidget {
