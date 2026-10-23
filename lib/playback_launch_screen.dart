@@ -79,6 +79,7 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
   @override
   void dispose() {
     _generation++;
+    _loadingTimer?.cancel();
     super.dispose();
   }
 
@@ -190,13 +191,6 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
         retryCover: true,
       );
     }
-  }
-
-  @override
-  void dispose() {
-    _generation++;
-    _loadingTimer?.cancel();
-    super.dispose();
   }
 
   @override
