@@ -189,6 +189,13 @@ abstract class AppRepository {
   Future<void> release(String session);
 }
 
+class _DramaDetailCacheEntry {
+  _DramaDetailCacheEntry(this.future);
+  final Future<DramaDetail> future;
+  bool completed = false;
+  DateTime expiresAt = DateTime.fromMillisecondsSinceEpoch(0);
+}
+
 class NativeRepository extends AppRepository {
   static final _coverDecoder = CoverDecoder();
   static final _coverPaths = <String, String>{};
@@ -198,6 +205,7 @@ class NativeRepository extends AppRepository {
   final _readOwner = DateTime.now().microsecondsSinceEpoch.toString();
   int _readSequence = 0;
   final _activeReads = <String, int>{};
+  final _detailCache = <String, _DramaDetailCacheEntry>{};
 
   @override
   Future<Map<String, dynamic>> lan(
@@ -747,9 +755,58 @@ class NativeRepository extends AppRepository {
   }
 
   @override
-  Future<DramaDetail> detail(Drama drama) async => DramaDetail.fromJson(
-    await _call({'action': 'detail', 'drama': drama.toJson()}),
-  );
+  Future<DramaDetail> detail(Drama drama) {
+    _authorize(drama.source);
+    final epoch = access?.profileEpoch ?? -1;
+    final key = '$epoch\u0000${drama.source}\u0000${drama.id}';
+    final now = DateTime.now();
+    final cached = _detailCache[key];
+    if (cached != null &&
+        (!cached.completed || now.isBefore(cached.expiresAt))) {
+      return cached.future;
+    }
+    _detailCache.remove(key);
+
+    final completer = Completer<DramaDetail>();
+    final entry = _DramaDetailCacheEntry(completer.future);
+    _detailCache[key] = entry;
+    _pruneDetailCache(keepKey: key);
+    unawaited(() async {
+      try {
+        final value = DramaDetail.fromJson(
+          await _call({'action': 'detail', 'drama': drama.toJson()}),
+        );
+        if ((access?.profileEpoch ?? -1) != epoch) {
+          throw AppFailure('使用者已切換，請重新操作');
+        }
+        entry.completed = true;
+        entry.expiresAt = DateTime.now().add(const Duration(seconds: 20));
+        completer.complete(value);
+      } catch (error, stack) {
+        if (identical(_detailCache[key], entry)) _detailCache.remove(key);
+        completer.completeError(error, stack);
+      }
+    }());
+    return entry.future;
+  }
+
+  void _pruneDetailCache({required String keepKey}) {
+    final now = DateTime.now();
+    _detailCache.removeWhere(
+      (key, entry) =>
+          key != keepKey &&
+          entry.completed &&
+          !now.isBefore(entry.expiresAt),
+    );
+    while (_detailCache.length > 80) {
+      final removable = _detailCache.keys.firstWhere(
+        (key) => key != keepKey && (_detailCache[key]?.completed ?? false),
+        orElse: () => keepKey,
+      );
+      if (removable == keepKey) break;
+      _detailCache.remove(removable);
+    }
+  }
   @override
   Future<PlaybackPlan> resolve(
     Drama drama,

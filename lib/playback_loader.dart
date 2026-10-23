@@ -7,6 +7,7 @@ class PlaybackLoader {
   final AppRepository repository;
   int _generation = 0;
   bool _closed = false;
+  bool _hasIssuedRequest = false;
 
   Future<PlaybackPlan?> load(
     Drama drama,
@@ -39,8 +40,12 @@ class PlaybackLoader {
       return null;
     }
     final generation = ++_generation;
+    final cancelPrevious = _hasIssuedRequest;
+    _hasIssuedRequest = true;
     try {
-      await repository.cancelPlayback();
+      // A brand-new player has no earlier resolver to cancel. Skip this
+      // native round trip on cold start; later requests still cancel stale work.
+      if (cancelPrevious) await repository.cancelPlayback();
       if (_closed || generation != _generation) {
         return null;
       }

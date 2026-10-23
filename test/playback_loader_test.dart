@@ -60,7 +60,7 @@ void main() {
     );
     expect(await old, isNull);
     expect(repository.released, ['first']);
-    expect(repository.cancellations, 2);
+    expect(repository.cancellations, 1);
     await loader.close();
   });
 

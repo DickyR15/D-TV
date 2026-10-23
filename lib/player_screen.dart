@@ -99,6 +99,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? _saveTimer;
   Timer? _healthTimer;
   Timer? _syncDiagnosticTimer;
+  Timer? _loadingOverlayTimer;
+  bool _showLoadingOverlay = false;
   Timer? _errorTimer;
   Timer? _pictureInPictureExitTimer;
   Future<void> _operations = Future<void>.value();
@@ -751,10 +753,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     final duration = state.duration.inMilliseconds;
     final position = state.position.inMilliseconds;
+    // Prepare the next episode once playback is stable and has buffer headroom,
+    // instead of waiting until the final 45 seconds of the current episode.
     if (duration <= 0 ||
-        position < 2000 ||
-        (position < duration ~/ 2 && duration - position > 45000) ||
-        state.buffer.inMilliseconds - position < 5000) {
+        position < 5000 ||
+        state.buffer.inMilliseconds - position < 8000) {
       return;
     }
     _preloader.prepare(
@@ -925,8 +928,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         });
       } catch (_) {}
       if (mounted && !_closed && ticket == _generation) {
+        _loadingOverlayTimer?.cancel();
         setState(() {
           _loading = false;
+          _showLoadingOverlay = false;
           _localFailure = current.local;
           _error = current.local
               ? widget.allowOnlineFallback
@@ -1020,6 +1025,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         index >= widget.detail.episodes.length) {
       return;
     }
+    final playClock = Stopwatch()..start();
+    var cleanupMs = 0;
+    var resolveMs = 0;
+    var setupMs = 0;
+    var openMs = 0;
     _interactions.cancel();
     if (widget.handoff != null &&
         handoffPlan == null &&
@@ -1048,6 +1058,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _syncDiagnosticTimer = null;
     _pendingError = false;
     _errorTimer?.cancel();
+    _loadingOverlayTimer?.cancel();
+    _showLoadingOverlay = false;
     _health.reset();
     if (recoveryAction == null) {
       _recovery.reset();
@@ -1058,6 +1070,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() {
       _index = index;
       _loading = true;
+      _showLoadingOverlay = false;
       _error = null;
       _localFailure = false;
       _loadingMessage = switch (recoveryAction) {
@@ -1066,6 +1079,16 @@ class _PlayerScreenState extends State<PlayerScreen>
         _ => '正在準備播放',
       };
     });
+    // Don't flash a spinner for streams that start quickly.
+    _loadingOverlayTimer = Timer(const Duration(milliseconds: 350), () {
+      if (mounted &&
+          !_closed &&
+          ticket == _generation &&
+          _loading &&
+          _error == null) {
+        setState(() => _showLoadingOverlay = true);
+      }
+    });
     LanController.current?.detachPlayback(_lanIdentity);
     _lanIdentity = Object();
     _attachLanPlayback();
@@ -1073,26 +1096,36 @@ class _PlayerScreenState extends State<PlayerScreen>
     PlaybackPlan? retained;
     bool installed = false;
     try {
+      final cleanupClock = Stopwatch()..start();
       await _serialize(() async {
         if (_closed || ticket != _generation) {
           return;
         }
-        await _saveProgress(flush: true);
-        await _enhancement.beforeMedia();
-        if (_closed || ticket != _generation) return;
-        _openedIndex = -1;
-        await _player.stop();
-        final previous = _plan;
-        _plan = null;
-        if (recoveryAction == PlaybackRecoveryAction.alternative) {
-          retained = previous;
-        } else if (previous != null) {
-          await _releasePlayback(previous.session, 'replace_or_refresh');
+        final hasPreviousMedia = _openedIndex >= 0 || _plan != null;
+        if (hasPreviousMedia) {
+          await _saveProgress(flush: true);
+          await _enhancement.beforeMedia();
+          if (_closed || ticket != _generation) return;
+          _openedIndex = -1;
+          await _player.stop();
+          final previous = _plan;
+          _plan = null;
+          if (recoveryAction == PlaybackRecoveryAction.alternative) {
+            retained = previous;
+          } else if (previous != null) {
+            await _releasePlayback(previous.session, 'replace_or_refresh');
+          }
+        } else {
+          // A new PlayerScreen has no old decoder, effects, or media to tear down.
+          _openedIndex = -1;
+          _plan = null;
         }
       });
+      cleanupMs = cleanupClock.elapsedMilliseconds;
       if (_closed || ticket != _generation) {
         return;
       }
+      final resolveClock = Stopwatch()..start();
       prepared = retained != null
           ? await _loader.fallback(retained!)
           : warmed != null
@@ -1104,6 +1137,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               localOnly: widget.localOnly,
               online: _forceOnline,
             );
+      resolveMs = resolveClock.elapsedMilliseconds;
       if (prepared == null) {
         return;
       }
@@ -1116,6 +1150,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (plan.url.isEmpty) {
           throw AppFailure('片源未提供播放網址，請重試');
         }
+        final setupClock = Stopwatch()..start();
         final platform = _player.platform;
         if (platform is NativePlayer) {
           if (Platform.isAndroid) {
@@ -1156,15 +1191,21 @@ class _PlayerScreenState extends State<PlayerScreen>
                 );
                 await platform.setProperty('vd-lavc-threads', '2');
               }
+              // Embed's original 4 MiB cap made the active demuxer cache
+              // much smaller than PlayerConfiguration.bufferSize (32 MiB).
+              // Increase available headroom without waiting for the cache to fill.
               await platform.setProperty(
                 'demuxer-max-bytes',
-                '${4 * 1024 * 1024}',
+                '${(_mpvEmbedBackend ? 16 : 4) * 1024 * 1024}',
               );
               await platform.setProperty(
                 'demuxer-max-back-bytes',
-                '${1 * 1024 * 1024}',
+                '${(_mpvEmbedBackend ? 4 : 1) * 1024 * 1024}',
               );
-              await platform.setProperty('demuxer-readahead-secs', '5');
+              await platform.setProperty(
+                'demuxer-readahead-secs',
+                _mpvEmbedBackend ? '8' : '5',
+              );
             } else {
               await platform.setProperty(
                 'hwdec',
@@ -1203,12 +1244,14 @@ class _PlayerScreenState extends State<PlayerScreen>
           );
           await platform.setProperty('network-timeout', '20');
         }
+        setupMs = setupClock.elapsedMilliseconds;
         _plan = plan;
         installed = true;
         _acceptErrors = true;
         DiaryService.add(
           '[Play] open generation=$ticket route=${plan.routeIndex}/${plan.routeCount} session=${playbackDiagnosticId(plan.session)} url=${playbackDiagnosticUrl(plan.url)} headers=${plan.headers.keys.toList()}',
         );
+        final openClock = Stopwatch()..start();
         await _player.open(
           Media(
             plan.url,
@@ -1219,9 +1262,13 @@ class _PlayerScreenState extends State<PlayerScreen>
           ),
           play: _foreground && _playIntent,
         );
+        openMs = openClock.elapsedMilliseconds;
         if (_closed || ticket != _generation) {
           return;
         }
+        DiaryService.add(
+          '[PlayTiming] generation=$ticket cleanupMs=$cleanupMs resolveMs=$resolveMs setupMs=$setupMs openMs=$openMs totalMs=${playClock.elapsedMilliseconds} backend=${_mpvEmbedBackend ? 'mpv_embed' : 'standard'}',
+        );
         _openedIndex = index;
         _startSyncDiagnostics();
         _enhancement.mediaReady();
@@ -1229,8 +1276,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         _health.reset();
         await _interactions.applySpeed();
         if (mounted && !_closed && ticket == _generation) {
+          _loadingOverlayTimer?.cancel();
           setState(() {
             _loading = false;
+            _showLoadingOverlay = false;
           });
           _danmaku.setPlan(plan);
           _syncDanmaku();
@@ -1251,8 +1300,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             await _releasePlayback(prepared.session, 'failed_preparation');
           }
           if (mounted && !_closed && ticket == _generation) {
+            _loadingOverlayTimer?.cancel();
             setState(() {
               _loading = false;
+              _showLoadingOverlay = false;
               _localFailure =
                   (error is AppFailure && error.code == 'local_media') ||
                   (widget.localOnly && !_forceOnline);
@@ -1709,6 +1760,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
     _healthTimer?.cancel();
+    _loadingOverlayTimer?.cancel();
     _syncDiagnosticTimer?.cancel();
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
@@ -1993,7 +2045,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                   fit: BoxFit.contain,
                   controls: (_) => layeredControls,
                 ),
-              if (_loading && !hideOverlayForPictureInPicture)
+              if (_loading &&
+                  _showLoadingOverlay &&
+                  !hideOverlayForPictureInPicture)
                 ColoredBox(
                   color: Colors.black.withValues(alpha: .78),
                   child: Center(
