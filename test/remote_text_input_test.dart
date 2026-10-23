@@ -65,7 +65,6 @@ void main() {
     expect(below.hasPrimaryFocus, isTrue);
     expect(tester.testTextInput.isVisible, isFalse);
   });
-}
 
   testWidgets('TV search input D-pad down focuses the Search action', (
     tester,
@@ -113,3 +112,5 @@ void main() {
     await tester.pumpAndSettle();
     expect(submitted, '測試短劇');
   });
+
+}
