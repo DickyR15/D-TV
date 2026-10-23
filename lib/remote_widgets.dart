@@ -652,8 +652,7 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
   }
 
   KeyEventResult _searchInputKey(FocusNode node, KeyEvent event) {
-    if (!AppLayout.isTelevision(context) ||
-        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -665,8 +664,7 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
   }
 
   KeyEventResult _searchButtonKey(FocusNode node, KeyEvent event) {
-    if (!AppLayout.isTelevision(context) ||
-        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
