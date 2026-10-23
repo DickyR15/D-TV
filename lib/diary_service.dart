@@ -1,11 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 應用內「日記」日誌服務 — 實時記錄播放與系統事件，方便在電視與手機端快速排查問題。
 class DiaryService {
@@ -123,14 +122,10 @@ class DiaryService {
         );
         savedPath = result?['path'] as String?;
       } else {
-        savedPath = await FilePicker.platform.saveFile(
-          dialogTitle: '匯出播放日記',
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: const ['txt'],
-          bytes: Uint8List.fromList(utf8.encode('$content\n')),
-        );
-        if (savedPath == null) return;
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}${Platform.pathSeparator}$fileName');
+        await file.writeAsString('$content\n', encoding: utf8, flush: true);
+        savedPath = file.path;
       }
 
       if (!context.mounted) return;
