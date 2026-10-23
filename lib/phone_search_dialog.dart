@@ -6,7 +6,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-/// Starts a short-lived, token-protected phone search page on the local network.
+/// Starts an app-lifetime, token-protected phone search page on the local network.
 class PhoneSearchServer {
   PhoneSearchServer._(this._server, this.address, this.token) {
     _subscription = _server.listen((request) {
@@ -105,7 +105,9 @@ class PhoneSearchServer {
         await _respond(
           request,
           HttpStatus.ok,
-          _searchForm.replaceAll('TOKEN_PLACEHOLDER', token),
+          _searchForm
+              .replaceAll('TOKEN_PLACEHOLDER', token)
+              .replaceAll('STATUS_MESSAGE', ''),
         );
         return;
       }
@@ -123,12 +125,17 @@ class PhoneSearchServer {
           return;
         }
 
+        if (!_closed) _queries.add(query);
         await _respond(
           request,
           HttpStatus.ok,
-          _page('搜尋已送出', '已將「' + _escape(query) + '」送到 D TV 電視，現在可以關閉此頁。'),
+          _searchForm
+              .replaceAll('TOKEN_PLACEHOLDER', token)
+              .replaceAll(
+                'STATUS_MESSAGE',
+                '<p class="notice">已送出「${_escape(query)}」。可繼續輸入其他短劇，不必重新掃碼。</p>',
+              ),
         );
-        if (!_closed) _queries.add(query);
         return;
       }
 
@@ -186,8 +193,10 @@ input{width:100%;font:inherit;font-size:19px;padding:15px 14px;margin:16px 0 12p
 input:focus{border-color:#ff8b77;box-shadow:0 0 0 2px #ff8b7733}
 button{width:100%;padding:15px;border:0;border-radius:12px;background:#ff8b77;color:#251715;font:inherit;font-size:18px;font-weight:800}
 footer{margin-top:18px;font-size:13px;color:#a8a9b3}
+.notice{padding:10px 12px;border-radius:10px;background:#24382f;color:#a8f0c6}
 </style></head><body><main><div class="brand">D TV</div><h1>手機搜尋短劇</h1>
-<p>輸入劇名並送出，電視會自動顯示搜尋結果。請保持手機與電視連線至同一個區域網路。</p>
+<p>輸入劇名並送出，電視會自動顯示搜尋結果。手機與電視需保持連線至同一個區域網路。</p>
+STATUS_MESSAGE
 <form method="post" action="/submit?token=TOKEN_PLACEHOLDER">
 <label for="q">短劇名稱</label><input id="q" name="q" type="search" maxlength="100" placeholder="輸入想看的劇名" autocomplete="off" required autofocus>
 <button type="submit">搜尋 D TV</button></form>
@@ -203,39 +212,16 @@ footer{margin-top:18px;font-size:13px;color:#a8a9b3}
   }
 }
 
-Future<String?> showPhoneSearchDialog(BuildContext context) async {
-  PhoneSearchServer server;
-  try {
-    server = await PhoneSearchServer.start();
-  } catch (error) {
-    if (!context.mounted) return null;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('無法開啟手機搜尋'),
-        content: Text(
-          '請確認電視已連上 Wi-Fi 或有線網路，並讓手機連到同一個區域網路。\n\n$error',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('知道了'),
-          ),
-        ],
-      ),
-    );
-    return null;
-  }
-
-  try {
-    return await showDialog<String>(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => _PhoneSearchDialog(server: server),
-    );
-  } finally {
-    await server.close();
-  }
+Future<void> showPhoneSearchDialog(
+  BuildContext context, {
+  required PhoneSearchServer server,
+}) async {
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (_) => _PhoneSearchDialog(server: server),
+  );
 }
 
 class _PhoneSearchDialog extends StatefulWidget {
@@ -252,8 +238,10 @@ class _PhoneSearchDialogState extends State<_PhoneSearchDialog> {
   @override
   void initState() {
     super.initState();
-    _subscription = widget.server.queries.listen((query) {
-      if (mounted) Navigator.of(context).pop(query);
+    // Close only the QR overlay after the first submission so the TV can
+    // display results. The app-owned server and phone page remain available.
+    _subscription = widget.server.queries.listen((_) {
+      if (mounted) Navigator.of(context).pop();
     });
   }
 
@@ -316,7 +304,7 @@ class _PhoneSearchDialogState extends State<_PhoneSearchDialog> {
               ),
               const SizedBox(height: 14),
               Text(
-                '使用手機相機掃描，輸入劇名並送出；電視收到搜尋後會自動關閉此視窗。',
+                '手機只需掃描一次。第一次送出後，電視會自動關閉此視窗顯示結果；手機頁面可繼續搜尋其他劇，不必重新掃碼。',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),

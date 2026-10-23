@@ -623,6 +623,8 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.initialValue,
   );
+  final FocusNode _queryFocus = FocusNode(debugLabel: 'tv-drama-search-input');
+  final FocusNode _submitFocus = FocusNode(debugLabel: 'tv-drama-search-submit');
   Timer? _debounce;
   int _generation = 0;
   List<String> _results = [];
@@ -643,8 +645,35 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
     _generation++;
     _debounce?.cancel();
     _controller.dispose();
+    _queryFocus.dispose();
+    _submitFocus.dispose();
     widget.onCancel?.call();
     super.dispose();
+  }
+
+  KeyEventResult _searchInputKey(FocusNode node, KeyEvent event) {
+    if (!AppLayout.isTelevision(context) ||
+        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _queryFocus.unfocus();
+      _submitFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _searchButtonKey(FocusNode node, KeyEvent event) {
+    if (!AppLayout.isTelevision(context) ||
+        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _queryFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _queryChanged(String value) {
@@ -731,8 +760,13 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
+            Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: _searchInputKey,
+              child: TextField(
               key: const ValueKey('tv-drama-search-input'),
+              focusNode: _queryFocus,
               controller: _controller,
               autofocus: true,
               textInputAction: TextInputAction.search,
@@ -761,6 +795,7 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
                     ),
                   ],
                 ),
+              ),
               ),
             ),
             const SizedBox(height: 18),
@@ -849,10 +884,15 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
-        FilledButton.icon(
-          onPressed: query.isEmpty ? null : () => _submit(_query),
-          icon: const Icon(Icons.search_rounded),
-          label: const Text('搜尋'),
+        Focus(
+          onKeyEvent: _searchButtonKey,
+          child: FilledButton.icon(
+            key: const ValueKey('tv-drama-search-submit'),
+            focusNode: _submitFocus,
+            onPressed: query.isEmpty ? null : () => _submit(_query),
+            icon: const Icon(Icons.search_rounded),
+            label: const Text('搜尋'),
+          ),
         ),
       ],
     );

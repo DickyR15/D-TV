@@ -83,6 +83,9 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _ignoreExitPromptUntil;
   bool _playbackRouteActive = false;
   bool _exitConfirmationShowing = false;
+  PhoneSearchServer? _phoneSearchServer;
+  StreamSubscription<String>? _phoneSearchSubscription;
+  Future<PhoneSearchServer>? _phoneSearchServerStarting;
 
   bool get _isCatalogTab => _tab == 0 || _tab == 8;
   bool get _isRankingTab => _tab >= 4 && _tab <= 7;
@@ -331,14 +334,65 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_searchVisible && hadQuery) _searchChanged('');
   }
 
-  Future<void> _openPhoneSearch() async {
-    final query = await showPhoneSearchDialog(context);
-    if (!mounted || query == null || query.trim().isEmpty) return;
-    _submitHeaderSearch(query);
+  Future<PhoneSearchServer> _ensurePhoneSearchServer() {
+    final existing = _phoneSearchServer;
+    if (existing != null) return Future.value(existing);
+    final starting = _phoneSearchServerStarting;
+    if (starting != null) return starting;
+
+    final future = PhoneSearchServer.start().then((server) {
+      if (!mounted) {
+        unawaited(server.close());
+        throw StateError('D TV 已關閉');
+      }
+      _phoneSearchServer = server;
+      _phoneSearchSubscription = server.queries.listen(_onPhoneSearchQuery);
+      return server;
+    }).whenComplete(() {
+      _phoneSearchServerStarting = null;
+    });
+    _phoneSearchServerStarting = future;
+    return future;
+  }
+
+  void _onPhoneSearchQuery(String query) {
+    final normalized = query.trim();
+    if (!mounted || normalized.isEmpty) return;
+    _submitHeaderSearch(normalized);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已收到手機搜尋：${uiTraditional(query)}')),
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text('已收到手機搜尋：${uiTraditional(normalized)}'),
+        duration: const Duration(seconds: 1),
+      ),
     );
+  }
+
+  Future<void> _openPhoneSearch() async {
+    late final PhoneSearchServer server;
+    try {
+      server = await _ensurePhoneSearchServer();
+    } catch (error) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('無法開啟手機搜尋'),
+          content: Text(
+            '請確認電視已連上 Wi-Fi 或有線網路，並讓手機連到同一個區域網路。\n\n$error',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    await showPhoneSearchDialog(context, server: server);
   }
 
   void _openRankings() {
@@ -552,6 +606,11 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_browser.cancel());
     unawaited(widget.repository.cancelSuggestions());
     _debounce?.cancel();
+    unawaited(_phoneSearchSubscription?.cancel());
+    _phoneSearchSubscription = null;
+    final phoneSearchServer = _phoneSearchServer;
+    _phoneSearchServer = null;
+    if (phoneSearchServer != null) unawaited(phoneSearchServer.close());
     _search.dispose();
     _scroll.removeListener(_onCatalogScroll);
     _scroll.dispose();
