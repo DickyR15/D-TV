@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -290,10 +291,17 @@ func (engine *nativeEngine) saveDetailMetadata(drama nativeDrama) error {
 	changed := false
 	for _, items := range engine.catalogs {
 		for index := range items {
-			if items[index].ID == drama.ID {
-				items[index] = mergeNativeDrama(items[index], drama)
-				changed = true
+			if items[index].ID != drama.ID {
+				continue
 			}
+			merged := mergeNativeDrama(items[index], drama)
+			// Detail lookups happen on every poster open. Do not synchronously
+			// rewrite (and fsync) the whole catalogs.json when nothing changed.
+			if reflect.DeepEqual(items[index], merged) {
+				continue
+			}
+			items[index] = merged
+			changed = true
 		}
 	}
 	if changed {

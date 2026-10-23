@@ -1,5 +1,5 @@
 name: Build D TV Android v7a
-run-name: 'D TV Android v7a v0.2.95'
+run-name: 'D TV Android v7a v0.2.96'
 
 on:
   workflow_dispatch:
@@ -56,6 +56,9 @@ jobs:
         run: |
           flutter pub get
           flutter test test/ui_localization_test.dart test/playback_preferences_test.dart test/resume_episode_test.dart
+      - name: Test native core
+        working-directory: native
+        run: go test ./...
       - name: Set up Android signing (optional)
         shell: bash
         env:

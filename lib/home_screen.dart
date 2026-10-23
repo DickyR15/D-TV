@@ -743,6 +743,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openDrama(Drama drama, {bool resume = false}) {
     _pauseCatalog();
+    CoverRequestScheduler.pauseBackground();
     if (resume) {
       // 觀看記錄／操作選單的「繼續觀看」維持一鍵續播。
       unawaited(
@@ -751,19 +752,23 @@ class _HomeScreenState extends State<HomeScreen> {
           drama: drama,
           repository: widget.repository,
           store: widget.store,
-        ),
+        ).whenComplete(CoverRequestScheduler.resumeBackground),
       );
       return;
     }
     // 一般海報點擊先進入劇情頁：新劇從第 1 集開始，有記錄則定位續播集數。
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => DetailScreen(
-          drama: drama,
-          repository: widget.repository,
-          store: widget.store,
-        ),
-      ),
+    unawaited(
+      Navigator.of(context)
+          .push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => DetailScreen(
+                drama: drama,
+                repository: widget.repository,
+                store: widget.store,
+              ),
+            ),
+          )
+          .whenComplete(CoverRequestScheduler.resumeBackground),
     );
   }
 

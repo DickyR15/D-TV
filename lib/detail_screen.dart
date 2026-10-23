@@ -258,15 +258,18 @@ class _DetailScreenState extends State<DetailScreen> {
       );
       if (!mounted) return;
     }
-    await Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => DetailScreen(
-          drama: drama,
-          repository: widget.repository,
-          store: widget.store,
-        ),
-      ),
-    );
+    CoverRequestScheduler.pauseBackground();
+    await Navigator.of(context)
+        .pushReplacement<void, void>(
+          MaterialPageRoute<void>(
+            builder: (_) => DetailScreen(
+              drama: drama,
+              repository: widget.repository,
+              store: widget.store,
+            ),
+          ),
+        )
+        .whenComplete(CoverRequestScheduler.resumeBackground);
   }
 
   @override
@@ -609,7 +612,11 @@ class _DetailScreenState extends State<DetailScreen> {
             SizedBox(
               width: 92,
               height: 138,
-              child: DramaCover(drama: drama, repository: widget.repository),
+              child: DramaCover(
+                drama: drama,
+                repository: widget.repository,
+                coverPriority: true,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(

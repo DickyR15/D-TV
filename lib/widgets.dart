@@ -98,12 +98,14 @@ class DramaCover extends StatelessWidget {
     this.radius = 14,
     this.showGradient = true,
     this.showEpisodeBadge = true,
+    this.coverPriority = false,
   });
   final Drama drama;
   final AppRepository repository;
   final double radius;
   final bool showGradient;
   final bool showEpisodeBadge;
+  final bool coverPriority;
   static const imagesDisabled = bool.fromEnvironment('DISABLE_REMOTE_IMAGES');
 
   @override
@@ -137,6 +139,7 @@ class DramaCover extends StatelessWidget {
               drama: drama,
               repository: repository,
               placeholder: placeholder,
+              priority: coverPriority,
             ),
           if (showGradient)
             Positioned.fill(
@@ -196,25 +199,41 @@ class CachedCoverImage extends StatefulWidget {
     required this.drama,
     required this.repository,
     required this.placeholder,
+    this.priority = false,
   });
   final Drama drama;
   final AppRepository repository;
   final Widget placeholder;
+  final bool priority;
   @override
   State<CachedCoverImage> createState() => _CachedCoverImageState();
 }
 
-class _CoverRequests {
-  static const _limit = 6;
-  static final _waiting = <VoidCallback>[];
+/// Coordinates poster downloads so background grids do not compete with
+/// detail-page navigation and playback. Priority covers may still load while
+/// background requests are paused.
+class CoverRequestScheduler {
+  static const _limit = 4;
+  static final _waiting = <({VoidCallback start, bool priority})>[];
   static var _running = 0;
+  static var _backgroundPauseCount = 0;
 
-  static void add(VoidCallback start) {
-    _waiting.add(start);
+  static void pauseBackground() {
+    _backgroundPauseCount++;
+  }
+
+  static void resumeBackground() {
+    if (_backgroundPauseCount > 0) _backgroundPauseCount--;
     _drain();
   }
 
-  static void remove(VoidCallback start) => _waiting.remove(start);
+  static void add(VoidCallback start, {bool priority = false}) {
+    _waiting.add((start: start, priority: priority));
+    _drain();
+  }
+
+  static void remove(VoidCallback start) =>
+      _waiting.removeWhere((entry) => entry.start == start);
 
   static Future<String> run(Future<String> Function() request) async {
     try {
@@ -227,8 +246,13 @@ class _CoverRequests {
 
   static void _drain() {
     while (_running < _limit && _waiting.isNotEmpty) {
+      final index = _backgroundPauseCount > 0
+          ? _waiting.indexWhere((entry) => entry.priority)
+          : 0;
+      if (index < 0) return;
+      final entry = _waiting.removeAt(index);
       _running++;
-      _waiting.removeLast()();
+      entry.start();
     }
   }
 }
@@ -261,13 +285,13 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
     _file = null;
     _delay = Timer(
       const Duration(milliseconds: 150),
-      () => _CoverRequests.add(_start),
+      () => CoverRequestScheduler.add(_start, priority: widget.priority),
     );
   }
 
   void _start() {
     final drama = widget.drama;
-    final file = _CoverRequests.run(() => widget.repository.cover(drama));
+    final file = CoverRequestScheduler.run(() => widget.repository.cover(drama));
     setState(() {
       _file = file;
     });
@@ -276,7 +300,7 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
   void _cancelRequest() {
     _delay?.cancel();
     _delay = null;
-    _CoverRequests.remove(_start);
+    CoverRequestScheduler.remove(_start);
   }
 
   @override

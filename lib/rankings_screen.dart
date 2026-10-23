@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
@@ -177,15 +179,18 @@ class _RankingsScreenState extends State<RankingsScreen> {
   };
 
   void _openDrama(RankingItem item) {
-    Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DetailScreen(
-          drama: item.drama,
-          repository: widget.repository,
-          store: widget.store,
+    CoverRequestScheduler.pauseBackground();
+    unawaited(
+      Navigator.push<void>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DetailScreen(
+            drama: item.drama,
+            repository: widget.repository,
+            store: widget.store,
+          ),
         ),
-      ),
+      ).whenComplete(CoverRequestScheduler.resumeBackground),
     );
   }
 

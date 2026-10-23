@@ -205,6 +205,9 @@ class _PlayerScreenState extends State<PlayerScreen>
             _player,
             configuration: VideoControllerConfiguration(
               enableHardwareAcceleration: !Platform.isIOS,
+              // Attach Android's surface before video parameters arrive. This
+              // avoids a known Surface/MediaCodec timing race on some TV boxes.
+              androidAttachSurfaceAfterVideoParameters: false,
             ),
           )
         : null;
