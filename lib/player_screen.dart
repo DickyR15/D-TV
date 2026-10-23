@@ -238,7 +238,6 @@ class _PlayerScreenState extends State<PlayerScreen>
               enableHardwareAcceleration: !Platform.isIOS,
               vo: useMpvEmbed ? 'mediacodec_embed' : null,
               hwdec: useMpvEmbed ? 'mediacodec' : null,
-              androidAttachSurfaceAfterVideoParameters: false,
             ),
           )
         : null;
@@ -1144,10 +1143,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             }
             await platform.setProperty('vd-lavc-fast', 'yes');
             await platform.setProperty('video-sync', 'audio');
-            // Keep TV playback real-time when frames fall behind the audio clock.
-            // Decoder-level dropping is more useful than VO-only dropping when
-            // decoding/rendering cannot keep up on lower-powered TV hardware.
-            await platform.setProperty('framedrop', _television ? 'decoder' : 'vo');
+            // Match the known-good upstream player defaults on Android TV.
+            // Keep frame dropping at the video output stage until a new test
+            // proves decoder-level dropping improves sync on this device.
+            await platform.setProperty('framedrop', 'vo');
           } else if (Platform.isWindows) {
             await platform.setProperty('hwdec', 'd3d11va-copy');
           }
