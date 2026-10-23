@@ -744,31 +744,14 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openDrama(Drama drama, {bool resume = false}) {
     _pauseCatalog();
     CoverRequestScheduler.pauseBackground();
-    if (resume) {
-      // 觀看記錄／操作選單的「繼續觀看」維持一鍵續播。
-      unawaited(
-        openPlaybackDirectly(
-          context,
-          drama: drama,
-          repository: widget.repository,
-          store: widget.store,
-        ).whenComplete(CoverRequestScheduler.resumeBackground),
-      );
-      return;
-    }
-    // 一般海報點擊先進入劇情頁：新劇從第 1 集開始，有記錄則定位續播集數。
+    // 所有海報統一一鍵播放；openPlaybackDirectly 會依觀看記錄選擇續播集數與進度。
     unawaited(
-      Navigator.of(context)
-          .push<void>(
-            MaterialPageRoute<void>(
-              builder: (_) => DetailScreen(
-                drama: drama,
-                repository: widget.repository,
-                store: widget.store,
-              ),
-            ),
-          )
-          .whenComplete(CoverRequestScheduler.resumeBackground),
+      openPlaybackDirectly(
+        context,
+        drama: drama,
+        repository: widget.repository,
+        store: widget.store,
+      ).whenComplete(CoverRequestScheduler.resumeBackground),
     );
   }
 
@@ -861,13 +844,13 @@ class _HomeScreenState extends State<HomeScreen> {
         final scaffold = Scaffold(
           appBar: AppBar(
             toolbarHeight: compactBrandBar
-                ? 72
+                ? 86
                 : wide
                 ? _brandBannerHeight(constraints.maxWidth) + 12
                 : null,
             titleSpacing: 12,
             title: compactBrandBar
-                ? _brandLogo(width: 154, height: 44)
+                ? _compactBrandHeader(width: constraints.maxWidth - 220)
                 : wide
                 ? _homeBrandBanner(
                     width: bannerWidth,
@@ -1244,6 +1227,56 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _brandTitle() => _brandLogo(width: 145, height: 52);
+
+  /// Larger, balanced brand treatment for Android TV and the Android emulator.
+  /// Uses the full title area without obscuring the first row of posters.
+  Widget _compactBrandHeader({required double width}) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: width.clamp(220.0, 460.0).toDouble(),
+      height: 72,
+      child: Row(
+        children: [
+          const _DtvBrandMark(size: 58),
+          const SizedBox(width: 14),
+          Flexible(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'D TV',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 30,
+                    height: 1,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.7,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  '短劇隨選・精彩立即播放',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 13,
+                    height: 1,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: .5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// Persistent brand header shared by the TV / desktop views.
   /// The slogan is redrawn larger over the original banner so it remains
