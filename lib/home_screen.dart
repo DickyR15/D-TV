@@ -1551,6 +1551,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _catalog() {
     final items = _reveal(_visible);
     final television = AppLayout.isTelevision(context);
+    final desktopWide = !television && MediaQuery.sizeOf(context).width >= 840;
     return Column(
       children: [
         if (_searchVisible && !television)
@@ -1719,6 +1720,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         final padding = constraints.maxWidth < 600
                             ? 16.0
                             : 24.0;
+                        final gridWidth = constraints.maxWidth - 2 * padding;
+                        final gridColumns = _posterColumns(constraints.maxWidth);
+                        const gridSpacing = 14.0;
+                        final tileWidth =
+                            (gridWidth - (gridColumns - 1) * gridSpacing) /
+                                gridColumns;
                         return RefreshIndicator(
                           onRefresh: _refreshCatalog,
                           child: CustomScrollView(
@@ -1733,10 +1740,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                   16,
                                 ),
                                 sliver: SliverGrid(
-                                  gridDelegate: dramaGridDelegate(
-                                    context,
-                                    constraints.maxWidth - 2 * padding,
-                                  ),
+                                  gridDelegate: desktopWide
+                                      ? SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: gridColumns,
+                                          mainAxisExtent: DramaTile.extentFor(
+                                            context,
+                                            tileWidth,
+                                          ),
+                                          crossAxisSpacing: gridSpacing,
+                                          mainAxisSpacing: gridSpacing,
+                                        )
+                                      : dramaGridDelegate(
+                                          context,
+                                          gridWidth,
+                                        ),
                                   delegate: SliverChildBuilderDelegate(
                                     (_, index) => _catalogTile(items[index]),
                                     childCount: items.length,
@@ -1781,9 +1798,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Match poster density with the hot-ranking grid for wide TV layouts.
+  /// Wide category and hot-ranking pages use identical column breakpoints.
   int _posterColumns(double width) =>
-      ((width - 36) / 150).floor().clamp(1, 8);
+      width >= 620 ? 5 : width >= 420 ? 3 : 2;
 
   Widget _televisionGrid(
     List<Drama> items,
