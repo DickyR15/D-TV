@@ -69,7 +69,7 @@ Future<LanConnection?> chooseLanDevice(
   );
 }
 
-void openLanSync(BuildContext context) {
+void openLanSync(BuildContext context, {VoidCallback? onReturn}) {
   final controller = LanController.current;
   if (controller == null) {
     ScaffoldMessenger.of(
@@ -77,12 +77,12 @@ void openLanSync(BuildContext context) {
     ).showSnackBar(const SnackBar(content: Text('裝置互聯尚未就緒')));
     return;
   }
-  Navigator.push(
+  Navigator.push<void>(
     context,
     MaterialPageRoute<void>(
       builder: (_) => LanSyncScreen(controller: controller),
     ),
-  );
+  ).whenComplete(() => onReturn?.call());
 }
 
 class LanSyncScreen extends StatefulWidget {

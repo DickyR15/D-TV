@@ -371,6 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openPhoneSearch() async {
+    _resetBackConfirmation();
     late final PhoneSearchServer server;
     try {
       server = await _ensurePhoneSearchServer();
@@ -391,10 +392,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       );
+      _resetBackConfirmation(ignoreTrailingBack: true);
       return;
     }
     if (!mounted) return;
     await showPhoneSearchDialog(context, server: server);
+    _resetBackConfirmation(ignoreTrailingBack: true);
   }
 
   void _openRankings() {
@@ -1185,7 +1188,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   IconButton(
                     key: const ValueKey('follow-lan-sync'),
                     tooltip: '收藏同步',
-                    onPressed: () => openLanSync(context),
+                    onPressed: () {
+                      _resetBackConfirmation();
+                      openLanSync(
+                        context,
+                        onReturn: () => _resetBackConfirmation(
+                          ignoreTrailingBack: true,
+                        ),
+                      );
+                    },
                     icon: const Icon(Icons.sync_rounded),
                   ),
                 if (_isCatalogTab) ...[
@@ -1250,7 +1261,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     } else if (value == 'sources') {
                       _manageSources();
                     } else if (value == 'settings') {
-                      Navigator.push(
+                      Navigator.push<void>(
                         context,
                         MaterialPageRoute<void>(
                           builder: (_) => SettingsScreen(
@@ -1258,13 +1269,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             store: widget.store,
                           ),
                         ),
+                      ).whenComplete(
+                        () => _resetBackConfirmation(ignoreTrailingBack: true),
                       );
                     } else if (value == 'users') {
-                      Navigator.push(
+                      Navigator.push<void>(
                         context,
                         MaterialPageRoute<void>(
                           builder: (_) => ProfilesScreen(store: widget.store),
                         ),
+                      ).whenComplete(
+                        () => _resetBackConfirmation(ignoreTrailingBack: true),
                       );
                     } else if (value == 'about') {
                       showAboutDialog(
@@ -1272,9 +1287,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         applicationName: appName,
                         applicationVersion: AppLayout.versionOf(context),
                         applicationIcon: const _DtvBrandMark(size: 56),
-                         children: const [
-                          Text('作者：R15'),
-                        ],
+                        children: const [Text('作者：R15')],
+                      ).whenComplete(
+                        () => _resetBackConfirmation(ignoreTrailingBack: true),
                       );
                     }
                   },
