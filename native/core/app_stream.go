@@ -175,7 +175,7 @@ func (stream *nativeStreamServer) nativeRelease(token string) {
 		delete(stream.sessions, token)
 	}
 	stream.mu.Unlock()
-	if exists && stream.downloader.streamClient != nil {
+	if exists && stream.downloader != nil && stream.downloader.streamClient != nil {
 		// Active requests are canceled with the session context; discard only
 		// idle pooled sockets so a later episode cannot inherit stale idle state.
 		stream.downloader.streamClient.CloseIdleConnections()
