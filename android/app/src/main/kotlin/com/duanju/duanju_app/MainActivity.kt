@@ -5,10 +5,12 @@ import android.app.UiModeManager
 import android.app.ActivityManager
 import android.app.PictureInPictureParams
 import android.os.Build
+import android.os.Environment
 import android.os.Bundle
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.os.SystemClock
+import android.content.ContentValues
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -22,7 +24,11 @@ import android.net.Uri
 import android.util.Rational
 import android.view.InputDevice
 import android.view.WindowManager
+import android.provider.MediaStore
 import android.provider.Settings
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.annotation.ChecksSdkIntAtLeast
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterShellArgs
@@ -87,6 +93,40 @@ class MainActivity : FlutterActivity() {
         super.setRequestedOrientation(
             if (televisionMode) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else requestedOrientation
         )
+    }
+
+    private fun exportPlaybackLog(text: String): Map<String, String> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            throw IllegalStateException("匯出日誌需要 Android 10 或更新版本")
+        }
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val fileName = "D-TV-playback-log_$stamp.txt"
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+            put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+            put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/D-TV")
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IllegalStateException("無法在下載資料夾建立日誌檔")
+        try {
+            val output = contentResolver.openOutputStream(uri)
+                ?: throw IllegalStateException("無法寫入日誌檔")
+            output.use {
+                it.write(text.toByteArray(Charsets.UTF_8))
+                it.flush()
+            }
+            val published = ContentValues().apply {
+                put(MediaStore.Downloads.IS_PENDING, 0)
+            }
+            if (contentResolver.update(uri, published, null, null) <= 0) {
+                throw IllegalStateException("無法完成日誌檔案儲存")
+            }
+            return mapOf("fileName" to fileName, "path" to "Download/D-TV/$fileName")
+        } catch (error: Exception) {
+            contentResolver.delete(uri, null, null)
+            throw error
+        }
     }
 
     private fun playbackPower(): Map<String, Any?> {
@@ -159,6 +199,22 @@ class MainActivity : FlutterActivity() {
                                     } else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                                 }
                                 result.success(null)
+                            }
+                        }
+                        "exportPlaybackLog" -> {
+                            val text = call.argument<String>("text")
+                            if (text.isNullOrBlank()) {
+                                result.error("empty_log", "沒有可匯出的日誌內容", null)
+                            } else {
+                                try {
+                                    result.success(exportPlaybackLog(text))
+                                } catch (error: Exception) {
+                                    result.error(
+                                        "export_failed",
+                                        "匯出失敗：${error.message ?: "未知錯誤"}",
+                                        null
+                                    )
+                                }
                             }
                         }
                         "playbackPower" -> result.success(runCatching { playbackPower() }.getOrNull())

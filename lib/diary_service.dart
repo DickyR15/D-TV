@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 
 /// 應用內「日記」日誌服務 — 實時記錄播放與系統事件，方便在電視與手機端快速排查問題。
 class DiaryService {
@@ -87,6 +90,85 @@ class DiaryService {
           content: Text('已複製播放日記到剪貼簿'),
           duration: Duration(seconds: 2),
         ),
+      );
+    }
+  }
+
+  /// 匯出完整播放日誌。Android 會存入公開的 Downloads/D-TV 資料夾。
+  static Future<void> exportToTxt(BuildContext context) async {
+    await refreshNativeLogs();
+    final content = fullText.trim();
+    if (!context.mounted) return;
+    if (content.isEmpty) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('目前沒有可匯出的日誌')),
+      );
+      return;
+    }
+
+    final stamp = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .split('.')
+        .first;
+    final fileName = 'D-TV-playback-log_$stamp.txt';
+
+    try {
+      String? savedPath;
+      if (Platform.isAndroid) {
+        final result = await const MethodChannel('duanju/device')
+            .invokeMapMethod<String, dynamic>(
+          'exportPlaybackLog',
+          <String, dynamic>{'text': '$content\\n'},
+        );
+        savedPath = result?['path'] as String?;
+      } else {
+        savedPath = await FilePicker.platform.saveFile(
+          dialogTitle: '匯出播放日記',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: const ['txt'],
+          bytes: Uint8List.fromList(utf8.encode('$content\\n')),
+        );
+        if (savedPath == null) return;
+      }
+
+      if (!context.mounted) return;
+      final location = savedPath?.isNotEmpty == true
+          ? savedPath!
+          : 'Download/D-TV/$fileName';
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('日誌匯出成功'),
+          content: SelectableText(
+            '已儲存播放診斷日誌：\\n$location\\n\\n請從檔案管理器開啟 Downloads/D-TV 資料夾，將 TXT 檔傳到電腦後上傳到 ChatGPT。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: location));
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('複製檔案位置'),
+            ),
+            FilledButton(
+              autofocus: true,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('完成'),
+            ),
+          ],
+        ),
+      );
+    } on PlatformException catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text('匯出日誌失敗：${error.message ?? error.code}')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text('匯出日誌失敗：$error')),
       );
     }
   }
@@ -207,6 +289,11 @@ class DiaryService {
             ),
           ),
           actions: [
+            TextButton.icon(
+              icon: const Icon(Icons.file_download_outlined, size: 16),
+              label: const Text('匯出日誌 TXT'),
+              onPressed: () => exportToTxt(dialogContext),
+            ),
             TextButton.icon(
               icon: const Icon(Icons.copy_rounded, size: 16),
               label: const Text('一鍵複製'),
