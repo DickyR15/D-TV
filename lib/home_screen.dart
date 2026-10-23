@@ -1781,6 +1781,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Match poster density with the hot-ranking grid for wide TV layouts.
+  int _posterColumns(double width) =>
+      ((width - 36) / 150).floor().clamp(1, 8);
+
   Widget _televisionGrid(
     List<Drama> items,
     double width, {
@@ -1788,7 +1792,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ScrollController? controller,
     Widget? footer,
   }) {
-    final columns = ((width - 36) / 150).floor().clamp(1, 8);
+    final columns = _posterColumns(width);
     final tileWidth = (width - 36 - (columns - 1) * 14) / columns;
     return RemoteGrid(
       key: ValueKey('tv-grid-$key'),
