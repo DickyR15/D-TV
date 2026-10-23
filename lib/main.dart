@@ -24,13 +24,8 @@ import 'ui_localization.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await initializeUiLocalization();
-  } catch (_) {
-    // Keep the built-in fallback dictionary if bundled conversion data cannot load.
-  }
   if (Platform.isAndroid) {
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemBars(Brightness.dark));
   }
   if (Platform.isWindows) {
@@ -38,15 +33,20 @@ Future<void> main() async {
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
-  final device = await AppDevice.detect();
-  final rendering = Platform.isAndroid
-      ? ', 渲染: ${await AppDevice.compatibleRendering() ? 'skia' : 'impeller'}'
-      : '';
-  DiaryService.add(
-    '[App] 應用啟動，版本: ${device.version}, '
-    '平臺: ${Platform.operatingSystem}$rendering',
-  );
-  runApp(AppBootstrap(device: device));
+
+  // Draw the first Flutter frame before loading and parsing the OpenCC dictionaries.
+  runApp(const AppBootstrap());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initializeUiLocalizationSafely());
+  });
+}
+
+Future<void> _initializeUiLocalizationSafely() async {
+  try {
+    await initializeUiLocalization();
+  } catch (_) {
+    // Keep the built-in fallback dictionary if bundled conversion data cannot load.
+  }
 }
 
 class AppBootstrap extends StatefulWidget {
@@ -115,6 +115,20 @@ class _AppBootstrapState extends State<AppBootstrap>
     setState(() => device = detected);
   }
 
+  Future<void> _logStartupRendering() async {
+    try {
+      final rendering = Platform.isAndroid
+          ? ', 渲染: ${await AppDevice.compatibleRendering() ? 'skia' : 'impeller'}'
+          : '';
+      DiaryService.add(
+        '[App] 應用啟動，版本: ${device.version}, '
+        '平臺: ${Platform.operatingSystem}$rendering',
+      );
+    } catch (_) {
+      // Diagnostics must never delay application startup.
+    }
+  }
+
   Future<void> _initialize() async {
     setState(() {
       error = null;
@@ -122,6 +136,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     try {
       final preferences = await SharedPreferences.getInstance();
       await _refreshDevice();
+      unawaited(_logStartupRendering());
       await repository.initialize();
       if (mounted) {
         setState(() {
@@ -232,7 +247,7 @@ class DuanjuApp extends StatelessWidget {
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
     theme: AppTheme.light,
     darkTheme: AppTheme.dark,
-    themeMode: AppTheme.mode(store?.themeMode ?? 'system'),
+    themeMode: store == null ? ThemeMode.dark : AppTheme.mode(store?.themeMode ?? 'system'),
     builder: (context, child) {
       final mode = store?.displayMode ?? 'auto';
       final tv = mode == 'television' || mode == 'auto' && television;
@@ -286,7 +301,52 @@ class DuanjuApp extends StatelessWidget {
         : Scaffold(
             body: Center(
               child: bootstrapError == null
-                  ? const CircularProgressIndicator()
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 68,
+                          height: 68,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF17101A),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: const Color(0xFFFF3658),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow_rounded,
+                            color: Color(0xFFFF3658),
+                            size: 48,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'D TV',
+                          style: TextStyle(
+                            color: Color(0xFFF4F4FA),
+                            fontSize: 30,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.8,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          '正在準備首頁',
+                          style: TextStyle(
+                            color: Color(0xFFB9B6C2),
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        ),
+                      ],
+                    )
                   : Padding(
                       padding: const EdgeInsets.all(32),
                       child: Column(
