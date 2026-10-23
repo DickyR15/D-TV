@@ -7,6 +7,7 @@ import 'app_layout.dart';
 import 'catalog_filters.dart';
 import 'core_bridge.dart';
 import 'detail_screen.dart';
+import 'playback_launch_screen.dart';
 import 'drama_actions.dart';
 import 'local_store.dart';
 import 'models.dart';
@@ -181,15 +182,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
   void _openDrama(RankingItem item) {
     CoverRequestScheduler.pauseBackground();
     unawaited(
-      Navigator.push<void>(
+      openPlaybackDirectly(
         context,
-        MaterialPageRoute(
-          builder: (_) => DetailScreen(
-            drama: item.drama,
-            repository: widget.repository,
-            store: widget.store,
-          ),
-        ),
+        drama: item.drama,
+        repository: widget.repository,
+        store: widget.store,
       ).whenComplete(CoverRequestScheduler.resumeBackground),
     );
   }
@@ -441,9 +438,13 @@ class _RankingsScreenState extends State<RankingsScreen> {
     );
   }
 
+  /// Match the category poster grid to the standard TV poster grid cell.
+  int _posterColumns(double width) =>
+      ((width - 36) / 150).floor().clamp(1, 8);
+
   Widget _rankingGrid(List<RankingItem> items, double width) {
     final television = AppLayout.isTelevision(context);
-    final columns = width >= 620 ? 5 : width >= 420 ? 3 : 2;
+    final columns = _posterColumns(width);
     const spacing = 14.0;
     const horizontalPadding = 18.0;
     final posterWidth =
