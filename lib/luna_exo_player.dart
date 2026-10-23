@@ -174,53 +174,18 @@ class LunaExoPlayer implements Player {
         .map((entry) => MapEntry(entry.key.toLowerCase(), entry.value))
         .toList();
     final normalizedPath = (uri?.path ?? url).toLowerCase();
-    final knownNonHlsFormat = RegExp(
-      r'\.(mp4|m4v|mov|webm|mkv|mp3|m4a|aac|ts|mpd)(?:$|[?#])',
-    ).hasMatch(normalizedPath);
-    bool isHls =
+    // The native stream proxy preserves the real extension (.m3u8/.mp4).
+    // Do not probe it with an extra Range request: that can start a second
+    // upstream read and stall the same signed stream before ExoPlayer starts.
+    final isHls =
         normalizedPath.contains('.m3u8') ||
-        normalizedPath.contains('hls') ||
+        normalizedPath.contains('/hls/') ||
         normalizedHeaders.any(
           (entry) =>
               entry.key == 'accept' &&
               entry.value.toLowerCase().contains('mpegurl'),
         );
-
-    // ExoPlayer already detects common container formats. Avoid an extra
-    // network probe for direct MP4/TS/DASH URLs, especially local proxy links;
-    // only sniff extensionless/unknown URLs that might be HLS playlists.
-    if (!isHls &&
-        !knownNonHlsFormat &&
-        uri != null &&
-        (uri.scheme == 'http' || uri.scheme == 'https')) {
-      try {
-        final client = HttpClient()
-          ..connectionTimeout = const Duration(seconds: 3);
-        final req = await client.getUrl(uri);
-        headers.forEach((k, v) => req.headers.set(k, v));
-        req.headers.set('Range', 'bytes=0-512');
-        final resp = await req.close();
-        final cType = resp.headers.contentType?.toString().toLowerCase() ?? '';
-        final chunks = await resp.take(1).toList();
-        final firstChunk = chunks.isNotEmpty
-            ? String.fromCharCodes(chunks.first)
-            : '';
-        DiaryService.add(
-          '[Sniff] 探測結果: status=${resp.statusCode}, contentType=$cType, prefix=${firstChunk.length > 20 ? firstChunk.substring(0, 20) : firstChunk}',
-        );
-        if (cType.contains('mpegurl') || firstChunk.contains('#EXTM3U')) {
-          isHls = true;
-          DiaryService.add(
-            '[Sniff] 自動識別為 HLS 流，注入 formatHint: VideoFormat.hls',
-          );
-        }
-        client.close(force: true);
-      } catch (e) {
-        DiaryService.add('[Sniff] 探測警告 (非致命): $e');
-      }
-    }
-
-    VideoFormat? formatHint = isHls ? VideoFormat.hls : null;
+    final VideoFormat? formatHint = isHls ? VideoFormat.hls : null;
 
     DiaryService.add(
       '[ExoPlayer] open(gen=$myGen): url=$url, isHls=$isHls, formatHint=$formatHint, headers=${headers.keys.toList()}',
@@ -251,59 +216,19 @@ class LunaExoPlayer implements Player {
       );
       await c.initialize();
       DiaryService.add(
-        '[ExoPlayer] c.initialize() 成功! duration=${c.value.duration}, size=${c.value.size}, isInitialized=${c.value.isInitialized}',
+        '[ExoPlayer] c.initialize() 成功 duration=${c.value.duration} size=${c.value.size}',
       );
     } catch (e, stack) {
-      DiaryService.add('[ExoPlayer] 首次 initialize 失敗: $e');
-      // 如果首次嘗試失敗，且為網路影片，則原地使用交替格式（HLS <-> MP4）自愈重試
-      if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-        final alternateFormat = formatHint == VideoFormat.hls
-            ? null
-            : VideoFormat.hls;
-        DiaryService.add(
-          '[ExoPlayer] 啟動自愈重試，切換格式為 formatHint=$alternateFormat...',
-        );
-        try {
-          await c.dispose();
-        } catch (_) {}
-
-        final retryHeaders = Map<String, String>.from(headers);
-        if (alternateFormat == VideoFormat.hls) {
-          retryHeaders['Accept'] =
-              'application/vnd.apple.mpegurl,application/x-mpegURL,*/*';
-        }
-        c = VideoPlayerController.networkUrl(
-          uri,
-          formatHint: alternateFormat,
-          httpHeaders: retryHeaders,
-          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-        );
-        try {
-          await c.initialize();
-          formatHint = alternateFormat;
-          DiaryService.add('[ExoPlayer] 自愈重試成功! duration=${c.value.duration}');
-        } catch (retryErr, retryStack) {
-          DiaryService.add(
-            '[ExoPlayer] 自愈重試依然失敗! 異常: $retryErr\n堆疊: $retryStack',
-          );
-          if (myGen == _openGeneration) {
-            _safeAdd(stream.errorController, retryErr.toString());
-          }
-          try {
-            await c.dispose();
-          } catch (_) {}
-          rethrow;
-        }
-      } else {
-        DiaryService.add('[ExoPlayer] c.initialize() 失敗! 異常: $e\n堆疊: $stack');
-        if (myGen == _openGeneration) {
-          _safeAdd(stream.errorController, e.toString());
-        }
-        try {
-          await c.dispose();
-        } catch (_) {}
-        rethrow;
+      DiaryService.add('[ExoPlayer] initialize 失敗: $e\n$stack');
+      // Let D-TV's route recovery try the next actual source. Switching a
+      // failed MP4 request to HLS blindly only repeats a slow/failing request.
+      if (myGen == _openGeneration) {
+        _safeAdd(stream.errorController, e.toString());
       }
+      try {
+        await c.dispose();
+      } catch (_) {}
+      rethrow;
     }
 
     if (_disposed || myGen != _openGeneration) {

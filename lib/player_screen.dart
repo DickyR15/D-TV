@@ -23,6 +23,7 @@ import 'playback_loader.dart';
 import 'playback_preloader.dart';
 import 'playback_recovery.dart';
 import 'playback_preferences.dart';
+import 'luna_exo_player.dart';
 import 'player_controls.dart';
 import 'player_interactions.dart';
 import 'player_menu.dart';
@@ -133,8 +134,12 @@ class _PlayerScreenState extends State<PlayerScreen>
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.optimized;
   // MPV-specific decoder properties must never be shown or applied when
   // Android is using the official video_player / ExoPlayer backend.
-  bool get _televisionDecoderApplies => Platform.isAndroid && _television;
-  bool get _televisionRenderingApplies => Platform.isAndroid && _television;
+  // MPV-specific settings only apply when the active backend actually exposes
+  // MPV's native platform. Android now defaults to the ExoPlayer backend.
+  bool get _televisionDecoderApplies =>
+      Platform.isAndroid && _television && _player.platform is NativePlayer;
+  bool get _televisionRenderingApplies =>
+      Platform.isAndroid && _television && _player.platform is NativePlayer;
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
       _pictureInPictureActive || _pictureInPictureRequested;
@@ -191,22 +196,28 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmaku = DanmakuController(widget.repository)
       ..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
+    final useExoPlayer =
+        Platform.isAndroid && widget.videoBuilder == null;
     _player =
         widget.playerFactory?.call() ??
-        Player(
-          configuration: const PlayerConfiguration(
-            bufferSize: 32 * 1024 * 1024,
-            logLevel: MPVLogLevel.error,
-          ),
-        );
-    DiaryService.add('[Player] backend=media_kit/MPV');
-    _video = widget.videoBuilder == null
+        (useExoPlayer
+            ? LunaExoPlayer()
+            : Player(
+                configuration: const PlayerConfiguration(
+                  bufferSize: 32 * 1024 * 1024,
+                  logLevel: MPVLogLevel.error,
+                ),
+              ));
+    final exoPlayer = _player is LunaExoPlayer;
+    DiaryService.add(
+      '[Player] backend=${exoPlayer ? 'video_player/ExoPlayer' : 'media_kit/MPV'}',
+    );
+    _video = widget.videoBuilder == null && !exoPlayer
         ? VideoController(
             _player,
             configuration: VideoControllerConfiguration(
               enableHardwareAcceleration: !Platform.isIOS,
-              // Attach Android's surface before video parameters arrive. This
-              // avoids a known Surface/MediaCodec timing race on some TV boxes.
+              // Keep the MPV Surface path configurable on custom/test backends.
               androidAttachSurfaceAfterVideoParameters: false,
             ),
           )
@@ -1894,6 +1905,12 @@ class _PlayerScreenState extends State<PlayerScreen>
             children: [
               if (widget.videoBuilder != null)
                 widget.videoBuilder!(layeredControls)
+              else if (_player is LunaExoPlayer)
+                LunaExoVideoView(
+                  player: _player as LunaExoPlayer,
+                  fit: BoxFit.contain,
+                  controls: (_) => layeredControls,
+                )
               else
                 Video(
                   controller: _video!,

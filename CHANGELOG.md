@@ -1,5 +1,12 @@
 # 更新日誌
 
+## 0.2.97+109
+
+- Android 預設改用 Flutter 官方 `video_player`（Android 底層 ExoPlayer），Windows 等非 Android 平台繼續使用 media_kit／MPV。
+- 移除 ExoPlayer 播放前額外的 Range 探測請求，避免對本機串流代理多發一次讀取。
+- 移除初始化失敗後無條件將 MP4／未知格式改成 HLS 重試的流程，改由 D-TV 的實際備用片源恢復機制處理。
+- MPV 專屬電視解碼與相容渲染設定只在實際使用 MPV 時顯示／套用。
+
 ## 0.2.96+108
 
 - Android 播放器調整影片 Surface 附加時機，排查 MediaCodec 初始化時 `surface/native_window` 為空及畫面間歇卡頓；此項仍需 Onn. 4K Pro 實機確認。

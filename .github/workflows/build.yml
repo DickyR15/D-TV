@@ -1,5 +1,5 @@
 name: Build D TV Android v7a
-run-name: 'D TV Android v7a v0.2.96'
+run-name: 'D TV Android v7a v0.2.97'
 
 on:
   workflow_dispatch:
