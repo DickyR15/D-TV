@@ -1,5 +1,11 @@
 # 更新日誌
 
+## 0.2.99+111
+
+- Android 預設播放路線恢復為原本可播放的 media_kit／MPV；不再預設使用實測無法播放的 ExoPlayer。
+- Android 編譯產出三個獨立 APK：原本 MPV、ExoPlayer、MPV `mediacodec_embed + mediacodec` 原生 Surface 測試版；每個產出後立即上傳，避免其中一個測試建置失敗而丟失其他 APK。
+- 三種播放引擎透過 `DTV_ANDROID_PLAYER` 建置參數選擇，方便在同一台 Onn. 4K Pro 比對串流、解碼與渲染差異。
+
 ## 0.2.98+110
 
 - Android A/B 測試建置：預設 ExoPlayer 路線維持不變，另提供 MPV `mediacodec_embed + mediacodec` 原生 Surface 版本，專門驗證 Amlogic 電視盒的硬解與 GPU 影格拷貝問題。

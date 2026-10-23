@@ -1,5 +1,5 @@
 name: Build D TV Android v7a
-run-name: 'D TV Android v7a v0.2.98 A/B'
+run-name: 'D TV Android v7a v0.2.99 Engine Compare'
 
 on:
   workflow_dispatch:
@@ -107,6 +107,24 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check Pillow
           python scripts/prepare_tv_banner.py
+      - name: Build Original MPV APK (armeabi-v7a)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_android.py --abi armeabi-v7a --player-engine mpv
+          version_full=$(sed -n "s/^version: *['\"]\?\([^'\"]*\)['\"]\?$/\1/p" pubspec.yaml | head -n1)
+          version="${version_full%%+*}"
+          apk=$(find dist/android -maxdepth 1 -type f -name "*-${version_full}-armeabi-v7a.apk" -print -quit)
+          test -n "$apk" && test -f "$apk"
+          output="dist/android/D TV-Android-v7a_v${version}_MPV.apk"
+          cp "$apk" "$output"
+          echo "Built $output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: D TV-Android-v7a-MPV
+          path: dist/android/D TV-Android-v7a_v*_MPV.apk
+          if-no-files-found: error
+          retention-days: 14
       - name: Build ExoPlayer APK (armeabi-v7a)
         shell: bash
         run: |
@@ -119,6 +137,12 @@ jobs:
           output="dist/android/D TV-Android-v7a_v${version}_ExoPlayer.apk"
           cp "$apk" "$output"
           echo "Built $output"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: D TV-Android-v7a-ExoPlayer
+          path: dist/android/D TV-Android-v7a_v*_ExoPlayer.apk
+          if-no-files-found: error
+          retention-days: 14
       - name: Build MPV MediaCodec Embed APK (armeabi-v7a)
         shell: bash
         run: |
@@ -133,9 +157,7 @@ jobs:
           echo "Built $output"
       - uses: actions/upload-artifact@v4
         with:
-          name: D TV-Android-v7a-Playback-AB
-          path: |
-            dist/android/D TV-Android-v7a_v*_ExoPlayer.apk
-            dist/android/D TV-Android-v7a_v*_MPV-Embed.apk
+          name: D TV-Android-v7a-MPV-Embed
+          path: dist/android/D TV-Android-v7a_v*_MPV-Embed.apk
           if-no-files-found: error
           retention-days: 14

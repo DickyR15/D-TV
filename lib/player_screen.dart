@@ -38,7 +38,7 @@ import 'video_output_size.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
-  defaultValue: 'exo',
+  defaultValue: 'mpv',
 );
 
 class PlayerScreen extends StatefulWidget {
@@ -209,6 +209,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final useMpvEmbed = _mpvEmbedBackend;
     final useExoPlayer =
         Platform.isAndroid &&
+        _androidPlayerEngine == 'exo' &&
         widget.videoBuilder == null &&
         widget.playerFactory == null &&
         !useMpvEmbed;
