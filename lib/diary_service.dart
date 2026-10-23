@@ -148,7 +148,6 @@ class DiaryService {
               child: const Text('複製檔案位置'),
             ),
             FilledButton(
-              autofocus: true,
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('完成'),
             ),
@@ -285,6 +284,7 @@ class DiaryService {
           ),
           actions: [
             TextButton.icon(
+              autofocus: true,
               icon: const Icon(Icons.file_download_outlined, size: 16),
               label: const Text('匯出日誌 TXT'),
               onPressed: () => exportToTxt(dialogContext),
