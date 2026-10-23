@@ -99,5 +99,36 @@ void main() {
       health.reset();
       expect(stalled(200, position: 6), isFalse);
     },
+
+  test('startup gets 20 seconds and buffer or duration changes reset the watchdog', () {
+    final health = PlaybackHealth();
+    final start = DateTime(2026, 10, 24);
+
+    bool stalled(
+      int seconds, {
+      int buffer = 0,
+      int duration = 0,
+      int position = 0,
+    }) => health.stalled(
+      position: Duration(seconds: position),
+      duration: Duration(seconds: duration),
+      buffer: Duration(seconds: buffer),
+      intendedToPlay: true,
+      foreground: true,
+      now: start.add(Duration(seconds: seconds)),
+    );
+
+    expect(stalled(0), isFalse);
+    expect(stalled(10), isFalse); // Initial MP4 response can be slow.
+    expect(stalled(18, buffer: 1), isFalse); // Buffer activity is progress.
+    expect(stalled(27, buffer: 2), isFalse); // New buffer activity resets time.
+    expect(stalled(36, buffer: 2), isFalse);
+    expect(stalled(37, buffer: 2), isTrue); // 10 seconds since last progress.
+
+    health.reset();
+    expect(stalled(100, duration: 120), isFalse); // Duration discovery is progress.
+    expect(stalled(109, duration: 120), isFalse);
+    expect(stalled(110, duration: 120), isTrue); // Mid-playback timeout remains 10s.
+  });
   );
 }

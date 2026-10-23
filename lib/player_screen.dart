@@ -385,20 +385,27 @@ class _PlayerScreenState extends State<PlayerScreen>
       (_) => _saveProgress(),
     );
     _healthTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!_closed &&
-          _acceptErrors &&
-          !_loading &&
-          _error == null &&
-          _health.stalled(
-            position: _player.state.position,
-            // Use the user's playback intent, not MPV's transient playing /
-            // buffering flags. Those native flags may flicker during a network
-            // stall and repeatedly reset the watchdog.
-            intendedToPlay: _playIntent && !_player.state.completed,
-            foreground: _foreground,
-            now: DateTime.now(),
-          )) {
-        unawaited(_recover(reason: 'position_stalled_10s'));
+      if (_closed || !_acceptErrors || _loading || _error != null) return;
+      final state = _player.state;
+      if (_health.stalled(
+        position: state.position,
+        duration: state.duration,
+        buffer: state.buffer,
+        // Use the user's playback intent, not MPV's transient playing /
+        // buffering flags. Buffer and duration changes are separately counted
+        // as progress so slow first-frame startup does not trigger early
+        // route cycling while MPV is still opening the stream.
+        intendedToPlay: _playIntent && !state.completed,
+        foreground: _foreground,
+        now: DateTime.now(),
+      )) {
+        final startup = state.position == Duration.zero &&
+            state.duration == Duration.zero;
+        unawaited(
+          _recover(
+            reason: startup ? 'startup_stalled_20s' : 'position_stalled_10s',
+          ),
+        );
       }
     });
     final handoff = widget.handoff;
