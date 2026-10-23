@@ -1,5 +1,5 @@
 name: Build D TV Android v7a
-run-name: 'D TV Android v7a v0.2.113+125 Category Switch Performance Fix'
+run-name: 'D TV Android v7a v0.2.114+126 Playback Route Probe + Category Performance'
 
 on:
   workflow_dispatch:
