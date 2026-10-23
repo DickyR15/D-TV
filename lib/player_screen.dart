@@ -44,7 +44,7 @@ const _androidPlayerEngine = String.fromEnvironment(
 
 // Never leave the loading overlay spinning indefinitely if MPV does not
 // complete the file-open future for an unavailable or stalled upstream stream.
-const _playbackOpenTimeout = Duration(seconds: 25);
+const _playbackOpenTimeout = Duration(seconds: 15);
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -398,7 +398,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             foreground: _foreground,
             now: DateTime.now(),
           )) {
-        unawaited(_recover(reason: 'position_stalled_20s'));
+        unawaited(_recover(reason: 'position_stalled_10s'));
       }
     });
     final handoff = widget.handoff;

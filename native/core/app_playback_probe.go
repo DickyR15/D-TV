@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const nativePlaybackRouteProbeTimeout = 6 * time.Second
+const nativePlaybackRouteProbeTimeout = 4 * time.Second
 const nativePlaybackRouteProbeLimit = 4
 
 type nativePlaybackRouteProbeResult struct {

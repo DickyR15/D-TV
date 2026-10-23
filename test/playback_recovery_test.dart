@@ -87,10 +87,11 @@ void main() {
         now: start.add(Duration(seconds: seconds)),
       );
       expect(stalled(0), isFalse);
-      expect(stalled(11), isFalse);
-      expect(stalled(12), isTrue);
-      expect(stalled(13, position: 6), isFalse);
-      expect(stalled(24, position: 6), isFalse);
+      expect(stalled(9), isFalse);
+      expect(stalled(10), isTrue);
+      expect(stalled(11, position: 6), isFalse);
+      expect(stalled(20, position: 6), isFalse);
+      expect(stalled(21, position: 6), isTrue);
       expect(stalled(60, intendedToPlay: false, position: 6), isFalse);
       expect(stalled(80, intendedToPlay: false, position: 6), isFalse);
       expect(stalled(100, foreground: false, position: 6), isFalse);

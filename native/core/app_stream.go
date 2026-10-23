@@ -52,13 +52,20 @@ type nativeStreamServer struct {
 	server     *http.Server
 }
 
-const nativeStreamResponseHeaderTimeout = 10 * time.Second
+const (
+	nativeStreamDialTimeout          = 8 * time.Second
+	nativeStreamTLSHandshakeTimeout  = 8 * time.Second
+	nativeStreamResponseHeaderTimeout = 8 * time.Second
+)
 
 func newNativeStreamTransport(base *http.Transport) *http.Transport {
 	transport := base.Clone()
 	transport.DisableKeepAlives = true
 	transport.MaxIdleConns = 0
 	transport.MaxIdleConnsPerHost = 0
+	dialer := &net.Dialer{Timeout: nativeStreamDialTimeout}
+	transport.DialContext = dialer.DialContext
+	transport.TLSHandshakeTimeout = nativeStreamTLSHandshakeTimeout
 	transport.ResponseHeaderTimeout = nativeStreamResponseHeaderTimeout
 	return transport
 }
