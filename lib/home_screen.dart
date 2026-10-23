@@ -525,9 +525,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ..showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
+          width: (MediaQuery.sizeOf(context).width - 32)
+              .clamp(260.0, 320.0)
+              .toDouble(),
           duration: const Duration(seconds: 3),
           backgroundColor: const Color(0xEE171920),
-          margin: const EdgeInsets.fromLTRB(28, 0, 28, 26),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
             side: const BorderSide(color: Color(0x44FFFFFF)),
@@ -535,13 +537,13 @@ class _HomeScreenState extends State<HomeScreen> {
           content: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _DtvBrandMark(size: 24),
-              SizedBox(width: 12),
+              _DtvBrandMark(size: 22),
+              SizedBox(width: 10),
               Text(
-                '再按一次返回鍵即可退出 D TV',
+                '再按一次返回鍵退出 D TV',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
               ),
