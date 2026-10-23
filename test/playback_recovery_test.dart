@@ -62,7 +62,7 @@ void main() {
       PlaybackRecoveryAction.recreatePlayer,
     );
     expect(
-      PlaybackRecovery().next(
+      recovery.next(
         route(12, count: 100),
         allowPlayerRecreate: false,
       ),
