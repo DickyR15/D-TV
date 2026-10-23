@@ -1,8 +1,8 @@
-import 'package:duanju_app/core_bridge.dart';
+import 'package:hgtv/core_bridge.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:duanju_app/local_profiles.dart';
-import 'package:duanju_app/local_store.dart';
-import 'package:duanju_app/models.dart';
+import 'package:hgtv/local_profiles.dart';
+import 'package:hgtv/local_store.dart';
+import 'package:hgtv/models.dart';
 
 /// 測試用 pin 雜湊：與 [hashProfilePin] 同格式（64 位十六進位制），但不用 isolate。
 /// flutter test 的 fake async 環境下 [Isolate.run] 永不完成，會讓用例掛到超時。
