@@ -402,6 +402,33 @@ class LocalStore extends ChangeNotifier {
     });
   }
 
+  /// One-time Android TV decoder migration. Old versions defaulted to an
+  /// aggressive MPV preset; preserve explicit choices except that legacy
+  /// optimized defaults are moved to the conservative hardware preset.
+  bool get needsTvDecoderSafePresetMigration =>
+      !locked && _bool(_key('tvDecoderSafePresetV1')) != true;
+
+  Future<void> migrateTvDecoderSafePreset() {
+    final epoch = _epoch;
+    return _queue(() async {
+      if (locked ||
+          epoch != _epoch ||
+          _bool(_key('tvDecoderSafePresetV1')) == true) {
+        return;
+      }
+      final current = playbackPreferences;
+      final migrated =
+          current.televisionDecoder == TelevisionDecoder.optimized
+          ? current.copyWith(televisionDecoder: TelevisionDecoder.hardware)
+          : current;
+      await _commit({
+        _key('playback'): jsonEncode(migrated.toJson()),
+        _key('tvDecoderSafePresetV1'): true,
+      });
+      _notify();
+    });
+  }
+
   CatalogView get catalogView {
     if (locked) return const CatalogView();
     try {

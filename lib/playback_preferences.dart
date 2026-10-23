@@ -12,7 +12,7 @@ class PlaybackPreferences {
     this.danmaku = false,
     this.preload = true,
     this.enhancement = const VideoEnhancementPreferences(),
-    this.televisionDecoder = TelevisionDecoder.optimized,
+    this.televisionDecoder = TelevisionDecoder.hardware,
   });
 
   final double speed;
@@ -69,7 +69,7 @@ class PlaybackPreferences {
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
       televisionDecoder:
           TelevisionDecoder.values.asNameMap()[value['televisionDecoder']] ??
-          TelevisionDecoder.optimized,
+          TelevisionDecoder.hardware,
     );
   }
 }

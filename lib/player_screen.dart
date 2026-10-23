@@ -136,7 +136,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   double _resumePosition = 0;
   bool _rotating = false;
   bool _television = false;
-  TelevisionDecoder _televisionDecoder = TelevisionDecoder.optimized;
+  TelevisionDecoder _televisionDecoder = TelevisionDecoder.hardware;
+  bool _tvDecoderPolicyMigrated = false;
   // MPV-specific decoder properties must never be shown or applied when
   // Android is using the official video_player / ExoPlayer backend.
   // MPV-specific settings only apply when the active backend actually exposes
@@ -788,6 +789,34 @@ class _PlayerScreenState extends State<PlayerScreen>
       _interactions.cancel();
     }
     _television = television;
+    // Migrate the aggressive legacy default once on Android TV while preserving
+    // an intentional optimized/software choice made after this migration.
+    if (Platform.isAndroid &&
+        television &&
+        !_tvDecoderPolicyMigrated &&
+        !_mpvEmbedBackend &&
+        widget.store.needsTvDecoderSafePresetMigration) {
+      _tvDecoderPolicyMigrated = true;
+      if (_televisionDecoder == TelevisionDecoder.optimized) {
+        _televisionDecoder = TelevisionDecoder.hardware;
+      }
+      unawaited(
+        widget.store
+            .migrateTvDecoderSafePreset()
+            .then<void>(
+              (_) => DiaryService.add(
+                '[Sync] completed legacy TV decoder preset migration',
+              ),
+            )
+            .catchError((Object error) {
+              DiaryService.add(
+                '[Sync] decoder preset migration failed: ${playbackDiagnosticError(error)}',
+              );
+            }),
+      );
+    } else if (television) {
+      _tvDecoderPolicyMigrated = true;
+    }
     _orientationController = AppOrientationScope.maybeOf(context);
     final orientation = MediaQuery.orientationOf(context);
     if (_lastOrientation != null && _lastOrientation != orientation) {
@@ -1143,10 +1172,13 @@ class _PlayerScreenState extends State<PlayerScreen>
             }
             await platform.setProperty('vd-lavc-fast', 'yes');
             await platform.setProperty('video-sync', 'audio');
-            // Match the known-good upstream player defaults on Android TV.
-            // Keep frame dropping at the video output stage until a new test
-            // proves decoder-level dropping improves sync on this device.
-            await platform.setProperty('framedrop', 'vo');
+            // The Onn. 4K Pro log showed VO frame drops but zero decoder
+            // drops while video lagged audio by nearly four seconds.
+            // Drop late TV frames at the decoder stage to reduce GPU work.
+            await platform.setProperty(
+              'framedrop',
+              _television ? 'decoder' : 'vo',
+            );
           } else if (Platform.isWindows) {
             await platform.setProperty('hwdec', 'd3d11va-copy');
           }
@@ -1260,8 +1292,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       'decoder-frame-drop-count',
       'frame-drop-count',
       'mistimed-frame-count',
+      'video-sync',
+      'framedrop',
+      'hwdec',
       'hwdec-current',
       'current-vo',
+      'opengl-pbo',
+      'video-latency-hacks',
+      'demuxer-readahead-secs',
       'container-fps',
     ];
     final values = <String>[];
@@ -1276,7 +1314,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (_closed) return;
     DiaryService.add(
       '[Sync] generation=$_generation decoder=${_televisionDecoder.name} '
-      'video-sync=audio framedrop=decoder ${values.join(' ')}',
+      '${values.join(' ')}',
     );
   }
 
