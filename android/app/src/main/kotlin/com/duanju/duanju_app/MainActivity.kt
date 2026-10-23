@@ -102,10 +102,10 @@ class MainActivity : FlutterActivity() {
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val fileName = "D-TV-playback-log_$stamp.txt"
         val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-            put(MediaStore.Downloads.MIME_TYPE, "text/plain")
-            put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/D-TV")
-            put(MediaStore.Downloads.IS_PENDING, 1)
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/D-TV")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
         val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             ?: throw IllegalStateException("無法在下載資料夾建立日誌檔")
@@ -117,7 +117,7 @@ class MainActivity : FlutterActivity() {
                 it.flush()
             }
             val published = ContentValues().apply {
-                put(MediaStore.Downloads.IS_PENDING, 0)
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
             }
             if (contentResolver.update(uri, published, null, null) <= 0) {
                 throw IllegalStateException("無法完成日誌檔案儲存")
