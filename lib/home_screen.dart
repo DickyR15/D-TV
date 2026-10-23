@@ -434,7 +434,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final now = DateTime.now();
     final previous = _lastBackAt;
     if (previous != null &&
         now.difference(previous) <= const Duration(seconds: 2)) {
