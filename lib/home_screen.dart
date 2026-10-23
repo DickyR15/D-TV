@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -831,6 +832,8 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, constraints) {
         final television = AppLayout.isTelevision(context);
         final desktop = constraints.maxWidth >= 840;
+        final compactBrandBar =
+            television || (Platform.isAndroid && desktop);
         final wide = television || desktop;
         final bannerWidth = (constraints.maxWidth -
                 (constraints.maxWidth >= 1450 ? 600.0 : 530.0))
@@ -839,9 +842,13 @@ class _HomeScreenState extends State<HomeScreen> {
         final bannerHeight = _brandBannerHeight(constraints.maxWidth);
         final scaffold = Scaffold(
           appBar: AppBar(
-            toolbarHeight: television ? 72 : wide ? _brandBannerHeight(constraints.maxWidth) + 12 : null,
+            toolbarHeight: compactBrandBar
+                ? 72
+                : wide
+                ? _brandBannerHeight(constraints.maxWidth) + 12
+                : null,
             titleSpacing: 12,
-            title: television
+            title: compactBrandBar
                 ? _brandLogo(width: 154, height: 44)
                 : wide
                 ? _homeBrandBanner(
