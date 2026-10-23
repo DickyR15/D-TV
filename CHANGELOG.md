@@ -5,6 +5,7 @@
 - Android TV 標準 MPV 改用較保守的硬體解碼預設，並將晚到影格的丟幀策略移至 decoder，降低 GPU 輸出端負擔。
 - 舊版 Android TV 的 optimized 預設只會遷移一次到 hardware；後續明確選擇會保留。
 - 同一工作流程另外產生 MPV Embed（原生 Surface）比較 APK，用於和標準 MPV 在 Onn. 4K Pro 上 A/B 比較。
+- Android MPV 明確在影片參數就緒前附加 Surface，針對實機 Log 中解碼器先啟動、Surface 約 2.6 秒後才就緒的時序差異進行修正。
 - 擴充播放日誌，記錄實際 video-sync、framedrop、hwdec、vo 與渲染相關設定；本版仍需實機確認是否改善音畫同步。
 
 ## 0.2.103+115

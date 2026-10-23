@@ -230,7 +230,8 @@ class _PlayerScreenState extends State<PlayerScreen>
           ? 'video_player/ExoPlayer'
           : useMpvEmbed
           ? 'media_kit/MPV (mediacodec_embed)'
-          : 'media_kit/MPV'}',
+          : 'media_kit/MPV'} '
+      'android-surface-after-video-params=${Platform.isAndroid ? false : 'default'}',
     );
     _video = widget.videoBuilder == null && !exoPlayer
         ? VideoController(
@@ -239,6 +240,10 @@ class _PlayerScreenState extends State<PlayerScreen>
               enableHardwareAcceleration: !Platform.isIOS,
               vo: useMpvEmbed ? 'mediacodec_embed' : null,
               hwdec: useMpvEmbed ? 'mediacodec' : null,
+              // Prevent Android video decoding from racing a late Surface.
+              // The real-device log showed the codec start before Surface availability.
+              androidAttachSurfaceAfterVideoParameters:
+                  Platform.isAndroid ? false : null,
             ),
           )
         : null;
