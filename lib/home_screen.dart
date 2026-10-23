@@ -75,6 +75,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int? _revealKey;
   bool _hiddenItems = false;
   DateTime? _lastBackAt;
+  DateTime? _ignoreExitPromptUntil;
+  bool _playbackRouteActive = false;
   bool _exitConfirmationShowing = false;
 
   bool get _isCatalogTab => _tab == 0 || _tab == 8;
@@ -406,6 +408,25 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _televisionBack() {
+    final now = DateTime.now();
+    final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+    final ignoreUntil = _ignoreExitPromptUntil;
+    if (_playbackRouteActive ||
+        (ignoreUntil != null && now.isBefore(ignoreUntil))) {
+      // A Back key used to close playback must not also trigger the home
+      // screen's "press again to exit" prompt.
+      _lastBackAt = null;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      // Some TV remotes deliver Back as a keyboard shortcut while focus
+      // remains on the home route. Close the top playback route in that case.
+      if (_playbackRouteActive &&
+          !routeIsCurrent &&
+          Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+    _ignoreExitPromptUntil = null;
     if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
@@ -744,6 +765,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openDrama(Drama drama, {bool resume = false}) {
     _pauseCatalog();
     CoverRequestScheduler.pauseBackground();
+    _playbackRouteActive = true;
+    _lastBackAt = null;
+    _ignoreExitPromptUntil = null;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     // 所有海報統一一鍵播放；openPlaybackDirectly 會依觀看記錄選擇續播集數與進度。
     unawaited(
       openPlaybackDirectly(
@@ -751,7 +776,18 @@ class _HomeScreenState extends State<HomeScreen> {
         drama: drama,
         repository: widget.repository,
         store: widget.store,
-      ).whenComplete(CoverRequestScheduler.resumeBackground),
+      ).whenComplete(() {
+        _playbackRouteActive = false;
+        _lastBackAt = null;
+        // Swallow the tail end of the same physical Back press after the
+        // player route closes, so it cannot become an app-exit confirmation.
+        _ignoreExitPromptUntil =
+            DateTime.now().add(const Duration(milliseconds: 500));
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        }
+        CoverRequestScheduler.resumeBackground();
+      }),
     );
   }
 

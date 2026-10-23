@@ -1,5 +1,5 @@
 name: Build D TV Android v7a
-run-name: 'D TV Android v7a v0.2.108+120 Streaming Startup Optimization'
+run-name: 'D TV Android v7a v0.2.109+121 TV Back Navigation Fix + Stream Optimization'
 
 on:
   workflow_dispatch:
