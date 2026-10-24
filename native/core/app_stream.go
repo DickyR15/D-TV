@@ -395,13 +395,12 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 	playlist := strings.Contains(contentType, "mpegurl") ||
 		(strings.HasSuffix(strings.ToLower(finalURL.Path), ".m3u8") && !contentIsMP4)
 	reader := bufio.NewReader(response.Body)
-	if request.Method == http.MethodGet {
-		peek, _ := reader.Peek(512)
+	// Avoid waiting for an arbitrary 512-byte peek before forwarding MP4 data.
+	if request.Method == http.MethodGet && !playlist && !contentIsMP4 {
+		peek, _ := reader.Peek(10)
 		bodyIsPlaylist := strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(string(peek), "\ufeff")), "#EXTM3U")
 		if bodyIsPlaylist {
 			playlist = true
-		} else if contentIsMP4 {
-			playlist = false
 		}
 	}
 	if playlist && request.Method == http.MethodHead {
