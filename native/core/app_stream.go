@@ -448,3 +448,4 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 		}
 	}
 }
+}
