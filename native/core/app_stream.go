@@ -92,7 +92,9 @@ func (stream *nativeStreamServer) nativeRequest(request *http.Request) (*http.Re
 	request = request.WithContext(httptrace.WithClientTrace(request.Context(), stream.nativeTrace(info, request.URL.String())))
 	response, err := stream.downloader.doMediaRequestWithClient(request, &client)
 	if err != nil {
-		stream.nativeLog(info, "upstream_error", request.URL.String(), "error="+nativeStreamError(err), 0, "")
+		reason := nativeStreamError(err)
+		stream.downloader.rememberNativeStreamHostFailure(request.URL.String(), reason)
+		stream.nativeLog(info, "upstream_error", request.URL.String(), "error="+reason, 0, "")
 		return response, err
 	}
 	address := request.URL.String()
@@ -380,6 +382,13 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 		return
 	}
 	defer response.Body.Close()
+	if response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= http.StatusInternalServerError {
+		failedAddress := upstream.URL.String()
+		if response.Request != nil && response.Request.URL != nil {
+			failedAddress = response.Request.URL.String()
+		}
+		stream.downloader.rememberNativeStreamHostFailure(failedAddress, "upstream_http")
+	}
 	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusPartialContent {
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
 		err := stream.downloader.catalogResponseError(upstream, response, body)

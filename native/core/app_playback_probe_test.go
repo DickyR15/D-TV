@@ -59,6 +59,40 @@ func TestNativePlaybackRouteProbePrefersResponsiveSameQualityBackup(t *testing.T
 	}
 }
 
+func TestNativePlaybackRouteProbeKeepsCoolingDownHostBehindHealthyRoute(t *testing.T) {
+	const failedURL = "https://cdn-stalled.example.test/episode.mp4"
+	const healthyURL = "https://cdn-healthy.example.test/episode.mp4"
+	client := &http.Client{Transport: playbackProbeFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		// The failed host would look faster if the resolver ignored its recent
+		// timeout; health cooldown must take priority over probe latency.
+		if request.URL.Host == "cdn-healthy.example.test" {
+			time.Sleep(15 * time.Millisecond)
+		}
+		return &http.Response{
+			StatusCode: http.StatusPartialContent,
+			Header:     http.Header{"Content-Type": []string{"video/mp4"}},
+			Body:       io.NopCloser(strings.NewReader("synthetic-media-bytes")),
+			Request:    request,
+		}, nil
+	})}
+	downloader := &Downloader{client: client}
+	downloader.rememberNativeStreamHostFailure(failedURL, "timeout")
+	choice := nativePlaybackChoices(providerMedia{
+		URL: failedURL, Quality: 1080,
+		Variants: []providerMedia{{URL: healthyURL, Quality: 1080}},
+	}, 0)
+	engine := &nativeEngine{downloader: downloader}
+	ranked := engine.rankNativePlaybackRoutes(context.Background(), choice, Task{
+		DramaID: "hongguo:fixture", DramaTitle: "synthetic playback", Index: 1,
+	})
+	if ranked.media[0].URL != healthyURL {
+		t.Fatalf("recently failed host was selected first: %s", ranked.media[0].URL)
+	}
+	if !downloader.nativeStreamHostCoolingDown(failedURL) {
+		t.Fatal("failed host should remain on cooldown")
+	}
+}
+
 type playbackProbeFixtureTransport func(*http.Request) (*http.Response, error)
 
 func (transport playbackProbeFixtureTransport) RoundTrip(request *http.Request) (*http.Response, error) {

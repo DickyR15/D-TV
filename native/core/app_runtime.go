@@ -49,6 +49,8 @@ type Downloader struct {
 	cfg                   Config
 	client                *http.Client
 	streamClient          *http.Client
+	streamHostMu          sync.Mutex
+	streamHostFailures    map[string]time.Time
 	huangdouDetails       map[string]huangdouDetailEntry
 	huangdouDetailPending map[string]*huangdouDetailCall
 	providerMu            sync.Mutex

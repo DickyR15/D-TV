@@ -81,6 +81,58 @@ func nativeStreamError(err error) string {
 	return "io_error"
 }
 
+const nativeStreamHostFailureCooldown = 90 * time.Second
+
+// rememberNativeStreamHostFailure temporarily deprioritizes hosts that failed
+// during connection setup or media transfer. The cooldown is shared by the
+// playback resolver and stream proxy through Downloader.
+func (downloader *Downloader) rememberNativeStreamHostFailure(address, reason string) {
+	switch reason {
+	case "timeout", "connect", "tls", "dns", "deadline", "unexpected_eof", "upstream_http":
+	default:
+		return
+	}
+	parsed, err := url.Parse(address)
+	if err != nil {
+		return
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" {
+		return
+	}
+	downloader.streamHostMu.Lock()
+	if downloader.streamHostFailures == nil {
+		downloader.streamHostFailures = make(map[string]time.Time)
+	}
+	until := time.Now().Add(nativeStreamHostFailureCooldown)
+	if current, exists := downloader.streamHostFailures[host]; !exists || current.Before(until) {
+		downloader.streamHostFailures[host] = until
+	}
+	downloader.streamHostMu.Unlock()
+}
+
+func (downloader *Downloader) nativeStreamHostCoolingDown(address string) bool {
+	parsed, err := url.Parse(address)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" {
+		return false
+	}
+	downloader.streamHostMu.Lock()
+	defer downloader.streamHostMu.Unlock()
+	until, exists := downloader.streamHostFailures[host]
+	if !exists {
+		return false
+	}
+	if !time.Now().Before(until) {
+		delete(downloader.streamHostFailures, host)
+		return false
+	}
+	return true
+}
+
 func (stream *nativeStreamServer) nativeLog(info nativeStreamDiagnostic, event, address, detail string, status int, contentType string) {
 	host, target := nativeStreamTarget(address)
 	mediaType, _, _ := mime.ParseMediaType(contentType)
@@ -108,7 +160,9 @@ type nativeDiagnosticBody struct {
 func (body *nativeDiagnosticBody) Read(buffer []byte) (int, error) {
 	n, err := body.ReadCloser.Read(buffer)
 	if err != nil && err != io.EOF {
-		body.stream.nativeLog(body.info, "upstream_read_error", body.address, "error="+nativeStreamError(err), 0, "")
+		reason := nativeStreamError(err)
+		body.stream.downloader.rememberNativeStreamHostFailure(body.address, reason)
+		body.stream.nativeLog(body.info, "upstream_read_error", body.address, "error="+reason, 0, "")
 	}
 	return n, err
 }

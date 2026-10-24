@@ -64,12 +64,32 @@ func (engine *nativeEngine) rankNativePlaybackRoutes(
 		}
 		topQualityCount++
 	}
-	probeCount := min(topQualityCount, nativePlaybackRouteProbeLimit)
-	if probeCount < 2 {
+	if topQualityCount < 2 {
 		return choice
 	}
 
-	choice.media = append(diversifyNativePlaybackRoutesByHost(choice.media[:topQualityCount]), choice.media[topQualityCount:]...)
+	// Keep recently failed CDN hosts behind unpenalized hosts even after a
+	// fresh online resolve returns the same set of signed URLs.
+	lowerQuality := append([]providerMedia(nil), choice.media[topQualityCount:]...)
+	topRoutes := diversifyNativePlaybackRoutesByHost(choice.media[:topQualityCount])
+	healthyRoutes := make([]providerMedia, 0, len(topRoutes))
+	coolingRoutes := make([]providerMedia, 0, len(topRoutes))
+	for _, media := range topRoutes {
+		if engine.downloader.nativeStreamHostCoolingDown(media.URL) {
+			coolingRoutes = append(coolingRoutes, media)
+		} else {
+			healthyRoutes = append(healthyRoutes, media)
+		}
+	}
+	choice.media = append(append(healthyRoutes, coolingRoutes...), lowerQuality...)
+	probeCount := min(len(healthyRoutes), nativePlaybackRouteProbeLimit)
+	if probeCount < 2 {
+		probeCount = min(topQualityCount, nativePlaybackRouteProbeLimit)
+	}
+	coolingAtProbe := make(map[int]bool, probeCount)
+	for index := 0; index < probeCount; index++ {
+		coolingAtProbe[index] = engine.downloader.nativeStreamHostCoolingDown(choice.media[index].URL)
+	}
 
 	resultsChannel := make(chan nativePlaybackRouteProbeResult, probeCount)
 	for index := 0; index < probeCount; index++ {
@@ -92,11 +112,28 @@ func (engine *nativeEngine) rankNativePlaybackRoutes(
 		}
 	}
 
+	// Remember transient probe failures so the next forced refresh can avoid
+	// returning to the same dead or stalled CDN node.
+	for _, result := range results {
+		if result.err == nil {
+			continue
+		}
+		reason := nativeStreamError(result.err)
+		if result.status == http.StatusTooManyRequests || result.status >= http.StatusInternalServerError {
+			reason = "upstream_http"
+		}
+		engine.downloader.rememberNativeStreamHostFailure(choice.media[result.index].URL, reason)
+	}
+
 	// Only change the order when at least one candidate proved it can return
 	// media data. If probes are all blocked by a provider, keep the old order.
 	if successful > 0 && ctx.Err() == nil {
 		sort.SliceStable(results, func(i, j int) bool {
 			left, right := results[i], results[j]
+			leftCooling, rightCooling := coolingAtProbe[left.index], coolingAtProbe[right.index]
+			if leftCooling != rightCooling {
+				return !leftCooling
+			}
 			if (left.err == nil) != (right.err == nil) {
 				return left.err == nil
 			}
