@@ -59,11 +59,15 @@ class _TelevisionControlsState extends State<TelevisionControls> {
   bool _visible = true;
   bool _panelOpen = false;
   bool _seekHint = false;
+  // Keep controls suppressed during an automatic route/player recovery until
+  // the replacement stream is actually playing.
+  bool _suppressControlsUntilPlaying = false;
 
   @override
   void initState() {
     super.initState();
     _visible = widget.showOnPlaybackReady;
+    _suppressControlsUntilPlaying = !widget.showOnPlaybackReady;
     for (final stream in [
       widget.player.stream.position,
       widget.player.stream.duration,
@@ -82,14 +86,15 @@ class _TelevisionControlsState extends State<TelevisionControls> {
       widget.player.stream.playing.listen((playing) {
         if (!mounted || !widget.enabled || _panelOpen) return;
         if (playing) {
+          _suppressControlsUntilPlaying = false;
           _scheduleHide();
-        } else {
+        } else if (!_suppressControlsUntilPlaying) {
           _show();
         }
       }),
     );
     if (widget.enabled) {
-      if (widget.showOnPlaybackReady || !widget.player.state.playing) {
+      if (widget.showOnPlaybackReady) {
         _show();
       } else {
         _visible = false;
@@ -101,16 +106,28 @@ class _TelevisionControlsState extends State<TelevisionControls> {
   @override
   void didUpdateWidget(covariant TelevisionControls oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.showOnPlaybackReady && !widget.showOnPlaybackReady) {
+      _suppressControlsUntilPlaying = true;
+    } else if (!oldWidget.showOnPlaybackReady &&
+        widget.showOnPlaybackReady) {
+      _suppressControlsUntilPlaying = false;
+    }
     if (widget.enabled && !oldWidget.enabled) {
-      if (widget.showOnPlaybackReady || !widget.player.state.playing) {
+      if (widget.showOnPlaybackReady) {
         _show();
       } else {
+        // If the stream started before controls were re-enabled, allow the
+        // next user pause to reveal controls as usual.
+        if (widget.player.state.playing) {
+          _suppressControlsUntilPlaying = false;
+        }
         setState(() => _visible = false);
         _hideTimer?.cancel();
         _focus(_surface);
       }
     } else if (!widget.enabled) {
       _hideTimer?.cancel();
+      if (_visible) setState(() => _visible = false);
     }
   }
 
