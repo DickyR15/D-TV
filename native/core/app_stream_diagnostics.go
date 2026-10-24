@@ -12,8 +12,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
-	"regexp"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -82,7 +82,7 @@ func nativeStreamError(err error) string {
 	return "io_error"
 }
 
-var nativeStreamURLInError = regexp.MustCompile(`(?i)https?://[^\\s"<>]+`)
+var nativeStreamURLInError = regexp.MustCompile(`(?i)https?://[^\s"<>]+`)
 
 // nativeStreamErrorDetail records the underlying network cause without leaking
 // signed playback URLs, query credentials, or long media tokens into exported logs.

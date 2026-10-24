@@ -2,8 +2,8 @@ package core
 
 import (
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
