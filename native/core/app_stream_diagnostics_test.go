@@ -308,6 +308,12 @@ func TestNativeStreamTransportReusesConnectionsAndBoundsTimeouts(t *testing.T) {
 	if stream.DialContext == nil {
 		t.Fatal("native media transport should bound TCP connection attempts")
 	}
+	if stream.ForceAttemptHTTP2 {
+		t.Fatal("native media transport must not attempt HTTP/2")
+	}
+	if stream.TLSNextProto == nil || len(stream.TLSNextProto) != 0 {
+		t.Fatal("native media transport should explicitly disable automatic HTTP/2 setup")
+	}
 	if stream.TLSHandshakeTimeout != nativeStreamTLSHandshakeTimeout {
 		t.Fatalf("TLS handshake timeout=%s, want %s", stream.TLSHandshakeTimeout, nativeStreamTLSHandshakeTimeout)
 	}

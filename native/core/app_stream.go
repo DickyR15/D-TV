@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -66,6 +67,13 @@ func newNativeStreamTransport(base *http.Transport) *http.Transport {
 	// MPV can issue several Range requests while seeking or filling its demuxer.
 	// Reusing the same CDN connection avoids paying TCP/TLS setup for every read.
 	transport.DisableKeepAlives = false
+	// Android 9 x86 emulators running this ARMv7 core through Houdini have
+	// crashed in Go's net/http HTTP/2 read loop during repeated MP4 Range
+	// requests. Keep media streaming on HTTP/1.1 while retaining Keep-Alive.
+	// An explicit empty TLSNextProto map also prevents automatic HTTP/2 setup
+	// on clones created by the CDN transport.
+	transport.ForceAttemptHTTP2 = false
+	transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
 	transport.MaxIdleConns = nativeStreamMaxIdleConnections
 	transport.MaxIdleConnsPerHost = nativeStreamMaxIdlePerHost
 	transport.IdleConnTimeout = nativeStreamIdleConnTimeout
