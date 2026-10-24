@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -67,6 +67,15 @@ func newNativeStreamTransport(base *http.Transport) *http.Transport {
 	// MPV can issue several Range requests while seeking or filling its demuxer.
 	// Reusing the same CDN connection avoids paying TCP/TLS setup for every read.
 	transport.DisableKeepAlives = false
+	// Pin the TLS ALPN protocol as well as disabling the Go HTTP/2 handler.
+	// Some playback CDNs still sent HTTP/2 SETTINGS frames when the transport
+	// expected an HTTP/1.x response, making every media route fail to open.
+	tlsConfig := &tls.Config{}
+	if transport.TLSClientConfig != nil {
+		tlsConfig = transport.TLSClientConfig.Clone()
+	}
+	tlsConfig.NextProtos = []string{"http/1.1"}
+	transport.TLSClientConfig = tlsConfig
 	// Android 9 x86 emulators running this ARMv7 core through Houdini have
 	// crashed in Go's net/http HTTP/2 read loop during repeated MP4 Range
 	// requests. Keep media streaming on HTTP/1.1 while retaining Keep-Alive.

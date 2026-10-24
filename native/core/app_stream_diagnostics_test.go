@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -320,6 +321,7 @@ func TestNativeStreamMP4ResponseDoesNotWaitForLargePeek(t *testing.T) {
 
 func TestNativeStreamTransportReusesConnectionsAndBoundsTimeouts(t *testing.T) {
 	base := &http.Transport{
+		TLSClientConfig:       &tls.Config{NextProtos: []string{"h2", "http/1.1"}},
 		MaxIdleConnsPerHost: 8,
 		TLSHandshakeTimeout: 20 * time.Second,
 		ResponseHeaderTimeout: 20 * time.Second,
@@ -337,6 +339,9 @@ func TestNativeStreamTransportReusesConnectionsAndBoundsTimeouts(t *testing.T) {
 	if stream.TLSNextProto == nil || len(stream.TLSNextProto) != 0 {
 		t.Fatal("native media transport should explicitly disable automatic HTTP/2 setup")
 	}
+	if stream.TLSClientConfig == nil || len(stream.TLSClientConfig.NextProtos) != 1 || stream.TLSClientConfig.NextProtos[0] != "http/1.1" {
+		t.Fatalf("native media transport must advertise HTTP/1.1 only via TLS ALPN: %+v", stream.TLSClientConfig)
+	}
 	if stream.TLSHandshakeTimeout != nativeStreamTLSHandshakeTimeout {
 		t.Fatalf("TLS handshake timeout=%s, want %s", stream.TLSHandshakeTimeout, nativeStreamTLSHandshakeTimeout)
 	}
@@ -348,6 +353,40 @@ func TestNativeStreamTransportReusesConnectionsAndBoundsTimeouts(t *testing.T) {
 	}
 	if base.DisableKeepAlives || base.DialContext != nil || base.TLSHandshakeTimeout != 20*time.Second || base.ResponseHeaderTimeout != 20*time.Second || base.MaxIdleConnsPerHost != 8 {
 		t.Fatal("creating the native media transport mutated the shared transport")
+	}
+	if len(base.TLSClientConfig.NextProtos) != 2 || base.TLSClientConfig.NextProtos[0] != "h2" || base.TLSClientConfig.NextProtos[1] != "http/1.1" {
+		t.Fatal("forcing HTTP/1.1 must not mutate the shared TLS config")
+	}
+}
+
+func TestNativeStreamTransportUsesHTTP11ALPN(t *testing.T) {
+	var negotiated atomic.Value
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.TLS != nil {
+			negotiated.Store(request.TLS.NegotiatedProtocol)
+		}
+		_, _ = io.WriteString(writer, "ok")
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.Proxy = nil
+	base.TLSClientConfig = &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12} // test server uses a self-signed certificate
+	transport := newNativeStreamTransport(base)
+	defer transport.CloseIdleConnections()
+	response, err := (&http.Client{Transport: transport}).Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	_, _ = io.Copy(io.Discard, response.Body)
+	if response.Proto != "HTTP/1.1" {
+		t.Fatalf("stream transport negotiated %s, want HTTP/1.1", response.Proto)
+	}
+	if got, ok := negotiated.Load().(string); !ok || got != "http/1.1" {
+		t.Fatalf("server negotiated ALPN %q, want http/1.1", got)
 	}
 }
 
