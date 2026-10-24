@@ -438,8 +438,12 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 	}
 	writer.WriteHeader(response.StatusCode)
 	if request.Method == http.MethodGet {
-		_, err := io.Copy(writer, reader)
-		if err != nil {
+		// Flush the response headers immediately so the player does not wait
+		// for net/http's small-write buffer to fill while the CDN is streaming.
+		if flusher, ok := writer.(http.Flusher); ok {
+			flusher.Flush()
+			_, err := io.Copy(&nativeInitialFlushWriter{destination: writer, flusher: flusher}, reader)
+			if err != nil {
 			stream.nativeLog(info, "transfer_error", finalURL.String(), "error="+nativeStreamError(err), 0, contentType)
 		}
 	}

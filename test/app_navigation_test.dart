@@ -1,4 +1,4 @@
-import 'package:duanju_app/app_navigation.dart';
+import 'package:hgtv/app_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

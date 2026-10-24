@@ -139,6 +139,30 @@ func (writer *nativeDiagnosticWriter) Write(data []byte) (int, error) {
 	return n, err
 }
 
+func (writer *nativeDiagnosticWriter) Flush() {
+	if flusher, ok := writer.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// nativeInitialFlushWriter flushes the first forwarded media bytes immediately.
+// Go's HTTP server can otherwise buffer a tiny initial MP4 chunk while the
+// upstream waits for more data, making the local player appear stuck at startup.
+type nativeInitialFlushWriter struct {
+	destination io.Writer
+	flusher     http.Flusher
+	flushed     bool
+}
+
+func (writer *nativeInitialFlushWriter) Write(data []byte) (int, error) {
+	n, err := writer.destination.Write(data)
+	if n > 0 && !writer.flushed {
+		writer.flusher.Flush()
+		writer.flushed = true
+	}
+	return n, err
+}
+
 func (stream *nativeStreamServer) nativeTrace(info nativeStreamDiagnostic, address string) *httptrace.ClientTrace {
 	phase := func(name string, err error) {
 		stream.nativeLog(info, "network_phase", address, "phase="+name+" error="+nativeStreamError(err), 0, "")
