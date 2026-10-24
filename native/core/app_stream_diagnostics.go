@@ -104,11 +104,25 @@ func (downloader *Downloader) rememberNativeStreamHostFailure(address, reason st
 	if downloader.streamHostFailures == nil {
 		downloader.streamHostFailures = make(map[string]time.Time)
 	}
-	until := time.Now().Add(nativeStreamHostFailureCooldown)
+	now := time.Now()
+	for failedHost, until := range downloader.streamHostFailures {
+		if !now.Before(until) {
+			delete(downloader.streamHostFailures, failedHost)
+		}
+	}
+	previousUntil, wasCooling := downloader.streamHostFailures[host]
+	previouslyCooling := wasCooling && now.Before(previousUntil)
+	until := now.Add(nativeStreamHostFailureCooldown)
 	if current, exists := downloader.streamHostFailures[host]; !exists || current.Before(until) {
 		downloader.streamHostFailures[host] = until
 	}
 	downloader.streamHostMu.Unlock()
+	if !previouslyCooling {
+		downloader.recordDiagnostic(diagnosticEvent{
+			Level: "warn", Event: "stream.host_cooldown", Host: host,
+			Message: fmt.Sprintf("reason=%s cooldown_seconds=%d", reason, int(nativeStreamHostFailureCooldown/time.Second)),
+		})
+	}
 }
 
 func (downloader *Downloader) nativeStreamHostCoolingDown(address string) bool {
