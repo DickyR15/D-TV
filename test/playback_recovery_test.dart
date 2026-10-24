@@ -103,7 +103,7 @@ void main() {
         route(12, count: 100),
         allowPlayerRecreate: false,
       ),
-      PlaybackRecoveryAction.recreatePlayer,
+      PlaybackRecoveryAction.stop,
     );
   });
 
