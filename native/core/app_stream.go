@@ -444,7 +444,8 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 			flusher.Flush()
 			_, err := io.Copy(&nativeInitialFlushWriter{destination: writer, flusher: flusher}, reader)
 			if err != nil {
-			stream.nativeLog(info, "transfer_error", finalURL.String(), "error="+nativeStreamError(err), 0, contentType)
+				stream.nativeLog(info, "transfer_error", finalURL.String(), "error="+nativeStreamError(err), 0, contentType)
+			}
 		}
 	}
 }
