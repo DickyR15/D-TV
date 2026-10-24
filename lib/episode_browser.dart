@@ -60,7 +60,7 @@ class EpisodeRangeBar extends StatelessWidget {
                 onPressed: () => Navigator.pop(context),
                 child: const Text('取消'),
               ),
-              FilledButton(onPressed: submit, child: const Text('定位')),
+              FilledButton(onPressed: submit, child: const Text('跳至該集')),
             ],
           );
         },
@@ -96,10 +96,10 @@ class EpisodeRangeBar extends StatelessWidget {
               if (current >= 0)
                 TextButton(
                   onPressed: () => onLocate(current),
-                  child: const Text('定位當前'),
+                  child: const Text('回到目前集數'),
                 ),
               IconButton(
-                tooltip: '跳轉集數',
+                tooltip: '跳至指定集數',
                 onPressed: episodes.isEmpty ? null : () => _jump(context),
                 icon: const Icon(Icons.pin_outlined),
               ),
