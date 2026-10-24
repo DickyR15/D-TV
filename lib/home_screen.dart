@@ -30,6 +30,7 @@ import 'library_updater.dart';
 import 'saved_library.dart';
 import 'ui_localization.dart';
 import 'phone_search_dialog.dart';
+import 'app_navigation.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.repository, required this.store});
@@ -476,10 +477,34 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _resetBackConfirmation({bool ignoreTrailingBack = false}) {
+  void _onAppNavigationChanged() {
+    if (!mounted || !AppLayout.isTelevision(context)) return;
+    final change = appNavigationObserver.changes.value;
+    if (change == null) return;
+    switch (change.event) {
+      case AppNavigationEvent.pop:
+      case AppNavigationEvent.remove:
+      case AppNavigationEvent.replace:
+        // A dialog or child page may close before the TV remote delivers its
+        // trailing Back event. Swallow that event app-wide, not just for menus.
+        _resetBackConfirmation(
+          ignoreTrailingBack: true,
+          trailingBackWindow: const Duration(milliseconds: 900),
+        );
+        break;
+      case AppNavigationEvent.push:
+        _resetBackConfirmation();
+        break;
+    }
+  }
+
+  void _resetBackConfirmation({
+    bool ignoreTrailingBack = false,
+    Duration trailingBackWindow = const Duration(milliseconds: 500),
+  }) {
     _lastBackAt = null;
     _ignoreExitPromptUntil = ignoreTrailingBack
-        ? DateTime.now().add(const Duration(milliseconds: 500))
+        ? DateTime.now().add(trailingBackWindow)
         : null;
     if (mounted) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -615,6 +640,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    appNavigationObserver.changes.addListener(_onAppNavigationChanged);
     _scroll.addListener(_onCatalogScroll);
     _source = SourceSite.byId(widget.store.source);
     _allSources = widget.store.catalogView.allSources;
@@ -667,6 +693,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    appNavigationObserver.changes.removeListener(_onAppNavigationChanged);
     _updater.removeListener(_updateChanged);
     _updater.dispose();
     _followUpdater.dispose();

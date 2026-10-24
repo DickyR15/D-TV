@@ -20,6 +20,7 @@ import 'lan_controller.dart';
 import 'player_screen.dart';
 import 'video_enhancement_assets.dart';
 import 'diary_service.dart';
+import 'app_navigation.dart';
 import 'ui_localization.dart';
 
 Future<void> main() async {
@@ -240,6 +241,7 @@ class DuanjuApp extends StatelessWidget {
 
   Widget _application() => MaterialApp(
     navigatorKey: navigatorKey,
+    navigatorObservers: [appNavigationObserver],
     title: appName,
     debugShowCheckedModeBanner: false,
     locale: const Locale('zh', 'TW'),
