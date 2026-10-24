@@ -7,7 +7,6 @@
 - 新增 stream.host_cooldown 診斷事件及備援路線測試；實機播放是否完全恢復仍需以新 APK 驗證。
 
 ## 0.2.138+150
-## 0.2.138+150
 
 - 修正 Android 9 及更早版本匯出播放日誌失敗：Android 10 以下改寫入公開 `Download/D-TV` 資料夾，並在需要時請求舊版外部儲存權限；Android 10 以上維持 MediaStore 匯出流程。
 - 匯出成功後通知媒體掃描器，讓 Android 9 檔案管理器能辨識新產生的 TXT 檔。
