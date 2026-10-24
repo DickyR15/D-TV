@@ -86,9 +86,10 @@ func (engine *nativeEngine) rankNativePlaybackRoutes(
 	if probeCount < 2 {
 		probeCount = min(topQualityCount, nativePlaybackRouteProbeLimit)
 	}
-	coolingAtProbe := make(map[int]bool, probeCount)
+
+	wasCooling := make(map[int]bool, probeCount)
 	for index := 0; index < probeCount; index++ {
-		coolingAtProbe[index] = engine.downloader.nativeStreamHostCoolingDown(choice.media[index].URL)
+		wasCooling[index] = engine.downloader.nativeStreamHostCoolingDown(choice.media[index].URL)
 	}
 
 	resultsChannel := make(chan nativePlaybackRouteProbeResult, probeCount)
@@ -103,19 +104,15 @@ func (engine *nativeEngine) rankNativePlaybackRoutes(
 		}()
 	}
 	results := make([]nativePlaybackRouteProbeResult, 0, probeCount)
-	successful := 0
+	resultsByIndex := make(map[int]nativePlaybackRouteProbeResult, probeCount)
 	for range probeCount {
 		result := <-resultsChannel
 		results = append(results, result)
+		resultsByIndex[result.index] = result
 		if result.err == nil {
-			successful++
-		}
-	}
-
-	// Remember transient probe failures so the next forced refresh can avoid
-	// returning to the same dead or stalled CDN node.
-	for _, result := range results {
-		if result.err == nil {
+			// A successful media probe means this host has recovered.
+			engine.downloader.clearNativeStreamHostFailure(choice.media[result.index].URL)
+			wasCooling[result.index] = false
 			continue
 		}
 		reason := nativeStreamError(result.err)
@@ -123,38 +120,57 @@ func (engine *nativeEngine) rankNativePlaybackRoutes(
 			reason = "upstream_http"
 		}
 		engine.downloader.rememberNativeStreamHostFailure(choice.media[result.index].URL, reason)
+		wasCooling[result.index] = engine.downloader.nativeStreamHostCoolingDown(choice.media[result.index].URL)
 	}
 
-	// Only change the order when at least one candidate proved it can return
-	// media data. If probes are all blocked by a provider, keep the old order.
-	if successful > 0 && ctx.Err() == nil {
-		sort.SliceStable(results, func(i, j int) bool {
-			left, right := results[i], results[j]
-			leftCooling, rightCooling := coolingAtProbe[left.index], coolingAtProbe[right.index]
-			if leftCooling != rightCooling {
-				return !leftCooling
+	// Rank the entire preferred-quality tier, not just the routes we probed.
+	// A candidate that just timed out must not immediately remain first; an
+	// untested alternative is safer to try next. Never move a lower quality up.
+	rankedPosition := make(map[int]int, topQualityCount)
+	if ctx.Err() == nil {
+		order := make([]int, topQualityCount)
+		for index := range order {
+			order[index] = index
+		}
+		routeClass := func(index int) int {
+			result, probed := resultsByIndex[index]
+			if probed && result.err == nil {
+				return 0 // proven responsive
 			}
-			if (left.err == nil) != (right.err == nil) {
-				return left.err == nil
+			if !probed {
+				return 1 // not yet tested; prefer over a known failure
 			}
-			if left.err == nil && left.latency != right.latency {
-				return left.latency < right.latency
+			if wasCooling[index] {
+				return 3 // transient connection/transport failure
 			}
-			return left.index < right.index
+			return 2 // non-transient response failure, such as an HTTP denial
+		}
+		sort.SliceStable(order, func(i, j int) bool {
+			leftIndex, rightIndex := order[i], order[j]
+			leftClass, rightClass := routeClass(leftIndex), routeClass(rightIndex)
+			if leftClass != rightClass {
+				return leftClass < rightClass
+			}
+			left, leftProbed := resultsByIndex[leftIndex]
+			right, rightProbed := resultsByIndex[rightIndex]
+			if leftClass == 0 && leftProbed && rightProbed {
+				if wasCooling[leftIndex] != wasCooling[rightIndex] {
+					return !wasCooling[leftIndex]
+				}
+				if left.latency != right.latency {
+					return left.latency < right.latency
+				}
+			}
+			return leftIndex < rightIndex
 		})
-		ranked := append([]providerMedia(nil), choice.media...)
-		for position, result := range results {
-			ranked[position] = choice.media[result.index]
+		rankedTop := append([]providerMedia(nil), choice.media[:topQualityCount]...)
+		for position, originalIndex := range order {
+			rankedTop[position] = choice.media[originalIndex]
+			rankedPosition[originalIndex] = position
 		}
-		choice.media = ranked
+		choice.media = append(rankedTop, lowerQuality...)
 	}
 
-	rankedPosition := make(map[int]int, len(results))
-	if successful > 0 && ctx.Err() == nil {
-		for position, result := range results {
-			rankedPosition[result.index] = position
-		}
-	}
 	for _, result := range results {
 		state := "ok"
 		reason := ""

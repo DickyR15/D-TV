@@ -125,7 +125,27 @@ func (downloader *Downloader) rememberNativeStreamHostFailure(address, reason st
 	}
 }
 
+func (downloader *Downloader) clearNativeStreamHostFailure(address string) {
+	if downloader == nil {
+		return
+	}
+	parsed, err := url.Parse(address)
+	if err != nil {
+		return
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" {
+		return
+	}
+	downloader.streamHostMu.Lock()
+	delete(downloader.streamHostFailures, host)
+	downloader.streamHostMu.Unlock()
+}
+
 func (downloader *Downloader) nativeStreamHostCoolingDown(address string) bool {
+	if downloader == nil {
+		return false
+	}
 	parsed, err := url.Parse(address)
 	if err != nil {
 		return false

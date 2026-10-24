@@ -102,6 +102,9 @@ func (stream *nativeStreamServer) nativeRequest(request *http.Request) (*http.Re
 		address = response.Request.URL.String()
 	}
 	stream.nativeLog(info, "upstream_headers", address, "", response.StatusCode, response.Header.Get("Content-Type"))
+	if response.StatusCode == http.StatusOK || response.StatusCode == http.StatusPartialContent {
+		stream.downloader.clearNativeStreamHostFailure(address)
+	}
 	response.Body = &nativeDiagnosticBody{ReadCloser: response.Body, stream: stream, info: info, address: address}
 	return response, nil
 }
