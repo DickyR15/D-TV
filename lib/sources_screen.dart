@@ -321,6 +321,48 @@ class _SourcesScreenState extends State<SourcesScreen> {
               children: [
                 FilledButton.icon(
                   key: ValueKey('update-${source.id}'),
+                  // Match the highly visible focus treatment of the adjacent
+                  // outlined diagnostic button. When focused, invert the
+                  // filled button to a dark surface with a thick cyan outline.
+                  style: ButtonStyle(
+                    backgroundColor:
+                        WidgetStateProperty.resolveWith<Color?>((states) {
+                          if (states.contains(WidgetState.focused) &&
+                              !states.contains(WidgetState.disabled)) {
+                            return Theme.of(context).colorScheme.surface;
+                          }
+                          return null;
+                        }),
+                    foregroundColor:
+                        WidgetStateProperty.resolveWith<Color?>((states) {
+                          if (states.contains(WidgetState.focused) &&
+                              !states.contains(WidgetState.disabled)) {
+                            return Theme.of(context).colorScheme.primary;
+                          }
+                          return null;
+                        }),
+                    side: WidgetStateProperty.resolveWith<BorderSide?>((states) {
+                      if (states.contains(WidgetState.focused) &&
+                          !states.contains(WidgetState.disabled)) {
+                        return BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 3,
+                        );
+                      }
+                      return null;
+                    }),
+                    overlayColor:
+                        WidgetStateProperty.resolveWith<Color?>((states) {
+                          if (states.contains(WidgetState.focused) &&
+                              !states.contains(WidgetState.disabled)) {
+                            return Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withValues(alpha: 0.12);
+                          }
+                          return null;
+                        }),
+                  ),
                   onPressed: enabled ? () => _run(source, 'update') : null,
                   icon: const Icon(Icons.sync_rounded),
                   label: const Text('更新'),
