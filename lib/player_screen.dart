@@ -1264,6 +1264,17 @@ class _PlayerScreenState extends State<PlayerScreen>
               );
               await platform.setProperty('hwdec-codecs', 'all');
               if (_mpvEmbedBackend) {
+                // Onn. 4K Pro logs repeatedly report "Failed to create file
+                // cache." Keep demuxer cache in RAM instead of creating a
+                // temporary on-disk cache in the embedded MPV sandbox.
+                try {
+                  await platform.setProperty('cache-on-disk', 'no');
+                  DiaryService.add('[MPV] cache_on_disk=no');
+                } catch (error) {
+                  DiaryService.add(
+                    '[MPV] cache_on_disk_setting_failed=${error.runtimeType}',
+                  );
+                }
                 await platform.setProperty('vd-lavc-threads', '4');
               } else {
                 await platform.setProperty(
