@@ -1,6 +1,8 @@
 package com.duanju.duanju_app
 
 import io.flutter.embedding.android.FlutterActivity
+import android.Manifest
+import android.media.MediaScannerConnection
 import android.app.UiModeManager
 import android.app.ActivityManager
 import android.app.PictureInPictureParams
@@ -26,6 +28,7 @@ import android.view.InputDevice
 import android.view.WindowManager
 import android.provider.MediaStore
 import android.provider.Settings
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -39,6 +42,12 @@ class MainActivity : FlutterActivity() {
     private var thermalHeadroom: Double? = null
     private var deviceChannel: MethodChannel? = null
     private var televisionMode = false
+    private var pendingExportPlaybackLogText: String? = null
+    private var pendingExportPlaybackLogResult: MethodChannel.Result? = null
+
+    companion object {
+        private const val EXPORT_PLAYBACK_LOG_PERMISSION_REQUEST = 7412
+    }
 
     @Suppress("DEPRECATION")
     private fun isTelevisionDevice(): Boolean {
@@ -96,11 +105,31 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun exportPlaybackLog(text: String): Map<String, String> {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            throw IllegalStateException("匯出日誌需要 Android 10 或更新版本")
-        }
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val fileName = "D-TV-playback-log_$stamp.txt"
+
+        // Android 9 and earlier use legacy public-storage access. These
+        // releases do not expose MediaStore.Downloads / RELATIVE_PATH.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val downloads = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS
+            )
+            val directory = File(downloads, "D-TV")
+            if (!directory.exists() && !directory.mkdirs()) {
+                throw IllegalStateException("無法建立 Download/D-TV 資料夾")
+            }
+            val outputFile = File(directory, fileName)
+            outputFile.writeText(text, Charsets.UTF_8)
+            MediaScannerConnection.scanFile(
+                this,
+                arrayOf(outputFile.absolutePath),
+                arrayOf("text/plain"),
+                null
+            )
+            return mapOf("fileName" to fileName, "path" to "Download/D-TV/$fileName")
+        }
+
+        // Android 10+ uses MediaStore and needs no broad storage permission.
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
             put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
@@ -126,6 +155,68 @@ class MainActivity : FlutterActivity() {
         } catch (error: Exception) {
             contentResolver.delete(uri, null, null)
             throw error
+        }
+    }
+
+    private fun handleExportPlaybackLog(text: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+                PackageManager.PERMISSION_GRANTED
+        ) {
+            if (pendingExportPlaybackLogResult != null) {
+                result.error("export_in_progress", "日誌匯出正在等待儲存權限確認", null)
+                return
+            }
+            pendingExportPlaybackLogText = text
+            pendingExportPlaybackLogResult = result
+            requestPermissions(
+                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                EXPORT_PLAYBACK_LOG_PERMISSION_REQUEST
+            )
+            return
+        }
+
+        try {
+            result.success(exportPlaybackLog(text))
+        } catch (error: Exception) {
+            result.error(
+                "export_failed",
+                "匯出失敗：${error.message ?: "未知錯誤"}",
+                null
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != EXPORT_PLAYBACK_LOG_PERMISSION_REQUEST) return
+
+        val pendingResult = pendingExportPlaybackLogResult
+        val pendingText = pendingExportPlaybackLogText
+        pendingExportPlaybackLogResult = null
+        pendingExportPlaybackLogText = null
+        if (pendingResult == null || pendingText == null) return
+
+        if (grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
+            pendingResult.error(
+                "storage_permission_denied",
+                "需要允許儲存空間權限，才能將 TXT 匯出到 Download/D-TV。",
+                null
+            )
+            return
+        }
+        try {
+            pendingResult.success(exportPlaybackLog(pendingText))
+        } catch (error: Exception) {
+            pendingResult.error(
+                "export_failed",
+                "匯出失敗：${error.message ?: "未知錯誤"}",
+                null
+            )
         }
     }
 
@@ -206,15 +297,7 @@ class MainActivity : FlutterActivity() {
                             if (text.isNullOrBlank()) {
                                 result.error("empty_log", "沒有可匯出的日誌內容", null)
                             } else {
-                                try {
-                                    result.success(exportPlaybackLog(text))
-                                } catch (error: Exception) {
-                                    result.error(
-                                        "export_failed",
-                                        "匯出失敗：${error.message ?: "未知錯誤"}",
-                                        null
-                                    )
-                                }
+                                handleExportPlaybackLog(text, result)
                             }
                         }
                         "playbackPower" -> result.success(runCatching { playbackPower() }.getOrNull())
