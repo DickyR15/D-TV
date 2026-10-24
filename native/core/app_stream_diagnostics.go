@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"regexp"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -81,6 +82,31 @@ func nativeStreamError(err error) string {
 	return "io_error"
 }
 
+var nativeStreamURLInError = regexp.MustCompile(`(?i)https?://[^\\s"<>]+`)
+
+// nativeStreamErrorDetail records the underlying network cause without leaking
+// signed playback URLs, query credentials, or long media tokens into exported logs.
+func nativeStreamErrorDetail(err error) string {
+	if err == nil {
+		return "error_type=<nil> cause=none"
+	}
+	var wrappedURL *url.Error
+	if errors.As(err, &wrappedURL) && wrappedURL.Err != nil {
+		err = wrappedURL.Err
+	}
+	var op *net.OpError
+	if errors.As(err, &op) {
+		cause := "<nil>"
+		if op.Err != nil {
+			cause = op.Err.Error()
+		}
+		cause = nativeStreamURLInError.ReplaceAllString(cause, "[redacted-url]")
+		return fmt.Sprintf("error_type=%T op=%s net=%s cause_type=%T cause=%q", err, op.Op, op.Net, op.Err, truncate(cause, 180))
+	}
+	cause := nativeStreamURLInError.ReplaceAllString(err.Error(), "[redacted-url]")
+	return fmt.Sprintf("error_type=%T cause=%q", err, truncate(cause, 180))
+}
+
 const nativeStreamHostFailureCooldown = 90 * time.Second
 
 // rememberNativeStreamHostFailure temporarily deprioritizes hosts that failed
@@ -88,7 +114,7 @@ const nativeStreamHostFailureCooldown = 90 * time.Second
 // playback resolver and stream proxy through Downloader.
 func (downloader *Downloader) rememberNativeStreamHostFailure(address, reason string) {
 	switch reason {
-	case "timeout", "connect", "tls", "dns", "deadline", "unexpected_eof", "upstream_http":
+	case "timeout", "connect", "tls", "dns", "deadline", "unexpected_eof", "upstream_http", "io_error":
 	default:
 		return
 	}
@@ -196,7 +222,7 @@ func (body *nativeDiagnosticBody) Read(buffer []byte) (int, error) {
 	if err != nil && err != io.EOF {
 		reason := nativeStreamError(err)
 		body.stream.downloader.rememberNativeStreamHostFailure(body.address, reason)
-		body.stream.nativeLog(body.info, "upstream_read_error", body.address, "error="+reason, 0, "")
+		body.stream.nativeLog(body.info, "upstream_read_error", body.address, "error="+reason+" "+nativeStreamErrorDetail(err), 0, "")
 	}
 	return n, err
 }

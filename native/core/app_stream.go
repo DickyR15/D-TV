@@ -102,7 +102,7 @@ func (stream *nativeStreamServer) nativeRequest(request *http.Request) (*http.Re
 	if err != nil {
 		reason := nativeStreamError(err)
 		stream.downloader.rememberNativeStreamHostFailure(request.URL.String(), reason)
-		stream.nativeLog(info, "upstream_error", request.URL.String(), "error="+reason, 0, "")
+		stream.nativeLog(info, "upstream_error", request.URL.String(), "error="+reason+" "+nativeStreamErrorDetail(err), 0, "")
 		return response, err
 	}
 	address := request.URL.String()

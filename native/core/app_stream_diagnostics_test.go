@@ -2,11 +2,13 @@ package core
 
 import (
 	"context"
+	"errors"
 	"encoding/json"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -80,12 +82,33 @@ func TestNativeStreamDiagnosticsRewriteAndReadFailures(t *testing.T) {
 	}{
 		{&net.DNSError{Err: "secret DNS error", Name: "private.test"}, "dns"},
 		{&net.OpError{Op: "dial", Err: io.ErrUnexpectedEOF}, "connect"},
+		{&net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset by peer")}, "io_error"},
 		{context.Canceled, "canceled"},
 		{context.DeadlineExceeded, "deadline"},
 	} {
 		if got := nativeStreamError(sample.err); got != sample.want {
 			t.Errorf("error category=%s want %s", got, sample.want)
 		}
+	}
+}
+
+func TestNativeStreamIOErrorsTriggerHostCooldownAndRedactURL(t *testing.T) {
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := "https://private.example.test/media.mp4?token=hidden-query"
+	engine.downloader.rememberNativeStreamHostFailure(address, "io_error")
+	if !engine.downloader.nativeStreamHostCoolingDown(address) {
+		t.Fatal("generic media I/O errors should temporarily cool down the failed host")
+	}
+	wrapped := &url.Error{Op: "Get", URL: address, Err: &net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset by peer")}}
+	detail := nativeStreamErrorDetail(wrapped)
+	if strings.Contains(detail, "hidden-query") || strings.Contains(detail, "private.example.test/media") {
+		t.Fatalf("error details leaked a signed playback URL: %s", detail)
+	}
+	if !strings.Contains(detail, "connection reset by peer") || !strings.Contains(detail, "op=read") {
+		t.Fatalf("missing underlying network failure details: %s", detail)
 	}
 }
 
