@@ -23,6 +23,26 @@ type nativePlaybackRouteProbeResult struct {
 	err     error
 }
 
+// Put same-quality CDN fallbacks on distinct hosts before retrying a slow origin.
+func diversifyNativePlaybackRoutesByHost(routes []providerMedia) []providerMedia {
+	seen := make(map[string]bool, len(routes))
+	unique := make([]providerMedia, 0, len(routes))
+	repeated := make([]providerMedia, 0, len(routes))
+	for _, media := range routes {
+		host := ""
+		if parsed, err := url.Parse(media.URL); err == nil {
+			host = strings.ToLower(parsed.Host)
+		}
+		if host == "" || seen[host] {
+			repeated = append(repeated, media)
+			continue
+		}
+		seen[host] = true
+		unique = append(unique, media)
+	}
+	return append(unique, repeated...)
+}
+
 // rankNativePlaybackRoutes performs a small, concurrent HTTP probe of the
 // highest-quality alternatives before playback starts. It only reorders
 // candidates within that quality, preserving quality preference and fallback
@@ -48,6 +68,8 @@ func (engine *nativeEngine) rankNativePlaybackRoutes(
 	if probeCount < 2 {
 		return choice
 	}
+
+	choice.media = append(diversifyNativePlaybackRoutesByHost(choice.media[:topQualityCount]), choice.media[topQualityCount:]...)
 
 	resultsChannel := make(chan nativePlaybackRouteProbeResult, probeCount)
 	for index := 0; index < probeCount; index++ {

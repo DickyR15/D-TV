@@ -153,6 +153,6 @@ func (stream *nativeStreamServer) nativeTrace(info nativeStreamDiagnostic, addre
 		GotConn: func(value httptrace.GotConnInfo) {
 			stream.nativeLog(info, "network_phase", address, fmt.Sprintf("phase=got_connection reused=%t", value.Reused), 0, "")
 		},
-		GotFirstResponseByte: func() { phase("first_response_byte", nil) },
+		GotFirstResponseByte: func() { phase("response_headers_first_byte", nil) },
 	}
 }

@@ -242,6 +242,59 @@ func TestNativeStreamDiagnosticsCancellationAndHTTPFailure(t *testing.T) {
 	}
 }
 
+func TestNativeStreamMP4ResponseDoesNotWaitForLargePeek(t *testing.T) {
+	releaseUpstream := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "video/mp4")
+		writer.Header().Set("Content-Length", "1024")
+		writer.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(writer, "0123456789abcdef")
+		writer.(http.Flusher).Flush()
+		select {
+		case <-releaseUpstream:
+		case <-request.Context().Done():
+			return
+		}
+		_, _ = io.WriteString(writer, strings.Repeat("x", 1024-16))
+	}))
+	defer upstream.Close()
+	defer close(releaseUpstream)
+
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := newNativeStreamServer(engine.downloader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.server.Close()
+	address, token := stream.nativeOpen(providerMedia{URL: upstream.URL + "/video.mp4"})
+	defer stream.nativeRelease(token)
+
+	type result struct {
+		response *http.Response
+		err      error
+	}
+	done := make(chan result, 1)
+	go func() {
+		response, err := http.Get(address)
+		done <- result{response: response, err: err}
+	}()
+	select {
+	case opened := <-done:
+		if opened.err != nil {
+			t.Fatal(opened.err)
+		}
+		opened.response.Body.Close()
+		if opened.response.StatusCode != http.StatusOK {
+			t.Fatalf("local MP4 response status=%d, want 200", opened.response.StatusCode)
+		}
+	case <-time.After(750 * time.Millisecond):
+		t.Fatal("MP4 response waited for a large body peek")
+	}
+}
+
 func TestNativeStreamTransportReusesConnectionsAndBoundsTimeouts(t *testing.T) {
 	base := &http.Transport{
 		MaxIdleConnsPerHost: 8,

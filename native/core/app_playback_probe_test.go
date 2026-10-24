@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -55,5 +56,53 @@ func TestNativePlaybackRouteProbePrefersResponsiveSameQualityBackup(t *testing.T
 	}
 	if ranked.media[3].Quality != 720 {
 		t.Fatalf("route probing should not downgrade preferred quality: %+v", ranked.media)
+	}
+}
+
+type playbackProbeFixtureTransport func(*http.Request) (*http.Response, error)
+
+func (transport playbackProbeFixtureTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+func TestNativePlaybackProbeDiversifiesSameQualityHostsWhenAllFail(t *testing.T) {
+	media := providerMedia{
+		URL: "https://cdn-a.example.test/one.mp4", Quality: 1080,
+		Variants: []providerMedia{
+			{URL: "https://cdn-a.example.test/two.mp4", Quality: 1080},
+			{URL: "https://cdn-b.example.test/three.mp4", Quality: 1080},
+			{URL: "https://cdn-b.example.test/four.mp4", Quality: 1080},
+			{URL: "https://cdn-c.example.test/five.mp4", Quality: 1080},
+			{URL: "https://cdn-a.example.test/720p.mp4", Quality: 720},
+		},
+	}
+	client := &http.Client{Transport: playbackProbeFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("unavailable")),
+			Request:    request,
+		}, nil
+	})}
+	choice := nativePlaybackChoices(media, 0)
+	engine := &nativeEngine{downloader: &Downloader{client: client}}
+	ranked := engine.rankNativePlaybackRoutes(context.Background(), choice, Task{DramaID: "hongguo:fixture", Index: 1})
+	want := []string{
+		"https://cdn-a.example.test/one.mp4",
+		"https://cdn-b.example.test/three.mp4",
+		"https://cdn-c.example.test/five.mp4",
+		"https://cdn-a.example.test/two.mp4",
+		"https://cdn-b.example.test/four.mp4",
+	}
+	if len(ranked.media) != len(want)+1 {
+		t.Fatalf("route count changed: %d", len(ranked.media))
+	}
+	for index, wantURL := range want {
+		if ranked.media[index].URL != wantURL {
+			t.Fatalf("route %d=%s, want %s", index+1, ranked.media[index].URL, wantURL)
+		}
+	}
+	if ranked.media[len(want)].Quality != 720 {
+		t.Fatalf("diversifying hosts must not downgrade preferred quality: %+v", ranked.media)
 	}
 }
