@@ -367,7 +367,10 @@ func TestNativeStreamTransportUsesHTTP11ALPN(t *testing.T) {
 		}
 		_, _ = io.WriteString(writer, "ok")
 	}))
-	server.EnableHTTP2 = true
+	// Exercise a real TLS ALPN handshake. Avoid EnableHTTP2 here because
+	// httptest's HTTP/2 setup replaces the server TLS NextProtos and can leave
+	// the selected protocol unobservable for this handler-based assertion.
+	server.TLS = &tls.Config{NextProtos: []string{"h2", "http/1.1"}}
 	server.StartTLS()
 	defer server.Close()
 
