@@ -10,7 +10,7 @@ void main() {
     routeCount: count,
   );
 
-  test('tries routes once, then recreates the player instead of wrapping to route 1', () {
+  test('refreshes a failed route list once before recreating the player', () {
     final recovery = PlaybackRecovery();
     for (var i = 0; i < 9; i++) {
       expect(
@@ -18,9 +18,22 @@ void main() {
         PlaybackRecoveryAction.alternative,
       );
     }
-    expect(recovery.next(route(9, count: 10)), PlaybackRecoveryAction.recreatePlayer);
+    expect(recovery.next(route(9, count: 10)), PlaybackRecoveryAction.refresh);
 
-    // The replacement screen is only allowed one full route pass.
+    // The refreshed URL list gets its own bounded pass.
+    for (var i = 0; i < 9; i++) {
+      expect(
+        recovery.next(route(i, count: 10)),
+        PlaybackRecoveryAction.alternative,
+      );
+    }
+    expect(
+      recovery.next(route(9, count: 10)),
+      PlaybackRecoveryAction.recreatePlayer,
+    );
+
+    // After one player replacement, a second refresh is allowed, but stop
+    // remains the terminal state when a second route list is exhausted.
     final replacement = PlaybackRecovery();
     for (var i = 0; i < 9; i++) {
       expect(
@@ -30,27 +43,51 @@ void main() {
     }
     expect(
       replacement.next(route(9, count: 10), allowPlayerRecreate: false),
+      PlaybackRecoveryAction.refresh,
+    );
+    for (var i = 0; i < 9; i++) {
+      expect(
+        replacement.next(route(i, count: 10), allowPlayerRecreate: false),
+        PlaybackRecoveryAction.alternative,
+      );
+    }
+    expect(
+      replacement.next(route(9, count: 10), allowPlayerRecreate: false),
       PlaybackRecoveryAction.stop,
     );
   });
 
-  test('one-route sources recreate the player once without endless retrying', () {
+  test('one-route sources force one fresh URL before terminal recovery', () {
     final recovery = PlaybackRecovery();
+    expect(
+      recovery.next(route(0, count: 1)),
+      PlaybackRecoveryAction.refresh,
+    );
     expect(
       recovery.next(route(0, count: 1)),
       PlaybackRecoveryAction.recreatePlayer,
     );
+
+    final replacement = PlaybackRecovery();
     expect(
-      PlaybackRecovery().next(
-        route(0, count: 1),
-        allowPlayerRecreate: false,
-      ),
+      replacement.next(route(0, count: 1), allowPlayerRecreate: false),
+      PlaybackRecoveryAction.refresh,
+    );
+    expect(
+      replacement.next(route(0, count: 1), allowPlayerRecreate: false),
       PlaybackRecoveryAction.stop,
     );
   });
 
-  test('large route lists remain bounded per player', () {
+  test('large route lists get at most twelve attempts per resolution', () {
     final recovery = PlaybackRecovery();
+    for (var i = 0; i < PlaybackRecovery.maxAlternativeAttempts; i++) {
+      expect(
+        recovery.next(route(i, count: 100)),
+        PlaybackRecoveryAction.alternative,
+      );
+    }
+    expect(recovery.next(route(12, count: 100)), PlaybackRecoveryAction.refresh);
     for (var i = 0; i < PlaybackRecovery.maxAlternativeAttempts; i++) {
       expect(
         recovery.next(route(i, count: 100)),
@@ -66,7 +103,7 @@ void main() {
         route(12, count: 100),
         allowPlayerRecreate: false,
       ),
-      PlaybackRecoveryAction.stop,
+      PlaybackRecoveryAction.recreatePlayer,
     );
   });
 

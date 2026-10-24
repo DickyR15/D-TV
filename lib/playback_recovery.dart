@@ -3,14 +3,17 @@ import 'models.dart';
 enum PlaybackRecoveryAction { alternative, refresh, recreatePlayer, stop }
 
 class PlaybackRecovery {
-  // A source can expose many URLs, but a single player should only cycle
-  // through them once. When exhausted, recreate the MPV instance instead of
-  // resolving the same list again inside a player that may be stuck.
+  // Try a bounded number of provider URLs, then force one fresh resolve.
+  // Signed media URLs and CDN routes can expire or return incomplete MP4 data;
+  // retrying the same session after exhaustion would only reuse stale URLs.
   static const maxAlternativeAttempts = 12;
+  static const maxRefreshAttempts = 1;
   int _alternativeAttempts = 0;
+  int _refreshAttempts = 0;
 
   void reset() {
     _alternativeAttempts = 0;
+    _refreshAttempts = 0;
   }
 
   PlaybackRecoveryAction next(
@@ -21,6 +24,11 @@ class PlaybackRecovery {
         _alternativeAttempts < maxAlternativeAttempts) {
       _alternativeAttempts++;
       return PlaybackRecoveryAction.alternative;
+    }
+    if (_refreshAttempts < maxRefreshAttempts) {
+      _refreshAttempts++;
+      _alternativeAttempts = 0;
+      return PlaybackRecoveryAction.refresh;
     }
     return allowPlayerRecreate
         ? PlaybackRecoveryAction.recreatePlayer

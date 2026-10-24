@@ -1210,17 +1210,27 @@ class _PlayerScreenState extends State<PlayerScreen>
         return;
       }
       final resolveClock = Stopwatch()..start();
-      prepared = retained != null
-          ? await _loader.fallback(retained!)
-          : warmed != null
-          ? await _loader.use(warmed)
-          : await _loader.load(
-              widget.detail.drama,
-              widget.detail.episodes[index],
-              quality: _requestedQuality,
-              localOnly: widget.localOnly,
-              online: _forceOnline,
-            );
+      if (retained != null) {
+        prepared = await _loader.fallback(retained!);
+      } else if (warmed != null) {
+        prepared = await _loader.use(warmed);
+      } else {
+        final forceRefresh = recoveryAction == PlaybackRecoveryAction.refresh;
+        if (forceRefresh) {
+          DiaryService.add(
+            '[Recovery] force_refresh_resolve generation=$ticket episode=${widget.detail.episodes[index].number}',
+          );
+        }
+        prepared = await _loader.load(
+          widget.detail.drama,
+          widget.detail.episodes[index],
+          quality: _requestedQuality,
+          localOnly: widget.localOnly,
+          // A route list exhausted or returned invalid MP4 headers. Resolve
+          // this episode again with force=true instead of reusing the old plan.
+          online: _forceOnline || forceRefresh,
+        );
+      }
       resolveMs = resolveClock.elapsedMilliseconds;
       if (prepared == null) {
         // A superseded request should stay silent, but a null result for the
