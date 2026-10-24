@@ -428,6 +428,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         _index,
         position: widget.initialPosition,
         handoffPlan: handoff?.plan,
+        // A clean-player restart is part of automatic recovery; don't flash
+        // the control overlay while the replacement stream begins.
+        showControlsOnReady: !widget.recoveryRestarted,
       );
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -970,7 +973,13 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
       return;
     }
-    await _play(_index, position: position, recoveryAction: action);
+    await _play(
+      _index,
+      position: position,
+      recoveryAction: action,
+      // Route fallback is automatic: keep the viewing surface unobstructed.
+      showControlsOnReady: false,
+    );
   }
 
   Future<void> _recreatePlayerForRecovery(
@@ -2088,8 +2097,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final title = uiTraditional(
       '${uiTraditional(widget.detail.drama.title)} · 第 ${widget.detail.episodes[_index].number} 集'
       '${_plan?.local == true ? ' · 本機' : ''}'
-      '${widget.detail.episodes[_index].vip ? ' · VIP 試看' : ''}'
-      '${(_plan?.routeIndex ?? 0) > 0 ? ' · 線路 ${_plan!.routeIndex + 1}' : ''}',
+      '${widget.detail.episodes[_index].vip ? ' · VIP 試看' : ''}',
     );
     final hideOverlayForPictureInPicture = _pictureInPictureVisible;
     final Widget controls = hideOverlayForPictureInPicture
