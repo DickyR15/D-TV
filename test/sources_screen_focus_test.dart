@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/local_store.dart';
 import 'package:hgtv/sources_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,8 +23,11 @@ void main() {
     final repository = _SourceManagementRepository();
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: SourcesScreen(repository: repository, store: store),
+      AppLayout(
+        television: true,
+        child: MaterialApp(
+          home: SourcesScreen(repository: repository, store: store),
+        ),
       ),
     );
     await tester.pump();
