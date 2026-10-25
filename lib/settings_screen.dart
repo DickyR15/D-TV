@@ -143,7 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               builder: (dialogContext) => AlertDialog(
                 title: const Text('設定備份匯出成功'),
                 content: SelectableText(
-                  '已儲存設定備份：\\n$path\\n\\n'
+                  '已儲存設定備份：\n$path\n\n'
                   '請從檔案管理器開啟 Download/D-TV 資料夾，'
                   '將 JSON 備份檔複製到電腦保存。',
                 ),
