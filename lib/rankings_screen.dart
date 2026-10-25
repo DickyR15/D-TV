@@ -335,7 +335,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
             ? DateTime.now().subtract(const Duration(minutes: 5))
             : DateTime.now(),
       );
-      if (!force && result.warning.isEmpty) {
+      if (result.warning.isEmpty) {
         _prefetchNextPage(board, result);
       }
       _retryTimer?.cancel();
