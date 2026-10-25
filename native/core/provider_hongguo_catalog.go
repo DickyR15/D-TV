@@ -109,14 +109,29 @@ func (downloader *Downloader) fetchHongguoWebsiteCatalogPage(ctx context.Context
 		}
 		successes++
 		cursor := state.Feeds[result.route.key]
+		previousSignature := cursor.PageSignature
+		ids := make([]string, 0, len(result.items))
+		for _, drama := range result.items {
+			if drama.ID != "" {
+				ids = append(ids, drama.ID)
+			}
+		}
+		sort.Strings(ids)
+		signature := ""
+		if len(ids) > 0 {
+			signature = fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(ids, "\n"))))
+		}
+		repeatedPage := signature != "" && signature == previousSignature
+
 		cursor.Offset = result.route.page
 		cursor.Initialized = true
 		cursor.UpdatedAt = time.Now()
+		cursor.PageSignature = signature
 		hasMore := len(result.items) >= 24
-		if result.total > 0 {
-			hasMore = result.route.page < result.total
+		if result.total > result.route.page {
+			hasMore = true
 		}
-		if result.route.page >= 500 {
+		if result.route.page >= 500 || len(result.items) == 0 || repeatedPage {
 			hasMore = false
 		}
 		cursor.Exhausted = !hasMore
