@@ -193,6 +193,7 @@ class DiaryService {
     final exportFocus = FocusNode(debugLabel: 'playback-log-export');
     final copyFocus = FocusNode(debugLabel: 'playback-log-copy');
     final closeFocus = FocusNode(debugLabel: 'playback-log-close');
+    var initialCloseFocusScheduled = false;
 
     KeyEventResult routeDialogRemote(
       FocusNode node,
@@ -271,9 +272,12 @@ class DiaryService {
       await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (dialogContext.mounted) closeFocus.requestFocus();
-        });
+        if (!initialCloseFocusScheduled) {
+          initialCloseFocusScheduled = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (dialogContext.mounted) closeFocus.requestFocus();
+          });
+        }
         return BackSafeDialog(
           onDismissed: onDialogDismissed,
           autofocus: false,
