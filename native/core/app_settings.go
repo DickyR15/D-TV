@@ -18,20 +18,16 @@ type nativeResourceSettings struct {
 	ProxyURL            string `json:"proxyUrl"`
 	CatalogConcurrency  int    `json:"catalogConcurrency"`
 	CatalogIntervalMS   int    `json:"catalogIntervalMs"`
-	DownloadConcurrency int    `json:"downloadConcurrency"`
-	DownloadBySource    bool   `json:"downloadBySource"`
 	Warning             string `json:"warning,omitempty"`
 	SystemProxyStatus   string `json:"systemProxyStatus,omitempty"`
 }
 
 func defaultResourceSettings() nativeResourceSettings {
-	return nativeResourceSettings{ProxyMode: "auto", CatalogConcurrency: 3, CatalogIntervalMS: 250, DownloadConcurrency: 2}
 }
 
 func (settings nativeResourceSettings) validate() error {
 	if settings.CatalogConcurrency < 1 || settings.CatalogConcurrency > 6 ||
-		settings.CatalogIntervalMS < 0 || settings.CatalogIntervalMS > 5000 ||
-		settings.DownloadConcurrency < 1 || settings.DownloadConcurrency > 6 {
+		settings.CatalogIntervalMS < 0 || settings.CatalogIntervalMS > 5000 {
 		return errors.New("并发应为 1 至 6，请求间隔应为 0 至 5000 毫秒")
 	}
 	if settings.ProxyMode != "auto" && settings.ProxyMode != "direct" && settings.ProxyMode != "manual" {
@@ -92,13 +88,13 @@ func (engine *nativeEngine) loadResourceSettings() {
 			if data, readErr := os.ReadFile(file); readErr == nil && json.Unmarshal(data, &stored) == nil && stored.validate() == nil {
 				settings = stored
 			} else {
-				settings.Warning = "网络与下载设置无法读取，已使用默认值，请重新保存设置"
+				settings.Warning = "网络与资源设置无法读取，已使用默认值，请重新保存设置"
 			}
 		} else {
-			settings.Warning = "网络与下载设置无效，已使用默认值，请重新保存设置"
+			settings.Warning = "网络与资源设置无效，已使用默认值，请重新保存设置"
 		}
 	} else if !os.IsNotExist(err) {
-		settings.Warning = "网络与下载设置无法读取，已使用默认值，请重新保存设置"
+		settings.Warning = "网络与资源设置无法读取，已使用默认值，请重新保存设置"
 	}
 	engine.settings = settings
 	engine.applyResourceSettings(settings)
@@ -133,13 +129,6 @@ func (engine *nativeEngine) applyResourceSettings(settings nativeResourceSetting
 	limiter.interval = time.Duration(settings.CatalogIntervalMS) * time.Millisecond
 	limiter.notifyLocked()
 	limiter.mu.Unlock()
-	if engine.downloads != nil {
-		engine.downloads.mu.Lock()
-		engine.downloads.concurrency = settings.DownloadConcurrency
-		engine.downloads.bySource = settings.DownloadBySource
-		engine.downloads.scheduleLocked()
-		engine.downloads.mu.Unlock()
-	}
 }
 
 func (engine *nativeEngine) saveResourceSettings(settings nativeResourceSettings) (nativeResourceSettings, error) {
@@ -156,7 +145,7 @@ func (engine *nativeEngine) saveResourceSettings(settings nativeResourceSettings
 		err = nativeDownloadWrite(filepath.Join(engine.directory, "resource-settings.json"), data)
 	}
 	if err != nil {
-		return nativeResourceSettings{}, errors.New("未能保存网络与下载设置，原设置保持不变")
+		return nativeResourceSettings{}, errors.New("未能保存网络与资源设置，原设置保持不变")
 	}
 	engine.settings = settings
 	engine.applyResourceSettings(settings)
