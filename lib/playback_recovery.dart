@@ -10,7 +10,10 @@ class PlaybackRecovery {
   // retrying the same session after exhaustion would only reuse stale URLs.
   static const maxAlternativeAttempts = 12;
   static const maxRefreshAttempts = 1;
-  static const maxRecoveryDuration = Duration(seconds: 45);
+  // A candidate can spend several seconds in DNS/connect/TLS and then wait
+  // for response headers. Keep enough time to try the available route list,
+  // while still guaranteeing that automatic recovery eventually terminates.
+  static const maxRecoveryDuration = Duration(seconds: 180);
   final DateTime Function() _now;
   DateTime? _startedAt;
   int _alternativeAttempts = 0;
@@ -106,10 +109,13 @@ class PlaybackRecoveryStability {
 }
 
 class PlaybackHealth {
-  static const stallTimeout = Duration(seconds: 10);
-  // First-frame startup can take longer than an ordinary mid-playback stall,
-  // especially when a CDN delays MP4 headers or the initial byte range.
-  static const startupStallTimeout = Duration(seconds: 15);
+  // The local stream proxy waits up to 12 seconds for an upstream read to
+  // resume. Do not cancel playback before it can report that timeout.
+  static const stallTimeout = Duration(seconds: 18);
+  // Native upstream dial, TLS handshake, and response-header waits are each
+  // bounded at 8 seconds. Allow more than their combined 24-second budget so
+  // slow but still viable sources are not canceled by the player watchdog.
+  static const startupStallTimeout = Duration(seconds: 30);
   Duration? _position;
   Duration? _duration;
   Duration? _buffer;

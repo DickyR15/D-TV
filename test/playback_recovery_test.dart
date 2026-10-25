@@ -107,15 +107,19 @@ void main() {
     );
   });
 
-  test('automatic recovery stops after its total time budget', () {
-    var now = DateTime(2026, 10, 25, 12);
+  test('recovery continues beyond 45 seconds but remains bounded at three minutes', () {
+    final start = DateTime(2026, 10, 25, 12);
+    var now = start;
     final recovery = PlaybackRecovery(now: () => now);
     final plan = route(0, count: 20);
 
     expect(recovery.next(plan), PlaybackRecoveryAction.alternative);
-    now = now.add(const Duration(seconds: 30));
+    now = start.add(const Duration(seconds: 30));
     expect(recovery.next(plan), PlaybackRecoveryAction.alternative);
-    now = now.add(const Duration(seconds: 16));
+    now = start.add(const Duration(seconds: 46));
+    // The previous 45-second limit stopped before all candidate routes ran.
+    expect(recovery.next(plan), PlaybackRecoveryAction.alternative);
+    now = start.add(PlaybackRecovery.maxRecoveryDuration);
     expect(recovery.next(plan), PlaybackRecoveryAction.stop);
 
     recovery.reset();
@@ -123,7 +127,7 @@ void main() {
   });
 
   test(
-    'a stalled foreground stream times out but paused and background playback do not',
+    'a stalled foreground stream waits beyond the proxy idle timeout',
     () {
       final health = PlaybackHealth();
       final start = DateTime(2026, 9, 18);
@@ -139,11 +143,11 @@ void main() {
         now: start.add(Duration(seconds: seconds)),
       );
       expect(stalled(0), isFalse);
-      expect(stalled(9), isFalse);
-      expect(stalled(10), isTrue);
-      expect(stalled(11, position: 6), isFalse);
-      expect(stalled(20, position: 6), isFalse);
-      expect(stalled(21, position: 6), isTrue);
+      expect(stalled(17), isFalse);
+      expect(stalled(18), isTrue);
+      expect(stalled(19, position: 6), isFalse);
+      expect(stalled(36, position: 6), isFalse);
+      expect(stalled(37, position: 6), isTrue);
       expect(stalled(60, intendedToPlay: false, position: 6), isFalse);
       expect(stalled(80, intendedToPlay: false, position: 6), isFalse);
       expect(stalled(100, foreground: false, position: 6), isFalse);
@@ -153,7 +157,7 @@ void main() {
     },
   );
 
-  test('startup gets 15 seconds and buffer or duration changes reset the watchdog', () {
+  test('startup gets 30 seconds and buffer or duration changes reset the watchdog', () {
     final health = PlaybackHealth();
     final start = DateTime(2026, 10, 24);
 
@@ -177,12 +181,13 @@ void main() {
     expect(stalled(27, buffer: 2), isFalse); // New buffer activity resets time.
     expect(stalled(36, buffer: 2), isFalse);
     expect(stalled(40, buffer: 2), isFalse);
-    expect(stalled(42, buffer: 2), isTrue); // 15 seconds since last progress.
+    expect(stalled(56, buffer: 2), isFalse); // 29 seconds since last progress.
+    expect(stalled(57, buffer: 2), isTrue); // 30 seconds since last progress.
 
     health.reset();
     expect(stalled(100, duration: 120), isFalse); // Duration discovery is progress.
-    expect(stalled(109, duration: 120), isFalse);
-    expect(stalled(110, duration: 120), isTrue); // Mid-playback timeout remains 10s.
+    expect(stalled(117, duration: 120), isFalse);
+    expect(stalled(118, duration: 120), isTrue); // Mid-playback timeout is 18s.
   });
 
   test('recovery budget resets only after 30 seconds of progressing playback', () {
