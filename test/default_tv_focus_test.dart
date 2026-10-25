@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/app_layout.dart';
+import 'package:hgtv/local_store.dart';
 import 'package:hgtv/profiles_screen.dart';
 import 'package:hgtv/resource_settings.dart';
 import 'package:hgtv/resource_settings_screen.dart';
