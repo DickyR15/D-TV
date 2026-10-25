@@ -43,9 +43,54 @@ class _SourcesScreenState extends State<SourcesScreen> {
   final _pending = <String>{};
   final _revisions = <String, int>{};
   final _expandedHealth = <String>{};
+  final _healthScrollControllers = <String, ScrollController>{};
+  final _healthFocusNodes = <String, FocusNode>{};
   Timer? _timer;
   bool _polling = false;
   int _ticks = 0;
+
+  ScrollController _healthScrollController(String id) =>
+      _healthScrollControllers.putIfAbsent(id, ScrollController.new);
+
+  FocusNode _healthFocusNode(String id) => _healthFocusNodes.putIfAbsent(
+    id,
+    () => FocusNode(debugLabel: 'source-health-$id'),
+  );
+
+  KeyEventResult _scrollHealthWithRemote(
+    String id,
+    FocusNode node,
+    KeyEvent event,
+  ) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key != LogicalKeyboardKey.arrowUp &&
+        key != LogicalKeyboardKey.arrowDown) {
+      return KeyEventResult.ignored;
+    }
+    final controller = _healthScrollController(id);
+    if (!controller.hasClients) return KeyEventResult.handled;
+    final position = controller.position;
+    final down = key == LogicalKeyboardKey.arrowDown;
+    final canScroll = down
+        ? position.pixels < position.maxScrollExtent - 1
+        : position.pixels > position.minScrollExtent + 1;
+    if (canScroll) {
+      final target = (position.pixels + (down ? 160 : -160))
+          .clamp(position.minScrollExtent, position.maxScrollExtent)
+          .toDouble();
+      controller.jumpTo(target);
+    } else {
+      if (down) {
+        FocusScope.of(context).nextFocus();
+      } else {
+        FocusScope.of(context).previousFocus();
+      }
+    }
+    return KeyEventResult.handled;
+  }
 
   @override
   void initState() {
@@ -67,6 +112,12 @@ class _SourcesScreenState extends State<SourcesScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    for (final controller in _healthScrollControllers.values) {
+      controller.dispose();
+    }
+    for (final node in _healthFocusNodes.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -608,40 +659,69 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 ],
               ),
               if (healthExpanded) ...[
-                if (health.sample.isNotEmpty) Text('檢測劇集：${uiTraditional(health.sample)}'),
-                for (final step in health.steps)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          step.state == 'ok'
-                              ? Icons.check_circle_outline
-                              : Icons.error_outline,
-                          size: 20,
-                          color: step.state == 'ok'
-                              ? colors.primary
-                              : colors.error,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('${uiTraditional(step.name)}：${uiTraditional(step.message)}'),
-                              if (step.host.isNotEmpty || step.httpStatus > 0)
-                                Text(
-                                  '${step.host}${step.httpStatus > 0 ? ' · HTTP ${step.httpStatus}' : ''} · ${step.elapsedMs} ms',
-                                  style: Theme.of(context).textTheme.bodySmall,
+                Focus(
+                  focusNode: _healthFocusNode(source.id),
+                  onKeyEvent: (node, event) =>
+                      _scrollHealthWithRemote(source.id, node, event),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.sizeOf(context).height * 0.46,
+                    ),
+                    child: Scrollbar(
+                      controller: _healthScrollController(source.id),
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                        controller: _healthScrollController(source.id),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (health.sample.isNotEmpty)
+                              Text('檢測劇集：${uiTraditional(health.sample)}'),
+                            for (final step in health.steps)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 10),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(
+                                      step.state == 'ok'
+                                          ? Icons.check_circle_outline
+                                          : Icons.error_outline,
+                                      size: 20,
+                                      color: step.state == 'ok'
+                                          ? colors.primary
+                                          : colors.error,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${uiTraditional(step.name)}：${uiTraditional(step.message)}',
+                                          ),
+                                          if (step.host.isNotEmpty ||
+                                              step.httpStatus > 0)
+                                            Text(
+                                              '${step.host}${step.httpStatus > 0 ? ' · HTTP ${step.httpStatus}' : ''} · ${step.elapsedMs} ms',
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.bodySmall,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                            ],
-                          ),
+                              ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
-              ],
+                ),
+              
             ] else ...[
               const SizedBox(height: 12),
               const Text('尚未檢測連線'),
