@@ -123,10 +123,15 @@ class CatalogBrowser {
     }
   }
 
-  void _rememberBaseCache(String source, Iterable<Drama> items) {
-    // Avoid rescanning tens of thousands of cached dramas on every category
-    // navigation. Later result updates still merge through updateDramas().
-    if (_rememberedBaseCaches.add(source)) _remember(source, items);
+  void _rememberBaseCache(
+    String source,
+    Iterable<Drama> items, {
+    bool refresh = false,
+  }) {
+    // Avoid rescanning the base catalog on every category navigation. Explicit
+    // cache-only refreshes still merge newly added dramas/categories.
+    final firstLoad = _rememberedBaseCaches.add(source);
+    if (firstLoad || refresh) _remember(source, items);
   }
 
   void updateDrama(Drama drama) {
@@ -187,9 +192,13 @@ class CatalogBrowser {
       // Seed it in the background, but don't hold category-menu publication
       // hostage to decoding the entire catalog through the native bridge.
       Future<void>? cachedRead;
-      if (!_rememberedBaseCaches.contains(source.id)) {
+      if (cacheOnly || !_rememberedBaseCaches.contains(source.id)) {
         cachedRead = cached(source.id).then<void>((page) {
-          _rememberBaseCache(source.id, page.items);
+          _rememberBaseCache(
+            source.id,
+            page.items,
+            refresh: cacheOnly,
+          );
           onCacheLoaded?.call();
         }).catchError((Object _) {});
       }
