@@ -664,9 +664,10 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		}
 		items, err = d.fetchHongguoAppCatalogCategory(ctx, category)
 		state := d.hongguoCatalogSnapshot()
-		if category == "" && !hongguoAppCatalogHasMore(state) {
-			// The App API may exhaust at a much smaller catalog size than the
-			// public website. Continue with independent, resumable website cursors.
+		if shouldFetchHongguoWebsiteHistory(ctx, category, state) {
+			// Keep history scans out of normal catalog reads and connectivity
+			// checks. The update task opts in one bounded website page batch at
+			// a time, after all App API feeds are exhausted.
 			var websiteItems []Drama
 			websiteItems, hongguoWebsiteErr = d.fetchHongguoWebsiteCatalogPage(ctx)
 			items = append(items, websiteItems...)
@@ -680,10 +681,24 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		if category != "" && state != nil {
 			result.HasMore = !state.Feeds["category:"+category].Exhausted
 		}
-		if len(items) == 0 && err != nil && ctx.Err() == nil && (category == "" || category == "short_play") {
+		if len(items) == 0 && ctx.Err() == nil && (category == "" || category == "short_play") {
+			// Once the App API history cursors are exhausted, a health check or
+			// normal first-page refresh should probe only one public website page.
+			// It must not trigger the full four-category historical backfill.
 			var totalPages int
-			items, totalPages, err = d.fetchHongguoCategoryPage(ctx, "real-drama?page="+strconv.Itoa(page), "真人剧")
+			websiteItems, websiteTotalPages, websiteErr := d.fetchHongguoCategoryPage(
+				ctx, "real-drama?page="+strconv.Itoa(page), "真人剧",
+			)
+			if websiteErr == nil && len(websiteItems) > 0 {
+				items, totalPages, err = websiteItems, websiteTotalPages, nil
+			} else {
+				err = errors.Join(err, websiteErr)
+				totalPages = websiteTotalPages
+			}
 			result.HasMore = page < totalPages
+			if category == "" {
+				result.HasMore = result.HasMore || hongguoCatalogHasMore(state)
+			}
 		}
 	case sourceHuangdou:
 		client := newHuangdouAPIClient(d)

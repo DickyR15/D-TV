@@ -36,7 +36,17 @@ type libraryMoreKey struct{}
 
 type libraryUpdateKey struct{}
 
+// libraryWebsiteBackfillKey permits the slower public-website history scan only
+// from the bounded Red Fruit update task, never from health checks or normal UI
+// catalog requests.
+type libraryWebsiteBackfillKey struct{}
+
 type libraryKnownKey struct{}
+
+func shouldFetchHongguoWebsiteHistory(ctx context.Context, category string, state *hongguoCatalogState) bool {
+	enabled, _ := ctx.Value(libraryWebsiteBackfillKey{}).(bool)
+	return enabled && category == "" && !hongguoAppCatalogHasMore(state)
+}
 
 func (downloader *Downloader) fetchHongguoAppCatalog(ctx context.Context) ([]Drama, error) {
 	return downloader.fetchHongguoAppCatalogCategory(ctx, "")
