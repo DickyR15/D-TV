@@ -111,7 +111,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/build_android.py --abi armeabi-v7a --player-engine mpv_embed
           version_full=$(sed -n "s/^version: *['\"]\?\([^'\"]*\)['\"]\?$/\1/p" pubspec.yaml | head -n1)
           version="${version_full%%+*}"
           build_number="${GITHUB_RUN_NUMBER:?GitHub Actions run number is required}"
