@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'core_bridge.dart';
 import 'app_theme.dart';
+import 'app_layout.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
 import 'app_build.dart';
@@ -35,33 +36,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _message;
 
   Future<void> _chooseTheme() async {
+    final current = widget.store.themeMode;
     final selected = await showDialog<String>(
       context: context,
-      builder: (context) => SimpleDialog(
+      builder: (dialogContext) => SimpleDialog(
         title: const Text('外觀主題'),
         children: [
-          RadioGroup<String>(
-            groupValue: widget.store.themeMode,
-            onChanged: (value) => Navigator.pop(context, value),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final mode in ['light', 'dark', 'system'])
-                  RadioListTile<String>(
-                    value: mode,
-                    title: Text(AppTheme.label(mode)),
-                    subtitle: mode == 'system'
-                        ? const Text('隨裝置的深色模式自動切換')
-                        : null,
-                  ),
-              ],
+          for (final mode in ['light', 'dark', 'system'])
+            ListTile(
+              autofocus: mode == current && AppLayout.isTelevision(context),
+              selected: mode == current,
+              leading: Icon(
+                mode == current
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_off_rounded,
+              ),
+              title: Text(AppTheme.label(mode)),
+              subtitle: mode == 'system'
+                  ? const Text('隨裝置的深色模式自動切換')
+                  : null,
+              onTap: () => Navigator.of(dialogContext).pop(mode),
             ),
-          ),
         ],
       ),
     );
-    if (selected != null && mounted) {
-      await saveUserChange(context, () => widget.store.setThemeMode(selected));
+    if (selected == null || !mounted || selected == widget.store.themeMode) {
+      return;
+    }
+    try {
+      await widget.store.setThemeMode(selected);
+      if (mounted) setState(() => _message = null);
+    } catch (error) {
+      if (mounted) setState(() => _message = '外觀主題切換失敗：$error');
+    }
+  }
+
+  String _displayModeLabel(String mode) => switch (mode) {
+    'television' => '電視／遙控器模式',
+    'standard' => '一般觸控模式',
+    _ => '自動偵測',
+  };
+
+  String _displayModeDescription(String mode) => switch (mode) {
+    'television' => '優先使用大字、方向鍵焦點與電視版導覽',
+    'standard' => '使用一般手機／平板觸控介面',
+    _ => '依裝置自動選擇手機或電視介面',
+  };
+
+  Future<void> _chooseDisplayMode() async {
+    final current = widget.store.displayMode;
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('操作模式'),
+        children: [
+          for (final mode in ['auto', 'television', 'standard'])
+            ListTile(
+              autofocus: mode == current && AppLayout.isTelevision(context),
+              selected: mode == current,
+              leading: Icon(
+                mode == current
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_off_rounded,
+              ),
+              title: Text(_displayModeLabel(mode)),
+              subtitle: Text(_displayModeDescription(mode)),
+              onTap: () => Navigator.of(dialogContext).pop(mode),
+            ),
+        ],
+      ),
+    );
+    if (selected == null || !mounted || selected == widget.store.displayMode) {
+      return;
+    }
+    try {
+      await widget.store.setDisplayMode(selected);
+      if (mounted) setState(() => _message = null);
+    } catch (error) {
+      if (mounted) setState(() => _message = '操作模式切換失敗：$error');
     }
   }
 
@@ -124,7 +176,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
+  Widget build(BuildContext context) {
+    final settings = AnimatedBuilder(
     animation: widget.store,
     builder: (_, _) => Scaffold(
       appBar: widget.embedded ? null : AppBar(title: const Text('設定與備份')),
@@ -165,6 +218,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: Text(AppTheme.label(widget.store.themeMode)),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: _chooseTheme,
+              ),
+              ListTile(
+                key: const ValueKey('display-mode-setting'),
+                leading: const Icon(Icons.settings_remote_rounded),
+                title: const Text('操作模式'),
+                subtitle: Text(_displayModeLabel(widget.store.displayMode)),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _chooseDisplayMode,
               ),
               ListTile(
                 leading: const Icon(Icons.people_outline),
@@ -236,5 +297,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     ),
   );
+    if (widget.embedded || !AppLayout.isTelevision(context)) {
+      return settings;
+    }
+    void closeSettings() {
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
+    }
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.goBack): closeSettings,
+        const SingleActivator(LogicalKeyboardKey.escape): closeSettings,
+      },
+      child: settings,
+    );
+  }
 }
 

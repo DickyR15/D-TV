@@ -6,7 +6,7 @@ abstract final class AppTheme {
   static final dark = _theme(Brightness.dark);
 
   /// D-TV 品牌色取自啟動圖示：珊瑚紅搭配深墨色背景。
-  static const brandAccent = Color(0xFFFF3658);
+  static const brandAccent = Color(0xFFFF526D);
 
   static ThemeMode mode(String preference) => switch (preference) {
     'light' => ThemeMode.light,
@@ -200,28 +200,29 @@ abstract final class AppTheme {
 
   static ThemeData _theme(Brightness brightness) {
     final dark = brightness == Brightness.dark;
+    // Softer graphite surfaces are easier to watch for long TV sessions.
     final background = dark
-        ? const Color(0xFF080910)
+        ? const Color(0xFF171820)
         : const Color(0xFFFBF6F7);
     final scheme = ColorScheme.fromSeed(
       seedColor: brandAccent,
       brightness: brightness,
-      primary: dark ? brandAccent : const Color(0xFFB51236),
-      onPrimary: dark ? const Color(0xFF25020A) : Colors.white,
+      primary: dark ? const Color(0xFFD13D55) : const Color(0xFFB51236),
+      onPrimary: Colors.white,
       primaryContainer: dark
-          ? const Color(0xFF5B0A1B)
+          ? const Color(0xFF493039)
           : const Color(0xFFFFD9E1),
       onPrimaryContainer: dark
-          ? const Color(0xFFFFDDE4)
+          ? const Color(0xFFFFE4E9)
           : const Color(0xFF510018),
       secondary: dark
-          ? const Color(0xFFF09AAF)
+          ? const Color(0xFFE5A1B0)
           : const Color(0xFF853247),
       onSecondary: dark
           ? const Color(0xFF310612)
           : Colors.white,
       secondaryContainer: dark
-          ? const Color(0xFF3A1721)
+          ? const Color(0xFF403039)
           : const Color(0xFFF4DDE3),
       onSecondaryContainer: dark
           ? const Color(0xFFFFD8E0)
@@ -230,34 +231,34 @@ abstract final class AppTheme {
           ? const Color(0xFFF6C86B)
           : const Color(0xFF805500),
       surface: dark
-          ? const Color(0xFF12131B)
+          ? const Color(0xFF1D1F28)
           : const Color(0xFFFFFBFC),
       onSurface: dark
-          ? const Color(0xFFF7F1F4)
+          ? const Color(0xFFF2EDF0)
           : const Color(0xFF272027),
       onSurfaceVariant: dark
-          ? const Color(0xFFC3B4BB)
+          ? const Color(0xFFC9BEC5)
           : const Color(0xFF655760),
       outline: dark
-          ? const Color(0xFF9E7B87)
+          ? const Color(0xFF9C8992)
           : const Color(0xFF807079),
       outlineVariant: dark
-          ? const Color(0xFF392830)
+          ? const Color(0xFF46404A)
           : const Color(0xFFE8D9DE),
       surfaceContainerLowest: dark
-          ? const Color(0xFF0A0B10)
+          ? const Color(0xFF191A22)
           : Colors.white,
       surfaceContainerLow: dark
-          ? const Color(0xFF14131B)
+          ? const Color(0xFF20212A)
           : const Color(0xFFFFF3F6),
       surfaceContainer: dark
-          ? const Color(0xFF1B1922)
+          ? const Color(0xFF252630)
           : const Color(0xFFF7E9EE),
       surfaceContainerHigh: dark
-          ? const Color(0xFF26212C)
+          ? const Color(0xFF2D2E38)
           : const Color(0xFFF0E0E6),
       surfaceContainerHighest: dark
-          ? const Color(0xFF332A36)
+          ? const Color(0xFF393A45)
           : const Color(0xFFE8D5DD),
       surfaceTint: Colors.transparent,
     );

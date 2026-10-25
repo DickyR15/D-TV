@@ -58,6 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   int _generation = 0;
   int _tab = 0;
+  int _tabBeforeSettings = 4;
   bool _initialTabResolved = false;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
@@ -500,7 +501,7 @@ class _HomeScreenState extends State<HomeScreen> {
         // trailing Back event. Swallow that event app-wide, not just for menus.
         _resetBackConfirmation(
           ignoreTrailingBack: true,
-          trailingBackWindow: const Duration(milliseconds: 900),
+          trailingBackWindow: const Duration(milliseconds: 300),
         );
         break;
       case AppNavigationEvent.push:
@@ -511,7 +512,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _resetBackConfirmation({
     bool ignoreTrailingBack = false,
-    Duration trailingBackWindow = const Duration(milliseconds: 500),
+    Duration trailingBackWindow = const Duration(milliseconds: 300),
   }) {
     _lastBackAt = null;
     _ignoreExitPromptUntil = ignoreTrailingBack
@@ -585,6 +586,10 @@ class _HomeScreenState extends State<HomeScreen> {
     // Never show the app-exit prompt while the home route is not on top.
     if (!routeIsCurrent) {
       _lastBackAt = null;
+      _ignoreExitPromptUntil = DateTime.now().add(
+        const Duration(milliseconds: 300),
+      );
+      _lastHandledBackEventAt = now;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       if (Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
@@ -592,6 +597,14 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     _ignoreExitPromptUntil = null;
+    if (_tab == 9) {
+      final destination = _tabBeforeSettings == 9 ? 4 : _tabBeforeSettings;
+      _lastBackAt = null;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      _selectNavigationDestination(destination);
+      _navigationFocusNodes[destination]?.requestFocus();
+      return;
+    }
     if (_search.text.isNotEmpty) {
       _search.clear();
       _searchChanged('');
@@ -1722,6 +1735,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _selectNavigationDestination(int tab) {
+    if (tab == 9 && _tab != 9) {
+      _tabBeforeSettings = _tab;
+    }
     if (tab == 0 || tab == 8) {
       _selectCatalogTab(tab);
       return;
