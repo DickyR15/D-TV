@@ -197,8 +197,8 @@ class _RemoteTargetState extends State<RemoteTarget> {
             duration: const Duration(milliseconds: 120),
             padding: widget.padding,
             decoration: BoxDecoration(
-              // Selection uses a teal fill; keyboard focus uses a blue-cyan outline.
-              // They remain visually distinct even when both states are active.
+              // Selection uses a restrained brand-tinted fill; keyboard focus uses a vivid
+              // brand-red outline. They remain distinct even when both are active.
               color: widget.selected
                   ? Theme.of(context).colorScheme.secondaryContainer
                   : _focused
