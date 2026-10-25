@@ -1746,25 +1746,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _selectCatalogTab(int tab) {
-    final shouldReload =
-        _category.isNotEmpty ||
-        _showRecommendations ||
-        _search.text.trim().isNotEmpty ||
-        _submittedQuery.isNotEmpty;
+    final returningFromSettings = _tab == 9;
+    final shouldReload = !returningFromSettings &&
+        (_category.isNotEmpty ||
+            _showRecommendations ||
+            _search.text.trim().isNotEmpty ||
+            _submittedQuery.isNotEmpty);
     final wasInitialized = _catalogInitialized;
     _debounce?.cancel();
     setState(() {
       _tab = tab;
-      _showRecommendations = false;
-      _search.clear();
-      _searchVisible = false;
-      _submittedQuery = '';
-      _categorySelections[_group.id] = '';
+      // Settings is a temporary destination, not a request to reset the
+      // user's catalog session. Preserve the selected category, search query,
+      // recommendations, and current posters when returning from settings.
+      if (!returningFromSettings) {
+        _showRecommendations = false;
+        _search.clear();
+        _searchVisible = false;
+        _submittedQuery = '';
+        _categorySelections[_group.id] = '';
+      }
       _error = null;
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
     if (!wasInitialized) {
       _ensureCatalogInitialized();
+    } else if (returningFromSettings) {
+      // Returning from the remote-control test should never leave an empty
+      // poster page merely because an earlier request was cancelled on pause.
+      if (_items.isEmpty) _load(useCache: true);
     } else if (shouldReload) {
       _load(useCache: true);
     }
