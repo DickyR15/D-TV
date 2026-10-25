@@ -45,20 +45,12 @@ extension MediaExportOperations on MediaLibrary {
   }
 
   Future<void> _writeShowMetadata(Drama drama, Directory showDirectory) async {
-    final poster = File(path.join(showDirectory.path, 'poster.jpg'));
-    var hasPoster = await poster.exists();
-    if (store.exportPosters &&
-        !hasPoster &&
-        !const bool.fromEnvironment('DISABLE_REMOTE_IMAGES')) {
-      try {
-        final cover = await repository.cover(drama);
-        _check();
-        await File(cover).copy(poster.path);
-        hasPoster = true;
-      } catch (_) {
-        _check();
-      }
-    }
+    // Poster file export is disabled; keep metadata compatible with any
+    // poster that already exists in the show folder without fetching/copying
+    // new image files as part of media export.
+    final hasPoster = await File(
+      path.join(showDirectory.path, 'poster.jpg'),
+    ).exists();
     _check();
     await _writeText(
       File(path.join(showDirectory.path, 'tvshow.nfo')),
