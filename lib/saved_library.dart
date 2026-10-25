@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_layout.dart';
 import 'core_bridge.dart';
@@ -36,6 +37,16 @@ class SavedLibrary extends StatefulWidget {
 
 class _SavedLibraryState extends State<SavedLibrary> {
   String _filter = '';
+  final FocusNode _clearButtonFocusNode = FocusNode(
+    debugLabel: 'saved-library-clear-action',
+  );
+
+  @override
+  void dispose() {
+    widget.gridFocusController?.setFallback(null);
+    _clearButtonFocusNode.dispose();
+    super.dispose();
+  }
 
   Future<void> _clearHistory() async {
     final epoch = widget.store.profileEpoch;
@@ -60,6 +71,64 @@ class _SavedLibraryState extends State<SavedLibrary> {
     if (accepted == true && mounted && epoch == widget.store.profileEpoch) {
       await saveUserChange(context, widget.store.clearHistory);
     }
+  }
+
+  Future<void> _clearFavorites() async {
+    final epoch = widget.store.profileEpoch;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清空收藏？'),
+        content: const Text('這會移除目前使用者的全部收藏及追劇狀態，不會刪除最近觀看記錄。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            autofocus: AppLayout.isTelevision(context),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (accepted == true && mounted && epoch == widget.store.profileEpoch) {
+      await saveUserChange(context, widget.store.clearFavorites);
+    }
+  }
+
+  void _focusClearButton() {
+    if (_clearButtonFocusNode.context != null) {
+      _clearButtonFocusNode.requestFocus();
+    }
+  }
+
+  KeyEventResult _clearButtonKey(FocusNode node, KeyEvent event) {
+    if (!AppLayout.isTelevision(context) ||
+        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      FocusScope.of(context).focusInDirection(TraversalDirection.down);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      FocusScope.of(context).focusInDirection(TraversalDirection.up);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      final exitLeft = widget.onExitLeft;
+      if (exitLeft != null) {
+        exitLeft();
+        return KeyEventResult.handled;
+      }
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _actions(Drama drama) => showDramaActions(
@@ -105,6 +174,9 @@ class _SavedLibraryState extends State<SavedLibrary> {
       final all = widget.history
           ? history.map((entry) => entry.drama).toList()
           : widget.store.favorites;
+      widget.gridFocusController?.setFallback(
+        all.isEmpty ? null : _focusClearButton,
+      );
       final items = all.where((drama) {
         final state = widget.store.following(drama.id);
         return widget.history ||
@@ -124,11 +196,17 @@ class _SavedLibraryState extends State<SavedLibrary> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-              if (widget.history && all.isNotEmpty)
-                IconButton(
-                  tooltip: '清空觀看記錄',
-                  onPressed: _clearHistory,
-                  icon: const Icon(Icons.delete_outline_rounded),
+              if (all.isNotEmpty)
+                Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  onKeyEvent: _clearButtonKey,
+                  child: IconButton(
+                    focusNode: _clearButtonFocusNode,
+                    tooltip: widget.history ? '清空觀看記錄' : '清空收藏',
+                    onPressed: widget.history ? _clearHistory : _clearFavorites,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
                 ),
             ],
           ),
@@ -201,6 +279,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                           columns: columns,
                           focusController: widget.gridFocusController,
                           onExitLeft: widget.onExitLeft,
+                          onExitUp: _focusClearButton,
                           itemExtent: DramaTile.extentFor(
                                 context,
                                 tileWidth - 4,
