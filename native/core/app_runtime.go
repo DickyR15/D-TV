@@ -392,9 +392,7 @@ func nativeDispatch(input nativeInput) (any, error) {
 		duration = 10 * time.Second
 	} else if input.Action == "preload" {
 		duration = 15 * time.Second
-	} else if input.Action == "detail" {
-		duration = 40 * time.Second
-	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
 	if input.Action == "danmaku" || input.Action == "preload" || input.Action == "prepareHandoff" || input.Session != "" && (input.Action == "catalog" || input.Action == "categories" || input.Action == "suggestions" || input.Action == "recommendations" || input.Action == "metadata") {
