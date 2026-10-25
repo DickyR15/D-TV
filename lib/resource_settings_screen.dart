@@ -23,8 +23,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   late final int _epoch = widget.store.profileEpoch;
   ResourceSettings? _settings;
   String _mode = 'auto';
-  int _catalog = 3, _interval = 250, _downloads = 2;
-  bool _folders = false, _busy = false, _showProxy = false;
+
   String? _error;
   bool get _allowed =>
       widget.store.profileEpoch == _epoch &&
@@ -53,8 +52,6 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
         _proxy.text = settings.proxyUrl;
         _catalog = settings.catalogConcurrency;
         _interval = settings.catalogIntervalMs;
-        _downloads = settings.downloadConcurrency;
-        _folders = settings.downloadBySource;
         _error = null;
       });
     } catch (error) {
@@ -75,8 +72,6 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
           proxyUrl: _proxy.text.trim(),
           catalogConcurrency: _catalog,
           catalogIntervalMs: _interval,
-          downloadConcurrency: _downloads,
-          downloadBySource: _folders,
         ),
       );
       if (!mounted || !_allowed) return;
