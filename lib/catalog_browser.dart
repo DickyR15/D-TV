@@ -397,6 +397,41 @@ class CatalogBrowser {
     }
 
     if ((useCache || cacheOnly) && !force && !more && query.isEmpty) {
+      if (useCache && !cacheOnly) {
+        await _each(sourceOrder, (source) async {
+          try {
+            final preview = await repository.cachedPreview(
+              source,
+              category: requests[source]!,
+            );
+            if (preview == null ||
+                preview.items.isEmpty ||
+                generation != session.generation) {
+              return;
+            }
+            final entry = session.entries[source]!;
+            entry.items = preview.items;
+            entry.page = preview.page;
+            entry.nextPage = preview.page + 1;
+            // Don't allow a remote "load more" to race the full-cache read.
+            // The full snapshot below will restore the real pagination state.
+            entry.hasMore = false;
+            entry.fresh = preview.fresh;
+            entry.checkedAt = DateTime.now();
+            if (preview.warning.isNotEmpty) {
+              failures[source] = preview.warning;
+            }
+            _remember(source, preview.items);
+          } catch (_) {
+            // Fast preview is opportunistic; the full cache path below remains
+            // authoritative and preserves the existing error behavior.
+          }
+        });
+        if (generation == session.generation) {
+          final preview = snapshot();
+          if (preview.items.isNotEmpty) onCached?.call(preview);
+        }
+      }
       await _each(sourceOrder, (source) async {
         try {
           final cached = await this.cached(source, category: requests[source]!);

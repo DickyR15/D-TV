@@ -180,6 +180,9 @@ abstract class AppRepository {
     bool force = false,
   });
   Future<CatalogPage> cached(String source, {String category = ''});
+  /// Fast first-screen snapshot. Implementations without a bounded native
+  /// cache read may return null and keep using [cached].
+  Future<CatalogPage?> cachedPreview(String source, {String category = ''}) async => null;
   Future<String> cover(Drama drama, {bool force = false});
   bool coverCached(Drama drama) => false;
   Future<DramaDetail> detail(Drama drama);
@@ -715,6 +718,19 @@ class NativeRepository extends AppRepository {
           'category': category,
         }),
       );
+
+  @override
+  Future<CatalogPage?> cachedPreview(
+    String source, {
+    String category = '',
+  }) async => CatalogPage.fromJson(
+    await _call({
+      'action': 'cachedPreview',
+      'source': source,
+      'category': category,
+    }),
+  );
+
   @override
   bool coverCached(Drama drama) =>
       _coverPaths.containsKey('${drama.id}\u0000${drama.cover}');

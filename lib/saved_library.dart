@@ -60,6 +60,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
             child: const Text('取消'),
           ),
           FilledButton(
+            autofocus: AppLayout.isTelevision(context),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('清空'),
           ),

@@ -9,11 +9,30 @@ import 'fixtures.dart';
 class CategoryRepository extends FixtureRepository {
   final categoryRequests = <String>[];
   int cachedReads = 0;
+  int cachedPreviewReads = 0;
   int categoryLoads = 0;
   Completer<void>? cachedWaitStarted;
   Completer<void>? releaseCached;
   bool failLegacy = false;
   bool paginate = false;
+
+  @override
+  Future<CatalogPage?> cachedPreview(
+    String source, {
+    String category = '',
+  }) async {
+    cachedPreviewReads++;
+    if (category.isNotEmpty) return null;
+    final page = cachedPages[source];
+    if (page == null || page.items.isEmpty) return null;
+    return CatalogPage(
+      page.items.take(30).toList(),
+      hasMore: false,
+      page: page.page,
+      warning: page.warning,
+      fresh: page.fresh,
+    );
+  }
 
   @override
   Future<CatalogPage> cached(String source, {String category = ''}) async {
@@ -82,6 +101,48 @@ class CategoryRepository extends FixtureRepository {
 }
 
 void main() {
+  test(
+    'cached preview paints posters before the full catalog cache finishes reading',
+    () async {
+      final repository = CategoryRepository();
+      repository.cachedPages['hongguo'] = CatalogPage(
+        [
+          for (var i = 0; i < 45; i++)
+            Drama(
+              id: 'hongguo:preview-$i',
+              source: 'hongguo',
+              title: '快取劇 $i',
+            ),
+        ],
+        page: 1,
+        hasMore: true,
+        fresh: true,
+      );
+      repository.cachedWaitStarted = Completer<void>();
+      repository.releaseCached = Completer<void>();
+      final browser = CatalogBrowser(repository);
+      const group = SourceGroup('hongguo', '紅果', [SourceSite.hongguo]);
+      final painted = Completer<CatalogPage>();
+      final loading = browser.load(
+        group,
+        useCache: true,
+        onCached: (page) {
+          if (!painted.isCompleted) painted.complete(page);
+        },
+      );
+
+      final firstPaint = await painted.future.timeout(
+        const Duration(seconds: 1),
+      );
+      expect(firstPaint.items, hasLength(30));
+      expect(repository.cachedPreviewReads, 1);
+      expect(repository.cachedReads, 1);
+      repository.releaseCached!.complete();
+      final complete = await loading;
+      expect(complete.items, hasLength(45));
+    },
+  );
+
   test(
     'category menu starts loading while cached catalog read is still pending',
     () async {

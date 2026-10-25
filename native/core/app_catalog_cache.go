@@ -109,6 +109,46 @@ func (engine *nativeEngine) nativeCached(source string) nativeCatalogResult {
 	return result
 }
 
+func (engine *nativeEngine) nativeCachedPreview(source string) nativeCatalogResult {
+	source = canonicalProviderSource(source)
+	engine.mu.Lock()
+	defer engine.mu.Unlock()
+
+	all := engine.catalogs[source]
+	limit := 30
+	if engine.downloader != nil && engine.downloader.cfg.PageSize > 0 {
+		limit = engine.downloader.cfg.PageSize
+	}
+	count := min(len(all), limit)
+	items := append([]nativeDrama{}, all[:count]...)
+	for index := range items {
+		items[index].Cover = repairLegacyCoverURL(items[index])
+	}
+
+	state, found := engine.catalogStates[source]
+	age := time.Since(state.UpdatedAt)
+	result := nativeCatalogResult{
+		Items: items,
+		Page:  max(1, state.Page),
+		// This is an initial paint-only snapshot, not a complete catalog. Disable
+		// pagination briefly; nativeCached() supplies the real state immediately
+		// after the full cache has been read.
+		HasMore: false,
+		Fresh: len(all) > 0 && state.Warning == "" && !state.UpdatedAt.IsZero() &&
+			age >= 0 && age < nativeCatalogTTL,
+		Warning: state.Warning,
+	}
+	if engine.catalogSaveError != nil {
+		result.Warning = joinNativeWarnings(result.Warning, engine.catalogSaveError.Error())
+		result.saveError = engine.catalogSaveError
+		result.Fresh = false
+	}
+	if !found && len(all) == 0 {
+		result.Fresh = false
+	}
+	return result
+}
+
 func mergeNativeCatalog(first, second []nativeDrama) []nativeDrama {
 	items := append([]nativeDrama{}, first...)
 	indices := make(map[string]int, len(items))

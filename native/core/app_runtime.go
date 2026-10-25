@@ -471,6 +471,11 @@ func nativeDispatch(input nativeInput) (any, error) {
 			return nil, errors.New("内容分类无效")
 		}
 		return engine.nativeCached(nativeCatalogKey(input.Source, input.Category)), nil
+	case "cachedPreview":
+		if !validNativeCategory(canonicalProviderSource(input.Source), input.Category) {
+			return nil, errors.New("内容分类无效")
+		}
+		return engine.nativeCachedPreview(nativeCatalogKey(input.Source, input.Category)), nil
 	case "categories":
 		items, err := engine.nativeCategories(ctx, input.Source, input.Force)
 		return map[string]any{"items": items}, err
