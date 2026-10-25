@@ -24,10 +24,28 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   final FocusNode _forceLoginFocus = FocusNode(
     debugLabel: 'force-login-setting',
   );
+  final Map<String, FocusNode> _profileEntryFocusNodes = {};
+  final Map<String, FocusNode> _profileEditFocusNodes = {};
+
+  FocusNode _profileEntryFocus(String id) => _profileEntryFocusNodes.putIfAbsent(
+    id,
+    () => FocusNode(debugLabel: 'profile-entry-$id'),
+  );
+
+  FocusNode _profileEditFocus(String id) => _profileEditFocusNodes.putIfAbsent(
+    id,
+    () => FocusNode(debugLabel: 'profile-edit-$id'),
+  );
 
   @override
   void dispose() {
     _forceLoginFocus.dispose();
+    for (final node in _profileEntryFocusNodes.values) {
+      node.dispose();
+    }
+    for (final node in _profileEditFocusNodes.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -239,26 +257,72 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                       ? widget.store.profiles
                       : <LocalProfile>[])
                 Card(
-                  child: ListTile(
-                    leading: Icon(
-                      profile.admin
-                          ? Icons.admin_panel_settings_outlined
-                          : Icons.person_outline,
-                    ),
-                    title: Text(uiTraditional(profile.name)),
-                    subtitle: Text(_permissionsLabel(profile)),
-                    onTap: _busy ? null : () => _switch(profile),
-                    trailing: !widget.store.locked && widget.store.profile.admin
-                        ? IconButton(
-                            tooltip: '編輯使用者',
-                            onPressed: _busy ? null : () => _edit(profile),
-                            icon: const Icon(Icons.edit_outlined),
-                          )
-                        : Icon(
-                            profile.protected
-                                ? Icons.lock_outline
-                                : Icons.chevron_right,
+                  child: FocusTraversalGroup(
+                    policy: OrderedTraversalPolicy(),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: FocusTraversalOrder(
+                            order: const NumericFocusOrder(1),
+                            child: InkWell(
+                              key: ValueKey('profile-open-${profile.id}'),
+                              focusNode: _profileEntryFocus(profile.id),
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: _busy ? null : () => _switch(profile),
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      profile.admin
+                                          ? Icons.admin_panel_settings_outlined
+                                          : Icons.person_outline,
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(uiTraditional(profile.name)),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            _permissionsLabel(profile),
+                                            style: Theme.of(context).textTheme.bodySmall,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
+                        ),
+                        if (!widget.store.locked && widget.store.profile.admin)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FocusTraversalOrder(
+                              order: const NumericFocusOrder(2),
+                              child: IconButton(
+                                key: ValueKey('profile-edit-${profile.id}'),
+                                focusNode: _profileEditFocus(profile.id),
+                                tooltip: '編輯使用者',
+                                onPressed: _busy ? null : () => _edit(profile),
+                                icon: const Icon(Icons.edit_outlined),
+                              ),
+                            ),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.only(right: 16),
+                            child: Icon(
+                              profile.protected
+                                  ? Icons.lock_outline
+                                  : Icons.chevron_right,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               if (!widget.store.locked && widget.store.profile.admin) ...[

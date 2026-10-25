@@ -123,6 +123,29 @@ void main() {
     expect(find.text('DickyR15'), findsOneWidget);
   });
 
+  testWidgets('TV settings keeps author visible in a short viewport', (
+    tester,
+  ) async {
+    final store = await localStore();
+    addTearDown(store.dispose);
+    await tester.binding.setSurfaceSize(const Size(960, 540));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      AppLayout(
+        television: true,
+        child: MaterialApp(
+          home: SettingsScreen(repository: NativeRepository(), store: store),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final author = find.byKey(const ValueKey('app-author'));
+    expect(author, findsOneWidget);
+    final rect = tester.getRect(author);
+    expect(rect.top, greaterThanOrEqualTo(0));
+    expect(rect.bottom, lessThanOrEqualTo(540));
+  });
+
   testWidgets('TV settings handles remote Back on the settings route', (
     tester,
   ) async {

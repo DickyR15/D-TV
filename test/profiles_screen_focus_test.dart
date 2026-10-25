@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hgtv/app_layout.dart';
@@ -21,7 +22,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('編輯使用者').first);
+      final openProfile = tester.widget<InkWell>(
+        find.byKey(const ValueKey('profile-open-default')),
+      );
+      final editFinder = find.byKey(const ValueKey('profile-edit-default'));
+      final editButton = tester.widget<IconButton>(editFinder);
+      openProfile.focusNode!.requestFocus();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(editButton.focusNode!.hasFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('profile-editor-name')), findsOneWidget);

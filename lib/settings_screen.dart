@@ -188,10 +188,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final pinAuthor = !widget.embedded && AppLayout.isTelevision(context);
     final settings = AnimatedBuilder(
     animation: widget.store,
     builder: (_, _) => Scaffold(
       appBar: widget.embedded ? null : AppBar(title: const Text('設定與備份')),
+      bottomNavigationBar: pinAuthor
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Divider(height: 1),
+                    ListTile(
+                      key: const ValueKey('app-author'),
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      leading: const Icon(Icons.person_outline_rounded),
+                      title: const Text('作者'),
+                      subtitle: Text(appAuthor),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
@@ -283,13 +306,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.all(16),
                   child: SelectableText(uiTraditional(_message!)),
                 ),
-              const Divider(height: 24),
-              ListTile(
-                key: const ValueKey('app-author'),
-                leading: const Icon(Icons.person_outline_rounded),
-                title: const Text('作者'),
-                subtitle: Text(appAuthor),
-              ),
+              if (!pinAuthor) ...[
+                const Divider(height: 24),
+                ListTile(
+                  key: const ValueKey('app-author'),
+                  leading: const Icon(Icons.person_outline_rounded),
+                  title: const Text('作者'),
+                  subtitle: Text(appAuthor),
+                ),
+              ],
             ],
           ),
         ),
