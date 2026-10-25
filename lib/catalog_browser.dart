@@ -167,6 +167,7 @@ class CatalogBrowser {
     bool cacheOnly = false,
   }) async {
     final failures = <String>[];
+    final loadedMenus = <String, List<CatalogCategory>>{};
     await _each(group.sources, (source) async {
       // Read cached dramas and fetch the server category menu concurrently.
       // Waiting for a large cached catalog must not delay the category chips.
@@ -183,13 +184,20 @@ class CatalogBrowser {
         source.id,
         force: force,
       ).then<void>((categories) {
-        _menus[source.id] = categories;
-        _invalidateChoices();
+        loadedMenus[source.id] = categories;
       }).catchError((Object _) {
         failures.add(source.groupName);
       });
       await Future.wait<void>([cachedRead, categoriesRead]);
     });
+    // Publish category menus only after every source has finished. Otherwise,
+    // an unrelated catalog rebuild can expose a temporarily partial menu and
+    // a selected category may query only some sources, intermittently yielding
+    // an empty poster grid.
+    if (loadedMenus.isNotEmpty) {
+      _menus.addAll(loadedMenus);
+      _invalidateChoices();
+    }
     return failures.isEmpty ? null : '部分分類暫未載入，點選重試';
   }
 
