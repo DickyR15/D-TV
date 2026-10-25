@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_layout.dart';
 import 'lan_controller.dart';
 import 'local_store.dart';
 import 'widgets.dart';
@@ -230,6 +231,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                     children: [
                       SwitchListTile.adaptive(
                         key: const ValueKey('lan-enabled'),
+                        autofocus: AppLayout.isTelevision(context),
                         title: const Text('裝置互聯'),
                         subtitle: const Text('同一區域網直連，接收端無需點選確認'),
                         value: link.enabled,
