@@ -96,7 +96,29 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
   bool _busy = false;
   bool _cancelling = false;
   String? _error;
+  final ScrollController _screenScrollController = ScrollController();
+  final GlobalKey _connectionHelpBottomKey = GlobalKey();
   LanController get link => widget.controller;
+
+  @override
+  void dispose() {
+    _screenScrollController.dispose();
+    super.dispose();
+  }
+
+  void _revealConnectionHelpBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = _connectionHelpBottomKey.currentContext;
+      if (target == null) return;
+      Scrollable.ensureVisible(
+        target,
+        alignment: 1,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   Future<void> _perform(Future<void> Function() action) async {
     if (_busy) return;
@@ -195,6 +217,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
             child: ListView(
+              controller: _screenScrollController,
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               children: [
                 Card(
@@ -395,6 +418,9 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                   ExpansionTile(
                     leading: const Icon(Icons.info_outline_rounded),
                     title: const Text('本機地址與連線幫助'),
+                    onExpansionChanged: (expanded) {
+                      if (expanded) _revealConnectionHelpBottom();
+                    },
                     childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     children: [
                       const Text(
@@ -412,6 +438,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                         ),
                       if (link.local!.addresses.isEmpty)
                         const Text('尚未取得區域網地址，請檢查 Wi-Fi 或網線連線。'),
+                      SizedBox(key: _connectionHelpBottomKey, height: 1),
                     ],
                   ),
               ],
