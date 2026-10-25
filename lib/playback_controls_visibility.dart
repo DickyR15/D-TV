@@ -1,11 +1,11 @@
 /// What Back should do based on the current playback-control visibility.
-enum PlaybackControlsBackAction { hideControls, revealControls }
+enum PlaybackControlsBackAction { exitPlayback, hideControls }
 
 PlaybackControlsBackAction playbackControlsBackAction({
   required bool controlsVisible,
 }) => controlsVisible
     ? PlaybackControlsBackAction.hideControls
-    : PlaybackControlsBackAction.revealControls;
+    : PlaybackControlsBackAction.exitPlayback;
 
 /// Controls whether playback events may automatically reveal the control overlay.
 ///

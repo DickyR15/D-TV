@@ -51,6 +51,7 @@ class TelevisionControls extends StatefulWidget {
 
 class TelevisionControlsState extends State<TelevisionControls> {
   final _surface = FocusNode(debugLabel: 'tv-player-surface');
+  final _exit = FocusNode(debugLabel: 'tv-player-exit');
   final _play = FocusNode(debugLabel: 'tv-player-play');
   final _episodes = FocusNode(debugLabel: 'tv-player-episodes');
   final _diary = FocusNode(debugLabel: 'tv-player-diary');
@@ -162,7 +163,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
     _scheduleHide();
   }
 
-  /// Remote/system Back toggles the control overlay instead of exiting playback.
+  /// Hidden controls: Back exits playback. Visible controls: Back hides them.
   void handleBack() {
     if (!widget.enabled || _panelOpen) return;
     final action = playbackControlsBackAction(controlsVisible: _visible);
@@ -171,7 +172,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
       _hideTimer?.cancel();
       _focus(_surface);
     } else {
-      _show();
+      widget.onBack();
     }
   }
 
@@ -229,6 +230,20 @@ class TelevisionControlsState extends State<TelevisionControls> {
     }
     final key = event.logicalKey;
     _scheduleHide();
+    // The exit action sits in the top-left corner; make it reachable from
+    // any focused playback control with one Up press.
+    if (_visible &&
+        key == LogicalKeyboardKey.arrowUp &&
+        !_exit.hasFocus) {
+      _focus(_exit);
+      return KeyEventResult.handled;
+    }
+    if (_visible &&
+        key == LogicalKeyboardKey.arrowDown &&
+        _exit.hasFocus) {
+      _focus(_play);
+      return KeyEventResult.handled;
+    }
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
       if (event is KeyDownEvent) {
         handleBack();
@@ -282,6 +297,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
     }
     for (final node in [
       _surface,
+      _exit,
       _play,
       _episodes,
       _diary,
@@ -352,6 +368,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
                         key: const ValueKey('tv-player-back'),
                         label: '退出播放',
                         icon: Icons.arrow_back_rounded,
+                        focusNode: _exit,
                         onPressed: widget.onBack,
                       ),
                       const SizedBox(width: 16),
@@ -514,7 +531,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        '控制項隱藏時按返回可顯示；顯示時按返回可隱藏。左右快進或後退 10 秒，上下或確認鍵也可顯示控制項',
+                        '控制項隱藏時按返回退出播放；顯示時按返回收起控制項。上下鍵可移動焦點，確認鍵可選取；控制項隱藏時按上下或確認可重新顯示',
                         style: TextStyle(fontSize: 13, color: Colors.white70),
                       ),
                     ],

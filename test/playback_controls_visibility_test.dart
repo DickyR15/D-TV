@@ -2,11 +2,14 @@ import 'package:hgtv/playback_controls_visibility.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('remote Back toggles controls instead of exiting playback', () {
+  test('remote Back exits video when controls are hidden', () {
     expect(
       playbackControlsBackAction(controlsVisible: false),
-      PlaybackControlsBackAction.revealControls,
+      PlaybackControlsBackAction.exitPlayback,
     );
+  });
+
+  test('remote Back hides controls but keeps video open when controls are visible', () {
     expect(
       playbackControlsBackAction(controlsVisible: true),
       PlaybackControlsBackAction.hideControls,
