@@ -1,16 +1,19 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -316,6 +319,87 @@ func TestNativeStreamMP4ResponseDoesNotWaitForLargePeek(t *testing.T) {
 		}
 	case <-time.After(750 * time.Millisecond):
 		t.Fatal("MP4 response waited for a large body peek")
+	}
+}
+
+func TestNativeStreamResumesPrematureMP4Body(t *testing.T) {
+	payload := []byte(strings.Repeat("0123456789abcdef", 4096))
+	cut := len(payload) / 2
+	var firstRequest atomic.Bool
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		rangeHeader := request.Header.Get("Range")
+		if rangeHeader == "" && firstRequest.CompareAndSwap(false, true) {
+			connection, buffered, err := writer.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Errorf("hijack truncated response: %v", err)
+				return
+			}
+			defer connection.Close()
+			_, _ = fmt.Fprintf(buffered, "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nContent-Length: %d\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n", len(payload))
+			_, _ = buffered.Write(payload[:cut])
+			if err := buffered.Flush(); err != nil {
+				t.Errorf("flush truncated response: %v", err)
+			}
+			return
+		}
+
+		if !strings.HasPrefix(rangeHeader, "bytes=") {
+			http.Error(writer, "expected Range retry", http.StatusBadRequest)
+			return
+		}
+		bounds := strings.SplitN(strings.TrimPrefix(rangeHeader, "bytes="), "-", 2)
+		if len(bounds) != 2 {
+			http.Error(writer, "invalid Range", http.StatusBadRequest)
+			return
+		}
+		start, errStart := strconv.Atoi(bounds[0])
+		end, errEnd := strconv.Atoi(bounds[1])
+		if errStart != nil || errEnd != nil || start < 0 || end >= len(payload) || start > end {
+			http.Error(writer, "invalid Range offsets", http.StatusBadRequest)
+			return
+		}
+		writer.Header().Set("Content-Type", "video/mp4")
+		writer.Header().Set("Accept-Ranges", "bytes")
+		writer.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(payload)))
+		writer.Header().Set("Content-Length", strconv.Itoa(end-start+1))
+		writer.WriteHeader(http.StatusPartialContent)
+		_, _ = writer.Write(payload[start : end+1])
+	}))
+	defer upstream.Close()
+
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := newNativeStreamServer(engine.downloader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.server.Close()
+	address, token := stream.nativeOpen(providerMedia{URL: upstream.URL + "/video.mp4"})
+	defer stream.nativeRelease(token)
+
+	response, err := http.Get(address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read repaired local media: %v", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("local response status=%d, want 200", response.StatusCode)
+	}
+	if !bytes.Equal(body, payload) {
+		t.Fatalf("local response has %d bytes, want %d; body was not resumed correctly", len(body), len(payload))
+	}
+	_, diagnosticText := streamDiagnosticEvents(t, stream)
+	for _, marker := range []string{"stream.resume_attempt", "stream.resume_response"} {
+		if !strings.Contains(diagnosticText, marker) {
+			t.Errorf("missing diagnostic event %q", marker)
+		}
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -57,6 +58,8 @@ const (
 	nativeStreamDialTimeout           = 8 * time.Second
 	nativeStreamTLSHandshakeTimeout   = 8 * time.Second
 	nativeStreamResponseHeaderTimeout = 8 * time.Second
+	nativeStreamReadIdleTimeout       = 12 * time.Second
+	nativeStreamResumeAttempts        = 2
 	nativeStreamMaxIdleConnections    = 16
 	nativeStreamMaxIdlePerHost         = 4
 	nativeStreamIdleConnTimeout       = 45 * time.Second
@@ -106,9 +109,11 @@ func (stream *nativeStreamServer) nativeRequest(request *http.Request) (*http.Re
 	}
 	info.method = request.Method
 	stream.nativeLog(info, "upstream_start", request.URL.String(), "", 0, "")
-	request = request.WithContext(httptrace.WithClientTrace(request.Context(), stream.nativeTrace(info, request.URL.String())))
+	requestCtx, cancel := context.WithCancel(request.Context())
+	request = request.WithContext(httptrace.WithClientTrace(requestCtx, stream.nativeTrace(info, request.URL.String())))
 	response, err := stream.downloader.doMediaRequestWithClient(request, &client)
 	if err != nil {
+		cancel()
 		reason := nativeStreamError(err)
 		stream.downloader.rememberNativeStreamHostFailure(request.URL.String(), reason)
 		stream.nativeLog(info, "upstream_error", request.URL.String(), "error="+reason+" "+nativeStreamErrorDetail(err), 0, "")
@@ -122,7 +127,18 @@ func (stream *nativeStreamServer) nativeRequest(request *http.Request) (*http.Re
 	if response.StatusCode == http.StatusOK || response.StatusCode == http.StatusPartialContent {
 		stream.downloader.clearNativeStreamHostFailure(address)
 	}
-	response.Body = &nativeDiagnosticBody{ReadCloser: response.Body, stream: stream, info: info, address: address}
+	diagnosticBody := &nativeDiagnosticBody{ReadCloser: response.Body, stream: stream, info: info, address: address}
+	response.Body = &nativeStreamIdleBody{
+		ReadCloser: diagnosticBody,
+		timeout:    nativeStreamReadIdleTimeout,
+		cancel:     cancel,
+		onTimeout: func() {
+			stream.downloader.rememberNativeStreamHostFailure(address, "timeout")
+			stream.nativeLog(info, "upstream_idle_timeout", address,
+				fmt.Sprintf("idle_timeout_ms=%d", nativeStreamReadIdleTimeout.Milliseconds()),
+				0, response.Header.Get("Content-Type"))
+		},
+	}
 	return response, nil
 }
 
@@ -471,10 +487,167 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 		// for net/http's small-write buffer to fill while the CDN is streaming.
 		if flusher, ok := writer.(http.Flusher); ok {
 			flusher.Flush()
-			_, err := io.Copy(&nativeInitialFlushWriter{destination: writer, flusher: flusher}, reader)
+			_, err := stream.nativeCopyMediaWithResume(
+				ctx,
+				&nativeInitialFlushWriter{destination: writer, flusher: flusher},
+				upstream,
+				finalURL.String(),
+				response,
+				reader,
+				info,
+			)
 			if err != nil {
-				stream.nativeLog(info, "transfer_error", finalURL.String(), "error="+nativeStreamError(err), 0, contentType)
+				stream.nativeLog(info, "transfer_error", finalURL.String(),
+					fmt.Sprintf("error=%s bytes_forwarded=%d", nativeStreamError(err), observed.bytes),
+					0, contentType)
 			}
 		}
+	}
+}
+
+
+func nativeParseContentRange(value string) (start, end, total int64, ok bool) {
+	fields := strings.Fields(strings.TrimSpace(value))
+	if len(fields) != 2 || !strings.EqualFold(fields[0], "bytes") {
+		return 0, 0, 0, false
+	}
+	parts := strings.SplitN(fields[1], "/", 2)
+	if len(parts) != 2 || parts[1] == "*" {
+		return 0, 0, 0, false
+	}
+	bounds := strings.SplitN(parts[0], "-", 2)
+	if len(bounds) != 2 {
+		return 0, 0, 0, false
+	}
+	start, errStart := strconv.ParseInt(bounds[0], 10, 64)
+	end, errEnd := strconv.ParseInt(bounds[1], 10, 64)
+	total, errTotal := strconv.ParseInt(parts[1], 10, 64)
+	if errStart != nil || errEnd != nil || errTotal != nil ||
+		start < 0 || end < start || total <= end {
+		return 0, 0, 0, false
+	}
+	return start, end, total, true
+}
+
+func nativeMediaResponseSpan(response *http.Response) (start, end, total int64, resumable bool) {
+	if response == nil {
+		return 0, 0, 0, false
+	}
+	if response.StatusCode == http.StatusPartialContent {
+		start, end, total, ok := nativeParseContentRange(response.Header.Get("Content-Range"))
+		if !ok {
+			return 0, 0, 0, false
+		}
+		if response.ContentLength > end-start+1 {
+			return 0, 0, 0, false
+		}
+		return start, end, total, true
+	}
+	if response.StatusCode == http.StatusOK &&
+		response.ContentLength > 0 &&
+		strings.Contains(strings.ToLower(response.Header.Get("Accept-Ranges")), "bytes") {
+		return 0, response.ContentLength - 1, response.ContentLength, true
+	}
+	return 0, 0, 0, false
+}
+
+// nativeCopyMediaWithResume keeps the local response open while repairing an
+// upstream body that ended before its advertised byte range was complete.
+// MPV receives one continuous byte stream; retries happen only upstream.
+func (stream *nativeStreamServer) nativeCopyMediaWithResume(
+	ctx context.Context,
+	destination io.Writer,
+	originalRequest *http.Request,
+	address string,
+	response *http.Response,
+	firstReader io.Reader,
+	info nativeStreamDiagnostic,
+) (int64, error) {
+	if response == nil || response.Body == nil {
+		return 0, errors.New("media response body is unavailable")
+	}
+	start, end, total, resumable := nativeMediaResponseSpan(response)
+	validator := response.Header.Get("ETag")
+	if validator == "" {
+		validator = response.Header.Get("Last-Modified")
+	}
+
+	currentResponse := response
+	currentReader := firstReader
+	var written int64
+	for attempt := 0; ; attempt++ {
+		n, copyErr := io.Copy(destination, currentReader)
+		written += n
+		_ = currentResponse.Body.Close()
+
+		expected := int64(0)
+		if resumable {
+			expected = end - start + 1
+		}
+		incomplete := copyErr != nil || resumable && written < expected
+		if !incomplete {
+			stream.downloader.clearNativeStreamHostFailure(address)
+			return written, nil
+		}
+		if ctx.Err() != nil {
+			return written, ctx.Err()
+		}
+		// Surface idle timeout to the existing recovery controller; repeatedly
+		// retrying a CDN that has stopped sending bytes would delay failover.
+		if errors.Is(copyErr, errNativeStreamIdleTimeout) {
+			return written, copyErr
+		}
+		if !resumable || attempt >= nativeStreamResumeAttempts || written >= expected {
+			if copyErr == nil {
+				copyErr = io.ErrUnexpectedEOF
+			}
+			return written, copyErr
+		}
+
+		nextStart := start + written
+		if nextStart < start || nextStart > end {
+			return written, io.ErrUnexpectedEOF
+		}
+		stream.nativeLog(info, "resume_attempt", address,
+			fmt.Sprintf("attempt=%d start=%d end=%d total=%d forwarded=%d",
+				attempt+1, nextStart, end, total, written),
+			0, currentResponse.Header.Get("Content-Type"))
+
+		retryRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+		if err != nil {
+			return written, err
+		}
+		for _, name := range []string{"User-Agent", "Referer"} {
+			if value := originalRequest.Header.Get(name); value != "" {
+				retryRequest.Header.Set(name, value)
+			}
+		}
+		retryRequest.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", nextStart, end))
+		if validator != "" {
+			retryRequest.Header.Set("If-Range", validator)
+		}
+		retryResponse, err := stream.nativeRequest(retryRequest)
+		if err != nil {
+			stream.nativeLog(info, "resume_failed", address,
+				"attempt="+strconv.Itoa(attempt+1)+" error="+nativeStreamError(err),
+				0, "")
+			return written, err
+		}
+		resumeStart, resumeEnd, resumeTotal, rangeOK := nativeParseContentRange(retryResponse.Header.Get("Content-Range"))
+		if retryResponse.StatusCode != http.StatusPartialContent ||
+			!rangeOK || resumeStart != nextStart || resumeEnd > end || resumeTotal != total {
+			_ = retryResponse.Body.Close()
+			stream.nativeLog(info, "resume_rejected", address,
+				fmt.Sprintf("attempt=%d status=%d requested_start=%d response_range=%s",
+					attempt+1, retryResponse.StatusCode, nextStart, retryResponse.Header.Get("Content-Range")),
+				retryResponse.StatusCode, retryResponse.Header.Get("Content-Type"))
+			return written, fmt.Errorf("media range resume rejected: HTTP %d", retryResponse.StatusCode)
+		}
+		stream.nativeLog(info, "resume_response", address,
+			fmt.Sprintf("attempt=%d range_start=%d range_end=%d total=%d",
+				attempt+1, resumeStart, resumeEnd, resumeTotal),
+			retryResponse.StatusCode, retryResponse.Header.Get("Content-Type"))
+		currentResponse = retryResponse
+		currentReader = retryResponse.Body
 	}
 }

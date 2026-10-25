@@ -54,6 +54,9 @@ func nativeStreamError(err error) string {
 	if err == nil {
 		return "none"
 	}
+	if errors.Is(err, errNativeStreamIdleTimeout) {
+		return "timeout"
+	}
 	if errors.Is(err, context.Canceled) {
 		return "canceled"
 	}
@@ -293,4 +296,44 @@ func (stream *nativeStreamServer) nativeTrace(info nativeStreamDiagnostic, addre
 		},
 		GotFirstResponseByte: func() { phase("response_headers_first_byte", nil) },
 	}
+}
+
+
+type nativeStreamIdleTimeoutError struct{}
+
+func (*nativeStreamIdleTimeoutError) Error() string   { return "media stream idle timeout" }
+func (*nativeStreamIdleTimeoutError) Timeout() bool   { return true }
+func (*nativeStreamIdleTimeoutError) Temporary() bool { return true }
+
+var errNativeStreamIdleTimeout = &nativeStreamIdleTimeoutError{}
+
+// nativeStreamIdleBody bounds inactivity between upstream reads without setting
+// a total playback duration. A timeout cancels only the stalled HTTP request.
+type nativeStreamIdleBody struct {
+	io.ReadCloser
+	timeout   time.Duration
+	cancel    context.CancelFunc
+	onTimeout func()
+}
+
+func (body *nativeStreamIdleBody) Read(buffer []byte) (int, error) {
+	fired := make(chan struct{})
+	timer := time.AfterFunc(body.timeout, func() {
+		body.cancel()
+		if body.onTimeout != nil {
+			body.onTimeout()
+		}
+		close(fired)
+	})
+	n, err := body.ReadCloser.Read(buffer)
+	if !timer.Stop() {
+		<-fired
+		return n, errNativeStreamIdleTimeout
+	}
+	return n, err
+}
+
+func (body *nativeStreamIdleBody) Close() error {
+	body.cancel()
+	return body.ReadCloser.Close()
 }
