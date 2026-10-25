@@ -248,22 +248,30 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
         if (!mounted || epoch != widget.store.profileEpoch) return;
-        _browser.updateDramas(updates.values);
-        setState(() {
-          _items = [
-            for (final item in _items)
-              updates[item.id] == null ? item : item.merge(updates[item.id]!),
-          ];
-        });
-        await saveUserChange(
-          context,
-          () => widget.store.refreshDramas(updates.values),
-        );
+        // A background cache read can temporarily return no rows while a source
+        // refresh is writing its catalog. Never replace visible data with that
+        // empty snapshot; only merge and persist when there is actual data.
+        if (updates.isNotEmpty) {
+          _browser.updateDramas(updates.values);
+          setState(() {
+            _items = [
+              for (final item in _items)
+                updates[item.id] == null
+                    ? item
+                    : item.merge(updates[item.id]!),
+            ];
+          });
+          await saveUserChange(
+            context,
+            () => widget.store.refreshDramas(updates.values),
+          );
+        }
         if (!mounted || epoch != widget.store.profileEpoch) return;
         if (_group.sources.any((source) => sources.contains(source.id))) {
           await Future.wait([
             _loadCategories(cacheOnly: true),
-            if (!_loading &&
+            if (updates.isNotEmpty &&
+                !_loading &&
                 !_loadingMore &&
                 (!_onlineSearch || _search.text.trim().isEmpty))
               _load(cacheOnly: true),
@@ -802,25 +810,40 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         _loading = true;
         _loadingMore = false;
-        if (query != _submittedQuery) _items = [];
+        // Background cache-only refreshes must not clear the visible list
+        // just because the query differs from the last completed request.
+        if (!cacheOnly && query != _submittedQuery) _items = [];
       }
     });
     CatalogPage? refreshed;
     void accept(CatalogPage result, {bool cached = false}) {
       if (!mounted || generation != _generation) return;
+      final preserveVisibleCatalog =
+          cacheOnly && result.items.isEmpty && _items.isNotEmpty;
       setState(() {
-        _items = result.items;
-        if (more && result.items.length > _revealed) {
+        if (!preserveVisibleCatalog) _items = result.items;
+        if (!preserveVisibleCatalog &&
+            more &&
+            result.items.length > _revealed) {
           _revealed = result.items.length;
         }
-        _hasMore = result.hasMore;
-        _submittedQuery = query;
-        _loading = cached && !result.fresh;
+        if (!preserveVisibleCatalog) {
+          _hasMore = result.hasMore;
+          _submittedQuery = query;
+        }
+        _loading = preserveVisibleCatalog ? false : cached && !result.fresh;
         _loadingMore = false;
-        _error = result.warning.isEmpty ? null : result.warning;
+        _error = preserveVisibleCatalog
+            ? null
+            : result.warning.isEmpty
+            ? null
+            : result.warning;
       });
       if (identical(result, refreshed)) return;
       refreshed = result;
+      // A cache-only refresh is advisory. An empty result means "no usable
+      // cached snapshot right now", not "the user's catalog is empty".
+      if (cacheOnly && result.items.isEmpty) return;
       unawaited(
         saveUserChange(context, () => widget.store.refreshDramas(result.items)),
       );
