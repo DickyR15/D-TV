@@ -61,6 +61,41 @@ func awaitSourceTask(t *testing.T, engine *nativeEngine, source string) nativeSo
 	return nativeSourceStatus{}
 }
 
+func TestSourceUpdateHistoryPageLimitBoundsHongguoWork(t *testing.T) {
+	tests := []struct {
+		name     string
+		source   string
+		operation string
+		maxPages int
+		want     int
+	}{
+		{name: "red fruit update scans one history page", source: sourceHongguo, operation: "update", maxPages: 50, want: 1},
+		{name: "red fruit more loads one history page", source: sourceHongguo, operation: "more", maxPages: 50, want: 1},
+		{name: "other provider keeps configured batch update", source: sourceYeguo, operation: "update", maxPages: 50, want: 49},
+		{name: "other provider continuation remains one page", source: sourceYeguo, operation: "more", maxPages: 50, want: 1},
+		{name: "metadata operation does not page catalog", source: sourceHongguo, operation: "metadata", maxPages: 50, want: 0},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := sourceUpdateHistoryPageLimit(testCase.source, testCase.operation, testCase.maxPages); got != testCase.want {
+				t.Fatalf("history page limit = %d, want %d", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestSourceHistoryPagingUsesSingleRemotePageForHongguo(t *testing.T) {
+	ctx := context.WithValue(context.Background(), backgroundCatalogKey{}, true)
+	hongguoCtx := sourceHistoryPageContext(ctx, sourceHongguo)
+	if got, ok := hongguoCtx.Value(backgroundCatalogKey{}).(bool); !ok || got {
+		t.Fatal("Red Fruit history paging kept the expansive background scan")
+	}
+	otherCtx := sourceHistoryPageContext(ctx, sourceYeguo)
+	if got, ok := otherCtx.Value(backgroundCatalogKey{}).(bool); !ok || !got {
+		t.Fatal("non-Red-Fruit source unexpectedly lost background paging behavior")
+	}
+}
+
 func TestSourceUpdatesPreservePagesOtherSourcesAndMetadata(t *testing.T) {
 	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
 		if !strings.Contains(request.URL.Path, "/api/videos/category/") {

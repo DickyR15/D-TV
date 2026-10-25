@@ -273,6 +273,37 @@ func (engine *nativeEngine) runSourceTask(ctx context.Context, source, operation
 	}
 }
 
+// sourceUpdateHistoryPageLimit bounds historical paging for each source.
+ // Red Fruit's catalog request already scans several feed pages internally, so
+ // treating its outer page as if it were one remote page multiplies the work.
+ // Keep other providers' configured batch-update behavior unchanged.
+func sourceUpdateHistoryPageLimit(source, operation string, maxPages int) int {
+	source = canonicalProviderSource(source)
+	switch operation {
+	case "more":
+		return 1
+	case "update":
+		if source == sourceHongguo {
+			return 1
+		}
+		if maxPages <= 0 {
+			maxPages = defaultConfig().MaxPagesPerSort
+		}
+		return max(0, maxPages-1)
+	default:
+		return 0
+	}
+}
+
+func sourceHistoryPageContext(ctx context.Context, source string) context.Context {
+	if canonicalProviderSource(source) == sourceHongguo {
+		// A historical catalog request for Red Fruit must only fetch one remote
+		// page per feed. The background mode intentionally scans up to 50.
+		return context.WithValue(ctx, backgroundCatalogKey{}, false)
+	}
+	return ctx
+}
+
 func (engine *nativeEngine) updateSource(ctx context.Context, source, operation string) error {
 	before := engine.nativeCached(source)
 	count := len(before.Items)
@@ -288,15 +319,9 @@ func (engine *nativeEngine) updateSource(ctx context.Context, source, operation 
 	}
 	if operation == "more" || operation == "update" {
 		engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Stage = "继续加载历史分页" })
-		limit := 1
-		if operation == "update" {
-			maxPages := engine.downloader.cfg.MaxPagesPerSort
-			if maxPages <= 0 {
-				maxPages = defaultConfig().MaxPagesPerSort
-			}
-			limit = max(0, maxPages-1)
-		}
-		if err := engine.loadMoreSourceCatalogPages(ctx, source, limit); err != nil {
+		limit := sourceUpdateHistoryPageLimit(source, operation, engine.downloader.cfg.MaxPagesPerSort)
+		pageCtx := sourceHistoryPageContext(ctx, source)
+		if err := engine.loadMoreSourceCatalogPages(pageCtx, source, limit); err != nil {
 			return err
 		}
 	}
