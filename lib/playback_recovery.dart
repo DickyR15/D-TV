@@ -40,7 +40,7 @@ class PlaybackHealth {
   static const stallTimeout = Duration(seconds: 10);
   // First-frame startup can take longer than an ordinary mid-playback stall,
   // especially when a CDN delays MP4 headers or the initial byte range.
-  static const startupStallTimeout = Duration(seconds: 20);
+  static const startupStallTimeout = Duration(seconds: 15);
   Duration? _position;
   Duration? _duration;
   Duration? _buffer;

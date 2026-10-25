@@ -392,6 +392,7 @@ func nativeDispatch(input nativeInput) (any, error) {
 		duration = 10 * time.Second
 	} else if input.Action == "preload" {
 		duration = 15 * time.Second
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()

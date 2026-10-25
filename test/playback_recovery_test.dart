@@ -138,7 +138,7 @@ void main() {
     },
   );
 
-  test('startup gets 20 seconds and buffer or duration changes reset the watchdog', () {
+  test('startup gets 15 seconds and buffer or duration changes reset the watchdog', () {
     final health = PlaybackHealth();
     final start = DateTime(2026, 10, 24);
 
