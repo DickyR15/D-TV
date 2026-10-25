@@ -88,10 +88,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final mode = tester.widget<DropdownButtonFormField<String>>(
-      find.byWidgetPredicate(
-        (widget) => widget is DropdownButtonFormField<String>,
-      ),
+    final mode = tester.widget<DropdownButton<String>>(
+      find.byWidgetPredicate((widget) => widget is DropdownButton<String>),
     );
     expect(mode.autofocus, isTrue);
 
