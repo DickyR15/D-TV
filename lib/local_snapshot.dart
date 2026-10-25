@@ -31,8 +31,6 @@ class LocalSnapshot {
     'activeProfile',
     'displayMode',
     'themeMode',
-    'autoExport',
-    'exportPosters',
     'sourceSwitches',
     'forceLogin',
   };
@@ -41,6 +39,8 @@ class LocalSnapshot {
     'sourceGateOff',
     'sourceGateSalt',
     'sourceGateHash',
+    'autoExport',
+    'exportPosters',
   };
   final SharedPreferences preferences;
   Map<String, Object> _values = {};
@@ -83,8 +83,6 @@ class LocalSnapshot {
     for (final entry in values.entries) {
       final boolean = {
         'hideVip',
-        'autoExport',
-        'exportPosters',
         'forceLogin',
         'tvDecoderSafePresetV1',
       }.contains(entry.key.split('.').last);
