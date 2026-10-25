@@ -350,7 +350,11 @@ func sourceDramaNeedsMetadata(source, operation string, drama nativeDrama) bool 
 		return drama.VIP == nil
 	}
 	if source == sourceHongguo {
-		return drama.Episodes <= 0 || strings.TrimSpace(drama.Description) == "" || strings.TrimSpace(drama.OnlineDate) == ""
+		// The feed intentionally omits some optional synopsis/date fields for
+		// many titles. They are not required for posters or playback, and
+		// refetching every such title can create tens of thousands of requests.
+		// Only enrich Red Fruit entries whose episode count is actually unknown.
+		return drama.Episodes <= 0
 	}
 	return operation == "metadata" || operation == "vipMetadata" || drama.Episodes <= 0 || drama.Description == "" || source == sourceHuangdou && drama.VIP == nil
 }

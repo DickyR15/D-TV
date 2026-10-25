@@ -98,8 +98,13 @@ func TestHongguoMetadataCandidatesSelectOnlyMissingFieldsAndIncludeAllBatches(t 
 	// More than one batch needs enrichment; selection must discover the whole
 	// pending set so progress reports the real total before batches are run.
 	for index := 0; index < 19; index++ {
+		items[index].Episodes = 0
 		items[index].Description = ""
 	}
+	// A title with an episode count but optional fields absent must not cause
+	// a detail request just to fill synopsis/date metadata.
+	items[19].Description = ""
+	items[19].OnlineDate = ""
 	// Recent checks and active retry backoffs must not be queried again.
 	record := nativeSourceRecord{
 		MetadataChecked: map[string]time.Time{items[2].ID: now},
@@ -110,9 +115,12 @@ func TestHongguoMetadataCandidatesSelectOnlyMissingFieldsAndIncludeAllBatches(t 
 		t.Fatalf("found %d pending titles, want 17", len(candidates))
 	}
 	for _, drama := range candidates {
-		if drama.ID == items[2].ID || drama.ID == items[3].ID || drama.ID == items[20].ID {
-			t.Fatalf("selected skipped or complete title: %s", drama.ID)
+		if drama.ID == items[2].ID || drama.ID == items[3].ID || drama.ID == items[19].ID || drama.ID == items[20].ID {
+			t.Fatalf("selected skipped or complete-core-data title: %s", drama.ID)
 		}
+	}
+	if sourceDramaNeedsMetadata(sourceHongguo, "metadata", items[19]) {
+		t.Fatal("optional synopsis/date fields alone should not require detail enrichment")
 	}
 	if sourceDramaNeedsMetadata(sourceHongguo, "metadata", items[20]) {
 		t.Fatal("complete Red Fruit metadata was marked as needing enrichment")
