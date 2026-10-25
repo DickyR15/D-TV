@@ -150,6 +150,16 @@ type nativePlan struct {
 	RouteCount      int               `json:"routeCount"`
 }
 
+type nativeDetailCacheEntry struct {
+	Drama     nativeDrama
+	Chapters  []Chapter
+	Warning   string
+	ExpiresAt time.Time
+}
+
+const nativeDetailCacheTTL = 5 * time.Minute
+const nativeStaleDetailTTL = 30 * time.Second
+
 type nativeEngine struct {
 	lanMu            sync.Mutex
 	lan              *nativeLANServer
@@ -180,6 +190,7 @@ type nativeEngine struct {
 	sourceRecords    map[string]nativeSourceRecord
 	sourceCatalogMu  sync.Mutex
 	sourceCatalogs   map[string]chan struct{}
+	detailCache      map[string]nativeDetailCacheEntry
 }
 
 var nativeState struct {
@@ -381,6 +392,8 @@ func nativeDispatch(input nativeInput) (any, error) {
 		duration = 10 * time.Second
 	} else if input.Action == "preload" {
 		duration = 15 * time.Second
+	} else if input.Action == "detail" {
+		duration = 40 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
@@ -723,6 +736,29 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 	if !valid {
 		return nil, errors.New("剧集信息无效，请刷新剧库")
 	}
+
+	now := time.Now()
+	engine.mu.Lock()
+	cached, hasCached := engine.detailCache[drama.ID]
+	if hasCached && now.Before(cached.ExpiresAt) {
+		cachedDrama := mergeNativeDrama(cached.Drama, drama)
+		for _, row := range engine.catalogs[source] {
+			if row.ID == drama.ID {
+				cachedDrama = mergeNativeDrama(cachedDrama, row)
+				break
+			}
+		}
+		chapters := append([]Chapter(nil), cached.Chapters...)
+		warning := cached.Warning
+		engine.mu.Unlock()
+		return map[string]any{"drama": cachedDrama, "chapters": chapters, "warning": warning}, nil
+	}
+	stale, hasStale := cached, hasCached && len(cached.Chapters) > 0
+	if hasCached {
+		delete(engine.detailCache, drama.ID)
+	}
+	engine.mu.Unlock()
+
 	var title string
 	var raw Drama
 	var chapters []Chapter
@@ -750,6 +786,25 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		title, chapters, err = engine.downloader.GetHuangguoChapters(ctx, source, sourceID)
 	}
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			if hasStale {
+				stale.Drama = mergeNativeDrama(stale.Drama, drama)
+				stale.Warning = "片源回應逾時，暫時顯示上次載入的劇集清單。"
+				stale.ExpiresAt = time.Now().Add(nativeStaleDetailTTL)
+				engine.mu.Lock()
+				if engine.detailCache == nil {
+					engine.detailCache = make(map[string]nativeDetailCacheEntry)
+				}
+				engine.detailCache[drama.ID] = stale
+				engine.mu.Unlock()
+				return map[string]any{
+					"drama": stale.Drama,
+					"chapters": append([]Chapter(nil), stale.Chapters...),
+					"warning": stale.Warning,
+				}, nil
+			}
+			return nil, errors.New("取得劇集清單逾時；請重試，若持續發生請改用其他片源。")
+		}
 		return nil, err
 	}
 	if len(chapters) == 0 {
@@ -781,29 +836,42 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 	if err := engine.saveDetailMetadata(drama); err != nil {
 		warning = err.Error()
 	}
-	return map[string]any{"drama": drama, "chapters": chapters, "warning": warning}, nil
-}
 
-func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput) (nativePlan, error) {
-	if _, _, valid := splitProviderDramaID(input.Drama.ID); !valid {
-		return nativePlan{}, errors.New("剧集信息无效")
+	entry := nativeDetailCacheEntry{
+		Drama: drama,
+		Chapters: append([]Chapter(nil), chapters...),
+		Warning: warning,
+		ExpiresAt: time.Now().Add(nativeDetailCacheTTL),
 	}
-	if !input.Force && engine.downloads != nil {
-		if plan, found, err := engine.downloads.localPlan(input.Drama.ID, input.Index); found || err != nil {
-			if input.Action != "prepareHandoff" || !errors.Is(err, errNativeLocalFile) {
-				return plan, err
+	engine.mu.Lock()
+	if engine.detailCache == nil {
+		engine.detailCache = make(map[string]nativeDetailCacheEntry)
+	}
+	if len(engine.detailCache) >= 256 {
+		cacheNow := time.Now()
+		for key, value := range engine.detailCache {
+			if !cacheNow.Before(value.ExpiresAt) {
+				delete(engine.detailCache, key)
+			}
+		}
+		if len(engine.detailCache) >= 256 {
+			oldestKey := ""
+			var oldest time.Time
+			for key, value := range engine.detailCache {
+				if oldestKey == "" || value.ExpiresAt.Before(oldest) {
+					oldestKey, oldest = key, value.ExpiresAt
+				}
+			}
+			if oldestKey != "" {
+				delete(engine.detailCache, oldestKey)
 			}
 		}
 	}
-	task := Task{DramaID: input.Drama.ID, DramaTitle: input.Drama.Title, Chapter: input.Chapter, Index: input.Index}
-	media, err := engine.downloader.resolveProviderMedia(ctx, task)
-	if err != nil {
-		return nativePlan{}, err
-	}
-	choice := nativePlaybackChoices(media, input.Quality)
-	choice = engine.rankNativePlaybackRoutes(ctx, choice, task)
-	if series, video, valid := hongguoPlaybackIDs(task); valid {
-		choice.danmakuSeries, choice.danmakuVideo = series, video
-	}
-	return engine.nativeOpenPlayback(ctx, choice)
+	engine.detailCache[drama.ID] = entry
+	engine.mu.Unlock()
+	return map[string]any{
+		"drama": drama,
+		"chapters": append([]Chapter(nil), chapters...),
+		"warning": warning,
+	}, nil
 }

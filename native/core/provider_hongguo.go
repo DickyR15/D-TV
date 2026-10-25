@@ -133,7 +133,11 @@ func (d *Downloader) fetchHongguoChapters(ctx context.Context, sourceID string) 
 	if sourceID == "" {
 		return "", nil, fmt.Errorf("empty hongguo sourceID")
 	}
-	entry, appErr := d.hongguoAppDetail(ctx, sourceID)
+	// Bound the slow App API route separately. If it stalls, keep enough of
+	// the overall detail deadline for the website fallback to respond.
+	appCtx, cancelApp := context.WithTimeout(ctx, 12*time.Second)
+	entry, appErr := d.hongguoAppDetail(appCtx, sourceID)
+	cancelApp()
 	if appErr == nil {
 		return entry.Drama.DisplayTitle(), append([]Chapter(nil), entry.Chapters...), nil
 	}
