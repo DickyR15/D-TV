@@ -1537,7 +1537,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         applicationName: appName,
                         applicationVersion: AppLayout.versionOf(context),
                         applicationIcon: const _DtvBrandMark(size: 56),
-                        children: const [Text('作者：R15')],
+                        children: [Text('作者：$appAuthor')],
                       );
                     }
                   },
