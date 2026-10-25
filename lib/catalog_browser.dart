@@ -29,6 +29,7 @@ class _CatalogEntry {
   int nextPage = 1;
   bool hasMore = true;
   bool fresh = false;
+  DateTime? checkedAt;
 }
 
 class _CatalogSession {
@@ -49,6 +50,18 @@ class CatalogBrowser {
   final _choicesCache = <String, List<_CatalogChoice>>{};
   final _localCategoryNames = <String, Set<String>>{};
   int _generation = 0;
+  Future<void> _catalogCancellationQueue = Future<void>.value();
+
+  /// Serialize native cancellation calls so an older cancellation can never
+  /// race with (and accidentally cancel) a newer catalog request.
+  Future<void> _cancelCatalogSerially() {
+    final next = _catalogCancellationQueue.then<void>(
+      (_) => repository.cancelCatalog(),
+      onError: (Object _) => repository.cancelCatalog(),
+    );
+    _catalogCancellationQueue = next.catchError((Object _) {});
+    return next;
+  }
 
   Future<CatalogPage> cached(String source, {String category = ''}) {
     final key = '$source|$category';
@@ -64,7 +77,7 @@ class CatalogBrowser {
     for (final session in _sessions.values) {
       session.generation++;
     }
-    return repository.cancelCatalog();
+    return _cancelCatalogSerially();
   }
 
   void _invalidateChoices() => _choicesCache.clear();
@@ -154,20 +167,27 @@ class CatalogBrowser {
   }) async {
     final failures = <String>[];
     await _each(group.sources, (source) async {
-      try {
-        final page = await cached(source.id);
+      // Read cached dramas and fetch the server category menu concurrently.
+      // Waiting for a large cached catalog must not delay the category chips.
+      final cachedRead = cached(source.id).then<void>((page) {
         _remember(source.id, page.items);
-      } catch (_) {}
-      if (cacheOnly) return;
-      try {
-        _menus[source.id] = await repository.categories(
-          source.id,
-          force: force,
-        );
-        _invalidateChoices();
-      } catch (_) {
-        failures.add(source.groupName);
+      }).catchError((Object _) {});
+
+      if (cacheOnly) {
+        await cachedRead;
+        return;
       }
+
+      final categoriesRead = repository.categories(
+        source.id,
+        force: force,
+      ).then<void>((categories) {
+        _menus[source.id] = categories;
+        _invalidateChoices();
+      }).catchError((Object _) {
+        failures.add(source.groupName);
+      });
+      await Future.wait<void>([cachedRead, categoriesRead]);
     });
     return failures.isEmpty ? null : '部分分類暫未載入，點選重試';
   }
@@ -231,8 +251,10 @@ class CatalogBrowser {
     for (final session in _sessions.values) {
       session.generation++;
     }
-    await repository.cancelCatalog();
-    if (request != _generation) throw AppFailure('已取消載入');
+    // Start cancelling obsolete network work immediately, but let disk cache
+    // reads run in parallel so a previously seen catalog can paint the UI
+    // before the native cancellation round-trip finishes.
+    final cancellation = _cancelCatalogSerially();
     final choice = query.isEmpty ? _choice(group, category) : null;
     final requests = choice != null && !choice.category.local
         ? choice.requests
@@ -281,6 +303,29 @@ class CatalogBrowser {
       );
     }
 
+    final canReuseFreshSession =
+        useCache &&
+        !cacheOnly &&
+        !force &&
+        !more &&
+        query.isEmpty &&
+        sourceOrder.isNotEmpty &&
+        sourceOrder.every((source) {
+          final entry = session.entries[source]!;
+          final checkedAt = entry.checkedAt;
+          if (!entry.fresh || checkedAt == null) return false;
+          final age = DateTime.now().difference(checkedAt);
+          return !age.isNegative && age < const Duration(minutes: 14);
+        });
+    if (canReuseFreshSession) {
+      final memorySnapshot = snapshot();
+      if (memorySnapshot.items.isNotEmpty) onCached?.call(memorySnapshot);
+      // No network request follows this path, so do not hold the UI on the
+      // cancellation response. Future live loads wait behind the same queue.
+      unawaited(cancellation.catchError((Object _) {}));
+      return memorySnapshot;
+    }
+
     if ((useCache || cacheOnly) && !force && !more && query.isEmpty) {
       await _each(sourceOrder, (source) async {
         try {
@@ -292,18 +337,31 @@ class CatalogBrowser {
           entry.nextPage = cached.page + 1;
           entry.hasMore = cached.hasMore || cached.warning.isNotEmpty;
           entry.fresh = cached.fresh && cached.warning.isEmpty;
+          entry.checkedAt = DateTime.now();
           if (cached.warning.isNotEmpty) failures[source] = cached.warning;
           _remember(source, cached.items);
         } catch (error) {
           if (cacheOnly) failures[source] = error.toString();
         }
       });
-      if (generation != session.generation) return snapshot();
+      if (generation != session.generation) {
+        unawaited(cancellation.catchError((Object _) {}));
+        return snapshot();
+      }
       final cached = snapshot();
       if (cached.items.isNotEmpty) onCached?.call(cached);
-      if (cacheOnly) return cached;
-      if (cached.fresh && cached.items.isNotEmpty) return cached;
+      if (cacheOnly) {
+        unawaited(cancellation.catchError((Object _) {}));
+        return cached;
+      }
+      if (cached.fresh && cached.items.isNotEmpty) {
+        unawaited(cancellation.catchError((Object _) {}));
+        return cached;
+      }
     }
+
+    await cancellation;
+    if (request != _generation) throw AppFailure('已取消載入');
 
     await _each(sourceOrder, (source) async {
       if (generation != session.generation) return;
@@ -332,6 +390,7 @@ class CatalogBrowser {
             (query.isEmpty || SourceSite.byId(source).pagedSearch) &&
             (result.hasMore || result.warning.isNotEmpty);
         entry.fresh = result.fresh && result.warning.isEmpty;
+        entry.checkedAt = DateTime.now();
         if (query.isEmpty) _remember(source, result.items);
         if (result.warning.isNotEmpty) {
           failures[source] = result.warning;

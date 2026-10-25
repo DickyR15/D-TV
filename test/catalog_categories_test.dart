@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:hgtv/catalog_browser.dart';
 import 'package:hgtv/core_bridge.dart';
 import 'package:hgtv/models.dart';
@@ -7,20 +8,34 @@ import 'fixtures.dart';
 
 class CategoryRepository extends FixtureRepository {
   final categoryRequests = <String>[];
+  int cachedReads = 0;
+  int categoryLoads = 0;
+  Completer<void>? cachedWaitStarted;
+  Completer<void>? releaseCached;
   bool failLegacy = false;
   bool paginate = false;
 
   @override
-  Future<CatalogPage> cached(String source, {String category = ''}) async =>
-      category.isEmpty
-      ? cachedPages[source] ?? CatalogPage([])
-      : CatalogPage([]);
+  Future<CatalogPage> cached(String source, {String category = ''}) async {
+    cachedReads++;
+    final started = cachedWaitStarted;
+    final release = releaseCached;
+    if (started != null && release != null) {
+      if (!started.isCompleted) started.complete();
+      await release.future;
+    }
+    return category.isEmpty
+        ? cachedPages[source] ?? CatalogPage([])
+        : CatalogPage([]);
+  }
 
   @override
   Future<List<CatalogCategory>> categories(
     String source, {
     bool force = false,
-  }) async => switch (source) {
+  }) async {
+    categoryLoads++;
+    return switch (source) {
     'hongguo' => const [
       CatalogCategory.all,
       CatalogCategory('short_play', '真人劇'),
@@ -38,7 +53,8 @@ class CategoryRepository extends FixtureRepository {
       CatalogCategory('old-short', 'AI成人短劇'),
     ],
     _ => const [CatalogCategory.all],
-  };
+    };
+  }
 
   @override
   Future<CatalogPage> catalog(
@@ -66,6 +82,49 @@ class CategoryRepository extends FixtureRepository {
 }
 
 void main() {
+  test(
+    'category menu starts loading while cached catalog read is still pending',
+    () async {
+      final repository = CategoryRepository();
+      repository.cachedWaitStarted = Completer<void>();
+      repository.releaseCached = Completer<void>();
+      final browser = CatalogBrowser(repository);
+      const group = SourceGroup('hongguo', '紅果', [SourceSite.hongguo]);
+
+      final loading = browser.loadCategories(group);
+      await repository.cachedWaitStarted!.future.timeout(
+        const Duration(seconds: 1),
+      );
+      expect(repository.categoryLoads, 1);
+      repository.releaseCached!.complete();
+      await loading;
+    },
+  );
+
+  test(
+    'recent fresh catalog session reuses memory instead of rereading the native cache',
+    () async {
+      final repository = CategoryRepository();
+      repository.cachedPages['hongguo'] = CatalogPage([
+        const Drama(
+          id: 'hongguo:cached-fresh',
+          source: 'hongguo',
+          title: '快取熱門劇',
+        ),
+      ], fresh: true);
+      final browser = CatalogBrowser(repository);
+      const group = SourceGroup('hongguo', '紅果', [SourceSite.hongguo]);
+
+      final first = await browser.load(group, useCache: true);
+      expect(first.items.map((item) => item.id), contains('hongguo:cached-fresh'));
+      expect(repository.cachedReads, 1);
+
+      final second = await browser.load(group, useCache: true);
+      expect(second.items.map((item) => item.id), contains('hongguo:cached-fresh'));
+      expect(repository.cachedReads, 1);
+    },
+  );
+
   test(
     'remote content types never hide fine categories from cached pages',
     () async {

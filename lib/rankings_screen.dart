@@ -37,6 +37,37 @@ class RankingsScreen extends StatefulWidget {
   State<RankingsScreen> createState() => _RankingsScreenState();
 }
 
+class _RankingSnapshot {
+  _RankingSnapshot({
+    required this.items,
+    required this.page,
+    required this.hasMore,
+    required this.updatedText,
+    required this.checkedAt,
+  });
+
+  final List<RankingItem> items;
+  final int page;
+  final bool hasMore;
+  final String updatedText;
+  final DateTime checkedAt;
+
+  bool get isFresh {
+    final age = DateTime.now().difference(checkedAt);
+    // Leave a small margin under the native ranking cache's five-minute TTL.
+    return !age.isNegative && age < const Duration(minutes: 4);
+  }
+}
+
+class _RankingMemory {
+  List<RankingBoard>? boards;
+  Future<List<RankingBoard>>? boardsFuture;
+  final pages = <String, _RankingSnapshot>{};
+}
+
+final Expando<_RankingMemory> _rankingMemoryByRepository =
+    Expando<_RankingMemory>('D-TV ranking memory');
+
 class _RankingsScreenState extends State<RankingsScreen> {
   final _scroll = ScrollController();
   List<RankingBoard> _boards = [];
@@ -50,6 +81,29 @@ class _RankingsScreenState extends State<RankingsScreen> {
   int _generation = 0;
   String? _error;
   String _updated = '';
+
+  _RankingMemory get _memory =>
+      _rankingMemoryByRepository[widget.repository] ??= _RankingMemory();
+
+  Future<List<RankingBoard>> _loadBoardsCached() {
+    final memory = _memory;
+    final boards = memory.boards;
+    if (boards != null) return Future.value(boards);
+    final pending = memory.boardsFuture;
+    if (pending != null) return pending;
+
+    late final Future<List<RankingBoard>> future;
+    future = widget.repository.rankingBoards().then((result) {
+      memory.boards = List<RankingBoard>.unmodifiable(result);
+      return memory.boards!;
+    }).whenComplete(() {
+      if (identical(memory.boardsFuture, future)) {
+        memory.boardsFuture = null;
+      }
+    });
+    memory.boardsFuture = future;
+    return future;
+  }
 
   @override
   void initState() {
@@ -90,23 +144,32 @@ class _RankingsScreenState extends State<RankingsScreen> {
       _error = null;
     });
     try {
-      final boards = (await widget.repository.rankingBoards())
+      final boards = (await _loadBoardsCached())
           .where((board) => widget.store.allowsSource(board.source))
           .toList();
       if (!mounted || generation != _generation) return;
+      final selectedBoard =
+          boards.where((board) => board.id == widget.initialBoardId).firstOrNull ??
+          boards.where((board) => board.groupId == widget.initialGroup).firstOrNull ??
+          boards.firstOrNull;
+      final cached = selectedBoard == null
+          ? null
+          : _memory.pages[selectedBoard.id];
       setState(() {
         _boards = boards;
-        _board =
-            boards
-                .where((board) => board.id == widget.initialBoardId)
-                .firstOrNull ??
-            boards
-                .where((board) => board.groupId == widget.initialGroup)
-                .firstOrNull ??
-            boards.firstOrNull;
+        _board = selectedBoard;
+        if (cached != null && cached.items.isNotEmpty) {
+          _items = List<RankingItem>.of(cached.items);
+          _page = cached.page;
+          _hasMore = cached.hasMore;
+          _updated = cached.updatedText;
+        }
         _loading = false;
       });
-      if (_board != null) await _load();
+      if (_board != null && (cached == null || !cached.isFresh)) {
+        // A stale in-memory list stays visible while the native layer refreshes.
+        await _load();
+      }
     } catch (error) {
       if (mounted && generation == _generation) {
         setState(() {
@@ -134,13 +197,15 @@ class _RankingsScreenState extends State<RankingsScreen> {
         force: force,
       );
       if (!mounted || generation != _generation) return;
+      final rows = <String, RankingItem>{
+        if (more)
+          for (final item in _items) item.drama.id: item,
+        for (final item in result.items) item.drama.id: item,
+      };
+      final mergedItems = rows.values.toList()
+        ..sort((a, b) => a.rank.compareTo(b.rank));
       setState(() {
-        final rows = <String, RankingItem>{
-          if (more)
-            for (final item in _items) item.drama.id: item,
-          for (final item in result.items) item.drama.id: item,
-        };
-        _items = rows.values.toList()..sort((a, b) => a.rank.compareTo(b.rank));
+        _items = mergedItems;
         _page = result.page;
         _hasMore = result.hasMore;
         _updated = result.updatedText;
@@ -148,6 +213,13 @@ class _RankingsScreenState extends State<RankingsScreen> {
         _loading = false;
         _more = false;
       });
+      _memory.pages[board.id] = _RankingSnapshot(
+        items: List<RankingItem>.unmodifiable(mergedItems),
+        page: result.page,
+        hasMore: result.hasMore,
+        updatedText: result.updatedText,
+        checkedAt: DateTime.now(),
+      );
     } catch (error) {
       if (mounted && generation == _generation) {
         setState(() {
@@ -162,15 +234,23 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   void _select(RankingBoard board) {
     if (_board?.id == board.id) return;
+    final cached = _memory.pages[board.id];
     setState(() {
       _board = board;
-      _items = [];
-      _updated = '';
-      _page = 1;
-      _hasMore = false;
+      _items = cached == null ? [] : List<RankingItem>.of(cached.items);
+      _updated = cached?.updatedText ?? '';
+      _page = cached?.page ?? 1;
+      _hasMore = cached?.hasMore ?? false;
+      _error = null;
+      _failedMore = false;
+      _more = false;
+      _loading = cached == null || !cached.isFresh;
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
-    _load();
+    if (cached == null || !cached.isFresh) {
+      // Keep old rows onscreen instead of clearing the grid while fetching.
+      _load();
+    }
   }
 
   String _boardTitle(RankingBoard? board) => switch (board?.id) {

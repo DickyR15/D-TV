@@ -72,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _cacheRefreshTimer;
   Timer? _watcherStartTimer;
   bool _catalogInitialized = false;
+  bool _sourceWatcherStarted = false;
   bool _refreshingUpdatedCache = false;
   bool _showRecommendations = false;
   String _sourceSignature = '';
@@ -676,11 +677,8 @@ class _HomeScreenState extends State<HomeScreen> {
       widget.store,
       onCatalogChanged: _catalogUpdated,
     )..addListener(_updateChanged);
-    // Source-status polling scans every configured source. Let the first TV
-    // frame and the active ranking settle before starting this background work.
-    _watcherStartTimer = Timer(const Duration(seconds: 8), () {
-      if (mounted) _updater.startWatching();
-    });
+    // Source-status polling is deferred until the catalog area is actually
+    // opened; rankings should not compete with hidden source-status requests.
     _followUpdater = FollowUpdater(widget.repository, widget.store)..start();
     widget.store.addListener(_sourcesChanged);
     widget.repository.catalogUpdates.addListener(_metadataChanged);
@@ -987,8 +985,25 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _scheduleSourceWatcher() {
+    if (_sourceWatcherStarted ||
+        _watcherStartTimer != null ||
+        !widget.repository.supportsSourceManagement) {
+      return;
+    }
+    // Let the catalog's first cache paint and category request settle first.
+    _watcherStartTimer = Timer(const Duration(seconds: 12), () {
+      _watcherStartTimer = null;
+      if (!mounted || !_isCatalogTab) return;
+      _sourceWatcherStarted = true;
+      _updater.startWatching();
+    });
+  }
+
   void _ensureCatalogInitialized() {
-    if (_catalogInitialized || !mounted || widget.store.sources.isEmpty) return;
+    if (!mounted || widget.store.sources.isEmpty) return;
+    _scheduleSourceWatcher();
+    if (_catalogInitialized) return;
     _catalogInitialized = true;
     unawaited(_load(useCache: true));
     unawaited(_loadCategories());

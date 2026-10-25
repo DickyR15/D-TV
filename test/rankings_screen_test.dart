@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'fixtures.dart';
 
 class _RankingRepository extends FixtureRepository {
+  int rankingCalls = 0;
+
   @override
   Future<List<RankingBoard>> rankingBoards() async => const [
     RankingBoard(id: 'hongguo-hot', source: 'hongguo', name: '熱播'),
@@ -20,7 +22,9 @@ class _RankingRepository extends FixtureRepository {
     String board, {
     int page = 1,
     bool force = false,
-  }) async => RankingPage(
+  }) async {
+    rankingCalls++;
+    return RankingPage(
     page: page,
     hasMore: page < 2,
     items: [
@@ -35,7 +39,8 @@ class _RankingRepository extends FixtureRepository {
           ),
         ),
     ],
-  );
+    );
+  }
 }
 
 void main() {
@@ -105,5 +110,32 @@ void main() {
     }
     await press(LogicalKeyboardKey.arrowUp);
     expect(focusedRank(), '13');
+
+    // Home navigation recreates the embedded screen for each board tab. A
+    // recently viewed board should be restored from memory without another
+    // ranking request or a blank loading screen.
+    final callsBeforeReentry = repository.rankingCalls;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => AppLayout(
+          television: true,
+          child: Theme(
+            data: televisionTheme(Theme.of(context)),
+            child: FocusTraversalGroup(child: child!),
+          ),
+        ),
+        home: RankingsScreen(
+          key: const ValueKey('reentered-ranking-screen'),
+          repository: repository,
+          store: store,
+          initialGroup: 'hongguo',
+          initialBoardId: 'hongguo-hot',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(repository.rankingCalls, callsBeforeReentry);
+    expect(find.text('合成榜單1'), findsOneWidget);
   });
 }
