@@ -46,6 +46,11 @@ const _androidPlayerEngine = String.fromEnvironment(
 // Never leave the loading overlay spinning indefinitely if MPV does not
 // complete the file-open future for an unavailable or stalled upstream stream.
 const _playbackOpenTimeout = Duration(seconds: 15);
+const _playbackCleanupTimeout = Duration(seconds: 5);
+const _playbackStopTimeout = Duration(seconds: 4);
+const _playbackReleaseTimeout = Duration(seconds: 3);
+const _playbackPropertyTimeout = Duration(seconds: 3);
+const _playbackSpeedTimeout = Duration(seconds: 3);
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
@@ -714,8 +719,17 @@ class _PlayerScreenState extends State<PlayerScreen>
       _interactions.cancel();
       _enhancement.suspend();
       _health.reset();
-      await _player.pause();
-      await _saveProgress(flush: true);
+      await _player.pause().timeout(
+        _playbackStopTimeout,
+        onTimeout: () => throw TimeoutException(
+          '暫停播放器逾時（區域播放交接）',
+          _playbackStopTimeout,
+        ),
+      );
+      await _saveProgressForPlayback(
+        flush: true,
+        reason: 'lan_handoff',
+      );
     });
   }
 
@@ -896,7 +910,97 @@ class _PlayerScreenState extends State<PlayerScreen>
     DiaryService.add(
       '[Recovery] release reason=$reason generation=$_generation session=${playbackDiagnosticId(session)}',
     );
-    await widget.repository.release(session);
+    try {
+      await widget.repository
+          .release(session)
+          .timeout(_playbackReleaseTimeout);
+    } on TimeoutException {
+      // Session cleanup must not block switching/reloading the next episode.
+      DiaryService.add(
+        '[Recovery] release_timeout reason=$reason generation=$_generation session=${playbackDiagnosticId(session)}',
+      );
+    } catch (error) {
+      DiaryService.add(
+        '[Recovery] release_error reason=$reason generation=$_generation error=${playbackDiagnosticError(error)}',
+      );
+    }
+  }
+
+  Future<void> _saveProgressForPlayback({
+    required bool flush,
+    required String reason,
+  }) async {
+    try {
+      await _saveProgress(flush: flush).timeout(
+        _playbackCleanupTimeout,
+        onTimeout: () => throw TimeoutException(
+          '保存觀看進度逾時（$reason）',
+          _playbackCleanupTimeout,
+        ),
+      );
+    } catch (error) {
+      DiaryService.add(
+        '[Play] cleanup_failure stage=save_progress reason=$reason error=${playbackDiagnosticError(error)}',
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> _beforeMediaForPlayback({required String reason}) async {
+    try {
+      await _enhancement.beforeMedia().timeout(
+        _playbackCleanupTimeout,
+        onTimeout: () => throw TimeoutException(
+          '清理畫質增強逾時（$reason）',
+          _playbackCleanupTimeout,
+        ),
+      );
+    } catch (error) {
+      DiaryService.add(
+        '[Play] cleanup_failure stage=enhancement reason=$reason error=${playbackDiagnosticError(error)}',
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> _stopPlayerForPlayback({required String reason}) async {
+    try {
+      await _player.stop().timeout(
+        _playbackStopTimeout,
+        onTimeout: () => throw TimeoutException(
+          '停止舊播放器逾時（$reason）',
+          _playbackStopTimeout,
+        ),
+      );
+    } catch (error) {
+      DiaryService.add(
+        '[Play] cleanup_failure stage=player_stop reason=$reason error=${playbackDiagnosticError(error)}',
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> _setPlaybackProperty(
+    NativePlayer platform,
+    String property,
+    String value,
+  ) async {
+    try {
+      await _setPlaybackProperty(platform, property, value).timeout(
+        _playbackPropertyTimeout,
+        onTimeout: () => throw TimeoutException(
+          '設定播放器參數逾時：$property',
+          _playbackPropertyTimeout,
+        ),
+      );
+    } catch (error) {
+      // Do not log property values; some properties include signed/decryption
+      // data. Only the safe setting name is needed for diagnostics.
+      DiaryService.add(
+        '[Play] setup_property_failure property=$property error=${playbackDiagnosticError(error)}',
+      );
+      rethrow;
+    }
   }
 
   void _queueRecovery({required String reason}) {
@@ -966,9 +1070,12 @@ class _PlayerScreenState extends State<PlayerScreen>
             return;
           }
           try {
-            await _saveProgress();
+            await _saveProgressForPlayback(
+              flush: false,
+              reason: 'recovery_stop',
+            );
             _openedIndex = -1;
-            await _player.stop();
+            await _stopPlayerForPlayback(reason: 'recovery_stop');
           } finally {
             await _releasePlayback(current.session, 'recovery_stop');
           }
@@ -1006,11 +1113,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       await _serialize(() async {
         if (_closed || ticket != _generation) return;
-        await _saveProgress(flush: true);
-        await _enhancement.beforeMedia();
+        await _saveProgressForPlayback(
+          flush: true,
+          reason: 'recreate_player',
+        );
+        await _beforeMediaForPlayback(reason: 'recreate_player');
         if (_closed || ticket != _generation) return;
         _openedIndex = -1;
-        await _player.stop();
+        await _stopPlayerForPlayback(reason: 'recreate_player');
         if (identical(_plan, current)) _plan = null;
         _danmaku.setPlan(null);
         await _releasePlayback(current.session, 'recovery_recreate_player');
@@ -1212,11 +1322,14 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
         final hasPreviousMedia = _openedIndex >= 0 || _plan != null;
         if (hasPreviousMedia) {
-          await _saveProgress(flush: true);
-          await _enhancement.beforeMedia();
+          await _saveProgressForPlayback(
+            flush: true,
+            reason: 'replace_or_refresh',
+          );
+          await _beforeMediaForPlayback(reason: 'replace_or_refresh');
           if (_closed || ticket != _generation) return;
           _openedIndex = -1;
-          await _player.stop();
+          await _stopPlayerForPlayback(reason: 'replace_or_refresh');
           final previous = _plan;
           _plan = null;
           if (recoveryAction == PlaybackRecoveryAction.alternative) {
@@ -1289,7 +1402,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             if (_television) {
               final optimized =
                   _televisionDecoder == TelevisionDecoder.optimized;
-              await platform.setProperty(
+              await _setPlaybackProperty(platform, 
                 'hwdec',
                 _mpvEmbedBackend
                     ? 'mediacodec'
@@ -1297,82 +1410,82 @@ class _PlayerScreenState extends State<PlayerScreen>
                     ? 'no'
                     : 'mediacodec-copy',
               );
-              await platform.setProperty('hwdec-codecs', 'all');
+              await _setPlaybackProperty(platform, 'hwdec-codecs', 'all');
               if (_mpvEmbedBackend) {
                 // Onn. 4K Pro logs repeatedly report "Failed to create file
                 // cache." Keep demuxer cache in RAM instead of creating a
                 // temporary on-disk cache in the embedded MPV sandbox.
                 try {
-                  await platform.setProperty('cache-on-disk', 'no');
+                  await _setPlaybackProperty(platform, 'cache-on-disk', 'no');
                   DiaryService.add('[MPV] cache_on_disk=no');
                 } catch (error) {
                   DiaryService.add(
                     '[MPV] cache_on_disk_setting_failed=${error.runtimeType}',
                   );
                 }
-                await platform.setProperty('vd-lavc-threads', '4');
+                await _setPlaybackProperty(platform, 'vd-lavc-threads', '4');
               } else {
-                await platform.setProperty(
+                await _setPlaybackProperty(platform, 
                   'opengl-pbo',
                   optimized ? 'yes' : 'no',
                 );
-                await platform.setProperty(
+                await _setPlaybackProperty(platform, 
                   'video-latency-hacks',
                   optimized ? 'yes' : 'no',
                 );
-                await platform.setProperty('scale', 'bilinear');
-                await platform.setProperty('cscale', 'bilinear');
-                await platform.setProperty('dscale', 'bilinear');
-                await platform.setProperty('correct-downscaling', 'no');
-                await platform.setProperty(
+                await _setPlaybackProperty(platform, 'scale', 'bilinear');
+                await _setPlaybackProperty(platform, 'cscale', 'bilinear');
+                await _setPlaybackProperty(platform, 'dscale', 'bilinear');
+                await _setPlaybackProperty(platform, 'correct-downscaling', 'no');
+                await _setPlaybackProperty(platform, 
                   'vd-lavc-skiploopfilter',
                   optimized ? 'all' : 'default',
                 );
-                await platform.setProperty(
+                await _setPlaybackProperty(platform, 
                   'vd-lavc-skipidct',
                   optimized ? 'all' : 'default',
                 );
-                await platform.setProperty('vd-lavc-threads', '2');
+                await _setPlaybackProperty(platform, 'vd-lavc-threads', '2');
               }
               // Embed's original 4 MiB cap made the active demuxer cache
               // much smaller than PlayerConfiguration.bufferSize (32 MiB).
               // Increase available headroom without waiting for the cache to fill.
-              await platform.setProperty(
+              await _setPlaybackProperty(platform, 
                 'demuxer-max-bytes',
                 '${(_mpvEmbedBackend ? 16 : 4) * 1024 * 1024}',
               );
-              await platform.setProperty(
+              await _setPlaybackProperty(platform, 
                 'demuxer-max-back-bytes',
                 '${(_mpvEmbedBackend ? 4 : 1) * 1024 * 1024}',
               );
-              await platform.setProperty(
+              await _setPlaybackProperty(platform, 
                 'demuxer-readahead-secs',
                 _mpvEmbedBackend ? '8' : '5',
               );
             } else {
-              await platform.setProperty(
+              await _setPlaybackProperty(platform, 
                 'hwdec',
                 _mpvEmbedBackend ? 'mediacodec' : 'auto-safe',
               );
-              await platform.setProperty('hwdec-codecs', 'all');
+              await _setPlaybackProperty(platform, 'hwdec-codecs', 'all');
               if (!_mpvEmbedBackend) {
-                await platform.setProperty('vd-lavc-skiploopfilter', 'nonkey');
+                await _setPlaybackProperty(platform, 'vd-lavc-skiploopfilter', 'nonkey');
               }
-              await platform.setProperty('vd-lavc-threads', '4');
+              await _setPlaybackProperty(platform, 'vd-lavc-threads', '4');
             }
-            await platform.setProperty('vd-lavc-fast', 'yes');
-            await platform.setProperty('video-sync', 'audio');
+            await _setPlaybackProperty(platform, 'vd-lavc-fast', 'yes');
+            await _setPlaybackProperty(platform, 'video-sync', 'audio');
             // The Onn. 4K Pro log showed VO frame drops but zero decoder
             // drops while video lagged audio by nearly four seconds.
             // Drop late TV frames at the decoder stage to reduce GPU work.
-            await platform.setProperty(
+            await _setPlaybackProperty(platform, 
               'framedrop',
               _television ? 'decoder' : 'vo',
             );
           } else if (Platform.isWindows) {
-            await platform.setProperty('hwdec', 'd3d11va-copy');
+            await _setPlaybackProperty(platform, 'hwdec', 'd3d11va-copy');
           }
-          await platform.setProperty(
+          await _setPlaybackProperty(platform, 
             'demuxer-lavf-o',
             [
               'seg_max_retry=3',
@@ -1385,7 +1498,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                 'decryption_key=${plan.decryptionKey}',
             ].join(','),
           );
-          await platform.setProperty('network-timeout', '20');
+          await _setPlaybackProperty(platform, 'network-timeout', '20');
         }
         setupMs = setupClock.elapsedMilliseconds;
         _plan = plan;
@@ -1434,7 +1547,21 @@ class _PlayerScreenState extends State<PlayerScreen>
         _enhancement.mediaReady();
         _attachLanPlayback();
         _health.reset();
-        await _interactions.applySpeed();
+        try {
+          await _interactions.applySpeed().timeout(
+            _playbackSpeedTimeout,
+            onTimeout: () => throw TimeoutException(
+              '套用播放速度逾時',
+              _playbackSpeedTimeout,
+            ),
+          );
+        } on TimeoutException {
+          // Rate application should not keep the loading overlay on top of a
+          // stream that has already opened successfully.
+          DiaryService.add(
+            '[Play] speed_apply_timeout generation=$ticket',
+          );
+        }
         if (mounted && !_closed && ticket == _generation) {
           _loadingOverlayTimer?.cancel();
           setState(() {
@@ -1489,7 +1616,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         await _releasePlayback(prepared.session, 'failed_preparation');
       }
     } finally {
-      if (warmed != null && !installed) {
+      if (warmed != null && !installed && !identical(prepared, warmed)) {
         await _releasePlayback(warmed.session, 'unused_preload');
       }
       if (retained != null) {
