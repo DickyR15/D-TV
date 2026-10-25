@@ -265,17 +265,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                 ),
-                SwitchListTile(
-                  value: widget.store.exportPosters,
-                  title: const Text('同時匯出海報檔案'),
-                  subtitle: const Text('預設只寫海報 URL。源站海報需要解密或外部讀取失敗時可開啟。'),
-                  onChanged: _busy
-                      ? null
-                      : (value) => saveUserChange(
-                          context,
-                          () => widget.store.setExportPosters(value),
-                        ),
-                ),
                 ListTile(
                   leading: const Icon(Icons.backup_outlined),
                   title: const Text('匯出設定備份'),
