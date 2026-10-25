@@ -85,6 +85,16 @@ class _RankingsScreenState extends State<RankingsScreen> {
   _RankingMemory get _memory =>
       _rankingMemoryByRepository[widget.repository] ??= _RankingMemory();
 
+  String _userFacingError(Object error) {
+    final message = error.toString();
+    if (message.contains('context deadline exceeded') ||
+        message.contains('deadline exceeded') ||
+        message.contains('i/o timeout')) {
+      return '榜單請求逾時，請重試或稍後再試。';
+    }
+    return message;
+  }
+
   Future<List<RankingBoard>> _loadBoardsCached() {
     final memory = _memory;
     final boards = memory.boards;
@@ -174,7 +184,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
       if (mounted && generation == _generation) {
         setState(() {
           _loading = false;
-          _error = error.toString();
+          _error = _userFacingError(error);
         });
       }
     }
@@ -223,7 +233,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
     } catch (error) {
       if (mounted && generation == _generation) {
         setState(() {
-          _error = error.toString();
+          _error = _userFacingError(error);
           _failedMore = more;
           _loading = false;
           _more = false;
