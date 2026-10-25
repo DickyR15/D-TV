@@ -44,6 +44,8 @@ class MainActivity : FlutterActivity() {
     private var televisionMode = false
     private var pendingExportPlaybackLogText: String? = null
     private var pendingExportPlaybackLogResult: MethodChannel.Result? = null
+    private var pendingExportSettingsBackupContent: String? = null
+    private var pendingExportSettingsBackupResult: MethodChannel.Result? = null
 
     companion object {
         private const val EXPORT_PLAYBACK_LOG_PERMISSION_REQUEST = 7412
@@ -163,13 +165,98 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun exportSettingsBackup(content: String): Map<String, String> {
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val fileName = "D-TV-settings-backup_$stamp.json"
+
+        // Android 9 and earlier need the existing public Downloads permission.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val downloads = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS
+            )
+            val directory = File(downloads, "D-TV")
+            if (!directory.exists() && !directory.mkdirs()) {
+                throw IllegalStateException("無法建立 Download/D-TV 資料夾")
+            }
+            val outputFile = File(directory, fileName)
+            outputFile.writeText(content, Charsets.UTF_8)
+            MediaScannerConnection.scanFile(
+                this,
+                arrayOf(outputFile.absolutePath),
+                arrayOf("application/json"),
+                null
+            )
+            return mapOf("fileName" to fileName, "path" to "Download/D-TV/$fileName")
+        }
+
+        // Android 10+ can write straight to Downloads without opening a file picker.
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/D-TV")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IllegalStateException("無法在下載資料夾建立設定備份")
+        try {
+            val output = contentResolver.openOutputStream(uri)
+                ?: throw IllegalStateException("無法寫入設定備份")
+            output.use {
+                it.write(content.toByteArray(Charsets.UTF_8))
+                it.flush()
+            }
+            val published = ContentValues().apply {
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+            }
+            if (contentResolver.update(uri, published, null, null) <= 0) {
+                throw IllegalStateException("無法完成設定備份儲存")
+            }
+            return mapOf("fileName" to fileName, "path" to "Download/D-TV/$fileName")
+        } catch (error: Exception) {
+            contentResolver.delete(uri, null, null)
+            throw error
+        }
+    }
+
+    private fun handleExportSettingsBackup(content: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+                PackageManager.PERMISSION_GRANTED
+        ) {
+            if (pendingExportPlaybackLogResult != null ||
+                pendingExportSettingsBackupResult != null
+            ) {
+                result.error("export_in_progress", "匯出作業正在等待儲存權限確認", null)
+                return
+            }
+            pendingExportSettingsBackupContent = content
+            pendingExportSettingsBackupResult = result
+            requestPermissions(
+                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                EXPORT_PLAYBACK_LOG_PERMISSION_REQUEST
+            )
+            return
+        }
+        try {
+            result.success(exportSettingsBackup(content))
+        } catch (error: Exception) {
+            result.error(
+                "settings_backup_export_failed",
+                "匯出設定備份失敗：${error.message ?: "未知錯誤"}",
+                null
+            )
+        }
+    }
+
     private fun handleExportPlaybackLog(text: String, result: MethodChannel.Result) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
                 PackageManager.PERMISSION_GRANTED
         ) {
-            if (pendingExportPlaybackLogResult != null) {
-                result.error("export_in_progress", "日誌匯出正在等待儲存權限確認", null)
+            if (pendingExportPlaybackLogResult != null ||
+                pendingExportSettingsBackupResult != null
+            ) {
+                result.error("export_in_progress", "匯出作業正在等待儲存權限確認", null)
                 return
             }
             pendingExportPlaybackLogText = text
@@ -199,6 +286,31 @@ class MainActivity : FlutterActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != EXPORT_PLAYBACK_LOG_PERMISSION_REQUEST) return
+
+        val backupResult = pendingExportSettingsBackupResult
+        val backupContent = pendingExportSettingsBackupContent
+        pendingExportSettingsBackupResult = null
+        pendingExportSettingsBackupContent = null
+        if (backupResult != null && backupContent != null) {
+            if (grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
+                backupResult.error(
+                    "storage_permission_denied",
+                    "需要允許儲存空間權限，才能將設定備份匯出到 Download/D-TV。",
+                    null
+                )
+                return
+            }
+            try {
+                backupResult.success(exportSettingsBackup(backupContent))
+            } catch (error: Exception) {
+                backupResult.error(
+                    "settings_backup_export_failed",
+                    "匯出設定備份失敗：${error.message ?: "未知錯誤"}",
+                    null
+                )
+            }
+            return
+        }
 
         val pendingResult = pendingExportPlaybackLogResult
         val pendingText = pendingExportPlaybackLogText
@@ -303,6 +415,14 @@ class MainActivity : FlutterActivity() {
                                 result.error("empty_log", "沒有可匯出的日誌內容", null)
                             } else {
                                 handleExportPlaybackLog(text, result)
+                            }
+                        }
+                        "exportSettingsBackup" -> {
+                            val content = call.argument<String>("content")
+                            if (content.isNullOrBlank()) {
+                                result.error("empty_settings_backup", "沒有可匯出的設定備份內容", null)
+                            } else {
+                                handleExportSettingsBackup(content, result)
                             }
                         }
                         "playbackPower" -> result.success(runCatching { playbackPower() }.getOrNull())

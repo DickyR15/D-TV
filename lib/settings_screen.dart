@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -126,13 +127,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       if (!restore) {
         final content = await widget.store.exportBackup();
-        final saved = await FilePicker.saveFile(
-          fileName:
-              '$appSlug-backup-${DateTime.now().toIso8601String().substring(0, 10)}.json',
-          bytes: Uint8List.fromList(utf8.encode(content)),
-          mimeType: 'application/json',
-        );
-        if (saved != null && mounted) setState(() => _message = '備份已儲存');
+        if (Platform.isAndroid) {
+          // Android TV images may not include a document-picker activity.
+          // Save directly to Download/D-TV through the native MediaStore API.
+          final saved = await const MethodChannel('duanju/device')
+              .invokeMapMethod<String, dynamic>(
+            'exportSettingsBackup',
+            <String, dynamic>{'content': content},
+          );
+          if (mounted) {
+            final path = saved?['path'] as String?;
+            setState(
+              () => _message = path == null
+                  ? '備份已儲存到 Download/D-TV'
+                  : '備份已儲存：$path',
+            );
+          }
+        } else {
+          final saved = await FilePicker.saveFile(
+            fileName:
+                '$appSlug-backup-${DateTime.now().toIso8601String().substring(0, 10)}.json',
+            bytes: Uint8List.fromList(utf8.encode(content)),
+            mimeType: 'application/json',
+          );
+          if (saved != null && mounted) setState(() => _message = '備份已儲存');
+        }
       } else {
         final file = await FilePicker.pickFile(
           type: FileType.custom,

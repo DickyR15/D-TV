@@ -240,7 +240,7 @@ class DiaryService {
                       color: Colors.white.withValues(alpha: 0.08),
                     ),
                   ),
-                  child: _PlaybackLogList(entries: list),,
+                  child: _PlaybackLogList(entries: list),
                 );
               },
             ),
