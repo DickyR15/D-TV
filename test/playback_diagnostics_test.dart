@@ -51,6 +51,73 @@ void main() {
     expect(text, isNot(contains('private')));
   });
 
+  test('MPV demuxer open failures trigger fast route recovery', () {
+    for (final sample in [
+      (
+        level: 'error',
+        prefix: 'ffmpeg/demuxer',
+        text: 'mov,mp4: error reading header',
+      ),
+      (
+        level: 'error',
+        prefix: 'ffmpeg/demuxer',
+        text: 'failed to read the initialization vector; Hit EOF while reading senc',
+      ),
+      (
+        level: 'error',
+        prefix: 'lavf',
+        text: 'avformat_open_input() failed',
+      ),
+      (
+        level: 'error',
+        prefix: 'ffmpeg/demuxer',
+        text: 'stream 1, offset 0x3277e: partial file',
+      ),
+      (
+        level: 'error',
+        prefix: 'stream',
+        text: 'Failed to open http://127.0.0.1:35309/media.mp4',
+      ),
+    ]) {
+      expect(
+        playbackDiagnosticLogRequiresRecovery(
+          level: sample.level,
+          prefix: sample.prefix,
+          text: sample.text,
+        ),
+        isTrue,
+        reason: sample.text,
+      );
+    }
+  });
+
+  test('benign MPV property errors do not force route switching', () {
+    expect(
+      playbackDiagnosticLogRequiresRecovery(
+        level: 'error',
+        prefix: 'media_kit',
+        text: 'property not found _setProperty(osc, 1)',
+      ),
+      isFalse,
+    );
+    expect(
+      playbackDiagnosticLogRequiresRecovery(
+        level: 'warn',
+        prefix: 'ffmpeg/demuxer',
+        text: 'error reading header',
+      ),
+      isFalse,
+    );
+    expect(
+      playbackDiagnosticLogRequiresRecovery(
+        level: 'error',
+        prefix: 'vd',
+        text: 'hardware decoder property rejected',
+      ),
+      isFalse,
+    );
+  });
+
   test('mpv warning and network keywords are relevant', () {
     expect(
       playbackDiagnosticLogRelevant(

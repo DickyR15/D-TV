@@ -56,3 +56,30 @@ bool playbackDiagnosticLogRelevant({
     r'http|https|tcp|tls|ssl|dns|hls|m3u8|demux|ffmpeg|ffmpeg/demuxer|lavf|stream|cache|protocol|whitelist|connection|connect|timeout|eof|127\.0\.0\.1|localhost',
   ).hasMatch(value);
 }
+
+/// Identifies MPV demuxer failures that mean the current URL cannot provide a
+/// usable media stream. These arrive as log messages on some Android builds,
+/// without an accompanying player.stream.error event, so the startup watchdog
+/// would otherwise wait 20 seconds before trying the next route.
+bool playbackDiagnosticLogRequiresRecovery({
+  required String level,
+  required String prefix,
+  required String text,
+}) {
+  if (!RegExp(r'\b(error|fatal)\b').hasMatch(level.toLowerCase())) {
+    return false;
+  }
+  final source = prefix.toLowerCase();
+  if (!(source.contains('demuxer') ||
+      source == 'lavf' ||
+      source == 'stream')) {
+    return false;
+  }
+  final message = text.toLowerCase();
+  return RegExp(
+    r'error reading header|failed to read the initialization vector|'
+    r'hit eof while reading senc|avformat_open_input\(\) failed|'
+    r'partial file|failed to open|moov atom not found|'
+    r'invalid data found when processing input',
+  ).hasMatch(message);
+}

@@ -315,6 +315,18 @@ class _PlayerScreenState extends State<PlayerScreen>
         DiaryService.add(
           '[MPV] level=${log.level} prefix=${playbackDiagnosticLogText(log.prefix)} generation=$_generation text=$text',
         );
+        if (_acceptErrors &&
+            mounted &&
+            playbackDiagnosticLogRequiresRecovery(
+              level: log.level,
+              prefix: log.prefix,
+              text: log.text,
+            )) {
+          DiaryService.add(
+            '[Recovery] demuxer_open_failure generation=$_generation',
+          );
+          _queueRecovery(reason: 'demuxer_open_error');
+        }
       }),
     );
     _subscriptions.add(
