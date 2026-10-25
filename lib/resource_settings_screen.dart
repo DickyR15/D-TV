@@ -23,6 +23,10 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   late final int _epoch = widget.store.profileEpoch;
   ResourceSettings? _settings;
   String _mode = 'auto';
+  bool _busy = false;
+  bool _showProxy = false;
+  int _catalog = 3;
+  int _interval = 250;
 
   String? _error;
   bool get _allowed =>
