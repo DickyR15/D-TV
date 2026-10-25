@@ -59,10 +59,29 @@ class _RankingSnapshot {
   }
 }
 
+class _RankingPageSnapshot {
+  const _RankingPageSnapshot({required this.page, required this.checkedAt});
+
+  final RankingPage page;
+  final DateTime checkedAt;
+
+  bool get isFresh {
+    final age = DateTime.now().difference(checkedAt);
+    return !page.stale &&
+        page.warning.isEmpty &&
+        !age.isNegative &&
+        age < const Duration(minutes: 4);
+  }
+}
+
 class _RankingMemory {
   List<RankingBoard>? boards;
   Future<List<RankingBoard>>? boardsFuture;
   final pages = <String, _RankingSnapshot>{};
+  // One-page look-ahead cache: we only download a page when the currently
+  // visible page succeeds, and we never recursively prefetch the whole board.
+  final prefetchedPages = <String, _RankingPageSnapshot>{};
+  final prefetchingPages = <String, Future<RankingPage>>{};
 }
 
 final Expando<_RankingMemory> _rankingMemoryByRepository =
@@ -95,6 +114,73 @@ class _RankingsScreenState extends State<RankingsScreen> {
       return '榜單請求逾時，請重試或稍後再試。';
     }
     return message;
+  }
+
+  String _rankingPageKey(String boardId, int page) => '$boardId:$page';
+
+  Future<RankingPage> _loadRankingPage(
+    RankingBoard board,
+    int page, {
+    required bool preferPrefetch,
+  }) async {
+    final key = _rankingPageKey(board.id, page);
+    if (preferPrefetch) {
+      final cached = _memory.prefetchedPages.remove(key);
+      if (cached != null && cached.isFresh) return cached.page;
+
+      final pending = _memory.prefetchingPages[key];
+      if (pending != null) {
+        try {
+          final result = await pending;
+          // A pending look-ahead can finish while this load is waiting.
+          _memory.prefetchedPages.remove(key);
+          return result;
+        } catch (_) {
+          // Background prefetch errors are silent; retry on the user path.
+        }
+      }
+    }
+    return widget.repository.rankings(board.id, page: page);
+  }
+
+  void _prefetchNextPage(RankingBoard board, RankingPage current) {
+    // These are the four Red Fruit hot-ranking boards. Keep this optimization
+    // scoped to their 20-item paginated source and do not change other providers.
+    if (board.source != 'hongguo' ||
+        current.items.isEmpty ||
+        !current.hasMore ||
+        current.stale ||
+        current.warning.isNotEmpty) {
+      return;
+    }
+    final nextPage = current.page + 1;
+    final key = _rankingPageKey(board.id, nextPage);
+    final cached = _memory.prefetchedPages[key];
+    if (cached != null && cached.isFresh) return;
+    _memory.prefetchedPages.remove(key);
+    if (_memory.prefetchingPages.containsKey(key)) return;
+
+    late final Future<RankingPage> pending;
+    pending = widget.repository
+        .rankings(board.id, page: nextPage)
+        .then((page) {
+          if (page.items.isNotEmpty && !page.stale && page.warning.isEmpty) {
+            _memory.prefetchedPages[key] = _RankingPageSnapshot(
+              page: page,
+              checkedAt: DateTime.now(),
+            );
+          }
+          return page;
+        })
+        .whenComplete(() {
+          if (identical(_memory.prefetchingPages[key], pending)) {
+            _memory.prefetchingPages.remove(key);
+          }
+        });
+    _memory.prefetchingPages[key] = pending;
+    // The visible page must not fail just because a speculative next page
+    // failed in the background. A later user request will retry it.
+    unawaited(pending.catchError((Object _) => const RankingPage(items: [])));
   }
 
   Future<List<RankingBoard>> _loadBoardsCached() {
@@ -210,11 +296,18 @@ class _RankingsScreenState extends State<RankingsScreen> {
       }
     });
     try {
-      final result = await widget.repository.rankings(
-        board.id,
-        page: more ? _page + 1 : 1,
-        force: force,
-      );
+      final requestedPage = more ? _page + 1 : 1;
+      final result = more && !force
+          ? await _loadRankingPage(
+              board,
+              requestedPage,
+              preferPrefetch: true,
+            )
+          : await widget.repository.rankings(
+              board.id,
+              page: requestedPage,
+              force: force,
+            );
       if (!mounted || generation != _generation) return;
       final rows = <String, RankingItem>{
         if (more)
@@ -242,6 +335,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
             ? DateTime.now().subtract(const Duration(minutes: 5))
             : DateTime.now(),
       );
+      if (!force && result.warning.isEmpty) {
+        _prefetchNextPage(board, result);
+      }
       _retryTimer?.cancel();
       _automaticRetries = 0;
       if (result.stale && !more && !force) {
