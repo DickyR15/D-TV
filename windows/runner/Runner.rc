@@ -90,11 +90,11 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "HGTV" "\0"
+            VALUE "CompanyName", "DickyR15" "\0"
             VALUE "FileDescription", APP_DISPLAY_NAME "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", APP_DISPLAY_NAME "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.duanju. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 DickyR15. All rights reserved." "\0"
             VALUE "OriginalFilename", APP_EXECUTABLE_NAME "\0"
             VALUE "ProductName", "HGTV" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

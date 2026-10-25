@@ -283,6 +283,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.all(16),
                   child: SelectableText(uiTraditional(_message!)),
                 ),
+              const Divider(height: 24),
+              ListTile(
+                key: const ValueKey('app-author'),
+                leading: const Icon(Icons.person_outline_rounded),
+                title: const Text('作者'),
+                subtitle: Text(appAuthor),
+              ),
             ],
           ),
         ),
