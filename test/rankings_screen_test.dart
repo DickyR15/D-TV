@@ -58,6 +58,7 @@ void main() {
       () => FocusManager.instance.highlightStrategy =
           FocusHighlightStrategy.automatic,
     );
+    final repository = _RankingRepository();
     await tester.pumpWidget(
       MaterialApp(
         builder: (context, child) => AppLayout(
@@ -68,7 +69,7 @@ void main() {
           ),
         ),
         home: RankingsScreen(
-          repository: _RankingRepository(),
+          repository: repository,
           store: store,
           initialGroup: 'hongguo',
         ),
