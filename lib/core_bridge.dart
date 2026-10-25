@@ -556,6 +556,7 @@ class NativeRepository extends AppRepository {
       if ({
         'catalog',
         'cached',
+        'cachedPreview',
         'categories',
         'sourceStatus',
         'sourceJob',
