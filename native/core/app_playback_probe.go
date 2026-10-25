@@ -93,11 +93,13 @@ func (engine *nativeEngine) rankNativePlaybackRoutes(
 	}
 
 	resultsChannel := make(chan nativePlaybackRouteProbeResult, probeCount)
+	probeCtx, cancelProbes := context.WithCancel(ctx)
+	defer cancelProbes()
 	for index := 0; index < probeCount; index++ {
 		index := index
 		media := choice.media[index]
 		go func() {
-			latency, status, size, host, err := engine.downloader.probeNativePlaybackRoute(ctx, media)
+			latency, status, size, host, err := engine.downloader.probeNativePlaybackRoute(probeCtx, media)
 			resultsChannel <- nativePlaybackRouteProbeResult{
 				index: index, host: host, latency: latency, status: status, bytes: size, err: err,
 			}
@@ -105,23 +107,36 @@ func (engine *nativeEngine) rankNativePlaybackRoutes(
 	}
 	results := make([]nativePlaybackRouteProbeResult, 0, probeCount)
 	resultsByIndex := make(map[int]nativePlaybackRouteProbeResult, probeCount)
-	for range probeCount {
-		result := <-resultsChannel
-		results = append(results, result)
-		resultsByIndex[result.index] = result
-		if result.err == nil {
-			// A successful media probe means this host has recovered.
-			engine.downloader.clearNativeStreamHostFailure(choice.media[result.index].URL)
-			wasCooling[result.index] = false
-			continue
+	// Route probing is only a startup heuristic, not a prerequisite for play.
+	// Stop waiting as soon as one same-quality route is proven responsive;
+	// slower alternatives remain available as fallbacks without delaying the
+	// current episode until every probe hits its timeout.
+probeResults:
+	for completed := 0; completed < probeCount; {
+		select {
+		case result := <-resultsChannel:
+			completed++
+			results = append(results, result)
+			resultsByIndex[result.index] = result
+			if result.err == nil {
+				// A successful media probe means this host has recovered.
+				engine.downloader.clearNativeStreamHostFailure(choice.media[result.index].URL)
+				wasCooling[result.index] = false
+				cancelProbes()
+				break probeResults
+			}
+			reason := nativeStreamError(result.err)
+			if result.status == http.StatusTooManyRequests || result.status >= http.StatusInternalServerError {
+				reason = "upstream_http"
+			}
+			engine.downloader.rememberNativeStreamHostFailure(choice.media[result.index].URL, reason)
+			wasCooling[result.index] = engine.downloader.nativeStreamHostCoolingDown(choice.media[result.index].URL)
+		case <-ctx.Done():
+			cancelProbes()
+			break probeResults
 		}
-		reason := nativeStreamError(result.err)
-		if result.status == http.StatusTooManyRequests || result.status >= http.StatusInternalServerError {
-			reason = "upstream_http"
-		}
-		engine.downloader.rememberNativeStreamHostFailure(choice.media[result.index].URL, reason)
-		wasCooling[result.index] = engine.downloader.nativeStreamHostCoolingDown(choice.media[result.index].URL)
 	}
+	cancelProbes()
 
 	// Rank the entire preferred-quality tier, not just the routes we probed.
 	// A candidate that just timed out must not immediately remain first; an

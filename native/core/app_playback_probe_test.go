@@ -59,6 +59,46 @@ func TestNativePlaybackRouteProbePrefersResponsiveSameQualityBackup(t *testing.T
 	}
 }
 
+
+func TestNativePlaybackRouteProbeReturnsAfterFirstHealthyRoute(t *testing.T) {
+	const stalledURL = "https://cdn-stalled.example.test/episode.mp4"
+	const healthyURL = "https://cdn-healthy.example.test/episode.mp4"
+	client := &http.Client{Transport: playbackProbeFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host == "cdn-stalled.example.test" {
+			<-request.Context().Done()
+			return nil, request.Context().Err()
+		}
+		return &http.Response{
+			StatusCode: http.StatusPartialContent,
+			Header:     http.Header{"Content-Type": []string{"video/mp4"}},
+			Body:       io.NopCloser(strings.NewReader("synthetic-media-bytes")),
+			Request:    request,
+		}, nil
+	})}
+	downloader := &Downloader{client: client}
+	engine := &nativeEngine{downloader: downloader}
+	choice := nativePlaybackChoices(providerMedia{
+		URL: stalledURL, Quality: 1080,
+		Variants: []providerMedia{{URL: healthyURL, Quality: 1080}},
+	}, 0)
+
+	started := time.Now()
+	ranked := engine.rankNativePlaybackRoutes(context.Background(), choice, Task{
+		DramaID: "hongguo:fixture", DramaTitle: "synthetic playback", Index: 1,
+	})
+	elapsed := time.Since(started)
+	if elapsed >= time.Second {
+		t.Fatalf("route probe waited for a stalled alternative despite a healthy route: %s", elapsed)
+	}
+	if ranked.media[0].URL != healthyURL {
+		t.Fatalf("healthy route should be selected before the stalled alternative: %s", ranked.media[0].URL)
+	}
+	if downloader.nativeStreamHostCoolingDown(stalledURL) {
+		t.Fatal("a probe canceled after another route succeeded must not mark the stalled host as failed")
+	}
+}
+
+
 func TestNativePlaybackRouteProbeKeepsCoolingDownHostBehindHealthyRoute(t *testing.T) {
 	const failedURL = "https://cdn-stalled.example.test/episode.mp4"
 	const healthyURL = "https://cdn-healthy.example.test/episode.mp4"
