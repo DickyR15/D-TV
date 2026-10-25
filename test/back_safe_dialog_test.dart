@@ -35,7 +35,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('player-nested-dialog')), findsOneWidget);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('player-nested-dialog')), findsNothing);

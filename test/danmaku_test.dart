@@ -386,10 +386,19 @@ void main() {
       final legacy = jsonDecode(backup) as Map<String, dynamic>;
       (((legacy['libraries'] as Map)['default'] as Map)['playback'] as Map)
           .remove('danmaku');
-      await store.importBackup(jsonEncode(legacy));
-      expect(store.locked, isTrue);
-      await store.switchProfile('default', pin: 'synthetic-pin');
-      expect(store.playbackPreferences.danmaku, isTrue);
+
+      // Import the legacy backup into a clean install so the default-off
+      // migration marker cannot override this test's intended old-backup case.
+      SharedPreferences.setMockInitialValues({});
+      final legacyStore = LocalStore(
+        await SharedPreferences.getInstance(),
+        pinHasher: testPinHasher,
+      );
+      addTearDown(legacyStore.dispose);
+      await legacyStore.importBackup(jsonEncode(legacy));
+      expect(legacyStore.locked, isTrue);
+      await legacyStore.switchProfile('default', pin: 'synthetic-pin');
+      expect(legacyStore.playbackPreferences.danmaku, isTrue);
     },
   );
 

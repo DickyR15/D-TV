@@ -139,7 +139,7 @@ void main() {
               isA<AppFailure>().having(
                 (error) => error.message,
                 'message',
-                '當前版本不包含此站源',
+                '目前版本不包含此片源',
               ),
             ),
           );

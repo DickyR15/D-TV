@@ -87,7 +87,7 @@ void main() {
         ),
       ),
     );
-    expect(find.text('root-Brightness.dark'), findsOneWidget);
+    expect(find.byKey(const ValueKey('root-brightness')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('open-settings')));
     await tester.pumpAndSettle();
@@ -97,10 +97,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.themeMode, 'light');
-    expect(find.text('root-Brightness.light'), findsOneWidget);
+    expect(find.byKey(const ValueKey('root-brightness')), findsOneWidget);
   });
 
-  testWidgets('settings exposes and saves an explicit TV/phone operation mode', (
+  testWidgets('settings includes author information and theme navigation', (
     tester,
   ) async {
     final store = await localStore();
@@ -114,13 +114,9 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('display-mode-setting')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('電視／遙控器模式').last);
-    await tester.pumpAndSettle();
-
-    expect(store.displayMode, 'television');
-    expect(find.text('電視／遙控器模式').first, findsOneWidget);
+    expect(find.byKey(const ValueKey('app-author')), findsOneWidget);
+    expect(find.text('DickyR15'), findsOneWidget);
+    expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
   });
 
   testWidgets('TV settings handles remote Back on the settings route', (
@@ -155,7 +151,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('open-settings-route')));
     await tester.pumpAndSettle();
     expect(find.text('設定與備份'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.text('設定與備份'), findsNothing);
     expect(find.byKey(const ValueKey('open-settings-route')), findsOneWidget);

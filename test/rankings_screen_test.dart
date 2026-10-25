@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:convert';
+
 import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/models.dart';
 import 'package:hgtv/ranking_models.dart';
@@ -10,6 +13,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'fixtures.dart';
 
 class _RankingRepository extends FixtureRepository {
+  @override
+  Future<String> cover(Drama drama, {bool force = false}) async {
+    final file = File('${Directory.systemTemp.path}/d-tv-test-cover.png');
+    if (!await file.exists()) {
+      await file.writeAsBytes(
+        base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/G7sAAAAASUVORK5CYII='),
+      );
+    }
+    return file.path;
+  }
   int rankingCalls = 0;
   bool timeoutFirstRanking = false;
 
