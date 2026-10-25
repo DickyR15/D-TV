@@ -128,10 +128,14 @@ class CatalogBrowser {
     Iterable<Drama> items, {
     bool refresh = false,
   }) {
+    // An empty native snapshot can be transient while the catalog is being
+    // written. Never mark a source warmed until it actually returned entries.
+    final snapshot = items.toList();
+    if (snapshot.isEmpty) return;
     // Avoid rescanning the base catalog on every category navigation. Explicit
     // cache-only refreshes still merge newly added dramas/categories.
     final firstLoad = _rememberedBaseCaches.add(source);
-    if (firstLoad || refresh) _remember(source, items);
+    if (firstLoad || refresh) _remember(source, snapshot);
   }
 
   void updateDrama(Drama drama) {

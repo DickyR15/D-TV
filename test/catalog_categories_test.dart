@@ -192,6 +192,33 @@ void main() {
   );
 
   test(
+    'empty cache snapshot does not block later local category warmup',
+    () async {
+      final repository = CategoryRepository();
+      final browser = CatalogBrowser(repository);
+      const group = SourceGroup('hongguo', '紅果', [SourceSite.hongguo]);
+
+      await browser.loadCategories(group);
+      // Allow the background empty cache request to complete before content appears.
+      await Future<void>.delayed(Duration.zero);
+      repository.cachedPages['hongguo'] = CatalogPage(const [
+        Drama(
+          id: 'hongguo:later-cache',
+          source: 'hongguo',
+          title: '後到的科幻短劇',
+          category: '科幻',
+        ),
+      ]);
+
+      await browser.load(group, useCache: true, cacheOnly: true);
+      expect(
+        browser.categories(group).map((category) => category.name),
+        contains('科幻'),
+      );
+    },
+  );
+
+  test(
     'category choices reuse cached results and refresh when new local categories arrive',
     () async {
       final repository = CategoryRepository();
