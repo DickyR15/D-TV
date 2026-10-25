@@ -120,30 +120,33 @@ void main() {
     await loader.close();
   });
 
-  test('a stalled cancellation cannot leave reload spinning or start a stale resolve', () async {
-    final repository = DeferredRepository();
-    final loader = PlaybackLoader(
-      repository,
-      resolveTimeout: const Duration(milliseconds: 10),
-    );
-    final first = loader.load(FixtureRepository.free, episode(1));
-    await tick();
-    repository.pending[1]!.complete(
-      const PlaybackPlan(url: 'https://example.test/1.mp4', session: 'first'),
-    );
-    expect((await first)?.session, 'first');
+  test(
+    'a stalled cancellation cannot leave reload spinning or start a stale resolve',
+    () async {
+      final repository = DeferredRepository();
+      final loader = PlaybackLoader(
+        repository,
+        resolveTimeout: const Duration(milliseconds: 10),
+      );
+      final first = loader.load(FixtureRepository.free, episode(1));
+      await tick();
+      repository.pending[1]!.complete(
+        const PlaybackPlan(url: 'https://example.test/1.mp4', session: 'first'),
+      );
+      expect((await first)?.session, 'first');
 
-    repository.cancellationGate = Completer<void>();
-    final reload = loader.load(FixtureRepository.free, episode(2));
-    await expectLater(reload, throwsA(isA<TimeoutException>()));
-    expect(repository.pending.keys, [1]);
+      repository.cancellationGate = Completer<void>();
+      final reload = loader.load(FixtureRepository.free, episode(2));
+      await expectLater(reload, throwsA(isA<TimeoutException>()));
+      expect(repository.pending.keys, [1]);
 
-    repository.cancellationGate!.complete();
-    await tick();
-    await tick();
-    expect(repository.pending.keys, [1]);
-    await loader.close();
-  });
+      repository.cancellationGate!.complete();
+      await tick();
+      await tick();
+      expect(repository.pending.keys, [1]);
+      await loader.close();
+    },
+  );
 
   test(
     'changing episode cancels an in-flight fallback and releases its late session',
