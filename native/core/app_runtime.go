@@ -664,8 +664,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		}
 		items, err = d.fetchHongguoAppCatalogCategory(ctx, category)
 		state := d.hongguoCatalogSnapshot()
-		websiteBackfill, _ := ctx.Value(libraryWebsiteBackfillKey{}).(bool)
-		if category == "" && websiteBackfill && !hongguoAppCatalogHasMore(state) {
+		if shouldFetchHongguoWebsiteHistory(ctx, category, state) {
 			// Keep history scans out of normal catalog reads and connectivity
 			// checks. The update task opts in one bounded website page batch at
 			// a time, after all App API feeds are exhausted.
@@ -697,6 +696,9 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 				totalPages = websiteTotalPages
 			}
 			result.HasMore = page < totalPages
+			if category == "" {
+				result.HasMore = result.HasMore || hongguoCatalogHasMore(state)
+			}
 		}
 	case sourceHuangdou:
 		client := newHuangdouAPIClient(d)
