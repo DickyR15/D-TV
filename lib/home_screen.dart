@@ -47,7 +47,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final _scroll = ScrollController();
   final Map<int, FocusNode> _navigationFocusNodes = {};
   final RemoteGridFocusController _savedGridFocus = RemoteGridFocusController();
-  final FocusNode _savedSearchFocusNode = FocusNode(debugLabel: 'saved-library-search');
   Timer? _debounce;
   late SourceSite _source;
   bool _allSources = false;
@@ -906,7 +905,6 @@ class _HomeScreenState extends State<HomeScreen> {
       node.dispose();
     }
     _navigationFocusNodes.clear();
-    _savedSearchFocusNode.dispose();
     super.dispose();
   }
 
@@ -1677,7 +1675,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           onContinue: (drama) =>
                               _openDrama(drama, resume: true),
                           gridFocusController: _savedGridFocus,
-                          searchFocusNode: _savedSearchFocusNode,
                           onExitLeft: _focusCurrentNavigation,
                         ),
                 ),
@@ -2045,12 +2042,9 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       if (key == LogicalKeyboardKey.arrowRight) {
         if (_tab == 1 || _tab == 2) {
-          // Enter the first poster directly; only use search when there are no matches.
-          if (_savedGridFocus.hasItems) {
-            _savedGridFocus.focusFirst();
-          } else {
-            _savedSearchFocusNode.requestFocus();
-          }
+          // Enter the first poster when the saved list has items. These pages
+          // intentionally no longer show a search row.
+          if (_savedGridFocus.hasItems) _savedGridFocus.focusFirst();
           return KeyEventResult.handled;
         }
         FocusScope.of(context).focusInDirection(TraversalDirection.right);

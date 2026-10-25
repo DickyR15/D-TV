@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
-import 'catalog_sort.dart';
 import 'core_bridge.dart';
 import 'drama_actions.dart';
 import 'follow_state.dart';
@@ -20,7 +19,6 @@ class SavedLibrary extends StatefulWidget {
     required this.onOpen,
     required this.onContinue,
     this.gridFocusController,
-    this.searchFocusNode,
     this.onExitLeft,
   });
 
@@ -30,7 +28,6 @@ class SavedLibrary extends StatefulWidget {
   final ValueChanged<Drama> onOpen;
   final ValueChanged<Drama> onContinue;
   final RemoteGridFocusController? gridFocusController;
-  final FocusNode? searchFocusNode;
   final VoidCallback? onExitLeft;
 
   @override
@@ -38,14 +35,7 @@ class SavedLibrary extends StatefulWidget {
 }
 
 class _SavedLibraryState extends State<SavedLibrary> {
-  final _search = TextEditingController();
   String _filter = '';
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
 
   Future<void> _clearHistory() async {
     final epoch = widget.store.profileEpoch;
@@ -116,7 +106,6 @@ class _SavedLibraryState extends State<SavedLibrary> {
           ? history.map((entry) => entry.drama).toList()
           : widget.store.favorites;
       final items = all.where((drama) {
-        if (!matchesDramaQuery(drama, _search.text)) return false;
         final state = widget.store.following(drama.id);
         return widget.history ||
             _filter.isEmpty ||
@@ -142,31 +131,6 @@ class _SavedLibraryState extends State<SavedLibrary> {
                   icon: const Icon(Icons.delete_outline_rounded),
                 ),
             ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: RemoteTextInput(
-            child: TextField(
-              key: ValueKey(
-                widget.history ? 'history-search' : 'favorites-search',
-              ),
-              controller: _search,
-              focusNode: widget.searchFocusNode,
-              onChanged: (_) => setState(() {}),
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: widget.history ? '搜尋觀看記錄' : '搜尋收藏',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: _search.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: '清空搜尋',
-                        onPressed: () => setState(_search.clear),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-              ),
-            ),
           ),
         ),
         if (!widget.history)
@@ -201,7 +165,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                   ? '還沒有觀看記錄'
                   : '還沒有收藏'
             : '沒有符合的紀錄',
-        message: all.isEmpty ? '去挑一部喜歡的短劇' : '可以更換搜尋詞或篩選條件。',
+        message: all.isEmpty ? '去挑一部喜歡的短劇' : '可以更換收藏篩選條件。',
         icon: widget.history
             ? Icons.history_rounded
             : Icons.bookmark_border_rounded,
@@ -231,7 +195,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                       ? empty
                       : RemoteGrid(
                           key: ValueKey(
-                            'saved-tv-${widget.history}-$_filter-${_search.text}',
+                            'saved-tv-${widget.history}-$_filter',
                           ),
                           itemKeys: items.map((item) => item.id).toList(),
                           columns: columns,
@@ -255,7 +219,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
           final padding = constraints.maxWidth < 600 ? 16.0 : 24.0;
           return CustomScrollView(
             key: PageStorageKey(
-              'saved-${widget.history}-$_filter-${_search.text}',
+              'saved-${widget.history}-$_filter',
             ),
             slivers: [
               SliverToBoxAdapter(child: Column(children: header)),
