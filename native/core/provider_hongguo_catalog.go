@@ -47,9 +47,9 @@ func (downloader *Downloader) fetchHongguoAppCatalog(ctx context.Context) ([]Dra
 // page from each public website category. The per-route cursors are persisted
 // with the App feed cursors, so long catalog updates can resume after restarts.
 func (downloader *Downloader) fetchHongguoWebsiteCatalogPage(ctx context.Context) ([]Drama, error) {
+	// Called from fetchHongguoAppCatalogCategory while catalogMu is already held.
+	// Do not acquire catalogMu here again.
 	client := downloader.hongguoClient()
-	client.catalogMu.Lock()
-	defer client.catalogMu.Unlock()
 
 	type pendingRoute struct {
 		path string
