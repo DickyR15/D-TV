@@ -12,6 +12,7 @@ import 'video_enhancement_settings.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
 import 'diary_service.dart';
+import 'playback_controls_visibility.dart';
 
 class TelevisionControls extends StatefulWidget {
   const TelevisionControls({
@@ -28,6 +29,7 @@ class TelevisionControls extends StatefulWidget {
     required this.onSettings,
     required this.onBack,
     this.enhancement,
+    this.playbackGeneration = 0,
   });
   final Player player;
   final String title;
@@ -41,6 +43,7 @@ class TelevisionControls extends StatefulWidget {
   final Future<void> Function() onSettings;
   final VoidCallback onBack;
   final VideoEnhancementController? enhancement;
+  final int playbackGeneration;
 
   @override
   State<TelevisionControls> createState() => _TelevisionControlsState();
@@ -59,15 +62,16 @@ class _TelevisionControlsState extends State<TelevisionControls> {
   bool _visible = true;
   bool _panelOpen = false;
   bool _seekHint = false;
-  // Keep controls suppressed during an automatic route/player recovery until
-  // the replacement stream is actually playing.
-  bool _suppressControlsUntilPlaying = false;
+  final PlaybackControlsVisibility _controlsVisibility = PlaybackControlsVisibility();
 
   @override
   void initState() {
     super.initState();
     _visible = widget.showOnPlaybackReady;
-    _suppressControlsUntilPlaying = !widget.showOnPlaybackReady;
+    _controlsVisibility.synchronize(
+      generation: widget.playbackGeneration,
+      showOnPlaybackReady: widget.showOnPlaybackReady,
+    );
     for (final stream in [
       widget.player.stream.position,
       widget.player.stream.duration,
@@ -86,9 +90,10 @@ class _TelevisionControlsState extends State<TelevisionControls> {
       widget.player.stream.playing.listen((playing) {
         if (!mounted || !widget.enabled || _panelOpen) return;
         if (playing) {
-          _suppressControlsUntilPlaying = false;
+          // Do not treat a brief "playing" event as proof that a replacement
+          // route has stabilized; broken URLs can fail immediately afterward.
           _scheduleHide();
-        } else if (!_suppressControlsUntilPlaying) {
+        } else if (!_controlsVisibility.suppressAutomaticReveal) {
           _show();
         }
       }),
@@ -106,28 +111,33 @@ class _TelevisionControlsState extends State<TelevisionControls> {
   @override
   void didUpdateWidget(covariant TelevisionControls oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.showOnPlaybackReady && !widget.showOnPlaybackReady) {
-      _suppressControlsUntilPlaying = true;
-    } else if (!oldWidget.showOnPlaybackReady &&
-        widget.showOnPlaybackReady) {
-      _suppressControlsUntilPlaying = false;
+    final playbackChanged =
+        widget.playbackGeneration != oldWidget.playbackGeneration;
+    final readinessChanged =
+        widget.showOnPlaybackReady != oldWidget.showOnPlaybackReady;
+    _controlsVisibility.synchronize(
+      generation: widget.playbackGeneration,
+      showOnPlaybackReady: widget.showOnPlaybackReady,
+    );
+    if (playbackChanged || readinessChanged) {
+      if (_controlsVisibility.suppressAutomaticReveal) {
+        _visible = false;
+        _hideTimer?.cancel();
+      } else if (widget.enabled) {
+        _show();
+      }
     }
     if (widget.enabled && !oldWidget.enabled) {
-      if (widget.showOnPlaybackReady) {
-        _show();
-      } else {
-        // If the stream started before controls were re-enabled, allow the
-        // next user pause to reveal controls as usual.
-        if (widget.player.state.playing) {
-          _suppressControlsUntilPlaying = false;
-        }
-        setState(() => _visible = false);
+      if (_controlsVisibility.suppressAutomaticReveal) {
+        _visible = false;
         _hideTimer?.cancel();
         _focus(_surface);
+      } else {
+        _show();
       }
     } else if (!widget.enabled) {
       _hideTimer?.cancel();
-      if (_visible) setState(() => _visible = false);
+      if (_visible) _visible = false;
     }
   }
 
@@ -144,6 +154,7 @@ class _TelevisionControlsState extends State<TelevisionControls> {
   }
 
   void _show() {
+    _controlsVisibility.revealFromUser();
     final needsFocus =
         !_visible || !_surface.hasFocus || _surface.hasPrimaryFocus;
     if (!_visible) setState(() => _visible = true);
@@ -187,6 +198,7 @@ class _TelevisionControlsState extends State<TelevisionControls> {
     } finally {
       if (mounted) {
         _panelOpen = false;
+        _controlsVisibility.revealFromUser();
         if (widget.enabled) {
           setState(() => _visible = true);
           _focus(returnFocus);

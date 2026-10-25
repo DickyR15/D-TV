@@ -2152,6 +2152,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         : _television
         ? TelevisionControls(
             player: _player,
+            playbackGeneration: _generation,
             title: title,
             enabled: !_loading && _error == null,
             showOnPlaybackReady: _showControlsOnPlaybackReady,
@@ -2168,6 +2169,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           )
         : PlayerControls(
             player: _player,
+            playbackGeneration: _generation,
             interactions: _interactions,
             enabled: !_loading && _error == null,
             enhancement: _enhancementForUi,

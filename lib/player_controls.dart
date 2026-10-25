@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'lan_controller.dart';
 import 'player_interactions.dart';
+import 'playback_controls_visibility.dart';
 import 'widgets.dart';
 import 'video_enhancement.dart';
 
@@ -39,6 +40,7 @@ class PlayerControls extends StatefulWidget {
     this.onPush,
     this.onPictureInPicture,
     this.enhancement,
+    this.playbackGeneration = 0,
   });
 
   final Player player;
@@ -69,6 +71,7 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
   final VideoEnhancementController? enhancement;
+  final int playbackGeneration;
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -78,7 +81,7 @@ class _PlayerControlsState extends State<PlayerControls> {
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   Timer? _hideTimer;
   bool _visible = true;
-  bool _suppressAutoPlaybackStart = false;
+  final PlaybackControlsVisibility _controlsVisibility = PlaybackControlsVisibility();
   bool _lastPlaying = false;
   double? _seekValue;
 
@@ -86,7 +89,10 @@ class _PlayerControlsState extends State<PlayerControls> {
   void initState() {
     super.initState();
     _visible = widget.showOnPlaybackReady;
-    _suppressAutoPlaybackStart = !widget.showOnPlaybackReady;
+    _controlsVisibility.synchronize(
+      generation: widget.playbackGeneration,
+      showOnPlaybackReady: widget.showOnPlaybackReady,
+    );
     _lastPlaying = widget.player.state.playing;
     for (final stream in [
       widget.player.stream.position,
@@ -108,10 +114,11 @@ class _PlayerControlsState extends State<PlayerControls> {
         _lastPlaying = playing;
         if (!mounted || !widget.enabled) return;
         if (!playing) {
-          _show();
+          if (!_controlsVisibility.suppressAutomaticReveal) _show();
         } else if (!wasPlaying) {
-          if (_suppressAutoPlaybackStart) {
-            _suppressAutoPlaybackStart = false;
+          // A replacement URL can briefly report playing before failing again.
+          // Never reveal controls during recovery until the user interacts.
+          if (_controlsVisibility.suppressAutomaticReveal) {
             _scheduleHide();
           } else {
             _show();
@@ -126,28 +133,31 @@ class _PlayerControlsState extends State<PlayerControls> {
   @override
   void didUpdateWidget(PlayerControls oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final playbackChanged =
+        widget.playbackGeneration != oldWidget.playbackGeneration;
+    final readinessChanged =
+        widget.showOnPlaybackReady != oldWidget.showOnPlaybackReady;
+    _controlsVisibility.synchronize(
+      generation: widget.playbackGeneration,
+      showOnPlaybackReady: widget.showOnPlaybackReady,
+    );
     if (widget.enabled != oldWidget.enabled ||
         widget.panelOpen != oldWidget.panelOpen ||
         widget.fullscreen != oldWidget.fullscreen ||
-        widget.showOnPlaybackReady != oldWidget.showOnPlaybackReady) {
+        readinessChanged ||
+        playbackChanged) {
       _seekValue = null;
-      if (widget.showOnPlaybackReady) {
-        _suppressAutoPlaybackStart = false;
-      } else if (widget.enabled && !oldWidget.enabled) {
-        _suppressAutoPlaybackStart = !widget.player.state.playing;
-      } else if (!widget.enabled && oldWidget.enabled) {
-        _suppressAutoPlaybackStart = true;
-        _visible = false;
-      }
-      if (widget.enabled && !oldWidget.enabled) {
-        if (widget.showOnPlaybackReady || !widget.player.state.playing) {
-          _visible = true;
-        } else {
-          _visible = false;
-        }
-      } else if (widget.panelOpen != oldWidget.panelOpen ||
+      if (widget.panelOpen != oldWidget.panelOpen ||
           widget.fullscreen != oldWidget.fullscreen) {
         _visible = true;
+      }
+      if (playbackChanged || readinessChanged) {
+        _visible = !_controlsVisibility.suppressAutomaticReveal;
+      }
+      if (!widget.enabled && oldWidget.enabled) {
+        _visible = false;
+      } else if (widget.enabled && !oldWidget.enabled) {
+        _visible = !_controlsVisibility.suppressAutomaticReveal;
       }
       _scheduleHide();
     }
@@ -180,12 +190,14 @@ class _PlayerControlsState extends State<PlayerControls> {
 
   void _show() {
     if (!mounted) return;
+    _controlsVisibility.revealFromUser();
     if (!_visible) setState(() => _visible = true);
     _scheduleHide();
   }
 
   void _tap() {
     if (widget.interactions.suppressTap) return;
+    _controlsVisibility.revealFromUser();
     widget.onFocusSurface();
     setState(() => _visible = !_visible);
     _scheduleHide();
@@ -215,7 +227,10 @@ class _PlayerControlsState extends State<PlayerControls> {
     final position = state.position.inMilliseconds / 1000;
     final buffered = state.buffer.inMilliseconds / 1000;
     final visible =
-        _visible || !state.playing || state.buffering || widget.panelOpen;
+        _visible ||
+        (!state.playing && !_controlsVisibility.suppressAutomaticReveal) ||
+        (state.buffering && !_controlsVisibility.suppressAutomaticReveal) ||
+        widget.panelOpen;
     return MouseRegion(
       onHover: (_) => _show(),
       cursor: visible ? SystemMouseCursors.basic : SystemMouseCursors.none,
