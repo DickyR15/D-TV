@@ -247,7 +247,6 @@ class DiaryService {
           ),
           actions: [
             TextButton.icon(
-              autofocus: true,
               icon: const Icon(Icons.file_download_outlined, size: 16),
               label: const Text('匯出紀錄 TXT'),
               onPressed: () => exportToTxt(dialogContext),
@@ -258,6 +257,7 @@ class DiaryService {
               onPressed: () => copyToClipboard(dialogContext),
             ),
             FilledButton(
+              autofocus: true,
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('關閉'),
             ),
