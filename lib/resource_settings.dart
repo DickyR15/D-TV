@@ -16,6 +16,7 @@ class ResourceSettings {
     this.systemProxyStatus = '',
   });
   final String proxyMode, proxyUrl, warning, systemProxyStatus;
+  final int catalogConcurrency, catalogIntervalMs;
 
   factory ResourceSettings.fromJson(Map<String, dynamic> data) =>
       ResourceSettings(
