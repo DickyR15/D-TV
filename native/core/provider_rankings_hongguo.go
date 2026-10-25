@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -16,32 +17,51 @@ import (
 var hongguoRankingMetric = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?[万亿]?热度$`)
 
 func (d *Downloader) fetchHongguoRankingPage(ctx context.Context, board rankingBoard, page int) (rankingPage, error) {
-	ctx, cancel := context.WithTimeout(ctx, 18*time.Second)
-	defer cancel()
+	// Keep the caller's cancellation separate from each attempt's deadline.
+	// A slow origin must not consume the whole retry budget on the first try.
+	parentCtx := ctx
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
 			timer := time.NewTimer(time.Duration(attempt*attempt) * 300 * time.Millisecond)
 			select {
 			case <-timer.C:
-			case <-ctx.Done():
+			case <-parentCtx.Done():
 				timer.Stop()
-				return rankingPage{}, ctx.Err()
+				return rankingPage{}, parentCtx.Err()
 			}
 		}
+
+		attemptCtx, cancel := context.WithTimeout(parentCtx, 20*time.Second)
 		base := d.providerBaseURL(sourceHongguo)
 		address := base + "/rank/" + board.path
 		if page > 1 {
 			address += "?page=" + strconv.Itoa(page)
 		}
-		requestCtx := ctx
+		var requestCtx context.Context = attemptCtx
 		if attempt > 0 {
-			requestCtx = context.WithValue(ctx, providerTextNoCacheKey{}, true)
+			requestCtx = context.WithValue(attemptCtx, providerTextNoCacheKey{}, true)
 		}
 		body, err := d.fetchProviderText(requestCtx, address, base+"/")
+		cancel()
 		if err != nil {
-			return rankingPage{}, err
+			if parentCtx.Err() != nil {
+				return rankingPage{}, parentCtx.Err()
+			}
+			lastErr = err
+			var backoff *requestBackoff
+			if errors.As(err, &backoff) {
+				return rankingPage{}, err
+			}
+			var networkErr net.Error
+			retryable := errors.Is(err, context.DeadlineExceeded) ||
+				errors.As(err, &networkErr) && networkErr.Timeout()
+			if !retryable || attempt == 2 {
+				return rankingPage{}, err
+			}
+			continue
 		}
+
 		result, err := parseHongguoRanking(body, board, page)
 		if err == nil {
 			return result, nil
