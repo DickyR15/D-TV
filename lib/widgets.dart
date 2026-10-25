@@ -213,7 +213,9 @@ class CachedCoverImage extends StatefulWidget {
 /// detail-page navigation and playback. Priority covers may still load while
 /// background requests are paused.
 class CoverRequestScheduler {
-  static const _limit = 4;
+  // Match the official app's six-way poster loading so the first visible
+  // screen is not unnecessarily serialized on slower Android TV hardware.
+  static const _limit = 6;
   static final _waiting = <({VoidCallback start, bool priority})>[];
   static var _running = 0;
   static var _backgroundPauseCount = 0;
@@ -283,8 +285,11 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
       return;
     }
     _file = null;
+    // Schedule uncached posters immediately. The request scheduler already
+    // limits concurrent network/decode work, so a per-poster timer only adds
+    // latency to the first visible row.
     _delay = Timer(
-      const Duration(milliseconds: 150),
+      Duration.zero,
       () => CoverRequestScheduler.add(_start, priority: widget.priority),
     );
   }
