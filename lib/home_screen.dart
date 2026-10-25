@@ -77,6 +77,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _sourceWatcherStarted = false;
   bool _refreshingUpdatedCache = false;
   bool _showRecommendations = false;
+  // Search results opened from a ranking should not change the selected board.
+  bool _searchResultsOnCurrentTab = false;
+  bool _catalogNeedsReload = false;
   String _sourceSignature = '';
   bool _catalogLoadScheduled = false;
   int _revealed = _revealBatch;
@@ -229,6 +232,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _searchVisible = false;
       _categorySelections.clear();
       _showRecommendations = false;
+      _searchResultsOnCurrentTab = false;
+      _catalogNeedsReload = false;
       _categoriesLoading = false;
       _categoriesError = null;
       _generation++;
@@ -359,6 +364,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _changeCategory(String category) {
+    final wasSearchResults = _searchResultsOnCurrentTab;
+    if (wasSearchResults) {
+      setState(() {
+        _searchResultsOnCurrentTab = false;
+        _catalogNeedsReload = false;
+        _tab = AppLayout.isTelevision(context) ? 8 : 0;
+        _search.clear();
+        _searchVisible = false;
+        _submittedQuery = '';
+        _items = [];
+        _hasMore = true;
+        _error = null;
+      });
+    }
     if (category == _recommendationCategory && _group.id == 'hongguo') {
       if (_showRecommendations) return;
       _pauseCatalog();
@@ -370,7 +389,10 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       return;
     }
-    if (_category == category && !_showRecommendations) return;
+    if (_category == category && !_showRecommendations) {
+      if (wasSearchResults) _load(useCache: true);
+      return;
+    }
     _debounce?.cancel();
     setState(() {
       _showRecommendations = false;
@@ -555,7 +577,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (query.isEmpty) return;
     if (_isRankingTab) {
       setState(() {
-        _tab = AppLayout.isTelevision(context) ? 8 : 0;
+        _searchResultsOnCurrentTab = true;
+        _catalogNeedsReload = false;
         _showRecommendations = false;
         _categorySelections[_group.id] = '';
         _search.clear();
@@ -565,6 +588,21 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
     _submitSearch(query);
+  }
+
+  void _leaveSearchResults() {
+    if (!_searchResultsOnCurrentTab) return;
+    _pauseCatalog();
+    setState(() {
+      _searchResultsOnCurrentTab = false;
+      _catalogNeedsReload = true;
+      _search.clear();
+      _searchVisible = false;
+      _submittedQuery = '';
+      _items = [];
+      _hasMore = true;
+      _error = null;
+    });
   }
 
   Future<void> _televisionSearch() async {
@@ -586,7 +624,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     _resetBackConfirmation(ignoreTrailingBack: true);
     if (query != null && mounted) {
-      _submitSearch(query);
+      _submitHeaderSearch(query);
     }
   }
 
@@ -702,6 +740,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       _selectNavigationDestination(destination);
       _navigationFocusNodes[destination]?.requestFocus();
+      return;
+    }
+    if (_searchResultsOnCurrentTab) {
+      _leaveSearchResults();
+      _lastBackAt = null;
       return;
     }
     if (_search.text.isNotEmpty) {
@@ -1000,6 +1043,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _search.clear();
     setState(() {
       _showRecommendations = false;
+      _searchResultsOnCurrentTab = false;
+      _catalogNeedsReload = false;
       _source = source;
       _allSources = allSources;
       _items = [];
@@ -1123,7 +1168,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _changeTab(int tab) {
-    setState(() => _tab = tab);
+    setState(() {
+      _tab = tab;
+      _searchResultsOnCurrentTab = false;
+      _catalogNeedsReload = false;
+    });
     if (_isCatalogTab) _ensureCatalogInitialized();
   }
 
@@ -1537,7 +1586,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   const VerticalDivider(width: 1, thickness: 1),
                 ],
                 Expanded(
-                  child: _isCatalogTab
+                  child: (_isCatalogTab ||
+                          (_searchResultsOnCurrentTab && _tab != 9))
                       ? widget.store.sources.isEmpty
                             ? const StatusPanel(
                                 title: '暫無可用片源',
@@ -1813,8 +1863,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _selectCatalogTab(int tab) {
     final returningFromSettings = _tab == 9;
+    final wasSearchResults = _searchResultsOnCurrentTab;
     final shouldReload = !returningFromSettings &&
-        (_category.isNotEmpty ||
+        (_catalogNeedsReload ||
+            wasSearchResults ||
+            _category.isNotEmpty ||
             _showRecommendations ||
             _search.text.trim().isNotEmpty ||
             _submittedQuery.isNotEmpty);
@@ -1826,6 +1879,12 @@ class _HomeScreenState extends State<HomeScreen> {
       // user's catalog session. Preserve the selected category, search query,
       // recommendations, and current posters when returning from settings.
       if (!returningFromSettings) {
+        if (_catalogNeedsReload || wasSearchResults) {
+          _items = [];
+          _hasMore = true;
+        }
+        _searchResultsOnCurrentTab = false;
+        _catalogNeedsReload = false;
         _showRecommendations = false;
         _search.clear();
         _searchVisible = false;
@@ -1851,6 +1910,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _selectNavigationDestination(int tab) {
+    final returningFromSettings = _tab == 9;
     if (tab == 9 && _tab != 9) {
       _tabBeforeSettings = _tab;
     }
@@ -1860,6 +1920,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     _pauseCatalog();
     setState(() {
+      if (_searchResultsOnCurrentTab && !returningFromSettings && tab != 9) {
+        _searchResultsOnCurrentTab = false;
+        _catalogNeedsReload = true;
+        _search.clear();
+        _searchVisible = false;
+        _submittedQuery = '';
+        _items = [];
+        _hasMore = true;
+        _error = null;
+      }
       _tab = tab;
     });
   }
@@ -2035,6 +2105,31 @@ class _HomeScreenState extends State<HomeScreen> {
               onSearch: _submitSearch,
             ),
           ),
+        if (television && _searchResultsOnCurrentTab)
+          Padding(
+            key: const ValueKey('search-results-context'),
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
+            child: Row(
+              children: [
+                const Icon(Icons.search_rounded, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '搜尋結果：${uiTraditional(_search.text.trim())}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                TextButton.icon(
+                  key: const ValueKey('search-results-return-to-ranking'),
+                  onPressed: _leaveSearchResults,
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  label: const Text('返回榜單'),
+                ),
+              ],
+            ),
+          ),
         if (_searchVisible &&
             _search.text.trim().isEmpty &&
             widget.store.recentSearches.isNotEmpty)
@@ -2072,7 +2167,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-        if (!television || _tab == 8)
+        if (!television || _tab == 8 || _searchResultsOnCurrentTab)
           CatalogFilters(
             key: ValueKey('filters-${_group.id}'),
             categories: _displayCategories,
