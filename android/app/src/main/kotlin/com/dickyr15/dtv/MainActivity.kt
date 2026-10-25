@@ -410,7 +410,8 @@ class MainActivity : FlutterActivity() {
                                 packageInfo.longVersionCode
                             } else {
                                 @Suppress("DEPRECATION")
-                                packageInfo.versionCode.toLong()
+                                val legacyVersionCode = packageInfo.versionCode.toLong()
+                                legacyVersionCode
                             }
                             // Include the Android build number in About and startup diagnostics,
                             // so every CI APK can be identified unambiguously.
