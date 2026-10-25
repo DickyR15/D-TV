@@ -3,6 +3,21 @@ run-name: "D TV Android v7a · ${{ github.event.head_commit.message || 'Manual b
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build.yml"
+      - "lib/**"
+      - "native/**"
+      - "android/**"
+      - "assets/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "scripts/build_android.py"
+      - "scripts/prepare_tv_banner.py"
+      - "analysis_options.yaml"
   push:
     branches:
       - main

@@ -649,6 +649,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	}
 	var items []Drama
 	var err error
+	var hongguoWebsiteErr error
 	switch source {
 	case sourceHongguo:
 		engine.mu.Lock()
@@ -663,6 +664,17 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		}
 		items, err = d.fetchHongguoAppCatalogCategory(ctx, category)
 		state := d.hongguoCatalogSnapshot()
+		if category == "" && !hongguoAppCatalogHasMore(state) {
+			// The App API may exhaust at a much smaller catalog size than the
+			// public website. Continue with independent, resumable website cursors.
+			var websiteItems []Drama
+			websiteItems, hongguoWebsiteErr = d.fetchHongguoWebsiteCatalogPage(ctx)
+			items = append(items, websiteItems...)
+			if hongguoWebsiteErr != nil {
+				err = errors.Join(err, hongguoWebsiteErr)
+			}
+			state = d.hongguoCatalogSnapshot()
+		}
 		result.hongguo = state
 		result.HasMore = hongguoCatalogHasMore(state)
 		if category != "" && state != nil {
@@ -732,6 +744,9 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.Items = append(result.Items, nativeNormalize(drama))
 	}
 	engine.saveCatalogCache(cacheKey, &result)
+	if hongguoWebsiteErr != nil {
+		return result, hongguoWebsiteErr
+	}
 	return result, nil
 }
 

@@ -22,6 +22,16 @@ var hongguoAppGenres = []struct {
 	{key: "ai_series", scene: "ai_series", name: "AI剧"},
 }
 
+var hongguoWebCatalogRoutes = []struct {
+	path string
+	name string
+}{
+	{path: "real-drama", name: "真人剧"},
+	{path: "comic-drama", name: "漫剧"},
+	{path: "ai-drama", name: "AI剧"},
+	{path: "comic", name: "动漫"},
+}
+
 type libraryMoreKey struct{}
 
 type libraryUpdateKey struct{}
@@ -30,6 +40,109 @@ type libraryKnownKey struct{}
 
 func (downloader *Downloader) fetchHongguoAppCatalog(ctx context.Context) ([]Drama, error) {
 	return downloader.fetchHongguoAppCatalogCategory(ctx, "")
+}
+
+ 
+// fetchHongguoWebsiteCatalogPage extends the App API catalog with one historical
+// page from each public website category. The per-route cursors are persisted
+// with the App feed cursors, so long catalog updates can resume after restarts.
+func (downloader *Downloader) fetchHongguoWebsiteCatalogPage(ctx context.Context) ([]Drama, error) {
+	// Called from fetchHongguoAppCatalogCategory while catalogMu is already held.
+	// Do not acquire catalogMu here again.
+	client := downloader.hongguoClient()
+
+	type pendingRoute struct {
+		path string
+		name string
+		key  string
+		page int
+	}
+	var pending []pendingRoute
+	state := downloader.hongguoCatalogSnapshot()
+	for _, route := range hongguoWebCatalogRoutes {
+		key := "web:" + route.path
+		cursor := state.Feeds[key]
+		if cursor.Exhausted {
+			continue
+		}
+		page := 1
+		if cursor.Initialized {
+			page = cursor.Offset + 1
+		}
+		if page > 500 {
+			continue
+		}
+		pending = append(pending, pendingRoute{path: route.path, name: route.name, key: key, page: page})
+	}
+	if len(pending) == 0 {
+		return nil, nil
+	}
+
+	type pageResult struct {
+		route pendingRoute
+		items []Drama
+		total int
+		err   error
+	}
+	results := make(chan pageResult, len(pending))
+	for _, entry := range pending {
+		entry := entry
+		go func() {
+			items, total, err := downloader.fetchHongguoCategoryPage(
+				ctx,
+				entry.path+"?page="+strconv.Itoa(entry.page),
+				entry.name,
+			)
+			results <- pageResult{route: entry, items: items, total: total, err: err}
+		}()
+	}
+
+	seen := make(map[string]bool)
+	var dramas []Drama
+	var failures []error
+	successes := 0
+	for range pending {
+		result := <-results
+		if result.err != nil {
+			failures = append(failures, fmt.Errorf("%s 第 %d 頁: %w", result.route.name, result.route.page, result.err))
+			continue
+		}
+		successes++
+		cursor := state.Feeds[result.route.key]
+		cursor.Offset = result.route.page
+		cursor.Initialized = true
+		cursor.UpdatedAt = time.Now()
+		hasMore := len(result.items) >= 24
+		if result.total > 0 {
+			hasMore = result.route.page < result.total
+		}
+		if result.route.page >= 500 {
+			hasMore = false
+		}
+		cursor.Exhausted = !hasMore
+
+		client.mu.Lock()
+		client.state.Feeds[result.route.key] = cursor
+		client.mu.Unlock()
+
+		for _, drama := range result.items {
+			if drama.ID == "" || seen[drama.ID] {
+				continue
+			}
+			seen[drama.ID] = true
+			dramas = append(dramas, drama)
+		}
+	}
+	sort.SliceStable(dramas, func(i, j int) bool {
+		return dramas[i].DisplayTitle() < dramas[j].DisplayTitle()
+	})
+	if len(failures) > 0 {
+		return dramas, errors.Join(failures...)
+	}
+	if successes == 0 {
+		return nil, errors.New("红果网站历史目录没有成功取得任何分页")
+	}
+	return dramas, nil
 }
 
 func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context, category string) ([]Drama, error) {
