@@ -21,6 +21,15 @@ class ProfilesScreen extends StatefulWidget {
 class _ProfilesScreenState extends State<ProfilesScreen> {
   bool _busy = false;
   String? _error;
+  final FocusNode _forceLoginFocus = FocusNode(
+    debugLabel: 'force-login-setting',
+  );
+
+  @override
+  void dispose() {
+    _forceLoginFocus.dispose();
+    super.dispose();
+  }
 
   Future<void> _recover({bool export = false, bool reload = false}) async {
     setState(() {
@@ -120,6 +129,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _setForceLogin(bool value) async {
+    if (_busy) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -129,7 +139,16 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        // Settings writes rebuild the list. Restore the remote-control focus
+        // to this tile after the frame whether the switch was enabled or not.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _forceLoginFocus.canRequestFocus) {
+            _forceLoginFocus.requestFocus();
+          }
+        });
+      }
     }
   }
 
@@ -183,6 +202,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 if (!widget.store.locked && widget.store.profile.admin) ...[
                   const SizedBox(height: 12),
                   SwitchListTile(
+                    key: const ValueKey('force-login-setting'),
+                    focusNode: _forceLoginFocus,
                     contentPadding: EdgeInsets.zero,
                     title: const Text('啟動時需要登入'),
                     subtitle: Text(
@@ -191,7 +212,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                           : '保留密碼，僅切換使用者或手動鎖定時驗證',
                     ),
                     value: widget.store.forceLogin,
-                    onChanged: _busy ? null : _setForceLogin,
+                    // Keep the tile focusable during the asynchronous write.
+                    // The handler ignores additional presses while busy.
+                    onChanged: _setForceLogin,
                   ),
                 ],
               ],
