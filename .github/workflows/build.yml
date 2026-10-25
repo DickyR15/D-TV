@@ -114,11 +114,13 @@ jobs:
           python scripts/build_android.py --abi armeabi-v7a --player-engine mpv_embed
           version_full=$(sed -n "s/^version: *['\"]\?\([^'\"]*\)['\"]\?$/\1/p" pubspec.yaml | head -n1)
           version="${version_full%%+*}"
+          build_number="${GITHUB_RUN_NUMBER:?GitHub Actions run number is required}"
+          python scripts/build_android.py --abi armeabi-v7a --player-engine mpv_embed --build-name "$version" --build-number "$build_number"
           apk=$(find dist/android -maxdepth 1 -type f -name "*-${version_full}-armeabi-v7a.apk" -print -quit)
           test -n "$apk" && test -f "$apk"
-          output="dist/android/D TV-Android-v7a_v${version}_MPV.apk"
+          output="dist/android/D TV-Android-v7a_v${version}+${build_number}_MPV.apk"
           cp "$apk" "$output"
-          echo "Built official default (MPV Embed): $output"
+          echo "Built official default (MPV Embed), version=${version}+${build_number}: $output"
       - uses: actions/upload-artifact@v4
         with:
           name: D TV-Android-v7a-MPV-Embed-Default
