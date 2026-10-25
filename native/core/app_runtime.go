@@ -869,3 +869,27 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		"warning": warning,
 	}, nil
 }
+
+func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput) (nativePlan, error) {
+	if _, _, valid := splitProviderDramaID(input.Drama.ID); !valid {
+		return nativePlan{}, errors.New("剧集信息无效")
+	}
+	if !input.Force && engine.downloads != nil {
+		if plan, found, err := engine.downloads.localPlan(input.Drama.ID, input.Index); found || err != nil {
+			if input.Action != "prepareHandoff" || !errors.Is(err, errNativeLocalFile) {
+				return plan, err
+			}
+		}
+	}
+	task := Task{DramaID: input.Drama.ID, DramaTitle: input.Drama.Title, Chapter: input.Chapter, Index: input.Index}
+	media, err := engine.downloader.resolveProviderMedia(ctx, task)
+	if err != nil {
+		return nativePlan{}, err
+	}
+	choice := nativePlaybackChoices(media, input.Quality)
+	choice = engine.rankNativePlaybackRoutes(ctx, choice, task)
+	if series, video, valid := hongguoPlaybackIDs(task); valid {
+		choice.danmakuSeries, choice.danmakuVideo = series, video
+	}
+	return engine.nativeOpenPlayback(ctx, choice)
+}

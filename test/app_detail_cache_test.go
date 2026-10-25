@@ -7,7 +7,7 @@ import (
 )
 
 func TestNativeDetailUsesCachedEpisodeList(t *testing.T) {
-	id := providerDramaID(sourceHongguo, "12345")
+	id := sourceHongguo + ":12345"
 	cachedDrama := nativeDrama{
 		ID: id, Source: sourceHongguo, SourceID: "12345", Title: "快取劇名", Episodes: 1,
 	}
