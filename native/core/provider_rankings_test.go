@@ -125,6 +125,22 @@ func rankingHTTPResponse(request *http.Request, status int, body string) *http.R
 	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Request: request}
 }
 
+func TestHongguoRankingRetriesTransientRequestTimeout(t *testing.T) {
+	board, _ := findRankingBoard("hongguo-comic")
+	var calls atomic.Int32
+	d := rankingTestDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if calls.Add(1) == 1 {
+			return nil, context.DeadlineExceeded
+		}
+		return rankingHTTPResponse(request, http.StatusOK, rankingFixture(board, 1, rankingRows(1))), nil
+	})
+
+	result, err := d.fetchHongguoRankingPage(context.Background(), board, 1)
+	if err != nil || len(result.Items) != 2 || calls.Load() != 2 {
+		t.Fatalf("a transient ranking timeout should be retried once: items=%d calls=%d err=%v", len(result.Items), calls.Load(), err)
+	}
+}
+
 func TestRankingCacheAndStaleRecovery(t *testing.T) {
 	board, _ := findRankingBoard("hongguo-hot")
 	var calls atomic.Int32
