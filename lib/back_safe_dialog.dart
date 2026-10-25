@@ -8,10 +8,12 @@ class BackSafeDialog extends StatelessWidget {
     super.key,
     required this.child,
     this.onDismissed,
+    this.autofocus = true,
   });
 
   final Widget child;
   final VoidCallback? onDismissed;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +31,7 @@ class BackSafeDialog extends StatelessWidget {
           const SingleActivator(LogicalKeyboardKey.goBack): dismiss,
           const SingleActivator(LogicalKeyboardKey.escape): dismiss,
         },
-        child: Focus(autofocus: true, child: child),
+        child: Focus(autofocus: autofocus, child: child),
       ),
     );
   }
