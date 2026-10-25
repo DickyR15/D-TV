@@ -212,10 +212,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (error) {
       if (mounted) {
         setState(() => _message = error.toString());
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(
-            content: Text('備份操作失敗：$error'),
-            duration: const Duration(seconds: 5),
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(restore ? '還原設定備份失敗' : '匯出設定備份失敗'),
+            content: SelectableText(error.toString()),
+            actions: [
+              FilledButton(
+                autofocus: true,
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('確定'),
+              ),
+            ],
           ),
         );
       }
