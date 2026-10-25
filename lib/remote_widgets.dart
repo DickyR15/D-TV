@@ -71,6 +71,7 @@ class RemoteTarget extends StatefulWidget {
     this.outlined = false,
     this.scrollAlignment = 0,
     this.scrollAlignmentPolicy,
+    this.ensureVisibleOnFocus = true,
   });
   final Widget child;
   final VoidCallback? onPressed;
@@ -86,6 +87,10 @@ class RemoteTarget extends StatefulWidget {
   final bool outlined;
   final double scrollAlignment;
   final ScrollPositionAlignmentPolicy? scrollAlignmentPolicy;
+
+  /// Disable automatic visibility scrolling when the parent grid already
+  /// coordinates focus scrolling for every D-pad movement.
+  final bool ensureVisibleOnFocus;
 
   @override
   State<RemoteTarget> createState() => _RemoteTargetState();
@@ -160,17 +165,19 @@ class _RemoteTargetState extends State<RemoteTarget> {
       }
       if (focused) {
         widget.onFocus?.call();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _focused) {
-            Scrollable.ensureVisible(
-              context,
-              alignment: widget.scrollAlignment,
-              alignmentPolicy:
-                  widget.scrollAlignmentPolicy ??
-                  ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-            );
-          }
-        });
+        if (widget.ensureVisibleOnFocus) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _focused) {
+              Scrollable.ensureVisible(
+                context,
+                alignment: widget.scrollAlignment,
+                alignmentPolicy:
+                    widget.scrollAlignmentPolicy ??
+                    ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+              );
+            }
+          });
+        }
       }
     },
     child: Semantics(
@@ -336,11 +343,20 @@ class RemoteGrid extends StatefulWidget {
 class _RemoteGridState extends State<RemoteGrid> {
   final _ownScroll = ScrollController();
   final _nodes = <String, FocusNode>{};
+  final _itemIndices = <String, int>{};
   final Object _focusControllerOwner = Object();
   String? _focused;
   String? _target;
   int _generation = 0;
   ScrollController get _scroll => widget.controller ?? _ownScroll;
+
+  void _syncItemIndices() {
+    _itemIndices
+      ..clear();
+    for (var index = 0; index < widget.itemKeys.length; index++) {
+      _itemIndices[widget.itemKeys[index]] = index;
+    }
+  }
 
   void _syncFocusController() {
     widget.focusController?._bind(
@@ -359,6 +375,7 @@ class _RemoteGridState extends State<RemoteGrid> {
   @override
   void initState() {
     super.initState();
+    _syncItemIndices();
     _syncFocusController();
     if (widget.autofocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -429,7 +446,7 @@ class _RemoteGridState extends State<RemoteGrid> {
     if (_focused == null || !(_nodes[_focused]?.hasFocus ?? false)) {
       return KeyEventResult.ignored;
     }
-    final index = widget.itemKeys.indexOf(_target ?? _focused!);
+    final index = _itemIndices[_target ?? _focused!] ?? -1;
     if (index < 0) return KeyEventResult.ignored;
     final key = event.logicalKey;
     final int next;
@@ -492,17 +509,19 @@ class _RemoteGridState extends State<RemoteGrid> {
     if (oldWidget.focusController != widget.focusController) {
       oldWidget.focusController?._unbind(_focusControllerOwner);
     }
+    _syncItemIndices();
     _syncFocusController();
     if (widget.itemKeys.isEmpty) widget.focusController?.clear();
+    final activeKeys = widget.itemKeys.toSet();
     final removed = _nodes.keys
-        .where((key) => !widget.itemKeys.contains(key))
+        .where((key) => !activeKeys.contains(key))
         .toList();
     final restore = removed.any((key) => _nodes[key]!.hasFocus);
     final index = oldWidget.itemKeys.indexOf(_focused ?? '');
     for (final key in removed) {
       _nodes.remove(key)?.dispose();
     }
-    if (_focused != null && !widget.itemKeys.contains(_focused)) {
+    if (_focused != null && !activeKeys.contains(_focused)) {
       _focused = null;
       _target = null;
       _generation++;

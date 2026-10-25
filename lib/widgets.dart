@@ -567,6 +567,9 @@ class DramaTile extends StatelessWidget {
         child: RemoteTarget(
           focusNode: focusNode,
           onFocus: onFocus,
+          // RemoteGrid already computes visibility and scroll offsets on D-pad
+          // movement; avoid a competing ensureVisible animation per focus hop.
+          ensureVisibleOnFocus: focusNode == null,
           onPressed: onTap,
           onLongPress: onLongPress ?? onMore,
           selected: selected ?? false,
