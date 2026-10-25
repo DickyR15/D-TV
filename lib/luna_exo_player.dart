@@ -268,21 +268,19 @@ class LunaExoPlayer implements Player {
       _requestControllerDispose(c);
       return;
     }
-    if (identical(_openingController, c)) _openingController = null;
-
     if (old != null) {
       try {
         await old.dispose();
       } catch (_) {}
     }
 
-    if (myGen != _openGeneration) {
-      try {
-        await c.dispose();
-      } catch (_) {}
+    if (_disposed || myGen != _openGeneration) {
+      if (identical(_openingController, c)) _openingController = null;
+      _requestControllerDispose(c);
       return;
     }
 
+    if (identical(_openingController, c)) _openingController = null;
     _controller = c;
     final dur = c.value.duration;
     final w = c.value.size.width.round();
