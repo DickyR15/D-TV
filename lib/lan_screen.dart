@@ -107,16 +107,21 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
   }
 
   void _revealConnectionHelpBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // ExpansionTile animates its height; wait for that layout to finish before
+    // scrolling the final address/copy controls into the viewport.
+    Future<void>.delayed(const Duration(milliseconds: 240), () {
       if (!mounted) return;
-      final target = _connectionHelpBottomKey.currentContext;
-      if (target == null) return;
-      Scrollable.ensureVisible(
-        target,
-        alignment: 1,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final target = _connectionHelpBottomKey.currentContext;
+        if (target == null) return;
+        Scrollable.ensureVisible(
+          target,
+          alignment: 1,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      });
     });
   }
 
