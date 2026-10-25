@@ -59,7 +59,6 @@ class _SourcesScreenState extends State<SourcesScreen> {
 
   KeyEventResult _scrollHealthWithRemote(
     String id,
-    FocusNode node,
     KeyEvent event,
   ) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -197,24 +196,24 @@ class _SourcesScreenState extends State<SourcesScreen> {
   }
 
   String _diagnosticText(SourceSite source, SourceStatus status) {
-    final text = StringBuffer('\${uiTraditional(source.name)}\n');
+    final text = StringBuffer('${uiTraditional(source.name)}\n');
     text.writeln(
-      '快取 \${status.count} 部，更新 \${sourceTimestamp(status.updatedAt)}',
+      '快取 ${status.count} 部，更新 ${sourceTimestamp(status.updatedAt)}',
     );
     final health = status.health;
     if (health != null) {
       text.writeln(
-        '\${uiTraditional(health.label)} · \${sourceTimestamp(health.checkedAt)}',
+        '${uiTraditional(health.label)} · ${sourceTimestamp(health.checkedAt)}',
       );
-      if (health.sample.isNotEmpty) text.writeln('檢測劇集：\${health.sample}');
+      if (health.sample.isNotEmpty) text.writeln('檢測劇集：${health.sample}');
       for (final step in health.steps) {
         text.writeln(
-          '\${uiTraditional(step.name)}：\${uiTraditional(step.message)}',
+          '${uiTraditional(step.name)}：${uiTraditional(step.message)}',
         );
         text.writeln(
-          '\${step.host} HTTP \${step.httpStatus} · \${step.elapsedMs} ms',
+          '${step.host} HTTP ${step.httpStatus} · ${step.elapsedMs} ms',
         );
-        if (step.cfRay.isNotEmpty) text.writeln('CF Ray: \${step.cfRay}');
+        if (step.cfRay.isNotEmpty) text.writeln('CF Ray: ${step.cfRay}');
       }
     }
     if (status.error.isNotEmpty) text.writeln(status.error);
@@ -244,7 +243,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
           'exportDiagnosticText',
           <String, dynamic>{
             'text': '$content\n',
-            'fileNamePrefix': 'D-TV-source-diagnostic-\${source.id}',
+            'fileNamePrefix': 'D-TV-source-diagnostic-${source.id}',
           },
         );
         savedPath = result?['path'] as String?;
@@ -256,7 +255,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
             .split('.')
             .first;
         final file = File(
-          '\${directory.path}\${Platform.pathSeparator}D-TV-source-diagnostic-\${source.id}_$stamp.txt',
+          '${directory.path}${Platform.pathSeparator}D-TV-source-diagnostic-${source.id}_$stamp.txt',
         );
         await file.writeAsString('$content\n', flush: true);
         savedPath = file.path;
@@ -264,7 +263,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
       if (!mounted) return;
       final location = savedPath?.isNotEmpty == true
           ? savedPath!
-          : 'Download/D-TV/D-TV-source-diagnostic-\${source.id}.txt';
+          : 'Download/D-TV/D-TV-source-diagnostic-${source.id}.txt';
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
@@ -662,7 +661,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 Focus(
                   focusNode: _healthFocusNode(source.id),
                   onKeyEvent: (node, event) =>
-                      _scrollHealthWithRemote(source.id, node, event),
+                      _scrollHealthWithRemote(source.id, event),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
                       maxHeight: MediaQuery.sizeOf(context).height * 0.46,
