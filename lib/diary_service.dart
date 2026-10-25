@@ -283,16 +283,6 @@ class _PlaybackLogListState extends State<_PlaybackLogList> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode(debugLabel: 'playback-debug-log-list');
 
-  @override
-  void initState() {
-    super.initState();
-    // The log rows are text rather than individual buttons. Give the list
-    // keyboard focus so DPAD up/down reliably scrolls the log on Android TV.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focusNode.requestFocus();
-    });
-  }
-
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
