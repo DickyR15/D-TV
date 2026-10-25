@@ -13,6 +13,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--abi', action='append', choices=['arm64-v8a', 'armeabi-v7a', 'x86_64'])
 parser.add_argument('--player-engine', choices=['mpv', 'exo', 'mpv_embed'], default='mpv_embed',
                     help='Android 播放引擎：預設使用已在 Android TV 驗證的 MPV mediacodec_embed 路徑；mpv 僅作對照測試')
+parser.add_argument('--build-name', help='覆寫 Android app versionName')
+parser.add_argument('--build-number', help='覆寫 Android app versionCode；CI 可使用 workflow run number')
 add_variant_argument(parser)
 options = parser.parse_args()
 variant = BuildVariant(options.all_sources)
@@ -34,6 +36,10 @@ build_args = [
     *variant.flutter_arguments,
     '--dart-define=DTV_ANDROID_PLAYER=' + options.player_engine,
 ]
+if options.build_name:
+    build_args += ['--build-name', options.build_name]
+if options.build_number:
+    build_args += ['--build-number', options.build_number]
 if options.abi:
     targets = {'arm64-v8a': 'android-arm64', 'armeabi-v7a': 'android-arm', 'x86_64': 'android-x64'}
     build_args += ['--target-platform', ','.join(targets[abi] for abi in options.abi)]
