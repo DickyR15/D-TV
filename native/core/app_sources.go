@@ -388,8 +388,12 @@ func (engine *nativeEngine) updateSource(ctx context.Context, source, operation 
 	if operation == "more" || operation == "update" {
 		pageCtx := sourceHistoryPageContext(ctx, source)
 		if source == sourceHongguo && operation == "update" {
-			// Process one remote page per feed in each iteration, but continue
-			// automatically until every Red Fruit history cursor is exhausted.
+			// Finish App API history first, then backfill a bounded number of
+			// public-website pages per user-triggered update. The public site can
+			// expose hundreds of pages; scanning all of them in one job makes
+			// updates appear to hang and can also make health checks sluggish.
+			const websitePagesPerUpdate = 12
+			websitePagesLoaded := 0
 			for {
 				if err := engine.waitForPlaybackIdle(ctx, source, "繼續載入歷史目錄"); err != nil {
 					return err
@@ -398,12 +402,24 @@ func (engine *nativeEngine) updateSource(ctx context.Context, source, operation 
 				if !current.HasMore {
 					break
 				}
+				appHasMore := hongguoAppCatalogHasMore(engine.downloader.hongguoCatalogSnapshot())
+				websiteBackfill := !appHasMore
+				if websiteBackfill && websitePagesLoaded >= websitePagesPerUpdate {
+					break
+				}
+				requestCtx := pageCtx
+				if websiteBackfill {
+					requestCtx = context.WithValue(requestCtx, libraryWebsiteBackfillKey{}, true)
+				}
 				nextPage := current.Page + 1
 				engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
 					record.Stage = fmt.Sprintf("繼續載入歷史目錄（第 %d 頁）", nextPage)
 				})
-				if err := engine.loadMoreSourceCatalogPages(pageCtx, source, 1); err != nil {
+				if err := engine.loadMoreSourceCatalogPages(requestCtx, source, 1); err != nil {
 					return err
+				}
+				if websiteBackfill {
+					websitePagesLoaded++
 				}
 				if !engine.nativeCached(source).HasMore {
 					break
@@ -412,9 +428,15 @@ func (engine *nativeEngine) updateSource(ctx context.Context, source, operation 
 					return err
 				}
 			}
-			engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
-				record.Stage = "歷史目錄載入完成"
-			})
+			if engine.nativeCached(source).HasMore {
+				engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
+					record.Stage = "本輪歷史目錄已載入，可繼續更新"
+				})
+			} else {
+				engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
+					record.Stage = "歷史目錄載入完成"
+				})
+			}
 		} else {
 			if source == sourceHongguo {
 				if err := engine.waitForPlaybackIdle(ctx, source, "繼續載入歷史目錄"); err != nil {
