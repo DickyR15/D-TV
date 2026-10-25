@@ -51,22 +51,12 @@ void main() {
     expect(text, isNot(contains('private')));
   });
 
-  test('MPV demuxer open failures trigger fast route recovery', () {
+  test('fatal MPV demuxer failures trigger fast route recovery', () {
     for (final sample in [
       (
         level: 'error',
         prefix: 'ffmpeg/demuxer',
-        text: 'mov,mp4: error reading header',
-      ),
-      (
-        level: 'error',
-        prefix: 'ffmpeg/demuxer',
         text: 'failed to read the initialization vector; Hit EOF while reading senc',
-      ),
-      (
-        level: 'error',
-        prefix: 'lavf',
-        text: 'avformat_open_input() failed',
       ),
       (
         level: 'error',
@@ -92,6 +82,24 @@ void main() {
   });
 
   test('benign MPV property errors do not force route switching', () {
+    expect(
+      playbackDiagnosticLogRequiresRecovery(
+        level: 'error',
+        prefix: 'ffmpeg/demuxer',
+        text: 'mov,mp4: error reading header',
+      ),
+      isFalse,
+      reason: 'a generic header message can precede a successful first frame',
+    );
+    expect(
+      playbackDiagnosticLogRequiresRecovery(
+        level: 'error',
+        prefix: 'lavf',
+        text: 'avformat_open_input() failed',
+      ),
+      isFalse,
+      reason: 'defer non-specific parser failures to the startup watchdog',
+    );
     expect(
       playbackDiagnosticLogRequiresRecovery(
         level: 'error',

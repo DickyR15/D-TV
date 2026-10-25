@@ -76,10 +76,13 @@ bool playbackDiagnosticLogRequiresRecovery({
     return false;
   }
   final message = text.toLowerCase();
+  // These two generic parser messages can be transient: the stream log
+  // shows some routes emit them immediately before hardware decoding starts.
+  // Strong truncation/crypto failures still switch routes immediately; generic
+  // header failures are given the shorter startup watchdog grace period.
   return RegExp(
-    r'error reading header|failed to read the initialization vector|'
-    r'hit eof while reading senc|avformat_open_input\(\) failed|'
-    r'partial file|failed to open|moov atom not found|'
-    r'invalid data found when processing input',
+    r'failed to read the initialization vector|'
+    r'hit eof while reading senc|partial file|failed to open|'
+    r'moov atom not found|invalid data found when processing input',
   ).hasMatch(message);
 }
