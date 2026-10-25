@@ -986,7 +986,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     String value,
   ) async {
     try {
-      await _setPlaybackProperty(platform, property, value).timeout(
+      await platform.setProperty(property, value).timeout(
         _playbackPropertyTimeout,
         onTimeout: () => throw TimeoutException(
           '設定播放器參數逾時：$property',
@@ -1402,7 +1402,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             if (_television) {
               final optimized =
                   _televisionDecoder == TelevisionDecoder.optimized;
-              await _setPlaybackProperty(platform, 
+              await _setPlaybackProperty(
+                platform,
                 'hwdec',
                 _mpvEmbedBackend
                     ? 'mediacodec'
@@ -1425,11 +1426,13 @@ class _PlayerScreenState extends State<PlayerScreen>
                 }
                 await _setPlaybackProperty(platform, 'vd-lavc-threads', '4');
               } else {
-                await _setPlaybackProperty(platform, 
+                await _setPlaybackProperty(
+                  platform,
                   'opengl-pbo',
                   optimized ? 'yes' : 'no',
                 );
-                await _setPlaybackProperty(platform, 
+                await _setPlaybackProperty(
+                  platform,
                   'video-latency-hacks',
                   optimized ? 'yes' : 'no',
                 );
@@ -1437,11 +1440,13 @@ class _PlayerScreenState extends State<PlayerScreen>
                 await _setPlaybackProperty(platform, 'cscale', 'bilinear');
                 await _setPlaybackProperty(platform, 'dscale', 'bilinear');
                 await _setPlaybackProperty(platform, 'correct-downscaling', 'no');
-                await _setPlaybackProperty(platform, 
+                await _setPlaybackProperty(
+                  platform,
                   'vd-lavc-skiploopfilter',
                   optimized ? 'all' : 'default',
                 );
-                await _setPlaybackProperty(platform, 
+                await _setPlaybackProperty(
+                  platform,
                   'vd-lavc-skipidct',
                   optimized ? 'all' : 'default',
                 );
@@ -1450,20 +1455,24 @@ class _PlayerScreenState extends State<PlayerScreen>
               // Embed's original 4 MiB cap made the active demuxer cache
               // much smaller than PlayerConfiguration.bufferSize (32 MiB).
               // Increase available headroom without waiting for the cache to fill.
-              await _setPlaybackProperty(platform, 
+              await _setPlaybackProperty(
+                platform,
                 'demuxer-max-bytes',
                 '${(_mpvEmbedBackend ? 16 : 4) * 1024 * 1024}',
               );
-              await _setPlaybackProperty(platform, 
+              await _setPlaybackProperty(
+                platform,
                 'demuxer-max-back-bytes',
                 '${(_mpvEmbedBackend ? 4 : 1) * 1024 * 1024}',
               );
-              await _setPlaybackProperty(platform, 
+              await _setPlaybackProperty(
+                platform,
                 'demuxer-readahead-secs',
                 _mpvEmbedBackend ? '8' : '5',
               );
             } else {
-              await _setPlaybackProperty(platform, 
+              await _setPlaybackProperty(
+                platform,
                 'hwdec',
                 _mpvEmbedBackend ? 'mediacodec' : 'auto-safe',
               );
@@ -1478,14 +1487,16 @@ class _PlayerScreenState extends State<PlayerScreen>
             // The Onn. 4K Pro log showed VO frame drops but zero decoder
             // drops while video lagged audio by nearly four seconds.
             // Drop late TV frames at the decoder stage to reduce GPU work.
-            await _setPlaybackProperty(platform, 
+            await _setPlaybackProperty(
+              platform,
               'framedrop',
               _television ? 'decoder' : 'vo',
             );
           } else if (Platform.isWindows) {
             await _setPlaybackProperty(platform, 'hwdec', 'd3d11va-copy');
           }
-          await _setPlaybackProperty(platform, 
+          await _setPlaybackProperty(
+            platform,
             'demuxer-lavf-o',
             [
               'seg_max_retry=3',
