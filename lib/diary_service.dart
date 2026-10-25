@@ -86,10 +86,20 @@ class DiaryService {
     final text = fullText;
     await Clipboard.setData(ClipboardData(text: text));
     if (context.mounted) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('已複製播放紀錄到剪貼簿'),
-          duration: Duration(seconds: 2),
+      // Keep the confirmation above the playback-log dialog; a SnackBar on
+      // the underlying Scaffold is obscured by the open modal on Android TV.
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('複製成功'),
+          content: const Text('已複製播放紀錄到剪貼簿。'),
+          actions: [
+            FilledButton(
+              autofocus: true,
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('完成'),
+            ),
+          ],
         ),
       );
     }
@@ -150,6 +160,7 @@ class DiaryService {
               child: const Text('複製檔案位置'),
             ),
             FilledButton(
+              autofocus: true,
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('完成'),
             ),

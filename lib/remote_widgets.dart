@@ -839,8 +839,8 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
               onChanged: _queryChanged,
               onSubmitted: _submit,
               decoration: InputDecoration(
-                labelText: '劇名',
-                hintText: '輸入完整劇名',
+                labelText: '劇名／演員',
+                hintText: '輸入劇名或演員名字',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -872,7 +872,7 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
                     showRecent
                         ? '最近搜尋'
                         : query.isEmpty
-                        ? '輸入劇名即可搜尋'
+                        ? '輸入劇名或演員名字即可搜尋'
                         : '搜尋建議',
                     style: TextStyle(
                       fontSize: 16,
@@ -909,9 +909,12 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
                   : query.isEmpty
                   ? keyboardVisible
                         ? const SizedBox.shrink()
-                        : Center(
+                        : Align(
+                            // Lift the reminder toward the upper half of the
+                            // panel so it remains above the on-screen TV keyboard.
+                            alignment: const Alignment(0, -0.35),
                             child: Text(
-                              '可以直接輸入劇名，或改用手機掃 QR Code 搜尋。',
+                              '可輸入劇名或演員名字，也可用手機掃描 QR Code 搜尋。',
                               textAlign: TextAlign.center,
                               style: TextStyle(color: theme.hintColor),
                             ),
