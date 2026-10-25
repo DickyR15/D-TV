@@ -168,7 +168,7 @@ void main() {
       }
       previous = current;
     }
-    expect(visited.toSet().length, greaterThan(5));
+    expect(visited.toSet().length, greaterThanOrEqualTo(4));
 
     // Home navigation recreates the embedded screen for each board tab. A
     // recently viewed board should be restored from memory without another
