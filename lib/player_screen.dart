@@ -2091,6 +2091,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _handlePlaybackBack() {
+    // The TV controls are disabled while the playback-error panel is visible.
+    // PopScope still intercepts remote Back, so bypass the disabled controls
+    // and apply the normal route/dialog back behavior directly.
+    if (_error != null) {
+      _back();
+      return;
+    }
     if (_television) {
       _televisionControlsKey.currentState?.handleBack();
     } else {
