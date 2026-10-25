@@ -68,7 +68,8 @@ class PlaybackLoader {
 
     // Future.timeout does not cancel the original Future. If a timed-out or
     // superseded resolver later creates a native stream session, release it.
-    pending.then<void>(
+    unawaited(
+      pending.then<void>(
       (plan) {
         if (plan != null &&
             (timedOut || _closed || generation != _generation) &&
@@ -77,7 +78,8 @@ class PlaybackLoader {
           unawaited(repository.release(plan.session).catchError((Object _) {}));
         }
       },
-      onError: (Object _, StackTrace __) {},
+        onError: (Object _, StackTrace __) {},
+      ),
     );
 
     try {
