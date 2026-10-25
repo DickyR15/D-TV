@@ -721,7 +721,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                     ),
                   ),
                 ),
-              
+              ],
             ] else ...[
               const SizedBox(height: 12),
               const Text('尚未檢測連線'),
