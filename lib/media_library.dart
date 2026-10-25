@@ -126,7 +126,6 @@ class MediaLibrary extends ChangeNotifier {
     this.repository,
     this.store, {
     MediaExecutor? executor,
-    this.automaticWorker = false,
   }) : executor = executor ?? FFmpegExecutor() {
     _observedEpoch = store.profileEpoch;
     store.addListener(_accessChanged);
@@ -134,7 +133,6 @@ class MediaLibrary extends ChangeNotifier {
   final AppRepository repository;
   final LocalStore store;
   final MediaExecutor executor;
-  final bool automaticWorker;
   static MediaLibrary? current;
   MergeQueue? _merges;
   MergeQueue get merges => _merges ??= MergeQueue(this);
@@ -158,16 +156,12 @@ class MediaLibrary extends ChangeNotifier {
     if (!_disposed) super.notifyListeners();
   }
 
-  Timer? _timer;
-  MediaLibrary? _automatic;
   String? root;
   List<LocalMediaItem> _items = [];
-  final _skipped = <String>{};
-  bool busy = false, _checking = false, _cancelled = false, _suspended = false;
+  bool busy = false, _cancelled = false, _suspended = false;
   bool get suspended => _suspended;
   set suspended(bool value) {
     _suspended = value;
-    _automatic?.suspended = value;
     if (value) {
       unawaited(_merges?.pauseUnavailable(all: true) ?? Future<void>.value());
     }
@@ -175,33 +169,10 @@ class MediaLibrary extends ChangeNotifier {
 
   String status = '', error = '';
   double progress = 0;
-  DateTime _retryAfter = DateTime(2000);
 
   static void attach(AppRepository repository, LocalStore store) {
     current?.dispose();
-    final library = MediaLibrary(repository, store);
-    current = library;
-    if (Platform.isAndroid && store.autoExport) {
-      unawaited(
-        BackgroundDownloads.ensureStarted().catchError((Object error) {
-          library.error = error.toString();
-        }),
-      );
-    }
-    if (!Platform.isAndroid) {
-      final automatic = MediaLibrary(
-        repository is NativeRepository
-            ? NativeRepository(background: true)
-            : repository,
-        store,
-        automaticWorker: true,
-      );
-      library._automatic = automatic;
-      library._timer = Timer.periodic(
-        const Duration(seconds: 8),
-        (_) => unawaited(automatic.maybeExport()),
-      );
-    }
+    current = MediaLibrary(repository, store);
   }
 
   List<LocalMediaItem> get items =>
@@ -225,8 +196,7 @@ class MediaLibrary extends ChangeNotifier {
     if (directory.isEmpty) throw AppFailure('無法讀取下載位置');
     final file = File(path.join(directory, 'media-library.json'));
     var items = <LocalMediaItem>[];
-    final skipped = <String>{},
-        folders = <String, String>{},
+    final folders = <String, String>{},
         numbers = <String, int>{};
     if (await file.exists()) {
       if (await file.length() > 16 * 1024 * 1024) {
@@ -243,7 +213,6 @@ class MediaLibrary extends ChangeNotifier {
       if (items.map((item) => item.id).toSet().length != items.length) {
         throw AppFailure('本地媒體記錄重複，原檔案已保留');
       }
-      skipped.addAll((data['skipped'] as List? ?? []).cast<String>());
       for (final entry in (data['showFolders'] as Map? ?? {}).entries) {
         final folder = entry.value as String;
         if (!_validShowFolder(folder)) throw AppFailure('匯出目錄記錄無效，原檔案已保留');
@@ -285,9 +254,6 @@ class MediaLibrary extends ChangeNotifier {
     if (busy && !duringTask) return;
     root = directory;
     _items = items;
-    _skipped
-      ..clear()
-      ..addAll(skipped);
     _showFolders
       ..clear()
       ..addAll(folders);
@@ -307,7 +273,6 @@ class MediaLibrary extends ChangeNotifier {
   Future<void> _save() async {
     final content = jsonEncode({
       'items': _items.map((item) => item.toJson()).toList(),
-      'skipped': _skipped.toList(),
       'showFolders': _showFolders,
       'specialNumbers': _specialNumbers,
     });
@@ -350,7 +315,7 @@ class MediaLibrary extends ChangeNotifier {
     Directory? temporary;
     bool lease = false;
     try {
-      if (!automaticWorker) await BackgroundDownloads.ensureStarted();
+      await BackgroundDownloads.ensureStarted();
       await repository.workLease('media', 'start');
       lease = true;
       await reload(duringTask: true);
@@ -398,10 +363,7 @@ class MediaLibrary extends ChangeNotifier {
 
   Future<void> cancel() async {
     _cancelled = true;
-    await Future.wait([
-      executor.cancel(),
-      if (_automatic != null) _automatic!.cancel(),
-    ]);
+    await executor.cancel();
   }
 
   Future<MediaProbe> _prepare(
@@ -463,10 +425,7 @@ class MediaLibrary extends ChangeNotifier {
     );
   }
 
-  Future<void> exportJobs(
-    List<DownloadJob> selected, {
-    bool automatic = false,
-  }) async {
+  Future<void> exportJobs(List<DownloadJob> selected) async {
     final jobs = selected.where((job) => job.completed).toList()
       ..sort((a, b) => a.episode.number.compareTo(b.episode.number));
     if (jobs.isEmpty) throw AppFailure('沒有已下載的分集');
@@ -474,13 +433,10 @@ class MediaLibrary extends ChangeNotifier {
       for (var i = 0; i < jobs.length; i++) {
         _check();
         final job = jobs[i], id = 'export-${jobs[i].id}';
-        if (automatic && _skipped.contains(job.id)) continue;
         final existing = _items.where((item) => item.id == id).firstOrNull;
         if (existing?.sourceVersion == _sourceVersion(job) &&
             await File(fileFor(existing!)).exists()) {
-          if (!automatic) {
-            await _exportMetadata(job, File(fileFor(existing)));
-          }
+          await _exportMetadata(job, File(fileFor(existing)));
           progress = (i + 1) / jobs.length;
           notifyListeners();
           continue;
@@ -520,48 +476,11 @@ class MediaLibrary extends ChangeNotifier {
             sourceVersion: _sourceVersion(job),
           ),
         );
-        _skipped.remove(job.id);
         await _save();
         progress = (i + 1) / jobs.length;
         notifyListeners();
       }
     }, sources: jobs.map((job) => job.drama.source).toSet());
-  }
-
-  Future<void> maybeExport() async {
-    if (_checking ||
-        busy ||
-        suspended ||
-        DateTime.now().isBefore(_retryAfter)) {
-      return;
-    }
-    _checking = true;
-    try {
-      if (automaticWorker) await store.reload();
-      if (!store.autoExport) return;
-      final jobs = await repository.downloads();
-      if (!jobs.any((job) => job.completed)) return;
-      await reload();
-      final pending = <DownloadJob>[];
-      for (final job in jobs.where(
-        (job) => job.completed && !_skipped.contains(job.id),
-      )) {
-        final item = _items
-            .where((item) => item.id == 'export-${job.id}')
-            .firstOrNull;
-        if (item == null ||
-            item.sourceVersion != _sourceVersion(job) ||
-            !await File(fileFor(item)).exists()) {
-          pending.add(job);
-        }
-      }
-      if (pending.isNotEmpty) await exportJobs(pending, automatic: true);
-    } catch (failure) {
-      _retryAfter = DateTime.now().add(const Duration(minutes: 2));
-      error = failure.toString();
-    } finally {
-      _checking = false;
-    }
   }
 
   Future<void> remove(LocalMediaItem selected) async {
@@ -577,7 +496,6 @@ class MediaLibrary extends ChangeNotifier {
         if (await file.exists()) await file.delete();
         final metadata = File(path.setExtension(file.path, '.nfo'));
         if (await metadata.exists()) await metadata.delete();
-        if (item.jobId.isNotEmpty) _skipped.add(item.jobId);
       }
       _items.removeWhere((entry) => entry.id == item.id);
       await _save();
@@ -588,10 +506,8 @@ class MediaLibrary extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _cancelled = true;
-    _timer?.cancel();
     _merges?.dispose();
     store.removeListener(_accessChanged);
-    _automatic?.dispose();
     unawaited(executor.cancel());
     super.dispose();
   }
