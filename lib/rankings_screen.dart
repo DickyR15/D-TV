@@ -231,10 +231,26 @@ class _RankingsScreenState extends State<RankingsScreen> {
         page: result.page,
         hasMore: result.hasMore,
         updatedText: result.updatedText,
-        checkedAt: DateTime.now(),
+        // A stale native page must remain stale in the Dart memory cache.
+        checkedAt: result.stale
+            ? DateTime.now().subtract(const Duration(minutes: 5))
+            : DateTime.now(),
       );
       _retryTimer?.cancel();
       _automaticRetries = 0;
+      if (result.stale && !more && !force) {
+        final staleGeneration = generation;
+        _retryTimer = Timer(const Duration(milliseconds: 250), () {
+          if (!mounted ||
+              staleGeneration != _generation ||
+              _board?.id != board.id) {
+            return;
+          }
+          // The native layer has already started a refresh. Joining it lets
+          // the current screen update once new data is available.
+          unawaited(_load(force: true));
+        });
+      }
     } catch (error) {
       if (mounted && generation == _generation) {
         final shouldRetryAutomatically =

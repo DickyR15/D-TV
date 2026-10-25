@@ -188,6 +188,67 @@ func TestRankingCacheAndStaleRecovery(t *testing.T) {
 	}
 }
 
+
+func TestRankingExpiredCacheServesImmediatelyAndRefreshesInBackground(t *testing.T) {
+	board, _ := findRankingBoard("hongguo-hot")
+	var calls atomic.Int32
+	started, release := make(chan struct{}), make(chan struct{})
+	d := rankingTestDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if calls.Add(1) == 1 {
+			close(started)
+		}
+		select {
+		case <-release:
+		case <-request.Context().Done():
+			return nil, request.Context().Err()
+		}
+		return rankingHTTPResponse(request, http.StatusOK, rankingFixture(board, 1, rankingRows(1))), nil
+	})
+	oldFetchedAt := time.Now().Add(-rankingCacheTTL - time.Minute)
+	key := board.ID + ":1"
+	d.rankings.pages = map[string]rankingPage{}
+	d.rankings.pending = map[string]*rankingCall{}
+	d.rankings.pages[key] = rankingPage{
+		BoardID: board.ID,
+		Page: 1,
+		Items: []rankingItem{{
+			Rank: 1,
+			Drama: Drama{
+				ID: "hongguo:7681903520873729048",
+				Source: sourceHongguo,
+				SourceID: "7681903520873729048",
+				Title: "上次快取榜單",
+			},
+		}},
+		FetchedAt: oldFetchedAt,
+	}
+	start := time.Now()
+	result, err := d.loadRankingPage(context.Background(), board, 1, false)
+	if err != nil || !result.Stale || len(result.Items) != 1 || result.Items[0].Drama.Title != "上次快取榜單" {
+		t.Fatalf("expired ranking cache was not served immediately: %+v %v", result, err)
+	}
+	if elapsed := time.Since(start); elapsed > 250*time.Millisecond {
+		t.Fatalf("stale cache waited for network response: %s", elapsed)
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("background refresh did not start")
+	}
+	close(release)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		d.rankings.mu.Lock()
+		refreshed := d.rankings.pages[key].FetchedAt.After(oldFetchedAt)
+		d.rankings.mu.Unlock()
+		if refreshed {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("background refresh did not replace the stale cache")
+}
+
 func TestRankingConcurrentRequestsShareFetch(t *testing.T) {
 	board, _ := findRankingBoard("hongguo-hot")
 	var calls atomic.Int32

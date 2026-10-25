@@ -105,9 +105,28 @@ func (d *Downloader) loadRankingPage(ctx context.Context, board rankingBoard, pa
 		cache.pending = map[string]*rankingCall{}
 	}
 	cached, exists := cache.pages[key]
-	if exists && !refresh && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < rankingCacheTTL {
+	age := time.Since(cached.FetchedAt)
+	if exists && !refresh && age >= 0 && age < rankingCacheTTL {
 		cache.mu.Unlock()
 		return cloneRankingPage(cached), nil
+	}
+	if exists && !refresh && age >= rankingCacheTTL && age < 24*time.Hour {
+		// On lower-powered Android TV devices, waiting for the ranking HTML
+		// endpoint can leave the whole page looking busy. Paint the last valid
+		// page first and update the persisted cache asynchronously.
+		stale := cloneRankingPage(cached)
+		stale.Stale = true
+		stale.Warning = ""
+		refreshAlreadyRunning := cache.pending[key] != nil
+		cache.mu.Unlock()
+		if !refreshAlreadyRunning {
+			go func() {
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+				defer cancel()
+				_, _ = d.loadRankingPage(refreshCtx, board, page, true)
+			}()
+		}
+		return stale, nil
 	}
 	if pending := cache.pending[key]; pending != nil {
 		cache.mu.Unlock()
