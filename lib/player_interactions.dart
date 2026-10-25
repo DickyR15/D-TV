@@ -72,6 +72,7 @@ class PlayerInteractions extends ChangeNotifier {
   double _brightness = 0.5;
   double _initialBrightness = 0.5;
   double _viewHeight = 0.0;
+  bool _brightnessReady = false, _brightnessLoading = false;
   Timer? _hudTimer;
 
   GestureHudState get hudState => _hudState;
@@ -187,23 +188,16 @@ class PlayerInteractions extends ChangeNotifier {
     _swipeThreshold = math.max(30, math.min(80, height * .08));
     _viewHeight = height;
     _moved = _held = false;
+    _brightnessReady = false;
+    _brightnessLoading = false;
     _swipeAction = SwipeAction.none;
 
     if (_swipeEnabled && width > 0) {
-      // 判定觸控落點：
-      // 左側 35% 區域 -> 撥出並拉動紅果風格亮度條
-      // 其餘區域 -> 刷劇切集，絕對不調節音量
-      if (event.localPosition.dx < width * 0.35) {
-        _swipeAction = SwipeAction.brightness;
-        AppDevice.getBrightness().then((val) {
-          if (_pointer == event.pointer) {
-            _initialBrightness = _brightness = val;
-            _showHud(SwipeAction.brightness, _brightness);
-          }
-        });
-      } else {
-        _swipeAction = SwipeAction.episode;
-      }
+      // 左側 35% 保留垂直滑動調整亮度；其他區域垂直滑動切集。
+      // 單純按下不能顯示亮度提示或讀寫裝置亮度，避免誤把點擊當成手勢。
+      _swipeAction = event.localPosition.dx < width * 0.35
+          ? SwipeAction.brightness
+          : SwipeAction.episode;
     }
     _beginHold();
   }
@@ -218,14 +212,44 @@ class PlayerInteractions extends ChangeNotifier {
     }
     if (!_swipeEnabled || !_moved || _viewHeight <= 0) return;
 
-    final dy = _origin!.dy - event.localPosition.dy; // 向上滑動為增加，向下滑動為減少
-    final deltaRatio = dy / (_viewHeight * 0.6);
-
-    if (_swipeAction == SwipeAction.brightness) {
-      _brightness = (_initialBrightness + deltaRatio).clamp(0.01, 1.0);
-      AppDevice.setBrightness(_brightness);
-      _showHud(SwipeAction.brightness, _brightness);
+    final isVertical = diff.dy.abs() >= _swipeThreshold &&
+        diff.dy.abs() > diff.dx.abs() * 1.5;
+    if (_swipeAction != SwipeAction.brightness) return;
+    if (!_brightnessReady) {
+      // Activate brightness controls only after a deliberate vertical swipe,
+      // never on pointer down or a normal tap.
+      if (!isVertical || _brightnessLoading) return;
+      _brightnessLoading = true;
+      final pointer = event.pointer;
+      unawaited(
+        AppDevice.getBrightness()
+            .then((value) {
+              if (_pointer != pointer ||
+                  !_moved ||
+                  _swipeAction != SwipeAction.brightness) {
+                return;
+              }
+              _initialBrightness = _brightness = value;
+              _brightnessReady = true;
+              _applyBrightnessFromLatestPosition();
+            })
+            .catchError((Object _) {})
+            .whenComplete(() {
+              if (_pointer == pointer) _brightnessLoading = false;
+            }),
+      );
+      return;
     }
+    _applyBrightnessFromLatestPosition();
+  }
+
+  void _applyBrightnessFromLatestPosition() {
+    final origin = _origin, latest = _lastPosition;
+    if (origin == null || latest == null || _viewHeight <= 0) return;
+    final deltaRatio = (origin.dy - latest.dy) / (_viewHeight * 0.6);
+    _brightness = (_initialBrightness + deltaRatio).clamp(0.01, 1.0);
+    AppDevice.setBrightness(_brightness);
+    _showHud(SwipeAction.brightness, _brightness);
   }
 
   void pointerUp(PointerUpEvent event) {
@@ -248,7 +272,7 @@ class PlayerInteractions extends ChangeNotifier {
         isVertical &&
         event.timeStamp - _started < const Duration(milliseconds: 1500)) {
       if (available()) hint(onEpisode(delta.dy < 0 ? 1 : -1));
-    } else if (_swipeAction == SwipeAction.brightness) {
+    } else if (_swipeAction == SwipeAction.brightness && _brightnessReady) {
       _scheduleDismissHud();
     }
 
@@ -257,12 +281,16 @@ class PlayerInteractions extends ChangeNotifier {
     }
     _pointer = null;
     _origin = null;
+    _brightnessReady = false;
+    _brightnessLoading = false;
     _endHold();
   }
 
   void pointerCancel(PointerCancelEvent event) {
     _pointers.remove(event.pointer);
     cancel();
+    _brightnessReady = false;
+    _brightnessLoading = false;
     _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 600));
     if (_pointers.isEmpty) _cancelUntilRelease = false;
   }
