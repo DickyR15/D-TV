@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import 'back_safe_dialog.dart';
 import 'package:flutter/services.dart';
 
 import 'package:path_provider/path_provider.dart';
 
-/// 應用內「日記」日誌服務 — 實時記錄播放與系統事件，方便在電視與手機端快速排查問題。
+/// 應用內「紀錄」紀錄服務 — 實時記錄播放與系統事件，方便在電視與手機端快速排查問題。
 class DiaryService {
   static final List<String> _entries = <String>[];
   static const int maxEntries = 500;
@@ -14,7 +16,7 @@ class DiaryService {
   static String _nativeText = '';
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
-  /// 記錄一條日記
+  /// 記錄一條紀錄
   static void add(String message) {
     final now = DateTime.now();
     final timeStr =
@@ -28,20 +30,20 @@ class DiaryService {
     debugPrint('[Diary] $message');
   }
 
-  /// 獲取當前所有日記副本
+  /// 獲取當前所有紀錄副本
   static List<String> get entries => List<String>.unmodifiable([
     ..._entries,
     if (_nativeText.isNotEmpty) ..._nativeText.split('\n'),
   ]);
 
-  /// 清空日記
+  /// 清空紀錄
   static void clear() {
     _entries.clear();
     _nativeText = '';
     revision.value++;
   }
 
-  /// 獲取合併後的完整日誌文字
+  /// 獲取合併後的完整紀錄文字
   static String get fullText => [_entries.join('\n'), _nativeText].join('\n');
 
   static Future<void> refreshNativeLogs() async {
@@ -78,7 +80,7 @@ class DiaryService {
         .join('\n');
   }
 
-  /// 複製全部日記到剪貼簿
+  /// 複製全部紀錄到剪貼簿
   static Future<void> copyToClipboard(BuildContext context) async {
     await refreshNativeLogs();
     final text = fullText;
@@ -86,21 +88,21 @@ class DiaryService {
     if (context.mounted) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(
-          content: Text('已複製播放日記到剪貼簿'),
+          content: Text('已複製播放紀錄到剪貼簿'),
           duration: Duration(seconds: 2),
         ),
       );
     }
   }
 
-  /// 匯出完整播放日誌。Android 會存入公開的 Downloads/D-TV 資料夾。
+  /// 匯出完整播放紀錄。Android 會存入公開的 Downloads/D-TV 資料夾。
   static Future<void> exportToTxt(BuildContext context) async {
     await refreshNativeLogs();
     final content = fullText.trim();
     if (!context.mounted) return;
     if (content.isEmpty) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('目前沒有可匯出的日誌')),
+        const SnackBar(content: Text('目前沒有可匯出的紀錄')),
       );
       return;
     }
@@ -135,9 +137,9 @@ class DiaryService {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('日誌匯出成功'),
+          title: const Text('紀錄匯出成功'),
           content: SelectableText(
-            '已儲存播放診斷日誌：\n$location\n\n請從檔案管理器開啟 Downloads/D-TV 資料夾，將 TXT 檔傳到電腦後上傳到 ChatGPT。',
+            '已儲存播放診斷紀錄：\n$location\n\n請從檔案管理器開啟 Downloads/D-TV 資料夾，將 TXT 檔傳到電腦後上傳到 ChatGPT。',
           ),
           actions: [
             TextButton(
@@ -157,25 +159,30 @@ class DiaryService {
     } on PlatformException catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text('匯出日誌失敗：${error.message ?? error.code}')),
+        SnackBar(content: Text('匯出紀錄失敗：${error.message ?? error.code}')),
       );
     } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text('匯出日誌失敗：$error')),
+        SnackBar(content: Text('匯出紀錄失敗：$error')),
       );
     }
   }
 
-  /// 在介面上彈出互動式日記彈窗（相容 TV 遙控器與手機觸屏）
-  static Future<void> showDiaryDialog(BuildContext context) async {
+  /// 在介面上彈出互動式紀錄彈窗（相容 TV 遙控器與手機觸屏）
+  static Future<void> showDiaryDialog(
+    BuildContext context, {
+    VoidCallback? onDialogDismissed,
+  }) async {
     await refreshNativeLogs();
     if (!context.mounted) return;
     return showDialog<void>(
       context: context,
       builder: (dialogContext) {
         final scrollController = ScrollController();
-        return AlertDialog(
+        return BackSafeDialog(
+          onDismissed: onDialogDismissed,
+          child: AlertDialog(
           backgroundColor: const Color(0xFF1E1E24),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -187,7 +194,7 @@ class DiaryService {
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  '播放除錯日記',
+                  '播放除錯紀錄',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -197,7 +204,7 @@ class DiaryService {
               ),
               IconButton(
                 icon: const Icon(Icons.copy_rounded, color: Colors.white70),
-                tooltip: '複製全部日記',
+                tooltip: '複製全部紀錄',
                 onPressed: () => copyToClipboard(dialogContext),
               ),
               IconButton(
@@ -205,7 +212,7 @@ class DiaryService {
                   Icons.delete_outline_rounded,
                   color: Colors.white70,
                 ),
-                tooltip: '清空日記',
+                tooltip: '清空紀錄',
                 onPressed: () => clear(),
               ),
             ],
@@ -220,7 +227,7 @@ class DiaryService {
                 if (list.isEmpty) {
                   return const Center(
                     child: Text(
-                      '暫無日記記錄',
+                      '暫無紀錄',
                       style: TextStyle(color: Colors.white38),
                     ),
                   );
@@ -286,7 +293,7 @@ class DiaryService {
             TextButton.icon(
               autofocus: true,
               icon: const Icon(Icons.file_download_outlined, size: 16),
-              label: const Text('匯出日誌 TXT'),
+              label: const Text('匯出紀錄 TXT'),
               onPressed: () => exportToTxt(dialogContext),
             ),
             TextButton.icon(
@@ -299,6 +306,7 @@ class DiaryService {
               child: const Text('關閉'),
             ),
           ],
+          ),
         );
       },
     );

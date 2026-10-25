@@ -309,7 +309,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             key: const ValueKey('player-diary-btn'),
             onPressed: () => DiaryService.showDiaryDialog(context),
             icon: const Icon(Icons.receipt_long_rounded),
-            label: const Text('檢視播放除錯日記'),
+            label: const Text('檢視播放除錯紀錄'),
           ),
           const SizedBox(height: 20),
           Text(

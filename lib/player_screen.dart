@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 import 'app_layout.dart';
 import 'app_orientation.dart';
 import 'app_theme.dart';
+import 'back_safe_dialog.dart';
 import 'core_bridge.dart';
 import 'diary_service.dart';
 import 'playback_diagnostics.dart';
@@ -122,6 +123,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _fullscreen = false;
   bool _automaticFullscreenSuppressed = false;
   bool _panelOpen = false;
+  DateTime? _lastNestedRoutePopAt;
   int _mobileTab = 0;
   bool _autoAdvance = true;
   bool? _systemFullscreen;
@@ -1699,6 +1701,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  void _recordNestedRoutePop() {
+    _lastNestedRoutePopAt = DateTime.now();
+  }
+
+  Widget _guardPlayerDialog(Widget child) => BackSafeDialog(
+    onDismissed: _recordNestedRoutePop,
+    child: child,
+  );
+
   Future<void> _openPanel(PlayerMenuSection section) async {
     if (_panelOpen || _closed) return;
     _interactions.cancel();
@@ -1707,7 +1718,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       final index = await showDialog<int>(
         context: context,
-        builder: (menuContext) => AnimatedBuilder(
+        builder: (menuContext) => _guardPlayerDialog(
+          AnimatedBuilder(
           animation: Listenable.merge([
             _menuRevision,
             widget.store,
@@ -1741,6 +1753,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                   widget.store.toggleFavorite(widget.detail.drama),
             ),
           ),
+        ),
         ),
       );
       if (mounted && !_closed && index != null && index != _index) {
@@ -1793,12 +1806,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       index = await showDialog<int>(
         context: context,
-        builder: (_) => Theme(
+        builder: (_) => _guardPlayerDialog(
+          Theme(
           data: televisionTheme(AppTheme.dark),
           child: TelevisionEpisodeDialog(
             episodes: widget.detail.episodes,
             currentIndex: _index,
           ),
+        ),
         ),
       );
     } finally {
@@ -1820,7 +1835,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (!context.mounted || _closed) return;
       selection = await showDialog<TelevisionPlaybackSetting>(
         context: context,
-        builder: (menuContext) => AnimatedBuilder(
+        builder: (menuContext) => _guardPlayerDialog(
+          AnimatedBuilder(
           animation: Listenable.merge([_danmaku, _preloader]),
           builder: (_, _) => Theme(
             data: televisionTheme(AppTheme.dark),
@@ -1848,6 +1864,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               compatibleRendering: compatibleRendering,
             ),
           ),
+        ),
         ),
       );
     } finally {
@@ -1879,7 +1896,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _switchCompatibleRendering(bool enabled) async {
     final accepted = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => Theme(
+      builder: (dialogContext) => _guardPlayerDialog(
+        Theme(
         data: televisionTheme(AppTheme.dark),
         child: AlertDialog(
           title: Text(enabled ? '開啟相容渲染模式？' : '關閉相容渲染模式？'),
@@ -1897,6 +1915,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           ],
         ),
       ),
+      ),
     );
     if (accepted != true || !mounted || _closed) return;
     if (!await AppDevice.setCompatibleRendering(enabled)) {
@@ -1905,6 +1924,22 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _back() {
+    final now = DateTime.now();
+    final lastNestedPop = _lastNestedRoutePopAt;
+    if (lastNestedPop != null &&
+        now.difference(lastNestedPop) < const Duration(milliseconds: 350)) {
+      return;
+    }
+
+    final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+    if (!routeIsCurrent) {
+      _recordNestedRoutePop();
+      Navigator.of(context).maybePop();
+      return;
+    }
+    // While an asynchronous dialog is opening, don't pop the video route.
+    if (_panelOpen) return;
+
     if (_showFullscreen && !_television) {
       _rotate();
     } else {
@@ -2240,10 +2275,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         FilledButton.tonalIcon(
-                          onPressed: () =>
-                              DiaryService.showDiaryDialog(context),
+                          onPressed: () => DiaryService.showDiaryDialog(
+                            context,
+                            onDialogDismissed: _recordNestedRoutePop,
+                          ),
                           icon: const Icon(Icons.receipt_long_rounded),
-                          label: const Text('檢視播放日記'),
+                          label: const Text('檢視播放紀錄'),
                         ),
                         if (_localFailure && widget.allowOnlineFallback)
                           TextButton.icon(

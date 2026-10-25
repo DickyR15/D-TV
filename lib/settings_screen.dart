@@ -242,8 +242,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ListTile(
                 key: const ValueKey('diary-setting'),
                 leading: const Icon(Icons.receipt_long_rounded),
-                title: const Text('播放除錯日記'),
-                subtitle: const Text('檢視並複製應用執行與播放器的詳細事件日誌'),
+                title: const Text('播放除錯紀錄'),
+                subtitle: const Text('檢視並複製應用執行與播放器的詳細事件紀錄'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => DiaryService.showDiaryDialog(context),
               ),
