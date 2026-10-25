@@ -24,7 +24,9 @@ class _RankingRepository extends FixtureRepository {
     return file.path;
   }
   int rankingCalls = 0;
+  final rankingCallsByPage = <int, int>{};
   bool timeoutFirstRanking = false;
+  bool allowThreePages = false;
 
   @override
   Future<List<RankingBoard>> rankingBoards() async => const [
@@ -38,12 +40,13 @@ class _RankingRepository extends FixtureRepository {
     bool force = false,
   }) async {
     rankingCalls++;
+    rankingCallsByPage.update(page, (count) => count + 1, ifAbsent: () => 1);
     if (timeoutFirstRanking && rankingCalls == 1) {
       throw StateError('context deadline exceeded');
     }
     return RankingPage(
     page: page,
-    hasMore: page < 2,
+    hasMore: page < (allowThreePages ? 3 : 2),
     items: [
       for (var i = 1; i <= 10; i++)
         RankingItem(
@@ -197,4 +200,46 @@ void main() {
     expect(repository.rankingCalls, callsBeforeReentry);
     expect(find.text('合成榜單1'), findsOneWidget);
   });
+
+  testWidgets(
+    'prefetches the next Red Fruit board page and reuses it on scroll',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await tester.binding.setSurfaceSize(const Size(960, 540));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final repository = _RankingRepository()..allowThreePages = true;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RankingsScreen(
+            repository: repository,
+            store: store,
+            initialGroup: 'hongguo',
+            initialBoardId: 'hongguo-hot',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The first page should initiate exactly one background look-ahead.
+      expect(repository.rankingCallsByPage[1], 1);
+      expect(repository.rankingCallsByPage[2], 1);
+
+      // Scroll-triggered pagination should consume the prefetched page without
+      // making a second network/bridge request for that same page.
+      await tester.drag(
+        find.byType(Scrollable).last,
+        const Offset(0, -1600),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('合成榜單11'), findsOneWidget);
+      expect(repository.rankingCallsByPage[2], 1);
+      // The newly visible page starts one-page look-ahead for page three.
+      expect(repository.rankingCallsByPage[3], 1);
+    },
+  );
+
 }
