@@ -237,15 +237,19 @@ func (d *Downloader) doPreparedCatalogRequest(request *http.Request, timeout tim
 	if background, _ := request.Context().Value(backgroundCatalogKey{}).(bool); background && (timeout <= 0 || timeout > 8*time.Second) {
 		timeout = 8 * time.Second
 	}
-	release, err := d.limiter.acquire(request.Context(), request)
-	if err != nil {
-		return nil, err
-	}
 	cancel := func() {}
 	if timeout > 0 {
 		var ctx context.Context
 		ctx, cancel = context.WithTimeout(request.Context(), timeout)
 		request = request.WithContext(ctx)
+	}
+	// The request deadline must also cover waiting for a concurrency slot or
+	// per-source rate-limit gate. Otherwise an occupied gate can hold reloads
+	// forever before the network timeout starts.
+	release, err := d.limiter.acquire(request.Context(), request)
+	if err != nil {
+		cancel()
+		return nil, err
 	}
 	if prepare != nil {
 		prepare(request)
