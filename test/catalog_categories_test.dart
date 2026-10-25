@@ -203,6 +203,35 @@ void main() {
     },
   );
 
+
+  test(
+    'revisited stale category paints remembered posters before refresh completes',
+    () async {
+      final repository = CategoryRepository();
+      final browser = CatalogBrowser(repository);
+      const group = SourceGroup('hongguo', '紅果', [SourceSite.hongguo]);
+
+      await browser.load(group, useCache: true);
+      final remembered = await browser.load(
+        group,
+        category: 'category:漫劇',
+        useCache: true,
+      );
+      expect(remembered.items, isNotEmpty);
+      final callsBeforeRevisit = repository.categoryRequests.length;
+      final start = DateTime.now();
+      final revisited = await browser.load(
+        group,
+        category: 'category:漫劇',
+        useCache: true,
+        onCached: (_) {},
+      );
+      expect(revisited.items, isNotEmpty);
+      expect(repository.categoryRequests.length, greaterThanOrEqualTo(callsBeforeRevisit));
+      expect(DateTime.now().difference(start), lessThan(const Duration(seconds: 1)));
+    },
+  );
+
   test(
     'group pagination retries failed member without skipping or reloading exhausted members',
     () async {
