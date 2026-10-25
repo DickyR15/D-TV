@@ -29,7 +29,7 @@ if (releaseKey.exists()) {
 val hasReleaseKey = releaseProperties.getProperty("storeFile") != null
 
 android {
-    namespace = "com.duanju.duanju_app"
+    namespace = "com.dickyr15.dtv"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "28.2.13676358"
 
@@ -39,7 +39,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.duanju.duanju_app"
+        applicationId = "com.dickyr15.dtv"
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

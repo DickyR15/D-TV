@@ -1,4 +1,4 @@
-package com.duanju.duanju_app
+package com.dickyr15.dtv
 
 import io.flutter.embedding.android.FlutterActivity
 import android.Manifest
