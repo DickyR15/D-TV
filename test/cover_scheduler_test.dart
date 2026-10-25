@@ -18,6 +18,7 @@ void main() {
           jobs[id] = CoverRequestScheduler.run(() async {
             started.add(id);
             await gates[id]!.future;
+            return '$id';
           });
         });
       }
