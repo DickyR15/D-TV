@@ -2044,7 +2044,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (_tab == 1 || _tab == 2) {
           // Enter the first poster when the saved list has items. These pages
           // intentionally no longer show a search row.
-          if (_savedGridFocus.hasItems) _savedGridFocus.focusFirst();
+          if (_savedGridFocus.hasTarget) _savedGridFocus.focusFirst();
           return KeyEventResult.handled;
         }
         FocusScope.of(context).focusInDirection(TraversalDirection.right);
