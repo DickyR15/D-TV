@@ -176,7 +176,71 @@ class DiaryService {
   }) async {
     await refreshNativeLogs();
     if (!context.mounted) return;
-    return showDialog<void>(
+    final logFocus = FocusNode(debugLabel: 'playback-debug-log-list');
+    FocusNode actionFocus(
+      String label, {
+      VoidCallback? onLeft,
+      VoidCallback? onRight,
+      VoidCallback? onUp,
+      VoidCallback? onDown,
+    }) => FocusNode(
+      debugLabel: label,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+          return KeyEventResult.ignored;
+        }
+        final key = event.logicalKey;
+        final VoidCallback? action;
+        if (key == LogicalKeyboardKey.arrowLeft) {
+          action = onLeft;
+        } else if (key == LogicalKeyboardKey.arrowRight) {
+          action = onRight;
+        } else if (key == LogicalKeyboardKey.arrowUp) {
+          action = onUp;
+        } else if (key == LogicalKeyboardKey.arrowDown) {
+          action = onDown;
+        } else {
+          return KeyEventResult.ignored;
+        }
+        if (action == null) return KeyEventResult.ignored;
+        action();
+        return KeyEventResult.handled;
+      },
+    );
+
+    late final FocusNode topCopyFocus = actionFocus(
+      'playback-log-copy-all',
+      onLeft: () => clearFocus.requestFocus(),
+      onRight: () => clearFocus.requestFocus(),
+      onDown: () => logFocus.requestFocus(),
+    );
+    late final FocusNode clearFocus = actionFocus(
+      'playback-log-clear',
+      onLeft: () => topCopyFocus.requestFocus(),
+      onRight: () => topCopyFocus.requestFocus(),
+      onDown: () => logFocus.requestFocus(),
+    );
+    late final FocusNode exportFocus = actionFocus(
+      'playback-log-export',
+      onLeft: () => closeFocus.requestFocus(),
+      onRight: () => copyFocus.requestFocus(),
+      onUp: () => logFocus.requestFocus(),
+    );
+    late final FocusNode copyFocus = actionFocus(
+      'playback-log-copy',
+      onLeft: () => exportFocus.requestFocus(),
+      onRight: () => closeFocus.requestFocus(),
+      onUp: () => logFocus.requestFocus(),
+    );
+    late final FocusNode closeFocus = actionFocus(
+      'playback-log-close',
+      onLeft: () => copyFocus.requestFocus(),
+      onRight: () => exportFocus.requestFocus(),
+      onUp: () => logFocus.requestFocus(),
+    );
+
+    try {
+      await showDialog<void>(
       context: context,
       builder: (dialogContext) {
         return BackSafeDialog(
@@ -202,11 +266,13 @@ class DiaryService {
                 ),
               ),
               IconButton(
+                focusNode: topCopyFocus,
                 icon: const Icon(Icons.copy_rounded, color: Colors.white70),
                 tooltip: '複製全部紀錄',
                 onPressed: () => copyToClipboard(dialogContext),
               ),
               IconButton(
+                focusNode: clearFocus,
                 icon: const Icon(
                   Icons.delete_outline_rounded,
                   color: Colors.white70,
@@ -240,23 +306,31 @@ class DiaryService {
                       color: Colors.white.withValues(alpha: 0.08),
                     ),
                   ),
-                  child: _PlaybackLogList(entries: list),
+                  child: _PlaybackLogList(
+                    entries: list,
+                    focusNode: logFocus,
+                    topCopyFocus: topCopyFocus,
+                    exportFocus: exportFocus,
+                  ),
                 );
               },
             ),
           ),
           actions: [
             TextButton.icon(
+              focusNode: exportFocus,
               icon: const Icon(Icons.file_download_outlined, size: 16),
               label: const Text('匯出紀錄 TXT'),
               onPressed: () => exportToTxt(dialogContext),
             ),
             TextButton.icon(
+              focusNode: copyFocus,
               icon: const Icon(Icons.copy_rounded, size: 16),
               label: const Text('一鍵複製'),
               onPressed: () => copyToClipboard(dialogContext),
             ),
             FilledButton(
+              focusNode: closeFocus,
               autofocus: true,
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('關閉'),
@@ -265,15 +339,35 @@ class DiaryService {
           ),
         );
       },
-    );
+      );
+    } finally {
+      for (final node in [
+        logFocus,
+        topCopyFocus,
+        clearFocus,
+        exportFocus,
+        copyFocus,
+        closeFocus,
+      ]) {
+        node.dispose();
+      }
+    }
   }
 }
 
 /// 可用 Android TV 遙控器上下鍵捲動的播放紀錄清單。
 class _PlaybackLogList extends StatefulWidget {
-  const _PlaybackLogList({required this.entries});
+  const _PlaybackLogList({
+    required this.entries,
+    required this.focusNode,
+    required this.topCopyFocus,
+    required this.exportFocus,
+  });
 
   final List<String> entries;
+  final FocusNode focusNode;
+  final FocusNode topCopyFocus;
+  final FocusNode exportFocus;
 
   @override
   State<_PlaybackLogList> createState() => _PlaybackLogListState();
@@ -281,13 +375,20 @@ class _PlaybackLogList extends StatefulWidget {
 
 class _PlaybackLogListState extends State<_PlaybackLogList> {
   final ScrollController _scrollController = ScrollController();
-  final FocusNode _focusNode = FocusNode(debugLabel: 'playback-debug-log-list');
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      widget.topCopyFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      widget.exportFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
     if (key != LogicalKeyboardKey.arrowUp &&
         key != LogicalKeyboardKey.arrowDown) {
       return KeyEventResult.ignored;
@@ -307,13 +408,12 @@ class _PlaybackLogListState extends State<_PlaybackLogList> {
           .toDouble();
       _scrollController.jumpTo(next);
     } else {
-      // At either end, let focus traversal reach the toolbar/action buttons
-      // rather than trapping the remote inside the log area.
-      final scope = FocusScope.of(context);
+      // Explicitly bridge the scrollable log to the action controls. Some TV
+      // launchers keep focus traversal inside the AlertDialog content scope.
       if (movingDown) {
-        scope.nextFocus();
+        widget.exportFocus.requestFocus();
       } else {
-        scope.previousFocus();
+        widget.topCopyFocus.requestFocus();
       }
     }
     return KeyEventResult.handled;
@@ -322,14 +422,13 @@ class _PlaybackLogListState extends State<_PlaybackLogList> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _focusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Focus(
-      focusNode: _focusNode,
+      focusNode: widget.focusNode,
       onKeyEvent: _onKeyEvent,
       child: Scrollbar(
         controller: _scrollController,
