@@ -907,18 +907,16 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
                       ),
                     )
                   : query.isEmpty
-                  ? keyboardVisible
-                        ? const SizedBox.shrink()
-                        : Align(
-                            // Lift the reminder toward the upper half of the
-                            // panel so it remains above the on-screen TV keyboard.
-                            alignment: const Alignment(0, -0.35),
-                            child: Text(
-                              '可輸入劇名或演員名字，也可用手機掃描 QR Code 搜尋。',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: theme.hintColor),
-                            ),
-                          )
+                  ? Align(
+                      // Keep the reminder visible and lift it toward the upper
+                      // half of the panel above the on-screen TV keyboard.
+                      alignment: const Alignment(0, -0.35),
+                      child: Text(
+                        '可輸入劇名或演員名字，也可用手機掃描 QR Code 搜尋。',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: theme.hintColor),
+                      ),
+                    )
                   : _results.isEmpty && !_searching
                   ? Center(
                       child: Text(
