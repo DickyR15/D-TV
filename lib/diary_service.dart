@@ -179,7 +179,6 @@ class DiaryService {
     return showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        final scrollController = ScrollController();
         return BackSafeDialog(
           onDismissed: onDialogDismissed,
           child: AlertDialog(
@@ -241,50 +240,7 @@ class DiaryService {
                       color: Colors.white.withValues(alpha: 0.08),
                     ),
                   ),
-                  child: Scrollbar(
-                    controller: scrollController,
-                    thumbVisibility: true,
-                    child: ListView.builder(
-                      controller: scrollController,
-                      itemCount: list.length,
-                      itemBuilder: (context, index) {
-                        final item = list[list.length - 1 - index]; // 倒序顯示最新
-                        Color textColor = Colors.white70;
-                        final lower = item.toLowerCase();
-                        if (lower.contains('err') ||
-                            lower.contains('fail') ||
-                            lower.contains('異常') ||
-                            lower.contains('失敗') ||
-                            lower.contains('exception')) {
-                          textColor = const Color(0xFFFF6B6B);
-                        } else if (lower.contains('成功') ||
-                            lower.contains('ok') ||
-                            lower.contains('success')) {
-                          textColor = const Color(0xFF51CF66);
-                        } else if (lower.contains('open') ||
-                            lower.contains('initialize') ||
-                            lower.contains('play') ||
-                            lower.contains('url')) {
-                          textColor = const Color(0xFF74C0FC);
-                        } else if (lower.contains('warn') ||
-                            lower.contains('403') ||
-                            lower.contains('404')) {
-                          textColor = const Color(0xFFFCC419);
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2.0),
-                          child: SelectableText(
-                            item,
-                            style: TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 12,
-                              color: textColor,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                  child: _PlaybackLogList(entries: list),,
                 );
               },
             ),
@@ -312,3 +268,125 @@ class DiaryService {
     );
   }
 }
+
+/// 可用 Android TV 遙控器上下鍵捲動的播放紀錄清單。
+class _PlaybackLogList extends StatefulWidget {
+  const _PlaybackLogList({required this.entries});
+
+  final List<String> entries;
+
+  @override
+  State<_PlaybackLogList> createState() => _PlaybackLogListState();
+}
+
+class _PlaybackLogListState extends State<_PlaybackLogList> {
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode(debugLabel: 'playback-debug-log-list');
+
+  @override
+  void initState() {
+    super.initState();
+    // The log rows are text rather than individual buttons. Give the list
+    // keyboard focus so DPAD up/down reliably scrolls the log on Android TV.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key != LogicalKeyboardKey.arrowUp &&
+        key != LogicalKeyboardKey.arrowDown) {
+      return KeyEventResult.ignored;
+    }
+    if (!_scrollController.hasClients) return KeyEventResult.handled;
+
+    final position = _scrollController.position;
+    final movingDown = key == LogicalKeyboardKey.arrowDown;
+    final current = position.pixels;
+    final edge = movingDown
+        ? position.maxScrollExtent
+        : position.minScrollExtent;
+    final canScroll = movingDown ? current < edge - 1 : current > edge + 1;
+    if (canScroll) {
+      final next = (current + (movingDown ? 120 : -120))
+          .clamp(position.minScrollExtent, position.maxScrollExtent)
+          .toDouble();
+      _scrollController.jumpTo(next);
+    } else {
+      // At either end, let focus traversal reach the toolbar/action buttons
+      // rather than trapping the remote inside the log area.
+      final scope = FocusScope.of(context);
+      if (movingDown) {
+        scope.nextFocus();
+      } else {
+        scope.previousFocus();
+      }
+    }
+    return KeyEventResult.handled;
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: _focusNode,
+      onKeyEvent: _onKeyEvent,
+      child: Scrollbar(
+        controller: _scrollController,
+        thumbVisibility: true,
+        child: ListView.builder(
+          key: const ValueKey('playback-log-list'),
+          controller: _scrollController,
+          itemCount: widget.entries.length,
+          itemBuilder: (context, index) {
+            final item = widget.entries[widget.entries.length - 1 - index];
+            Color textColor = Colors.white70;
+            final lower = item.toLowerCase();
+            if (lower.contains('err') ||
+                lower.contains('fail') ||
+                lower.contains('異常') ||
+                lower.contains('失敗') ||
+                lower.contains('exception')) {
+              textColor = const Color(0xFFFF6B6B);
+            } else if (lower.contains('成功') ||
+                lower.contains('ok') ||
+                lower.contains('success')) {
+              textColor = const Color(0xFF51CF66);
+            } else if (lower.contains('open') ||
+                lower.contains('initialize') ||
+                lower.contains('play') ||
+                lower.contains('url')) {
+              textColor = const Color(0xFF74C0FC);
+            } else if (lower.contains('warn') ||
+                lower.contains('403') ||
+                lower.contains('404')) {
+              textColor = const Color(0xFFFCC419);
+            }
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.0),
+              child: SelectableText(
+                item,
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  color: textColor,
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
