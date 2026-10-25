@@ -248,11 +248,22 @@ class CoverRequestScheduler {
 
   static void _drain() {
     while (_running < _limit && _waiting.isNotEmpty) {
-      final index = _backgroundPauseCount > 0
-          ? _waiting.indexWhere((entry) => entry.priority)
-          : 0;
-      if (index < 0) return;
-      final entry = _waiting.removeAt(index);
+      // Newer requests are most likely to belong to the currently visible
+      // viewport after scrolling. Pop from the end in the normal path so
+      // dequeuing a large poster backlog stays O(1), matching the upstream
+      // app's visible-poster prioritization.
+      var index = _waiting.length - 1;
+      if (_backgroundPauseCount > 0) {
+        // While playback/detail is active, only start priority work; scan from
+        // the end to avoid repeatedly shifting the entire waiting list.
+        while (index >= 0 && !_waiting[index].priority) {
+          index--;
+        }
+        if (index < 0) return;
+      }
+      final entry = index == _waiting.length - 1
+          ? _waiting.removeLast()
+          : _waiting.removeAt(index);
       _running++;
       entry.start();
     }
