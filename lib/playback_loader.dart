@@ -56,7 +56,7 @@ class PlaybackLoader {
 
     // Include cancellation in the timeout window. A stalled native cancel
     // must not block all later reloads before the new resolver even starts.
-    final pending = Future<PlaybackPlan?>(() async {
+    final pending = (() async {
       // A brand-new player has no earlier resolver to cancel. Skip this
       // native round trip on cold start; later requests still cancel stale work.
       if (cancelPrevious) await repository.cancelPlayback();
@@ -64,7 +64,7 @@ class PlaybackLoader {
         return null;
       }
       return resolve();
-    }());
+    })();
 
     // Future.timeout does not cancel the original Future. If a timed-out or
     // superseded resolver later creates a native stream session, release it.
