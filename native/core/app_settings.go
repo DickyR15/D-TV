@@ -23,6 +23,11 @@ type nativeResourceSettings struct {
 }
 
 func defaultResourceSettings() nativeResourceSettings {
+	return nativeResourceSettings{
+		ProxyMode: "auto",
+		CatalogConcurrency: 3,
+		CatalogIntervalMS: 250,
+	}
 }
 
 func (settings nativeResourceSettings) validate() error {
