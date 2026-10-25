@@ -155,9 +155,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('open-settings-route')));
     await tester.pumpAndSettle();
     expect(find.text('設定與備份'), findsOneWidget);
-    // The route remains under the app's root navigator; invoke its route
-    // pop callback directly because this widget test has no physical TV Back key.
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    // Simulate Android TV's platform Back action. Flutter's widget-test key
+    // simulator has no physical-key mapping for the remote's Go Back key.
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.text('設定與備份'), findsNothing);
     expect(find.byKey(const ValueKey('open-settings-route')), findsOneWidget);
