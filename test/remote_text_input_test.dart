@@ -1,4 +1,5 @@
 import 'package:hgtv/app_layout.dart';
+import 'package:hgtv/diary_service.dart';
 import 'package:hgtv/remote_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -65,6 +66,89 @@ void main() {
     expect(below.hasPrimaryFocus, isTrue);
     expect(tester.testTextInput.isVisible, isFalse);
   });
+
+  testWidgets(
+    'playback log D-pad reaches export, copy, close and the header icons',
+    (tester) async {
+      DiaryService.clear();
+      DiaryService.add('remote focus test row');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () => DiaryService.showDiaryDialog(context),
+                  child: const Text('開啟播放除錯紀錄'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('開啟播放除錯紀錄'));
+      await tester.pumpAndSettle();
+
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-log-close',
+      );
+
+      await press(LogicalKeyboardKey.arrowLeft);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-log-copy',
+      );
+      await press(LogicalKeyboardKey.arrowLeft);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-log-export',
+      );
+      await press(LogicalKeyboardKey.arrowUp);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-debug-log-list',
+      );
+      await press(LogicalKeyboardKey.arrowLeft);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-log-copy-all',
+      );
+      await press(LogicalKeyboardKey.arrowRight);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-log-clear',
+      );
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-debug-log-list',
+      );
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-log-export',
+      );
+      await press(LogicalKeyboardKey.arrowRight);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-log-copy',
+      );
+      await press(LogicalKeyboardKey.arrowRight);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-log-close',
+      );
+      await press(LogicalKeyboardKey.enter);
+      expect(find.text('播放除錯紀錄'), findsNothing);
+    },
+  );
 
   testWidgets(
     'TV search D-pad reaches QR, Cancel and Search without an open keyboard blocking them',
