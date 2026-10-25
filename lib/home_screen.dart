@@ -218,7 +218,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     _changedSources.add(source);
     _cacheRefreshTimer?.cancel();
-    _watcherStartTimer?.cancel();
     _cacheRefreshTimer = Timer(const Duration(milliseconds: 100), () {
       unawaited(_reloadUpdatedCache());
     });
@@ -716,6 +715,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _updater.dispose();
     _followUpdater.dispose();
     _cacheRefreshTimer?.cancel();
+    _watcherStartTimer?.cancel();
     widget.store.removeListener(_sourcesChanged);
     widget.repository.catalogUpdates.removeListener(_metadataChanged);
     _generation++;
