@@ -43,6 +43,7 @@ class MainActivity : FlutterActivity() {
     private var deviceChannel: MethodChannel? = null
     private var televisionMode = false
     private var pendingExportPlaybackLogText: String? = null
+    private var pendingExportPlaybackLogPrefix: String = "D-TV-playback-log"
     private var pendingExportPlaybackLogResult: MethodChannel.Result? = null
     private var pendingExportSettingsBackupContent: String? = null
     private var pendingExportSettingsBackupResult: MethodChannel.Result? = null
@@ -111,9 +112,14 @@ class MainActivity : FlutterActivity() {
         )
     }
 
-    private fun exportPlaybackLog(text: String): Map<String, String> {
+    private fun exportPlaybackLog(
+        text: String,
+        fileNamePrefix: String = "D-TV-playback-log"
+    ): Map<String, String> {
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val fileName = "D-TV-playback-log_$stamp.txt"
+        val safePrefix = fileNamePrefix.replace(Regex("[^A-Za-z0-9_-]"), "-").trim('-')
+            .take(64).ifEmpty { "D-TV-diagnostic" }
+        val fileName = "${safePrefix}_$stamp.txt"
 
         // Android 9 and earlier use legacy public-storage access. These
         // releases do not expose MediaStore.Downloads / RELATIVE_PATH.
@@ -248,7 +254,11 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun handleExportPlaybackLog(text: String, result: MethodChannel.Result) {
+    private fun handleExportPlaybackLog(
+        text: String,
+        fileNamePrefix: String,
+        result: MethodChannel.Result
+    ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
                 PackageManager.PERMISSION_GRANTED
@@ -260,6 +270,7 @@ class MainActivity : FlutterActivity() {
                 return
             }
             pendingExportPlaybackLogText = text
+            pendingExportPlaybackLogPrefix = fileNamePrefix
             pendingExportPlaybackLogResult = result
             requestPermissions(
                 arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
@@ -269,7 +280,7 @@ class MainActivity : FlutterActivity() {
         }
 
         try {
-            result.success(exportPlaybackLog(text))
+            result.success(exportPlaybackLog(text, fileNamePrefix))
         } catch (error: Exception) {
             result.error(
                 "export_failed",
@@ -314,8 +325,10 @@ class MainActivity : FlutterActivity() {
 
         val pendingResult = pendingExportPlaybackLogResult
         val pendingText = pendingExportPlaybackLogText
+        val pendingPrefix = pendingExportPlaybackLogPrefix
         pendingExportPlaybackLogResult = null
         pendingExportPlaybackLogText = null
+        pendingExportPlaybackLogPrefix = "D-TV-playback-log"
         if (pendingResult == null || pendingText == null) return
 
         if (grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
@@ -327,7 +340,7 @@ class MainActivity : FlutterActivity() {
             return
         }
         try {
-            pendingResult.success(exportPlaybackLog(pendingText))
+            pendingResult.success(exportPlaybackLog(pendingText, pendingPrefix))
         } catch (error: Exception) {
             pendingResult.error(
                 "export_failed",
@@ -414,7 +427,21 @@ class MainActivity : FlutterActivity() {
                             if (text.isNullOrBlank()) {
                                 result.error("empty_log", "沒有可匯出的日誌內容", null)
                             } else {
-                                handleExportPlaybackLog(text, result)
+                                handleExportPlaybackLog(text, "D-TV-playback-log", result)
+                            }
+                        }
+                        "exportDiagnosticText" -> {
+                            val text = call.argument<String>("text")
+                            val prefix = call.argument<String>("fileNamePrefix")
+                                ?.replace(Regex("[^A-Za-z0-9_-]"), "-")
+                                ?.trim('-')
+                                ?.take(64)
+                                ?.takeIf { it.isNotEmpty() }
+                                ?: "D-TV-diagnostic"
+                            if (text.isNullOrBlank()) {
+                                result.error("empty_diagnostic", "沒有可匯出的診斷資訊", null)
+                            } else {
+                                handleExportPlaybackLog(text, prefix, result)
                             }
                         }
                         "exportSettingsBackup" -> {
