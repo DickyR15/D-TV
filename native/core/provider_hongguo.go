@@ -33,15 +33,7 @@ func (d *Downloader) fetchHongguoDramas(ctx context.Context) ([]Drama, error) {
 }
 
 func (d *Downloader) fetchHongguoWebDramas(ctx context.Context) ([]Drama, error) {
-	routes := []struct {
-		path string
-		name string
-	}{
-		{path: "real-drama", name: "真人剧"},
-		{path: "comic-drama", name: "漫剧"},
-		{path: "ai-drama", name: "AI剧"},
-		{path: "comic", name: "动漫"},
-	}
+	routes := hongguoWebCatalogRoutes
 	type routeResult struct {
 		dramas []Drama
 		err    error
