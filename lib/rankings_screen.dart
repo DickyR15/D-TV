@@ -79,6 +79,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
   bool _failedMore = false;
   int _page = 1;
   int _generation = 0;
+  int _automaticRetries = 0;
+  Timer? _retryTimer;
   String? _error;
   String _updated = '';
 
@@ -127,6 +129,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
   void dispose() {
     widget.repository.catalogUpdates.removeListener(_metadataChanged);
     _generation++;
+    _retryTimer?.cancel();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
@@ -230,14 +233,33 @@ class _RankingsScreenState extends State<RankingsScreen> {
         updatedText: result.updatedText,
         checkedAt: DateTime.now(),
       );
+      _retryTimer?.cancel();
+      _automaticRetries = 0;
     } catch (error) {
       if (mounted && generation == _generation) {
+        final shouldRetryAutomatically =
+            !more && _items.isEmpty && _automaticRetries == 0;
         setState(() {
           _error = _userFacingError(error);
           _failedMore = more;
           _loading = false;
           _more = false;
         });
+        // A transient timeout is common on first connection. Retry once
+        // automatically so users don't need to focus the Retry button.
+        if (shouldRetryAutomatically) {
+          _automaticRetries++;
+          _retryTimer?.cancel();
+          _retryTimer = Timer(const Duration(milliseconds: 800), () {
+            if (!mounted ||
+                generation != _generation ||
+                _board?.id != board.id ||
+                _items.isNotEmpty) {
+              return;
+            }
+            unawaited(_load());
+          });
+        }
       }
     }
   }
@@ -245,6 +267,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
   void _select(RankingBoard board) {
     if (_board?.id == board.id) return;
     final cached = _memory.pages[board.id];
+    _retryTimer?.cancel();
+    _automaticRetries = 0;
     setState(() {
       _board = board;
       _items = cached == null ? [] : List<RankingItem>.of(cached.items);
