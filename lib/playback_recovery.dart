@@ -76,7 +76,8 @@ class PlaybackRecoveryStability {
     required bool completed,
     required DateTime now,
   }) {
-    final healthy = playing &&
+    final healthy = position > Duration.zero &&
+        playing &&
         !buffering &&
         intendedToPlay &&
         foreground &&
