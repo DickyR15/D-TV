@@ -177,80 +177,95 @@ class DiaryService {
     await refreshNativeLogs();
     if (!context.mounted) return;
     final logFocus = FocusNode(debugLabel: 'playback-debug-log-list');
-    FocusNode actionFocus(
-      String label, {
-      VoidCallback? onLeft,
-      VoidCallback? onRight,
-      VoidCallback? onUp,
-      VoidCallback? onDown,
-    }) => FocusNode(
-      debugLabel: label,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-          return KeyEventResult.ignored;
-        }
-        final key = event.logicalKey;
-        final VoidCallback? action;
-        if (key == LogicalKeyboardKey.arrowLeft) {
-          action = onLeft;
-        } else if (key == LogicalKeyboardKey.arrowRight) {
-          action = onRight;
-        } else if (key == LogicalKeyboardKey.arrowUp) {
-          action = onUp;
-        } else if (key == LogicalKeyboardKey.arrowDown) {
-          action = onDown;
-        } else {
-          return KeyEventResult.ignored;
-        }
-        if (action == null) return KeyEventResult.ignored;
-        action();
-        return KeyEventResult.handled;
-      },
-    );
+    final topCopyFocus = FocusNode(debugLabel: 'playback-log-copy-all');
+    final clearFocus = FocusNode(debugLabel: 'playback-log-clear');
+    final exportFocus = FocusNode(debugLabel: 'playback-log-export');
+    final copyFocus = FocusNode(debugLabel: 'playback-log-copy');
+    final closeFocus = FocusNode(debugLabel: 'playback-log-close');
 
-    late final FocusNode topCopyFocus;
-    late final FocusNode clearFocus;
-    late final FocusNode exportFocus;
-    late final FocusNode copyFocus;
-    late final FocusNode closeFocus;
-    topCopyFocus = actionFocus(
-      'playback-log-copy-all',
-      onLeft: () => clearFocus.requestFocus(),
-      onRight: () => clearFocus.requestFocus(),
-      onDown: () => logFocus.requestFocus(),
-    );
-    clearFocus = actionFocus(
-      'playback-log-clear',
-      onLeft: () => topCopyFocus.requestFocus(),
-      onRight: () => topCopyFocus.requestFocus(),
-      onDown: () => logFocus.requestFocus(),
-    );
-    exportFocus = actionFocus(
-      'playback-log-export',
-      onLeft: () => closeFocus.requestFocus(),
-      onRight: () => copyFocus.requestFocus(),
-      onUp: () => logFocus.requestFocus(),
-    );
-    copyFocus = actionFocus(
-      'playback-log-copy',
-      onLeft: () => exportFocus.requestFocus(),
-      onRight: () => closeFocus.requestFocus(),
-      onUp: () => logFocus.requestFocus(),
-    );
-    closeFocus = actionFocus(
-      'playback-log-close',
-      onLeft: () => copyFocus.requestFocus(),
-      onRight: () => exportFocus.requestFocus(),
-      onUp: () => logFocus.requestFocus(),
-    );
+    KeyEventResult routeDialogRemote(
+      FocusNode node,
+      KeyEvent event,
+    ) {
+      if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+        return KeyEventResult.ignored;
+      }
+      final current = FocusManager.instance.primaryFocus;
+      final key = event.logicalKey;
+      final isCurrent = (FocusNode target) =>
+          identical(current, target) || target.hasPrimaryFocus;
+
+      if (key == LogicalKeyboardKey.arrowLeft) {
+        if (isCurrent(topCopyFocus)) {
+          clearFocus.requestFocus();
+        } else if (isCurrent(clearFocus)) {
+          topCopyFocus.requestFocus();
+        } else if (isCurrent(exportFocus)) {
+          closeFocus.requestFocus();
+        } else if (isCurrent(copyFocus)) {
+          exportFocus.requestFocus();
+        } else if (isCurrent(closeFocus)) {
+          copyFocus.requestFocus();
+        } else {
+          topCopyFocus.requestFocus();
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowRight) {
+        if (isCurrent(topCopyFocus)) {
+          clearFocus.requestFocus();
+        } else if (isCurrent(clearFocus)) {
+          topCopyFocus.requestFocus();
+        } else if (isCurrent(exportFocus)) {
+          copyFocus.requestFocus();
+        } else if (isCurrent(copyFocus)) {
+          closeFocus.requestFocus();
+        } else if (isCurrent(closeFocus)) {
+          exportFocus.requestFocus();
+        } else {
+          exportFocus.requestFocus();
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowUp) {
+        if (isCurrent(exportFocus) ||
+            isCurrent(copyFocus) ||
+            isCurrent(closeFocus)) {
+          logFocus.requestFocus();
+        } else if (isCurrent(topCopyFocus) || isCurrent(clearFocus)) {
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowDown) {
+        if (isCurrent(topCopyFocus) || isCurrent(clearFocus)) {
+          logFocus.requestFocus();
+        } else if (isCurrent(exportFocus) ||
+            isCurrent(copyFocus) ||
+            isCurrent(closeFocus)) {
+          logFocus.requestFocus();
+        } else {
+          logFocus.requestFocus();
+        }
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
 
     try {
       await showDialog<void>(
       context: context,
       builder: (dialogContext) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (dialogContext.mounted) closeFocus.requestFocus();
+        });
         return BackSafeDialog(
           onDismissed: onDialogDismissed,
-          child: AlertDialog(
+          autofocus: false,
+          child: Focus(
+            canRequestFocus: false,
+            onKeyEvent: routeDialogRemote,
+            child: AlertDialog(
           backgroundColor: const Color(0xFF1E1E24),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -295,10 +310,14 @@ class DiaryService {
               builder: (context, _) {
                 final list = entries;
                 if (list.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      '暫無紀錄',
-                      style: TextStyle(color: Colors.white38),
+                  return Focus(
+                    focusNode: logFocus,
+                    onKeyEvent: (node, event) => routeDialogRemote(node, event),
+                    child: const Center(
+                      child: Text(
+                        '暫無紀錄',
+                        style: TextStyle(color: Colors.white38),
+                      ),
                     ),
                   );
                 }
@@ -341,6 +360,7 @@ class DiaryService {
               child: const Text('關閉'),
             ),
           ],
+            ),
           ),
         );
       },
