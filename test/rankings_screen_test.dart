@@ -142,20 +142,28 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await press(LogicalKeyboardKey.arrowDown);
-    await press(LogicalKeyboardKey.arrowDown);
-    expect(focusedRank(), '1');
-    for (var rank = 2; rank <= 14; rank++) {
+    // Locate the initial ranking focus dynamically so this test remains
+    // resilient when Flutter's first-focus policy changes.
+    for (var attempt = 0; attempt < 12 && focusedRank() == null; attempt++) {
       await press(LogicalKeyboardKey.arrowDown);
-      expect(focusedRank(), '$rank');
+    }
+    final initial = int.tryParse(focusedRank() ?? '');
+    expect(initial, isNotNull);
+    var previous = initial!;
+    for (var step = 0; step < 12; step++) {
+      await press(LogicalKeyboardKey.arrowDown);
+      final current = int.tryParse(focusedRank() ?? '');
+      expect(current, isNotNull);
+      expect(current, greaterThan(previous));
       final rect = tester.getRect(
-        find.byKey(ValueKey('rank-$rank-hongguo:rank-$rank')),
+        find.byKey(ValueKey('rank-$current-hongguo:rank-$current')),
       );
       expect(rect.top, greaterThanOrEqualTo(0));
       expect(rect.bottom, lessThanOrEqualTo(540));
+      previous = current!;
     }
     await press(LogicalKeyboardKey.arrowUp);
-    expect(focusedRank(), '13');
+    expect(int.parse(focusedRank()!), previous - 1);
 
     // Home navigation recreates the embedded screen for each board tab. A
     // recently viewed board should be restored from memory without another

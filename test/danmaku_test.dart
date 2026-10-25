@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import 'danmaku_fixtures.dart';
+import 'fixtures.dart' show testPinHasher;
 import 'local_persistence_test.dart' show FailingPreferences;
 
 const danmakuPlan = PlaybackPlan(

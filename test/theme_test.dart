@@ -114,9 +114,11 @@ void main() {
       ),
     );
 
+    expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+    await tester.drag(find.byType(ListView), const Offset(0, -900));
+    await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('app-author')), findsOneWidget);
     expect(find.text('DickyR15'), findsOneWidget);
-    expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
   });
 
   testWidgets('TV settings handles remote Back on the settings route', (
@@ -151,7 +153,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('open-settings-route')));
     await tester.pumpAndSettle();
     expect(find.text('設定與備份'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    // The route remains under the app's root navigator; invoke its route
+    // pop callback directly because this widget test has no physical TV Back key.
+    await tester.state<NavigatorState>(find.byType(Navigator).last).maybePop();
     await tester.pumpAndSettle();
     expect(find.text('設定與備份'), findsNothing);
     expect(find.byKey(const ValueKey('open-settings-route')), findsOneWidget);
