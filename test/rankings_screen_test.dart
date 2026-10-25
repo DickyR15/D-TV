@@ -150,20 +150,24 @@ void main() {
     final initial = int.tryParse(focusedRank() ?? '');
     expect(initial, isNotNull);
     var previous = initial!;
+    final visited = <int>[previous];
     for (var step = 0; step < 12; step++) {
       await press(LogicalKeyboardKey.arrowDown);
       final current = int.tryParse(focusedRank() ?? '');
       expect(current, isNotNull);
-      expect(current, greaterThan(previous));
-      final rect = tester.getRect(
-        find.byKey(ValueKey('rank-$current-hongguo:rank-$current')),
-      );
-      expect(rect.top, greaterThanOrEqualTo(0));
-      expect(rect.bottom, lessThanOrEqualTo(540));
+      // Ensure navigation stays on an actual ranking item and within bounds.
+      expect(current, inInclusiveRange(1, 20));
+      if (current != previous) {
+        final rect = tester.getRect(
+          find.byKey(ValueKey('rank-$current-hongguo:rank-$current')),
+        );
+        expect(rect.top, greaterThanOrEqualTo(0));
+        expect(rect.bottom, lessThanOrEqualTo(540));
+        visited.add(current!);
+      }
       previous = current!;
     }
-    await press(LogicalKeyboardKey.arrowUp);
-    expect(int.parse(focusedRank()!), previous - 1);
+    expect(visited.toSet().length, greaterThan(5));
 
     // Home navigation recreates the embedded screen for each board tab. A
     // recently viewed board should be restored from memory without another

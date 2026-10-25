@@ -133,8 +133,8 @@ void main() {
           ]),
           () => repository.localPlayback(drama, episode),
         ]) {
-          await expectLater(
-            request(),
+          expect(
+            request,
             throwsA(
               isA<AppFailure>().having(
                 (error) => error.message,

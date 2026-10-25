@@ -147,8 +147,8 @@ void main() {
         ]),
         () => repository.localPlayback(drama, Episode({'id': '1'}, 1)),
       ]) {
-        await expectLater(
-          request(),
+        expect(
+          request,
           throwsA(
             isA<AppFailure>().having(
               (e) => e.message,

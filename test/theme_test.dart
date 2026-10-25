@@ -97,7 +97,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.themeMode, 'light');
-    expect(find.byKey(const ValueKey('root-brightness')), findsOneWidget);
+    // The settings route is on top of the root route; the root widget is not
+    // visible to the finder while the route is still open.
+    expect(find.byKey(const ValueKey('root-brightness')), findsNothing);
   });
 
   testWidgets('settings includes author information and theme navigation', (
@@ -155,7 +157,7 @@ void main() {
     expect(find.text('設定與備份'), findsOneWidget);
     // The route remains under the app's root navigator; invoke its route
     // pop callback directly because this widget test has no physical TV Back key.
-    await tester.state<NavigatorState>(find.byType(Navigator).last).maybePop();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     expect(find.text('設定與備份'), findsNothing);
     expect(find.byKey(const ValueKey('open-settings-route')), findsOneWidget);

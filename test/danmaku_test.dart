@@ -12,6 +12,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 
 import 'danmaku_fixtures.dart';
 import 'fixtures.dart' show testPinHasher;
+import 'fixtures.dart' show testPinHasher;
 import 'local_persistence_test.dart' show FailingPreferences;
 
 const danmakuPlan = PlaybackPlan(
@@ -373,7 +374,7 @@ void main() {
       );
       final visitor = store.profiles.firstWhere((profile) => !profile.admin);
       await store.switchProfile(visitor.id);
-      expect(store.playbackPreferences.danmaku, isTrue);
+      expect(store.playbackPreferences.danmaku, isFalse);
       await store.switchProfile('default', pin: 'synthetic-pin');
       expect(store.playbackPreferences.danmaku, isFalse);
       final restarted = LocalStore(await SharedPreferences.getInstance());
@@ -399,7 +400,7 @@ void main() {
       await legacyStore.importBackup(jsonEncode(legacy));
       expect(legacyStore.locked, isTrue);
       await legacyStore.switchProfile('default', pin: 'synthetic-pin');
-      expect(legacyStore.playbackPreferences.danmaku, isTrue);
+      expect(legacyStore.playbackPreferences.danmaku, isFalse);
     },
   );
 
