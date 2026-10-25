@@ -827,7 +827,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       });
     }
-    _browser = CatalogBrowser(widget.repository);
+    _browser = CatalogBrowser.shared(widget.repository);
     _updater = LibraryUpdater(
       widget.repository,
       widget.store,
@@ -995,7 +995,9 @@ class _HomeScreenState extends State<HomeScreen> {
           _hasMore = result.hasMore;
           _submittedQuery = query;
         }
-        _loading = preserveVisibleCatalog ? false : cached && !result.fresh;
+        _loading = preserveVisibleCatalog || (cached && result.items.isNotEmpty)
+            ? false
+            : cached && !result.fresh;
         _loadingMore = false;
         _error = preserveVisibleCatalog
             ? null

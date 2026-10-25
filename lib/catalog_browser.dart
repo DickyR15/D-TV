@@ -39,6 +39,12 @@ class _CatalogSession {
 }
 
 class CatalogBrowser {
+  static final Expando<CatalogBrowser> _sharedByRepository =
+      Expando<CatalogBrowser>('D-TV catalog session');
+
+  factory CatalogBrowser.shared(AppRepository repository) =>
+      _sharedByRepository[repository] ??= CatalogBrowser(repository);
+
   CatalogBrowser(this.repository);
   final AppRepository repository;
   final _menus = <String, List<CatalogCategory>>{};

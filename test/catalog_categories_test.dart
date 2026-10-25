@@ -112,14 +112,16 @@ void main() {
           title: '快取熱門劇',
         ),
       ], fresh: true);
-      final browser = CatalogBrowser(repository);
+      final browser = CatalogBrowser.shared(repository);
       const group = SourceGroup('hongguo', '紅果', [SourceSite.hongguo]);
 
       final first = await browser.load(group, useCache: true);
       expect(first.items.map((item) => item.id), contains('hongguo:cached-fresh'));
       expect(repository.cachedReads, 1);
 
-      final second = await browser.load(group, useCache: true);
+      final recreatedBrowser = CatalogBrowser.shared(repository);
+      expect(identical(browser, recreatedBrowser), isTrue);
+      final second = await recreatedBrowser.load(group, useCache: true);
       expect(second.items.map((item) => item.id), contains('hongguo:cached-fresh'));
       expect(repository.cachedReads, 1);
     },
