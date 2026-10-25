@@ -663,6 +663,10 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
     text: widget.initialValue,
   );
   final FocusNode _queryFocus = FocusNode(debugLabel: 'tv-drama-search-input');
+  final FocusNode _phoneSearchFocus = FocusNode(
+    debugLabel: 'tv-drama-search-phone-qr',
+  );
+  final FocusNode _cancelFocus = FocusNode(debugLabel: 'tv-drama-search-cancel');
   final FocusNode _submitFocus = FocusNode(debugLabel: 'tv-drama-search-submit');
   Timer? _debounce;
   int _generation = 0;
@@ -685,6 +689,8 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
     _debounce?.cancel();
     _controller.dispose();
     _queryFocus.dispose();
+    _phoneSearchFocus.dispose();
+    _cancelFocus.dispose();
     _submitFocus.dispose();
     widget.onCancel?.call();
     super.dispose();
@@ -696,18 +702,33 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _queryFocus.unfocus();
-      _submitFocus.requestFocus();
+      SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+      (widget.onPhoneSearch != null ? _phoneSearchFocus : _cancelFocus)
+          .requestFocus();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
 
-  KeyEventResult _searchButtonKey(FocusNode node, KeyEvent event) {
+  KeyEventResult _searchActionKey(
+    FocusNode node,
+    KeyEvent event, {
+    required FocusNode left,
+    required FocusNode right,
+  }) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       _queryFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      left.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      right.requestFocus();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -775,7 +796,15 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final query = _query.trim();
-    final showRecent = query.isEmpty && widget.recentSearches.isNotEmpty;
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final keyboardVisible = keyboardInset > 0;
+    final contentHeight = (MediaQuery.sizeOf(context).height -
+            keyboardInset -
+            190)
+        .clamp(140.0, 430.0)
+        .toDouble();
+    final showRecent =
+        query.isEmpty && widget.recentSearches.isNotEmpty && !keyboardVisible;
     return AlertDialog(
       titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
       contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
@@ -793,7 +822,7 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
       ),
       content: SizedBox(
         width: 660,
-        height: 430,
+        height: contentHeight,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -878,13 +907,15 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
                       ),
                     )
                   : query.isEmpty
-                  ? Center(
-                      child: Text(
-                        '可以直接輸入劇名，或改用手機掃 QR Code 搜尋。',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: theme.hintColor),
-                      ),
-                    )
+                  ? keyboardVisible
+                        ? const SizedBox.shrink()
+                        : Center(
+                            child: Text(
+                              '可以直接輸入劇名，或改用手機掃 QR Code 搜尋。',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: theme.hintColor),
+                            ),
+                          )
                   : _results.isEmpty && !_searching
                   ? Center(
                       child: Text(
@@ -912,21 +943,62 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
       ),
       actions: [
         if (widget.onPhoneSearch != null)
-          TextButton.icon(
-            onPressed: _usePhoneSearch,
-            icon: const Icon(Icons.qr_code_2_rounded),
-            label: const Text('手機掃描 QR Code'),
+          Focus(
+            onKeyEvent: (node, event) => _searchActionKey(
+              node,
+              event,
+              left: _submitFocus,
+              right: _cancelFocus,
+            ),
+            child: TextButton.icon(
+              key: const ValueKey('tv-drama-search-phone-qr'),
+              focusNode: _phoneSearchFocus,
+              onPressed: _usePhoneSearch,
+              icon: const Icon(Icons.qr_code_2_rounded),
+              label: const Text('手機掃描 QR Code'),
+            ),
           ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+        Focus(
+          onKeyEvent: (node, event) => _searchActionKey(
+            node,
+            event,
+            left: widget.onPhoneSearch != null
+                ? _phoneSearchFocus
+                : _submitFocus,
+            right: _submitFocus,
+          ),
+          child: TextButton(
+            key: const ValueKey('tv-drama-search-cancel'),
+            focusNode: _cancelFocus,
+            onPressed: () {
+              _queryFocus.unfocus();
+              SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+              Navigator.of(context).pop();
+            },
+            child: const Text('取消'),
+          ),
         ),
         Focus(
-          onKeyEvent: _searchButtonKey,
+          onKeyEvent: (node, event) => _searchActionKey(
+            node,
+            event,
+            left: _cancelFocus,
+            right: widget.onPhoneSearch != null
+                ? _phoneSearchFocus
+                : _cancelFocus,
+          ),
           child: FilledButton.icon(
             key: const ValueKey('tv-drama-search-submit'),
             focusNode: _submitFocus,
-            onPressed: query.isEmpty ? null : () => _submit(_query),
+            onPressed: () {
+              if (query.isEmpty) {
+                _queryFocus.requestFocus();
+                return;
+              }
+              _queryFocus.unfocus();
+              SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+              _submit(_query);
+            },
             icon: const Icon(Icons.search_rounded),
             label: const Text('搜尋'),
           ),
