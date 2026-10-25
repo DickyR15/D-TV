@@ -262,7 +262,11 @@ func (engine *nativeEngine) runSourceTask(ctx context.Context, source, operation
 				record.Stage, record.Error = "已停止", "已保留更新内容，可稍后继续"
 			}
 			if errors.Is(err, context.DeadlineExceeded) {
-				record.Error = "本次站源任务超时，已保留更新内容，可继续更新"
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					record.Error = "本次站源任务超时，已保留更新内容，可继续更新"
+				} else {
+					record.Error = "单次站源请求逾时，已保留已取得内容，可重试"
+				}
 			}
 			var backoff *requestBackoff
 			if errors.As(err, &backoff) {
