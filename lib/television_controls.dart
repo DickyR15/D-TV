@@ -46,10 +46,10 @@ class TelevisionControls extends StatefulWidget {
   final int playbackGeneration;
 
   @override
-  State<TelevisionControls> createState() => _TelevisionControlsState();
+  State<TelevisionControls> createState() => TelevisionControlsState();
 }
 
-class _TelevisionControlsState extends State<TelevisionControls> {
+class TelevisionControlsState extends State<TelevisionControls> {
   final _surface = FocusNode(debugLabel: 'tv-player-surface');
   final _play = FocusNode(debugLabel: 'tv-player-play');
   final _episodes = FocusNode(debugLabel: 'tv-player-episodes');
@@ -162,6 +162,19 @@ class _TelevisionControlsState extends State<TelevisionControls> {
     _scheduleHide();
   }
 
+  /// Remote/system Back toggles the control overlay instead of exiting playback.
+  void handleBack() {
+    if (!widget.enabled || _panelOpen) return;
+    final action = playbackControlsBackAction(controlsVisible: _visible);
+    if (action == PlaybackControlsBackAction.hideControls) {
+      setState(() => _visible = false);
+      _hideTimer?.cancel();
+      _focus(_surface);
+    } else {
+      _show();
+    }
+  }
+
   void _scheduleHide() {
     _hideTimer?.cancel();
     if (!widget.enabled || _panelOpen) return;
@@ -218,13 +231,7 @@ class _TelevisionControlsState extends State<TelevisionControls> {
     _scheduleHide();
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
       if (event is KeyDownEvent) {
-        if (_visible) {
-          setState(() => _visible = false);
-          _hideTimer?.cancel();
-          _focus(_surface);
-        } else {
-          widget.onBack();
-        }
+        handleBack();
       }
     } else if (key == LogicalKeyboardKey.mediaPlayPause ||
         key == LogicalKeyboardKey.space) {
@@ -343,7 +350,7 @@ class _TelevisionControlsState extends State<TelevisionControls> {
                     children: [
                       RemoteButton(
                         key: const ValueKey('tv-player-back'),
-                        label: '返回',
+                        label: '退出播放',
                         icon: Icons.arrow_back_rounded,
                         onPressed: widget.onBack,
                       ),
@@ -456,7 +463,7 @@ class _TelevisionControlsState extends State<TelevisionControls> {
                             ),
                             RemoteButton(
                               key: const ValueKey('tv-diary'),
-                              label: '播放日記',
+                              label: '播放紀錄',
                               icon: Icons.receipt_long_rounded,
                               focusNode: _diary,
                               onPressed: () async {
@@ -507,7 +514,7 @@ class _TelevisionControlsState extends State<TelevisionControls> {
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        '控制條隱藏後：左右快進 10 秒，上下或確認鍵顯示控制條',
+                        '控制項隱藏時按返回可顯示；顯示時按返回可隱藏。左右快進或後退 10 秒，上下或確認鍵也可顯示控制項',
                         style: TextStyle(fontSize: 13, color: Colors.white70),
                       ),
                     ],

@@ -96,6 +96,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final PlayerInteractions _interactions;
   final _playerFocus = FocusNode(debugLabel: 'player-surface');
   final _videoPaneKey = GlobalKey();
+  final GlobalKey<TelevisionControlsState> _televisionControlsKey =
+      GlobalKey<TelevisionControlsState>();
   final _menuRevision = ValueNotifier<int>(0);
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   final _recovery = PlaybackRecovery();
@@ -1923,6 +1925,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  void _handlePlaybackBack() {
+    if (_television) {
+      _televisionControlsKey.currentState?.handleBack();
+    } else {
+      _back();
+    }
+  }
+
   void _back() {
     final now = DateTime.now();
     final lastNestedPop = _lastNestedRoutePopAt;
@@ -1940,7 +1950,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     // While an asynchronous dialog is opening, don't pop the video route.
     if (_panelOpen) return;
 
-    if (_showFullscreen && !_television) {
+    if (_television) {
+      // The visible control-row action is an explicit exit; physical remote
+      // Back is handled separately by _handlePlaybackBack().
+      Navigator.of(context).pop();
+    } else if (_showFullscreen) {
       _rotate();
     } else {
       Navigator.of(context).maybePop();
@@ -2027,16 +2041,20 @@ class _PlayerScreenState extends State<PlayerScreen>
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
     return PopScope(
-      canPop: _television || !fullscreen,
+      // Android TV Back is consumed by the playback controls, never the video route.
+      canPop: !_television && !fullscreen,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && fullscreen && !_television) {
+        if (didPop) return;
+        if (_television) {
+          _handlePlaybackBack();
+        } else if (fullscreen) {
           _rotate();
         }
       },
       child: CallbackShortcuts(
         bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): _back,
-          const SingleActivator(LogicalKeyboardKey.goBack): _back,
+          const SingleActivator(LogicalKeyboardKey.escape): _handlePlaybackBack,
+          const SingleActivator(LogicalKeyboardKey.goBack): _handlePlaybackBack,
         },
         child: Focus(
           focusNode: _playerFocus,
@@ -2151,6 +2169,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         ? const SizedBox.shrink()
         : _television
         ? TelevisionControls(
+            key: _televisionControlsKey,
             player: _player,
             playbackGeneration: _generation,
             title: title,

@@ -1,3 +1,12 @@
+/// What Back should do based on the current playback-control visibility.
+enum PlaybackControlsBackAction { hideControls, revealControls }
+
+PlaybackControlsBackAction playbackControlsBackAction({
+  required bool controlsVisible,
+}) => controlsVisible
+    ? PlaybackControlsBackAction.hideControls
+    : PlaybackControlsBackAction.revealControls;
+
 /// Controls whether playback events may automatically reveal the control overlay.
 ///
 /// A new playback generation must reapply the visibility policy even when

@@ -2,6 +2,17 @@ import 'package:hgtv/playback_controls_visibility.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('remote Back toggles controls instead of exiting playback', () {
+    expect(
+      playbackControlsBackAction(controlsVisible: false),
+      PlaybackControlsBackAction.revealControls,
+    );
+    expect(
+      playbackControlsBackAction(controlsVisible: true),
+      PlaybackControlsBackAction.hideControls,
+    );
+  });
+
   test('re-applies hidden-control policy on every recovery generation', () {
     final visibility = PlaybackControlsVisibility();
 
