@@ -36,6 +36,18 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   String? _message;
+  FocusNode? _restoreBackupReturnFocus;
+
+  void _restoreBackupFocusIfNeeded() {
+    if (!mounted || !AppLayout.isTelevision(context)) return;
+    final node = _restoreBackupReturnFocus;
+    if (node == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !node.canRequestFocus) return;
+      node.requestFocus();
+      _restoreBackupReturnFocus = null;
+    });
+  }
 
   Future<void> _chooseTheme() async {
     final current = widget.store.themeMode;
@@ -74,6 +86,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _backup(bool restore) async {
+    // Keep the currently focused TV control. Opening Android's document picker
+    // and rebuilding the busy state can otherwise move focus to another row.
+    if (restore && AppLayout.isTelevision(context)) {
+      _restoreBackupReturnFocus = FocusManager.instance.primaryFocus;
+    }
     setState(() {
       _busy = true;
       _message = null;
@@ -182,7 +199,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (restore) _restoreBackupFocusIfNeeded();
+      }
     }
   }
 
