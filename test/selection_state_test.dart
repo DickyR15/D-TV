@@ -5,14 +5,14 @@ import 'package:hgtv/app_theme.dart';
 import 'package:hgtv/remote_widgets.dart';
 
 void main() {
-  test('selected chips use a teal container distinct from the blue-cyan focus palette', () {
+  test('selected chips use the brand container distinct from the focus palette', () {
     for (final theme in [AppTheme.light, AppTheme.dark]) {
-      expect(theme.chipTheme.selectedColor, theme.colorScheme.secondaryContainer);
-      expect(theme.colorScheme.secondaryContainer, isNot(theme.colorScheme.primaryContainer));
+      expect(theme.chipTheme.selectedColor, theme.colorScheme.primaryContainer);
+      expect(theme.chipTheme.selectedColor, isNot(theme.colorScheme.surfaceContainerHighest));
     }
   });
 
-  testWidgets('TV selected state stays teal while focus uses a neutral fill and blue-cyan outline', (tester) async {
+  testWidgets('TV selected state uses a soft brand fill while focus uses a neutral fill and brand-red outline', (tester) async {
     const selectedKey = ValueKey('selected-option');
     const focusKey = ValueKey('focus-only-option');
     final focusNode = FocusNode(debugLabel: 'focus-only-option');
