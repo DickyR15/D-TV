@@ -136,11 +136,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             <String, dynamic>{'content': content},
           );
           if (mounted) {
-            final path = saved?['path'] as String?;
-            setState(
-              () => _message = path == null
-                  ? '備份已儲存到 Download/D-TV'
-                  : '備份已儲存：$path',
+            final path = saved?['path'] as String? ?? 'Download/D-TV';
+            setState(() => _message = '備份已儲存：$path');
+            await showDialog<void>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('設定備份匯出成功'),
+                content: SelectableText(
+                  '已儲存設定備份：\\n$path\\n\\n'
+                  '請從檔案管理器開啟 Download/D-TV 資料夾，'
+                  '將 JSON 備份檔複製到電腦保存。',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: path));
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('複製檔案位置'),
+                  ),
+                  FilledButton(
+                    autofocus: true,
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('完成'),
+                  ),
+                ],
+              ),
             );
           }
         } else {
@@ -189,7 +210,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } catch (error) {
-      if (mounted) setState(() => _message = error.toString());
+      if (mounted) {
+        setState(() => _message = error.toString());
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text('備份操作失敗：$error'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
