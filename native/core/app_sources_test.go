@@ -84,6 +84,44 @@ func TestSourceUpdateHistoryPageLimitBoundsHongguoWork(t *testing.T) {
 	}
 }
 
+
+func TestHongguoMetadataCandidatesSelectOnlyMissingFieldsAndIncludeAllBatches(t *testing.T) {
+	now := time.Now()
+	items := make([]nativeDrama, 24)
+	for index := range items {
+		items[index] = nativeDrama{
+			ID: fmt.Sprintf("hongguo:%d", index+1), Source: sourceHongguo,
+			Title: fmt.Sprintf("紅果劇集%d", index+1), Episodes: 12,
+			Description: "完整簡介", OnlineDate: "2026-01-01",
+		}
+	}
+	// More than one batch needs enrichment; selection must discover the whole
+	// pending set so progress reports the real total before batches are run.
+	for index := 0; index < 19; index++ {
+		items[index].Description = ""
+	}
+	// Recent checks and active retry backoffs must not be queried again.
+	record := nativeSourceRecord{
+		MetadataChecked: map[string]time.Time{items[2].ID: now},
+		MetadataRetryAt: map[string]time.Time{items[3].ID: now.Add(time.Minute)},
+	}
+	candidates := sourceMetadataCandidates(items, sourceHongguo, "metadata", record, now)
+	if len(candidates) != 17 {
+		t.Fatalf("found %d pending titles, want 17", len(candidates))
+	}
+	for _, drama := range candidates {
+		if drama.ID == items[2].ID || drama.ID == items[3].ID || drama.ID == items[20].ID {
+			t.Fatalf("selected skipped or complete title: %s", drama.ID)
+		}
+	}
+	if sourceDramaNeedsMetadata(sourceHongguo, "metadata", items[20]) {
+		t.Fatal("complete Red Fruit metadata was marked as needing enrichment")
+	}
+	if !sourceDramaNeedsMetadata(sourceHongguo, "metadata", nativeDrama{Source: sourceHongguo, Episodes: 0, OnlineDate: "2026-01-01"}) {
+		t.Fatal("missing episode count was not marked as needing enrichment")
+	}
+}
+
 func TestSourceHistoryPagingUsesSingleRemotePageForHongguo(t *testing.T) {
 	ctx := context.WithValue(context.Background(), backgroundCatalogKey{}, true)
 	hongguoCtx := sourceHistoryPageContext(ctx, sourceHongguo)

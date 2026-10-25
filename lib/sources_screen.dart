@@ -332,7 +332,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                   const Padding(
                     padding: EdgeInsets.only(bottom: 16),
                     child: Text(
-                      '各片源可分別更新與檢測。更新會查詢新劇、續載一頁歷史內容，並分批補齊資料；離開此頁後工作仍會繼續。',
+                      '各片源可分別更新與檢測。更新會查詢新劇、續載一頁歷史內容，並分批補齊資料；紅果會自動接續可處理的批次。離開此頁後工作仍會繼續。',
                     ),
                   ),
                   if (sources.isEmpty)
@@ -551,7 +551,9 @@ class _SourcesScreenState extends State<SourcesScreen> {
             ] else if (status != null && status.stage.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                '${uiTraditional(status.stage)}${status.added > 0 ? ' · 新增 ${status.added} 部' : ''}',
+                '${uiTraditional(status.stage)}'
+                '${status.added > 0 ? ' · 新增 ${status.added} 部' : ''}'
+                '${source.id == 'hongguo' && (status.operation == 'update' || status.operation == 'metadata') && status.total > 0 ? ' · 已處理 ${status.completed}/${status.total} 部' : ''}',
               ),
             ],
             if (seconds > 0)

@@ -200,7 +200,13 @@ func (engine *nativeEngine) startSourceTask(source, operation string, drama nati
 		engine.mu.Unlock()
 		return nativeSourceStatus{}, fmt.Errorf("站源暂时暂停请求，请在 %d 秒后重试", max(1, int(time.Until(previous.RetryAt).Seconds()+.999)))
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	timeout := 3 * time.Minute
+	if canonicalProviderSource(source) == sourceHongguo && (operation == "update" || operation == "metadata") {
+		// Red Fruit updates may need many small detail requests. Keep the work
+		// bounded, but allow automatic batches to continue after the UI is left.
+		timeout = 10 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	task := &nativeSourceTask{cancel: cancel}
 	engine.sourceTasks[source] = task
 	previous.Operation, previous.Running, previous.Stage = operation, true, "准备中"
@@ -329,9 +335,32 @@ func (engine *nativeEngine) updateSource(ctx context.Context, source, operation 
 		return nil
 	}
 	items := engine.nativeCached(source).Items
-	var pending []nativeDrama
-	engine.mu.Lock()
-	record := engine.sourceRecords[source]
+	return engine.completeSourceMetadata(ctx, source, operation, items)
+}
+
+
+const sourceMetadataBatchSize = 8
+
+// sourceDramaNeedsMetadata describes which catalog entries still need their
+// details enriched. Red Fruit's "fill metadata" action is a missing-data repair,
+// not a request to refetch every complete title.
+func sourceDramaNeedsMetadata(source, operation string, drama nativeDrama) bool {
+	source = canonicalProviderSource(source)
+	if operation == "vipMetadata" {
+		return drama.VIP == nil
+	}
+	if source == sourceHongguo {
+		return drama.Episodes <= 0 || strings.TrimSpace(drama.Description) == "" || strings.TrimSpace(drama.OnlineDate) == ""
+	}
+	return operation == "metadata" || operation == "vipMetadata" || drama.Episodes <= 0 || drama.Description == "" || source == sourceHuangdou && drama.VIP == nil
+}
+
+// sourceMetadataCandidates returns every eligible entry in cursor order. The
+// caller limits each request batch; separating selection from batching keeps
+// progress counts accurate and makes it harder to repeatedly select completed
+// entries.
+func sourceMetadataCandidates(items []nativeDrama, source, operation string, record nativeSourceRecord, now time.Time) []nativeDrama {
+	source = canonicalProviderSource(source)
 	start := 0
 	for index, drama := range items {
 		if drama.ID == record.MetadataCursor {
@@ -339,99 +368,168 @@ func (engine *nativeEngine) updateSource(ctx context.Context, source, operation 
 			break
 		}
 	}
+	candidates := make([]nativeDrama, 0, len(items))
 	for scanned := 0; scanned < len(items); scanned++ {
 		drama := items[(start+scanned)%len(items)]
-		if len(pending) >= 8 {
-			break
-		}
-		if operation == "vipMetadata" && drama.VIP != nil {
+		if operation != "vipMetadata" && now.Sub(record.MetadataChecked[drama.ID]) < 24*time.Hour {
 			continue
 		}
-		if operation != "vipMetadata" && time.Since(record.MetadataChecked[drama.ID]) < 24*time.Hour {
+		if now.Before(record.MetadataRetryAt[drama.ID]) {
 			continue
 		}
-		if time.Now().Before(record.MetadataRetryAt[drama.ID]) {
-			continue
-		}
-		if operation == "metadata" || operation == "vipMetadata" || drama.Episodes <= 0 || drama.Description == "" || source == sourceHuangdou && drama.VIP == nil {
-			pending = append(pending, drama)
+		if sourceDramaNeedsMetadata(source, operation, drama) {
+			candidates = append(candidates, drama)
 		}
 	}
+	return candidates
+}
+
+// completeSourceMetadata uses small bounded batches for every provider. For
+// Red Fruit, it automatically continues with the next batch until no eligible
+// entries remain or the task context expires; the durable cursor/checkpoint
+// lets the next manual update resume after a timeout or failed request.
+func (engine *nativeEngine) completeSourceMetadata(ctx context.Context, source, operation string, items []nativeDrama) error {
+	source = canonicalProviderSource(source)
+	autoContinue := source == sourceHongguo && (operation == "update" || operation == "metadata")
+	engine.mu.Lock()
+	initialRecord := engine.sourceRecords[source]
+	initialCandidates := sourceMetadataCandidates(items, source, operation, initialRecord, time.Now())
 	engine.mu.Unlock()
+
+	total := len(initialCandidates)
+	if !autoContinue && total > sourceMetadataBatchSize {
+		total = sourceMetadataBatchSize
+	}
 	engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
-		record.Stage, record.Completed, record.Total = "补齐剧集资料", 0, len(pending)
+		record.Stage = "補齊劇集資料"
+		record.Completed = 0
+		record.Total = total
 	})
-	var failures []error
-	for index, drama := range pending {
-		if ctx.Err() != nil {
-			return ctx.Err()
+	if total == 0 {
+		return nil
+	}
+
+	processed := 0
+	incomplete := 0
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-		result, err := engine.nativeDetail(ctx, drama)
-		unknownVIP := false
-		if err == nil {
-			fresh := result.(map[string]any)["drama"].(nativeDrama)
-			var metadataErr error
-			if nativeNeedsExtraMetadata(fresh) {
-				fresh, metadataErr = engine.nativeExtraMetadata(ctx, fresh)
-			}
-			unknownVIP = source == sourceHuangdou && fresh.VIP == nil
-			engine.mu.Lock()
-			engine.catalogs[source] = mergeNativeCatalog(engine.catalogs[source], []nativeDrama{fresh})
-			for key, items := range engine.catalogs {
-				if !strings.HasPrefix(key, source+"|") {
-					continue
-				}
-				for index := range items {
-					if items[index].ID == fresh.ID {
-						items[index] = mergeNativeDrama(items[index], fresh)
-					}
-				}
-			}
-			err = engine.writeCatalogDiskLocked()
-			engine.mu.Unlock()
-			if err == nil {
-				err = metadataErr
-			}
+		engine.mu.Lock()
+		record := engine.sourceRecords[source]
+		candidates := sourceMetadataCandidates(items, source, operation, record, time.Now())
+		engine.mu.Unlock()
+		if len(candidates) == 0 {
+			break
 		}
-		engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
-			record.Completed = index + 1
-			record.MetadataCursor = drama.ID
-			if err == nil {
-				if record.MetadataChecked == nil {
-					record.MetadataChecked = map[string]time.Time{}
-				}
-				record.MetadataChecked[drama.ID] = time.Now()
-				delete(record.MetadataRetryAt, drama.ID)
-				if unknownVIP {
-					if record.MetadataRetryAt == nil {
-						record.MetadataRetryAt = map[string]time.Time{}
-					}
-					record.MetadataRetryAt[drama.ID] = time.Now().Add(5 * time.Minute)
-				}
-			} else if ctx.Err() == nil {
-				if record.MetadataRetryAt == nil {
-					record.MetadataRetryAt = map[string]time.Time{}
-				}
-				retry := 5 * time.Minute
-				if strings.Contains(err.Error(), "404") {
-					retry = 24 * time.Hour
-				}
-				record.MetadataRetryAt[drama.ID] = time.Now().Add(retry)
-			}
-		})
-		if err != nil {
-			var persistence *nativePersistenceError
-			if errors.As(err, &persistence) {
-				return err
-			}
-			failures = append(failures, err)
-			var backoff *requestBackoff
-			if errors.As(err, &backoff) || len(failures) >= 2 {
+		batchSize := min(sourceMetadataBatchSize, len(candidates))
+		if !autoContinue {
+			batchSize = min(batchSize, total-processed)
+			if batchSize <= 0 {
 				break
 			}
 		}
+		pending := candidates[:batchSize]
+		var failures []error
+		for _, drama := range pending {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			result, err := engine.nativeDetail(ctx, drama)
+			unknownVIP := false
+			incompleteMetadata := false
+			if err == nil {
+				fresh := result.(map[string]any)["drama"].(nativeDrama)
+				var metadataErr error
+				if nativeNeedsExtraMetadata(fresh) {
+					fresh, metadataErr = engine.nativeExtraMetadata(ctx, fresh)
+				}
+				unknownVIP = source == sourceHuangdou && fresh.VIP == nil
+				incompleteMetadata = source == sourceHongguo && sourceDramaNeedsMetadata(source, operation, fresh)
+				engine.mu.Lock()
+				engine.catalogs[source] = mergeNativeCatalog(engine.catalogs[source], []nativeDrama{fresh})
+				for key, catalogItems := range engine.catalogs {
+					if !strings.HasPrefix(key, source+"|") {
+						continue
+					}
+					for index := range catalogItems {
+						if catalogItems[index].ID == fresh.ID {
+							catalogItems[index] = mergeNativeDrama(catalogItems[index], fresh)
+						}
+					}
+				}
+				err = engine.writeCatalogDiskLocked()
+				engine.mu.Unlock()
+				if err == nil {
+					err = metadataErr
+				}
+			}
+			engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
+				record.MetadataCursor = drama.ID
+				if err == nil {
+					if incompleteMetadata {
+						// The endpoint responded, but did not provide the missing
+						// fields. Do not mark this title as checked for 24 hours.
+						if record.MetadataRetryAt == nil {
+							record.MetadataRetryAt = map[string]time.Time{}
+						}
+						record.MetadataRetryAt[drama.ID] = time.Now().Add(5 * time.Minute)
+					} else {
+						if record.MetadataChecked == nil {
+							record.MetadataChecked = map[string]time.Time{}
+						}
+						record.MetadataChecked[drama.ID] = time.Now()
+						delete(record.MetadataRetryAt, drama.ID)
+					}
+					if unknownVIP {
+						if record.MetadataRetryAt == nil {
+							record.MetadataRetryAt = map[string]time.Time{}
+						}
+						record.MetadataRetryAt[drama.ID] = time.Now().Add(5 * time.Minute)
+					}
+				} else if ctx.Err() == nil {
+					if record.MetadataRetryAt == nil {
+						record.MetadataRetryAt = map[string]time.Time{}
+					}
+					retry := 5 * time.Minute
+					if strings.Contains(err.Error(), "404") {
+						retry = 24 * time.Hour
+					}
+					record.MetadataRetryAt[drama.ID] = time.Now().Add(retry)
+				}
+			})
+			processed++
+			if incompleteMetadata && err == nil {
+				incomplete++
+			}
+			engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
+				record.Completed = processed
+				record.Total = total
+				record.Stage = "補齊劇集資料"
+			})
+			if err != nil {
+				var persistence *nativePersistenceError
+				if errors.As(err, &persistence) {
+					return err
+				}
+				failures = append(failures, err)
+				var backoff *requestBackoff
+				if errors.As(err, &backoff) || len(failures) >= 2 {
+					break
+				}
+			}
+		}
+		if len(failures) > 0 {
+			return errors.Join(failures...)
+		}
+		if !autoContinue {
+			break
+		}
 	}
-	return errors.Join(failures...)
+	if incomplete > 0 {
+		return fmt.Errorf("%d 部紅果劇集資料仍不完整，已安排 5 分鐘後重試", incomplete)
+	}
+	return nil
 }
 
 func (engine *nativeEngine) loadSourceCatalogPage(ctx context.Context, source string, page int) error {
