@@ -449,6 +449,42 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _chooseDisplayMode() async {
+    final selection = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('介面模式'),
+        children: [
+          RadioGroup<String>(
+            groupValue: widget.store.displayMode,
+            onChanged: (value) => Navigator.of(dialogContext).pop(value),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final mode in const {
+                  'auto': '自動偵測裝置',
+                  'television': '電視／遙控器',
+                  'standard': '手機／電腦',
+                }.entries)
+                  RadioListTile<String>(
+                    value: mode.key,
+                    autofocus: mode.key == widget.store.displayMode,
+                    title: Text(mode.value),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (selection != null && mounted) {
+      await saveUserChange(
+        context,
+        () => widget.store.setDisplayMode(selection),
+      );
+    }
+  }
+
   void _submitHeaderSearch(String value) {
     final query = value.trim();
     if (query.isEmpty) return;
@@ -1375,6 +1411,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ).whenComplete(
                         () => _resetBackConfirmation(ignoreTrailingBack: true),
                       );
+                    } else if (value == 'display') {
+                      _chooseDisplayMode();
                     } else if (value == 'about') {
                       // showAboutDialog returns void (not a Future).
                       // The parent Back handler already ignores the underlying
@@ -1410,6 +1448,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     const PopupMenuItem(
                       value: 'settings',
                       child: Text('設定與備份'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'display',
+                      child: Text('介面模式'),
                     ),
                     const PopupMenuItem(
                       value: 'about',
