@@ -234,18 +234,22 @@ class DiaryService {
           logFocus.requestFocus();
         } else if (isCurrent(topCopyFocus) || isCurrent(clearFocus)) {
           return KeyEventResult.handled;
+        } else if (isCurrent(logFocus)) {
+          topCopyFocus.requestFocus();
         }
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowDown) {
         if (isCurrent(topCopyFocus) || isCurrent(clearFocus)) {
           logFocus.requestFocus();
+        } else if (isCurrent(logFocus)) {
+          exportFocus.requestFocus();
         } else if (isCurrent(exportFocus) ||
             isCurrent(copyFocus) ||
             isCurrent(closeFocus)) {
           logFocus.requestFocus();
         } else {
-          logFocus.requestFocus();
+          exportFocus.requestFocus();
         }
         return KeyEventResult.handled;
       }
