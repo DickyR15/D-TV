@@ -52,10 +52,10 @@ jobs:
         with:
           packages: "platforms;android-36"
           accept-android-sdk-licenses: true
-      - name: Test Taiwan Traditional Chinese conversion
+      - name: Test Flutter suite
         run: |
           flutter pub get
-          flutter test test/ui_localization_test.dart test/playback_preferences_test.dart test/resume_episode_test.dart test/catalog_categories_test.dart test/remote_text_input_test.dart test/playback_recovery_test.dart test/source_status_test.dart test/selection_state_test.dart test/app_navigation_test.dart
+          flutter test
       - name: Test native core
         working-directory: native
         run: go test ./...

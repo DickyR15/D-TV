@@ -67,8 +67,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _categoriesLoading = false;
   String? _categoriesError;
   int _categoryGeneration = 0;
-  late final LibraryUpdater _updater;
-  late final FollowUpdater _followUpdater;
+  late LibraryUpdater _updater;
+  late FollowUpdater _followUpdater;
+  late int _observedProfileEpoch;
   final _changedSources = <String>{};
   Timer? _cacheRefreshTimer;
   Timer? _watcherStartTimer;
@@ -190,23 +191,87 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() {});
   }
 
-  /// 密碼鎖切換後可見站源會變，這裡把當前站源歸一化到仍然可見的站源。
+  void _resetProfileScopedUpdaters() {
+    _updater.removeListener(_updateChanged);
+    _updater.dispose();
+    _followUpdater.dispose();
+    _updater = LibraryUpdater(
+      widget.repository,
+      widget.store,
+      onCatalogChanged: _catalogUpdated,
+    )..addListener(_updateChanged);
+    _followUpdater = FollowUpdater(widget.repository, widget.store)..start();
+    if (_sourceWatcherStarted) _updater.startWatching();
+  }
+
+  /// Refresh profile-scoped UI and background services whenever the active
+  /// account epoch changes, even if its allowed source list is unchanged.
   void _sourcesChanged() {
     if (!mounted) return;
     final visible = widget.store.sources;
     final signature = visible.map((site) => site.id).join(',');
-    if (signature == _sourceSignature) return;
+    final epoch = widget.store.profileEpoch;
+    final profileChanged = epoch != _observedProfileEpoch;
+    if (!profileChanged && signature == _sourceSignature) return;
     final wasEmpty = _sourceSignature.isEmpty;
     _sourceSignature = signature;
+
+    if (profileChanged) {
+      _observedProfileEpoch = epoch;
+      _resetProfileScopedUpdaters();
+
+      // Search/category preferences and source selection belong to the active
+      // profile. Invalidate any in-flight load from the previous account.
+      _source = SourceSite.byId(widget.store.source);
+      _allSources = widget.store.catalogView.allSources;
+      _search.clear();
+      _submittedQuery = '';
+      _searchVisible = false;
+      _categorySelections.clear();
+      _showRecommendations = false;
+      _categoriesLoading = false;
+      _categoriesError = null;
+      _generation++;
+      _categoryGeneration++;
+      _catalogInitialized = false;
+      _changedSources.clear();
+      _cacheRefreshTimer?.cancel();
+      _cacheRefreshTimer = null;
+      _visibleCacheItems = null;
+      _visibleCacheKey = null;
+      _visibleCache = const [];
+      _revealed = _revealBatch;
+      _revealKey = null;
+      _hiddenItems = false;
+    }
+
     if (visible.isEmpty) {
       setState(() {
         _items = [];
         _hasMore = false;
         _loading = false;
         _loadingMore = false;
+        _error = null;
       });
       return;
     }
+
+    if (profileChanged) {
+      setState(() {
+        _items = [];
+        _hasMore = true;
+        _loading = true;
+        _loadingMore = false;
+        _error = null;
+      });
+      if (_isCatalogTab) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _isCatalogTab) _ensureCatalogInitialized();
+        });
+      }
+      return;
+    }
+
     final allowed = visible.map((site) => site.id).toSet();
     if (!wasEmpty &&
         allowed.contains(_source.id) &&
@@ -703,6 +768,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _source = SourceSite.byId(widget.store.source);
     _allSources = widget.store.catalogView.allSources;
     _sourceSignature = widget.store.sources.map((site) => site.id).join(',');
+    _observedProfileEpoch = widget.store.profileEpoch;
     final savedCatalogView = widget.store.catalogView;
     if (savedCatalogView.sort != CatalogSort.date ||
         savedCatalogView.release.isNotEmpty) {

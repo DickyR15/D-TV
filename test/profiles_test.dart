@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:duanju_app/core_bridge.dart';
-import 'package:duanju_app/local_profiles.dart';
-import 'package:duanju_app/local_store.dart';
-import 'package:duanju_app/models.dart';
+import 'package:hgtv/core_bridge.dart';
+import 'package:hgtv/local_profiles.dart';
+import 'package:hgtv/local_store.dart';
+import 'package:hgtv/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
