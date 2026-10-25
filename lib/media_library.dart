@@ -126,6 +126,7 @@ class MediaLibrary extends ChangeNotifier {
     this.repository,
     this.store, {
     MediaExecutor? executor,
+    this.automaticWorker = false,
   }) : executor = executor ?? FFmpegExecutor() {
     _observedEpoch = store.profileEpoch;
     store.addListener(_accessChanged);
@@ -133,6 +134,7 @@ class MediaLibrary extends ChangeNotifier {
   final AppRepository repository;
   final LocalStore store;
   final MediaExecutor executor;
+  final bool automaticWorker;
   static MediaLibrary? current;
   MergeQueue? _merges;
   MergeQueue get merges => _merges ??= MergeQueue(this);
@@ -315,7 +317,7 @@ class MediaLibrary extends ChangeNotifier {
     Directory? temporary;
     bool lease = false;
     try {
-      await BackgroundDownloads.ensureStarted();
+      if (!automaticWorker) await BackgroundDownloads.ensureStarted();
       await repository.workLease('media', 'start');
       lease = true;
       await reload(duringTask: true);
