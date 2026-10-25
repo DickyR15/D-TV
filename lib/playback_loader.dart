@@ -1,10 +1,19 @@
+import 'dart:async';
+
 import 'core_bridge.dart';
 import 'models.dart';
 
 class PlaybackLoader {
-  PlaybackLoader(this.repository);
+  PlaybackLoader(
+    this.repository, {
+    this.resolveTimeout = const Duration(seconds: 20),
+  });
 
   final AppRepository repository;
+
+  /// Bounds both cancellation of the previous resolver and resolution of the
+  /// next plan, so reload cannot leave the UI loading forever.
+  final Duration resolveTimeout;
   int _generation = 0;
   bool _closed = false;
   bool _hasIssuedRequest = false;
@@ -42,20 +51,69 @@ class PlaybackLoader {
     final generation = ++_generation;
     final cancelPrevious = _hasIssuedRequest;
     _hasIssuedRequest = true;
-    try {
+    var timedOut = false;
+    var planHandled = false;
+
+    // Include cancellation in the timeout window. A stalled native cancel
+    // must not block all later reloads before the new resolver even starts.
+    final pending = Future<PlaybackPlan?>(() async {
       // A brand-new player has no earlier resolver to cancel. Skip this
       // native round trip on cold start; later requests still cancel stale work.
       if (cancelPrevious) await repository.cancelPlayback();
       if (_closed || generation != _generation) {
         return null;
       }
-      final plan = await resolve();
-      if (_closed || generation != _generation) {
-        await repository.release(plan.session);
+      return resolve();
+    }());
+
+    // Future.timeout does not cancel the original Future. If a timed-out or
+    // superseded resolver later creates a native stream session, release it.
+    pending.then<void>(
+      (plan) {
+        if (plan != null &&
+            (timedOut || _closed || generation != _generation) &&
+            !planHandled) {
+          planHandled = true;
+          unawaited(repository.release(plan.session).catchError((Object _) {}));
+        }
+      },
+      onError: (Object _, StackTrace __) {},
+    );
+
+    try {
+      final plan = await pending.timeout(
+        resolveTimeout,
+        onTimeout: () {
+          timedOut = true;
+          if (!_closed && generation == _generation) {
+            // Invalidate the hung continuation before requesting cancellation;
+            // if cancellation eventually returns, it must not start a stale resolve.
+            _generation++;
+            unawaited(repository.cancelPlayback().catchError((Object _) {}));
+          }
+          throw TimeoutException(
+            '取得播放網址或取消上一個請求超過 '
+            '${resolveTimeout.inSeconds} 秒，已停止本次載入。',
+            resolveTimeout,
+          );
+        },
+      );
+      if (plan == null) {
         return null;
       }
+      if (_closed || generation != _generation) {
+        if (!planHandled) {
+          planHandled = true;
+          await repository.release(plan.session);
+        }
+        return null;
+      }
+      planHandled = true;
       return plan;
     } catch (_) {
+      if (timedOut) {
+        rethrow;
+      }
       if (_closed || generation != _generation) {
         return null;
       }
