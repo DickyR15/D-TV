@@ -329,10 +329,38 @@ class CatalogBrowser {
     if (canReuseFreshSession) {
       final memorySnapshot = snapshot();
       if (memorySnapshot.items.isNotEmpty) onCached?.call(memorySnapshot);
-      // No network request follows this path, so do not hold the UI on the
-      // cancellation response. Future live loads wait behind the same queue.
+      // A fresh in-memory session requires no network refresh or cancellation.
+      // Cancel any obsolete read in the background without delaying this result.
       unawaited(cancellation.catchError((Object _) {}));
       return memorySnapshot;
+    }
+
+    // A category switch should paint whatever is already known for that
+    // exact category immediately, then refresh only if that snapshot is stale.
+    // This avoids a second catalog round-trip before showing previously seen
+    // posters when the selected category has already been visited.
+    final hasUsableCategorySession = useCache &&
+        !cacheOnly &&
+        !force &&
+        !more &&
+        query.isEmpty &&
+        sourceOrder.isNotEmpty &&
+        sourceOrder.every((source) {
+          final entry = session.entries[source]!;
+          return entry.items.isNotEmpty;
+        });
+    if (hasUsableCategorySession) {
+      final memorySnapshot = snapshot();
+      if (memorySnapshot.items.isNotEmpty) onCached?.call(memorySnapshot);
+      unawaited(cancellation.catchError((Object _) {}));
+      final hasFreshEntries = sourceOrder.every((source) {
+        final entry = session.entries[source]!;
+        final checkedAt = entry.checkedAt;
+        if (!entry.fresh || checkedAt == null) return false;
+        final age = DateTime.now().difference(checkedAt);
+        return !age.isNegative && age < const Duration(minutes: 14);
+      });
+      if (hasFreshEntries) return memorySnapshot;
     }
 
     if ((useCache || cacheOnly) && !force && !more && query.isEmpty) {
