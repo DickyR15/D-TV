@@ -413,14 +413,18 @@ class _ProfileEditorState extends State<ProfileEditor> {
           padding: const EdgeInsets.all(20),
           children: [
             TextField(
+              key: const ValueKey('profile-editor-name'),
               controller: _name,
               maxLength: 40,
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(labelText: '使用者名稱'),
             ),
             const SizedBox(height: 12),
             TextField(
+              key: const ValueKey('profile-editor-pin'),
               controller: _pin,
               obscureText: true,
+              textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: '設定密碼（至少 6 位）',
                 helperText: '留空保留原密碼',
@@ -428,8 +432,13 @@ class _ProfileEditorState extends State<ProfileEditor> {
             ),
             const SizedBox(height: 12),
             TextField(
+              key: const ValueKey('profile-editor-confirm-pin'),
               controller: _confirm,
               obscureText: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) {
+                if (!_busy) _save();
+              },
               decoration: const InputDecoration(labelText: '再次輸入密碼'),
             ),
             if (widget.profile?.protected == true &&
@@ -471,6 +480,8 @@ class _ProfileEditorState extends State<ProfileEditor> {
               ),
             const SizedBox(height: 24),
             FilledButton(
+              key: const ValueKey('profile-editor-save'),
+              autofocus: true,
               onPressed: _busy ? null : _save,
               child: Text(_busy ? '正在儲存…' : '儲存'),
             ),

@@ -9,6 +9,48 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
+    'admin profile editor exposes editable fields and a focused save action',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = LocalStore(await SharedPreferences.getInstance());
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          child: MaterialApp(home: ProfilesScreen(store: store)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('編輯使用者').first);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('profile-editor-name')), findsOneWidget);
+      expect(find.byKey(const ValueKey('profile-editor-pin')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('profile-editor-confirm-pin')),
+        findsOneWidget,
+      );
+      final save = find.byKey(const ValueKey('profile-editor-save'));
+      expect(save, findsOneWidget);
+      expect(tester.widget<FilledButton>(save).autofocus, isTrue);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('profile-editor-name')),
+        '管理員測試',
+      );
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-name')),
+        ).controller!.text,
+        '管理員測試',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      store.dispose();
+    },
+  );
+
+  testWidgets(
     'force-login switch keeps TV focus when enabled and disabled',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
