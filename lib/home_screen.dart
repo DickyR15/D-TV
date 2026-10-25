@@ -73,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _changedSources = <String>{};
   Timer? _cacheRefreshTimer;
   Timer? _watcherStartTimer;
+  Timer? _catalogWarmupTimer;
   bool _catalogInitialized = false;
   bool _sourceWatcherStarted = false;
   bool _refreshingUpdatedCache = false;
@@ -842,7 +843,12 @@ class _HomeScreenState extends State<HomeScreen> {
       // A wide-screen device opens on Hot Rankings. Don't fetch/merge the
       // hidden catalog and categories concurrently with that first ranking.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _isCatalogTab) _ensureCatalogInitialized();
+        if (!mounted) return;
+        if (_isCatalogTab) {
+          _ensureCatalogInitialized();
+        } else {
+          _scheduleCatalogCacheWarmup();
+        }
       });
     } else {
       _loading = false;
@@ -870,6 +876,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _followUpdater.dispose();
     _cacheRefreshTimer?.cancel();
     _watcherStartTimer?.cancel();
+    _catalogWarmupTimer?.cancel();
     widget.store.removeListener(_sourcesChanged);
     widget.repository.catalogUpdates.removeListener(_metadataChanged);
     _generation++;
@@ -1160,6 +1167,48 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+
+  void _scheduleCatalogCacheWarmup() {
+    if (!mounted ||
+        _catalogInitialized ||
+        widget.store.sources.isEmpty ||
+        _isCatalogTab) {
+      return;
+    }
+    _catalogWarmupTimer?.cancel();
+    _catalogWarmupTimer = Timer(const Duration(milliseconds: 350), () {
+      _catalogWarmupTimer = null;
+      unawaited(_warmCatalogCache());
+    });
+  }
+
+  Future<void> _warmCatalogCache() async {
+    if (!mounted ||
+        _catalogInitialized ||
+        _isCatalogTab ||
+        widget.store.sources.isEmpty) {
+      return;
+    }
+    final group = _group;
+    try {
+      // Cache-only work never calls the source's remote catalog/category APIs.
+      // It seeds CatalogBrowser's memory snapshot so entering 分類 can paint
+      // previously seen posters before any stale-cache network refresh finishes.
+      await Future.wait<void>([
+        _browser
+            .load(group, useCache: true, cacheOnly: true)
+            .then<void>((_) {}),
+        _browser
+            .loadCategories(group, cacheOnly: true)
+            .then<void>((_) {}),
+      ]);
+    } catch (_) {
+      // This is a best-effort startup optimization; the visible catalog load
+      // owns user-facing errors and can still fetch fresh content when opened.
+    }
+  }
+
+
   void _ensureCatalogInitialized() {
     if (!mounted || widget.store.sources.isEmpty) return;
     _scheduleSourceWatcher();
@@ -1207,10 +1256,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _pauseCatalog() {
     _debounce?.cancel();
+    final interruptedCatalogLoad = _loading || _loadingMore;
     _generation++;
     unawaited(_browser.cancel());
     unawaited(widget.repository.cancelSuggestions());
     setState(() {
+      if (interruptedCatalogLoad) _catalogNeedsReload = true;
       _loading = false;
       _loadingMore = false;
     });
@@ -1868,11 +1919,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final wasSearchResults = _searchResultsOnCurrentTab;
     final shouldReload = !returningFromSettings &&
         (_catalogNeedsReload ||
+            _items.isEmpty ||
             wasSearchResults ||
             _category.isNotEmpty ||
             _showRecommendations ||
             _search.text.trim().isNotEmpty ||
             _submittedQuery.isNotEmpty);
+    final shouldReloadCategories = !returningFromSettings &&
+        (_categoriesError != null || _categories.length <= 1);
     final wasInitialized = _catalogInitialized;
     _debounce?.cancel();
     setState(() {
@@ -1902,8 +1956,11 @@ class _HomeScreenState extends State<HomeScreen> {
       // Returning from the remote-control test should never leave an empty
       // poster page merely because an earlier request was cancelled on pause.
       if (_items.isEmpty) _load(useCache: true);
-    } else if (shouldReload) {
-      _load(useCache: true);
+    } else {
+      if (shouldReload) _load(useCache: true);
+      if (shouldReloadCategories && !_categoriesLoading) {
+        _loadCategories();
+      }
     }
   }
 

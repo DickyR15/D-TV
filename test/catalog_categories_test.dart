@@ -127,6 +127,38 @@ void main() {
     },
   );
 
+
+  test(
+    'cache-only warmup seeds memory so opening catalog can paint immediately',
+    () async {
+      final repository = CategoryRepository();
+      repository.cachedPages['hongguo'] = CatalogPage(const [
+        Drama(
+          id: 'hongguo:warmed',
+          source: 'hongguo',
+          title: '預熱快取劇',
+        ),
+      ], fresh: true);
+      final browser = CatalogBrowser.shared(repository);
+      const group = SourceGroup('hongguo', '紅果', [SourceSite.hongguo]);
+
+      final warmed = await browser.load(
+        group,
+        useCache: true,
+        cacheOnly: true,
+      );
+      expect(warmed.items.map((item) => item.id), contains('hongguo:warmed'));
+      expect(repository.categoryRequests, isEmpty);
+      expect(repository.cachedReads, 1);
+
+      final visible = await browser.load(group, useCache: true);
+      expect(visible.items.map((item) => item.id), contains('hongguo:warmed'));
+      expect(repository.cachedReads, 1);
+      expect(repository.categoryRequests, isEmpty);
+    },
+  );
+
+
   test(
     'remote content types never hide fine categories from cached pages',
     () async {
