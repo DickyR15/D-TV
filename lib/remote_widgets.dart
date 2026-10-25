@@ -300,8 +300,11 @@ class RemoteButton extends StatelessWidget {
 class RemoteGridFocusController {
   Object? _owner;
   VoidCallback? _focusFirst;
+  VoidCallback? _focusFallback;
   bool get hasItems => _focusFirst != null;
-  void focusFirst() => _focusFirst?.call();
+  bool get hasTarget => _focusFirst != null || _focusFallback != null;
+  void focusFirst() => (_focusFirst ?? _focusFallback)?.call();
+  void setFallback(VoidCallback? callback) => _focusFallback = callback;
   void clear() { _owner = null; _focusFirst = null; }
   void _bind(Object owner, VoidCallback? callback) { _owner = owner; _focusFirst = callback; }
   void _unbind(Object owner) { if (identical(_owner, owner)) { _owner = null; _focusFirst = null; } }
@@ -322,6 +325,7 @@ class RemoteGrid extends StatefulWidget {
     this.autofocus = false,
     this.focusController,
     this.onExitLeft,
+    this.onExitUp,
   });
   final List<String> itemKeys;
   final int columns;
@@ -334,6 +338,7 @@ class RemoteGrid extends StatefulWidget {
   final bool autofocus;
   final RemoteGridFocusController? focusController;
   final VoidCallback? onExitLeft;
+  final VoidCallback? onExitUp;
   final Widget Function(BuildContext, int, FocusNode, VoidCallback) itemBuilder;
 
   @override
@@ -473,6 +478,11 @@ class _RemoteGridState extends State<RemoteGrid> {
             duration: const Duration(milliseconds: 150),
             curve: Curves.easeOutCubic,
           );
+          return KeyEventResult.handled;
+        }
+        final exitUp = widget.onExitUp;
+        if (exitUp != null) {
+          exitUp();
           return KeyEventResult.handled;
         }
         FocusScope.of(context).focusInDirection(TraversalDirection.up);

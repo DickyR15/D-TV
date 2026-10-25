@@ -741,6 +741,26 @@ class LocalStore extends ChangeNotifier {
     });
   }
 
+  Future<void> clearFavorites() {
+    final epoch = _epoch;
+    return _queue(() async {
+      if (locked || epoch != _epoch) return;
+      await _commit(
+        {
+          _key('favorites'): '[]',
+          _key('followStates'): '{}',
+        },
+        clearSyncProgress: {
+          ..._favorites.keys,
+          ..._followStates.keys,
+          ...lanDocument.records.keys,
+        },
+      );
+      _loadLibrary();
+      _notify();
+    });
+  }
+
   Future<void> removeHistory(String id) {
     final epoch = _epoch;
     return _queue(() async {
