@@ -208,31 +208,36 @@ class DiaryService {
       },
     );
 
-    late final FocusNode topCopyFocus = actionFocus(
+    late final FocusNode topCopyFocus;
+    late final FocusNode clearFocus;
+    late final FocusNode exportFocus;
+    late final FocusNode copyFocus;
+    late final FocusNode closeFocus;
+    topCopyFocus = actionFocus(
       'playback-log-copy-all',
       onLeft: () => clearFocus.requestFocus(),
       onRight: () => clearFocus.requestFocus(),
       onDown: () => logFocus.requestFocus(),
     );
-    late final FocusNode clearFocus = actionFocus(
+    clearFocus = actionFocus(
       'playback-log-clear',
       onLeft: () => topCopyFocus.requestFocus(),
       onRight: () => topCopyFocus.requestFocus(),
       onDown: () => logFocus.requestFocus(),
     );
-    late final FocusNode exportFocus = actionFocus(
+    exportFocus = actionFocus(
       'playback-log-export',
       onLeft: () => closeFocus.requestFocus(),
       onRight: () => copyFocus.requestFocus(),
       onUp: () => logFocus.requestFocus(),
     );
-    late final FocusNode copyFocus = actionFocus(
+    copyFocus = actionFocus(
       'playback-log-copy',
       onLeft: () => exportFocus.requestFocus(),
       onRight: () => closeFocus.requestFocus(),
       onUp: () => logFocus.requestFocus(),
     );
-    late final FocusNode closeFocus = actionFocus(
+    closeFocus = actionFocus(
       'playback-log-close',
       onLeft: () => copyFocus.requestFocus(),
       onRight: () => exportFocus.requestFocus(),
