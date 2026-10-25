@@ -89,7 +89,12 @@ class MainActivity : FlutterActivity() {
 
     override fun getFlutterShellArgs(): FlutterShellArgs {
         val args = super.getFlutterShellArgs()
-        if (compatibleRendering()) args.add("--enable-impeller=false")
+        // Android TV boxes using Mali/Vulkan have shown graphics-buffer allocation
+        // failures under Impeller. Use the compatible Skia renderer on TV by default;
+        // the saved preference continues to enable Skia on phones/tablets as well.
+        if (compatibleRendering() || isTelevisionDevice()) {
+            args.add("--enable-impeller=false")
+        }
         return args
     }
 

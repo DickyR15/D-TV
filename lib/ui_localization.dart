@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:flutter/services.dart';
 
@@ -488,19 +489,17 @@ _OpenCcNode? _openCcS2t;
 _OpenCcNode? _openCcTaiwan;
 bool _openCcReady = false;
 
-/// Load OpenCC dictionaries bundled in the APK; no network is used at runtime.
-Future<void> initializeUiLocalization() async {
-  final sourceFiles = <String, String>{};
-  for (final name in const [
-    'STCharacters.txt',
-    'STPhrases.txt',
-    'TWPhrases.txt',
-    'TWVariantsPhrases.txt',
-    'TWVariants.txt',
-  ]) {
-    sourceFiles[name] = await rootBundle.loadString('assets/opencc/$name');
-  }
+// Repeated widget rebuilds often convert the same ranking/poster text.
+// Keep a bounded LRU-like cache so focus changes don't repeatedly scan every
+// phrase substitution and trie edge on the UI isolate.
+final _conversionCache = <String, String>{};
+const _conversionCacheLimit = 4096;
 
+/// Build the large tries off the UI isolate. Parsing these dictionaries here
+/// used to block Android TV D-pad input for several seconds on first launch.
+typedef _OpenCcTrees = ({_OpenCcNode s2t, _OpenCcNode taiwan});
+
+_OpenCcTrees _buildOpenCcTrees(Map<String, String> sourceFiles) {
   final characterMap = _parseOpenCc(sourceFiles['STCharacters.txt']!);
   final phraseMap = _parseOpenCc(sourceFiles['STPhrases.txt']!);
   final taiwanPhraseMap = _parseOpenCc(sourceFiles['TWPhrases.txt']!);
@@ -518,9 +517,27 @@ Future<void> initializeUiLocalization() async {
   _insertOpenCc(taiwan, taiwanPhraseMap, overwrite: false);
   _insertOpenCc(taiwan, variantPhraseMap, overwrite: false);
   _insertOpenCc(taiwan, variantMap, overwrite: false);
+  return (s2t: s2t, taiwan: taiwan);
+}
 
-  _openCcS2t = s2t;
-  _openCcTaiwan = taiwan;
+/// Load OpenCC dictionaries bundled in the APK; no network is used at runtime.
+Future<void> initializeUiLocalization() async {
+  final sourceFiles = <String, String>{};
+  for (final name in const [
+    'STCharacters.txt',
+    'STPhrases.txt',
+    'TWPhrases.txt',
+    'TWVariantsPhrases.txt',
+    'TWVariants.txt',
+  ]) {
+    sourceFiles[name] = await rootBundle.loadString('assets/opencc/$name');
+  }
+
+  final trees = await Isolate.run(() => _buildOpenCcTrees(sourceFiles));
+  _openCcS2t = trees.s2t;
+  _openCcTaiwan = trees.taiwan;
+  // Drop fallback translations created while the dictionaries were loading.
+  _conversionCache.clear();
   _openCcReady = true;
 }
 
@@ -585,36 +602,49 @@ String _convertOpenCc(String input, _OpenCcNode root) {
 /// Convert source-site text to Taiwan Traditional Chinese for display only.
 /// API identifiers, category IDs, request arguments, and raw records stay intact.
 String uiTraditional(String value) {
-  final s2t = _openCcS2t;
-  final taiwan = _openCcTaiwan;
-  if (!_openCcReady || s2t == null || taiwan == null) {
-    return _uiTraditionalFallback(value);
+  final cached = _conversionCache.remove(value);
+  if (cached != null) {
+    _conversionCache[value] = cached;
+    return cached;
   }
 
-  var result = _convertOpenCc(value, s2t);
-  result = _convertOpenCc(result, taiwan);
-  // HGTV-specific terminology that is not part of the general OpenCC dictionaries.
-  for (final entry in _twPhrases.entries) {
-    result = result.replaceAll(entry.key, entry.value);
+  final s2t = _openCcS2t;
+  final taiwan = _openCcTaiwan;
+  late final String result;
+  if (!_openCcReady || s2t == null || taiwan == null) {
+    result = _uiTraditionalFallback(value);
+  } else {
+    var converted = _convertOpenCc(value, s2t);
+    converted = _convertOpenCc(converted, taiwan);
+    // HGTV-specific terminology that is not part of the general OpenCC dictionaries.
+    for (final entry in _twPhrases.entries) {
+      converted = converted.replaceAll(entry.key, entry.value);
+    }
+    const restorations = {
+      '皇後': '皇后',
+      '太後': '太后',
+      '王後': '王后',
+      '頭發': '頭髮',
+      '白發': '白髮',
+      '長發': '長髮',
+      '短發': '短髮',
+      '理發': '理髮',
+      '染發': '染髮',
+      '洗發': '洗髮',
+      '發型': '髮型',
+      '頭發型': '頭髮型',
+      '公裡': '公里',
+      '里程': '里程',
+    };
+    for (final entry in restorations.entries) {
+      converted = converted.replaceAll(entry.key, entry.value);
+    }
+    result = converted;
   }
-  const restorations = {
-    '皇後': '皇后',
-    '太後': '太后',
-    '王後': '王后',
-    '頭發': '頭髮',
-    '白發': '白髮',
-    '長發': '長髮',
-    '短發': '短髮',
-    '理發': '理髮',
-    '染發': '染髮',
-    '洗發': '洗髮',
-    '發型': '髮型',
-    '頭發型': '頭髮型',
-    '公裡': '公里',
-    '里程': '里程',
-  };
-  for (final entry in restorations.entries) {
-    result = result.replaceAll(entry.key, entry.value);
+
+  if (_conversionCache.length >= _conversionCacheLimit) {
+    _conversionCache.remove(_conversionCache.keys.first);
   }
+  _conversionCache[value] = result;
   return result;
 }

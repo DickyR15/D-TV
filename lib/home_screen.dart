@@ -70,6 +70,8 @@ class _HomeScreenState extends State<HomeScreen> {
   late final FollowUpdater _followUpdater;
   final _changedSources = <String>{};
   Timer? _cacheRefreshTimer;
+  Timer? _watcherStartTimer;
+  bool _catalogInitialized = false;
   bool _refreshingUpdatedCache = false;
   bool _showRecommendations = false;
   String _sourceSignature = '';
@@ -216,6 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     _changedSources.add(source);
     _cacheRefreshTimer?.cancel();
+    _watcherStartTimer?.cancel();
     _cacheRefreshTimer = Timer(const Duration(milliseconds: 100), () {
       unawaited(_reloadUpdatedCache());
     });
@@ -674,13 +677,20 @@ class _HomeScreenState extends State<HomeScreen> {
       widget.store,
       onCatalogChanged: _catalogUpdated,
     )..addListener(_updateChanged);
-    _updater.startWatching();
+    // Source-status polling scans every configured source. Let the first TV
+    // frame and the active ranking settle before starting this background work.
+    _watcherStartTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted) _updater.startWatching();
+    });
     _followUpdater = FollowUpdater(widget.repository, widget.store)..start();
     widget.store.addListener(_sourcesChanged);
     widget.repository.catalogUpdates.addListener(_metadataChanged);
     if (widget.store.sources.isNotEmpty) {
-      _load(useCache: true);
-      _loadCategories();
+      // A wide-screen device opens on Hot Rankings. Don't fetch/merge the
+      // hidden catalog and categories concurrently with that first ranking.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _isCatalogTab) _ensureCatalogInitialized();
+      });
     } else {
       _loading = false;
     }
@@ -977,9 +987,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _changeTab(int tab) => setState(() {
-    _tab = tab;
-  });
+  void _ensureCatalogInitialized() {
+    if (_catalogInitialized || !mounted || widget.store.sources.isEmpty) return;
+    _catalogInitialized = true;
+    unawaited(_load(useCache: true));
+    unawaited(_loadCategories());
+  }
+
+  void _changeTab(int tab) {
+    setState(() => _tab = tab);
+    if (_isCatalogTab) _ensureCatalogInitialized();
+  }
 
   void _dramaActions(Drama drama) => showDramaActions(
     context,
@@ -1665,6 +1683,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _showRecommendations ||
         _search.text.trim().isNotEmpty ||
         _submittedQuery.isNotEmpty;
+    final wasInitialized = _catalogInitialized;
     _debounce?.cancel();
     setState(() {
       _tab = tab;
@@ -1676,7 +1695,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _error = null;
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
-    if (shouldReload) _load(useCache: true);
+    if (!wasInitialized) {
+      _ensureCatalogInitialized();
+    } else if (shouldReload) {
+      _load(useCache: true);
+    }
   }
 
   void _focusCurrentNavigation() {
