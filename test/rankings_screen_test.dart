@@ -11,6 +11,7 @@ import 'fixtures.dart';
 
 class _RankingRepository extends FixtureRepository {
   int rankingCalls = 0;
+  bool timeoutFirstRanking = false;
 
   @override
   Future<List<RankingBoard>> rankingBoards() async => const [
@@ -24,6 +25,9 @@ class _RankingRepository extends FixtureRepository {
     bool force = false,
   }) async {
     rankingCalls++;
+    if (timeoutFirstRanking && rankingCalls == 1) {
+      throw StateError('context deadline exceeded');
+    }
     return RankingPage(
     page: page,
     hasMore: page < 2,
@@ -44,6 +48,34 @@ class _RankingRepository extends FixtureRepository {
 }
 
 void main() {
+  testWidgets('automatically retries an initial ranking timeout', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await tester.binding.setSurfaceSize(const Size(960, 540));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final repository = _RankingRepository()..timeoutFirstRanking = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RankingsScreen(
+          repository: repository,
+          store: store,
+          initialGroup: 'hongguo',
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pumpAndSettle();
+
+    expect(repository.rankingCalls, greaterThanOrEqualTo(2));
+    expect(find.text('合成榜單1'), findsOneWidget);
+    expect(find.text('榜單請求逾時，請重試或稍後再試。'), findsNothing);
+  });
+
   testWidgets('television remote moves focus through ranking list', (
     tester,
   ) async {
