@@ -543,17 +543,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _televisionBack() {
     final now = DateTime.now();
+    final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+
+    // A child route must always receive Back first. Otherwise a recent
+    // exit-toast suppression window can accidentally swallow a real press.
+    if (!routeIsCurrent) {
+      _lastHandledBackEventAt = now;
+      _lastBackAt = null;
+      _ignoreExitPromptUntil = now.add(const Duration(milliseconds: 300));
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+      return;
+    }
 
     // Android TV can report the same physical Back press through both the
-    // platform pop callback and keyboard shortcuts. Handle that press once.
+    // platform pop callback and keyboard shortcuts. De-duplicate only on home.
     final lastHandled = _lastHandledBackEventAt;
     if (lastHandled != null &&
         now.difference(lastHandled) < const Duration(milliseconds: 250)) {
       return;
     }
     _lastHandledBackEventAt = now;
-
-    final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
 
     // Menus are routes too. A Back press here belongs to the open menu, not
     // to the home screen's double-Back-to-exit behavior.
@@ -584,18 +594,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Settings, source management, dialogs and popup routes must close first.
     // Never show the app-exit prompt while the home route is not on top.
-    if (!routeIsCurrent) {
-      _lastBackAt = null;
-      _ignoreExitPromptUntil = DateTime.now().add(
-        const Duration(milliseconds: 300),
-      );
-      _lastHandledBackEventAt = now;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-      return;
-    }
     _ignoreExitPromptUntil = null;
     if (_tab == 9) {
       final destination = _tabBeforeSettings == 9 ? 4 : _tabBeforeSettings;

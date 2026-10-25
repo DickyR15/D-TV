@@ -742,12 +742,6 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 	cached, hasCached := engine.detailCache[drama.ID]
 	if hasCached && now.Before(cached.ExpiresAt) {
 		cachedDrama := mergeNativeDrama(cached.Drama, drama)
-		for _, row := range engine.catalogs[source] {
-			if row.ID == drama.ID {
-				cachedDrama = mergeNativeDrama(cachedDrama, row)
-				break
-			}
-		}
 		chapters := append([]Chapter(nil), cached.Chapters...)
 		warning := cached.Warning
 		engine.mu.Unlock()
