@@ -1,11 +1,11 @@
 import 'dart:async';
 
-import 'package:duanju_app/batch_downloads.dart';
-import 'package:duanju_app/catalog_browser.dart';
-import 'package:duanju_app/library_updater.dart';
-import 'package:duanju_app/local_store.dart';
-import 'package:duanju_app/models.dart';
-import 'package:duanju_app/source_status.dart';
+import 'package:hgtv/batch_downloads.dart';
+import 'package:hgtv/catalog_browser.dart';
+import 'package:hgtv/library_updater.dart';
+import 'package:hgtv/local_store.dart';
+import 'package:hgtv/models.dart';
+import 'package:hgtv/source_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

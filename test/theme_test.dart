@@ -1,10 +1,10 @@
 import 'dart:convert';
 
-import 'package:duanju_app/app_layout.dart';
-import 'package:duanju_app/app_theme.dart';
-import 'package:duanju_app/core_bridge.dart';
-import 'package:duanju_app/local_store.dart';
-import 'package:duanju_app/settings_screen.dart';
+import 'package:hgtv/app_layout.dart';
+import 'package:hgtv/app_theme.dart';
+import 'package:hgtv/core_bridge.dart';
+import 'package:hgtv/local_store.dart';
+import 'package:hgtv/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

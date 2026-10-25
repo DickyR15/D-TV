@@ -40,6 +40,16 @@ void main() {
     final scrollable = tester.state<ScrollableState>(scrollableFinder.first);
     expect(scrollable.position.pixels, 0);
 
+    // The dialog now deliberately starts with focus on Close. Move focus
+    // into the log list before asserting that D-pad scrolling changes its
+    // scroll position.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'playback-debug-log-list',
+    );
+
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
 

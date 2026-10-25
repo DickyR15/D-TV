@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:duanju_app/local_store.dart';
-import 'package:duanju_app/media_library.dart';
-import 'package:duanju_app/media_pipeline.dart';
-import 'package:duanju_app/models.dart';
+import 'package:hgtv/local_store.dart';
+import 'package:hgtv/media_library.dart';
+import 'package:hgtv/media_pipeline.dart';
+import 'package:hgtv/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

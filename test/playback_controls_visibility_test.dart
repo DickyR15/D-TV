@@ -1,4 +1,4 @@
-import 'package:duanju_app/playback_controls_visibility.dart';
+import 'package:hgtv/playback_controls_visibility.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

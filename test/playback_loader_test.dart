@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:duanju_app/core_bridge.dart';
-import 'package:duanju_app/models.dart';
-import 'package:duanju_app/playback_loader.dart';
+import 'package:hgtv/core_bridge.dart';
+import 'package:hgtv/models.dart';
+import 'package:hgtv/playback_loader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fixtures.dart';
