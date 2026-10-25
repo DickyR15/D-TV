@@ -184,4 +184,68 @@ void main() {
     expect(stalled(109, duration: 120), isFalse);
     expect(stalled(110, duration: 120), isTrue); // Mid-playback timeout remains 10s.
   });
+
+  test('recovery budget resets only after 30 seconds of progressing playback', () {
+    final tracker = PlaybackRecoveryStability();
+    final start = DateTime(2026, 10, 25, 12);
+    var becameStable = false;
+
+    for (var second = 0; second <= 30; second++) {
+      becameStable = tracker.observe(
+        position: Duration(seconds: second + 1),
+        playing: true,
+        buffering: false,
+        intendedToPlay: true,
+        foreground: true,
+        completed: false,
+        now: start.add(Duration(seconds: second)),
+      );
+      if (second < 30) expect(becameStable, isFalse);
+    }
+    expect(becameStable, isTrue);
+  });
+
+  test('buffering, pause, and stalled position restart recovery stability window', () {
+    final tracker = PlaybackRecoveryStability();
+    final start = DateTime(2026, 10, 25, 13);
+
+    bool observe(
+      int second, {
+      int position = 1,
+      bool playing = true,
+      bool buffering = false,
+      bool intendedToPlay = true,
+      bool foreground = true,
+    }) => tracker.observe(
+      position: Duration(seconds: position),
+      playing: playing,
+      buffering: buffering,
+      intendedToPlay: intendedToPlay,
+      foreground: foreground,
+      completed: false,
+      now: start.add(Duration(seconds: second)),
+    );
+
+    for (var second = 0; second <= 10; second++) {
+      expect(observe(second, position: second + 1), isFalse);
+    }
+    expect(observe(11, position: 12, buffering: true), isFalse);
+    for (var second = 12; second <= 41; second++) {
+      expect(observe(second, position: second + 1), isFalse);
+    }
+    expect(observe(42, position: 43), isTrue);
+
+    tracker.reset();
+    expect(observe(50, position: 10), isFalse);
+    expect(observe(51, position: 10, playing: false), isFalse);
+    expect(observe(52, position: 10), isFalse);
+    expect(observe(55, position: 10), isFalse);
+    expect(observe(56, position: 11), isFalse);
+    for (var second = 57; second <= 86; second++) {
+      final stable = observe(second, position: second - 45);
+      if (second < 86) expect(stable, isFalse);
+      if (second == 86) expect(stable, isTrue);
+    }
+  });
+
 }

@@ -106,6 +106,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   final _menuRevision = ValueNotifier<int>(0);
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   final _recovery = PlaybackRecovery();
+  final _recoveryStability = PlaybackRecoveryStability();
+  bool _recoveryBudgetPendingReset = false;
   Object _lanIdentity = Object();
   bool _handoffOwned = true;
   double? _lanFirstPosition;
@@ -408,6 +410,24 @@ class _PlayerScreenState extends State<PlayerScreen>
     _healthTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_closed || !_acceptErrors || _loading || _error != null) return;
       final state = _player.state;
+      final now = DateTime.now();
+      if (_recoveryBudgetPendingReset &&
+          _recoveryStability.observe(
+            position: state.position,
+            playing: state.playing,
+            buffering: state.buffering,
+            intendedToPlay: _playIntent && !state.completed,
+            foreground: _foreground,
+            completed: state.completed,
+            now: now,
+          )) {
+        _recovery.reset();
+        _recoveryBudgetPendingReset = false;
+        _recoveryStability.reset();
+        DiaryService.add(
+          '[Recovery] budget_reset_after_stable_playback generation=$_generation stable_seconds=${PlaybackRecoveryStability.stablePlaybackDuration.inSeconds}',
+        );
+      }
       if (_health.stalled(
         position: state.position,
         duration: state.duration,
@@ -418,7 +438,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         // route cycling while MPV is still opening the stream.
         intendedToPlay: _playIntent && !state.completed,
         foreground: _foreground,
-        now: DateTime.now(),
+        now: now,
       )) {
         final startup = state.position == Duration.zero &&
             state.duration == Duration.zero;
@@ -1279,8 +1299,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     _loadingOverlayTimer?.cancel();
     _showLoadingOverlay = false;
     _health.reset();
+    _recoveryStability.reset();
+    _recoveryBudgetPendingReset = recoveryAction != null;
     if (recoveryAction == null) {
       _recovery.reset();
+      _recoveryBudgetPendingReset = false;
       _playIntent = playWhenReady;
     }
     _resumePosition = position;

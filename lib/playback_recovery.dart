@@ -50,6 +50,61 @@ class PlaybackRecovery {
   }
 }
 
+/// Tracks whether a recovered stream has played smoothly for long enough to
+/// start a fresh recovery budget. A buffer event, pause/background transition,
+/// or lack of position progress restarts the stability window.
+class PlaybackRecoveryStability {
+  static const stablePlaybackDuration = Duration(seconds: 30);
+  static const maxNoProgress = Duration(seconds: 2);
+
+  DateTime? _healthySince;
+  DateTime? _lastProgressAt;
+  Duration? _lastPosition;
+
+  void reset() {
+    _healthySince = null;
+    _lastProgressAt = null;
+    _lastPosition = null;
+  }
+
+  bool observe({
+    required Duration position,
+    required bool playing,
+    required bool buffering,
+    required bool intendedToPlay,
+    required bool foreground,
+    required bool completed,
+    required DateTime now,
+  }) {
+    final healthy = position > Duration.zero &&
+        playing &&
+        !buffering &&
+        intendedToPlay &&
+        foreground &&
+        !completed;
+    if (!healthy) {
+      _healthySince = null;
+      _lastPosition = position;
+      _lastProgressAt = now;
+      return false;
+    }
+
+    if (_lastPosition == null || position != _lastPosition) {
+      _lastProgressAt = now;
+    }
+    _lastPosition = position;
+    final lastProgress = _lastProgressAt;
+    if (lastProgress == null ||
+        now.difference(lastProgress) > maxNoProgress) {
+      _healthySince = null;
+      return false;
+    }
+
+    _healthySince ??= now;
+    return now.difference(_healthySince!) >= stablePlaybackDuration;
+  }
+}
+
 class PlaybackHealth {
   static const stallTimeout = Duration(seconds: 10);
   // First-frame startup can take longer than an ordinary mid-playback stall,

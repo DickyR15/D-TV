@@ -100,11 +100,32 @@ class LunaExoPlayer implements Player {
   }
 
   VideoPlayerController? _controller;
+  // Keep the controller visible while initialize() is waiting for the native
+  // initialized event. _controller is assigned only after initialization.
+  VideoPlayerController? _openingController;
   VoidCallback? _valueListener;
   Timer? _positionPollTimer;
 
+  final Expando<bool> _disposeRequested =
+      Expando<bool>('dtv-video-player-dispose-requested');
   int _openGeneration = 0;
   bool _disposed = false;
+
+  // VideoPlayerController.dispose() can itself wait for createWithOptions(),
+  // so never await disposal of a stale, still-initializing controller on the
+  // reload path. The generation check prevents it from taking over playback
+  // if initialize() eventually completes.
+  void _requestControllerDispose(VideoPlayerController controller) {
+    if (_disposeRequested[controller] == true) return;
+    _disposeRequested[controller] = true;
+    unawaited(
+      controller.dispose().catchError((Object error) {
+        DiaryService.add(
+          '[ExoPlayer] stale controller dispose failed: ${error.runtimeType}',
+        );
+      }),
+    );
+  }
 
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
@@ -134,6 +155,12 @@ class LunaExoPlayer implements Player {
     final myGen = ++_openGeneration;
     _positionPollTimer?.cancel();
 
+    // A timed-out initialize() is still in flight below the public API. Mark
+    // it stale and request disposal without waiting for its native event.
+    final pending = _openingController;
+    _openingController = null;
+    if (pending != null) _requestControllerDispose(pending);
+
     // 切換新節目時，舊控制器先靜音/暫停，徹底防止新舊雙重音訊重疊
     final old = _controller;
     if (old != null) {
@@ -147,6 +174,7 @@ class LunaExoPlayer implements Player {
         await old.pause();
       } catch (_) {}
     }
+    if (_disposed || myGen != _openGeneration) return;
 
     state = state.copyWith(completed: false);
     _safeAdd(stream.completedController, false);
@@ -210,6 +238,7 @@ class LunaExoPlayer implements Player {
       );
     }
 
+    _openingController = c;
     try {
       DiaryService.add(
         '[ExoPlayer] c.initialize() 開始 (formatHint=$formatHint)...',
@@ -219,38 +248,39 @@ class LunaExoPlayer implements Player {
         '[ExoPlayer] c.initialize() 成功 duration=${c.value.duration} size=${c.value.size}',
       );
     } catch (e, stack) {
-      DiaryService.add('[ExoPlayer] initialize 失敗: $e\n$stack');
-      // Let D-TV's route recovery try the next actual source. Switching a
-      // failed MP4 request to HLS blindly only repeats a slow/failing request.
-      if (myGen == _openGeneration) {
+      if (identical(_openingController, c)) _openingController = null;
+      if (myGen == _openGeneration && !_disposed) {
+        DiaryService.add('[ExoPlayer] initialize 失敗: $e\n$stack');
+        // Let D-TV's route recovery try the next actual source. Switching a
+        // failed MP4 request to HLS blindly only repeats a slow/failing request.
         _safeAdd(stream.errorController, e.toString());
+      } else {
+        DiaryService.add(
+          '[ExoPlayer] stale initialize failed gen=$myGen current=$_openGeneration',
+        );
       }
-      try {
-        await c.dispose();
-      } catch (_) {}
+      _requestControllerDispose(c);
       rethrow;
     }
 
     if (_disposed || myGen != _openGeneration) {
-      try {
-        await c.dispose();
-      } catch (_) {}
+      if (identical(_openingController, c)) _openingController = null;
+      _requestControllerDispose(c);
       return;
     }
-
     if (old != null) {
       try {
         await old.dispose();
       } catch (_) {}
     }
 
-    if (myGen != _openGeneration) {
-      try {
-        await c.dispose();
-      } catch (_) {}
+    if (_disposed || myGen != _openGeneration) {
+      if (identical(_openingController, c)) _openingController = null;
+      _requestControllerDispose(c);
       return;
     }
 
+    if (identical(_openingController, c)) _openingController = null;
     _controller = c;
     final dur = c.value.duration;
     final w = c.value.size.width.round();
@@ -427,12 +457,21 @@ class LunaExoPlayer implements Player {
 
   @override
   Future<void> stop() async {
+    // Invalidate any pending initialize() before stopping the old controller.
+    // This is used by PlayerScreen's open timeout to unblock a reload attempt.
+    _openGeneration++;
+    _positionPollTimer?.cancel();
+    final pending = _openingController;
+    _openingController = null;
+    if (pending != null) _requestControllerDispose(pending);
+
     final c = _controller;
-    if (c == null) return;
-    try {
-      await c.pause();
-      await c.seekTo(Duration.zero);
-    } catch (_) {}
+    if (c != null) {
+      try {
+        await c.pause();
+        await c.seekTo(Duration.zero);
+      } catch (_) {}
+    }
     state = state.copyWith(
       playing: false,
       buffering: false,
@@ -448,7 +487,11 @@ class LunaExoPlayer implements Player {
   @override
   Future<void> dispose() async {
     _disposed = true;
+    _openGeneration++;
     _positionPollTimer?.cancel();
+    final pending = _openingController;
+    _openingController = null;
+    if (pending != null) _requestControllerDispose(pending);
     final c = _controller;
     final listener = _valueListener;
     if (c != null && listener != null) {
