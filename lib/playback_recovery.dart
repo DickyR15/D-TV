@@ -3,23 +3,37 @@ import 'models.dart';
 enum PlaybackRecoveryAction { alternative, refresh, recreatePlayer, stop }
 
 class PlaybackRecovery {
+  PlaybackRecovery({DateTime Function()? now}) : _now = now ?? DateTime.now;
+
   // Try a bounded number of provider URLs, then force one fresh resolve.
   // Signed media URLs and CDN routes can expire or return incomplete MP4 data;
   // retrying the same session after exhaustion would only reuse stale URLs.
   static const maxAlternativeAttempts = 12;
   static const maxRefreshAttempts = 1;
+  static const maxRecoveryDuration = Duration(seconds: 45);
+  final DateTime Function() _now;
+  DateTime? _startedAt;
   int _alternativeAttempts = 0;
   int _refreshAttempts = 0;
 
   void reset() {
     _alternativeAttempts = 0;
     _refreshAttempts = 0;
+    _startedAt = null;
   }
 
   PlaybackRecoveryAction next(
     PlaybackPlan plan, {
     bool allowPlayerRecreate = true,
   }) {
+    final now = _now();
+    _startedAt ??= now;
+    // A route may take up to the player-open timeout to fail. Bound total
+    // automatic recovery as well as individual requests so the spinner is
+    // eventually replaced by a retryable error instead of cycling forever.
+    if (now.difference(_startedAt!) >= maxRecoveryDuration) {
+      return PlaybackRecoveryAction.stop;
+    }
     if (plan.hasAlternative &&
         _alternativeAttempts < maxAlternativeAttempts) {
       _alternativeAttempts++;
