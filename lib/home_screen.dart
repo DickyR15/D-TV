@@ -163,6 +163,16 @@ class _HomeScreenState extends State<HomeScreen> {
       group,
       force: force,
       cacheOnly: cacheOnly,
+      onCacheLoaded: () {
+        if (!mounted ||
+            generation != _categoryGeneration ||
+            group.id != _group.id) {
+          return;
+        }
+        // Show local category names after the menu paints, without waiting for
+        // the native bridge to decode the full cached catalog.
+        setState(() {});
+      },
     );
     if (!mounted ||
         generation != _categoryGeneration ||
@@ -1176,7 +1186,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     _catalogWarmupTimer?.cancel();
-    _catalogWarmupTimer = Timer(const Duration(milliseconds: 350), () {
+    _catalogWarmupTimer = Timer(const Duration(milliseconds: 1200), () {
       _catalogWarmupTimer = null;
       unawaited(_warmCatalogCache());
     });
@@ -1194,14 +1204,9 @@ class _HomeScreenState extends State<HomeScreen> {
       // Cache-only work never calls the source's remote catalog/category APIs.
       // It seeds CatalogBrowser's memory snapshot so entering 分類 can paint
       // previously seen posters before any stale-cache network refresh finishes.
-      await Future.wait<void>([
-        _browser
-            .load(group, useCache: true, cacheOnly: true)
-            .then<void>((_) {}),
-        _browser
-            .loadCategories(group, cacheOnly: true)
-            .then<void>((_) {}),
-      ]);
+      // Loading the base catalog already records local category names. Running
+      // loadCategories(cacheOnly: true) would walk the same 20k+ rows again.
+      await _browser.load(group, useCache: true, cacheOnly: true);
     } catch (_) {
       // This is a best-effort startup optimization; the visible catalog load
       // owns user-facing errors and can still fetch fresh content when opened.

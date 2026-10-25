@@ -202,9 +202,10 @@ func (engine *nativeEngine) startSourceTask(source, operation string, drama nati
 	}
 	timeout := 3 * time.Minute
 	if canonicalProviderSource(source) == sourceHongguo && (operation == "update" || operation == "metadata") {
-		// Red Fruit updates may need many small detail requests. Keep the work
-		// bounded, but allow automatic batches to continue after the UI is left.
-		timeout = 10 * time.Minute
+		// Red Fruit updates may walk thousands of entries and pause during playback.
+		// Per-request deadlines and persisted cursors bound individual work; this
+		// outer deadline avoids forcing a restart after each short viewing session.
+		timeout = 12 * time.Hour
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	task := &nativeSourceTask{cancel: cancel}
@@ -310,31 +311,133 @@ func sourceHistoryPageContext(ctx context.Context, source string) context.Contex
 	return ctx
 }
 
+func (engine *nativeEngine) waitForPlaybackIdle(ctx context.Context, source, resumeStage string) error {
+	paused := false
+	for {
+		engine.mu.Lock()
+		active := len(engine.playbacks) > 0
+		engine.mu.Unlock()
+		if !active {
+			if paused {
+				engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
+					record.Stage = resumeStage
+				})
+			}
+			return nil
+		}
+		if !paused {
+			engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
+				record.Stage = "播放中，暫停目錄更新"
+			})
+			paused = true
+		}
+		timer := time.NewTimer(400 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func waitForSourceCatalogInterval(ctx context.Context) error {
+	timer := time.NewTimer(300 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 func (engine *nativeEngine) updateSource(ctx context.Context, source, operation string) error {
 	before := engine.nativeCached(source)
 	count := len(before.Items)
+	var knownBefore map[string]struct{}
+	if source == sourceHongguo && operation == "update" {
+		knownBefore = make(map[string]struct{}, len(before.Items))
+		for _, drama := range before.Items {
+			knownBefore[drama.ID] = struct{}{}
+		}
+	}
+	var headItems []nativeDrama
 	defer func() {
 		after := len(engine.nativeCached(source).Items)
 		engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Added = max(0, after-count) })
 	}()
 	if operation == "update" {
-		engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Stage = "查找新剧" })
+		if source == sourceHongguo {
+			if err := engine.waitForPlaybackIdle(ctx, source, "查找新劇"); err != nil {
+				return err
+			}
+		}
+		engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Stage = "查找新劇" })
 		if err := engine.loadSourceCatalogPage(ctx, source, 1); err != nil {
 			return err
 		}
+		if source == sourceHongguo {
+			for _, drama := range engine.nativeCached(source).Items {
+				if _, existed := knownBefore[drama.ID]; !existed {
+					headItems = append(headItems, drama)
+				}
+			}
+		}
 	}
 	if operation == "more" || operation == "update" {
-		engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Stage = "继续加载历史分页" })
-		limit := sourceUpdateHistoryPageLimit(source, operation, engine.downloader.cfg.MaxPagesPerSort)
 		pageCtx := sourceHistoryPageContext(ctx, source)
-		if err := engine.loadMoreSourceCatalogPages(pageCtx, source, limit); err != nil {
-			return err
+		if source == sourceHongguo && operation == "update" {
+			// Process one remote page per feed in each iteration, but continue
+			// automatically until every Red Fruit history cursor is exhausted.
+			for {
+				if err := engine.waitForPlaybackIdle(ctx, source, "繼續載入歷史目錄"); err != nil {
+					return err
+				}
+				current := engine.nativeCached(source)
+				if !current.HasMore {
+					break
+				}
+				nextPage := current.Page + 1
+				engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
+					record.Stage = fmt.Sprintf("繼續載入歷史目錄（第 %d 頁）", nextPage)
+				})
+				if err := engine.loadMoreSourceCatalogPages(pageCtx, source, 1); err != nil {
+					return err
+				}
+				if !engine.nativeCached(source).HasMore {
+					break
+				}
+				if err := waitForSourceCatalogInterval(ctx); err != nil {
+					return err
+				}
+			}
+			engine.changeSourceRecord(source, func(record *nativeSourceRecord) {
+				record.Stage = "歷史目錄載入完成"
+			})
+		} else {
+			if source == sourceHongguo {
+				if err := engine.waitForPlaybackIdle(ctx, source, "繼續載入歷史目錄"); err != nil {
+					return err
+				}
+			}
+			engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Stage = "繼續載入歷史分頁" })
+			limit := sourceUpdateHistoryPageLimit(source, operation, engine.downloader.cfg.MaxPagesPerSort)
+			if err := engine.loadMoreSourceCatalogPages(pageCtx, source, limit); err != nil {
+				return err
+			}
 		}
 	}
 	if operation == "more" {
 		return nil
 	}
 	items := engine.nativeCached(source).Items
+	if source == sourceHongguo && operation == "update" {
+		// Enrich only newly discovered head entries during an update. The explicit
+		// "補齊資料" action handles the full catalog; normal updates should not
+		// trigger thousands of detail requests after paging through history.
+		items = headItems
+	}
 	return engine.completeSourceMetadata(ctx, source, operation, items)
 }
 
@@ -394,7 +497,7 @@ func sourceMetadataCandidates(items []nativeDrama, source, operation string, rec
 // lets the next manual update resume after a timeout or failed request.
 func (engine *nativeEngine) completeSourceMetadata(ctx context.Context, source, operation string, items []nativeDrama) error {
 	source = canonicalProviderSource(source)
-	autoContinue := source == sourceHongguo && (operation == "update" || operation == "metadata")
+	autoContinue := source == sourceHongguo && operation == "metadata"
 	engine.mu.Lock()
 	initialRecord := engine.sourceRecords[source]
 	initialCandidates := sourceMetadataCandidates(items, source, operation, initialRecord, time.Now())
@@ -438,6 +541,11 @@ func (engine *nativeEngine) completeSourceMetadata(ctx context.Context, source, 
 		for _, drama := range pending {
 			if err := ctx.Err(); err != nil {
 				return err
+			}
+			if source == sourceHongguo {
+				if err := engine.waitForPlaybackIdle(ctx, source, "補齊劇集資料"); err != nil {
+					return err
+				}
 			}
 			result, err := engine.nativeDetail(ctx, drama)
 			unknownVIP := false

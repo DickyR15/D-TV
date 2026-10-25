@@ -51,6 +51,7 @@ class CatalogBrowser {
   final _library = <String, Map<String, Drama>>{};
   final _sessions = <String, _CatalogSession>{};
   final _cachedReads = <String, Future<CatalogPage>>{};
+  final _rememberedBaseCaches = <String>{};
   // Category chips are rebuilt whenever the home screen rebuilds. Cache both
   // the merged choices and each source's distinct local category names so we
   // never rescan every cached drama just because focus or tabs changed.
@@ -122,6 +123,12 @@ class CatalogBrowser {
     }
   }
 
+  void _rememberBaseCache(String source, Iterable<Drama> items) {
+    // Avoid rescanning tens of thousands of cached dramas on every category
+    // navigation. Later result updates still merge through updateDramas().
+    if (_rememberedBaseCaches.add(source)) _remember(source, items);
+  }
+
   void updateDrama(Drama drama) {
     updateDramas([drama]);
   }
@@ -171,18 +178,24 @@ class CatalogBrowser {
     SourceGroup group, {
     bool force = false,
     bool cacheOnly = false,
+    void Function()? onCacheLoaded,
   }) async {
     final failures = <String>[];
     final loadedMenus = <String, List<CatalogCategory>>{};
     await _each(group.sources, (source) async {
-      // Read cached dramas and fetch the server category menu concurrently.
-      // Waiting for a large cached catalog must not delay the category chips.
-      final cachedRead = cached(source.id).then<void>((page) {
-        _remember(source.id, page.items);
-      }).catchError((Object _) {});
+      // The base cache may contain tens of thousands of dramas on Android TV.
+      // Seed it in the background, but don't hold category-menu publication
+      // hostage to decoding the entire catalog through the native bridge.
+      Future<void>? cachedRead;
+      if (!_rememberedBaseCaches.contains(source.id)) {
+        cachedRead = cached(source.id).then<void>((page) {
+          _rememberBaseCache(source.id, page.items);
+          onCacheLoaded?.call();
+        }).catchError((Object _) {});
+      }
 
       if (cacheOnly) {
-        await cachedRead;
+        if (cachedRead != null) await cachedRead;
         return;
       }
 
@@ -194,7 +207,8 @@ class CatalogBrowser {
       }).catchError((Object _) {
         failures.add(source.groupName);
       });
-      await Future.wait<void>([cachedRead, categoriesRead]);
+      if (cachedRead != null) unawaited(cachedRead);
+      await categoriesRead;
     });
     // Publish category menus only after every source has finished. Otherwise,
     // an unrelated catalog rebuild can expose a temporarily partial menu and
@@ -382,7 +396,11 @@ class CatalogBrowser {
           entry.fresh = cached.fresh && cached.warning.isEmpty;
           entry.checkedAt = DateTime.now();
           if (cached.warning.isNotEmpty) failures[source] = cached.warning;
-          _remember(source, cached.items);
+          if (requests[source]!.isEmpty) {
+            _rememberBaseCache(source, cached.items);
+          } else {
+            _remember(source, cached.items);
+          }
         } catch (error) {
           if (cacheOnly) failures[source] = error.toString();
         }

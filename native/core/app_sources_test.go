@@ -332,3 +332,25 @@ func TestSourceBackoffUsesRelativeTimeAndRetainsTypedError(t *testing.T) {
 		t.Fatal("redaction discarded structured retry time")
 	}
 }
+
+
+func TestWaitForPlaybackIdlePausesCatalogDuringPlayback(t *testing.T) {
+	engine := &nativeEngine{
+		directory: t.TempDir(),
+		playbacks: map[string]nativePlaybackChoice{
+			"active-session": {created: time.Now()},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Millisecond)
+	defer cancel()
+	if err := engine.waitForPlaybackIdle(ctx, sourceHongguo, "繼續載入歷史目錄"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("active playback should pause catalog work until canceled, got %v", err)
+	}
+
+	engine.mu.Lock()
+	delete(engine.playbacks, "active-session")
+	engine.mu.Unlock()
+	if err := engine.waitForPlaybackIdle(context.Background(), sourceHongguo, "繼續載入歷史目錄"); err != nil {
+		t.Fatalf("catalog work should resume after playback releases its session: %v", err)
+	}
+}

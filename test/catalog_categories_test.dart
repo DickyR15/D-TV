@@ -96,8 +96,9 @@ void main() {
         const Duration(seconds: 1),
       );
       expect(repository.categoryLoads, 1);
+      // The category menu should finish while the full catalog cache is pending.
+      await loading.timeout(const Duration(seconds: 1));
       repository.releaseCached!.complete();
-      await loading;
     },
   );
 

@@ -193,15 +193,21 @@ class _RankingsScreenState extends State<RankingsScreen> {
     }
   }
 
-  Future<void> _load({bool more = false, bool force = false}) async {
+  Future<void> _load({
+    bool more = false,
+    bool force = false,
+    bool quiet = false,
+  }) async {
     final board = _board;
     if (board == null || more && (_loading || _more || !_hasMore)) return;
     final generation = ++_generation;
     setState(() {
-      _loading = !more;
+      _loading = !more && !quiet;
       _more = more;
-      _error = null;
-      _failedMore = false;
+      if (!quiet) {
+        _error = null;
+        _failedMore = false;
+      }
     });
     try {
       final result = await widget.repository.rankings(
@@ -246,9 +252,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
               _board?.id != board.id) {
             return;
           }
-          // The native layer has already started a refresh. Joining it lets
-          // the current screen update once new data is available.
-          unawaited(_load(force: true));
+          // The native layer already started a refresh. Join it without
+          // restarting the visible top progress bar over cached posters.
+          unawaited(_load(force: true, quiet: true));
         });
       }
     } catch (error) {
