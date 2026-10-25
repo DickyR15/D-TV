@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'app_build.dart';
 import 'core_bridge.dart';
@@ -143,30 +145,112 @@ class _SourcesScreenState extends State<SourcesScreen> {
     }
   }
 
-  Future<void> _copy(SourceSite source, SourceStatus status) async {
-    final text = StringBuffer('${uiTraditional(source.name)}\n');
+  String _diagnosticText(SourceSite source, SourceStatus status) {
+    final text = StringBuffer('\${uiTraditional(source.name)}\n');
     text.writeln(
-      '快取 ${status.count} 部，更新 ${sourceTimestamp(status.updatedAt)}',
+      '快取 \${status.count} 部，更新 \${sourceTimestamp(status.updatedAt)}',
     );
     final health = status.health;
     if (health != null) {
-      text.writeln('${uiTraditional(health.label)} · ${sourceTimestamp(health.checkedAt)}');
-      if (health.sample.isNotEmpty) text.writeln('檢測劇集：${health.sample}');
+      text.writeln(
+        '\${uiTraditional(health.label)} · \${sourceTimestamp(health.checkedAt)}',
+      );
+      if (health.sample.isNotEmpty) text.writeln('檢測劇集：\${health.sample}');
       for (final step in health.steps) {
-        text.writeln('${uiTraditional(step.name)}：${uiTraditional(step.message)}');
         text.writeln(
-          '${step.host} HTTP ${step.httpStatus} · ${step.elapsedMs} ms',
+          '\${uiTraditional(step.name)}：\${uiTraditional(step.message)}',
         );
-        if (step.cfRay.isNotEmpty) text.writeln('CF Ray: ${step.cfRay}');
+        text.writeln(
+          '\${step.host} HTTP \${step.httpStatus} · \${step.elapsedMs} ms',
+        );
+        if (step.cfRay.isNotEmpty) text.writeln('CF Ray: \${step.cfRay}');
       }
     }
     if (status.error.isNotEmpty) text.writeln(status.error);
     if (status.storageError.isNotEmpty) text.writeln(status.storageError);
-    await Clipboard.setData(ClipboardData(text: text.toString()));
+    return text.toString().trim();
+  }
+
+  Future<void> _copy(SourceSite source, SourceStatus status) async {
+    await Clipboard.setData(
+      ClipboardData(text: _diagnosticText(source, status)),
+    );
     if (mounted) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('診斷資訊已複製')));
+    }
+  }
+
+  Future<void> _export(SourceSite source, SourceStatus status) async {
+    final content = _diagnosticText(source, status);
+    if (content.isEmpty) return;
+    try {
+      String? savedPath;
+      if (Platform.isAndroid) {
+        final result = await const MethodChannel('duanju/device')
+            .invokeMapMethod<String, dynamic>(
+          'exportDiagnosticText',
+          <String, dynamic>{
+            'text': '$content\n',
+            'fileNamePrefix': 'D-TV-source-diagnostic-\${source.id}',
+          },
+        );
+        savedPath = result?['path'] as String?;
+      } else {
+        final directory = await getApplicationDocumentsDirectory();
+        final stamp = DateTime.now()
+            .toIso8601String()
+            .replaceAll(':', '-')
+            .split('.')
+            .first;
+        final file = File(
+          '\${directory.path}\${Platform.pathSeparator}D-TV-source-diagnostic-\${source.id}_$stamp.txt',
+        );
+        await file.writeAsString('$content\n', flush: true);
+        savedPath = file.path;
+      }
+      if (!mounted) return;
+      final location = savedPath?.isNotEmpty == true
+          ? savedPath!
+          : 'Download/D-TV/D-TV-source-diagnostic-\${source.id}.txt';
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('診斷資訊匯出成功'),
+          content: SelectableText(
+            '已儲存片源診斷資訊：\n$location\n\n可從檔案管理器開啟 Downloads/D-TV 資料夾，將 TXT 檔傳到電腦後上傳分析。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: location));
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('複製檔案位置'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('完成'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('匯出診斷資訊失敗'),
+          content: SelectableText(uiTraditional(error.toString())),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('關閉'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -515,6 +599,11 @@ class _SourcesScreenState extends State<SourcesScreen> {
                     tooltip: '複製診斷資訊',
                     onPressed: () => _copy(source, status!),
                     icon: const Icon(Icons.copy_rounded),
+                  ),
+                  IconButton(
+                    tooltip: '匯出診斷 TXT',
+                    onPressed: () => _export(source, status!),
+                    icon: const Icon(Icons.file_download_outlined),
                   ),
                 ],
               ),
