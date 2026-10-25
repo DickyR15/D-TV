@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_layout.dart';
 import 'core_bridge.dart';
 import 'local_store.dart';
 import 'resource_settings.dart';
@@ -136,6 +137,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                     ),
                   DropdownButtonFormField<String>(
                     initialValue: _mode,
+                    autofocus: AppLayout.isTelevision(context),
                     decoration: const InputDecoration(labelText: '連線方式'),
                     items: const [
                       DropdownMenuItem(value: 'auto', child: Text('自動')),
