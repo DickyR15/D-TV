@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import 'app_layout.dart';
 import 'local_profiles.dart';
 import 'local_store.dart';
 import 'ui_localization.dart';
@@ -221,6 +222,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                   const SizedBox(height: 12),
                   SwitchListTile(
                     key: const ValueKey('force-login-setting'),
+                    autofocus: AppLayout.isTelevision(context),
                     focusNode: _forceLoginFocus,
                     contentPadding: EdgeInsets.zero,
                     title: const Text('啟動時需要登入'),
