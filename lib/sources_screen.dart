@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app_build.dart';
+import 'app_layout.dart';
 import 'core_bridge.dart';
 import 'local_store.dart';
 import 'models.dart';
@@ -86,7 +87,11 @@ class _SourcesScreenState extends State<SourcesScreen> {
   }
 
   void _requestInitialUpdateFocus() {
-    if (!mounted || _initialUpdateFocusRequested) return;
+    if (!mounted ||
+        _initialUpdateFocusRequested ||
+        !AppLayout.isTelevision(context)) {
+      return;
+    }
     final sourceId = _defaultVisibleUpdateSourceId();
     if (sourceId == null) return;
     final node = _updateFocusNodes[sourceId];
