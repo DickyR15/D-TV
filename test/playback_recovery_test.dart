@@ -107,6 +107,21 @@ void main() {
     );
   });
 
+  test('automatic recovery stops after its total time budget', () {
+    var now = DateTime(2026, 10, 25, 12);
+    final recovery = PlaybackRecovery(now: () => now);
+    final plan = route(0, count: 20);
+
+    expect(recovery.next(plan), PlaybackRecoveryAction.alternative);
+    now = now.add(const Duration(seconds: 30));
+    expect(recovery.next(plan), PlaybackRecoveryAction.alternative);
+    now = now.add(const Duration(seconds: 16));
+    expect(recovery.next(plan), PlaybackRecoveryAction.stop);
+
+    recovery.reset();
+    expect(recovery.next(plan), PlaybackRecoveryAction.alternative);
+  });
+
   test(
     'a stalled foreground stream times out but paused and background playback do not',
     () {

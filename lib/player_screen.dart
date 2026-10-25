@@ -1476,7 +1476,11 @@ class _PlayerScreenState extends State<PlayerScreen>
               _localFailure =
                   (error is AppFailure && error.code == 'local_media') ||
                   (widget.localOnly && !_forceOnline);
-              _error = error is AppFailure ? error.message : '無法播放這一集，請重試或換一集。';
+              _error = error is AppFailure
+                  ? error.message
+                  : error is TimeoutException
+                  ? (error.message ?? '播放載入逾時，請重試或更換片源。')
+                  : '無法播放這一集，請重試或換一集。';
               widget.handoff?.fail(_error!);
             });
           }

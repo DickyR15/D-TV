@@ -12,6 +12,7 @@ class DeferredRepository extends FixtureRepository {
   final released = <String>[];
   Completer<PlaybackPlan>? alternate;
   int cancellations = 0;
+  Completer<void>? cancellationGate;
 
   @override
   Future<PlaybackPlan> resolve(
@@ -33,6 +34,8 @@ class DeferredRepository extends FixtureRepository {
   @override
   Future<void> cancelPlayback() async {
     cancellations++;
+    final gate = cancellationGate;
+    if (gate != null) await gate.future;
   }
 
   @override
@@ -93,6 +96,55 @@ void main() {
       expect(repository.released, ['late']);
       expect(await loader.load(FixtureRepository.free, episode(2)), isNull);
       expect(repository.pending.length, 1);
+    },
+  );
+
+  test('a stalled resolver times out and releases a late session', () async {
+    final repository = DeferredRepository();
+    final loader = PlaybackLoader(
+      repository,
+      resolveTimeout: const Duration(milliseconds: 10),
+    );
+    final pending = loader.load(FixtureRepository.free, episode(1));
+    await tick();
+
+    await expectLater(pending, throwsA(isA<TimeoutException>()));
+    expect(repository.cancellations, 1);
+
+    repository.pending[1]!.complete(
+      const PlaybackPlan(url: 'https://example.test/late.mp4', session: 'late'),
+    );
+    await tick();
+    await tick();
+    expect(repository.released, ['late']);
+    await loader.close();
+  });
+
+  test(
+    'a stalled cancellation cannot leave reload spinning or start a stale resolve',
+    () async {
+      final repository = DeferredRepository();
+      final loader = PlaybackLoader(
+        repository,
+        resolveTimeout: const Duration(milliseconds: 10),
+      );
+      final first = loader.load(FixtureRepository.free, episode(1));
+      await tick();
+      repository.pending[1]!.complete(
+        const PlaybackPlan(url: 'https://example.test/1.mp4', session: 'first'),
+      );
+      expect((await first)?.session, 'first');
+
+      repository.cancellationGate = Completer<void>();
+      final reload = loader.load(FixtureRepository.free, episode(2));
+      await expectLater(reload, throwsA(isA<TimeoutException>()));
+      expect(repository.pending.keys, [1]);
+
+      repository.cancellationGate!.complete();
+      await tick();
+      await tick();
+      expect(repository.pending.keys, [1]);
+      await loader.close();
     },
   );
 
