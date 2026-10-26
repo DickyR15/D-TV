@@ -82,6 +82,9 @@ class _RankingMemory {
   // pages each) in a serialized background queue.
   final prefetchedPages = <String, _RankingPageSnapshot>{};
   final prefetchingPages = <String, Future<RankingPage>>{};
+  final boardRefreshVersions = <String, int>{};
+  Future<void>? top100RefreshFuture;
+  bool top100ForceRefreshRequested = false;
   bool top100PrefetchStarted = false;
 }
 
@@ -124,6 +127,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
     'hongguo-comic',
   };
   static const _redFruitPreloadPageCount = 5;
+  static const _top100RefreshInterval = Duration(minutes: 15);
+
+  Timer? _top100RefreshTimer;
 
   String _rankingPageKey(String boardId, int page) => '$boardId:$page';
 
@@ -152,11 +158,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
     return widget.repository.rankings(board.id, page: page);
   }
 
-  Future<void> _waitForPlaybackPriority() async {
+  Future<bool> _waitForPlaybackPriority() async {
     // Stop issuing new background ranking requests while playback has priority.
-    while (CoverRequestScheduler.backgroundPaused) {
+    while (mounted && CoverRequestScheduler.backgroundPaused) {
       await Future<void>.delayed(const Duration(milliseconds: 200));
     }
+    return mounted;
   }
 
   Future<RankingPage> _requestAndCacheRankingPage(
@@ -164,6 +171,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
     int page,
   ) async {
     final key = _rankingPageKey(board.id, page);
+    final boardRefreshVersion = _memory.boardRefreshVersions[board.id] ?? 0;
     if (page == 1) {
       final cached = _memory.pages[board.id];
       if (cached != null &&
@@ -187,7 +195,10 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
     late final Future<RankingPage> pending;
     pending = widget.repository.rankings(board.id, page: page).then((result) {
-      if (result.items.isNotEmpty &&
+      final versionIsCurrent =
+          (_memory.boardRefreshVersions[board.id] ?? 0) == boardRefreshVersion;
+      if (versionIsCurrent &&
+          result.items.isNotEmpty &&
           !result.stale &&
           result.warning.isEmpty) {
         if (page == 1) {
@@ -230,13 +241,69 @@ class _RankingsScreenState extends State<RankingsScreen> {
       return;
     }
     _memory.top100PrefetchStarted = true;
-    unawaited(_prefetchTop100ForAllHotBoards(board, current));
+    unawaited(
+      _scheduleTop100Refresh(
+        force: false,
+        activeBoard: board,
+        activeFirstPage: current,
+      ),
+    );
   }
 
-  Future<void> _prefetchTop100ForAllHotBoards(
-    RankingBoard activeBoard,
-    RankingPage activeFirstPage,
-  ) async {
+  Future<void> _scheduleTop100Refresh({
+    required bool force,
+    RankingBoard? activeBoard,
+    RankingPage? activeFirstPage,
+  }) async {
+    final running = _memory.top100RefreshFuture;
+    if (running != null) {
+      if (!force) {
+        await running;
+        return;
+      }
+      _memory.top100ForceRefreshRequested = true;
+      await running;
+      if (!mounted) return;
+      if (_memory.top100ForceRefreshRequested) {
+        _memory.top100ForceRefreshRequested = false;
+        await _runTop100Refresh(force: true);
+      } else {
+        final queued = _memory.top100RefreshFuture;
+        if (queued != null) await queued;
+      }
+      return;
+    }
+    await _runTop100Refresh(
+      force: force,
+      activeBoard: activeBoard,
+      activeFirstPage: activeFirstPage,
+    );
+  }
+
+  Future<void> _runTop100Refresh({
+    required bool force,
+    RankingBoard? activeBoard,
+    RankingPage? activeFirstPage,
+  }) {
+    late final Future<void> pending;
+    pending = _refreshTop100ForAllHotBoards(
+      force: force,
+      activeBoard: activeBoard,
+      activeFirstPage: activeFirstPage,
+    ).whenComplete(() {
+      if (identical(_memory.top100RefreshFuture, pending)) {
+        _memory.top100RefreshFuture = null;
+      }
+    });
+    _memory.top100RefreshFuture = pending;
+    return pending;
+  }
+
+  Future<void> _refreshTop100ForAllHotBoards({
+    required bool force,
+    RankingBoard? activeBoard,
+    RankingPage? activeFirstPage,
+  }) async {
     List<RankingBoard> boards;
     try {
       boards = (await _loadBoardsCached())
@@ -252,13 +319,22 @@ class _RankingsScreenState extends State<RankingsScreen> {
     }
 
     for (final board in boards) {
+      if (!mounted) return;
       RankingPage firstPage;
-      if (board.id == activeBoard.id && activeFirstPage.page == 1) {
-        firstPage = activeFirstPage;
+      final suppliedFirstPage =
+          board.id == activeBoard?.id && activeFirstPage?.page == 1;
+      if (suppliedFirstPage) {
+        firstPage = activeFirstPage!;
       } else {
         try {
-          await _waitForPlaybackPriority();
-          firstPage = await _requestAndCacheRankingPage(board, 1);
+          if (!await _waitForPlaybackPriority()) return;
+          firstPage = force
+              ? await widget.repository.rankings(
+                  board.id,
+                  page: 1,
+                  force: true,
+                )
+              : await _requestAndCacheRankingPage(board, 1);
         } catch (_) {
           // A failed board must not block the other hot boards from preloading.
           continue;
@@ -270,23 +346,85 @@ class _RankingsScreenState extends State<RankingsScreen> {
         continue;
       }
 
+      if (force) {
+        _memory.boardRefreshVersions[board.id] =
+            (_memory.boardRefreshVersions[board.id] ?? 0) + 1;
+        final prefix = '${board.id}:';
+        _memory.prefetchedPages.removeWhere((key, _) => key.startsWith(prefix));
+        _memory.prefetchingPages.removeWhere((key, _) => key.startsWith(prefix));
+      }
+
+      final rows = <String, RankingItem>{
+        for (final item in firstPage.items) item.drama.id: item,
+      };
+      var items = rows.values.toList()
+        ..sort((a, b) => a.rank.compareTo(b.rank));
+      var page = firstPage.page;
       var hasMore = firstPage.hasMore;
-      for (var page = 2;
-          page <= _redFruitPreloadPageCount && hasMore;
-          page++) {
+      var updatedText = firstPage.updatedText;
+
+      for (var nextPage = 2;
+          nextPage <= _redFruitPreloadPageCount &&
+              hasMore &&
+              items.length < 100;
+          nextPage++) {
+        RankingPage result;
         try {
-          await _waitForPlaybackPriority();
-          final result = await _requestAndCacheRankingPage(board, page);
-          if (result.page != page ||
-              result.items.isEmpty ||
-              result.stale ||
-              result.warning.isNotEmpty) {
-            break;
-          }
-          hasMore = result.hasMore;
+          if (!await _waitForPlaybackPriority()) return;
+          result = force
+              ? await widget.repository.rankings(
+                  board.id,
+                  page: nextPage,
+                  force: true,
+                )
+              : await _requestAndCacheRankingPage(board, nextPage);
         } catch (_) {
-          // Leave this page uncached; user-driven pagination can retry it.
+          // Keep the pages obtained so far; the visible list can retry the next page.
           break;
+        }
+        if (result.page != nextPage ||
+            result.items.isEmpty ||
+            result.stale ||
+            result.warning.isNotEmpty) {
+          break;
+        }
+
+        if (force) {
+          _memory.prefetchedPages[_rankingPageKey(board.id, nextPage)] =
+              _RankingPageSnapshot(page: result, checkedAt: DateTime.now());
+        }
+        for (final item in result.items) {
+          rows[item.drama.id] = item;
+        }
+        items = rows.values.toList()
+          ..sort((a, b) => a.rank.compareTo(b.rank));
+        if (items.length > 100) items = items.take(100).toList();
+        page = result.page;
+        hasMore = result.hasMore;
+        if (result.updatedText.isNotEmpty) updatedText = result.updatedText;
+      }
+
+      if (force) {
+        final reachedLimit = items.length >= 100 || page >= _redFruitPreloadPageCount;
+        final mayHaveMore = !reachedLimit && hasMore;
+        _memory.pages[board.id] = _RankingSnapshot(
+          items: List<RankingItem>.unmodifiable(items),
+          page: page,
+          hasMore: mayHaveMore,
+          updatedText: updatedText,
+          checkedAt: DateTime.now(),
+        );
+        if (mounted && _board?.id == board.id) {
+          setState(() {
+            _items = List<RankingItem>.of(items);
+            _page = page;
+            _hasMore = mayHaveMore;
+            _updated = updatedText;
+            _error = null;
+            _failedMore = false;
+            _loading = false;
+            _more = false;
+          });
         }
       }
     }
@@ -318,6 +456,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
     _scroll.addListener(_onScroll);
     widget.repository.catalogUpdates.addListener(_metadataChanged);
     _initialize();
+    _top100RefreshTimer = Timer.periodic(_top100RefreshInterval, (_) {
+      if (mounted) unawaited(_scheduleTop100Refresh(force: true));
+    });
   }
 
   @override
@@ -325,6 +466,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
     widget.repository.catalogUpdates.removeListener(_metadataChanged);
     _generation++;
     _retryTimer?.cancel();
+    _top100RefreshTimer?.cancel();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
@@ -444,7 +586,19 @@ class _RankingsScreenState extends State<RankingsScreen> {
             ? DateTime.now().subtract(const Duration(minutes: 5))
             : DateTime.now(),
       );
-      if (result.warning.isEmpty) {
+      if (result.warning.isEmpty &&
+          force &&
+          !more &&
+          !result.stale &&
+          _redFruitHotBoardIds.contains(board.id)) {
+        unawaited(
+          _scheduleTop100Refresh(
+            force: true,
+            activeBoard: board,
+            activeFirstPage: result,
+          ),
+        );
+      } else if (result.warning.isEmpty) {
         _prefetchNextPage(board, result);
       }
       _retryTimer?.cancel();
@@ -552,8 +706,16 @@ class _RankingsScreenState extends State<RankingsScreen> {
           ),
   );
 
+  Future<void> _refreshRankingList() {
+    final board = _board;
+    if (board != null && _redFruitHotBoardIds.contains(board.id)) {
+      return _scheduleTop100Refresh(force: true);
+    }
+    return _load(force: true);
+  }
+
   Widget _rankingList(List<RankingItem> items) => RefreshIndicator(
-    onRefresh: () => _load(force: true),
+    onRefresh: _refreshRankingList,
     child: ListView.builder(
       key: ValueKey('ranking-${_board!.id}'),
       controller: _scroll,
