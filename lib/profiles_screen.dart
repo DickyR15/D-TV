@@ -39,6 +39,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   );
 
   @override
+  void initState() {
+    super.initState();
+    requestTvFocusAfterRouteTransition(context, _forceLoginFocus);
+  }
+
+  @override
   void dispose() {
     _forceLoginFocus.dispose();
     for (final node in _profileEntryFocusNodes.values) {
@@ -222,7 +228,6 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                   const SizedBox(height: 12),
                   SwitchListTile(
                     key: const ValueKey('force-login-setting'),
-                    autofocus: AppLayout.isTelevision(context),
                     focusNode: _forceLoginFocus,
                     contentPadding: EdgeInsets.zero,
                     title: const Text('啟動時需要登入'),
