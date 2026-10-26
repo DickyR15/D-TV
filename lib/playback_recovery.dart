@@ -113,9 +113,15 @@ class PlaybackHealth {
   // Range-resume attempt. Fail over after a shorter total stall window so a
   // dead CDN cannot leave playback spinning for nearly a minute.
   static const stallTimeout = Duration(seconds: 32);
-  // If startup has no media progress, fail over before a dead CDN can keep
-  // the spinner visible for half a minute. Buffer/duration changes reset this.
-  static const startupStallTimeout = Duration(seconds: 20);
+  // The first route gets a little more time for DNS/TLS startup. Once it
+  // has failed, alternates must prove useful quickly instead of each holding
+  // the spinner for another 20 seconds.
+  static const startupStallTimeout = Duration(seconds: 12);
+  static const alternativeStartupStallTimeout = Duration(seconds: 8);
+
+  static Duration startupTimeoutForRoute(int routeIndex) =>
+      routeIndex <= 0 ? startupStallTimeout : alternativeStartupStallTimeout;
+
   Duration? _position;
   Duration? _duration;
   Duration? _buffer;
@@ -135,6 +141,7 @@ class PlaybackHealth {
     required bool intendedToPlay,
     required bool foreground,
     required DateTime now,
+    int routeIndex = 0,
   }) {
     if (!intendedToPlay || !foreground) {
       _position = position;
@@ -161,7 +168,7 @@ class PlaybackHealth {
     final waitingForInitialMedia =
         position == Duration.zero && duration == Duration.zero;
     final timeout = waitingForInitialMedia
-        ? startupStallTimeout
+        ? startupTimeoutForRoute(routeIndex)
         : stallTimeout;
     return now.difference(_lastProgress!) >= timeout;
   }
