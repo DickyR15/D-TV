@@ -554,6 +554,47 @@ class _RankingsScreenState extends State<RankingsScreen> {
     return future;
   }
 
+  Future<void> _restoreCachedHotBoards(List<RankingBoard> boards) async {
+    final hotBoards = boards
+        .where(
+          (board) =>
+              board.source == 'hongguo' &&
+              _redFruitHotBoardIds.contains(board.id),
+        )
+        .toList();
+    await Future.wait([
+      for (final board in hotBoards)
+        () async {
+          try {
+            final result =
+                await widget.repository.cachedRankingTop100(board.id);
+            if (!mounted || result == null || result.items.isEmpty) return;
+            final current = _memory.pages[board.id];
+            if (current != null &&
+                current.isFresh &&
+                current.items.length >= result.items.length) {
+              return;
+            }
+            _memory.pages[board.id] = _RankingSnapshot(
+              items: List<RankingItem>.unmodifiable(result.items),
+              page: result.page,
+              hasMore: result.hasMore,
+              updatedText: result.updatedText,
+              checkedAt: result.stale || result.warning.isNotEmpty
+                  ? DateTime.now().subtract(const Duration(minutes: 5))
+                  : DateTime.now(),
+            );
+            RankingSearchCache.remember(
+              result.items.map((item) => item.drama),
+            );
+          } catch (_) {
+            // Cache restoration is opportunistic. A missing snapshot falls
+            // back to the normal first-page load and background prefetch.
+          }
+        }(),
+    ]);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -610,6 +651,13 @@ class _RankingsScreenState extends State<RankingsScreen> {
           .where((board) => widget.store.allowsSource(board.source))
           .toList();
       if (!mounted || generation != _generation) return;
+
+      // Pull cached 100-item snapshots from the native disk cache before
+      // asking the provider for new HTML. The cache-only call never waits on
+      // the network, so previously seen boards can paint all posters at once.
+      await _restoreCachedHotBoards(boards);
+      if (!mounted || generation != _generation) return;
+
       final selectedBoard =
           boards.where((board) => board.id == widget.initialBoardId).firstOrNull ??
           boards.where((board) => board.groupId == widget.initialGroup).firstOrNull ??
@@ -626,11 +674,22 @@ class _RankingsScreenState extends State<RankingsScreen> {
           _hasMore = cached.hasMore;
           _updated = cached.updatedText;
         }
-        _loading = false;
+        _loading = cached == null || cached.items.isEmpty;
       });
-      if (_board != null && (cached == null || !cached.isFresh)) {
-        // A stale in-memory list stays visible while the native layer refreshes.
-        await _load();
+      if (_board != null) {
+        if (cached == null || cached.items.isEmpty) {
+          await _load();
+        } else if (_redFruitHotBoardIds.contains(_board!.id)) {
+          if (!cached.isFresh) {
+            // Keep every cached poster visible while all four boards refresh.
+            unawaited(_scheduleTop100Refresh(force: true));
+          } else if (cached.items.length < 100 && cached.hasMore) {
+            // A fresh partial cache is useful immediately; finish it silently.
+            unawaited(_scheduleTop100Refresh(force: false));
+          }
+        } else if (!cached.isFresh) {
+          await _load();
+        }
       }
     } catch (error) {
       if (mounted && generation == _generation) {
