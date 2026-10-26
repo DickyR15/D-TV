@@ -413,24 +413,25 @@ class _RankingsScreenState extends State<RankingsScreen> {
         previousSnapshot != null &&
         previousSnapshot.items.length > firstPage.items.length &&
         firstPage.hasMore;
-    final rows = <String, RankingItem>{
+    // A ranking is a list of rank positions, not a set of unique drama IDs.
+    // Some upstream pages can overlap/repeat IDs; keying by ID silently drops
+    // those ranked rows and turns a 100-entry board into e.g. 85 visible items.
+    final rows = <int, RankingItem>{
       if (preserveCachedRows)
-        for (final item in previousSnapshot.items) item.drama.id: item,
+        for (final item in previousSnapshot.items) item.rank: item,
     };
 
     void mergePage(RankingPage incoming) {
       if (preserveCachedRows) {
         final firstRank = (incoming.page - 1) * 20 + 1;
         final lastRank = incoming.page * 20;
-        rows.removeWhere(
-          (_, item) => item.rank >= firstRank && item.rank <= lastRank,
-        );
+        rows.removeWhere((rank, _) => rank >= firstRank && rank <= lastRank);
       }
       for (final item in incoming.items) {
-        rows[item.drama.id] = item;
+        rows[item.rank] = item;
       }
       if (!incoming.hasMore) {
-        rows.removeWhere((_, item) => item.rank > incoming.page * 20);
+        rows.removeWhere((rank, _) => rank > incoming.page * 20);
       }
     }
 
@@ -754,10 +755,10 @@ class _RankingsScreenState extends State<RankingsScreen> {
           !more &&
           _redFruitHotBoardIds.contains(board.id) &&
           _items.length > result.items.length;
-      final rows = <String, RankingItem>{
+      final rows = <int, RankingItem>{
         if (more || preserveCachedTop100)
-          for (final item in _items) item.drama.id: item,
-        for (final item in result.items) item.drama.id: item,
+          for (final item in _items) item.rank: item,
+        for (final item in result.items) item.rank: item,
       };
       final mergedItems = rows.values.toList()
         ..sort((a, b) => a.rank.compareTo(b.rank));
@@ -1173,7 +1174,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
     if (television) {
       return RemoteGrid(
         key: ValueKey('ranking-grid-${_board!.id}'),
-        itemKeys: items.map((item) => item.drama.id).toList(),
+        // Rank is part of the key because upstream pagination may repeat a
+        // drama ID; each rank slot must still have independent focus state.
+        itemKeys: items
+            .map((item) => '${item.rank}:${item.drama.id}')
+            .toList(),
         columns: columns,
         itemExtent: itemExtent,
         spacing: spacing,
