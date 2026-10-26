@@ -83,6 +83,7 @@ class _RankingMemory {
   final prefetchedPages = <String, _RankingPageSnapshot>{};
   final prefetchingPages = <String, Future<RankingPage>>{};
   final boardRefreshVersions = <String, int>{};
+  DateTime? top100LastRefreshAt;
   Future<void>? top100RefreshFuture;
   bool top100ForceRefreshRequested = false;
   bool top100PrefetchStarted = false;
@@ -291,6 +292,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
       activeBoard: activeBoard,
       activeFirstPage: activeFirstPage,
     ).whenComplete(() {
+      if (mounted) _memory.top100LastRefreshAt = DateTime.now();
       if (identical(_memory.top100RefreshFuture, pending)) {
         _memory.top100RefreshFuture = null;
       }
@@ -455,7 +457,14 @@ class _RankingsScreenState extends State<RankingsScreen> {
     super.initState();
     _scroll.addListener(_onScroll);
     widget.repository.catalogUpdates.addListener(_metadataChanged);
-    _initialize();
+    unawaited(_initialize().then((_) {
+      final lastRefresh = _memory.top100LastRefreshAt;
+      if (mounted &&
+          lastRefresh != null &&
+          DateTime.now().difference(lastRefresh) >= _top100RefreshInterval) {
+        unawaited(_scheduleTop100Refresh(force: true));
+      }
+    }));
     _top100RefreshTimer = Timer.periodic(_top100RefreshInterval, (_) {
       if (mounted) unawaited(_scheduleTop100Refresh(force: true));
     });
