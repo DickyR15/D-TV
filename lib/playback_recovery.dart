@@ -109,12 +109,13 @@ class PlaybackRecoveryStability {
 }
 
 class PlaybackHealth {
-  // The proxy detects 12 seconds of read inactivity, then makes one bounded
-  // Range-resume attempt. Allow that attempt to finish before route failover.
-  static const stallTimeout = Duration(seconds: 52);
-  // Initial reads may also spend time in DNS/connect/TLS and response headers.
-  // Keep startup bounded, but don't cancel a viable first-range recovery early.
-  static const startupStallTimeout = Duration(seconds: 60);
+  // The proxy detects 12 seconds of read inactivity and makes one bounded
+  // Range-resume attempt. Fail over after a shorter total stall window so a
+  // dead CDN cannot leave playback spinning for nearly a minute.
+  static const stallTimeout = Duration(seconds: 32);
+  // Leave room for a slow first response and one resume attempt, but move on
+  // when startup still has no media progress after 35 seconds.
+  static const startupStallTimeout = Duration(seconds: 35);
   Duration? _position;
   Duration? _duration;
   Duration? _buffer;
