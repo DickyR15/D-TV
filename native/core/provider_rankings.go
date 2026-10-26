@@ -103,7 +103,9 @@ func (d *Downloader) cachedRankingTop100(board rankingBoard) rankingPage {
 		return result
 	}
 
-	rows := map[string]rankingItem{}
+	// Ranking position is the row identity here; a repeated drama ID on
+	// another upstream page must not shrink the cached board from 100 rows.
+	rows := map[int]rankingItem{}
 	result.Stale = false
 	for pageNo := 1; pageNo <= 5; pageNo++ {
 		cached, exists := cache.pages[board.ID+":"+strconv.Itoa(pageNo)]
@@ -124,7 +126,7 @@ func (d *Downloader) cachedRankingTop100(board rankingBoard) rankingPage {
 
 		for _, item := range cached.Items {
 			if item.Rank >= 1 && item.Rank <= 100 && item.Drama.ID != "" {
-				rows[item.Drama.ID] = item
+				rows[item.Rank] = item
 			}
 		}
 		result.Page = pageNo
