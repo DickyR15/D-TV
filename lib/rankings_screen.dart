@@ -987,7 +987,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
       );
     }
     return RefreshIndicator(
-      onRefresh: () => _load(force: true),
+      onRefresh: _refreshRankingList,
       child: CustomScrollView(
         key: ValueKey('ranking-grid-${_board!.id}'),
         controller: _scroll,
