@@ -114,6 +114,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
   _RankingMemory get _memory =>
       _rankingMemoryByRepository[widget.repository] ??= _RankingMemory();
 
+  bool get _isHotBoardPreloading =>
+      _board != null &&
+      _redFruitHotBoardIds.contains(_board!.id) &&
+      _memory.top100RefreshFuture != null;
+
   String _userFacingError(Object error) {
     final message = error.toString();
     if (message.contains('context deadline exceeded') ||
@@ -318,6 +323,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
       if (identical(_memory.top100RefreshFuture, pending)) {
         _memory.top100RefreshFuture = null;
       }
+      if (mounted) setState(() {});
     });
     _memory.top100RefreshFuture = pending;
     return pending;
@@ -626,7 +632,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }
 
   void _onScroll() {
-    if (!mounted || !_hasMore || _loading || _more || !_scroll.hasClients) {
+    if (!mounted ||
+        !_hasMore ||
+        _loading ||
+        _more ||
+        _isHotBoardPreloading ||
+        !_scroll.hasClients) {
       return;
     }
     final position = _scroll.position;
@@ -707,7 +718,15 @@ class _RankingsScreenState extends State<RankingsScreen> {
     bool quiet = false,
   }) async {
     final board = _board;
-    if (board == null || more && (_loading || _more || !_hasMore)) return;
+    if (board == null ||
+        more &&
+            (_loading ||
+                _more ||
+                !_hasMore ||
+                (_isHotBoardPreloading &&
+                    _redFruitHotBoardIds.contains(board.id)))) {
+      return;
+    }
     final generation = ++_generation;
     setState(() {
       _loading = !more && !quiet;
@@ -877,7 +896,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }
 
   Widget _loadMoreFooter() => Center(
-    child: _more
+    child: _isHotBoardPreloading
+        ? const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('正在準備完整榜單…'),
+          )
+        : _more
         ? const Padding(
             padding: EdgeInsets.all(16),
             child: CircularProgressIndicator(),
@@ -1221,7 +1245,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   Widget _wideFooter(int count) {
     final theme = Theme.of(context);
-    final status = _more
+    final status = _isHotBoardPreloading
+        ? '正在準備完整榜單…'
+        : _more
         ? '正在載入更多…'
         : _hasMore
         ? '上滑載入更多'
