@@ -731,17 +731,27 @@ class _RankingsScreenState extends State<RankingsScreen> {
               force: force,
             );
       if (!mounted || generation != _generation) return;
+      final preserveCachedTop100 =
+          !more &&
+          _redFruitHotBoardIds.contains(board.id) &&
+          _items.length > result.items.length;
       final rows = <String, RankingItem>{
-        if (more)
+        if (more || preserveCachedTop100)
           for (final item in _items) item.drama.id: item,
         for (final item in result.items) item.drama.id: item,
       };
       final mergedItems = rows.values.toList()
         ..sort((a, b) => a.rank.compareTo(b.rank));
+      final displayedPage = preserveCachedTop100 && _page > result.page
+          ? _page
+          : result.page;
+      final displayedHasMore = preserveCachedTop100
+          ? _hasMore
+          : result.hasMore;
       setState(() {
         _items = mergedItems;
-        _page = result.page;
-        _hasMore = result.hasMore;
+        _page = displayedPage;
+        _hasMore = displayedHasMore;
         _updated = result.updatedText;
         _error = result.warning.isEmpty ? null : result.warning;
         _loading = false;
@@ -749,11 +759,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
       });
       _memory.pages[board.id] = _RankingSnapshot(
         items: List<RankingItem>.unmodifiable(mergedItems),
-        page: result.page,
-        hasMore: result.hasMore,
+        page: displayedPage,
+        hasMore: displayedHasMore,
         updatedText: result.updatedText,
-        // A stale native page must remain stale in the Dart memory cache.
-        checkedAt: result.stale
+        // Keep partial stale snapshots marked stale until every cached page
+        // has been refreshed in the background.
+        checkedAt: result.stale || preserveCachedTop100
             ? DateTime.now().subtract(const Duration(minutes: 5))
             : DateTime.now(),
       );
