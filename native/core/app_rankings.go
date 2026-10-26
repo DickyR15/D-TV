@@ -62,12 +62,21 @@ func (engine *nativeEngine) nativeRanking(ctx context.Context, input nativeInput
 	if !found || !nativeSourceAvailable(board.Source) {
 		return nil, errNativeBuildSource
 	}
-	if input.Page < 1 || input.Page > 500 {
-		return nil, errors.New("榜单页码无效")
-	}
-	page, err := engine.downloader.loadRankingPage(ctx, board, input.Page, input.Force)
-	if err != nil {
-		return nil, err
+	var page rankingPage
+	var err error
+	if input.CacheOnly {
+		if input.Page != 0 {
+			return nil, errors.New("缓存榜单请求无效")
+		}
+		page = engine.downloader.cachedRankingTop100(board)
+	} else {
+		if input.Page < 1 || input.Page > 500 {
+			return nil, errors.New("榜单页码无效")
+		}
+		page, err = engine.downloader.loadRankingPage(ctx, board, input.Page, input.Force)
+		if err != nil {
+			return nil, err
+		}
 	}
 	type item struct {
 		Rank   int         `json:"rank"`
