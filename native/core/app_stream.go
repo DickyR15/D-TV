@@ -55,12 +55,14 @@ type nativeStreamServer struct {
 }
 
 const (
-	// Live traces show working CDN endpoints reaching response headers in
-	// about 1-3 seconds. Unreachable endpoints, however, spent 10-17 seconds
-	// across connect/TLS/header waits before MPV could switch routes. Keep each
-	// network stage bounded so a bad redirect/CDN cannot monopolize startup.
+	// Captured playback traces show successful TCP connections were IPv4;
+	// IPv6 connection attempts failed consistently on the target TV network.
+	// Prefer IPv4 for up to four seconds, then try IPv6 within the overall budget.
 	nativeStreamDialTimeout           = 5 * time.Second
-	nativeStreamTLSHandshakeTimeout   = 4 * time.Second
+	nativeStreamIPv4DialBudget        = 4 * time.Second
+	// Working TLS handshakes completed in under two seconds, while failed
+	// handshakes consumed the previous four-second budget.
+	nativeStreamTLSHandshakeTimeout   = 2500 * time.Millisecond
 	nativeStreamResponseHeaderTimeout = 5 * time.Second
 	nativeStreamReadIdleTimeout       = 12 * time.Second
 	nativeStreamResumeAttempts        = 2
@@ -68,6 +70,37 @@ const (
 	nativeStreamMaxIdlePerHost         = 4
 	nativeStreamIdleConnTimeout       = 45 * time.Second
 )
+
+// nativeStreamDialContext avoids spending the initial connection budget on
+// broken IPv6 routes when the CDN has working IPv4 addresses. IPv6-only hosts
+// and networks remain supported via fallback, without extending the total
+// connection deadline.
+func nativeStreamDialContext(dialer *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		if network != "tcp" {
+			return dialer.DialContext(ctx, network, address)
+		}
+
+		dialCtx, cancel := context.WithTimeout(ctx, nativeStreamDialTimeout)
+		defer cancel()
+
+		ipv4Ctx, cancelIPv4 := context.WithTimeout(dialCtx, nativeStreamIPv4DialBudget)
+		conn, ipv4Err := dialer.DialContext(ipv4Ctx, "tcp4", address)
+		cancelIPv4()
+		if ipv4Err == nil {
+			return conn, nil
+		}
+		if err := dialCtx.Err(); err != nil {
+			return nil, fmt.Errorf("IPv4 dial failed: %v; overall dial deadline reached: %w", ipv4Err, err)
+		}
+
+		conn, ipv6Err := dialer.DialContext(dialCtx, "tcp6", address)
+		if ipv6Err == nil {
+			return conn, nil
+		}
+		return nil, fmt.Errorf("IPv4 dial failed: %v; IPv6 fallback failed: %w", ipv4Err, ipv6Err)
+	}
+}
 
 func newNativeStreamTransport(base *http.Transport) *http.Transport {
 	transport := base.Clone()
@@ -94,7 +127,7 @@ func newNativeStreamTransport(base *http.Transport) *http.Transport {
 	transport.MaxIdleConnsPerHost = nativeStreamMaxIdlePerHost
 	transport.IdleConnTimeout = nativeStreamIdleConnTimeout
 	dialer := &net.Dialer{Timeout: nativeStreamDialTimeout}
-	transport.DialContext = dialer.DialContext
+	transport.DialContext = nativeStreamDialContext(dialer)
 	transport.TLSHandshakeTimeout = nativeStreamTLSHandshakeTimeout
 	transport.ResponseHeaderTimeout = nativeStreamResponseHeaderTimeout
 	return transport
