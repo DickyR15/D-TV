@@ -65,7 +65,7 @@ class DiaryService {
           try {
             final event = jsonDecode(line) as Map<String, dynamic>;
             final name = event['event'] as String? ?? '';
-            if (name.startsWith('stream.') || name == 'playback.route_probe') {
+            if (name.startsWith('stream.') || name.startsWith('playback.')) {
               lines.add(line);
             }
           } catch (_) {}

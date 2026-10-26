@@ -5,19 +5,27 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 )
 
 type nativePlaybackChoice struct {
-	danmakuSeries string
-	danmakuVideo  string
-	media         []providerMedia
-	index         int
-	qualities     []int
-	streamSession string
-	created       time.Time
+	danmakuSeries    string
+	danmakuVideo     string
+	media            []providerMedia
+	index            int
+	qualities        []int
+	streamSession    string
+	created          time.Time
+	task             Task
+	requestedQuality int
+	earlyRefreshUsed bool
 }
+
+// After three consecutive failed routes, resolve fresh signed URLs once but
+// retain every not-yet-tried route from the previous list as a last resort.
+const nativeEarlyPlaybackRefreshAfterFailedRoutes = 3
 
 func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoice {
 	choice := nativePlaybackChoice{qualities: []int{}}
@@ -27,7 +35,7 @@ func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoic
 		if !isProviderHTTPMediaURL(option.URL) {
 			continue
 		}
-		identity := option.URL + "\x00" + option.Referer + "\x00" + hex.EncodeToString(option.CENCKey) + "\x00" + hex.EncodeToString(option.HLSKey)
+		identity := nativePlaybackMediaIdentity(option)
 		if seen[identity] {
 			continue
 		}
@@ -160,6 +168,14 @@ func (engine *nativeEngine) nativeNextPlayback(ctx context.Context, session stri
 	if !exists {
 		return nativePlan{}, errors.New("播放线路已失效，请重新解析播放")
 	}
+	// A repeated open/demux failure is often caused by an expired signed URL
+	// set, not by the TV decoder. Refresh after a few failures rather than making
+	// the viewer wait through ten serial opens. Untried prior routes are kept.
+	if !choice.earlyRefreshUsed &&
+		choice.task.DramaID != "" &&
+		choice.index+1 >= nativeEarlyPlaybackRefreshAfterFailedRoutes {
+		return engine.nativeRefreshPlaybackAfterFailures(ctx, choice)
+	}
 	choice.index = nextNativePlaybackRouteIndex(
 		choice.media,
 		choice.index,
@@ -169,6 +185,175 @@ func (engine *nativeEngine) nativeNextPlayback(ctx context.Context, session stri
 		},
 	)
 	return engine.nativeOpenPlayback(ctx, choice)
+}
+
+func (engine *nativeEngine) nativeRefreshPlaybackAfterFailures(
+	ctx context.Context,
+	previous nativePlaybackChoice,
+) (nativePlan, error) {
+	if engine.downloader == nil || previous.task.DramaID == "" {
+		previous.earlyRefreshUsed = true
+		previous.index = nextNativePlaybackRouteIndex(previous.media, previous.index, func(address string) bool {
+			return engine.downloader != nil && engine.downloader.nativeStreamHostCoolingDown(address)
+		})
+		return engine.nativeOpenPlayback(ctx, previous)
+	}
+	attemptedEnd := previous.index + 1
+	if attemptedEnd > len(previous.media) {
+		attemptedEnd = len(previous.media)
+	}
+	if attemptedEnd < 0 {
+		attemptedEnd = 0
+	}
+	attempted := previous.media[:attemptedEnd]
+	remaining := append([]providerMedia(nil), previous.media[attemptedEnd:]...)
+
+	freshMedia, err := engine.downloader.resolveProviderMedia(ctx, previous.task)
+	if ctx.Err() != nil {
+		return nativePlan{}, ctx.Err()
+	}
+
+	freshChoice := nativePlaybackChoice{
+		task:             previous.task,
+		requestedQuality: previous.requestedQuality,
+		earlyRefreshUsed: true,
+		danmakuSeries:    previous.danmakuSeries,
+		danmakuVideo:     previous.danmakuVideo,
+		qualities:        append([]int(nil), previous.qualities...),
+	}
+	freshCount := 0
+	refreshState := "failed"
+	refreshError := ""
+	if err == nil {
+		freshChoice = nativePlaybackChoices(freshMedia, previous.requestedQuality)
+		freshChoice.task = previous.task
+		freshChoice.requestedQuality = previous.requestedQuality
+		freshChoice.earlyRefreshUsed = true
+		freshChoice.danmakuSeries = previous.danmakuSeries
+		freshChoice.danmakuVideo = previous.danmakuVideo
+		freshChoice.media = nativeExcludeAttemptedPlaybackRoutes(freshChoice.media, attempted)
+		freshChoice.qualities = nativeMergePlaybackQualities(freshChoice.qualities, previous.qualities)
+		freshCount = len(freshChoice.media)
+		if len(freshChoice.media) > 0 {
+			freshChoice = engine.rankNativePlaybackRoutes(ctx, freshChoice, previous.task)
+		}
+		refreshState = "success"
+	} else {
+		refreshError = nativeStreamError(err)
+	}
+
+	// If the resolver did not return any new, untried URLs, probe the unused
+	// old candidates instead of looping over media that has already failed.
+	if len(freshChoice.media) == 0 && len(remaining) > 0 {
+		fallbackChoice := nativePlaybackChoice{
+			media:            remaining,
+			qualities:        append([]int(nil), previous.qualities...),
+			task:             previous.task,
+			requestedQuality: previous.requestedQuality,
+			earlyRefreshUsed: true,
+			danmakuSeries:    previous.danmakuSeries,
+			danmakuVideo:     previous.danmakuVideo,
+		}
+		freshChoice = engine.rankNativePlaybackRoutes(ctx, fallbackChoice, previous.task)
+	}
+	freshChoice = nativeMergeRefreshedPlaybackChoice(previous, freshChoice, remaining)
+	if len(freshChoice.media) == 0 {
+		return nativePlan{}, errors.New("该集没有其他可用的播放线路")
+	}
+	engine.downloader.recordDiagnostic(diagnosticEvent{
+		Level:      "info",
+		Event:      "playback.route_refresh",
+		Source:     sourceFromDramaID(previous.task.DramaID),
+		DramaID:    previous.task.DramaID,
+		DramaTitle: previous.task.DramaTitle,
+		Episode:    previous.task.Index,
+		Message: fmt.Sprintf(
+			"state=%s failed_routes=%d fresh_routes=%d preserved_routes=%d error=%s",
+			refreshState, attemptedEnd, freshCount, len(remaining), refreshError,
+		),
+	})
+	return engine.nativeOpenPlayback(ctx, freshChoice)
+}
+
+func nativePlaybackMediaIdentity(option providerMedia) string {
+	return option.URL + "\x00" + option.Referer + "\x00" +
+		hex.EncodeToString(option.CENCKey) + "\x00" + hex.EncodeToString(option.HLSKey)
+}
+
+func nativeExcludeAttemptedPlaybackRoutes(candidates, attempted []providerMedia) []providerMedia {
+	used := make(map[string]bool, len(attempted))
+	for _, option := range attempted {
+		used[nativePlaybackMediaIdentity(option)] = true
+	}
+	seen := make(map[string]bool, len(candidates))
+	result := make([]providerMedia, 0, len(candidates))
+	for _, option := range candidates {
+		if !isProviderHTTPMediaURL(option.URL) {
+			continue
+		}
+		identity := nativePlaybackMediaIdentity(option)
+		if used[identity] || seen[identity] {
+			continue
+		}
+		seen[identity] = true
+		option.Variants = nil
+		result = append(result, option)
+	}
+	return result
+}
+
+func nativeMergePlaybackRoutes(primary, fallback []providerMedia) []providerMedia {
+	seen := make(map[string]bool, len(primary)+len(fallback))
+	result := make([]providerMedia, 0, len(primary)+len(fallback))
+	for _, group := range [][]providerMedia{primary, fallback} {
+		for _, option := range group {
+			if !isProviderHTTPMediaURL(option.URL) {
+				continue
+			}
+			identity := nativePlaybackMediaIdentity(option)
+			if seen[identity] {
+				continue
+			}
+			seen[identity] = true
+			option.Variants = nil
+			result = append(result, option)
+		}
+	}
+	return result
+}
+
+func nativeMergePlaybackQualities(primary, fallback []int) []int {
+	seen := make(map[int]bool, len(primary)+len(fallback))
+	var result []int
+	for _, values := range [][]int{primary, fallback} {
+		for _, quality := range values {
+			if quality <= 0 || seen[quality] {
+				continue
+			}
+			seen[quality] = true
+			result = append(result, quality)
+		}
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(result)))
+	return result
+}
+
+func nativeMergeRefreshedPlaybackChoice(
+	previous nativePlaybackChoice,
+	fresh nativePlaybackChoice,
+	remaining []providerMedia,
+) nativePlaybackChoice {
+	fresh.media = nativeMergePlaybackRoutes(fresh.media, remaining)
+	fresh.qualities = nativeMergePlaybackQualities(fresh.qualities, previous.qualities)
+	fresh.task = previous.task
+	fresh.requestedQuality = previous.requestedQuality
+	fresh.earlyRefreshUsed = true
+	fresh.danmakuSeries = previous.danmakuSeries
+	fresh.danmakuVideo = previous.danmakuVideo
+	fresh.index = 0
+	fresh.streamSession = ""
+	fresh.created = time.Time{}
+	return fresh
 }
 
 func (engine *nativeEngine) nativeReleasePlayback(session string) {

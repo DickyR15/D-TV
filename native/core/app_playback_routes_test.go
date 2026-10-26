@@ -189,3 +189,78 @@ func TestNextNativePlaybackRouteSkipsCoolingCDNHosts(t *testing.T) {
 		t.Fatalf("exhausted route index=%d, want %d", got, len(media))
 	}
 }
+
+
+func TestNativePlaybackRefreshSkipsTriedURLsAndKeepsUnusedFallbacks(t *testing.T) {
+	previous := nativePlaybackChoice{
+		media: []providerMedia{
+			{URL: "https://old-a.test/failed-0.mp4", Quality: 1080},
+			{URL: "https://old-b.test/failed-1.mp4", Quality: 1080},
+			{URL: "https://old-c.test/failed-2.mp4", Quality: 1080},
+			{URL: "https://old-good.test/untried.mp4", Quality: 1080},
+			{URL: "https://old-backup.test/untried.mp4", Quality: 1080},
+		},
+		index:            2,
+		qualities:        []int{1080, 720},
+		task:             Task{DramaID: "hongguo:fixture", DramaTitle: "refresh fixture", Index: 7},
+		requestedQuality: 1080,
+		danmakuSeries:    "series",
+		danmakuVideo:     "video",
+	}
+	fresh := nativePlaybackChoices(providerMedia{
+		URL: "https://fresh-a.test/new.mp4",
+		Quality: 1080,
+		Variants: []providerMedia{
+			{URL: "https://old-a.test/failed-0.mp4", Quality: 1080},
+			{URL: "https://fresh-b.test/new.mp4", Quality: 1080},
+		},
+	}, 1080)
+	attempted := previous.media[:previous.index+1]
+	fresh.media = nativeExcludeAttemptedPlaybackRoutes(fresh.media, attempted)
+	merged := nativeMergeRefreshedPlaybackChoice(previous, fresh, previous.media[previous.index+1:])
+
+	got := make([]string, 0, len(merged.media))
+	for _, option := range merged.media {
+		got = append(got, option.URL)
+	}
+	want := []string{
+		"https://fresh-a.test/new.mp4",
+		"https://fresh-b.test/new.mp4",
+		"https://old-good.test/untried.mp4",
+		"https://old-backup.test/untried.mp4",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("merged routes=%v, want %v", got, want)
+	}
+	if !reflect.DeepEqual(merged.qualities, []int{1080, 720}) {
+		t.Fatalf("merged qualities=%v, want [1080 720]", merged.qualities)
+	}
+	if merged.index != 0 || !merged.earlyRefreshUsed || merged.requestedQuality != 1080 {
+		t.Fatalf("refreshed choice lost state: %+v", merged)
+	}
+	if merged.task.DramaID != previous.task.DramaID || merged.danmakuVideo != previous.danmakuVideo {
+		t.Fatalf("refreshed choice lost playback identity: %+v", merged)
+	}
+}
+
+func TestNativePlaybackRefreshDoesNotDropOldRoutesWhenRefreshAddsNothing(t *testing.T) {
+	previous := nativePlaybackChoice{
+		media: []providerMedia{
+			{URL: "https://old.test/failed.mp4", Quality: 1080},
+			{URL: "https://old.test/still-available.mp4", Quality: 1080},
+		},
+		index: 0,
+		qualities: []int{1080},
+		task: Task{DramaID: "hongguo:fixture"},
+		requestedQuality: 1080,
+	}
+	fresh := nativePlaybackChoices(providerMedia{
+		URL: "https://old.test/failed.mp4",
+		Quality: 1080,
+	}, 1080)
+	fresh.media = nativeExcludeAttemptedPlaybackRoutes(fresh.media, previous.media[:1])
+	merged := nativeMergeRefreshedPlaybackChoice(previous, fresh, previous.media[1:])
+	if len(merged.media) != 1 || merged.media[0].URL != "https://old.test/still-available.mp4" {
+		t.Fatalf("refresh discarded the only untried old route: %+v", merged.media)
+	}
+}

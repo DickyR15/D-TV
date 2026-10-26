@@ -169,6 +169,7 @@ void main() {
         '${'x' * (128 * 1024)}\n'
         '{"event":"catalog.other","message":"not a playback event"}\n'
         '{"event":"playback.route_probe","host":"cdn.example.test","message":"state=failed error=probe_budget"}\n'
+        '{"event":"playback.route_refresh","host":"cdn.example.test","message":"state=success failed_routes=3"}\n'
         '{"event":"stream.local_response","httpStatus":200}\n'
         '{"event":"stream.incomplete"',
       );
@@ -176,6 +177,7 @@ void main() {
       expect(DiaryService.fullText, contains('stream.session_cancel'));
       expect(DiaryService.fullText, contains('stream.local_response'));
       expect(DiaryService.fullText, contains('playback.route_probe'));
+      expect(DiaryService.fullText, contains('playback.route_refresh'));
       expect(DiaryService.fullText, isNot(contains('catalog.other')));
       expect(DiaryService.fullText, isNot(contains('stream.incomplete')));
       expect(DiaryService.entries.last, contains('stream.local_response'));
