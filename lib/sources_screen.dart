@@ -65,21 +65,26 @@ class _SourcesScreenState extends State<SourcesScreen> {
     () => FocusNode(debugLabel: 'source-update-$id'),
   );
 
-  String? _defaultVisibleUpdateSourceId() {
-    final sources = widget.store.permittedSources.toList()
+  List<String> _defaultVisibleUpdateSourceIds() {
+    if (!widget.repository.supportsSourceManagement) return const [];
+    final sources = widget.store.permittedSources
+        .where((source) => widget.store.sourceEnabled(source.id))
+        .toList()
       ..sort((a, b) {
         final aFirst = a.id == widget.initialSource ? 0 : 1;
         final bFirst = b.id == widget.initialSource ? 0 : 1;
         return aFirst.compareTo(bFirst);
       });
+    final visible = <String>[];
     for (final group in SourceGroup.fromSources(sources)) {
+      // This group is collapsed unless the page was opened for one of its entries.
       if (group.id == 'huangguo' &&
           !group.sources.any((source) => source.id == widget.initialSource)) {
         continue;
       }
-      if (group.sources.isNotEmpty) return group.sources.first.id;
+      visible.addAll(group.sources.map((source) => source.id));
     }
-    return null;
+    return visible;
   }
 
   void _requestInitialUpdateFocus() {
@@ -88,12 +93,15 @@ class _SourcesScreenState extends State<SourcesScreen> {
         !AppLayout.isTelevision(context)) {
       return;
     }
-    final sourceId = _defaultVisibleUpdateSourceId();
-    if (sourceId == null) return;
-    final node = _updateFocusNodes[sourceId];
-    if (node == null || !node.canRequestFocus) return;
-    node.requestFocus();
-    _initialUpdateFocusRequested = true;
+    for (final sourceId in _defaultVisibleUpdateSourceIds()) {
+      final node = _updateFocusNodes[sourceId];
+      if (node == null || node.context == null || !node.canRequestFocus) {
+        continue;
+      }
+      _initialUpdateFocusRequested = true;
+      requestTvFocusAfterRouteTransition(context, node);
+      return;
+    }
   }
 
   KeyEventResult _scrollHealthWithRemote(
