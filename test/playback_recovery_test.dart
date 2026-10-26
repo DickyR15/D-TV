@@ -143,11 +143,11 @@ void main() {
         now: start.add(Duration(seconds: seconds)),
       );
       expect(stalled(0), isFalse);
-      expect(stalled(17), isFalse);
-      expect(stalled(18), isTrue);
-      expect(stalled(19, position: 6), isFalse);
-      expect(stalled(36, position: 6), isFalse);
-      expect(stalled(37, position: 6), isTrue);
+      expect(stalled(51), isFalse);
+      expect(stalled(52), isTrue);
+      expect(stalled(53, position: 6), isFalse);
+      expect(stalled(96, position: 6), isFalse);
+      expect(stalled(97, position: 6), isTrue);
       expect(stalled(60, intendedToPlay: false, position: 6), isFalse);
       expect(stalled(80, intendedToPlay: false, position: 6), isFalse);
       expect(stalled(100, foreground: false, position: 6), isFalse);
@@ -157,7 +157,7 @@ void main() {
     },
   );
 
-  test('startup gets 30 seconds and buffer or duration changes reset the watchdog', () {
+  test('startup gets 60 seconds and buffer or duration changes reset the watchdog', () {
     final health = PlaybackHealth();
     final start = DateTime(2026, 10, 24);
 
@@ -180,14 +180,14 @@ void main() {
     expect(stalled(18, buffer: 1), isFalse); // Buffer activity is progress.
     expect(stalled(27, buffer: 2), isFalse); // New buffer activity resets time.
     expect(stalled(36, buffer: 2), isFalse);
-    expect(stalled(40, buffer: 2), isFalse);
-    expect(stalled(56, buffer: 2), isFalse); // 29 seconds since last progress.
-    expect(stalled(57, buffer: 2), isTrue); // 30 seconds since last progress.
+    expect(stalled(50, buffer: 2), isFalse);
+    expect(stalled(86, buffer: 2), isFalse); // 59 seconds since last progress.
+    expect(stalled(87, buffer: 2), isTrue); // 60 seconds since last progress.
 
     health.reset();
     expect(stalled(100, duration: 120), isFalse); // Duration discovery is progress.
-    expect(stalled(117, duration: 120), isFalse);
-    expect(stalled(118, duration: 120), isTrue); // Mid-playback timeout is 18s.
+    expect(stalled(151, duration: 120), isFalse);
+    expect(stalled(152, duration: 120), isTrue); // Mid-playback timeout is 52s.
   });
 
   test('recovery budget resets only after 30 seconds of progressing playback', () {

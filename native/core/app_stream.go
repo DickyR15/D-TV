@@ -592,9 +592,10 @@ func (stream *nativeStreamServer) nativeCopyMediaWithResume(
 		if ctx.Err() != nil {
 			return written, ctx.Err()
 		}
-		// Surface idle timeout to the existing recovery controller; repeatedly
-		// retrying a CDN that has stopped sending bytes would delay failover.
-		if errors.Is(copyErr, errNativeStreamIdleTimeout) {
+		// One idle-timeout rescue is worthwhile: some CDNs send headers and a
+		// small prefix, then pause long enough to trip the per-read watchdog.
+		// Resume from the next byte once, but don't loop on a CDN that stays idle.
+		if errors.Is(copyErr, errNativeStreamIdleTimeout) && attempt >= 1 {
 			return written, copyErr
 		}
 		if !resumable || attempt >= nativeStreamResumeAttempts || written >= expected {

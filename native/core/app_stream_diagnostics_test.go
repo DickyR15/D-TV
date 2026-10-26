@@ -322,6 +322,85 @@ func TestNativeStreamMP4ResponseDoesNotWaitForLargePeek(t *testing.T) {
 	}
 }
 
+type nativeStreamIdleTimeoutReader struct{}
+
+func (nativeStreamIdleTimeoutReader) Read([]byte) (int, error) {
+	return 0, errNativeStreamIdleTimeout
+}
+
+func TestNativeStreamResumesMP4AfterIdleTimeout(t *testing.T) {
+	payload := []byte(strings.Repeat("0123456789abcdef", 4096))
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		start, end, total, ok := nativeParseContentRange(
+			fmt.Sprintf("bytes %s/%d", strings.TrimPrefix(request.Header.Get("Range"), "bytes="), len(payload)),
+		)
+		if request.Header.Get("Range") != fmt.Sprintf("bytes=0-%d", len(payload)-1) {
+			http.Error(writer, "expected Range resume after idle timeout", http.StatusBadRequest)
+			return
+		}
+		if !ok || start != 0 || end != int64(len(payload)-1) || total != int64(len(payload)) {
+			http.Error(writer, "invalid resume range", http.StatusBadRequest)
+			return
+		}
+		writer.Header().Set("Content-Type", "video/mp4")
+		writer.Header().Set("Accept-Ranges", "bytes")
+		writer.Header().Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", len(payload)-1, len(payload)))
+		writer.Header().Set("Content-Length", strconv.Itoa(len(payload)))
+		writer.WriteHeader(http.StatusPartialContent)
+		_, _ = writer.Write(payload)
+	}))
+	defer upstream.Close()
+
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := newNativeStreamServer(engine.downloader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.server.Close()
+
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, upstream.URL+"/video.mp4", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := &http.Response{
+		StatusCode:    http.StatusPartialContent,
+		Header:        http.Header{},
+		ContentLength: int64(len(payload)),
+		Body:          io.NopCloser(strings.NewReader("")),
+		Request:       request,
+	}
+	response.Header.Set("Content-Type", "video/mp4")
+	response.Header.Set("Accept-Ranges", "bytes")
+	response.Header.Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", len(payload)-1, len(payload)))
+	response.Header.Set("Content-Length", strconv.Itoa(len(payload)))
+
+	var destination bytes.Buffer
+	written, err := stream.nativeCopyMediaWithResume(
+		context.Background(),
+		&destination,
+		request,
+		request.URL.String(),
+		response,
+		nativeStreamIdleTimeoutReader{},
+		nativeStreamDiagnostic{request: 1, session: "idle-resume", asset: "media", method: http.MethodGet, started: time.Now()},
+	)
+	if err != nil {
+		t.Fatalf("idle-timeout resume failed after %d bytes: %v", written, err)
+	}
+	if !bytes.Equal(destination.Bytes(), payload) {
+		t.Fatalf("resumed stream has %d bytes, want %d", destination.Len(), len(payload))
+	}
+	_, diagnosticText := streamDiagnosticEvents(t, stream)
+	for _, marker := range []string{"stream.resume_attempt", "stream.resume_response"} {
+		if !strings.Contains(diagnosticText, marker) {
+			t.Errorf("missing diagnostic event %q", marker)
+		}
+	}
+}
+
 func TestNativeStreamResumesPrematureMP4Body(t *testing.T) {
 	payload := []byte(strings.Repeat("0123456789abcdef", 4096))
 	cut := len(payload) / 2

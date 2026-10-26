@@ -26,7 +26,6 @@ class _RankingRepository extends FixtureRepository {
   int rankingCalls = 0;
   final rankingCallsByPage = <int, int>{};
   bool timeoutFirstRanking = false;
-  bool allowThreePages = false;
 
   static const hotBoards = [
     RankingBoard(id: 'hongguo-hot', source: 'hongguo', name: '熱播'),
@@ -60,7 +59,7 @@ class _RankingRepository extends FixtureRepository {
     const pageSize = 20;
     return RankingPage(
       page: page,
-      hasMore: page < (allowThreePages ? 3 : 5),
+      hasMore: page < 5,
       items: [
         for (var i = 1; i <= pageSize; i++)
           RankingItem(
@@ -224,7 +223,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(960, 540));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      final repository = _RankingRepository()..allowThreePages = true;
+      final repository = _RankingRepository();
       await tester.pumpWidget(
         MaterialApp(
           home: RankingsScreen(

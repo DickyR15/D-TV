@@ -109,13 +109,12 @@ class PlaybackRecoveryStability {
 }
 
 class PlaybackHealth {
-  // The local stream proxy waits up to 12 seconds for an upstream read to
-  // resume. Do not cancel playback before it can report that timeout.
-  static const stallTimeout = Duration(seconds: 18);
-  // Native upstream dial, TLS handshake, and response-header waits are each
-  // bounded at 8 seconds. Allow more than their combined 24-second budget so
-  // slow but still viable sources are not canceled by the player watchdog.
-  static const startupStallTimeout = Duration(seconds: 30);
+  // The proxy detects 12 seconds of read inactivity, then makes one bounded
+  // Range-resume attempt. Allow that attempt to finish before route failover.
+  static const stallTimeout = Duration(seconds: 52);
+  // Initial reads may also spend time in DNS/connect/TLS and response headers.
+  // Keep startup bounded, but don't cancel a viable first-range recovery early.
+  static const startupStallTimeout = Duration(seconds: 60);
   Duration? _position;
   Duration? _duration;
   Duration? _buffer;
