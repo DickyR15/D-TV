@@ -12,7 +12,10 @@ import (
 	"time"
 )
 
-const nativePlaybackRouteProbeTimeout = 4 * time.Second
+// Route probing is only a ranking hint. Keep it short so stalled backups
+// cannot hold first-frame startup for four seconds; failed/untested routes
+// remain available for real playback failover.
+const nativePlaybackRouteProbeTimeout = 1500 * time.Millisecond
 const nativePlaybackRouteProbeLimit = 4
 const nativePlaybackRouteProbeBytes = 64 * 1024
 

@@ -253,8 +253,12 @@ func TestNativePlaybackProbeBudgetDoesNotCooldownSlowHosts(t *testing.T) {
 	_ = engine.rankNativePlaybackRoutes(context.Background(), choice, Task{
 		DramaID: "hongguo:fixture", DramaTitle: "slow CDN probe", Index: 1,
 	})
-	if time.Since(started) < nativePlaybackRouteProbeTimeout {
-		t.Fatalf("probe returned before its own timeout budget elapsed")
+	elapsed := time.Since(started)
+	if elapsed < nativePlaybackRouteProbeTimeout {
+		t.Fatalf("probe returned before its own timeout budget elapsed: %s", elapsed)
+	}
+	if elapsed > 3500*time.Millisecond {
+		t.Fatalf("stalled probes delayed playback resolution too long: %s", elapsed)
 	}
 	for _, address := range []string{slowA, slowB} {
 		if downloader.nativeStreamHostCoolingDown(address) {
