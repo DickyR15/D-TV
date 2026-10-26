@@ -55,26 +55,78 @@ type nativeStreamServer struct {
 }
 
 const (
-	// Captured playback traces show successful TCP connections were IPv4;
-	// IPv6 connection attempts failed consistently on the target TV network.
-	// Prefer IPv4 for up to four seconds, then try IPv6 within the overall budget.
+	// Race all IPv4 CDN addresses in parallel. Captured traces show one IPv4
+	// address can stall for two seconds while a later address connects quickly.
+	// Preserve an IPv6 fallback within the same overall dial deadline.
 	nativeStreamDialTimeout           = 5 * time.Second
-	nativeStreamIPv4DialBudget        = 4 * time.Second
-	// Working TLS handshakes completed in under two seconds, while failed
-	// handshakes consumed the previous four-second budget.
-	nativeStreamTLSHandshakeTimeout   = 2500 * time.Millisecond
+	nativeStreamIPv4DialBudget        = 2 * time.Second
+	// Working TLS handshakes in the latest trace completed in under 350 ms;
+	// dead CDN handshakes repeatedly consumed the full 2.5-second budget.
+	nativeStreamTLSHandshakeTimeout   = 1500 * time.Millisecond
 	nativeStreamResponseHeaderTimeout = 5 * time.Second
 	nativeStreamReadIdleTimeout       = 12 * time.Second
 	nativeStreamResumeAttempts        = 2
 	nativeStreamMaxIdleConnections    = 16
 	nativeStreamMaxIdlePerHost         = 4
-	nativeStreamIdleConnTimeout       = 45 * time.Second
-)
+	nativeStreamIdleConnTimeout       = 45 * time// nativeDialResolvedIPs races a set of already-resolved addresses. This avoids
+// serially spending seconds on an unreachable CDN IP when another address for
+// the same hostname is responsive.
+func nativeDialResolvedIPs(
+	ctx context.Context,
+	network string,
+	port string,
+	ips []net.IPAddr,
+	dial func(context.Context, string, string) (net.Conn, error),
+) (net.Conn, error) {
+	if len(ips) == 0 {
+		return nil, errors.New("no addresses available")
+	}
+	type dialResult struct {
+		conn net.Conn
+		err  error
+	}
+	attemptCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	results := make(chan dialResult)
+	for _, entry := range ips {
+		address := net.JoinHostPort(entry.String(), port)
+		go func(address string) {
+			conn, err := dial(attemptCtx, network, address)
+			select {
+			case results <- dialResult{conn: conn, err: err}:
+			case <-attemptCtx.Done():
+				if conn != nil {
+					_ = conn.Close()
+				}
+			}
+		}(address)
+	}
+	var lastErr error
+	for completed := 0; completed < len(ips); {
+		select {
+		case result := <-results:
+			completed++
+			if result.err == nil {
+				cancel()
+				return result.conn, nil
+			}
+			lastErr = result.err
+		case <-ctx.Done():
+			if lastErr != nil {
+				return nil, fmt.Errorf("dial deadline reached: %v: %w", lastErr, ctx.Err())
+			}
+			return nil, ctx.Err()
+		}
+	}
+	if lastErr == nil {
+		lastErr = errors.New("all address attempts failed")
+	}
+	return nil, lastErr
+}
 
-// nativeStreamDialContext avoids spending the initial connection budget on
-// broken IPv6 routes when the CDN has working IPv4 addresses. IPv6-only hosts
-// and networks remain supported via fallback, without extending the total
-// connection deadline.
+// nativeStreamDialContext prefers IPv4 on the observed TV network, but races
+// all A-record addresses in parallel. If no IPv4 address connects within its
+// short budget, IPv6 remains available within the original overall deadline.
 func nativeStreamDialContext(dialer *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, network, address string) (net.Conn, error) {
 		if network != "tcp" {
@@ -83,22 +135,65 @@ func nativeStreamDialContext(dialer *net.Dialer) func(context.Context, string, s
 
 		dialCtx, cancel := context.WithTimeout(ctx, nativeStreamDialTimeout)
 		defer cancel()
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return dialer.DialContext(dialCtx, network, address)
+		}
+		if ip := net.ParseIP(host); ip != nil {
+			if ip.To4() != nil {
+				return dialer.DialContext(dialCtx, "tcp4", net.JoinHostPort(ip.To4().String(), port))
+			}
+			return dialer.DialContext(dialCtx, "tcp6", address)
+		}
 
-		ipv4Ctx, cancelIPv4 := context.WithTimeout(dialCtx, nativeStreamIPv4DialBudget)
-		conn, ipv4Err := dialer.DialContext(ipv4Ctx, "tcp4", address)
-		cancelIPv4()
-		if ipv4Err == nil {
-			return conn, nil
+		resolved, lookupErr := net.DefaultResolver.LookupIPAddr(dialCtx, host)
+		if lookupErr != nil {
+			if dialCtx.Err() != nil {
+				return nil, fmt.Errorf("resolve media host: %w", lookupErr)
+			}
+			return nil, dialer.DialContext(dialCtx, network, address)
 		}
-		if err := dialCtx.Err(); err != nil {
-			return nil, fmt.Errorf("IPv4 dial failed: %v; overall dial deadline reached: %w", ipv4Err, err)
+		var ipv4, ipv6 []net.IPAddr
+		for _, entry := range resolved {
+			if entry.IP.To4() != nil {
+				ipv4 = append(ipv4, net.IPAddr{IP: entry.IP.To4()})
+			} else if entry.IP.To16() != nil {
+				ipv6 = append(ipv6, entry)
+			}
 		}
 
-		conn, ipv6Err := dialer.DialContext(dialCtx, "tcp6", address)
-		if ipv6Err == nil {
-			return conn, nil
+		var ipv4Err error
+		if len(ipv4) > 0 {
+			ipv4Ctx, cancelIPv4 := context.WithTimeout(dialCtx, nativeStreamIPv4DialBudget)
+			conn, err := nativeDialResolvedIPs(ipv4Ctx, "tcp4", port, ipv4, dialer.DialContext)
+			cancelIPv4()
+			if err == nil {
+				return conn, nil
+			}
+			ipv4Err = err
+			if dialCtx.Err() != nil {
+				return nil, fmt.Errorf("IPv4 dial failed: %v; overall dial deadline reached: %w", ipv4Err, dialCtx.Err())
+			}
 		}
-		return nil, fmt.Errorf("IPv4 dial failed: %v; IPv6 fallback failed: %w", ipv4Err, ipv6Err)
+
+		if len(ipv6) > 0 {
+			conn, ipv6Err := nativeDialResolvedIPs(dialCtx, "tcp6", port, ipv6, dialer.DialContext)
+			if ipv6Err == nil {
+				return conn, nil
+			}
+			if ipv4Err != nil {
+				return nil, fmt.Errorf("IPv4 dial failed: %v; IPv6 fallback failed: %w", ipv4Err, ipv6Err)
+			}
+			return nil, fmt.Errorf("IPv6 dial failed: %w", ipv6Err)
+		}
+		if ipv4Err != nil {
+			return nil, fmt.Errorf("IPv4 dial failed: %w", ipv4Err)
+		}
+		return nil, errors.New("media host has no usable IP addresses")
+	}
+}
+
+Err)
 	}
 }
 

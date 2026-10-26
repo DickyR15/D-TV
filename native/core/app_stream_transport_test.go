@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"net"
+	"sync"
 	"testing"
 	"time"
 )
@@ -61,7 +62,13 @@ func TestNativeStreamDialContextFallsBackToIPv6(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	dial := nativeStreamDialContext(&net.Dialer{Timeout: nativeStreamDialTimeout})
-	conn, err := dial(ctx, "tcp", listener.Addr().String())
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// localhost resolves to both families on standard CI runners. The IPv4
+	// loopback port has no listener, so this exercises the IPv6 fallback.
+	conn, err := dial(ctx, "tcp", net.JoinHostPort("localhost", port))
 	if err != nil {
 		t.Fatalf("IPv6-only target should connect through fallback: %v", err)
 	}
@@ -76,5 +83,47 @@ func TestNativeStreamDialContextFallsBackToIPv6(t *testing.T) {
 		_ = acceptedConn.Close()
 	case <-time.After(time.Second):
 		t.Fatal("listener did not accept the IPv6 connection")
+	}
+}
+
+func TestNativeDialResolvedIPsRacesCandidates(t *testing.T) {
+	ips := []net.IPAddr{
+		{IP: net.ParseIP("192.0.2.1")},
+		{IP: net.ParseIP("192.0.2.2")},
+	}
+	var mu sync.Mutex
+	started := map[string]bool{}
+	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
+		mu.Lock()
+		started[address] = true
+		mu.Unlock()
+		if address == "192.0.2.1:443" {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(20 * time.Millisecond):
+		}
+		client, server := net.Pipe()
+		go func() { _ = server.Close() }()
+		return client, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	startedAt := time.Now()
+	conn, err := nativeDialResolvedIPs(ctx, "tcp4", "443", ips, dial)
+	if err != nil {
+		t.Fatalf("fast candidate should win the race: %v", err)
+	}
+	_ = conn.Close()
+	if elapsed := time.Since(startedAt); elapsed > 500*time.Millisecond {
+		t.Fatalf("dial waited for a stalled sibling address: %s", elapsed)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !started["192.0.2.1:443"] || !started["192.0.2.2:443"] {
+		t.Fatalf("dial did not try all IPv4 addresses concurrently: %+v", started)
 	}
 }
