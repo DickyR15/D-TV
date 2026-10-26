@@ -32,16 +32,18 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      // HomeScreen contains ongoing TV animations, so wait for the initial
+      // layout instead of requiring the whole widget tree to become idle.
+      await tester.pump(const Duration(milliseconds: 300));
 
       final moreButton = find.byTooltip('更多');
       expect(moreButton, findsOneWidget);
       await tester.tap(moreButton);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('片源管理'), findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.byType(SourcesScreen), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
