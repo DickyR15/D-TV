@@ -116,6 +116,44 @@ func TestNativeStreamIOErrorsTriggerHostCooldownAndRedactURL(t *testing.T) {
 	}
 }
 
+func TestNativeStreamDoesNotClearHostCooldownAtHeaders(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "video/mp4")
+		writer.Header().Set("Content-Range", "bytes 0-31/100")
+		writer.Header().Set("Content-Length", "32")
+		writer.Header().Set("Accept-Ranges", "bytes")
+		writer.WriteHeader(http.StatusPartialContent)
+		_, _ = io.WriteString(writer, strings.Repeat("x", 32))
+	}))
+	defer upstream.Close()
+
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := newNativeStreamServer(engine.downloader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.server.Close()
+
+	address := upstream.URL + "/video.mp4"
+	engine.downloader.rememberNativeStreamHostFailure(address, "timeout")
+	request, err := http.NewRequest(http.MethodGet, address, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := stream.nativeRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+
+	if !engine.downloader.nativeStreamHostCoolingDown(address) {
+		t.Fatal("HTTP 206 headers alone must not clear host cooldown before the body is consumed")
+	}
+}
+
 func TestNativeStreamDiagnosticsHLSAssetsAndPrivacy(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -377,6 +415,7 @@ func TestNativeStreamResumesMP4AfterIdleTimeout(t *testing.T) {
 	response.Header.Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", len(payload)-1, len(payload)))
 	response.Header.Set("Content-Length", strconv.Itoa(len(payload)))
 
+	stream.downloader.rememberNativeStreamHostFailure(request.URL.String(), "timeout")
 	var destination bytes.Buffer
 	written, err := stream.nativeCopyMediaWithResume(
 		context.Background(),
@@ -392,6 +431,9 @@ func TestNativeStreamResumesMP4AfterIdleTimeout(t *testing.T) {
 	}
 	if !bytes.Equal(destination.Bytes(), payload) {
 		t.Fatalf("resumed stream has %d bytes, want %d", destination.Len(), len(payload))
+	}
+	if stream.downloader.nativeStreamHostCoolingDown(request.URL.String()) {
+		t.Fatal("a fully transferred media body should clear the host cooldown")
 	}
 	_, diagnosticText := streamDiagnosticEvents(t, stream)
 	for _, marker := range []string{"stream.resume_attempt", "stream.resume_response"} {
