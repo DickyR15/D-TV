@@ -21,6 +21,9 @@ class ResourceSettingsScreen extends StatefulWidget {
 
 class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   final _proxy = TextEditingController();
+  final FocusNode _connectionModeFocus =
+      FocusNode(debugLabel: 'network-connection-mode');
+  bool _initialConnectionFocusRequested = false;
   late final int _epoch = widget.store.profileEpoch;
   ResourceSettings? _settings;
   String _mode = 'auto';
@@ -44,6 +47,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   @override
   void dispose() {
     _proxy.dispose();
+    _connectionModeFocus.dispose();
     super.dispose();
   }
 
@@ -59,6 +63,11 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
         _interval = settings.catalogIntervalMs;
         _error = null;
       });
+      if (!_initialConnectionFocusRequested &&
+          AppLayout.isTelevision(context)) {
+        _initialConnectionFocusRequested = true;
+        requestTvFocusAfterRouteTransition(context, _connectionModeFocus);
+      }
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     }
@@ -137,7 +146,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                     ),
                   DropdownButtonFormField<String>(
                     initialValue: _mode,
-                    autofocus: AppLayout.isTelevision(context),
+                    focusNode: _connectionModeFocus,
                     decoration: const InputDecoration(labelText: '連線方式'),
                     items: const [
                       DropdownMenuItem(value: 'auto', child: Text('自動')),
