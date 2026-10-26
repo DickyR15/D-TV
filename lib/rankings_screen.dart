@@ -88,6 +88,8 @@ class _RankingMemory {
   Future<void>? top100RefreshFuture;
   bool top100ForceRefreshRequested = false;
   bool top100PrefetchStarted = false;
+  bool top100PreloadIncomplete = false;
+  int top100AutomaticRetryCount = 0;
 }
 
 final Expando<_RankingMemory> _rankingMemoryByRepository =
@@ -132,6 +134,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
   static const _top100RefreshInterval = Duration(minutes: 15);
 
   Timer? _top100RefreshTimer;
+  Timer? _top100RetryTimer;
 
   String _rankingPageKey(String boardId, int page) => '$boardId:$page';
 
@@ -297,7 +300,21 @@ class _RankingsScreenState extends State<RankingsScreen> {
       activeBoard: activeBoard,
       activeFirstPage: activeFirstPage,
     ).whenComplete(() {
-      if (mounted) _memory.top100LastRefreshAt = DateTime.now();
+      if (mounted) {
+        _memory.top100LastRefreshAt = DateTime.now();
+        if (_memory.top100PreloadIncomplete) {
+          _memory.top100PrefetchStarted = false;
+          if (_memory.top100AutomaticRetryCount == 0) {
+            _memory.top100AutomaticRetryCount = 1;
+            _top100RetryTimer?.cancel();
+            _top100RetryTimer = Timer(const Duration(seconds: 3), () {
+              if (mounted) unawaited(_scheduleTop100Refresh(force: false));
+            });
+          }
+        } else {
+          _memory.top100AutomaticRetryCount = 0;
+        }
+      }
       if (identical(_memory.top100RefreshFuture, pending)) {
         _memory.top100RefreshFuture = null;
       }
@@ -311,6 +328,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
     RankingBoard? activeBoard,
     RankingPage? activeFirstPage,
   }) async {
+    _memory.top100PreloadIncomplete = false;
     List<RankingBoard> boards;
     try {
       boards = (await _loadBoardsCached())
@@ -322,6 +340,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
           )
           .toList();
     } catch (_) {
+      _memory.top100PreloadIncomplete = true;
       return;
     }
 
@@ -362,12 +381,14 @@ class _RankingsScreenState extends State<RankingsScreen> {
             : await _requestAndCacheRankingPage(board, 1);
       } catch (_) {
         // A failed board must not block the other hot boards from preloading.
+        _memory.top100PreloadIncomplete = true;
         return;
       }
     }
     if (firstPage.items.isEmpty ||
         firstPage.stale ||
         firstPage.warning.isNotEmpty) {
+      _memory.top100PreloadIncomplete = true;
       return;
     }
 
@@ -433,12 +454,14 @@ class _RankingsScreenState extends State<RankingsScreen> {
             : await _requestAndCacheRankingPage(board, nextPage);
       } catch (_) {
         // Keep the pages obtained so far; the visible list can retry the next page.
+        _memory.top100PreloadIncomplete = true;
         break;
       }
       if (result.page != nextPage ||
           result.items.isEmpty ||
           result.stale ||
           result.warning.isNotEmpty) {
+        _memory.top100PreloadIncomplete = true;
         break;
       }
 
@@ -459,6 +482,31 @@ class _RankingsScreenState extends State<RankingsScreen> {
       page = result.page;
       hasMore = result.hasMore;
       if (result.updatedText.isNotEmpty) updatedText = result.updatedText;
+
+      // Publish each completed page immediately. The active board can grow
+      // from 20 to 40, 60 ... up to 100 items without waiting for all four
+      // background queues to finish.
+      final reachedLimit =
+          items.length >= 100 || page >= _redFruitPreloadPageCount;
+      final mayHaveMore = !reachedLimit && hasMore;
+      _memory.pages[board.id] = _RankingSnapshot(
+        items: List<RankingItem>.unmodifiable(items),
+        page: page,
+        hasMore: mayHaveMore,
+        updatedText: updatedText,
+        checkedAt: DateTime.now(),
+      );
+      if (mounted && _board?.id == board.id) {
+        setState(() {
+          _items = List<RankingItem>.of(items);
+          _page = page;
+          _hasMore = mayHaveMore;
+          _updated = updatedText;
+          _loading = false;
+          _error = null;
+          _failedMore = false;
+        });
+      }
     }
 
     if (force) {
@@ -530,6 +578,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
     _generation++;
     _retryTimer?.cancel();
     _top100RefreshTimer?.cancel();
+    _top100RetryTimer?.cancel();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
