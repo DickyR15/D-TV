@@ -278,3 +278,52 @@ func TestRankingConcurrentRequestsShareFetch(t *testing.T) {
 		t.Fatalf("got %d upstream requests, want one", calls.Load())
 	}
 }
+
+func TestCachedRankingTop100ReturnsLocalPagesImmediately(t *testing.T) {
+	board, _ := findRankingBoard("hongguo-hot")
+	d := &Downloader{}
+	d.rankings.pages = map[string]rankingPage{}
+	fetchedAt := time.Now().Add(-6 * time.Minute)
+	for pageNo := 1; pageNo <= 5; pageNo++ {
+		rows := make([]rankingItem, 0, 20)
+		for offset := 1; offset <= 20; offset++ {
+			rank := (pageNo-1)*20 + offset
+			id := strconv.FormatInt(7681903520873720000+int64(rank), 10)
+			rows = append(rows, rankingItem{
+				Rank: rank,
+				Drama: Drama{
+					ID: providerDramaID(sourceHongguo, id),
+					Source: sourceHongguo,
+					SourceID: id,
+					Title: "快取短劇 " + strconv.Itoa(rank),
+				},
+			})
+		}
+		d.rankings.pages[board.ID+":"+strconv.Itoa(pageNo)] = rankingPage{
+			BoardID: board.ID,
+			Page: pageNo,
+			Items: rows,
+			HasMore: pageNo < 5,
+			FetchedAt: fetchedAt,
+		}
+	}
+
+	result := d.cachedRankingTop100(board)
+	if len(result.Items) != 100 || result.Page != 5 || result.HasMore || !result.Stale {
+		t.Fatalf("expected stale cached top 100 without refreshing: items=%d page=%d more=%t stale=%t",
+			len(result.Items), result.Page, result.HasMore, result.Stale)
+	}
+	if result.Items[0].Rank != 1 || result.Items[99].Rank != 100 {
+		t.Fatalf("cached pages were not merged in ranking order: first=%d last=%d",
+			result.Items[0].Rank, result.Items[99].Rank)
+	}
+
+	// If a continuation page is absent, return the known contiguous prefix
+	// rather than blocking or stitching around a missing range.
+	delete(d.rankings.pages, board.ID+":4")
+	partial := d.cachedRankingTop100(board)
+	if len(partial.Items) != 60 || partial.Page != 3 || !partial.HasMore {
+		t.Fatalf("expected 60 cached items when page 4 is missing: items=%d page=%d more=%t",
+			len(partial.Items), partial.Page, partial.HasMore)
+	}
+}
