@@ -215,6 +215,10 @@ void main() {
       final repository = _RankingRepository()..rankingTotalPages = 10;
       await tester.pumpWidget(
         MaterialApp(
+          builder: (context, child) => AppLayout(
+            television: true,
+            child: child!,
+          ),
           home: RankingsScreen(
             repository: repository,
             store: store,
