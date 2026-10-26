@@ -230,33 +230,12 @@ void main() {
       }
       expect(repository.rankingCallsByPage[6], isNull);
 
-      final rankingScroll = find.descendant(
-        of: find.byKey(const ValueKey('ranking-grid-hongguo-hot')),
-        matching: find.byType(Scrollable),
-      ).first;
-      await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('rank-81-hongguo:rank-81')),
-        450,
-        scrollable: rankingScroll,
+      // The fixed wide-screen status bar reports the full in-memory count,
+      // without requiring lazy grid tiles to be scrolled into the viewport.
+      expect(
+        find.text('已載入 100 部短劇 · 已顯示全部短劇'),
+        findsOneWidget,
       );
-      await tester.pumpAndSettle();
-      expect(find.text('合成榜單81'), findsOneWidget);
-
-      await tester.scrollUntilVisible(
-        find.text('合成榜單100'),
-        450,
-        scrollable: rankingScroll,
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('合成榜單100'), findsOneWidget);
-
-      await tester.scrollUntilVisible(
-        find.text('已顯示全部榜單'),
-        450,
-        scrollable: rankingScroll,
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('已顯示全部榜單'), findsOneWidget);
       expect(repository.rankingCallsByPage[6], isNull);
     },
   );
