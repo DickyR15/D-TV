@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,12 +17,22 @@ const nativePlaybackRouteProbeLimit = 4
 const nativePlaybackRouteProbeBytes = 64 * 1024
 
 type nativePlaybackRouteProbeResult struct {
-	index   int
-	host    string
-	latency time.Duration
-	status  int
-	bytes   int
-	err     error
+	index         int
+	host          string
+	latency       time.Duration
+	status        int
+	bytes         int
+	probeTimedOut bool
+	err           error
+}
+
+var errNativePlaybackProbeBudgetExceeded = errors.New("playback route probe budget exceeded")
+
+func nativePlaybackProbeError(parent, probe context.Context, err error) error {
+	if err != nil && parent.Err() == nil && probe.Err() == context.DeadlineExceeded && errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("%w: %w", errNativePlaybackProbeBudgetExceeded, err)
+	}
+	return err
 }
 
 // Put same-quality CDN fallbacks on distinct hosts before retrying a slow origin.
@@ -101,8 +112,10 @@ func (engine *nativeEngine) rankNativePlaybackRoutes(
 		media := choice.media[index]
 		go func() {
 			latency, status, size, host, err := engine.downloader.probeNativePlaybackRoute(probeCtx, media)
+			probeTimedOut := errors.Is(err, errNativePlaybackProbeBudgetExceeded)
 			resultsChannel <- nativePlaybackRouteProbeResult{
-				index: index, host: host, latency: latency, status: status, bytes: size, err: err,
+				index: index, host: host, latency: latency, status: status, bytes: size,
+				probeTimedOut: probeTimedOut, err: err,
 			}
 		}()
 	}
@@ -127,10 +140,18 @@ probeResults:
 				break probeResults
 			}
 			reason := nativeStreamError(result.err)
-			if result.status == http.StatusTooManyRequests || result.status >= http.StatusInternalServerError {
-				reason = "upstream_http"
+			if result.probeTimedOut {
+				// A probe has a deliberately short budget. Expiring that budget is
+				// evidence that this route is slow, not that the CDN is dead; keep it
+				// behind responsive/untested routes for this resolution without
+				// suppressing it for 90 seconds across later episodes.
+				reason = "probe_budget"
+			} else {
+				if result.status == http.StatusTooManyRequests || result.status >= http.StatusInternalServerError {
+					reason = "upstream_http"
+				}
+				engine.downloader.rememberNativeStreamHostFailure(choice.media[result.index].URL, reason)
 			}
-			engine.downloader.rememberNativeStreamHostFailure(choice.media[result.index].URL, reason)
 			wasCooling[result.index] = engine.downloader.nativeStreamHostCoolingDown(choice.media[result.index].URL)
 		case <-ctx.Done():
 			cancelProbes()
@@ -246,7 +267,7 @@ func (downloader *Downloader) probeNativePlaybackRoute(
 	start := time.Now()
 	response, err := downloader.doMediaRequest(request)
 	if err != nil {
-		return time.Since(start), 0, 0, host, err
+		return time.Since(start), 0, 0, host, nativePlaybackProbeError(parent, ctx, err)
 	}
 	defer response.Body.Close()
 	latency := time.Since(start)
@@ -255,7 +276,7 @@ func (downloader *Downloader) probeNativePlaybackRoute(
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, nativePlaybackRouteProbeBytes))
 	if err != nil {
-		return time.Since(start), response.StatusCode, len(body), host, err
+		return time.Since(start), response.StatusCode, len(body), host, nativePlaybackProbeError(parent, ctx, err)
 	}
 	if len(body) == 0 {
 		return time.Since(start), response.StatusCode, 0, host, fmt.Errorf("empty media response")

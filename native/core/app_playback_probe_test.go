@@ -235,6 +235,34 @@ func TestNativePlaybackProbeDiversifiesSameQualityHostsWhenAllFail(t *testing.T)
 	}
 }
 
+func TestNativePlaybackProbeBudgetDoesNotCooldownSlowHosts(t *testing.T) {
+	const slowA = "https://cdn-slow-a.example.test/episode.mp4"
+	const slowB = "https://cdn-slow-b.example.test/episode.mp4"
+	client := &http.Client{Transport: playbackProbeFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	})}
+	downloader := &Downloader{client: client}
+	engine := &nativeEngine{downloader: downloader}
+	choice := nativePlaybackChoices(providerMedia{
+		URL: slowA, Quality: 1080,
+		Variants: []providerMedia{{URL: slowB, Quality: 1080}},
+	}, 0)
+
+	started := time.Now()
+	_ = engine.rankNativePlaybackRoutes(context.Background(), choice, Task{
+		DramaID: "hongguo:fixture", DramaTitle: "slow CDN probe", Index: 1,
+	})
+	if time.Since(started) < nativePlaybackRouteProbeTimeout {
+		t.Fatalf("probe returned before its own timeout budget elapsed")
+	}
+	for _, address := range []string{slowA, slowB} {
+		if downloader.nativeStreamHostCoolingDown(address) {
+			t.Errorf("the short probe budget incorrectly cooled down slow host %s", address)
+		}
+	}
+}
+
 func TestNativePlaybackRouteProbeMovesUntestedRoutesAheadOfTimedOutRoutes(t *testing.T) {
 	routes := []providerMedia{
 		{URL: "https://cdn-a.example.test/one.mp4", Quality: 1080},
