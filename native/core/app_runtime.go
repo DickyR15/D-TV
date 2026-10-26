@@ -122,6 +122,7 @@ type nativeInput struct {
 	Session          string                  `json:"session"`
 	Sequence         int64                   `json:"sequence"`
 	Force            bool                    `json:"force"`
+	CacheOnly        bool                    `json:"cacheOnly"`
 }
 
 type nativeCatalogResult struct {
