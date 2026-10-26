@@ -26,6 +26,7 @@ class _RankingRepository extends FixtureRepository {
   int rankingCalls = 0;
   final rankingCallsByPage = <int, int>{};
   bool timeoutFirstRanking = false;
+  int rankingRevision = 0;
 
   static const hotBoards = [
     RankingBoard(id: 'hongguo-hot', source: 'hongguo', name: '熱播'),
@@ -67,7 +68,9 @@ class _RankingRepository extends FixtureRepository {
             Drama(
               id: 'hongguo:rank-${(page - 1) * pageSize + i}',
               source: 'hongguo',
-              title: '合成榜單${(page - 1) * pageSize + i}',
+              title:
+                  '合成榜單${(page - 1) * pageSize + i}'
+                  '${rankingRevision == 0 ? '' : '-v$rankingRevision'}',
               episodes: 1,
             ),
           ),
@@ -213,6 +216,54 @@ void main() {
     expect(repository.rankingCalls, callsBeforeReentry);
     expect(find.text('合成榜單1'), findsOneWidget);
   });
+
+  testWidgets(
+    'automatically refreshes all four hot boards and replaces stale page caches',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await tester.binding.setSurfaceSize(const Size(960, 540));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final repository = _RankingRepository();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RankingsScreen(
+            repository: repository,
+            store: store,
+            initialGroup: 'hongguo',
+            initialBoardId: 'hongguo-hot',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
+
+      for (final board in _RankingRepository.hotBoards) {
+        for (var page = 1; page <= 5; page++) {
+          expect(repository.rankingCallsByBoardPage['${board.id}:$page'], 1);
+        }
+      }
+
+      // Simulate the ranking source changing while the app stays open.
+      repository.rankingRevision = 2;
+      await tester.pump(const Duration(minutes: 15));
+      await tester.pumpAndSettle();
+
+      expect(find.text('合成榜單1-v2'), findsOneWidget);
+      for (final board in _RankingRepository.hotBoards) {
+        for (var page = 1; page <= 5; page++) {
+          expect(
+            repository.rankingCallsByBoardPage['${board.id}:$page'],
+            2,
+            reason: '${board.id} page $page should be refetched after refresh',
+          );
+        }
+      }
+    },
+  );
 
   testWidgets(
     'preloads 100 items for all four Red Fruit hot-ranking boards',
