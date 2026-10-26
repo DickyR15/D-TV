@@ -303,8 +303,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Board preloads now run concurrently; each board caches its first five
-      // 20-item pages (up to 100 records).
+      // All four Red Fruit hot boards should be populated with 100 items,
+      // rather than leaving the active board stuck at the first 20.
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pumpAndSettle();
       for (final board in _RankingRepository.hotBoards) {
@@ -316,16 +316,32 @@ void main() {
           );
         }
       }
-
-      // Scrolling consumes the prefetched page without another request.
-      await tester.drag(
-        find.byKey(const ValueKey('ranking-hongguo-hot')),
-        const Offset(0, -8000),
+      expect(
+        find.textContaining('已載入 100 部短劇'),
+        findsAtLeastNWidgets(1),
+        reason: 'the visible hot board should publish all 100 preloaded items',
       );
-      await tester.pumpAndSettle();
 
-      expect(find.text('合成榜單21'), findsOneWidget);
-      expect(repository.rankingCallsByBoardPage['hongguo-hot:2'], 1);
+      // Re-entering each board should immediately show its own 100-item cache.
+      for (final board in _RankingRepository.hotBoards) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RankingsScreen(
+              key: ValueKey('cached-${board.id}'),
+              repository: repository,
+              store: store,
+              initialGroup: 'hongguo',
+              initialBoardId: board.id,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('已載入 100 部短劇'),
+          findsAtLeastNWidgets(1),
+          reason: '${board.id} should reopen with all 100 cached items',
+        );
+      }
     },
   );
 
