@@ -154,7 +154,7 @@ func nativeStreamDialContext(dialer *net.Dialer) func(context.Context, string, s
 			if dialCtx.Err() != nil {
 				return nil, fmt.Errorf("resolve media host: %w", lookupErr)
 			}
-			return nil, dialer.DialContext(dialCtx, network, address)
+			return dialer.DialContext(dialCtx, network, address)
 		}
 		var ipv4, ipv6 []net.IPAddr
 		for _, entry := range resolved {
