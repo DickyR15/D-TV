@@ -41,7 +41,7 @@ void main() {
 
       expect(find.text('片源管理'), findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(find.byType(SourcesScreen), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());

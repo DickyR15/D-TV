@@ -1606,9 +1606,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   itemBuilder: (_) => [
                     if (widget.repository.supportsSourceManagement)
-                      const PopupMenuItem(
+                      PopupMenuItem<String>(
                         value: 'sources',
-                        child: Text('片源管理'),
+                        child: Focus(
+                          autofocus: television,
+                          onKeyEvent: (node, event) {
+                            if (television &&
+                                event is KeyDownEvent &&
+                                (event.logicalKey == LogicalKeyboardKey.enter ||
+                                    event.logicalKey == LogicalKeyboardKey.select)) {
+                              // Focus must be actionable, not only highlighted
+                              // via PopupMenuButton.initialValue.
+                              Navigator.of(context).pop<String>('sources');
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
+                          },
+                          child: const SizedBox(
+                            width: double.infinity,
+                            child: Text('片源管理'),
+                          ),
+                        ),
                       ),
                     if (_isCatalogTab &&
                         !_showRecommendations &&
