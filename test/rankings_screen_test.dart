@@ -25,6 +25,8 @@ class _RankingRepository extends FixtureRepository {
     return file.path;
   }
   int rankingCalls = 0;
+  bool useCachedTop100 = false;
+  int cachedTop100Calls = 0;
   final rankingCallsByPage = <int, int>{};
   bool timeoutFirstRanking = false;
   int rankingRevision = 0;
@@ -43,6 +45,29 @@ class _RankingRepository extends FixtureRepository {
 
   @override
   Future<List<RankingBoard>> rankingBoards() async => hotBoards;
+
+  @override
+  Future<RankingPage?> cachedRankingTop100(String board) async {
+    cachedTop100Calls++;
+    if (!useCachedTop100) return null;
+    return RankingPage(
+      page: 5,
+      hasMore: false,
+      updatedText: '本機快取',
+      items: [
+        for (var rank = 1; rank <= 100; rank++)
+          RankingItem(
+            rank,
+            Drama(
+              id: 'hongguo:cache-$board-$rank',
+              source: 'hongguo',
+              title: '快取$board-$rank',
+              episodes: 1,
+            ),
+          ),
+      ],
+    );
+  }
 
   @override
   Future<RankingPage> rankings(
@@ -96,6 +121,47 @@ class _RankingRepository extends FixtureRepository {
 }
 
 void main() {
+  testWidgets('restores all four cached top-100 boards without network calls', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await tester.binding.setSurfaceSize(const Size(960, 540));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final repository = _RankingRepository()..useCachedTop100 = true;
+    for (final board in _RankingRepository.hotBoards) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppLayout(
+            television: true,
+            child: RankingsScreen(
+              key: ValueKey('cached-board-${board.id}'),
+              repository: repository,
+              store: store,
+              initialGroup: 'hongguo',
+              initialBoardId: board.id,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('已載入 100 部短劇'),
+        findsOneWidget,
+        reason: '${board.id} should paint all 100 cached items immediately',
+      );
+      expect(
+        repository.rankingCalls,
+        0,
+        reason: 'a complete local cache must not wait for the network',
+      );
+    }
+    expect(repository.cachedTop100Calls, greaterThanOrEqualTo(4));
+  });
+
   testWidgets('automatically retries an initial ranking timeout', (
     tester,
   ) async {
