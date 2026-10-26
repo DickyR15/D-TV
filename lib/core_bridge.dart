@@ -112,6 +112,7 @@ abstract class AppRepository {
     int page = 1,
     bool force = false,
   }) async => throw AppFailure('目前環境不支援榜單');
+  Future<RankingPage?> cachedRankingTop100(String board) async => null;
   Future<List<CatalogCategory>> categories(
     String source, {
     bool force = false,
@@ -422,6 +423,17 @@ class NativeRepository extends AppRepository {
       'force': force,
     }),
   );
+
+  @override
+  Future<RankingPage?> cachedRankingTop100(String board) async =>
+      RankingPage.fromJson(
+        await _call({
+          'action': 'rankings',
+          'board': board,
+          'page': 0,
+          'cacheOnly': true,
+        }),
+      );
 
   @override
   Future<SourceStatus> sourceStatus(String source) async =>
