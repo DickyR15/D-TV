@@ -320,6 +320,12 @@ void main() {
       // delivered, so pump the final result through the widget tree as well.
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pumpAndSettle();
+      // DEBUG: inspect the actual loaded-count text if the background
+      // prefetch has not published the completed page set.
+      // ignore: avoid_print
+      print(
+        'RANKING_LOAD_TEXTS: ${tester.widgetList<Text>(find.byType(Text)).map((widget) => widget.data ?? widget.textSpan?.toPlainText()).whereType<String>().where((value) => value.contains("已載入") || value.contains("正在載入") || value.contains("短劇")).toList()}',
+      );
       expect(
         find.textContaining('已載入 100 部短劇'),
         findsAtLeastNWidgets(1),
