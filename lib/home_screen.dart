@@ -1553,6 +1553,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 PopupMenuButton<String>(
                   tooltip: '更多',
+                  // On TV/remotes, opening the menu should land on the action
+                  // users most often need. The matching entry is highlighted,
+                  // and putting it first makes it the initial traversal target.
+                  initialValue: widget.repository.supportsSourceManagement
+                      ? 'sources'
+                      : null,
+                  requestFocus: true,
                   onOpened: _homePopupOpened,
                   onCanceled: _homePopupCanceled,
                   onSelected: (value) {
@@ -1598,6 +1605,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                   },
                   itemBuilder: (_) => [
+                    if (widget.repository.supportsSourceManagement)
+                      const PopupMenuItem(
+                        value: 'sources',
+                        child: Text('片源管理'),
+                      ),
                     if (_isCatalogTab &&
                         !_showRecommendations &&
                         constraints.maxWidth < 400)
@@ -1609,11 +1621,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               (source) => _updater.busy(source.id),
                             ),
                         child: const Text('更新劇庫'),
-                      ),
-                    if (widget.repository.supportsSourceManagement)
-                      const PopupMenuItem(
-                        value: 'sources',
-                        child: Text('片源管理'),
                       ),
                     const PopupMenuItem(value: 'users', child: Text('使用者管理')),
                     const PopupMenuItem(

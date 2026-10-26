@@ -1,0 +1,52 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hgtv/app_layout.dart';
+import 'package:hgtv/home_screen.dart';
+import 'package:hgtv/local_store.dart';
+import 'package:hgtv/sources_screen.dart';
+
+import 'fixtures.dart';
+
+class _SourceManagementRepository extends FixtureRepository {
+  @override
+  bool get supportsSourceManagement => true;
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+    'top-right more menu starts at source management on TV',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      final repository = _SourceManagementRepository();
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          child: MaterialApp(
+            home: HomeScreen(repository: repository, store: store),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final moreButton = find.byTooltip('更多');
+      expect(moreButton, findsOneWidget);
+      await tester.tap(moreButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('片源管理'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(find.byType(SourcesScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      store.dispose();
+    },
+  );
+}
