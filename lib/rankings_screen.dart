@@ -365,6 +365,30 @@ class _RankingsScreenState extends State<RankingsScreen> {
       var hasMore = firstPage.hasMore;
       var updatedText = firstPage.updatedText;
 
+      // Publish the freshly fetched first page immediately. The remaining
+      // pages are background prefetch and must not delay the visible refresh.
+      if (force) {
+        _memory.pages[board.id] = _RankingSnapshot(
+          items: List<RankingItem>.unmodifiable(items),
+          page: page,
+          hasMore: hasMore,
+          updatedText: updatedText,
+          checkedAt: DateTime.now(),
+        );
+        if (mounted && _board?.id == board.id) {
+          setState(() {
+            _items = List<RankingItem>.of(items);
+            _page = page;
+            _hasMore = hasMore;
+            _updated = updatedText;
+            _error = null;
+            _failedMore = false;
+            _loading = false;
+            _more = false;
+          });
+        }
+      }
+
       for (var nextPage = 2;
           nextPage <= _redFruitPreloadPageCount &&
               hasMore &&
@@ -716,10 +740,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
   );
 
   Future<void> _refreshRankingList() {
-    final board = _board;
-    if (board != null && _redFruitHotBoardIds.contains(board.id)) {
-      return _scheduleTop100Refresh(force: true);
-    }
+    // Refresh the visible board's first page in the foreground. _load()
+    // schedules the four-board/100-item refresh in the background, so the
+    // pull-to-refresh indicator ends as soon as the visible page is updated.
     return _load(force: true);
   }
 
