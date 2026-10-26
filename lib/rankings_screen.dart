@@ -59,29 +59,13 @@ class _RankingSnapshot {
   }
 }
 
-class _RankingPageSnapshot {
-  const _RankingPageSnapshot({required this.page, required this.checkedAt});
-
-  final RankingPage page;
-  final DateTime checkedAt;
-
-  bool get isFresh {
-    final age = DateTime.now().difference(checkedAt);
-    return !page.stale &&
-        page.warning.isEmpty &&
-        !age.isNegative &&
-        age < const Duration(minutes: 4);
-  }
-}
-
 class _RankingMemory {
   List<RankingBoard>? boards;
   Future<List<RankingBoard>>? boardsFuture;
   final pages = <String, _RankingSnapshot>{};
-  // One-page look-ahead cache: we only download a page when the currently
-  // visible page succeeds, and we never recursively prefetch the whole board.
-  final prefetchedPages = <String, _RankingPageSnapshot>{};
-  final prefetchingPages = <String, Future<RankingPage>>{};
+  // Each Red Fruit hot board loads up to five 20-item pages in the background.
+  // The map deduplicates work across recreated ranking screens.
+  final top100Loads = <String, Future<void>>{};
 }
 
 final Expando<_RankingMemory> _rankingMemoryByRepository =
@@ -116,71 +100,197 @@ class _RankingsScreenState extends State<RankingsScreen> {
     return message;
   }
 
-  String _rankingPageKey(String boardId, int page) => '$boardId:$page';
+  static const int _hongguoRankingPageLimit = 5;
+  static const int _hongguoRankingItemLimit = 100;
 
-  Future<RankingPage> _loadRankingPage(
-    RankingBoard board,
-    int page, {
-    required bool preferPrefetch,
-  }) async {
-    final key = _rankingPageKey(board.id, page);
-    if (preferPrefetch) {
-      final cached = _memory.prefetchedPages.remove(key);
-      if (cached != null && cached.isFresh) return cached.page;
+  bool _isTop100Loading(RankingBoard? board) =>
+      board != null &&
+      board.source == 'hongguo' &&
+      _memory.top100Loads.containsKey(board.id);
 
-      final pending = _memory.prefetchingPages[key];
-      if (pending != null) {
-        try {
-          final result = await pending;
-          // A pending look-ahead can finish while this load is waiting.
-          _memory.prefetchedPages.remove(key);
-          return result;
-        } catch (_) {
-          // Background prefetch errors are silent; retry on the user path.
-        }
-      }
-    }
-    return widget.repository.rankings(board.id, page: page);
+  void _applyMemorySnapshot(RankingBoard board) {
+    if (!mounted || _board?.id != board.id) return;
+    final cached = _memory.pages[board.id];
+    if (cached == null) return;
+    setState(() {
+      _items = List<RankingItem>.of(cached.items);
+      _page = cached.page;
+      _hasMore = cached.hasMore;
+      _updated = cached.updatedText;
+    });
   }
 
-  void _prefetchNextPage(RankingBoard board, RankingPage current) {
-    // These are the four Red Fruit hot-ranking boards. Keep this optimization
-    // scoped to their 20-item paginated source and do not change other providers.
+  Future<void> _ensureTop100Loaded(
+    RankingBoard board,
+    RankingPage startPage, {
+    bool force = false,
+  }) {
     if (board.source != 'hongguo' ||
-        current.items.isEmpty ||
-        !current.hasMore ||
-        current.stale ||
-        current.warning.isNotEmpty) {
+        startPage.items.isEmpty ||
+        !startPage.hasMore ||
+        startPage.stale ||
+        startPage.warning.isNotEmpty) {
+      return Future<void>.value();
+    }
+    final existing = _memory.top100Loads[board.id];
+    if (existing != null) return existing;
+
+    final cached = _memory.pages[board.id];
+    final items = cached?.items ?? startPage.items;
+    final page = cached?.page ?? startPage.page;
+    final hasMore = cached?.hasMore ?? startPage.hasMore;
+    if (items.length >= _hongguoRankingItemLimit ||
+        page >= _hongguoRankingPageLimit ||
+        !hasMore) {
+      return Future<void>.value();
+    }
+
+    late final Future<void> pending;
+    pending = _fillTop100(
+      board,
+      initialItems: items,
+      initialPage: page,
+      hasMore: hasMore,
+      updatedText: cached?.updatedText ?? startPage.updatedText,
+      force: force,
+    ).whenComplete(() {
+      if (identical(_memory.top100Loads[board.id], pending)) {
+        _memory.top100Loads.remove(board.id);
+      }
+      _applyMemorySnapshot(board);
+    });
+    _memory.top100Loads[board.id] = pending;
+    if (mounted && _board?.id == board.id) setState(() {});
+    unawaited(pending);
+    return pending;
+  }
+
+  Future<void> _fillTop100(
+    RankingBoard board, {
+    required List<RankingItem> initialItems,
+    required int initialPage,
+    required bool hasMore,
+    required String updatedText,
+    required bool force,
+  }) async {
+    var items = List<RankingItem>.of(initialItems);
+    var page = initialPage;
+    var morePages = hasMore;
+    var updateLabel = updatedText;
+
+    // Pages contain up to 20 items. Load the remaining pages sequentially:
+    // the first 20 are shown immediately, and scrolling won't trigger a chain
+    // of additional network waits. Only the selected board is preloaded.
+    while (morePages &&
+        items.length < _hongguoRankingItemLimit &&
+        page < _hongguoRankingPageLimit) {
+      RankingPage result;
+      try {
+        result = await widget.repository.rankings(
+          board.id,
+          page: page + 1,
+          force: force,
+        );
+      } catch (error) {
+        if (mounted && _board?.id == board.id) {
+          setState(() {
+            _error = _userFacingError(error);
+            _failedMore = true;
+            _hasMore = true;
+          });
+        }
+        return;
+      }
+
+      if (result.items.isEmpty || result.warning.isNotEmpty) {
+        if (mounted && _board?.id == board.id) {
+          setState(() {
+            _error = result.warning.isNotEmpty
+                ? uiTraditional(result.warning)
+                : '前 100 名榜單載入未完成，已保留目前取得的內容。';
+            _failedMore = true;
+            _hasMore = true;
+          });
+        }
+        return;
+      }
+
+      final rows = <String, RankingItem>{
+        for (final item in items) item.drama.id: item,
+        for (final item in result.items) item.drama.id: item,
+      };
+      items = rows.values.toList()
+        ..sort((a, b) => a.rank.compareTo(b.rank));
+      if (items.length > _hongguoRankingItemLimit) {
+        items = items.take(_hongguoRankingItemLimit).toList();
+      }
+      page = result.page;
+      morePages = result.hasMore &&
+          items.length < _hongguoRankingItemLimit &&
+          page < _hongguoRankingPageLimit;
+      if (result.updatedText.isNotEmpty) updateLabel = result.updatedText;
+
+      _memory.pages[board.id] = _RankingSnapshot(
+        items: List<RankingItem>.unmodifiable(items),
+        page: page,
+        hasMore: morePages,
+        updatedText: updateLabel,
+        checkedAt: result.stale
+            ? DateTime.now().subtract(const Duration(minutes: 5))
+            : DateTime.now(),
+      );
+      if (mounted && _board?.id == board.id) {
+        setState(() {
+          _items = List<RankingItem>.of(items);
+          _page = page;
+          _hasMore = morePages;
+          _updated = updateLabel;
+          _error = null;
+          _failedMore = false;
+        });
+      }
+    }
+
+    // The four Red Fruit boards intentionally expose only the top 100.
+    if (items.length >= _hongguoRankingItemLimit ||
+        page >= _hongguoRankingPageLimit ||
+        !morePages) {
+      morePages = false;
+      final cached = _memory.pages[board.id];
+      _memory.pages[board.id] = _RankingSnapshot(
+        items: List<RankingItem>.unmodifiable(items),
+        page: page,
+        hasMore: false,
+        updatedText: updateLabel,
+        checkedAt: cached?.checkedAt ?? DateTime.now(),
+      );
+      if (mounted && _board?.id == board.id) {
+        setState(() {
+          _items = List<RankingItem>.of(items);
+          _page = page;
+          _hasMore = false;
+          _updated = updateLabel;
+        });
+      }
+    }
+  }
+
+  void _ensureCachedBoardTop100(RankingBoard board, _RankingSnapshot cached) {
+    if (board.source != 'hongguo' ||
+        !cached.isFresh ||
+        cached.items.length >= _hongguoRankingItemLimit ||
+        !cached.hasMore) {
       return;
     }
-    final nextPage = current.page + 1;
-    final key = _rankingPageKey(board.id, nextPage);
-    final cached = _memory.prefetchedPages[key];
-    if (cached != null && cached.isFresh) return;
-    _memory.prefetchedPages.remove(key);
-    if (_memory.prefetchingPages.containsKey(key)) return;
-
-    late final Future<RankingPage> pending;
-    pending = widget.repository
-        .rankings(board.id, page: nextPage)
-        .then((page) {
-          if (page.items.isNotEmpty && !page.stale && page.warning.isEmpty) {
-            _memory.prefetchedPages[key] = _RankingPageSnapshot(
-              page: page,
-              checkedAt: DateTime.now(),
-            );
-          }
-          return page;
-        })
-        .whenComplete(() {
-          if (identical(_memory.prefetchingPages[key], pending)) {
-            _memory.prefetchingPages.remove(key);
-          }
-        });
-    _memory.prefetchingPages[key] = pending;
-    // The visible page must not fail just because a speculative next page
-    // failed in the background. A later user request will retry it.
-    unawaited(pending.catchError((Object _) => const RankingPage(items: [])));
+    final page = RankingPage(
+      items: cached.items,
+      page: cached.page,
+      hasMore: cached.hasMore,
+      updatedText: cached.updatedText,
+    );
+    unawaited(
+      _ensureTop100Loaded(board, page).then((_) => _applyMemorySnapshot(board)),
+    );
   }
 
   Future<List<RankingBoard>> _loadBoardsCached() {
@@ -222,7 +332,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }
 
   void _onScroll() {
-    if (!mounted || !_hasMore || _loading || _more || !_scroll.hasClients) {
+    if (!mounted ||
+        !_hasMore ||
+        _loading ||
+        _more ||
+        _isTop100Loading(_board) ||
+        !_scroll.hasClients) {
       return;
     }
     final position = _scroll.position;
@@ -268,6 +383,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
       if (_board != null && (cached == null || !cached.isFresh)) {
         // A stale in-memory list stays visible while the native layer refreshes.
         await _load();
+      } else if (_board != null && cached != null) {
+        _ensureCachedBoardTop100(_board!, cached);
       }
     } catch (error) {
       if (mounted && generation == _generation) {
@@ -285,7 +402,15 @@ class _RankingsScreenState extends State<RankingsScreen> {
     bool quiet = false,
   }) async {
     final board = _board;
-    if (board == null || more && (_loading || _more || !_hasMore)) return;
+    if (board == null ||
+        more &&
+            (_loading ||
+                _more ||
+                !_hasMore ||
+                _isTop100Loading(board)) ||
+        !more && _isTop100Loading(board)) {
+      return;
+    }
     final generation = ++_generation;
     setState(() {
       _loading = !more && !quiet;
@@ -297,17 +422,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
     });
     try {
       final requestedPage = more ? _page + 1 : 1;
-      final result = more && !force
-          ? await _loadRankingPage(
-              board,
-              requestedPage,
-              preferPrefetch: true,
-            )
-          : await widget.repository.rankings(
-              board.id,
-              page: requestedPage,
-              force: force,
-            );
+      final result = await widget.repository.rankings(
+        board.id,
+        page: requestedPage,
+        force: force,
+      );
       if (!mounted || generation != _generation) return;
       final rows = <String, RankingItem>{
         if (more)
@@ -316,10 +435,14 @@ class _RankingsScreenState extends State<RankingsScreen> {
       };
       final mergedItems = rows.values.toList()
         ..sort((a, b) => a.rank.compareTo(b.rank));
+      final hasMore = result.hasMore &&
+          (board.source != 'hongguo' ||
+              (mergedItems.length < _hongguoRankingItemLimit &&
+                  result.page < _hongguoRankingPageLimit));
       setState(() {
         _items = mergedItems;
         _page = result.page;
-        _hasMore = result.hasMore;
+        _hasMore = hasMore;
         _updated = result.updatedText;
         _error = result.warning.isEmpty ? null : result.warning;
         _loading = false;
@@ -328,15 +451,21 @@ class _RankingsScreenState extends State<RankingsScreen> {
       _memory.pages[board.id] = _RankingSnapshot(
         items: List<RankingItem>.unmodifiable(mergedItems),
         page: result.page,
-        hasMore: result.hasMore,
+        hasMore: hasMore,
         updatedText: result.updatedText,
         // A stale native page must remain stale in the Dart memory cache.
         checkedAt: result.stale
             ? DateTime.now().subtract(const Duration(minutes: 5))
             : DateTime.now(),
       );
-      if (result.warning.isEmpty) {
-        _prefetchNextPage(board, result);
+      if (result.warning.isEmpty && !result.stale) {
+        unawaited(
+          _ensureTop100Loaded(
+            board,
+            result,
+            force: force && !more,
+          ),
+        );
       }
       _retryTimer?.cancel();
       _automaticRetries = 0;
@@ -402,6 +531,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
     if (cached == null || !cached.isFresh) {
       // Keep old rows onscreen instead of clearing the grid while fetching.
       _load();
+    } else {
+      _ensureCachedBoardTop100(board, cached);
     }
   }
 
@@ -426,7 +557,19 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }
 
   Widget _loadMoreFooter() => Center(
-    child: _more
+    child: _isTop100Loading(_board)
+        ? const Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(),
+                SizedBox(height: 8),
+                Text('正在預載前 100 名榜單…'),
+              ],
+            ),
+          )
+        : _more
         ? const Padding(
             padding: EdgeInsets.all(16),
             child: CircularProgressIndicator(),
@@ -435,7 +578,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
         ? OutlinedButton.icon(
             onPressed: () => _load(more: true),
             icon: const Icon(Icons.expand_more_rounded),
-            label: const Text('載入更多'),
+            label: const Text('重試載入剩餘榜單'),
           )
         : const Padding(
             padding: EdgeInsets.all(16),
@@ -763,7 +906,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   Widget _wideFooter(int count) {
     final theme = Theme.of(context);
-    final status = _more
+    final status = _isTop100Loading(_board)
+        ? '正在預載前 100 名…'
+        : _more
         ? '正在載入更多…'
         : _hasMore
         ? '上滑載入更多'
@@ -854,7 +999,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
         ),
         actions: [
           RefreshAction(
-            loading: _loading || _more,
+            loading: _loading || _more || _isTop100Loading(_board),
             tooltip: '更新榜單',
             onPressed: _board == null ? _initialize : () => _load(force: true),
           ),
@@ -895,7 +1040,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     ),
                     if (!wide)
                       RefreshAction(
-                        loading: _loading || _more,
+                        loading: _loading || _more || _isTop100Loading(_board),
                         tooltip: '更新榜單',
                         onPressed: _board == null ? _initialize : () => _load(force: true),
                       ),
