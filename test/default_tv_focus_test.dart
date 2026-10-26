@@ -39,12 +39,14 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     final tile = tester.widget<ListTile>(
       find.byKey(const ValueKey('lan-settings')),
     );
-    expect(tile.autofocus, isTrue);
+    expect(tile.focusNode, isNotNull);
+    expect(tile.focusNode!.hasPrimaryFocus, isTrue);
+    expect(FocusManager.instance.primaryFocus, same(tile.focusNode));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -59,12 +61,14 @@ void main() {
         child: MaterialApp(home: ProfilesScreen(store: store)),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     final tile = tester.widget<SwitchListTile>(
       find.byKey(const ValueKey('force-login-setting')),
     );
-    expect(tile.autofocus, isTrue);
+    expect(tile.focusNode, isNotNull);
+    expect(tile.focusNode!.hasPrimaryFocus, isTrue);
+    expect(FocusManager.instance.primaryFocus, same(tile.focusNode));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -91,7 +95,9 @@ void main() {
     final mode = tester.widget<DropdownButton<String>>(
       find.byWidgetPredicate((widget) => widget is DropdownButton<String>),
     );
-    expect(mode.autofocus, isTrue);
+    expect(mode.focusNode, isNotNull);
+    expect(mode.focusNode!.hasPrimaryFocus, isTrue);
+    expect(FocusManager.instance.primaryFocus, same(mode.focusNode));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
