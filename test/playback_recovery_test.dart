@@ -157,7 +157,7 @@ void main() {
     },
   );
 
-  test('startup gets 20 seconds and buffer or duration changes reset the watchdog', () {
+  test('startup uses 12 seconds first, 8 seconds on alternates, and respects progress', () {
     final health = PlaybackHealth();
     final start = DateTime(2026, 10, 24);
 
@@ -166,6 +166,7 @@ void main() {
       int buffer = 0,
       int duration = 0,
       int position = 0,
+      int routeIndex = 0,
     }) => health.stalled(
       position: Duration(seconds: position),
       duration: Duration(seconds: duration),
@@ -173,20 +174,31 @@ void main() {
       intendedToPlay: true,
       foreground: true,
       now: start.add(Duration(seconds: seconds)),
+      routeIndex: routeIndex,
     );
 
+    expect(PlaybackHealth.startupTimeoutForRoute(0), const Duration(seconds: 12));
+    expect(PlaybackHealth.startupTimeoutForRoute(1), const Duration(seconds: 8));
     expect(stalled(0), isFalse);
-    expect(stalled(10), isFalse); // Initial MP4 response can be slow.
-    expect(stalled(18, buffer: 1), isFalse); // Buffer activity is progress.
-    expect(stalled(27, buffer: 2), isFalse); // New buffer activity resets time.
-    expect(stalled(36, buffer: 2), isFalse);
-    expect(stalled(46, buffer: 2), isFalse); // 19 seconds since last progress.
-    expect(stalled(47, buffer: 2), isTrue); // 20 seconds since last progress.
+    expect(stalled(10), isFalse);
+    expect(stalled(11), isFalse);
+    expect(stalled(12), isTrue);
 
     health.reset();
-    expect(stalled(100, duration: 120), isFalse); // Duration discovery is progress.
-    expect(stalled(131, duration: 120), isFalse);
-    expect(stalled(132, duration: 120), isTrue); // Mid-playback timeout is 32s.
+    expect(stalled(100, routeIndex: 1), isFalse);
+    expect(stalled(107, routeIndex: 1), isFalse);
+    expect(stalled(108, routeIndex: 1), isTrue);
+
+    health.reset();
+    expect(stalled(200, routeIndex: 1), isFalse);
+    expect(stalled(207, buffer: 1, routeIndex: 1), isFalse);
+    expect(stalled(214, buffer: 1, routeIndex: 1), isFalse);
+    expect(stalled(215, buffer: 1, routeIndex: 1), isTrue);
+
+    health.reset();
+    expect(stalled(300, duration: 120), isFalse); // Duration discovery is progress.
+    expect(stalled(331, duration: 120), isFalse);
+    expect(stalled(332, duration: 120), isTrue); // Mid-playback timeout remains 32s.
   });
 
   test('recovery budget resets only after 30 seconds of progressing playback', () {
