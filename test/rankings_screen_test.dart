@@ -26,7 +26,7 @@ class _RankingRepository extends FixtureRepository {
   int rankingCalls = 0;
   final rankingCallsByPage = <int, int>{};
   bool timeoutFirstRanking = false;
-  bool allowThreePages = false;
+  int rankingTotalPages = 2;
 
   @override
   Future<List<RankingBoard>> rankingBoards() async => const [
@@ -45,20 +45,20 @@ class _RankingRepository extends FixtureRepository {
       throw StateError('context deadline exceeded');
     }
     return RankingPage(
-    page: page,
-    hasMore: page < (allowThreePages ? 3 : 2),
-    items: [
-      for (var i = 1; i <= 10; i++)
-        RankingItem(
-          (page - 1) * 10 + i,
-          Drama(
-            id: 'hongguo:rank-${(page - 1) * 10 + i}',
-            source: 'hongguo',
-            title: '合成榜單${(page - 1) * 10 + i}',
-            episodes: 1,
+      page: page,
+      hasMore: page < rankingTotalPages,
+      items: [
+        for (var i = 1; i <= 20; i++)
+          RankingItem(
+            (page - 1) * 20 + i,
+            Drama(
+              id: 'hongguo:rank-${(page - 1) * 20 + i}',
+              source: 'hongguo',
+              title: '合成榜單${(page - 1) * 20 + i}',
+              episodes: 1,
+            ),
           ),
-        ),
-    ],
+      ],
     );
   }
 }
@@ -202,7 +202,7 @@ void main() {
   });
 
   testWidgets(
-    'prefetches the next Red Fruit board page and reuses it on scroll',
+    'preloads the Red Fruit hot board to 100 items without requesting extra pages',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final store = testStore(await SharedPreferences.getInstance());
@@ -210,7 +210,9 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(960, 540));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      final repository = _RankingRepository()..allowThreePages = true;
+      // The origin has more than 100 entries, but this screen only exposes its
+      // top 100 (five pages of 20).
+      final repository = _RankingRepository()..rankingTotalPages = 10;
       await tester.pumpWidget(
         MaterialApp(
           home: RankingsScreen(
@@ -223,22 +225,21 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The first page should initiate exactly one background look-ahead.
-      expect(repository.rankingCallsByPage[1], 1);
-      expect(repository.rankingCallsByPage[2], 1);
+      for (var page = 1; page <= 5; page++) {
+        expect(repository.rankingCallsByPage[page], 1);
+      }
+      expect(repository.rankingCallsByPage[6], isNull);
 
-      // Scroll-triggered pagination should consume the prefetched page without
-      // making a second network/bridge request for that same page.
       await tester.drag(
         find.byType(Scrollable).last,
-        const Offset(0, -1600),
+        const Offset(0, -10000),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('合成榜單11'), findsOneWidget);
-      expect(repository.rankingCallsByPage[2], 1);
-      // The newly visible page starts one-page look-ahead for page three.
-      expect(repository.rankingCallsByPage[3], 1);
+      expect(find.text('合成榜單81'), findsOneWidget);
+      expect(find.text('合成榜單100'), findsOneWidget);
+      expect(find.text('已顯示全部榜單'), findsOneWidget);
+      expect(repository.rankingCallsByPage[6], isNull);
     },
   );
 
