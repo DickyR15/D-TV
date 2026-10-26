@@ -30,14 +30,13 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     final updateButton = find.byKey(const ValueKey('update-hongguo'));
     expect(updateButton, findsOneWidget);
-    expect(
-      tester.widget<FilledButton>(updateButton).focusNode!.hasFocus,
-      isTrue,
-    );
+    final updateNode = tester.widget<FilledButton>(updateButton).focusNode!;
+    expect(updateNode.hasPrimaryFocus, isTrue);
+    expect(FocusManager.instance.primaryFocus, same(updateNode));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
