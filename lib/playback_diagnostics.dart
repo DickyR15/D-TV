@@ -76,10 +76,13 @@ bool playbackDiagnosticLogRequiresRecovery({
     return false;
   }
   final message = text.toLowerCase();
-  // These two generic parser messages can be transient: the stream log
-  // shows some routes emit them immediately before hardware decoding starts.
-  // Strong truncation/crypto failures still switch routes immediately; generic
-  // header failures are given the shorter startup watchdog grace period.
+  // libavformat's open-input failure is a definitive failure to initialize
+  // the current media input. Switch routes immediately rather than waiting for
+  // the startup watchdog. Keep generic MP4 header errors on the bounded grace
+  // period because some MPV builds emit them transiently during stream probing.
+  if (source == 'lavf' && message.contains('avformat_open_input() failed')) {
+    return true;
+  }
   return RegExp(
     r'failed to read the initialization vector|'
     r'hit eof while reading senc|partial file|failed to open|'

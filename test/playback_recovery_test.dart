@@ -177,23 +177,24 @@ void main() {
       routeIndex: routeIndex,
     );
 
-    expect(PlaybackHealth.startupTimeoutForRoute(0), const Duration(seconds: 12));
-    expect(PlaybackHealth.startupTimeoutForRoute(1), const Duration(seconds: 8));
+    expect(PlaybackHealth.startupTimeoutForRoute(0), const Duration(seconds: 16));
+    expect(PlaybackHealth.startupTimeoutForRoute(1), const Duration(seconds: 14));
     expect(stalled(0), isFalse);
     expect(stalled(10), isFalse);
-    expect(stalled(11), isFalse);
-    expect(stalled(12), isTrue);
+    expect(stalled(15), isFalse);
+    expect(stalled(16), isTrue);
 
     health.reset();
     expect(stalled(100, routeIndex: 1), isFalse);
     expect(stalled(107, routeIndex: 1), isFalse);
-    expect(stalled(108, routeIndex: 1), isTrue);
+    expect(stalled(113, routeIndex: 1), isFalse);
+    expect(stalled(114, routeIndex: 1), isTrue);
 
     health.reset();
     expect(stalled(200, routeIndex: 1), isFalse);
     expect(stalled(207, buffer: 1, routeIndex: 1), isFalse);
-    expect(stalled(214, buffer: 1, routeIndex: 1), isFalse);
-    expect(stalled(215, buffer: 1, routeIndex: 1), isTrue);
+    expect(stalled(220, buffer: 1, routeIndex: 1), isFalse);
+    expect(stalled(221, buffer: 1, routeIndex: 1), isTrue);
 
     health.reset();
     expect(stalled(300, duration: 120), isFalse); // Duration discovery is progress.

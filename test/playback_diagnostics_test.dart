@@ -68,6 +68,11 @@ void main() {
         prefix: 'stream',
         text: 'Failed to open http://127.0.0.1:35309/media.mp4',
       ),
+      (
+        level: 'error',
+        prefix: 'lavf',
+        text: 'avformat_open_input() failed',
+      ),
     ]) {
       expect(
         playbackDiagnosticLogRequiresRecovery(
@@ -97,8 +102,8 @@ void main() {
         prefix: 'lavf',
         text: 'avformat_open_input() failed',
       ),
-      isFalse,
-      reason: 'defer non-specific parser failures to the startup watchdog',
+      isTrue,
+      reason: 'an explicit libavformat open failure should switch routes immediately',
     );
     expect(
       playbackDiagnosticLogRequiresRecovery(

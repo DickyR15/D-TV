@@ -113,11 +113,13 @@ class PlaybackHealth {
   // Range-resume attempt. Fail over after a shorter total stall window so a
   // dead CDN cannot leave playback spinning for nearly a minute.
   static const stallTimeout = Duration(seconds: 32);
-  // The first route gets a little more time for DNS/TLS startup. Once it
-  // has failed, alternates must prove useful quickly instead of each holding
-  // the spinner for another 20 seconds.
-  static const startupStallTimeout = Duration(seconds: 12);
-  static const alternativeStartupStallTimeout = Duration(seconds: 8);
+  // MPV may not report buffer/position progress until it has enough bytes to
+  // parse an MP4 header. Captured playback traces show valid HTTP 206 responses
+  // arriving around 8 seconds, then getting canceled by the old 8-second
+  // alternate timeout before MPV could initialize. Parser/open errors still
+  // trigger immediate recovery, so this grace period is for slow, live routes.
+  static const startupStallTimeout = Duration(seconds: 16);
+  static const alternativeStartupStallTimeout = Duration(seconds: 14);
 
   static Duration startupTimeoutForRoute(int routeIndex) =>
       routeIndex <= 0 ? startupStallTimeout : alternativeStartupStallTimeout;
