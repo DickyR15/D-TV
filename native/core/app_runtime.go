@@ -664,7 +664,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		}
 		items, err = d.fetchHongguoAppCatalogCategory(ctx, category)
 		state := d.hongguoCatalogSnapshot()
-		if category == "" && !hongguoAppCatalogHasMore(state) {
+		if shouldFetchHongguoWebsiteHistory(ctx, category, state) {
 			// The App API may exhaust at a much smaller catalog size than the
 			// public website. Continue with independent, resumable website cursors.
 			var websiteItems []Drama
@@ -676,10 +676,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 			state = d.hongguoCatalogSnapshot()
 		}
 		result.hongguo = state
-		result.HasMore = hongguoCatalogHasMore(state)
-		if category != "" && state != nil {
-			result.HasMore = !state.Feeds["category:"+category].Exhausted
-		}
+		result.HasMore = hongguoCatalogHasMoreForContext(ctx, category, state)
 		if len(items) == 0 && err != nil && ctx.Err() == nil && (category == "" || category == "short_play") {
 			var totalPages int
 			items, totalPages, err = d.fetchHongguoCategoryPage(ctx, "real-drama?page="+strconv.Itoa(page), "真人剧")

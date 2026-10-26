@@ -38,6 +38,30 @@ type libraryUpdateKey struct{}
 
 type libraryKnownKey struct{}
 
+func hongguoSourceUpdateInProgress(ctx context.Context) bool {
+	updating, _ := ctx.Value(hongguoSourceUpdateKey{}).(bool)
+	return updating
+}
+
+func shouldFetchHongguoWebsiteHistory(ctx context.Context, category string, state *hongguoCatalogState) bool {
+	return category == "" &&
+		!hongguoSourceUpdateInProgress(ctx) &&
+		!hongguoAppCatalogHasMore(state)
+}
+
+func hongguoCatalogHasMoreForContext(ctx context.Context, category string, state *hongguoCatalogState) bool {
+	if category != "" {
+		if state == nil {
+			return true
+		}
+		return !state.Feeds["category:"+category].Exhausted
+	}
+	if hongguoSourceUpdateInProgress(ctx) {
+		return hongguoAppCatalogHasMore(state)
+	}
+	return hongguoCatalogHasMore(state)
+}
+
 func (downloader *Downloader) fetchHongguoAppCatalog(ctx context.Context) ([]Drama, error) {
 	return downloader.fetchHongguoAppCatalogCategory(ctx, "")
 }

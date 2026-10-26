@@ -15,6 +15,11 @@ type nativeSourceTask struct {
 	cancel context.CancelFunc
 }
 
+// hongguoSourceUpdateKey identifies the explicit Red Fruit update task. It lets
+// catalog loading retain the pre-website-history update boundary without
+// disabling website history for normal catalog browsing.
+type hongguoSourceUpdateKey struct{}
+
 type nativeSourceRecord struct {
 	Operation       string               `json:"operation"`
 	Running         bool                 `json:"running"`
@@ -353,6 +358,9 @@ func waitForSourceCatalogInterval(ctx context.Context) error {
 }
 
 func (engine *nativeEngine) updateSource(ctx context.Context, source, operation string) error {
+	if canonicalProviderSource(source) == sourceHongguo && operation == "update" {
+		ctx = context.WithValue(ctx, hongguoSourceUpdateKey{}, true)
+	}
 	before := engine.nativeCached(source)
 	count := len(before.Items)
 	var knownBefore map[string]struct{}
