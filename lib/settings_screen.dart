@@ -36,6 +36,31 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   String? _message;
+  final FocusNode _deviceInterconnectFocus =
+      FocusNode(debugLabel: 'settings-device-interconnect');
+  final FocusNode _restoreBackupTileFocus =
+      FocusNode(debugLabel: 'settings-restore-backup');
+  FocusNode? _restoreBackupReturnFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    requestTvFocusAfterRouteTransition(context, _deviceInterconnectFocus);
+  }
+
+  @override
+  void dispose() {
+    _deviceInterconnectFocus.dispose();
+    _restoreBackupTileFocus.dispose();
+    super.dispose();
+  }
+
+  void _restoreBackupFocusIfNeeded() {
+    final node = _restoreBackupReturnFocus;
+    _restoreBackupReturnFocus = null;
+    if (!mounted || node == null) return;
+    requestTvFocusAfterRouteTransition(context, node);
+  }
 
   Future<void> _chooseTheme() async {
     final current = widget.store.themeMode;
@@ -74,6 +99,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _backup(bool restore) async {
+    // Keep the currently focused TV control. Opening Android's document picker
+    // and rebuilding the busy state can otherwise move focus to another row.
+    if (restore) {
+      // Keep this row as an explicit focus target across Android's document
+      // picker and the busy-state rebuild.
+      _restoreBackupReturnFocus = _restoreBackupTileFocus;
+      if (AppLayout.isTelevision(context)) {
+        _restoreBackupTileFocus.requestFocus();
+      }
+    }
     setState(() {
       _busy = true;
       _message = null;
@@ -182,7 +217,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (restore) _restoreBackupFocusIfNeeded();
+      }
     }
   }
 
@@ -223,6 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               ListTile(
                 key: const ValueKey('lan-settings'),
+                focusNode: _deviceInterconnectFocus,
                 leading: const Icon(Icons.devices_rounded),
                 title: const Text('裝置互聯'),
                 subtitle: const Text('區域網自動同步收藏與推送播放'),
@@ -295,9 +334,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _busy ? null : () => _backup(false),
                 ),
                 ListTile(
+                  key: const ValueKey('restore-settings-backup'),
+                  focusNode: _restoreBackupTileFocus,
                   leading: const Icon(Icons.restore),
                   title: const Text('還原設定備份'),
-                  onTap: _busy ? null : () => _backup(true),
+                  onTap: _busy
+                      ? null
+                      : () {
+                          if (AppLayout.isTelevision(context)) {
+                            _restoreBackupTileFocus.requestFocus();
+                          }
+                          _backup(true);
+                        },
                 ),
               ],
               if (_busy) const LinearProgressIndicator(),

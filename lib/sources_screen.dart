@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app_build.dart';
+import 'app_layout.dart';
 import 'core_bridge.dart';
 import 'local_store.dart';
 import 'models.dart';
@@ -45,7 +46,9 @@ class _SourcesScreenState extends State<SourcesScreen> {
   final _expandedHealth = <String>{};
   final _healthScrollControllers = <String, ScrollController>{};
   final _healthFocusNodes = <String, FocusNode>{};
+  final _updateFocusNodes = <String, FocusNode>{};
   Timer? _timer;
+  bool _initialUpdateFocusRequested = false;
   bool _polling = false;
   int _ticks = 0;
 
@@ -56,6 +59,50 @@ class _SourcesScreenState extends State<SourcesScreen> {
     id,
     () => FocusNode(debugLabel: 'source-health-$id'),
   );
+
+  FocusNode _updateFocusNode(String id) => _updateFocusNodes.putIfAbsent(
+    id,
+    () => FocusNode(debugLabel: 'source-update-$id'),
+  );
+
+  List<String> _defaultVisibleUpdateSourceIds() {
+    if (!widget.repository.supportsSourceManagement) return const [];
+    final sources = widget.store.permittedSources
+        .where((source) => widget.store.sourceEnabled(source.id))
+        .toList()
+      ..sort((a, b) {
+        final aFirst = a.id == widget.initialSource ? 0 : 1;
+        final bFirst = b.id == widget.initialSource ? 0 : 1;
+        return aFirst.compareTo(bFirst);
+      });
+    final visible = <String>[];
+    for (final group in SourceGroup.fromSources(sources)) {
+      // This group is collapsed unless the page was opened for one of its entries.
+      if (group.id == 'huangguo' &&
+          !group.sources.any((source) => source.id == widget.initialSource)) {
+        continue;
+      }
+      visible.addAll(group.sources.map((source) => source.id));
+    }
+    return visible;
+  }
+
+  void _requestInitialUpdateFocus() {
+    if (!mounted ||
+        _initialUpdateFocusRequested ||
+        !AppLayout.isTelevision(context)) {
+      return;
+    }
+    for (final sourceId in _defaultVisibleUpdateSourceIds()) {
+      final node = _updateFocusNodes[sourceId];
+      if (node == null || node.context == null || !node.canRequestFocus) {
+        continue;
+      }
+      _initialUpdateFocusRequested = true;
+      requestTvFocusAfterRouteTransition(context, node);
+      return;
+    }
+  }
 
   KeyEventResult _scrollHealthWithRemote(
     String id,
@@ -94,6 +141,9 @@ class _SourcesScreenState extends State<SourcesScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _requestInitialUpdateFocus();
+    });
     unawaited(_refresh());
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       _ticks++;
@@ -115,6 +165,9 @@ class _SourcesScreenState extends State<SourcesScreen> {
       controller.dispose();
     }
     for (final node in _healthFocusNodes.values) {
+      node.dispose();
+    }
+    for (final node in _updateFocusNodes.values) {
       node.dispose();
     }
     super.dispose();
@@ -455,6 +508,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
               children: [
                 FilledButton.icon(
                   key: ValueKey('update-${source.id}'),
+                  focusNode: _updateFocusNode(source.id),
                   // Match the highly visible focus treatment of the adjacent
                   // outlined diagnostic button. When focused, invert the
                   // filled button to a dark surface with a thick cyan outline.
