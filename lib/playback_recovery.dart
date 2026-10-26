@@ -113,9 +113,9 @@ class PlaybackHealth {
   // Range-resume attempt. Fail over after a shorter total stall window so a
   // dead CDN cannot leave playback spinning for nearly a minute.
   static const stallTimeout = Duration(seconds: 32);
-  // Leave room for a slow first response and one resume attempt, but move on
-  // when startup still has no media progress after 35 seconds.
-  static const startupStallTimeout = Duration(seconds: 35);
+  // If startup has no media progress, fail over before a dead CDN can keep
+  // the spinner visible for half a minute. Buffer/duration changes reset this.
+  static const startupStallTimeout = Duration(seconds: 20);
   Duration? _position;
   Duration? _duration;
   Duration? _buffer;

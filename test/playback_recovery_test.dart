@@ -157,7 +157,7 @@ void main() {
     },
   );
 
-  test('startup gets 35 seconds and buffer or duration changes reset the watchdog', () {
+  test('startup gets 20 seconds and buffer or duration changes reset the watchdog', () {
     final health = PlaybackHealth();
     final start = DateTime(2026, 10, 24);
 
@@ -180,9 +180,8 @@ void main() {
     expect(stalled(18, buffer: 1), isFalse); // Buffer activity is progress.
     expect(stalled(27, buffer: 2), isFalse); // New buffer activity resets time.
     expect(stalled(36, buffer: 2), isFalse);
-    expect(stalled(50, buffer: 2), isFalse);
-    expect(stalled(61, buffer: 2), isFalse); // 34 seconds since last progress.
-    expect(stalled(62, buffer: 2), isTrue); // 35 seconds since last progress.
+    expect(stalled(46, buffer: 2), isFalse); // 19 seconds since last progress.
+    expect(stalled(47, buffer: 2), isTrue); // 20 seconds since last progress.
 
     health.reset();
     expect(stalled(100, duration: 120), isFalse); // Duration discovery is progress.

@@ -444,7 +444,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             state.duration == Duration.zero;
         unawaited(
           _recover(
-            reason: startup ? 'startup_stalled_35s' : 'position_stalled_32s',
+            reason: startup ? 'startup_stalled_20s' : 'position_stalled_32s',
           ),
         );
       }

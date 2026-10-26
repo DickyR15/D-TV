@@ -143,6 +143,56 @@ func (transport playbackProbeFixtureTransport) RoundTrip(request *http.Request) 
 	return transport(request)
 }
 
+
+func TestNativePlaybackRouteProbeRejectsTruncatedMediaBody(t *testing.T) {
+	const stalledURL = "https://cdn-prefix-only.example.test/episode.mp4"
+	const healthyURL = "https://cdn-healthy.example.test/episode.mp4"
+	client := &http.Client{Transport: playbackProbeFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		if got, want := request.Header.Get("Range"), "bytes=0-65535"; got != want {
+			t.Errorf("route probe range=%q, want %q", got, want)
+		}
+		if request.URL.Host == "cdn-prefix-only.example.test" {
+			return &http.Response{
+				StatusCode: http.StatusPartialContent,
+				Header:     http.Header{"Content-Type": []string{"video/mp4"}},
+				Body: io.NopCloser(io.MultiReader(
+					strings.NewReader(strings.Repeat("x", nativePlaybackRouteProbeBytes/2)),
+					playbackProbeUnexpectedEOFReader{},
+				)),
+				Request: request,
+			}, nil
+		}
+		time.Sleep(15 * time.Millisecond)
+		return &http.Response{
+			StatusCode: http.StatusPartialContent,
+			Header:     http.Header{"Content-Type": []string{"video/mp4"}},
+			Body:       io.NopCloser(strings.NewReader(strings.Repeat("x", nativePlaybackRouteProbeBytes))),
+			Request:    request,
+		}, nil
+	})}
+	downloader := &Downloader{client: client}
+	choice := nativePlaybackChoices(providerMedia{
+		URL: stalledURL, Quality: 1080,
+		Variants: []providerMedia{{URL: healthyURL, Quality: 1080}},
+	}, 0)
+	engine := &nativeEngine{downloader: downloader}
+	ranked := engine.rankNativePlaybackRoutes(context.Background(), choice, Task{
+		DramaID: "hongguo:fixture", DramaTitle: "synthetic playback", Index: 1,
+	})
+	if ranked.media[0].URL != healthyURL {
+		t.Fatalf("expected a complete-body route ahead of a truncated prefix, got %s", ranked.media[0].URL)
+	}
+	if !downloader.nativeStreamHostCoolingDown(stalledURL) {
+		t.Fatal("truncated media prefix should cool down its host")
+	}
+}
+
+type playbackProbeUnexpectedEOFReader struct{}
+
+func (playbackProbeUnexpectedEOFReader) Read([]byte) (int, error) {
+	return 0, io.ErrUnexpectedEOF
+}
+
 func TestNativePlaybackProbeDiversifiesSameQualityHostsWhenAllFail(t *testing.T) {
 	media := providerMedia{
 		URL: "https://cdn-a.example.test/one.mp4", Quality: 1080,

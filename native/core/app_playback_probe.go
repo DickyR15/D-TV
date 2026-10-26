@@ -13,6 +13,7 @@ import (
 
 const nativePlaybackRouteProbeTimeout = 4 * time.Second
 const nativePlaybackRouteProbeLimit = 4
+const nativePlaybackRouteProbeBytes = 64 * 1024
 
 type nativePlaybackRouteProbeResult struct {
 	index   int
@@ -240,7 +241,7 @@ func (downloader *Downloader) probeNativePlaybackRoute(
 	}
 	request.Header.Set("Referer", media.Referer)
 	if !strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
-		request.Header.Set("Range", "bytes=0-1023")
+		request.Header.Set("Range", fmt.Sprintf("bytes=0-%d", nativePlaybackRouteProbeBytes-1))
 	}
 	start := time.Now()
 	response, err := downloader.doMediaRequest(request)
@@ -252,7 +253,7 @@ func (downloader *Downloader) probeNativePlaybackRoute(
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return latency, response.StatusCode, 0, host, fmt.Errorf("media HTTP %d", response.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, 1024))
+	body, err := io.ReadAll(io.LimitReader(response.Body, nativePlaybackRouteProbeBytes))
 	if err != nil {
 		return time.Since(start), response.StatusCode, len(body), host, err
 	}
