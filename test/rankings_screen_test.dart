@@ -316,6 +316,10 @@ void main() {
           );
         }
       }
+      // The fifth-page call is recorded before its Future completion is
+      // delivered, so pump the final result through the widget tree as well.
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
       expect(
         find.textContaining('已載入 100 部短劇'),
         findsAtLeastNWidgets(1),
