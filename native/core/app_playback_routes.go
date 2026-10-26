@@ -133,6 +133,26 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 	return plan, nil
 }
 
+// nextNativePlaybackRouteIndex prefers an uncooled candidate after the
+// current failed route. If every remaining host is cooling down, preserve the
+// original fallback order so recovery still has a chance to succeed.
+func nextNativePlaybackRouteIndex(
+	media []providerMedia,
+	currentIndex int,
+	isCooling func(string) bool,
+) int {
+	next := currentIndex + 1
+	if next >= len(media) {
+		return len(media)
+	}
+	for index := next; index < len(media); index++ {
+		if isCooling == nil || !isCooling(media[index].URL) {
+			return index
+		}
+	}
+	return next
+}
+
 func (engine *nativeEngine) nativeNextPlayback(ctx context.Context, session string) (nativePlan, error) {
 	engine.mu.Lock()
 	choice, exists := engine.playbacks[session]
@@ -140,7 +160,14 @@ func (engine *nativeEngine) nativeNextPlayback(ctx context.Context, session stri
 	if !exists {
 		return nativePlan{}, errors.New("播放线路已失效，请重新解析播放")
 	}
-	choice.index++
+	choice.index = nextNativePlaybackRouteIndex(
+		choice.media,
+		choice.index,
+		func(address string) bool {
+			return engine.downloader != nil &&
+				engine.downloader.nativeStreamHostCoolingDown(address)
+		},
+	)
 	return engine.nativeOpenPlayback(ctx, choice)
 }
 
