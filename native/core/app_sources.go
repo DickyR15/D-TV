@@ -240,12 +240,12 @@ func (engine *nativeEngine) cancelSourceTask(source string) nativeSourceStatus {
 	return engine.sourceStatusLocked(source)
 }
 
-func sourceTaskErrorMessage(ctx context.Context, err error) string {
+func sourceTaskErrorMessage(taskContextErr, err error) string {
 	if errors.Is(err, context.Canceled) {
 		return "已保留更新內容，可稍後繼續"
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if errors.Is(taskContextErr, context.DeadlineExceeded) {
 			return "本次片源任務超時，已保留更新內容，可繼續更新"
 		}
 		return "單一步驟連線逾時，已保留已完成內容；可重新檢測或稍後重試"
@@ -259,6 +259,7 @@ func (engine *nativeEngine) runSourceTask(ctx context.Context, source, operation
 		if recover() != nil {
 			err = errors.New("站源任务处理失败，已保留缓存")
 		}
+		taskContextErr := ctx.Err()
 		task.cancel()
 		engine.mu.Lock()
 		defer engine.mu.Unlock()
@@ -267,7 +268,7 @@ func (engine *nativeEngine) runSourceTask(ctx context.Context, source, operation
 		record.Running, record.FinishedAt = false, time.Now()
 		record.Stage = "已完成"
 		if err != nil {
-			record.Stage, record.Error = "未完成", sourceTaskErrorMessage(ctx, err)
+			record.Stage, record.Error = "未完成", sourceTaskErrorMessage(taskContextErr, err)
 			var persistence *nativePersistenceError
 			if errors.As(err, &persistence) {
 				record.NeedsSave, record.Error = engine.catalogSaveError != nil, ""
@@ -280,7 +281,7 @@ func (engine *nativeEngine) runSourceTask(ctx context.Context, source, operation
 				record.Stage, record.Error = "已停止", "已保留更新内容，可稍后继续"
 			}
 			if errors.Is(err, context.DeadlineExceeded) &&
-				errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				errors.Is(taskContextErr, context.DeadlineExceeded) {
 				record.Error = "本次片源任務超時，已保留更新內容，可繼續更新"
 			}
 			var backoff *requestBackoff

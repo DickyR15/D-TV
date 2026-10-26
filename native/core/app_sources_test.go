@@ -247,7 +247,7 @@ func TestSourceJobsDeduplicateCancelAndRecoverAfterRestart(t *testing.T) {
 }
 
 func TestSourceTaskErrorMessageDistinguishesRequestTimeout(t *testing.T) {
-	requestMessage := sourceTaskErrorMessage(context.Background(), context.DeadlineExceeded)
+	requestMessage := sourceTaskErrorMessage(nil, context.DeadlineExceeded)
 	if !strings.Contains(requestMessage, "單一步驟連線逾時") {
 		t.Fatalf("request timeout was mislabeled: %q", requestMessage)
 	}
@@ -255,7 +255,7 @@ func TestSourceTaskErrorMessageDistinguishesRequestTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
 	defer cancel()
 	<-ctx.Done()
-	taskMessage := sourceTaskErrorMessage(ctx, context.DeadlineExceeded)
+	taskMessage := sourceTaskErrorMessage(ctx.Err(), context.DeadlineExceeded)
 	if !strings.Contains(taskMessage, "本次片源任務超時") {
 		t.Fatalf("task deadline was not reported accurately: %q", taskMessage)
 	}
