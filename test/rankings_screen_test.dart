@@ -248,8 +248,14 @@ void main() {
         scrollable: rankingScroll,
       );
       await tester.pumpAndSettle();
-
       expect(find.text('合成榜單100'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.text('已顯示全部榜單'),
+        450,
+        scrollable: rankingScroll,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('已顯示全部榜單'), findsOneWidget);
       expect(repository.rankingCallsByPage[6], isNull);
     },
