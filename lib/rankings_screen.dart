@@ -400,11 +400,38 @@ class _RankingsScreenState extends State<RankingsScreen> {
       _memory.prefetchingPages.removeWhere((key, _) => key.startsWith(prefix));
     }
 
+    // Keep an already-rendered cached top-100 on screen while refreshing.
+    // Replace one rank range at a time as the fresh upstream pages arrive.
+    final previousSnapshot = _memory.pages[board.id];
+    final preserveCachedRows =
+        previousSnapshot != null &&
+        previousSnapshot.items.length > firstPage.items.length &&
+        firstPage.hasMore;
     final rows = <String, RankingItem>{
-      for (final item in firstPage.items) item.drama.id: item,
+      if (preserveCachedRows)
+        for (final item in previousSnapshot.items) item.drama.id: item,
     };
+
+    void mergePage(RankingPage incoming) {
+      if (preserveCachedRows) {
+        final firstRank = (incoming.page - 1) * 20 + 1;
+        final lastRank = incoming.page * 20;
+        rows.removeWhere(
+          (_, item) => item.rank >= firstRank && item.rank <= lastRank,
+        );
+      }
+      for (final item in incoming.items) {
+        rows[item.drama.id] = item;
+      }
+      if (!incoming.hasMore) {
+        rows.removeWhere((_, item) => item.rank > incoming.page * 20);
+      }
+    }
+
+    mergePage(firstPage);
     var items = rows.values.toList()
       ..sort((a, b) => a.rank.compareTo(b.rank));
+    if (items.length > 100) items = items.take(100).toList();
     if (board.source == 'hongguo' &&
         _redFruitHotBoardIds.contains(board.id)) {
       RankingSearchCache.remember(items.map((item) => item.drama));
@@ -413,34 +440,52 @@ class _RankingsScreenState extends State<RankingsScreen> {
     var hasMore = firstPage.hasMore;
     var updatedText = firstPage.updatedText;
 
-    // Publish the freshly fetched first page immediately. The remaining pages
-    // are background prefetch and must not delay the visible refresh.
-    if (force) {
+    int displayPage() {
+      if (items.length >= 100) return _redFruitPreloadPageCount;
+      if (preserveCachedRows &&
+          hasMore &&
+          previousSnapshot!.page > page) {
+        return previousSnapshot.page;
+      }
+      return page;
+    }
+
+    bool displayHasMore() => items.length >= 100 ? false : hasMore;
+
+    void publishSnapshot() {
+      final refreshStillUsesOldPages =
+          preserveCachedRows && hasMore && page < _redFruitPreloadPageCount;
+      final snapshotPage = displayPage();
+      final snapshotHasMore = displayHasMore();
       _memory.pages[board.id] = _RankingSnapshot(
         items: List<RankingItem>.unmodifiable(items),
-        page: page,
-        hasMore: hasMore,
+        page: snapshotPage,
+        hasMore: snapshotHasMore,
         updatedText: updatedText,
-        checkedAt: DateTime.now(),
+        checkedAt: refreshStillUsesOldPages
+            ? DateTime.now().subtract(const Duration(minutes: 5))
+            : DateTime.now(),
       );
       if (mounted && _board?.id == board.id) {
         setState(() {
           _items = List<RankingItem>.of(items);
-          _page = page;
-          _hasMore = hasMore;
+          _page = snapshotPage;
+          _hasMore = snapshotHasMore;
           _updated = updatedText;
+          _loading = false;
           _error = null;
           _failedMore = false;
-          _loading = false;
           _more = false;
         });
       }
     }
 
+    // The cached list is already visible. Publish only if there is no richer
+    // snapshot to preserve, then refresh each 20-item range in the background.
+    if (force) publishSnapshot();
+
     for (var nextPage = 2;
-        nextPage <= _redFruitPreloadPageCount &&
-            hasMore &&
-            items.length < 100;
+        nextPage <= _redFruitPreloadPageCount && hasMore;
         nextPage++) {
       RankingPage result;
       try {
@@ -469,9 +514,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
         _memory.prefetchedPages[_rankingPageKey(board.id, nextPage)] =
             _RankingPageSnapshot(page: result, checkedAt: DateTime.now());
       }
-      for (final item in result.items) {
-        rows[item.drama.id] = item;
-      }
+      mergePage(result);
       items = rows.values.toList()
         ..sort((a, b) => a.rank.compareTo(b.rank));
       if (items.length > 100) items = items.take(100).toList();
@@ -483,55 +526,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
       hasMore = result.hasMore;
       if (result.updatedText.isNotEmpty) updatedText = result.updatedText;
 
-      // Publish each completed page immediately. The active board can grow
-      // from 20 to 40, 60 ... up to 100 items without waiting for all four
-      // background queues to finish.
-      final reachedLimit =
-          items.length >= 100 || page >= _redFruitPreloadPageCount;
-      final mayHaveMore = !reachedLimit && hasMore;
-      _memory.pages[board.id] = _RankingSnapshot(
-        items: List<RankingItem>.unmodifiable(items),
-        page: page,
-        hasMore: mayHaveMore,
-        updatedText: updatedText,
-        checkedAt: DateTime.now(),
-      );
-      if (mounted && _board?.id == board.id) {
-        setState(() {
-          _items = List<RankingItem>.of(items);
-          _page = page;
-          _hasMore = mayHaveMore;
-          _updated = updatedText;
-          _loading = false;
-          _error = null;
-          _failedMore = false;
-        });
-      }
+      // Show progress page-by-page without ever collapsing a cached 100-item
+      // list back to 20 while the remaining cached ranges are being refreshed.
+      publishSnapshot();
     }
 
-    if (force) {
-      final reachedLimit = items.length >= 100 || page >= _redFruitPreloadPageCount;
-      final mayHaveMore = !reachedLimit && hasMore;
-      _memory.pages[board.id] = _RankingSnapshot(
-        items: List<RankingItem>.unmodifiable(items),
-        page: page,
-        hasMore: mayHaveMore,
-        updatedText: updatedText,
-        checkedAt: DateTime.now(),
-      );
-      if (mounted && _board?.id == board.id) {
-        setState(() {
-          _items = List<RankingItem>.of(items);
-          _page = page;
-          _hasMore = mayHaveMore;
-          _updated = updatedText;
-          _error = null;
-          _failedMore = false;
-          _loading = false;
-          _more = false;
-        });
-      }
-    }
+    if (force) publishSnapshot();
   }
 
   Future<List<RankingBoard>> _loadBoardsCached() {
