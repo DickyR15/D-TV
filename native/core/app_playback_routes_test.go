@@ -161,3 +161,31 @@ func TestNativePlaybackCancellationAndCacheBound(t *testing.T) {
 		engine.nativeReleasePlayback(token)
 	}
 }
+
+func TestNextNativePlaybackRouteSkipsCoolingCDNHosts(t *testing.T) {
+	media := []providerMedia{
+		{URL: "https://first.test/0.mp4"},
+		{URL: "https://recently-failed.test/1.mp4"},
+		{URL: "https://recently-failed.test/2.mp4"},
+		{URL: "https://healthy.test/3.mp4"},
+	}
+	coolingHosts := map[string]bool{
+		"https://recently-failed.test/1.mp4": true,
+		"https://recently-failed.test/2.mp4": true,
+	}
+	isCooling := func(address string) bool { return coolingHosts[address] }
+
+	if got := nextNativePlaybackRouteIndex(media, 0, isCooling); got != 3 {
+		t.Fatalf("next route index=%d, want healthy host at 3", got)
+	}
+
+	// Do not terminate recovery when every remaining route is cooling down;
+	// preserve sequential fallback as the last-resort chance to play.
+	coolingHosts["https://healthy.test/3.mp4"] = true
+	if got := nextNativePlaybackRouteIndex(media, 0, isCooling); got != 1 {
+		t.Fatalf("all-cooling fallback index=%d, want original next route 1", got)
+	}
+	if got := nextNativePlaybackRouteIndex(media, 3, isCooling); got != len(media) {
+		t.Fatalf("exhausted route index=%d, want %d", got, len(media))
+	}
+}
