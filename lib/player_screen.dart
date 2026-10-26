@@ -428,23 +428,29 @@ class _PlayerScreenState extends State<PlayerScreen>
           '[Recovery] budget_reset_after_stable_playback generation=$_generation stable_seconds=${PlaybackRecoveryStability.stablePlaybackDuration.inSeconds}',
         );
       }
+      final routeIndex = _plan?.routeIndex ?? 0;
       if (_health.stalled(
         position: state.position,
         duration: state.duration,
         buffer: state.buffer,
         // Use the user's playback intent, not MPV's transient playing /
         // buffering flags. Buffer and duration changes are separately counted
-        // as progress so slow first-frame startup does not trigger early
-        // route cycling while MPV is still opening the stream.
+        // as progress. A new route gets a shorter startup window after prior
+        // candidates have already failed.
         intendedToPlay: _playIntent && !state.completed,
         foreground: _foreground,
         now: now,
+        routeIndex: routeIndex,
       )) {
         final startup = state.position == Duration.zero &&
             state.duration == Duration.zero;
+        final startupSeconds =
+            PlaybackHealth.startupTimeoutForRoute(routeIndex).inSeconds;
         unawaited(
           _recover(
-            reason: startup ? 'startup_stalled_20s' : 'position_stalled_32s',
+            reason: startup
+                ? 'startup_stalled_${startupSeconds}s'
+                : 'position_stalled_32s',
           ),
         );
       }
