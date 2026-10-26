@@ -68,7 +68,7 @@ const (
 	nativeStreamResumeAttempts        = 2
 	nativeStreamMaxIdleConnections    = 16
 	nativeStreamMaxIdlePerHost         = 4
-	nativeStreamIdleConnTimeout       = 45 * time// nativeDialResolvedIPs races a set of already-resolved addresses. This avoids
+	nativeStreamIdleConnTimeout        = 45 * time.Second
 // serially spending seconds on an unreachable CDN IP when another address for
 // the same hostname is responsive.
 func nativeDialResolvedIPs(
@@ -193,8 +193,6 @@ func nativeStreamDialContext(dialer *net.Dialer) func(context.Context, string, s
 	}
 }
 
-Err)
-	}
 }
 
 func newNativeStreamTransport(base *http.Transport) *http.Transport {
