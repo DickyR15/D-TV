@@ -78,10 +78,11 @@ class _RankingMemory {
   List<RankingBoard>? boards;
   Future<List<RankingBoard>>? boardsFuture;
   final pages = <String, _RankingSnapshot>{};
-  // One-page look-ahead cache: we only download a page when the currently
-  // visible page succeeds, and we never recursively prefetch the whole board.
+  // The four Red Fruit hot boards are preloaded to 100 items (five 20-item
+  // pages each) in a serialized background queue.
   final prefetchedPages = <String, _RankingPageSnapshot>{};
   final prefetchingPages = <String, Future<RankingPage>>{};
+  bool top100PrefetchStarted = false;
 }
 
 final Expando<_RankingMemory> _rankingMemoryByRepository =
@@ -116,6 +117,14 @@ class _RankingsScreenState extends State<RankingsScreen> {
     return message;
   }
 
+  static const _redFruitHotBoardIds = <String>{
+    'hongguo-hot',
+    'hongguo-real',
+    'hongguo-ai',
+    'hongguo-comic',
+  };
+  static const _redFruitPreloadPageCount = 5;
+
   String _rankingPageKey(String boardId, int page) => '$boardId:$page';
 
   Future<RankingPage> _loadRankingPage(
@@ -132,7 +141,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
       if (pending != null) {
         try {
           final result = await pending;
-          // A pending look-ahead can finish while this load is waiting.
+          // A queued background page can finish while this load is waiting.
           _memory.prefetchedPages.remove(key);
           return result;
         } catch (_) {
@@ -143,44 +152,144 @@ class _RankingsScreenState extends State<RankingsScreen> {
     return widget.repository.rankings(board.id, page: page);
   }
 
-  void _prefetchNextPage(RankingBoard board, RankingPage current) {
-    // These are the four Red Fruit hot-ranking boards. Keep this optimization
-    // scoped to their 20-item paginated source and do not change other providers.
-    if (board.source != 'hongguo' ||
-        current.items.isEmpty ||
-        !current.hasMore ||
-        current.stale ||
-        current.warning.isNotEmpty) {
-      return;
+  Future<void> _waitForPlaybackPriority() async {
+    // Stop issuing new background ranking requests while playback has priority.
+    while (CoverRequestScheduler.backgroundPaused) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
     }
-    final nextPage = current.page + 1;
-    final key = _rankingPageKey(board.id, nextPage);
-    final cached = _memory.prefetchedPages[key];
-    if (cached != null && cached.isFresh) return;
-    _memory.prefetchedPages.remove(key);
-    if (_memory.prefetchingPages.containsKey(key)) return;
+  }
+
+  Future<RankingPage> _requestAndCacheRankingPage(
+    RankingBoard board,
+    int page,
+  ) async {
+    final key = _rankingPageKey(board.id, page);
+    if (page == 1) {
+      final cached = _memory.pages[board.id];
+      if (cached != null &&
+          cached.isFresh &&
+          cached.page == 1 &&
+          cached.items.isNotEmpty) {
+        return RankingPage(
+          items: cached.items,
+          page: 1,
+          hasMore: cached.hasMore,
+          updatedText: cached.updatedText,
+        );
+      }
+    } else {
+      final cached = _memory.prefetchedPages[key];
+      if (cached != null && cached.isFresh) return cached.page;
+    }
+
+    final pendingRequest = _memory.prefetchingPages[key];
+    if (pendingRequest != null) return pendingRequest;
 
     late final Future<RankingPage> pending;
-    pending = widget.repository
-        .rankings(board.id, page: nextPage)
-        .then((page) {
-          if (page.items.isNotEmpty && !page.stale && page.warning.isEmpty) {
-            _memory.prefetchedPages[key] = _RankingPageSnapshot(
-              page: page,
+    pending = widget.repository.rankings(board.id, page: page).then((result) {
+      if (result.items.isNotEmpty &&
+          !result.stale &&
+          result.warning.isEmpty) {
+        if (page == 1) {
+          final previous = _memory.pages[board.id];
+          if (previous == null || !previous.isFresh) {
+            _memory.pages[board.id] = _RankingSnapshot(
+              items: List<RankingItem>.unmodifiable(result.items),
+              page: 1,
+              hasMore: result.hasMore,
+              updatedText: result.updatedText,
               checkedAt: DateTime.now(),
             );
           }
-          return page;
-        })
-        .whenComplete(() {
-          if (identical(_memory.prefetchingPages[key], pending)) {
-            _memory.prefetchingPages.remove(key);
-          }
-        });
+        } else {
+          _memory.prefetchedPages[key] = _RankingPageSnapshot(
+            page: result,
+            checkedAt: DateTime.now(),
+          );
+        }
+      }
+      return result;
+    }).whenComplete(() {
+      if (identical(_memory.prefetchingPages[key], pending)) {
+        _memory.prefetchingPages.remove(key);
+      }
+    });
     _memory.prefetchingPages[key] = pending;
-    // The visible page must not fail just because a speculative next page
-    // failed in the background. A later user request will retry it.
-    unawaited(pending.catchError((Object _) => const RankingPage(items: [])));
+    return pending;
+  }
+
+  void _prefetchNextPage(RankingBoard board, RankingPage current) {
+    if (!_redFruitHotBoardIds.contains(board.id) ||
+        board.source != 'hongguo' ||
+        current.page != 1 ||
+        current.items.isEmpty ||
+        !current.hasMore ||
+        current.stale ||
+        current.warning.isNotEmpty ||
+        _memory.top100PrefetchStarted) {
+      return;
+    }
+    _memory.top100PrefetchStarted = true;
+    unawaited(_prefetchTop100ForAllHotBoards(board, current));
+  }
+
+  Future<void> _prefetchTop100ForAllHotBoards(
+    RankingBoard activeBoard,
+    RankingPage activeFirstPage,
+  ) async {
+    List<RankingBoard> boards;
+    try {
+      boards = (await _loadBoardsCached())
+          .where(
+            (board) =>
+                board.source == 'hongguo' &&
+                _redFruitHotBoardIds.contains(board.id) &&
+                widget.store.allowsSource(board.source),
+          )
+          .toList();
+    } catch (_) {
+      return;
+    }
+
+    for (final board in boards) {
+      RankingPage firstPage;
+      if (board.id == activeBoard.id && activeFirstPage.page == 1) {
+        firstPage = activeFirstPage;
+      } else {
+        try {
+          await _waitForPlaybackPriority();
+          firstPage = await _requestAndCacheRankingPage(board, 1);
+        } catch (_) {
+          // A failed board must not block the other hot boards from preloading.
+          continue;
+        }
+      }
+      if (firstPage.items.isEmpty ||
+          firstPage.stale ||
+          firstPage.warning.isNotEmpty) {
+        continue;
+      }
+
+      var hasMore = firstPage.hasMore;
+      for (var page = 2;
+          page <= _redFruitPreloadPageCount && hasMore;
+          page++) {
+        try {
+          await _waitForPlaybackPriority();
+          final result = await _requestAndCacheRankingPage(board, page);
+          if (result.page != page ||
+              result.items.isEmpty ||
+              result.stale ||
+              result.warning.isNotEmpty) {
+            break;
+          }
+          hasMore = result.hasMore;
+        } catch (_) {
+          // Leave this page uncached; user-driven pagination can retry it.
+          break;
+        }
+      }
+    }
   }
 
   Future<List<RankingBoard>> _loadBoardsCached() {

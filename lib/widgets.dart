@@ -220,6 +220,8 @@ class CoverRequestScheduler {
   static var _running = 0;
   static var _backgroundPauseCount = 0;
 
+  static bool get backgroundPaused => _backgroundPauseCount > 0;
+
   static void pauseBackground() {
     _backgroundPauseCount++;
   }

@@ -28,10 +28,17 @@ class _RankingRepository extends FixtureRepository {
   bool timeoutFirstRanking = false;
   bool allowThreePages = false;
 
-  @override
-  Future<List<RankingBoard>> rankingBoards() async => const [
+  static const hotBoards = [
     RankingBoard(id: 'hongguo-hot', source: 'hongguo', name: '熱播'),
+    RankingBoard(id: 'hongguo-real', source: 'hongguo', name: '真人劇'),
+    RankingBoard(id: 'hongguo-ai', source: 'hongguo', name: 'AI劇'),
+    RankingBoard(id: 'hongguo-comic', source: 'hongguo', name: '漫劇'),
   ];
+
+  final rankingCallsByBoardPage = <String, int>{};
+
+  @override
+  Future<List<RankingBoard>> rankingBoards() async => hotBoards;
 
   @override
   Future<RankingPage> rankings(
@@ -41,24 +48,31 @@ class _RankingRepository extends FixtureRepository {
   }) async {
     rankingCalls++;
     rankingCallsByPage.update(page, (count) => count + 1, ifAbsent: () => 1);
+    final boardPageKey = '$board:$page';
+    rankingCallsByBoardPage.update(
+      boardPageKey,
+      (count) => count + 1,
+      ifAbsent: () => 1,
+    );
     if (timeoutFirstRanking && rankingCalls == 1) {
       throw StateError('context deadline exceeded');
     }
+    const pageSize = 20;
     return RankingPage(
-    page: page,
-    hasMore: page < (allowThreePages ? 3 : 2),
-    items: [
-      for (var i = 1; i <= 10; i++)
-        RankingItem(
-          (page - 1) * 10 + i,
-          Drama(
-            id: 'hongguo:rank-${(page - 1) * 10 + i}',
-            source: 'hongguo',
-            title: '合成榜單${(page - 1) * 10 + i}',
-            episodes: 1,
+      page: page,
+      hasMore: page < (allowThreePages ? 3 : 5),
+      items: [
+        for (var i = 1; i <= pageSize; i++)
+          RankingItem(
+            (page - 1) * pageSize + i,
+            Drama(
+              id: 'hongguo:rank-${(page - 1) * pageSize + i}',
+              source: 'hongguo',
+              title: '合成榜單${(page - 1) * pageSize + i}',
+              episodes: 1,
+            ),
           ),
-        ),
-    ],
+      ],
     );
   }
 }
@@ -202,7 +216,7 @@ void main() {
   });
 
   testWidgets(
-    'prefetches the next Red Fruit board page and reuses it on scroll',
+    'preloads 100 items for all four Red Fruit hot-ranking boards',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final store = testStore(await SharedPreferences.getInstance());
@@ -223,22 +237,29 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The first page should initiate exactly one background look-ahead.
-      expect(repository.rankingCallsByPage[1], 1);
-      expect(repository.rankingCallsByPage[2], 1);
+      // Preload requests are serialized. The current page is reused and every
+      // hot board caches the first five 20-item pages (up to 100 records).
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
+      for (final board in _RankingRepository.hotBoards) {
+        for (var page = 1; page <= 5; page++) {
+          expect(
+            repository.rankingCallsByBoardPage['${board.id}:$page'],
+            1,
+            reason: '${board.id} page $page should be cached once',
+          );
+        }
+      }
 
-      // Scroll-triggered pagination should consume the prefetched page without
-      // making a second network/bridge request for that same page.
+      // Scrolling consumes the prefetched page without another request.
       await tester.drag(
         find.byType(Scrollable).last,
         const Offset(0, -1600),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('合成榜單11'), findsOneWidget);
-      expect(repository.rankingCallsByPage[2], 1);
-      // The newly visible page starts one-page look-ahead for page three.
-      expect(repository.rankingCallsByPage[3], 1);
+      expect(find.text('合成榜單21'), findsOneWidget);
+      expect(repository.rankingCallsByBoardPage['hongguo-hot:2'], 1);
     },
   );
 
