@@ -39,10 +39,15 @@ void main() {
       final moreButton = find.byTooltip('更多');
       expect(moreButton, findsOneWidget);
       await tester.tap(moreButton);
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('片源管理'), findsOneWidget);
+      // Let PopupMenuRoute's initial focus request commit before sending the
+      // remote's Enter key to the focused first action.
+      await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byType(SourcesScreen), findsOneWidget);
 
