@@ -31,6 +31,11 @@ void main() {
     await tester.tap(find.text('開啟紀錄'));
     await tester.pumpAndSettle();
 
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'playback-log-close',
+    );
+
     final listFinder = find.byKey(const ValueKey('playback-log-list'));
     expect(listFinder, findsOneWidget);
     final scrollableFinder = find.descendant(

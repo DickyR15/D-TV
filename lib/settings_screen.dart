@@ -36,6 +36,27 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   String? _message;
+  final FocusNode _deviceInterconnectFocus =
+      FocusNode(debugLabel: 'settings-device-interconnect');
+  bool _initialFocusScheduled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
+    _initialFocusScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _deviceInterconnectFocus.canRequestFocus) {
+        _deviceInterconnectFocus.requestFocus();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _deviceInterconnectFocus.dispose();
+    super.dispose();
+  }
 
   Future<void> _chooseTheme() async {
     final current = widget.store.themeMode;
@@ -223,6 +244,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               ListTile(
                 key: const ValueKey('lan-settings'),
+                focusNode: _deviceInterconnectFocus,
                 leading: const Icon(Icons.devices_rounded),
                 title: const Text('裝置互聯'),
                 subtitle: const Text('區域網自動同步收藏與推送播放'),

@@ -91,7 +91,12 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		step.Name, step.State, step.Message, step.ElapsedMS = name, "ok", message, time.Since(start).Milliseconds()
 		if err != nil {
 			failure = err
-			step.State, step.Message = "failed", publicError(err).Error()
+			step.State = "failed"
+			if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+				step.Message = "單次網路請求逾時"
+			} else {
+				step.Message = publicError(err).Error()
+			}
 			var backoff *requestBackoff
 			if errors.As(err, &backoff) {
 				step.HTTPStatus, step.Host = backoff.status, backoff.host

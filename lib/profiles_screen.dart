@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import 'app_layout.dart';
 import 'local_profiles.dart';
 import 'local_store.dart';
 import 'ui_localization.dart';
@@ -24,6 +25,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   final FocusNode _forceLoginFocus = FocusNode(
     debugLabel: 'force-login-setting',
   );
+  bool _initialFocusScheduled = false;
   final Map<String, FocusNode> _profileEntryFocusNodes = {};
   final Map<String, FocusNode> _profileEditFocusNodes = {};
 
@@ -36,6 +38,18 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     id,
     () => FocusNode(debugLabel: 'profile-edit-$id'),
   );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
+    _initialFocusScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _forceLoginFocus.canRequestFocus) {
+        _forceLoginFocus.requestFocus();
+      }
+    });
+  }
 
   @override
   void dispose() {

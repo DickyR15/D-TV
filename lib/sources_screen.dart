@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app_build.dart';
+import 'app_layout.dart';
 import 'core_bridge.dart';
 import 'local_store.dart';
 import 'models.dart';
@@ -45,8 +46,11 @@ class _SourcesScreenState extends State<SourcesScreen> {
   final _expandedHealth = <String>{};
   final _healthScrollControllers = <String, ScrollController>{};
   final _healthFocusNodes = <String, FocusNode>{};
+  final FocusNode _initialUpdateFocus =
+      FocusNode(debugLabel: 'source-update-default');
   Timer? _timer;
   bool _polling = false;
+  bool _initialFocusScheduled = false;
   int _ticks = 0;
 
   ScrollController _healthScrollController(String id) =>
@@ -117,6 +121,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
     for (final node in _healthFocusNodes.values) {
       node.dispose();
     }
+    _initialUpdateFocus.dispose();
     super.dispose();
   }
 
@@ -314,6 +319,26 @@ class _SourcesScreenState extends State<SourcesScreen> {
           final bFirst = b.id == widget.initialSource ? 0 : 1;
           return aFirst.compareTo(bFirst);
         });
+      final enabledSources = sources
+          .where((source) => widget.store.sourceEnabled(source.id))
+          .toList();
+      final focusSourceId = widget.initialSource != null &&
+              enabledSources.any((source) => source.id == widget.initialSource)
+          ? widget.initialSource
+          : enabledSources.isEmpty
+          ? null
+          : enabledSources.first.id;
+      if (focusSourceId != null &&
+          AppLayout.isTelevision(context) &&
+          !_initialFocusScheduled) {
+        _initialFocusScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _initialUpdateFocus.canRequestFocus) {
+            _initialUpdateFocus.requestFocus();
+          }
+        });
+      }
+      final sourceGroups = SourceGroup.fromSources(sources);
       final viewPaddingBottom = MediaQuery.viewPaddingOf(context).bottom;
       final paddingBottom = MediaQuery.paddingOf(context).bottom;
       final bottomInset = viewPaddingBottom > paddingBottom
@@ -340,14 +365,16 @@ class _SourcesScreenState extends State<SourcesScreen> {
                       padding: EdgeInsets.all(24),
                       child: Text('目前使用者沒有可用片源'),
                     ),
-                  for (final group in SourceGroup.fromSources(sources))
+                  for (final group in sourceGroups)
                     if (group.id == 'huangguo')
                       Card(
                         clipBehavior: Clip.antiAlias,
                         child: ExpansionTile(
                           key: const PageStorageKey('source-group-huangguo'),
                           initiallyExpanded: group.sources.any(
-                            (source) => source.id == widget.initialSource,
+                            (source) =>
+                                source.id == widget.initialSource ||
+                                source.id == focusSourceId,
                           ),
                           leading: const Icon(Icons.hub_outlined),
                           title: const Text('黃果'),
@@ -357,12 +384,19 @@ class _SourcesScreenState extends State<SourcesScreen> {
                           childrenPadding: const EdgeInsets.all(8),
                           children: [
                             for (final source in group.sources)
-                              _sourceCard(source),
+                              _sourceCard(
+                                source,
+                                autofocusUpdate: source.id == focusSourceId,
+                              ),
                           ],
                         ),
                       )
                     else
-                      for (final source in group.sources) _sourceCard(source),
+                      for (final source in group.sources)
+                        _sourceCard(
+                          source,
+                          autofocusUpdate: source.id == focusSourceId,
+                        ),
                 ],
               ),
             ),
@@ -372,7 +406,10 @@ class _SourcesScreenState extends State<SourcesScreen> {
     },
   );
 
-  Widget _sourceCard(SourceSite source) {
+  Widget _sourceCard(
+    SourceSite source, {
+    bool autofocusUpdate = false,
+  }) {
     final status = _statuses[source.id];
     final pending = _pending.contains(source.id);
     final busy = pending || status?.running == true;
@@ -455,6 +492,10 @@ class _SourcesScreenState extends State<SourcesScreen> {
               children: [
                 FilledButton.icon(
                   key: ValueKey('update-${source.id}'),
+                  focusNode: autofocusUpdate && AppLayout.isTelevision(context)
+                      ? _initialUpdateFocus
+                      : null,
+                  autofocus: autofocusUpdate && AppLayout.isTelevision(context),
                   // Match the highly visible focus treatment of the adjacent
                   // outlined diagnostic button. When focused, invert the
                   // filled button to a dark surface with a thick cyan outline.

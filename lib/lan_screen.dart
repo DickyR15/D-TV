@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_layout.dart';
 import 'lan_controller.dart';
 import 'local_store.dart';
 import 'widgets.dart';
@@ -98,11 +99,27 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
   String? _error;
   final ScrollController _screenScrollController = ScrollController();
   final GlobalKey _connectionHelpBottomKey = GlobalKey();
+  final FocusNode _interconnectFocus =
+      FocusNode(debugLabel: 'lan-device-interconnect');
+  bool _initialFocusScheduled = false;
   LanController get link => widget.controller;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
+    _initialFocusScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _interconnectFocus.canRequestFocus) {
+        _interconnectFocus.requestFocus();
+      }
+    });
+  }
 
   @override
   void dispose() {
     _screenScrollController.dispose();
+    _interconnectFocus.dispose();
     super.dispose();
   }
 
@@ -230,6 +247,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                     children: [
                       SwitchListTile.adaptive(
                         key: const ValueKey('lan-enabled'),
+                        focusNode: _interconnectFocus,
                         title: const Text('裝置互聯'),
                         subtitle: const Text('同一區域網直連，接收端無需點選確認'),
                         value: link.enabled,

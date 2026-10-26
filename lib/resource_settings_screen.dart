@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_layout.dart';
 import 'core_bridge.dart';
 import 'local_store.dart';
 import 'resource_settings.dart';
@@ -20,6 +21,9 @@ class ResourceSettingsScreen extends StatefulWidget {
 
 class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   final _proxy = TextEditingController();
+  final FocusNode _connectionModeFocus =
+      FocusNode(debugLabel: 'resource-connection-mode');
+  bool _initialFocusScheduled = false;
   late final int _epoch = widget.store.profileEpoch;
   ResourceSettings? _settings;
   String _mode = 'auto';
@@ -43,7 +47,18 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   @override
   void dispose() {
     _proxy.dispose();
+    _connectionModeFocus.dispose();
     super.dispose();
+  }
+
+  void _scheduleConnectionModeFocus() {
+    if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
+    _initialFocusScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _connectionModeFocus.canRequestFocus) {
+        _connectionModeFocus.requestFocus();
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -58,6 +73,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
         _interval = settings.catalogIntervalMs;
         _error = null;
       });
+      _scheduleConnectionModeFocus();
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     }
@@ -135,6 +151,8 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                       child: Text(uiTraditional(_settings!.warning)),
                     ),
                   DropdownButtonFormField<String>(
+                    focusNode: _connectionModeFocus,
+                    autofocus: AppLayout.isTelevision(context),
                     initialValue: _mode,
                     decoration: const InputDecoration(labelText: '連線方式'),
                     items: const [
