@@ -99,11 +99,20 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
   String? _error;
   final ScrollController _screenScrollController = ScrollController();
   final GlobalKey _connectionHelpBottomKey = GlobalKey();
+  final FocusNode _enabledFocusNode =
+      FocusNode(debugLabel: 'lan-device-interconnect-enabled');
   LanController get link => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    requestTvFocusAfterRouteTransition(context, _enabledFocusNode);
+  }
 
   @override
   void dispose() {
     _screenScrollController.dispose();
+    _enabledFocusNode.dispose();
     super.dispose();
   }
 
@@ -231,7 +240,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                     children: [
                       SwitchListTile.adaptive(
                         key: const ValueKey('lan-enabled'),
-                        autofocus: AppLayout.isTelevision(context),
+                        focusNode: _enabledFocusNode,
                         title: const Text('裝置互聯'),
                         subtitle: const Text('同一區域網直連，接收端無需點選確認'),
                         value: link.enabled,
