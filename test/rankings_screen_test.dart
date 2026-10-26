@@ -5,6 +5,7 @@ import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/models.dart';
 import 'package:hgtv/ranking_models.dart';
 import 'package:hgtv/rankings_screen.dart';
+import 'package:hgtv/remote_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -234,12 +235,13 @@ void main() {
       }
       expect(repository.rankingCallsByPage[6], isNull);
 
-      // The fixed wide-screen status bar reports the full in-memory count,
-      // without requiring lazy grid tiles to be scrolled into the viewport.
-      expect(
-        find.text('已載入 100 部短劇 · 已顯示全部短劇'),
-        findsOneWidget,
+      // RemoteGrid carries the complete item key list even though its
+      // poster children are lazily built while scrolling.
+      final grid = tester.widget<RemoteGrid>(
+        find.byKey(const ValueKey('ranking-grid-hongguo-hot')),
       );
+      expect(grid.itemKeys, hasLength(100));
+      expect(grid.itemKeys.last, 'hongguo:rank-100');
       expect(repository.rankingCallsByPage[6], isNull);
     },
   );
