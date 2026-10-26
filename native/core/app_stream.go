@@ -124,9 +124,9 @@ func (stream *nativeStreamServer) nativeRequest(request *http.Request) (*http.Re
 		address = response.Request.URL.String()
 	}
 	stream.nativeLog(info, "upstream_headers", address, "", response.StatusCode, response.Header.Get("Content-Type"))
-	if response.StatusCode == http.StatusOK || response.StatusCode == http.StatusPartialContent {
-		stream.downloader.clearNativeStreamHostFailure(address)
-	}
+	// Do not clear a host cooldown from status headers alone: several CDNs
+	// return HTTP 206 and then stop sending the media body. A complete body
+	// transfer (or a fully read/re-written playlist) proves that the host recovered.
 	diagnosticBody := &nativeDiagnosticBody{ReadCloser: response.Body, stream: stream, info: info, address: address}
 	response.Body = &nativeStreamIdleBody{
 		ReadCloser: diagnosticBody,
@@ -472,6 +472,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 			http.Error(writer, err.Error(), http.StatusBadGateway)
 			return
 		}
+		stream.downloader.clearNativeStreamHostFailure(finalURL.String())
 		writer.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		_, _ = io.WriteString(writer, rewritten)
 		return
