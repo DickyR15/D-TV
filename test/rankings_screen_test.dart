@@ -27,6 +27,9 @@ class _RankingRepository extends FixtureRepository {
   final rankingCallsByPage = <int, int>{};
   bool timeoutFirstRanking = false;
   int rankingRevision = 0;
+  Completer<void>? rankingPageGate;
+  int activeGatedRankingCalls = 0;
+  int maxConcurrentGatedRankingCalls = 0;
 
   static const hotBoards = [
     RankingBoard(id: 'hongguo-hot', source: 'hongguo', name: '熱播'),
@@ -56,6 +59,18 @@ class _RankingRepository extends FixtureRepository {
     );
     if (timeoutFirstRanking && rankingCalls == 1) {
       throw StateError('context deadline exceeded');
+    }
+    final gate = rankingPageGate;
+    if (gate != null && page > 1) {
+      activeGatedRankingCalls++;
+      if (activeGatedRankingCalls > maxConcurrentGatedRankingCalls) {
+        maxConcurrentGatedRankingCalls = activeGatedRankingCalls;
+      }
+      try {
+        await gate.future;
+      } finally {
+        activeGatedRankingCalls--;
+      }
     }
     const pageSize = 20;
     return RankingPage(
@@ -287,8 +302,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Preload requests are serialized. The current page is reused and every
-      // hot board caches the first five 20-item pages (up to 100 records).
+      // Board preloads now run concurrently; each board caches its first five
+      // 20-item pages (up to 100 records).
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pumpAndSettle();
       for (final board in _RankingRepository.hotBoards) {
@@ -310,6 +325,59 @@ void main() {
 
       expect(find.text('合成榜單21'), findsOneWidget);
       expect(repository.rankingCallsByBoardPage['hongguo-hot:2'], 1);
+    },
+  );
+
+
+  testWidgets(
+    'preloads the four hot boards concurrently instead of serially',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await tester.binding.setSurfaceSize(const Size(960, 540));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final repository = _RankingRepository();
+      final gate = Completer<void>();
+      repository.rankingPageGate = gate;
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RankingsScreen(
+            repository: repository,
+            store: store,
+            initialGroup: 'hongguo',
+            initialBoardId: 'hongguo-hot',
+          ),
+        ),
+      );
+
+      for (var attempt = 0;
+          attempt < 10 && repository.maxConcurrentGatedRankingCalls < 2;
+          attempt++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(
+        repository.maxConcurrentGatedRankingCalls,
+        greaterThanOrEqualTo(2),
+        reason: 'independent hot boards should preload pages concurrently',
+      );
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      for (final board in _RankingRepository.hotBoards) {
+        for (var page = 1; page <= 5; page++) {
+          expect(
+            repository.rankingCallsByBoardPage['${board.id}:$page'],
+            1,
+            reason: '${board.id} page $page should be cached once',
+          );
+        }
+      }
     },
   );
 
