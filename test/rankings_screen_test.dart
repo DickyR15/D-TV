@@ -26,6 +26,7 @@ class _RankingRepository extends FixtureRepository {
   }
   int rankingCalls = 0;
   bool useCachedTop100 = false;
+  bool duplicateCrossPageIDs = false;
   int cachedTop100Calls = 0;
   final rankingCallsByPage = <int, int>{};
   bool timeoutFirstRanking = false;
@@ -33,6 +34,9 @@ class _RankingRepository extends FixtureRepository {
   Completer<void>? rankingPageGate;
   int activeGatedRankingCalls = 0;
   int maxConcurrentGatedRankingCalls = 0;
+
+  int _rankingIDFor(int rank) =>
+      duplicateCrossPageIDs && rank >= 21 && rank <= 35 ? rank - 20 : rank;
 
   static const hotBoards = [
     RankingBoard(id: 'hongguo-hot', source: 'hongguo', name: '熱播'),
@@ -107,10 +111,10 @@ class _RankingRepository extends FixtureRepository {
           RankingItem(
             (page - 1) * pageSize + i,
             Drama(
-              id: 'hongguo:rank-${(page - 1) * pageSize + i}',
+              id: 'hongguo:rank-${_rankingIDFor((page - 1) * pageSize + i)}',
               source: 'hongguo',
               title:
-                  '合成榜單${(page - 1) * pageSize + i}'
+                  '合成榜單${_rankingIDFor((page - 1) * pageSize + i)}'
                   '${rankingRevision == 0 ? '' : '-v$rankingRevision'}',
               episodes: 1,
             ),
@@ -121,6 +125,48 @@ class _RankingRepository extends FixtureRepository {
 }
 
 void main() {
+  testWidgets(
+    'preserves 100 ranked slots even when adjacent pages repeat drama IDs',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await tester.binding.setSurfaceSize(const Size(960, 540));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final repository = _RankingRepository()..duplicateCrossPageIDs = true;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppLayout(
+            television: true,
+            child: RankingsScreen(
+              repository: repository,
+              store: store,
+              initialGroup: 'hongguo',
+              initialBoardId: 'hongguo-hot',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('已載入 100 部短劇'),
+        findsAtLeastNWidgets(1),
+        reason: 'rank positions 1 through 100 should remain visible',
+      );
+      for (final board in _RankingRepository.hotBoards) {
+        expect(
+          repository.rankingCallsByBoardPage['${board.id}:5'],
+          1,
+          reason: '${board.id} should request the fifth page',
+        );
+      }
+    },
+  );
+
   testWidgets('restores all four cached top-100 boards without network calls', (
     tester,
   ) async {
