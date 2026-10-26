@@ -159,3 +159,49 @@ class AppLayout extends InheritedWidget {
   bool updateShouldNotify(AppLayout oldWidget) =>
       television != oldWidget.television || version != oldWidget.version;
 }
+
+/// Request a TV control's initial focus after the current route finishes
+/// entering. Autofocus during a route animation can be overridden when
+/// Navigator restores the previous route's focus scope.
+void requestTvFocusAfterRouteTransition(
+  BuildContext context,
+  FocusNode node,
+) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!context.mounted || !AppLayout.isTelevision(context)) return;
+    final route = ModalRoute.of(context);
+    final animation = route?.animation;
+
+    void requestFocus() {
+      if (!context.mounted ||
+          !AppLayout.isTelevision(context) ||
+          (route != null && !route.isCurrent) ||
+          node.context == null ||
+          !node.canRequestFocus) {
+        return;
+      }
+      node.requestFocus();
+    }
+
+    if (animation == null ||
+        animation.status == AnimationStatus.completed) {
+      requestFocus();
+      return;
+    }
+
+    void onStatusChanged(AnimationStatus status) {
+      if (status == AnimationStatus.completed) {
+        animation.removeStatusListener(onStatusChanged);
+        WidgetsBinding.instance.addPostFrameCallback((_) => requestFocus());
+      } else if (status == AnimationStatus.dismissed) {
+        animation.removeStatusListener(onStatusChanged);
+      }
+    }
+
+    animation.addStatusListener(onStatusChanged);
+    if (animation.status == AnimationStatus.completed) {
+      animation.removeStatusListener(onStatusChanged);
+      requestFocus();
+    }
+  });
+}
