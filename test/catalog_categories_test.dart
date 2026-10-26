@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:hgtv/catalog_browser.dart';
 import 'package:hgtv/core_bridge.dart';
 import 'package:hgtv/models.dart';
+import 'package:hgtv/ranking_search_cache.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fixtures.dart';
@@ -382,4 +383,43 @@ void main() {
       expect(next.warning, isEmpty);
     },
   );
+
+  test(
+    'search merges matches from the loaded catalog and four-board ranking cache',
+    () async {
+      RankingSearchCache.clearForTesting();
+      addTearDown(RankingSearchCache.clearForTesting);
+      final repository = CategoryRepository();
+      repository.cachedPages['hongguo'] = CatalogPage(
+        const [
+          Drama(
+            id: 'hongguo:catalog-cache-match',
+            source: 'hongguo',
+            title: '分類快取命中測試劇',
+            category: '真人劇',
+          ),
+        ],
+        fresh: true,
+      );
+      const group = SourceGroup('hongguo', '紅果', [SourceSite.hongguo]);
+      final browser = CatalogBrowser(repository);
+
+      // Warm the browser's catalog cache, as happens on the home screen.
+      await browser.load(group, useCache: true);
+      RankingSearchCache.remember(const [
+        Drama(
+          id: 'hongguo:ranking-cache-match',
+          source: 'hongguo',
+          title: '真人榜快取命中測試劇',
+          category: '真人劇',
+        ),
+      ]);
+
+      final result = await browser.load(group, query: '快取命中測試劇');
+      final ids = result.items.map((item) => item.id).toSet();
+      expect(ids, contains('hongguo:catalog-cache-match'));
+      expect(ids, contains('hongguo:ranking-cache-match'));
+    },
+  );
+
 }

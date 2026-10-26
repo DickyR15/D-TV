@@ -12,6 +12,7 @@ import 'drama_actions.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'ranking_models.dart';
+import 'ranking_search_cache.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
 import 'ui_localization.dart';
@@ -202,6 +203,10 @@ class _RankingsScreenState extends State<RankingsScreen> {
           result.items.isNotEmpty &&
           !result.stale &&
           result.warning.isEmpty) {
+        if (board.source == 'hongguo' &&
+            _redFruitHotBoardIds.contains(board.id)) {
+          RankingSearchCache.remember(result.items.map((item) => item.drama));
+        }
         if (page == 1) {
           final previous = _memory.pages[board.id];
           if (previous == null || !previous.isFresh) {
@@ -361,6 +366,10 @@ class _RankingsScreenState extends State<RankingsScreen> {
       };
       var items = rows.values.toList()
         ..sort((a, b) => a.rank.compareTo(b.rank));
+      if (board.source == 'hongguo' &&
+          _redFruitHotBoardIds.contains(board.id)) {
+        RankingSearchCache.remember(items.map((item) => item.drama));
+      }
       var page = firstPage.page;
       var hasMore = firstPage.hasMore;
       var updatedText = firstPage.updatedText;
@@ -425,6 +434,10 @@ class _RankingsScreenState extends State<RankingsScreen> {
         items = rows.values.toList()
           ..sort((a, b) => a.rank.compareTo(b.rank));
         if (items.length > 100) items = items.take(100).toList();
+        if (board.source == 'hongguo' &&
+            _redFruitHotBoardIds.contains(board.id)) {
+          RankingSearchCache.remember(items.map((item) => item.drama));
+        }
         page = result.page;
         hasMore = result.hasMore;
         if (result.updatedText.isNotEmpty) updatedText = result.updatedText;
@@ -619,6 +632,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
             ? DateTime.now().subtract(const Duration(minutes: 5))
             : DateTime.now(),
       );
+      if (result.warning.isEmpty &&
+          !result.stale &&
+          board.source == 'hongguo' &&
+          _redFruitHotBoardIds.contains(board.id)) {
+        RankingSearchCache.remember(mergedItems.map((item) => item.drama));
+      }
       if (result.warning.isEmpty &&
           force &&
           !more &&

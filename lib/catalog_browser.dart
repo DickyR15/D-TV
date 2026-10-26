@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'core_bridge.dart';
 import 'models.dart';
+import 'ranking_search_cache.dart';
 import 'ui_localization.dart';
 
 String categoryName(String name) {
@@ -276,6 +277,16 @@ class CatalogBrowser {
     group,
   ).where((choice) => choice.category.id == category).firstOrNull;
 
+  static String _searchText(String value) =>
+      value.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+
+  static int _searchMatchRank(String title, String query) {
+    final value = _searchText(title);
+    if (value == query) return 0;
+    if (value.startsWith(query)) return 1;
+    return 2;
+  }
+
   Future<CatalogPage> load(
     SourceGroup group, {
     String category = '',
@@ -312,29 +323,62 @@ class CatalogBrowser {
       session.entries.putIfAbsent(source, _CatalogEntry.new);
     }
 
+    final queryText = _searchText(query);
+
     CatalogPage snapshot() {
       final rows = sourceOrder
           .map((source) => session.entries[source]!.items)
           .toList();
       final items = <String, Drama>{};
+
+      void mergeItem(Drama item) {
+        if (item.id.isEmpty) return;
+        final previous = items[item.id];
+        items[item.id] = previous == null ? item : previous.merge(item);
+      }
+
       final count = rows.fold<int>(0, (count, row) => max(count, row.length));
       for (var index = 0; index < count; index++) {
         for (final row in rows) {
-          if (index < row.length) items[row[index].id] = row[index];
+          if (index < row.length) mergeItem(row[index]);
         }
       }
-      if (choice != null) {
+
+      if (queryText.isNotEmpty) {
+        // Search already-loaded category catalog items before relying on network results alone.
+        for (final source in group.sources) {
+          for (final item in _library[source.id]?.values ?? const <Drama>[]) {
+            if (_searchText(item.title).contains(queryText)) mergeItem(item);
+          }
+        }
+        for (final item in RankingSearchCache.matching(
+          query,
+          sources: group.sources.map((source) => source.id).toSet(),
+        )) {
+          mergeItem(item);
+        }
+      } else if (choice != null) {
         for (final source in group.sources) {
           for (final item in _library[source.id]?.values ?? const <Drama>[]) {
             if (choice.category.local ||
                 categoryName(item.category) == choice.category.name) {
-              items.putIfAbsent(item.id, () => item);
+              mergeItem(item);
             }
           }
         }
       }
+
+      final visibleItems = items.values.toList();
+      if (queryText.isNotEmpty) {
+        visibleItems.sort((left, right) {
+          final leftRank = _searchMatchRank(left.title, queryText);
+          final rightRank = _searchMatchRank(right.title, queryText);
+          if (leftRank != rightRank) return leftRank.compareTo(rightRank);
+          return left.title.compareTo(right.title);
+        });
+      }
       return CatalogPage(
-        items.values.toList(),
+        visibleItems,
         hasMore: sourceOrder.any((source) => session.entries[source]!.hasMore),
         page: sourceOrder.fold<int>(
           1,
