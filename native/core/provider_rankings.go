@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -82,6 +83,83 @@ func findRankingBoard(id string) (rankingBoard, bool) {
 func cloneRankingPage(page rankingPage) rankingPage {
 	page.Items = append([]rankingItem{}, page.Items...)
 	return page
+}
+
+// cachedRankingTop100 returns the contiguous local pages without making any
+// upstream request. It is used to paint cached posters immediately on TV start,
+// while the normal ranking path refreshes stale or missing pages in background.
+func (d *Downloader) cachedRankingTop100(board rankingBoard) rankingPage {
+	cache := &d.rankings
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+
+	result := rankingPage{
+		BoardID: board.ID,
+		Page:    1,
+		Items:   []rankingItem{},
+		Stale:   true,
+	}
+	if cache.pages == nil {
+		return result
+	}
+
+	rows := map[string]rankingItem{}
+	result.Stale = false
+	for pageNo := 1; pageNo <= 5; pageNo++ {
+		cached, exists := cache.pages[board.ID+":"+strconv.Itoa(pageNo)]
+		if !exists || cached.Page != pageNo || len(cached.Items) == 0 {
+			if pageNo == 1 {
+				result.Stale = true
+			}
+			break
+		}
+		if pageNo > 1 && !result.HasMore {
+			break
+		}
+		age := time.Since(cached.FetchedAt)
+		if age < 0 || age >= 24*time.Hour {
+			result.Stale = true
+			break
+		}
+
+		for _, item := range cached.Items {
+			if item.Rank >= 1 && item.Rank <= 100 && item.Drama.ID != "" {
+				rows[item.Drama.ID] = item
+			}
+		}
+		result.Page = pageNo
+		result.HasMore = cached.HasMore
+		result.TotalPages = cached.TotalPages
+		result.FetchedAt = cached.FetchedAt
+		if cached.UpdatedText != "" {
+			result.UpdatedText = cached.UpdatedText
+		}
+		if age >= rankingCacheTTL {
+			result.Stale = true
+		}
+		if len(rows) >= 100 || !result.HasMore {
+			break
+		}
+	}
+
+	result.Items = make([]rankingItem, 0, len(rows))
+	for _, item := range rows {
+		result.Items = append(result.Items, item)
+	}
+	sort.Slice(result.Items, func(i, j int) bool {
+		return result.Items[i].Rank < result.Items[j].Rank
+	})
+	if len(result.Items) > 100 {
+		result.Items = result.Items[:100]
+	}
+	result.HasMore = result.HasMore && result.Page < 5 && len(result.Items) < 100
+	if len(result.Items) == 0 {
+		result.Page = 1
+		result.HasMore = false
+		result.Stale = true
+	}
+	result.Warning = ""
+	return result
 }
 
 func singlePageRankingBoard(board rankingBoard) bool {
