@@ -55,9 +55,13 @@ type nativeStreamServer struct {
 }
 
 const (
-	nativeStreamDialTimeout           = 8 * time.Second
-	nativeStreamTLSHandshakeTimeout   = 8 * time.Second
-	nativeStreamResponseHeaderTimeout = 8 * time.Second
+	// Live traces show working CDN endpoints reaching response headers in
+	// about 1-3 seconds. Unreachable endpoints, however, spent 10-17 seconds
+	// across connect/TLS/header waits before MPV could switch routes. Keep each
+	// network stage bounded so a bad redirect/CDN cannot monopolize startup.
+	nativeStreamDialTimeout           = 5 * time.Second
+	nativeStreamTLSHandshakeTimeout   = 4 * time.Second
+	nativeStreamResponseHeaderTimeout = 5 * time.Second
 	nativeStreamReadIdleTimeout       = 12 * time.Second
 	nativeStreamResumeAttempts        = 2
 	nativeStreamMaxIdleConnections    = 16

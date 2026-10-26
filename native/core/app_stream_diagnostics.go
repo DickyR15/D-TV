@@ -281,20 +281,42 @@ func (writer *nativeInitialFlushWriter) Write(data []byte) (int, error) {
 }
 
 func (stream *nativeStreamServer) nativeTrace(info nativeStreamDiagnostic, address string) *httptrace.ClientTrace {
-	phase := func(name string, err error) {
-		stream.nativeLog(info, "network_phase", address, "phase="+name+" error="+nativeStreamError(err), 0, "")
+	phase := func(name string, err error, detail string) {
+		message := "phase=" + name + " error=" + nativeStreamError(err)
+		if detail != "" {
+			message += " " + detail
+		}
+		stream.nativeLog(info, "network_phase", address, message, 0, "")
 	}
 	return &httptrace.ClientTrace{
-		DNSStart:          func(httptrace.DNSStartInfo) { phase("dns_start", nil) },
-		DNSDone:           func(value httptrace.DNSDoneInfo) { phase("dns_done", value.Err) },
-		ConnectStart:      func(string, string) { phase("connect_start", nil) },
-		ConnectDone:       func(_, _ string, err error) { phase("connect_done", err) },
-		TLSHandshakeStart: func() { phase("tls_start", nil) },
-		TLSHandshakeDone:  func(_ tls.ConnectionState, err error) { phase("tls_done", err) },
-		GotConn: func(value httptrace.GotConnInfo) {
-			stream.nativeLog(info, "network_phase", address, fmt.Sprintf("phase=got_connection reused=%t", value.Reused), 0, "")
+		DNSStart: func(httptrace.DNSStartInfo) {
+			phase("dns_start", nil, "")
 		},
-		GotFirstResponseByte: func() { phase("response_headers_first_byte", nil) },
+		DNSDone: func(value httptrace.DNSDoneInfo) {
+			phase("dns_done", value.Err, "")
+		},
+		ConnectStart: func(network, remote string) {
+			phase("connect_start", nil, fmt.Sprintf("network=%s remote=%s", network, remote))
+		},
+		ConnectDone: func(network, remote string, err error) {
+			phase("connect_done", err, fmt.Sprintf("network=%s remote=%s", network, remote))
+		},
+		TLSHandshakeStart: func() {
+			phase("tls_start", nil, "")
+		},
+		TLSHandshakeDone: func(_ tls.ConnectionState, err error) {
+			phase("tls_done", err, "")
+		},
+		GotConn: func(value httptrace.GotConnInfo) {
+			remote := ""
+			if value.Conn != nil && value.Conn.RemoteAddr() != nil {
+				remote = value.Conn.RemoteAddr().String()
+			}
+			phase("got_connection", nil, fmt.Sprintf("reused=%t remote=%s", value.Reused, remote))
+		},
+		GotFirstResponseByte: func() {
+			phase("response_headers_first_byte", nil, "")
+		},
 	}
 }
 

@@ -229,7 +229,7 @@ func TestNativeStreamDiagnosticsHLSAssetsAndPrivacy(t *testing.T) {
 			t.Fatalf("diagnostic exposed %s", secret)
 		}
 	}
-	for _, marker := range []string{"stream.local_request", "stream.upstream_headers", "stream.local_response", "kind=master_playlist", "kind=media_playlist", "asset=child_playlist", "asset=key", "asset=map", "asset=segment", "reason=release", "elapsed_ms=", "phase=connect_done"} {
+	for _, marker := range []string{"stream.local_request", "stream.upstream_headers", "stream.local_response", "kind=master_playlist", "kind=media_playlist", "asset=child_playlist", "asset=key", "asset=map", "asset=segment", "reason=release", "elapsed_ms=", "phase=connect_done", "network=tcp", "remote="} {
 		if !strings.Contains(text, marker) {
 			t.Errorf("missing diagnostic %s", marker)
 		}
