@@ -288,14 +288,21 @@ func TestCachedRankingTop100ReturnsLocalPagesImmediately(t *testing.T) {
 		rows := make([]rankingItem, 0, 20)
 		for offset := 1; offset <= 20; offset++ {
 			rank := (pageNo-1)*20 + offset
-			id := strconv.FormatInt(7681903520873720000+int64(rank), 10)
+			// Simulate an upstream page overlap: positions 21-35 repeat
+			// the first 15 drama IDs, producing the reported 85 unique IDs
+			// across 100 valid rank positions.
+			idRank := rank
+			if pageNo == 2 && offset <= 15 {
+				idRank = offset
+			}
+			id := strconv.FormatInt(7681903520873720000+int64(idRank), 10)
 			rows = append(rows, rankingItem{
 				Rank: rank,
 				Drama: Drama{
 					ID: providerDramaID(sourceHongguo, id),
 					Source: sourceHongguo,
 					SourceID: id,
-					Title: "快取短劇 " + strconv.Itoa(rank),
+					Title: "快取短劇 " + strconv.Itoa(idRank),
 				},
 			})
 		}
