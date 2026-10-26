@@ -146,8 +146,8 @@ void main() {
       expect(stalled(51), isFalse);
       expect(stalled(52), isTrue);
       expect(stalled(53, position: 6), isFalse);
-      expect(stalled(96, position: 6), isFalse);
-      expect(stalled(97, position: 6), isTrue);
+      expect(stalled(104, position: 6), isFalse);
+      expect(stalled(105, position: 6), isTrue);
       expect(stalled(60, intendedToPlay: false, position: 6), isFalse);
       expect(stalled(80, intendedToPlay: false, position: 6), isFalse);
       expect(stalled(100, foreground: false, position: 6), isFalse);

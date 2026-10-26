@@ -252,8 +252,8 @@ void main() {
 
       // Scrolling consumes the prefetched page without another request.
       await tester.drag(
-        find.byType(Scrollable).last,
-        const Offset(0, -1600),
+        find.byKey(const ValueKey('ranking-hongguo-hot')),
+        const Offset(0, -8000),
       );
       await tester.pumpAndSettle();
 
