@@ -222,7 +222,12 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }
 
   void _onScroll() {
-    if (!mounted || !_hasMore || _loading || _more || !_scroll.hasClients) {
+    if (!mounted ||
+        !_hasMore ||
+        _loading ||
+        _more ||
+        _isTop100Loading(_board) ||
+        !_scroll.hasClients) {
       return;
     }
     final position = _scroll.position;
@@ -268,6 +273,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
       if (_board != null && (cached == null || !cached.isFresh)) {
         // A stale in-memory list stays visible while the native layer refreshes.
         await _load();
+      } else if (_board != null && cached != null) {
+        _ensureCachedBoardTop100(_board!, cached);
       }
     } catch (error) {
       if (mounted && generation == _generation) {
@@ -285,7 +292,15 @@ class _RankingsScreenState extends State<RankingsScreen> {
     bool quiet = false,
   }) async {
     final board = _board;
-    if (board == null || more && (_loading || _more || !_hasMore)) return;
+    if (board == null ||
+        more &&
+            (_loading ||
+                _more ||
+                !_hasMore ||
+                _isTop100Loading(board)) ||
+        !more && _isTop100Loading(board)) {
+      return;
+    }
     final generation = ++_generation;
     setState(() {
       _loading = !more && !quiet;
@@ -297,17 +312,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
     });
     try {
       final requestedPage = more ? _page + 1 : 1;
-      final result = more && !force
-          ? await _loadRankingPage(
-              board,
-              requestedPage,
-              preferPrefetch: true,
-            )
-          : await widget.repository.rankings(
-              board.id,
-              page: requestedPage,
-              force: force,
-            );
+      final result = await widget.repository.rankings(
+        board.id,
+        page: requestedPage,
+        force: force,
+      );
       if (!mounted || generation != _generation) return;
       final rows = <String, RankingItem>{
         if (more)
@@ -316,10 +325,14 @@ class _RankingsScreenState extends State<RankingsScreen> {
       };
       final mergedItems = rows.values.toList()
         ..sort((a, b) => a.rank.compareTo(b.rank));
+      final hasMore = result.hasMore &&
+          (board.source != 'hongguo' ||
+              (mergedItems.length < _hongguoRankingItemLimit &&
+                  result.page < _hongguoRankingPageLimit));
       setState(() {
         _items = mergedItems;
         _page = result.page;
-        _hasMore = result.hasMore;
+        _hasMore = hasMore;
         _updated = result.updatedText;
         _error = result.warning.isEmpty ? null : result.warning;
         _loading = false;
@@ -328,15 +341,21 @@ class _RankingsScreenState extends State<RankingsScreen> {
       _memory.pages[board.id] = _RankingSnapshot(
         items: List<RankingItem>.unmodifiable(mergedItems),
         page: result.page,
-        hasMore: result.hasMore,
+        hasMore: hasMore,
         updatedText: result.updatedText,
         // A stale native page must remain stale in the Dart memory cache.
         checkedAt: result.stale
             ? DateTime.now().subtract(const Duration(minutes: 5))
             : DateTime.now(),
       );
-      if (result.warning.isEmpty) {
-        _prefetchNextPage(board, result);
+      if (result.warning.isEmpty && !result.stale) {
+        unawaited(
+          _ensureTop100Loaded(
+            board,
+            result,
+            force: force && !more,
+          ),
+        );
       }
       _retryTimer?.cancel();
       _automaticRetries = 0;
@@ -402,6 +421,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
     if (cached == null || !cached.isFresh) {
       // Keep old rows onscreen instead of clearing the grid while fetching.
       _load();
+    } else {
+      _ensureCachedBoardTop100(board, cached);
     }
   }
 
@@ -426,7 +447,19 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }
 
   Widget _loadMoreFooter() => Center(
-    child: _more
+    child: _isTop100Loading(_board)
+        ? const Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(),
+                SizedBox(height: 8),
+                Text('正在預載前 100 名榜單…'),
+              ],
+            ),
+          )
+        : _more
         ? const Padding(
             padding: EdgeInsets.all(16),
             child: CircularProgressIndicator(),
@@ -435,7 +468,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
         ? OutlinedButton.icon(
             onPressed: () => _load(more: true),
             icon: const Icon(Icons.expand_more_rounded),
-            label: const Text('載入更多'),
+            label: const Text('重試載入剩餘榜單'),
           )
         : const Padding(
             padding: EdgeInsets.all(16),
@@ -763,7 +796,9 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   Widget _wideFooter(int count) {
     final theme = Theme.of(context);
-    final status = _more
+    final status = _isTop100Loading(_board)
+        ? '正在預載前 100 名…'
+        : _more
         ? '正在載入更多…'
         : _hasMore
         ? '上滑載入更多'
@@ -854,7 +889,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
         ),
         actions: [
           RefreshAction(
-            loading: _loading || _more,
+            loading: _loading || _more || _isTop100Loading(_board),
             tooltip: '更新榜單',
             onPressed: _board == null ? _initialize : () => _load(force: true),
           ),
@@ -895,7 +930,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     ),
                     if (!wide)
                       RefreshAction(
-                        loading: _loading || _more,
+                        loading: _loading || _more || _isTop100Loading(_board),
                         tooltip: '更新榜單',
                         onPressed: _board == null ? _initialize : () => _load(force: true),
                       ),
