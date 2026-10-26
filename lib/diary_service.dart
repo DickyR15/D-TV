@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'back_safe_dialog.dart';
+import 'app_layout.dart';
 import 'package:flutter/services.dart';
 
 import 'package:path_provider/path_provider.dart';
@@ -274,9 +275,7 @@ class DiaryService {
       builder: (dialogContext) {
         if (!initialCloseFocusScheduled) {
           initialCloseFocusScheduled = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (dialogContext.mounted) closeFocus.requestFocus();
-          });
+          requestTvFocusAfterRouteTransition(dialogContext, closeFocus);
         }
         return BackSafeDialog(
           onDismissed: onDialogDismissed,
