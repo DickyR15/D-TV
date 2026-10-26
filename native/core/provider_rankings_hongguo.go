@@ -21,7 +21,9 @@ func (d *Downloader) fetchHongguoRankingPage(ctx context.Context, board rankingB
 	// A slow origin must not consume the whole retry budget on the first try.
 	parentCtx := ctx
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	// Ranking pages feed all four 100-item boards. Keep a stalled HTML
+	// request from holding the TV's "load more" indicator for a minute.
+	for attempt := 0; attempt < 2; attempt++ {
 		if attempt > 0 {
 			timer := time.NewTimer(time.Duration(attempt*attempt) * 300 * time.Millisecond)
 			select {
@@ -32,7 +34,7 @@ func (d *Downloader) fetchHongguoRankingPage(ctx context.Context, board rankingB
 			}
 		}
 
-		attemptCtx, cancel := context.WithTimeout(parentCtx, 20*time.Second)
+		attemptCtx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 		base := d.providerBaseURL(sourceHongguo)
 		address := base + "/rank/" + board.path
 		if page > 1 {
