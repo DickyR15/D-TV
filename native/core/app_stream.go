@@ -193,8 +193,6 @@ func nativeStreamDialContext(dialer *net.Dialer) func(context.Context, string, s
 	}
 }
 
-}
-
 func newNativeStreamTransport(base *http.Transport) *http.Transport {
 	transport := base.Clone()
 	// MPV can issue several Range requests while seeking or filling its demuxer.
