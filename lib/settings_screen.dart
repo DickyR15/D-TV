@@ -12,12 +12,12 @@ import 'app_layout.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
 import 'app_build.dart';
-import 'sources_screen.dart';
 import 'ui_localization.dart';
 import 'widgets.dart';
 import 'resource_settings_screen.dart';
 import 'lan_screen.dart';
 import 'diary_service.dart';
+import 'playback_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -91,6 +91,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _message = null);
     } catch (error) {
       if (mounted) setState(() => _message = '外觀主題切換失敗：$error');
+    }
+  }
+
+  Future<void> _chooseThemeAccent() async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('介面配色'),
+        children: [
+          for (final tone in AppTheme.accentOptions)
+            ListTile(
+              autofocus: tone == widget.store.themeAccent &&
+                  AppLayout.isTelevision(context),
+              selected: tone == widget.store.themeAccent,
+              leading: CircleAvatar(
+                radius: 13,
+                backgroundColor: AppTheme.accentPreview(tone),
+                child: tone == widget.store.themeAccent
+                    ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                    : null,
+              ),
+              title: Text(AppTheme.accentLabel(tone)),
+              subtitle: tone == 'system'
+                  ? const Text('Android 12 以上支援系統動態色彩')
+                  : tone == 'brand'
+                  ? const Text('保留 D-TV 預設品牌色')
+                  : null,
+              onTap: () => Navigator.of(dialogContext).pop(tone),
+            ),
+        ],
+      ),
+    );
+    if (selected == null || !mounted || selected == widget.store.themeAccent) {
+      return;
+    }
+    try {
+      await widget.store.setThemeAccent(selected);
+      if (mounted) setState(() => _message = null);
+    } catch (error) {
+      if (mounted) setState(() => _message = '介面配色切換失敗：$error');
     }
   }
 
@@ -251,22 +291,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => openLanSync(context),
               ),
-              if (widget.repository.supportsSourceManagement)
-                ListTile(
-                  leading: const Icon(Icons.dns_outlined),
-                  title: const Text('片源管理'),
-                  subtitle: const Text('獨立更新、連線與播放檢測'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => SourcesScreen(
-                        repository: widget.repository,
-                        store: widget.store,
-                      ),
-                    ),
-                  ),
-                ),
               ListTile(
                 key: const ValueKey('theme-setting'),
                 leading: const Icon(Icons.palette_outlined),
@@ -274,6 +298,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: Text(AppTheme.label(widget.store.themeMode)),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: _chooseTheme,
+              ),
+              ListTile(
+                key: const ValueKey('theme-accent-setting'),
+                leading: const Icon(Icons.color_lens_outlined),
+                title: const Text('介面配色'),
+                subtitle: Text(AppTheme.accentLabel(widget.store.themeAccent)),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _chooseThemeAccent,
+              ),
+              ListTile(
+                key: const ValueKey('playback-setting'),
+                leading: const Icon(Icons.tune_rounded),
+                title: const Text('播放'),
+                subtitle: const Text('預設倍速、清晰度、解碼方式與相容渲染'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => PlaybackSettingsScreen(store: widget.store),
+                  ),
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.people_outline),
