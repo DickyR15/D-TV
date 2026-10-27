@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'core_bridge.dart';
 import 'diary_service.dart';
 import 'local_store.dart';
