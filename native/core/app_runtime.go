@@ -281,6 +281,16 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	transport.ResponseHeaderTimeout = 20 * time.Second
 	transport.Proxy = router.proxy
 	cdn := newCDNTransport(transport, newDNSResolver(transport))
+	// The Hongguo backup playback API rejects the default ALPN offer with
+	// "tls: no application protocol". Use a dedicated no-ALPN HTTP/1.1
+	// transport for that hostname only; keep normal negotiation elsewhere.
+	hongguoBackupHTTP1 := transport.Clone()
+	hongguoBackupHTTP1.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	hongguoBackupHTTP1.ForceAttemptHTTP2 = false
+	hongguoBackupHTTP1.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	providerTransport := &hostProtocolFallbackTransport{
+		base: cdn, fallback: hongguoBackupHTTP1, host: "djapi.999888456.xyz",
+	}
 	checkRedirect := func(request *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return errors.New("站源重定向次数过多")
@@ -291,7 +301,7 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 		return nil
 	}
 	d.client = &http.Client{
-		Transport: newHuangguoBrowserTransport(cdn, d),
+		Transport: newHuangguoBrowserTransport(providerTransport, d),
 		Timeout: 45 * time.Second,
 		CheckRedirect: checkRedirect,
 	}
