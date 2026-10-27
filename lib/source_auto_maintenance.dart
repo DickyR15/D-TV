@@ -46,7 +46,7 @@ abstract final class SourceAutoMaintenance {
         return;
       }
       _lastAttempt[source] = now;
-      await repository.startSourceJob(source, 'check');
+      await repository.startAutomaticSourceCheck(source);
       DiaryService.add(
         '[SourceAuto] started daily connection/playback check for $source',
       );
