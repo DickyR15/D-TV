@@ -29,7 +29,6 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   String _mode = 'auto';
   bool _busy = false;
   bool _showProxy = false;
-  int _catalog = 3;
   int _interval = 250;
 
   String? _error;
@@ -69,7 +68,6 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
         _settings = settings;
         _mode = settings.proxyMode;
         _proxy.text = settings.proxyUrl;
-        _catalog = settings.catalogConcurrency;
         _interval = settings.catalogIntervalMs;
         _error = null;
       });
@@ -90,7 +88,8 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
         ResourceSettings(
           proxyMode: _mode,
           proxyUrl: _proxy.text.trim(),
-          catalogConcurrency: _catalog,
+          // Keep the engine's existing/default value; this is not a user-facing setting.
+          catalogConcurrency: _settings?.catalogConcurrency ?? 3,
           catalogIntervalMs: _interval,
         ),
       );
@@ -105,21 +104,6 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
-
-  Widget _count(String title, int value, ValueChanged<int> change) =>
-      DropdownButtonFormField<int>(
-        initialValue: value,
-        decoration: InputDecoration(labelText: title),
-        items: [
-          for (var i = 1; i <= 6; i++)
-            DropdownMenuItem(value: i, child: Text('$i')),
-        ],
-        onChanged: _busy
-            ? null
-            : (value) {
-                if (value != null) setState(() => change(value));
-              },
-      );
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -200,8 +184,6 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                       ),
                     ),
                   const SizedBox(height: 28),
-                  _count('目錄請求併發', _catalog, (value) => _catalog = value),
-                  const SizedBox(height: 16),
                   Text('目錄請求間隔 · $_interval 毫秒'),
                   Slider(
                     value: _interval.toDouble(),
