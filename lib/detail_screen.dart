@@ -282,7 +282,8 @@ class _DetailScreenState extends State<DetailScreen> {
     final resumeEpisodeNumber = episodes.isEmpty
         ? null
         : episodes[resumeIndex].number;
-    final television = AppLayout.isTelevision(context);
+    final formFactor = AppLayout.formFactorOf(context);
+    final television = formFactor == FormFactor.television;
     final playAutofocus = _shouldAutofocusPlay(context);
     final allowed =
         widget.store.profileEpoch == _profileEpoch &&
@@ -320,7 +321,9 @@ class _DetailScreenState extends State<DetailScreen> {
                       message: '請返回劇庫後重新選擇。',
                     );
                   }
-                  if (television || constraints.maxWidth >= 960) {
+                  if (television ||
+                      (formFactor != FormFactor.phone &&
+                          constraints.maxWidth >= 840)) {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -485,8 +488,7 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   bool _shouldAutofocusPlay(BuildContext context) {
-    return AppLayout.isTelevision(context) ||
-        (Platform.isAndroid && MediaQuery.sizeOf(context).width >= 840);
+    return AppLayout.formFactorOf(context) == FormFactor.television;
   }
 
   Widget _episodeStatus() {

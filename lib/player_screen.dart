@@ -156,6 +156,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   double _resumePosition = 0;
   bool _rotating = false;
   bool _television = false;
+  FormFactor _formFactor = FormFactor.phone;
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.hardware;
   bool _tvDecoderPolicyMigrated = false;
   // MPV-specific decoder properties must never be shown or applied when
@@ -178,10 +179,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       !_television &&
       defaultTargetPlatform == TargetPlatform.android &&
       _pictureInPictureSupported;
-  bool get _mobile =>
-      !_television &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+  bool get _mobile => _formFactor == FormFactor.phone;
   VideoEnhancementController? get _enhancementForUi =>
       _enhancement.supported ? _enhancement : null;
   PlaybackPreferences get _preferences => PlaybackPreferences(
@@ -866,12 +864,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final television = AppLayout.isTelevision(context);
-    if (_television != television) {
+    final formFactor = AppLayout.formFactorOf(context);
+    final television = formFactor == FormFactor.television;
+    if (_formFactor != formFactor) {
       _fullscreen = false;
       _automaticFullscreenSuppressed = false;
       _interactions.cancel();
     }
+    _formFactor = formFactor;
     _television = television;
     // Migrate the aggressive legacy default once on Android TV while preserving
     // an intentional optimized/software choice made after this migration.
@@ -2274,7 +2274,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                     bottom: !fullscreen,
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final desktop = constraints.maxWidth >= 840;
+                        final desktop =
+                            (_formFactor == FormFactor.pad ||
+                                _formFactor == FormFactor.window) &&
+                            constraints.maxWidth >= 840;
                         if (fullscreen) {
                           return _videoPane(context);
                         }
