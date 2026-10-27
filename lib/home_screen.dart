@@ -1672,8 +1672,11 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                 color: theme.colorScheme.onSurface,
                 fontSize: height * .52,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.7,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.0,
+                shadows: const [
+                  Shadow(color: Color(0x5533BFFF), blurRadius: 10),
+                ],
               ),
             ),
           ),
@@ -1696,46 +1699,20 @@ class _HomeScreenState extends State<HomeScreen> {
           const _DtvBrandMark(size: 58),
           const SizedBox(width: 14),
           Flexible(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'D TV',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurface,
-                    fontSize: 30,
-                    height: 1,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.7,
-                  ),
-                ),
-                const SizedBox(height: 7),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const _DtvBrandMark(size: 14),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        '短劇隨選・精彩立即播放',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontSize: 13,
-                          height: 1,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: .5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+            child: Text(
+              'D TV',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: theme.colorScheme.onSurface,
+                fontSize: 31,
+                height: 1,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.15,
+                shadows: const [
+                  Shadow(color: Color(0x5533BFFF), blurRadius: 10),
+                ],
+              ),
             ),
           ),
         ],
@@ -1756,19 +1733,18 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Desktop-only brand banner. Android TV uses a compact top bar so posters
   /// remain visible without a large hero panel.
   Widget _homeBrandBanner({required double width, required double height}) {
-    final sloganSize = (height * .19).clamp(18.0, 34.0).toDouble();
     return Container(
       width: width,
       height: height,
       padding: const EdgeInsets.all(1),
       decoration: BoxDecoration(
-        color: const Color(0xFF080910),
+        color: const Color(0xFF050B14),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0x66FF3658), width: 1),
+        border: Border.all(color: const Color(0x5538C7FF), width: 1),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x22F52245),
-            blurRadius: 12,
+            color: Color(0x222E9BFF),
+            blurRadius: 20,
             spreadRadius: 1,
           ),
         ],
@@ -1778,65 +1754,26 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.asset(
-              'assets/brand/dtv-home-header.webp',
-              fit: BoxFit.fill,
-              filterQuality: FilterQuality.high,
-              errorBuilder: (_, error, stack) => Container(
-                color: const Color(0xFF080910),
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _brandLogo(width: width * .42, height: height * .78),
-              ),
-            ),
-            // Mask the small slogan baked into the image and redraw it larger
-            // for Google TV viewing distance. Keep the DTV logo and portrait.
+            const CustomPaint(painter: _DtvBannerBackdropPainter()),
             Positioned(
-              left: 0,
-              bottom: 0,
-              width: width * .78,
-              height: height * .35,
+              left: width * .035,
+              top: height * .08,
+              bottom: height * .08,
+              width: width * .46,
+              child: _brandLogo(width: width * .46, height: height * .78),
+            ),
+            Positioned(
+              right: width * .035,
+              bottom: height * .12,
               child: Container(
-                alignment: Alignment.bottomLeft,
-                padding: EdgeInsets.only(
-                  left: width * .025,
-                  right: width * .025,
-                  bottom: height * .025,
-                  top: height * .025,
-                ),
+                width: width * .18,
+                height: 2,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
                     colors: [
-                      Color(0xF5080910),
-                      Color(0xE8080910),
-                      Color(0x00080910),
-                    ],
-                    stops: [0, .68, 1],
-                  ),
-                ),
-                child: Text(
-                  '精彩隨時　大屏更過癮',
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.visible,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: sloganSize,
-                    fontWeight: FontWeight.w900,
-                    height: 1,
-                    letterSpacing: .5,
-                    shadows: const [
-                      Shadow(
-                        color: Color(0xFFFF243F),
-                        blurRadius: 10,
-                      ),
-                      Shadow(
-                        color: Color(0xFF000000),
-                        blurRadius: 4,
-                        offset: Offset(1, 2),
-                      ),
+                      Color(0x0039D8FF),
+                      Color(0xCC39D8FF),
+                      Color(0x0039D8FF),
                     ],
                   ),
                 ),
@@ -2368,6 +2305,79 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 
+class _DtvBannerBackdropPainter extends CustomPainter {
+  const _DtvBannerBackdropPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF050A12), Color(0xFF0A1A2D), Color(0xFF06101E)],
+        ).createShader(rect),
+    );
+    final upperGlow = Path()
+      ..moveTo(size.width * .46, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width, size.height * .43)
+      ..cubicTo(size.width * .80, size.height * .28,
+          size.width * .64, size.height * .21, size.width * .46, 0)
+      ..close();
+    canvas.drawPath(upperGlow, Paint()..color = const Color(0x1838A9FF));
+
+    final wave = Path()
+      ..moveTo(size.width * .30, size.height * 1.06)
+      ..cubicTo(size.width * .55, size.height * .98,
+          size.width * .66, size.height * .24,
+          size.width * 1.06, size.height * .12);
+    canvas.drawPath(
+      wave,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.height * .025
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0x8834BEFF),
+    );
+
+    final thinWave = Path()
+      ..moveTo(size.width * .43, size.height * 1.04)
+      ..cubicTo(size.width * .70, size.height * .87,
+          size.width * .77, size.height * .42,
+          size.width * 1.04, size.height * .34);
+    canvas.drawPath(
+      thinWave,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = const Color(0x6647E5FF),
+    );
+
+    final lowerGlow = Path()
+      ..moveTo(size.width * .52, size.height)
+      ..cubicTo(size.width * .72, size.height * .88,
+          size.width * .80, size.height * .62,
+          size.width, size.height * .58)
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(
+      lowerGlow,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [const Color(0x002A9EFF), const Color(0x222A9EFF)],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _DtvBannerBackdropPainter oldDelegate) => false;
+}
+
 /// Reusable D TV mark rendered as vector artwork, so the UI never falls back
 /// to the former HGTV bitmap logo on any theme.
 class _DtvBrandMark extends StatelessWidget {
@@ -2394,55 +2404,104 @@ class _DtvMarkPainter extends CustomPainter {
     canvas.save();
     canvas.translate(dx, dy);
     final rect = Offset.zero & Size(side, side);
+
     final outer = Path()
-      ..moveTo(side * .17, side * .10)
-      ..lineTo(side * .52, side * .10)
-      ..cubicTo(side * .86, side * .10, side * .93, side * .32,
-          side * .93, side * .50)
-      ..cubicTo(side * .93, side * .69, side * .86, side * .90,
-          side * .52, side * .90)
-      ..lineTo(side * .17, side * .90)
+      ..moveTo(side * .18, side * .10)
+      ..lineTo(side * .50, side * .10)
+      ..cubicTo(side * .81, side * .10, side * .92, side * .30,
+          side * .92, side * .50)
+      ..cubicTo(side * .92, side * .70, side * .81, side * .90,
+          side * .50, side * .90)
+      ..lineTo(side * .18, side * .90)
+      ..cubicTo(side * .14, side * .90, side * .12, side * .87,
+          side * .12, side * .82)
+      ..lineTo(side * .12, side * .18)
+      ..cubicTo(side * .12, side * .13, side * .14, side * .10,
+          side * .18, side * .10)
       ..close();
 
     canvas.saveLayer(rect, Paint());
     canvas.drawPath(
       outer,
       Paint()
+        ..color = const Color(0xAA127BC9)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, side * .035),
+    );
+    canvas.drawPath(
+      outer,
+      Paint()
         ..shader = const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFFF343E), Color(0xFFD80729), Color(0xFF8D061B)],
+          colors: [
+            Color(0xFFFFFFFF),
+            Color(0xFFE0EAF2),
+            Color(0xFF718CA4),
+            Color(0xFFB5CDE0),
+            Color(0xFFF8FBFF),
+          ],
+          stops: [0.0, .22, .52, .76, 1.0],
         ).createShader(rect),
     );
-    canvas.save();
-    canvas.clipPath(outer);
-    final gloss = Path()
-      ..moveTo(side * .17, side * .10)
-      ..lineTo(side * .31, side * .10)
-      ..lineTo(side * .63, side * .90)
-      ..lineTo(side * .48, side * .90)
-      ..close();
-    canvas.drawPath(gloss, Paint()..color = const Color(0x2BFFFFFF));
-    canvas.restore();
 
-    final hole = Path()
-      ..moveTo(side * .34, side * .25)
-      ..lineTo(side * .52, side * .25)
-      ..cubicTo(side * .72, side * .25, side * .78, side * .38,
-          side * .78, side * .50)
-      ..cubicTo(side * .78, side * .63, side * .72, side * .75,
-          side * .52, side * .75)
-      ..lineTo(side * .34, side * .75)
+    final inner = Path()
+      ..moveTo(side * .34, side * .27)
+      ..lineTo(side * .49, side * .27)
+      ..cubicTo(side * .65, side * .27, side * .72, side * .38,
+          side * .72, side * .50)
+      ..cubicTo(side * .72, side * .63, side * .65, side * .73,
+          side * .49, side * .73)
+      ..lineTo(side * .34, side * .73)
       ..close();
-    canvas.drawPath(hole, Paint()..blendMode = BlendMode.clear);
-    canvas.restore();
+    canvas.drawPath(inner, Paint()..blendMode = BlendMode.clear);
+
+    final bevel = Path()
+      ..moveTo(side * .19, side * .13)
+      ..lineTo(side * .49, side * .13)
+      ..cubicTo(side * .68, side * .13, side * .79, side * .20,
+          side * .85, side * .33);
+    canvas.drawPath(
+      bevel,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = side * .018
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: .68),
+    );
 
     final play = Path()
-      ..moveTo(side * .45, side * .37)
-      ..lineTo(side * .45, side * .63)
-      ..lineTo(side * .63, side * .50)
+      ..moveTo(side * .42, side * .38)
+      ..lineTo(side * .42, side * .62)
+      ..lineTo(side * .62, side * .50)
       ..close();
-    canvas.drawPath(play, Paint()..color = const Color(0xFFFF4057));
+    canvas.drawPath(
+      play,
+      Paint()
+        ..color = const Color(0xCC087EFF)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, side * .025),
+    );
+    canvas.drawPath(
+      play,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF53F3FF), Color(0xFF00CFFF), Color(0xFF2787FF)],
+        ).createShader(rect),
+    );
+    final playHighlight = Path()
+      ..moveTo(side * .435, side * .395)
+      ..lineTo(side * .435, side * .51)
+      ..lineTo(side * .535, side * .45);
+    canvas.drawPath(
+      playHighlight,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = side * .012
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: .62),
+    );
+    canvas.restore();
     canvas.restore();
   }
 

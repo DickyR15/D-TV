@@ -404,90 +404,119 @@ class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
 
 class _DtvMarkPainter extends CustomPainter {
   const _DtvMarkPainter({required this.phase});
-
   final double phase;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     final outer = Path()
-      ..moveTo(size.width * 0.20, size.height * 0.15)
-      ..lineTo(size.width * 0.51, size.height * 0.15)
-      ..cubicTo(
-        size.width * 0.81, size.height * 0.15,
-        size.width * 0.89, size.height * 0.35,
-        size.width * 0.89, size.height * 0.50,
-      )
-      ..cubicTo(
-        size.width * 0.89, size.height * 0.68,
-        size.width * 0.80, size.height * 0.85,
-        size.width * 0.51, size.height * 0.85,
-      )
-      ..lineTo(size.width * 0.20, size.height * 0.85)
+      ..moveTo(size.width * .18, size.height * .10)
+      ..lineTo(size.width * .50, size.height * .10)
+      ..cubicTo(size.width * .81, size.height * .10,
+          size.width * .92, size.height * .30,
+          size.width * .92, size.height * .50)
+      ..cubicTo(size.width * .92, size.height * .70,
+          size.width * .81, size.height * .90,
+          size.width * .50, size.height * .90)
+      ..lineTo(size.width * .18, size.height * .90)
+      ..cubicTo(size.width * .14, size.height * .90,
+          size.width * .12, size.height * .87,
+          size.width * .12, size.height * .82)
+      ..lineTo(size.width * .12, size.height * .18)
+      ..cubicTo(size.width * .12, size.height * .13,
+          size.width * .14, size.height * .10,
+          size.width * .18, size.height * .10)
       ..close();
-    final bodyPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Color(0xFFF5F8FA),
-          Color(0xFFCBD5DC),
-          Color(0xFF7B8D9B),
-          Color(0xFFE5EBEF),
-        ],
-        stops: [0.0, 0.34, 0.68, 1.0],
-      ).createShader(rect);
-    canvas.drawPath(outer, bodyPaint);
 
-    // Hollow out the D and place the play triangle inside the negative space.
+    canvas.saveLayer(rect, Paint());
+    canvas.drawPath(
+      outer,
+      Paint()
+        ..color = const Color(0xAA128DFF)
+        ..maskFilter = MaskFilter.blur(
+          BlurStyle.normal,
+          size.width * (.035 + .01 * phase),
+        ),
+    );
+    canvas.drawPath(
+      outer,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFFFFF),
+            Color(0xFFE0EAF2),
+            Color(0xFF718CA4),
+            Color(0xFFB5CDE0),
+            Color(0xFFF8FBFF),
+          ],
+          stops: [0.0, .22, .52, .76, 1.0],
+        ).createShader(rect),
+    );
+
     final inner = Path()
-      ..moveTo(size.width * 0.36, size.height * 0.30)
-      ..lineTo(size.width * 0.49, size.height * 0.30)
-      ..cubicTo(
-        size.width * 0.64, size.height * 0.30,
-        size.width * 0.70, size.height * 0.39,
-        size.width * 0.70, size.height * 0.50,
-      )
-      ..cubicTo(
-        size.width * 0.70, size.height * 0.62,
-        size.width * 0.63, size.height * 0.70,
-        size.width * 0.49, size.height * 0.70,
-      )
-      ..lineTo(size.width * 0.36, size.height * 0.70)
+      ..moveTo(size.width * .34, size.height * .27)
+      ..lineTo(size.width * .49, size.height * .27)
+      ..cubicTo(size.width * .65, size.height * .27,
+          size.width * .72, size.height * .38,
+          size.width * .72, size.height * .50)
+      ..cubicTo(size.width * .72, size.height * .63,
+          size.width * .65, size.height * .73,
+          size.width * .49, size.height * .73)
+      ..lineTo(size.width * .34, size.height * .73)
       ..close();
-    canvas.drawPath(inner, Paint()..color = const Color(0xFF0B0D12));
+    canvas.drawPath(inner, Paint()..blendMode = BlendMode.clear);
+
+    final bevel = Path()
+      ..moveTo(size.width * .19, size.height * .13)
+      ..lineTo(size.width * .49, size.height * .13)
+      ..cubicTo(size.width * .68, size.height * .13,
+          size.width * .79, size.height * .20,
+          size.width * .85, size.height * .33);
+    canvas.drawPath(
+      bevel,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * .018
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: .58 + .16 * phase),
+    );
 
     final play = Path()
-      ..moveTo(size.width * 0.42, size.height * 0.38)
-      ..lineTo(size.width * 0.42, size.height * 0.62)
-      ..lineTo(size.width * 0.61, size.height * 0.50)
+      ..moveTo(size.width * .42, size.height * .38)
+      ..lineTo(size.width * .42, size.height * .62)
+      ..lineTo(size.width * .62, size.height * .50)
       ..close();
+    canvas.drawPath(
+      play,
+      Paint()
+        ..color = const Color(0xCC087EFF)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * .025),
+    );
     canvas.drawPath(
       play,
       Paint()
         ..shader = const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFA7EDF1), Color(0xFF55C8D3), Color(0xFF218A9A)],
+          colors: [Color(0xFF53F3FF), Color(0xFF00CFFF), Color(0xFF2787FF)],
         ).createShader(rect),
     );
 
-    final highlight = Path()
-      ..moveTo(size.width * 0.22, size.height * 0.17)
-      ..lineTo(size.width * 0.50, size.height * 0.17)
-      ..cubicTo(
-        size.width * 0.67, size.height * 0.17,
-        size.width * 0.78, size.height * 0.23,
-        size.width * 0.83, size.height * 0.35,
-      );
+    final playHighlight = Path()
+      ..moveTo(size.width * .435, size.height * .395)
+      ..lineTo(size.width * .435, size.height * .51)
+      ..lineTo(size.width * .535, size.height * .45);
     canvas.drawPath(
-      highlight,
+      playHighlight,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = size.width * 0.012
+        ..strokeWidth = size.width * .012
         ..strokeCap = StrokeCap.round
-        ..color = Colors.white.withValues(alpha: 0.14 + 0.12 * phase),
+        ..color = Colors.white.withValues(alpha: .5 + .12 * phase),
     );
+    canvas.restore();
   }
 
   @override
