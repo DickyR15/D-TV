@@ -23,7 +23,6 @@ import 'vip_icon.dart';
 import 'settings_screen.dart';
 import 'profiles_screen.dart';
 import 'search_input.dart';
-import 'sources_screen.dart';
 import 'drama_actions.dart';
 import 'follow_updater.dart';
 import 'library_updater.dart';
@@ -187,17 +186,6 @@ class _HomeScreenState extends State<HomeScreen> {
         !_categories.any((entry) => entry.id == _category)) {
       _changeCategory('');
     }
-  }
-
-  Future<void> _refreshCatalog() async {
-    if (widget.repository.supportsSourceManagement) {
-      if (_group.sources.any((source) => _updater.busy(source.id))) return;
-      _pauseCatalog();
-      await _updater.update(_group.sources);
-      return;
-    }
-    await _loadCategories(force: true);
-    if (mounted) await _load(force: true);
   }
 
   void _updateChanged() {
@@ -523,27 +511,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     ).whenComplete(() => _resetBackConfirmation(ignoreTrailingBack: true));
-  }
-
-  Future<void> _manageSources() async {
-    _resetBackConfirmation();
-    _pauseCatalog();
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SourcesScreen(
-          repository: widget.repository,
-          store: widget.store,
-          initialSource: _source.id,
-        ),
-      ),
-    );
-    _resetBackConfirmation(ignoreTrailingBack: true);
-    if (!mounted) return;
-    await _loadCategories();
-    if (mounted && (!_onlineSearch || _submittedQuery.isEmpty)) {
-      await _load(useCache: true);
-    }
   }
 
   Future<void> _chooseDisplayMode() async {
@@ -1251,9 +1218,9 @@ class _HomeScreenState extends State<HomeScreen> {
       onFocus: onFocus,
       onTap: () => _openDrama(drama),
       onMore: () => _dramaActions(drama),
-      badge: following == null
-          ? null
-          : '${following.status.label}${following.hasUpdates ? ' · ${following.updateLabel}' : ''}',
+      badge: following != null && following.hasUpdates
+          ? following.updateLabel
+          : null,
     );
   }
 
@@ -1533,42 +1500,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           : _openPhoneSearch,
                     ),
                 ],
-                if (_isCatalogTab &&
-                    !_showRecommendations &&
-                    constraints.maxWidth >= 400 &&
-                    !wide)
-                  RefreshAction(
-                    key: const ValueKey('catalog-refresh'),
-                    loading:
-                        _loading ||
-                        _loadingMore ||
-                        _categoriesLoading ||
-                        _group.sources.any(
-                          (source) => _updater.busy(source.id),
-                        ),
-                    tooltip: '更新劇庫',
-                    onPressed: widget.store.sources.isEmpty
-                        ? null
-                        : _refreshCatalog,
-                  ),
                 PopupMenuButton<String>(
                   tooltip: '更多',
                   // On TV/remotes, opening the menu should land on the action
                   // users most often need. The matching entry is highlighted,
                   // and putting it first makes it the initial traversal target.
-                  initialValue: widget.repository.supportsSourceManagement
-                      ? 'sources'
-                      : null,
                   requestFocus: true,
                   onOpened: _homePopupOpened,
                   onCanceled: _homePopupCanceled,
                   onSelected: (value) {
                     _homePopupSelected();
-                    if (value == 'update') {
-                      _refreshCatalog();
-                    } else if (value == 'sources') {
-                      _manageSources();
-                    } else if (value == 'settings') {
+                    if (value == 'settings') {
                       Navigator.push<void>(
                         context,
                         MaterialPageRoute<void>(
@@ -1605,41 +1547,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                   },
                   itemBuilder: (_) => [
-                    if (widget.repository.supportsSourceManagement)
-                      PopupMenuItem<String>(
-                        value: 'sources',
-                        child: Focus(
-                          autofocus: television,
-                          onKeyEvent: (node, event) {
-                            if (television &&
-                                event is KeyDownEvent &&
-                                (event.logicalKey == LogicalKeyboardKey.enter ||
-                                    event.logicalKey == LogicalKeyboardKey.select)) {
-                              // Focus must be actionable, not only highlighted
-                              // via PopupMenuButton.initialValue.
-                              Navigator.of(context).pop<String>('sources');
-                              return KeyEventResult.handled;
-                            }
-                            return KeyEventResult.ignored;
-                          },
-                          child: const SizedBox(
-                            width: double.infinity,
-                            child: Text('片源管理'),
-                          ),
-                        ),
-                      ),
-                    if (_isCatalogTab &&
-                        !_showRecommendations &&
-                        constraints.maxWidth < 400)
-                      PopupMenuItem(
-                        value: 'update',
-                        enabled:
-                            widget.store.sources.isNotEmpty &&
-                            !_group.sources.any(
-                              (source) => _updater.busy(source.id),
-                            ),
-                        child: const Text('更新劇庫'),
-                      ),
                     const PopupMenuItem(value: 'users', child: Text('使用者管理')),
                     const PopupMenuItem(
                       value: 'settings',
@@ -1672,7 +1579,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? widget.store.sources.isEmpty
                             ? const StatusPanel(
                                 title: '暫無可用片源',
-                                message: '請到片源管理開啟片源，或請管理員確認使用權限。',
+                                message: '目前沒有可用片源，請確認目前使用者的片源權限。',
                               )
                             : _catalog()
                       : _isRankingTab
@@ -2306,13 +2213,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: '暫時無法載入',
                       message: uiTraditional(_error!),
                       onRetry: () => _load(force: true),
-                      secondaryAction:
-                          widget.repository.supportsSourceManagement
-                          ? TextButton(
-                              onPressed: _manageSources,
-                              child: const Text('片源診斷'),
-                            )
-                          : null,
+                      secondaryAction: null,
                       icon: Icons.wifi_off_rounded,
                     )
                   : items.isEmpty
