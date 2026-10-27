@@ -115,8 +115,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: Text(AppTheme.accentLabel(tone)),
               subtitle: tone == 'system'
                   ? const Text('Android 12 以上支援系統動態色彩')
-                  : tone == 'brand'
-                  ? const Text('保留 D-TV 預設品牌色')
                   : null,
               onTap: () => Navigator.of(dialogContext).pop(tone),
             ),
