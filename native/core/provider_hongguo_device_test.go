@@ -51,16 +51,16 @@ func TestHongguoSignedRequestKeepsCurrentDevice(t *testing.T) {
 
 func TestHongguoDeviceRegistrationReplacesDevice(t *testing.T) {
 	d, requests := hongguoDeviceFixture(t, nil, false)
-	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+	if err := d.ensureHongguoDevice(context.Background(), false, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+	if err := d.ensureHongguoDevice(context.Background(), false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if state := d.hongguoCatalogSnapshot(); !state.Registered || state.DeviceID != "1001" || state.InstallID != "10019" {
 		t.Fatal("registered device was not kept", state)
 	}
-	if err := d.ensureHongguoDevice(context.Background(), "1001"); err != nil {
+	if err := d.ensureHongguoDevice(context.Background(), false, "1001"); err != nil {
 		t.Fatal(err)
 	}
 	if state := d.hongguoCatalogSnapshot(); state.DeviceID != "1002" {
@@ -88,7 +88,7 @@ func TestHongguoTabRejectionKeepsDevice(t *testing.T) {
 func TestHongguoRegisterFailurePausesAndKeepsOldDevice(t *testing.T) {
 	d, requests := hongguoDeviceFixture(t, nil, true)
 	for range 2 {
-		if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
+		if err := d.ensureHongguoDevice(context.Background(), false, ""); err == nil {
 			t.Fatal("failed registration reported success")
 		}
 	}
