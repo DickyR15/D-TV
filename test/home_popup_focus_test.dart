@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/home_screen.dart';
 import 'package:hgtv/local_store.dart';
-import 'package:hgtv/sources_screen.dart';
 
 import 'fixtures.dart';
 
@@ -18,7 +17,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'top-right more menu starts at source management on TV',
+    'top-right more menu omits source management and manual update on TV',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final store = testStore(await SharedPreferences.getInstance());
@@ -42,14 +41,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('片源管理'), findsOneWidget);
-      // Let PopupMenuRoute's initial focus request commit before sending the
-      // remote's Enter key to the focused first action.
+      expect(find.text('片源管理'), findsNothing);
+      expect(find.text('更新劇庫'), findsNothing);
+      expect(find.text('檢測連線與播放'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.byType(SourcesScreen), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
