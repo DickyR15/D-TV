@@ -349,11 +349,14 @@ class LocalStore extends ChangeNotifier {
 
   String get themeAccent {
     final value = _configurationError == null ? _string('themeAccent') : null;
+    // Migrate the previous selectable "brand" palette to system color without
+    // invalidating older backups or persisted preferences.
+    if (value == 'brand') return 'system';
     return const {
-      'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+      'system', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
     }.contains(value)
         ? value!
-        : 'brand';
+        : 'system';
   }
 
   String get source {
@@ -575,7 +578,7 @@ class LocalStore extends ChangeNotifier {
 
   Future<void> setThemeAccent(String value) =>
       const {
-        'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+        'system', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
       }.contains(value)
       ? _setting('themeAccent', value)
       : Future.value();
