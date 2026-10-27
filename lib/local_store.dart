@@ -347,6 +347,15 @@ class LocalStore extends ChangeNotifier {
     return {'light', 'dark', 'system'}.contains(value) ? value! : 'system';
   }
 
+  String get themeAccent {
+    final value = _configurationError == null ? _string('themeAccent') : null;
+    return const {
+      'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+    }.contains(value)
+        ? value!
+        : 'brand';
+  }
+
   String get source {
     if (locked) return '';
     final value = _string(_key('source')) ?? '';
@@ -562,6 +571,13 @@ class LocalStore extends ChangeNotifier {
   Future<void> setThemeMode(String value) =>
       {'light', 'dark', 'system'}.contains(value)
       ? _setting('themeMode', value)
+      : Future.value();
+
+  Future<void> setThemeAccent(String value) =>
+      const {
+        'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+      }.contains(value)
+      ? _setting('themeAccent', value)
       : Future.value();
   Future<void> setPlaybackPreferences(PlaybackPreferences value) {
     PlaybackPreferences.fromJson(value.toJson());
@@ -1037,6 +1053,7 @@ class LocalStore extends ChangeNotifier {
       'profiles': _profiles.map((profile) => profile.toJson()).toList(),
       'displayMode': displayMode,
       'themeMode': themeMode,
+      'themeAccent': themeAccent,
       'forceLogin': forceLogin,
       'libraries': {
         for (final profile in _profiles)
@@ -1090,6 +1107,12 @@ class LocalStore extends ChangeNotifier {
     if (data.containsKey('themeMode') &&
         !{'light', 'dark', 'system'}.contains(data['themeMode'])) {
       throw const FormatException('備份主題設定無效');
+    }
+    if (data.containsKey('themeAccent') &&
+        !const {
+          'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+        }.contains(data['themeAccent'])) {
+      throw const FormatException('備份主題配色無效');
     }
     if (data.containsKey('forceLogin') && data['forceLogin'] is! bool) {
       throw const FormatException('備份登入設定無效');
@@ -1163,6 +1186,7 @@ class LocalStore extends ChangeNotifier {
           ? data['displayMode'] as String
           : 'auto',
       'themeMode': data['themeMode'] as String? ?? themeMode,
+      'themeAccent': data['themeAccent'] as String? ?? themeAccent,
       'forceLogin': data['forceLogin'] is bool
           ? data['forceLogin'] as bool
           : profiles.firstWhere((profile) => profile.admin).protected,
