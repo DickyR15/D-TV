@@ -292,7 +292,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('播放除錯紀錄'),
                 subtitle: const Text('檢視並複製應用執行與播放器的詳細事件紀錄'),
                 trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => DiaryService.showDiaryDialog(context),
+                onTap: () => DiaryService.showDiaryDialog(
+                  context,
+                  clearNativeLogs: widget.repository.clearDiagnostics,
+                ),
               ),
               if (widget.store.profile.admin) ...[
                 ListTile(
