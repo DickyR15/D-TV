@@ -447,6 +447,11 @@ func nativeDispatch(input nativeInput) (any, error) {
 		root := engine.downloads.root
 		engine.downloads.mu.Unlock()
 		return map[string]string{"directory": root}, nil
+	case "clearDiagnostics":
+		if engine.downloader == nil || engine.downloader.diagnostics == nil {
+			return true, nil
+		}
+		return true, engine.downloader.diagnostics.clear()
 	case "storage":
 		return engine.storage()
 	case "moveDownloads":
