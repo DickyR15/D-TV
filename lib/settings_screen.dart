@@ -57,6 +57,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _deviceInterconnectFocus.dispose();
     super.dispose();
   }
+  Future<void> _chooseDisplayMode() async {
+    final selection = await AppLayout.chooseDisplayMode(
+      context,
+      currentMode: widget.store.displayMode,
+    );
+    if (selection == null || !mounted) return;
+    await saveUserChange(
+      context,
+      () => widget.store.setDisplayMode(selection),
+    );
+    if (mounted) setState(() => _message = null);
+  }
+
 
   Future<void> _chooseTheme() async {
     final current = widget.store.themeMode;
@@ -304,6 +317,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: Text(AppTheme.accentLabel(widget.store.themeAccent)),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: _chooseThemeAccent,
+              ),
+              ListTile(
+                key: const ValueKey('display-mode-setting'),
+                leading: const Icon(Icons.devices_rounded),
+                title: const Text('介面模式'),
+                subtitle: Text(
+                  AppLayout.displayModeLabel(
+                    widget.store.displayMode,
+                    currentFactor: AppLayout.formFactorOf(context),
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _chooseDisplayMode,
               ),
               ListTile(
                 key: const ValueKey('playback-setting'),

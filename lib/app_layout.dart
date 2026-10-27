@@ -9,6 +9,17 @@ export 'app_build.dart';
 
 const appVersion = '0.2.161+338';
 
+/// Layout family selected in settings or inferred from the active device.
+enum FormFactor { phone, pad, window, television }
+
+const _displayModeLabels = <String, String>{
+  'auto': '自動識別設備',
+  'television': '電視',
+  'phone': '手機',
+  'pad': '平板',
+  'window': '視窗',
+};
+
 ThemeData televisionTheme(ThemeData theme) {
   final colors = theme.colorScheme;
   final focusSide = WidgetStateProperty.resolveWith<BorderSide?>(
@@ -152,20 +163,137 @@ class AppLayout extends InheritedWidget {
   const AppLayout({
     super.key,
     required this.television,
+    this.formFactor,
     this.version = appVersion,
     required super.child,
   });
+
+  /// Kept for older call sites and tests. New app entry points should pass
+  /// [formFactor] so all screens use the same explicit layout decision.
   final bool television;
+  final FormFactor? formFactor;
   final String version;
 
+  static bool get isDesktopPlatform => switch (defaultTargetPlatform) {
+    TargetPlatform.windows ||
+    TargetPlatform.macOS ||
+    TargetPlatform.linux => true,
+    _ => false,
+  };
+
+  static Map<String, String> availableDisplayModes({bool? desktopPlatform}) {
+    final desktop = desktopPlatform ?? isDesktopPlatform;
+    return {
+      for (final entry in _displayModeLabels.entries)
+        if (entry.key != 'window' || desktop) entry.key: entry.value,
+    };
+  }
+
+  static FormFactor _inferFromSize(Size size, {required bool desktop}) {
+    if (desktop) return size.width >= 600 ? FormFactor.window : FormFactor.phone;
+    return size.shortestSide >= 600 ? FormFactor.pad : FormFactor.phone;
+  }
+
+  /// Mirrors the upstream app's device mode rules while preserving D-TV's TV
+  /// remote navigation. Legacy "standard" explicitly suppresses TV UI.
+  static FormFactor resolveFormFactor({
+    required String mode,
+    required bool detectedTelevision,
+    required Size screenSize,
+    bool? desktopPlatform,
+  }) {
+    final desktop = desktopPlatform ?? isDesktopPlatform;
+    switch (mode) {
+      case 'television':
+        return FormFactor.television;
+      case 'phone':
+        return FormFactor.phone;
+      case 'pad':
+        return FormFactor.pad;
+      case 'window':
+        return desktop ? FormFactor.window : FormFactor.pad;
+      case 'standard':
+        return _inferFromSize(screenSize, desktop: desktop);
+      case 'auto':
+      default:
+        if (detectedTelevision) return FormFactor.television;
+        return _inferFromSize(screenSize, desktop: desktop);
+    }
+  }
+
+  static FormFactor formFactorOf(BuildContext context) {
+    final layout = context.dependOnInheritedWidgetOfExactType<AppLayout>();
+    if (layout != null) {
+      return layout.formFactor ??
+          (layout.television ? FormFactor.television : FormFactor.phone);
+    }
+    final size = MediaQuery.maybeOf(context)?.size ?? Size.zero;
+    return resolveFormFactor(
+      mode: 'auto',
+      detectedTelevision: false,
+      screenSize: size,
+    );
+  }
+
   static bool isTelevision(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<AppLayout>()?.television ??
-      false;
+      formFactorOf(context) == FormFactor.television;
+  static bool isPhone(BuildContext context) =>
+      formFactorOf(context) == FormFactor.phone;
+  static bool isPad(BuildContext context) =>
+      formFactorOf(context) == FormFactor.pad;
+  static bool isWindow(BuildContext context) =>
+      formFactorOf(context) == FormFactor.window;
+  static bool isWide(BuildContext context) =>
+      formFactorOf(context) == FormFactor.pad ||
+      formFactorOf(context) == FormFactor.window;
+
+  static String displayModeLabel(
+    String mode, {
+    FormFactor? currentFactor,
+  }) {
+    final key = mode == 'standard' ? currentFactor?.name ?? 'auto' : mode;
+    return _displayModeLabels[key] ?? _displayModeLabels['auto']!;
+  }
+
+  static Future<String?> chooseDisplayMode(
+    BuildContext context, {
+    required String currentMode,
+  }) {
+    final options = availableDisplayModes();
+    var selected = currentMode;
+    if (selected == 'standard' ||
+        selected == 'window' && !isDesktopPlatform) {
+      selected = formFactorOf(context).name;
+    }
+    if (!options.containsKey(selected)) selected = 'auto';
+
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('介面模式'),
+        children: [
+          for (final entry in options.entries)
+            ListTile(
+              autofocus: entry.key == selected,
+              selected: entry.key == selected,
+              title: Text(entry.value),
+              trailing: entry.key == selected
+                  ? const Icon(Icons.check_rounded)
+                  : null,
+              onTap: () => Navigator.of(dialogContext).pop(entry.key),
+            ),
+        ],
+      ),
+    );
+  }
+
   static String versionOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppLayout>()?.version ??
       appVersion;
 
   @override
   bool updateShouldNotify(AppLayout oldWidget) =>
-      television != oldWidget.television || version != oldWidget.version;
+      television != oldWidget.television ||
+      formFactor != oldWidget.formFactor ||
+      version != oldWidget.version;
 }

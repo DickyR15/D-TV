@@ -268,7 +268,13 @@ class DuanjuApp extends StatelessWidget {
     themeMode: store == null ? ThemeMode.dark : AppTheme.mode(store?.themeMode ?? 'system'),
     builder: (context, child) {
       final mode = store?.displayMode ?? 'auto';
-      final tv = mode == 'television' || mode == 'auto' && television;
+      final screenSize = MediaQuery.maybeOf(context)?.size ?? Size.zero;
+      final formFactor = AppLayout.resolveFormFactor(
+        mode: mode,
+        detectedTelevision: television,
+        screenSize: screenSize,
+      );
+      final tv = formFactor == FormFactor.television;
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => FocusManager.instance.highlightStrategy = tv
             ? FocusHighlightStrategy.alwaysTraditional
@@ -283,6 +289,7 @@ class DuanjuApp extends StatelessWidget {
             television: tv,
             child: AppLayout(
               television: tv,
+              formFactor: formFactor,
               version: version,
               child: Theme(
                 data: tv ? televisionTheme(theme) : theme,

@@ -514,32 +514,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _chooseDisplayMode() async {
-    final selection = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => SimpleDialog(
-        title: const Text('介面模式'),
-        children: [
-          RadioGroup<String>(
-            groupValue: widget.store.displayMode,
-            onChanged: (value) => Navigator.of(dialogContext).pop(value),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final mode in const {
-                  'auto': '自動偵測裝置',
-                  'television': '電視／遙控器',
-                  'standard': '手機／電腦',
-                }.entries)
-                  RadioListTile<String>(
-                    value: mode.key,
-                    autofocus: mode.key == widget.store.displayMode,
-                    title: Text(mode.value),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    final selection = await AppLayout.chooseDisplayMode(
+      context,
+      currentMode: widget.store.displayMode,
     );
     if (selection != null && mounted) {
       await saveUserChange(
@@ -839,8 +816,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Large-screen layouts open directly on the Redfruit Hot ranking.
     // Narrow/mobile layouts keep the catalog tab so bottom navigation remains valid.
-    final wideHome = AppLayout.isTelevision(context) ||
-        MediaQuery.sizeOf(context).width >= 840;
+    // TV starts on the Redfruit ranking as before; phone, pad and window
+    // modes start on the catalog, like the upstream app's Explore entry.
+    final wideHome =
+        AppLayout.formFactorOf(context) == FormFactor.television;
     if (wideHome) _tab = 4;
   }
 
@@ -1293,8 +1272,10 @@ class _HomeScreenState extends State<HomeScreen> {
     animation: widget.store,
     builder: (context, _) => LayoutBuilder(
       builder: (context, constraints) {
-        final television = AppLayout.isTelevision(context);
-        final desktop = constraints.maxWidth >= 840;
+        final formFactor = AppLayout.formFactorOf(context);
+        final television = formFactor == FormFactor.television;
+        final desktop =
+            formFactor == FormFactor.pad || formFactor == FormFactor.window;
         final compactBrandBar =
             television || (Platform.isAndroid && desktop);
         final wide = television || desktop;
@@ -2042,8 +2023,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _catalog() {
     final items = _reveal(_visible);
-    final television = AppLayout.isTelevision(context);
-    final desktopWide = !television && MediaQuery.sizeOf(context).width >= 840;
+    final formFactor = AppLayout.formFactorOf(context);
+    final television = formFactor == FormFactor.television;
+    final desktopWide =
+        formFactor == FormFactor.pad || formFactor == FormFactor.window;
     return Column(
       children: [
         if (_searchVisible && !television)
@@ -2306,9 +2289,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Wide category and hot-ranking pages use identical column breakpoints.
-  int _posterColumns(double width) =>
-      width >= 620 ? 5 : width >= 420 ? 3 : 2;
+  /// Poster density follows the selected form factor, not only viewport width.
+  int _posterColumns(double width) {
+    switch (AppLayout.formFactorOf(context)) {
+      case FormFactor.phone:
+        return 3;
+      case FormFactor.pad:
+        return (width / 180).floor().clamp(4, 9).toInt();
+      case FormFactor.window:
+        final columns = ((width + 18) / 178).floor();
+        return columns < 2 ? 2 : columns;
+      case FormFactor.television:
+        return width >= 620 ? 5 : width >= 420 ? 3 : 2;
+    }
+  }
 
   Widget _televisionGrid(
     List<Drama> items,
