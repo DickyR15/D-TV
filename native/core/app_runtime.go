@@ -50,7 +50,7 @@ type Downloader struct {
 	client                *http.Client
 	streamClient          *http.Client
 	streamHostMu          sync.Mutex
-	streamHostFailures    map[string]time.Time
+	streamHostFailures    map[string]nativeStreamHostFailureState
 	huangdouDetails       map[string]huangdouDetailEntry
 	huangdouDetailPending map[string]*huangdouDetailCall
 	providerMu            sync.Mutex
