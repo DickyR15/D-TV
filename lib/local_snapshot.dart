@@ -31,6 +31,7 @@ class LocalSnapshot {
     'activeProfile',
     'displayMode',
     'themeMode',
+    'themeAccent',
     'sourceSwitches',
     'forceLogin',
   };
