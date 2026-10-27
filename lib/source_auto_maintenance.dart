@@ -68,7 +68,8 @@ abstract final class SourceAutoMaintenance {
     _running = true;
     try {
       final status = await repository.sourceStatus(source);
-      if (store.locked ||
+      if (_activePlayers > 0 ||
+          store.locked ||
           !store.allowsSource(source) ||
           status.running ||
           status.retrySeconds > 0) {
