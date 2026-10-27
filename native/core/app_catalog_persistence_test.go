@@ -352,11 +352,10 @@ func TestNativeCatalogPressureEvictsOnlyExpiredCategoryCaches(t *testing.T) {
 	}); err != nil {
 		t.Fatal("expired cache eviction should make room without truncating active data:", err)
 	}
-	if _, ok := engine.catalogs["hongguo|expired-a"]; ok {
-		t.Fatal("old completed category cache was not evicted under disk pressure")
-	}
-	if _, ok := engine.catalogs["hongguo|expired-b"]; ok {
-		t.Fatal("old completed category cache was not evicted under disk pressure")
+	removedA := engine.catalogs["hongguo|expired-a"] == nil
+	removedB := engine.catalogs["hongguo|expired-b"] == nil
+	if removedA == removedB {
+		t.Fatal("cache pressure should evict only as many expired snapshots as needed", removedA, removedB)
 	}
 	if len(engine.catalogs[activeKey]) != 1 || len(engine.catalogs[deepKey]) != 1 ||
 		engine.catalogStates[deepKey].Page != 501 {
@@ -368,8 +367,9 @@ func TestNativeCatalogPressureEvictsOnlyExpiredCategoryCaches(t *testing.T) {
 		restarted.catalogStates[deepKey].Page != 501 || len(restarted.catalogs[sourceHongguo]) != 1 {
 		t.Fatal("restart did not preserve active data and page 501 after cache cleanup")
 	}
-	if _, ok := restarted.catalogs["hongguo|expired-a"]; ok {
-		t.Fatal("evicted cache unexpectedly returned after restart")
+	if (restarted.catalogs["hongguo|expired-a"] == nil) != removedA ||
+		(restarted.catalogs["hongguo|expired-b"] == nil) != removedB {
+		t.Fatal("restart changed the set of expired snapshots evicted from disk")
 	}
 }
 
