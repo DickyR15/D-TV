@@ -76,6 +76,26 @@ func TestHongguoDeviceRegistrationReplacesDevice(t *testing.T) {
 	}
 }
 
+func TestHongguoRestoreInvalidHelperIDClearsRegistration(t *testing.T) {
+	d, _ := hongguoDeviceFixture(t, nil, false)
+	d.restoreHongguoCatalog(&hongguoCatalogState{
+		Version:         1,
+		DeviceID:        "7",
+		InstallID:       "8",
+		Registered:      true,
+		HelperDeviceID:  "invalid",
+		HelperInstallID: "invalid",
+		HelperRegistered: true,
+		Feeds:           map[string]hongguoCatalogCursor{},
+	})
+	state := d.hongguoCatalogSnapshot()
+	if !hongguoNumericID.MatchString(state.HelperDeviceID) ||
+		!hongguoNumericID.MatchString(state.HelperInstallID) ||
+		state.HelperRegistered {
+		t.Fatal("replaced helper identifiers retained a stale registration status", state)
+	}
+}
+
 func TestHongguoHelperDeviceRegistersBeforeSignedRequest(t *testing.T) {
 	d, requests := hongguoDeviceFixture(t, nil, false)
 	ctx := context.WithValue(context.Background(), hongguoHelperDeviceKey{}, true)
