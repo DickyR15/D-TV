@@ -76,6 +76,56 @@ func TestHongguoDeviceRegistrationReplacesDevice(t *testing.T) {
 	}
 }
 
+func TestHongguoHelperDeviceRegistersBeforeSignedRequest(t *testing.T) {
+	d, requests := hongguoDeviceFixture(t, nil, false)
+	ctx := context.WithValue(context.Background(), hongguoHelperDeviceKey{}, true)
+
+	for range 2 {
+		if _, err := d.hongguoAppRequest(ctx, http.MethodGet, hongguoBookmallCellChangePath, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := d.hongguoCatalogSnapshot()
+	if !state.HelperRegistered || state.HelperDeviceID != "1001" || state.HelperInstallID != "10019" {
+		t.Fatal("helper device was used without a completed registration", state)
+	}
+	if got := *requests; len(got) != 3 || got[0] != "register" || got[1] != "detail@1001" || got[2] != "detail@1001" {
+		t.Fatal("helper device registration/request sequence was unexpected", got)
+	}
+}
+
+func TestHongguoHelperRegistrationFailureStopsSignedRequest(t *testing.T) {
+	d, requests := hongguoDeviceFixture(t, nil, true)
+	ctx := context.WithValue(context.Background(), hongguoHelperDeviceKey{}, true)
+	if _, err := d.hongguoAppRequest(ctx, http.MethodGet, hongguoBookmallCellChangePath, nil, nil); err == nil {
+		t.Fatal("helper signed request succeeded without a registered device")
+	}
+	state := d.hongguoCatalogSnapshot()
+	if state.HelperRegistered {
+		t.Fatal("failed registration marked the helper device as registered", state)
+	}
+	if got := *requests; len(got) != 1 || got[0] != "register" {
+		t.Fatal("request continued after helper registration failed", got)
+	}
+}
+
+func TestHongguoRejectedHelperDeviceRotatesAndRetries(t *testing.T) {
+	d, requests := hongguoDeviceFixture(t, map[string]bool{"1001": true}, false)
+	ctx := context.WithValue(context.Background(), hongguoHelperDeviceKey{}, true)
+	if _, err := d.hongguoAppRequest(ctx, http.MethodGet, hongguoBookmallCellChangePath, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	state := d.hongguoCatalogSnapshot()
+	if !state.HelperRegistered || state.HelperDeviceID != "1002" || state.HelperInstallID != "10029" {
+		t.Fatal("rejected helper device was not replaced by a registered device", state)
+	}
+	if got := *requests; len(got) != 4 ||
+		got[0] != "register" || got[1] != "detail@1001" ||
+		got[2] != "register" || got[3] != "detail@1002" {
+		t.Fatal("helper rotation did not retry with the replacement device", got)
+	}
+}
+
 func TestHongguoTabRejectionKeepsDevice(t *testing.T) {
 	d, requests := hongguoDeviceFixture(t, map[string]bool{"7": true}, false)
 	d.cfg.Retries = 1
