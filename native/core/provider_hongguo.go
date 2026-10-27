@@ -19,7 +19,7 @@ const hongguoBaseURL = "https://hongguoduanju.com"
 
 const hongguoQuickAppBaseURL = "https://novelquickapp.com"
 const hongguoQuickAppUserAgent = "Mozilla/5.0 (Linux; Android 16; 25053RT47C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-var hongguoQuickAppMainURLPattern = regexp.MustCompile("\"main_url\"\\s*:\\s*(\"(?:\\\\.|[^\"\\\\])*\")")
+var hongguoQuickAppMainURLPattern = regexp.MustCompile("\"main_url\"\\s*:\\s*(\"(\\\\.|[^\"\\\\])*\")")
 
 func (d *Downloader) fetchHongguoDramas(ctx context.Context) ([]Drama, error) {
 	initialized := hongguoCatalogInitialized(d.hongguoCatalogSnapshot())
@@ -258,7 +258,7 @@ func hongguoQuickAppMediaFromPage(body string) (providerMedia, error) {
 	}
 	end := min(len(body), index+8192)
 	match := hongguoQuickAppMainURLPattern.FindStringSubmatch(body[index:end])
-	if len(match) != 2 {
+	if len(match) < 2 {
 		return providerMedia{}, errors.New("红果快捷网页未提供公开播放地址")
 	}
 	var address string
