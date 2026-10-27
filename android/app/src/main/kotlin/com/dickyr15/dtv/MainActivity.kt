@@ -88,14 +88,14 @@ class MainActivity : FlutterActivity() {
         getSharedPreferences("duanju_rendering", Context.MODE_PRIVATE)
 
     private fun compatibleRendering(): Boolean =
-        renderingPreferences().getBoolean("compatibleRendering", false)
+        renderingPreferences().getBoolean("compatibleRendering", isTelevisionDevice())
 
     override fun getFlutterShellArgs(): FlutterShellArgs {
         val args = super.getFlutterShellArgs()
         // Android TV boxes using Mali/Vulkan have shown graphics-buffer allocation
         // failures under Impeller. Use the compatible Skia renderer on TV by default;
         // the saved preference continues to enable Skia on phones/tablets as well.
-        if (compatibleRendering() || isTelevisionDevice()) {
+        if (compatibleRendering()) {
             args.add("--enable-impeller=false")
         }
         return args
@@ -466,6 +466,21 @@ class MainActivity : FlutterActivity() {
                             }
                         }
                         "playbackPower" -> result.success(runCatching { playbackPower() }.getOrNull())
+                        "systemAccentColor" -> {
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                                result.success(null)
+                            } else {
+                                val resourceId = resources.getIdentifier(
+                                    "system_accent1_500",
+                                    "color",
+                                    "android"
+                                )
+                                val color = if (resourceId != 0) {
+                                    runCatching { resources.getColor(resourceId) }.getOrNull()
+                                } else null
+                                result.success(color)
+                            }
+                        }
                         "compatibleRendering" -> result.success(compatibleRendering())
                         "setCompatibleRendering" -> {
                             val enabled = call.argument<Boolean>("enabled")
