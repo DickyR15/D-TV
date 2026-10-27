@@ -257,6 +257,18 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		}
 		if response.StatusCode != http.StatusOK {
 			lastErr = fmt.Errorf("红果 App 接口 HTTP %d", response.StatusCode)
+			// Some rejected device identities are reported as HTTP 401/403
+			// instead of an empty 200 response. Rotate only signed requests and
+			// keep the retry count bounded; unrelated 4xx responses remain fatal.
+			if signed && (response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) &&
+				rotations < hongguoDeviceRotations && downloader.ensureHongguoDevice(ctx, deviceID) == nil {
+				rotations++
+				deviceID, installID, _ = clientDeviceIDs(client)
+				query.Set("device_id", deviceID)
+				query.Set("iid", installID)
+				attempt--
+				continue
+			}
 			if response.StatusCode >= 400 && response.StatusCode < 500 {
 				return nil, lastErr
 			}
