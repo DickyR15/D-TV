@@ -5,8 +5,8 @@ abstract final class AppTheme {
   static final light = _theme(Brightness.light);
   static final dark = _theme(Brightness.dark);
 
-  /// D-TV 品牌色取自啟動圖示：珊瑚紅搭配深墨色背景。
-  static const brandAccent = Color(0xFFFF526D);
+  /// D-TV 品牌色：低飽和青藍搭配石墨灰與銀白色。
+  static const brandAccent = Color(0xFF55BDCA);
 
   static const accentOptions = <String>[
     'system', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
