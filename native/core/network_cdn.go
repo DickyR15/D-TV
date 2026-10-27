@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,6 +15,31 @@ import (
 type cdnRoute struct {
 	address string
 	expires time.Time
+}
+
+// hostProtocolFallbackTransport keeps a single incompatible upstream on a
+// dedicated HTTP/1.1 transport without changing protocol negotiation for
+// other providers.
+type hostProtocolFallbackTransport struct {
+	base     http.RoundTripper
+	fallback http.RoundTripper
+	host     string
+}
+
+func (transport *hostProtocolFallbackTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if strings.EqualFold(request.URL.Hostname(), transport.host) {
+		return transport.fallback.RoundTrip(request)
+	}
+	return transport.base.RoundTrip(request)
+}
+
+func (transport *hostProtocolFallbackTransport) CloseIdleConnections() {
+	if closer, ok := transport.base.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+	if closer, ok := transport.fallback.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
 }
 
 type cdnTransport struct {
