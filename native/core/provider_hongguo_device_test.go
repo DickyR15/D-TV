@@ -36,15 +36,29 @@ func hongguoDeviceFixture(t *testing.T, rejected map[string]bool, registerFails 
 	return d, &requests
 }
 
-func TestHongguoSignedRequestKeepsCurrentDevice(t *testing.T) {
+func TestHongguoSignedRequestRegistersDeviceBeforeRequest(t *testing.T) {
 	d, requests := hongguoDeviceFixture(t, nil, false)
 	if _, err := d.hongguoAppRequest(context.Background(), http.MethodPost, "/novel/player/video_detail/v1/", nil, map[string]any{}); err != nil {
 		t.Fatal(err)
 	}
-	if state := d.hongguoCatalogSnapshot(); state.DeviceID != "7" || state.Registered {
-		t.Fatal("signed request changed the device", state)
+	if state := d.hongguoCatalogSnapshot(); state.DeviceID != "1001" || state.InstallID != "10019" || !state.Registered {
+		t.Fatal("signed request did not use the registered device", state)
 	}
-	if got := *requests; len(got) != 1 || got[0] != "detail@7" {
+	if got := *requests; len(got) != 2 || got[0] != "register" || got[1] != "detail@1001" {
+		t.Fatal("unexpected request sequence", got)
+	}
+}
+
+func TestHongguoSignedRequestRotatesRejectedDeviceOnEmptyResponse(t *testing.T) {
+	d, requests := hongguoDeviceFixture(t, map[string]bool{"1001": true}, false)
+	d.cfg.Retries = 1
+	if _, err := d.hongguoAppRequest(context.Background(), http.MethodPost, "/novel/player/video_detail/v1/", nil, map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	if state := d.hongguoCatalogSnapshot(); state.DeviceID != "1002" || state.InstallID != "10029" || !state.Registered {
+		t.Fatal("rejected device was not rotated", state)
+	}
+	if got := *requests; len(got) != 4 || got[0] != "register" || got[1] != "detail@1001" || got[2] != "register" || got[3] != "detail@1002" {
 		t.Fatal("unexpected request sequence", got)
 	}
 }
