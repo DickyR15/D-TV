@@ -89,7 +89,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       builder: (dialogContext) => AlertDialog(
         title: Text(enabled ? '開啟相容渲染模式？' : '關閉相容渲染模式？'),
         content: const Text(
-          '需要重新啟動 App 才會生效，播放會中斷。預設使用標準渲染（Impeller）；若出現介面閃爍、黑屏或圖形異常，再開啟 Skia 相容渲染測試。',
+          '需要重新啟動 App 才會生效，播放會中斷。Android TV 預設使用 Skia 相容渲染以避免部分電視盒黑屏；手機預設使用 Impeller。你也可以手動切換後重啟測試。',
         ),
         actions: [
           TextButton(

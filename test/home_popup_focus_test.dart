@@ -37,6 +37,8 @@ void main() {
 
       final moreButton = find.byTooltip('更多');
       expect(moreButton, findsOneWidget);
+      final moreMenu = tester.widget<PopupMenuButton<String>>(moreButton);
+      expect(moreMenu.initialValue, 'users');
       await tester.tap(moreButton);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));

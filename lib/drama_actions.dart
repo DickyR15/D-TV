@@ -29,14 +29,22 @@ Future<void> showDramaActions(
       title: Text(uiTraditional(drama.title), maxLines: 2, overflow: TextOverflow.ellipsis),
       children: [
         for (final entry in choices.indexed)
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, entry.$2.$1),
-            child: Row(
-              children: [
-                Icon(entry.$2.$3, size: 22),
-                const SizedBox(width: 14),
-                Expanded(child: Text(entry.$2.$2)),
-              ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                key: ValueKey('drama-action-${entry.$2.$1}'),
+                autofocus: entry.$2.$1 == 'favorite',
+                onPressed: () => Navigator.pop(context, entry.$2.$1),
+                style: TextButton.styleFrom(
+                  alignment: Alignment.centerLeft,
+                  minimumSize: const Size.fromHeight(52),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+                icon: Icon(entry.$2.$3, size: 22),
+                label: Text(entry.$2.$2),
+              ),
             ),
           ),
       ],

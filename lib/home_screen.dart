@@ -1502,9 +1502,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
                 PopupMenuButton<String>(
                   tooltip: '更多',
-                  // On TV/remotes, opening the menu should land on the action
-                  // users most often need. The matching entry is highlighted,
-                  // and putting it first makes it the initial traversal target.
+                  // Explicitly focus the user-management entry on first open.
+                  initialValue: 'users',
                   requestFocus: true,
                   onOpened: _homePopupOpened,
                   onCanceled: _homePopupCanceled,

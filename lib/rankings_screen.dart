@@ -1239,15 +1239,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
     );
   }
 
-  Future<void> _scrollToTop() async {
-    if (!_scroll.hasClients) return;
-    await _scroll.animateTo(
-      0,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
   Widget _wideFooter(int count) {
     final theme = Theme.of(context);
     final status = _isHotBoardPreloading
@@ -1266,27 +1257,16 @@ class _RankingsScreenState extends State<RankingsScreen> {
           color: theme.colorScheme.surface,
           border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
         ),
-        child: Row(
-          children: [
-            FilledButton.tonalIcon(
-              onPressed: _scrollToTop,
-              icon: const Icon(Icons.keyboard_double_arrow_up_rounded),
-              label: const Text('回到頂部'),
+        child: Center(
+          child: Text(
+            '已載入 $count 部短劇 · $status',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            const Spacer(),
-            Text(
-              '已載入 $count 部短劇 · $status',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const Spacer(),
-            FilledButton.tonalIcon(
-              onPressed: _loading || _more ? null : () => _load(force: true),
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('重新整理'),
-            ),
-          ],
+          ),
         ),
       ),
     );

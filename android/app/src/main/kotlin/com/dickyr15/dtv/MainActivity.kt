@@ -89,24 +89,26 @@ class MainActivity : FlutterActivity() {
 
     private fun compatibleRendering(): Boolean {
         val preferences = renderingPreferences()
-        // Migrate an existing explicit choice, but do not force Skia on TVs.
-        // Standard Impeller rendering is the default; Skia remains an opt-in
-        // compatibility switch for troubleshooting renderer-specific issues.
-        if (!preferences.getBoolean("compatibleRenderingChoiceV2", false)) {
-            val migrated = preferences.getBoolean("compatibleRendering", false)
+        // Android TV defaults to Skia because some TV GPU/Surface combinations
+        // can show audio without video under Impeller. Phones keep Impeller.
+        // Migrate this default once; a later explicit switch choice is preserved.
+        if (!preferences.getBoolean("compatibleRenderingDefaultMigratedV3", false)) {
+            val migrated = isTelevisionDevice() ||
+                preferences.getBoolean("compatibleRendering", false)
             preferences.edit()
                 .putBoolean("compatibleRendering", migrated)
                 .putBoolean("compatibleRenderingChoiceV2", true)
+                .putBoolean("compatibleRenderingDefaultMigratedV3", true)
                 .apply()
             return migrated
         }
-        return preferences.getBoolean("compatibleRendering", false)
+        return preferences.getBoolean("compatibleRendering", isTelevisionDevice())
     }
 
     override fun getFlutterShellArgs(): FlutterShellArgs {
         val args = super.getFlutterShellArgs()
-        // Use Skia only when the user explicitly enables compatibility rendering.
-        // The default remains Impeller; this switch is for renderer troubleshooting.
+        // compatibleRendering() defaults Android TV to Skia and keeps phones
+        // on Impeller unless the user explicitly enables compatibility rendering.
         if (compatibleRendering()) {
             args.add("--enable-impeller=false")
         }
@@ -501,6 +503,7 @@ class MainActivity : FlutterActivity() {
                             } else if (!renderingPreferences().edit()
                                     .putBoolean("compatibleRendering", enabled)
                                     .putBoolean("compatibleRenderingChoiceV2", true)
+                                    .putBoolean("compatibleRenderingDefaultMigratedV3", true)
                                     .commit()) {
                                 result.error("rendering_mode_not_saved", "相容渲染模式未能儲存", null)
                             } else {

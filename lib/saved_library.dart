@@ -35,7 +35,6 @@ class SavedLibrary extends StatefulWidget {
 }
 
 class _SavedLibraryState extends State<SavedLibrary> {
-  String _filter = '';
   final FocusNode _clearButtonFocusNode = FocusNode(
     debugLabel: 'saved-library-clear-action',
   );
@@ -176,12 +175,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
       widget.gridFocusController?.setFallback(
         all.isEmpty ? null : _focusClearButton,
       );
-      final items = all.where((drama) {
-        final state = widget.store.following(drama.id);
-        return widget.history ||
-            _filter.isEmpty ||
-            (_filter == 'updates' && state?.hasUpdates == true);
-      }).toList();
+      final items = all;
       final header = [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
@@ -208,37 +202,11 @@ class _SavedLibraryState extends State<SavedLibrary> {
             ],
           ),
         ),
-        if (!widget.history)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Row(
-              children: [
-                for (final filter in [
-                  ('', '全部'),
-                  ('updates', '有更新'),
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      key: ValueKey('follow-filter-${filter.$1}'),
-                      label: Text(filter.$2),
-                      selected: _filter == filter.$1,
-                      onSelected: (_) => setState(() => _filter = filter.$1),
-                    ),
-                  ),
-              ],
-            ),
-          ),
       ];
       if (items.isEmpty) widget.gridFocusController?.clear();
       final empty = StatusPanel(
-        title: all.isEmpty
-            ? widget.history
-                  ? '還沒有觀看記錄'
-                  : '還沒有收藏'
-            : '沒有符合的紀錄',
-        message: all.isEmpty ? '去挑一部喜歡的短劇' : '可以更換收藏篩選條件。',
+        title: widget.history ? '還沒有觀看記錄' : '還沒有收藏',
+        message: '去挑一部喜歡的短劇',
         icon: widget.history
             ? Icons.history_rounded
             : Icons.bookmark_border_rounded,
@@ -268,7 +236,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
                       ? empty
                       : RemoteGrid(
                           key: ValueKey(
-                            'saved-tv-${widget.history}-$_filter',
+                            'saved-tv-${widget.history}',
                           ),
                           itemKeys: items.map((item) => item.id).toList(),
                           columns: columns,
@@ -293,7 +261,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
           final padding = constraints.maxWidth < 600 ? 16.0 : 24.0;
           return CustomScrollView(
             key: PageStorageKey(
-              'saved-${widget.history}-$_filter',
+              'saved-${widget.history}',
             ),
             slivers: [
               SliverToBoxAdapter(child: Column(children: header)),
