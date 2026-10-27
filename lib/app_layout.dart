@@ -7,7 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 export 'app_build.dart';
 
-const appVersion = '0.2.160+337';
+const appVersion = '0.2.161+338';
 
 ThemeData televisionTheme(ThemeData theme) {
   final colors = theme.colorScheme;
@@ -114,6 +114,16 @@ class AppDevice {
     try {
       await channel.invokeMethod('resetBrightness');
     } catch (_) {}
+  }
+
+  static Future<Color?> systemAccentColor() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return null;
+    try {
+      final value = await channel.invokeMethod<int>('systemAccentColor');
+      return value == null ? null : Color(value & 0xFFFFFFFF);
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<bool> compatibleRendering() async {
