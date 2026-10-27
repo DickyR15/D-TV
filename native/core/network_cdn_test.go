@@ -124,3 +124,36 @@ func TestCoverDNSRecoveryAcceptsNewImageHosts(t *testing.T) {
 		}
 	}
 }
+
+func TestHostProtocolFallbackTransportIsScopedToOneHostname(t *testing.T) {
+	var baseCalls, fallbackCalls atomic.Int32
+	base := sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		baseCalls.Add(1)
+		return sourceFixtureResponse(request, http.StatusOK, "base"), nil
+	})
+	fallback := sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		fallbackCalls.Add(1)
+		return sourceFixtureResponse(request, http.StatusOK, "fallback"), nil
+	})
+	transport := &hostProtocolFallbackTransport{
+		base: base, fallback: fallback, host: "djapi.999888456.xyz",
+	}
+
+	for _, address := range []string{
+		"https://djapi.999888456.xyz/api/hongguo/play",
+		"https://example.test/ordinary",
+	} {
+		request, err := http.NewRequest(http.MethodGet, address, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := transport.RoundTrip(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+	}
+	if baseCalls.Load() != 1 || fallbackCalls.Load() != 1 {
+		t.Fatal("protocol fallback escaped its configured hostname", baseCalls.Load(), fallbackCalls.Load())
+	}
+}
