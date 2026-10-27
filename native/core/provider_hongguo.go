@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/url"
 	"regexp"
 	"slices"
@@ -15,6 +16,10 @@ import (
 )
 
 const hongguoBaseURL = "https://hongguoduanju.com"
+
+const hongguoQuickAppBaseURL = "https://novelquickapp.com"
+const hongguoQuickAppUserAgent = "Mozilla/5.0 (Linux; Android 16; 25053RT47C) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
+var hongguoQuickAppMainURLPattern = regexp.MustCompile("\"main_url\"\\s*:\\s*(\"(?:\\\\.|[^\"\\\\])*\")")
 
 func (d *Downloader) fetchHongguoDramas(ctx context.Context) ([]Drama, error) {
 	initialized := hongguoCatalogInitialized(d.hongguoCatalogSnapshot())
@@ -194,6 +199,16 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if !hongguoNumericID.MatchString(videoID) || !hongguoNumericID.MatchString(seriesID) {
 		return providerMedia{}, fmt.Errorf("红果章节 ID 无效，请重新获取章节")
 	}
+	// The public quick-app player can expose an unencrypted media URL. Try it
+	// first so a stale App signature or device registration does not block
+	// otherwise-public episodes.
+	media, quickWebErr := d.resolveHongguoQuickAppMedia(ctx, seriesID, videoID)
+	if quickWebErr == nil {
+		return media, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return providerMedia{}, err
+	}
 	media, nativeErr := d.resolveHongguoAppMedia(ctx, videoID)
 	if nativeErr == nil {
 		return media, nil
@@ -219,7 +234,43 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if apiErr == nil {
 		return media, nil
 	}
-	return providerMedia{}, fmt.Errorf("红果 App 取流失败：%v；多清晰度备用取流失败：%v；网页取流失败：%v；最终备用取流失败：%w", publicError(nativeErr), publicError(multiModelErr), publicError(pageErr), apiErr)
+	return providerMedia{}, fmt.Errorf("红果快捷网页取流失败：%v；App 取流失败：%v；多清晰度备用取流失败：%v；官网网页取流失败：%v；最终备用取流失败：%w", publicError(quickWebErr), publicError(nativeErr), publicError(multiModelErr), publicError(pageErr), apiErr)
+}
+
+func (d *Downloader) resolveHongguoQuickAppMedia(ctx context.Context, seriesID, videoID string) (providerMedia, error) {
+	if !hongguoNumericID.MatchString(seriesID) || !hongguoNumericID.MatchString(videoID) {
+		return providerMedia{}, errors.New("红果快捷网页剧集 ID 无效")
+	}
+	ctx = context.WithValue(ctx, providerTextUserAgentKey{}, hongguoQuickAppUserAgent)
+	pageURL := hongguoQuickAppBaseURL + "/player/" + url.PathEscape(seriesID) + "/" + url.PathEscape(videoID)
+	body, err := d.fetchProviderText(ctx, pageURL, hongguoQuickAppBaseURL+"/")
+	if err != nil {
+		return providerMedia{}, err
+	}
+	return hongguoQuickAppMediaFromPage(body)
+}
+
+func hongguoQuickAppMediaFromPage(body string) (providerMedia, error) {
+	body = html.UnescapeString(body)
+	index := strings.Index(body, "video_player_info")
+	if index < 0 {
+		return providerMedia{}, errors.New("红果快捷网页未提供 video_player_info")
+	}
+	end := min(len(body), index+8192)
+	match := hongguoQuickAppMainURLPattern.FindStringSubmatch(body[index:end])
+	if len(match) != 2 {
+		return providerMedia{}, errors.New("红果快捷网页未提供公开播放地址")
+	}
+	var address string
+	if err := json.Unmarshal([]byte(match[1]), &address); err != nil {
+		return providerMedia{}, errors.New("红果快捷网页播放地址格式异常")
+	}
+	address = strings.TrimSpace(address)
+	parsed, err := url.Parse(address)
+	if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil {
+		return providerMedia{}, errors.New("红果快捷网页未返回有效公开播放地址")
+	}
+	return providerMedia{URL: address, Referer: hongguoQuickAppBaseURL + "/"}, nil
 }
 
 func (d *Downloader) resolveHongguoWebMedia(ctx context.Context, seriesID, videoID string) (providerMedia, error) {
