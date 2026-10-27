@@ -99,6 +99,8 @@ abstract class AppRepository {
   Future<void> cancelCatalog() async {}
   Future<void> cancelSuggestions() async {}
   Future<void> cancelRecommendations() async {}
+  Future<void> clearDiagnostics() async =>
+      throw AppFailure('目前環境不支援清除原生診斷紀錄');
   Future<Drama?> supplementMetadata(Drama drama) async => null;
   Future<Drama> followCheck(Drama drama) async => (await detail(drama)).drama;
   Future<CatalogPage> recommendations(
@@ -352,6 +354,11 @@ class NativeRepository extends AppRepository {
   Future<void> cancelRecommendations() => _cancelReads('recommendations-');
 
   @override
+  Future<void> clearDiagnostics() async {
+    await _call({'action': 'clearDiagnostics'});
+  }
+
+  @override
   Future<CatalogPage> recommendations(
     String genre, {
     bool more = false,
@@ -545,6 +552,7 @@ class NativeRepository extends AppRepository {
             'cancelPlayback',
             'cancelRead',
             'updateSystemProxy',
+            'clearDiagnostics',
           }.contains(action) ||
           action == 'workLease' && input['command'] == 'end' ||
           action == 'lan' &&
