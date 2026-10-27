@@ -87,8 +87,22 @@ class MainActivity : FlutterActivity() {
     private fun renderingPreferences() =
         getSharedPreferences("duanju_rendering", Context.MODE_PRIVATE)
 
-    private fun compatibleRendering(): Boolean =
-        renderingPreferences().getBoolean("compatibleRendering", isTelevisionDevice())
+    private fun compatibleRendering(): Boolean {
+        val preferences = renderingPreferences()
+        // Older releases forced Skia on every TV even when the saved switch
+        // was false. Preserve that safe behavior once while migrating to the
+        // now-functional explicit on/off preference.
+        if (!preferences.getBoolean("compatibleRenderingChoiceV2", false)) {
+            val migrated = isTelevisionDevice() ||
+                preferences.getBoolean("compatibleRendering", false)
+            preferences.edit()
+                .putBoolean("compatibleRendering", migrated)
+                .putBoolean("compatibleRenderingChoiceV2", true)
+                .apply()
+            return migrated
+        }
+        return preferences.getBoolean("compatibleRendering", isTelevisionDevice())
+    }
 
     override fun getFlutterShellArgs(): FlutterShellArgs {
         val args = super.getFlutterShellArgs()
@@ -487,7 +501,9 @@ class MainActivity : FlutterActivity() {
                             if (enabled == null) {
                                 result.error("invalid_rendering_mode", "缺少相容渲染模式狀態", null)
                             } else if (!renderingPreferences().edit()
-                                    .putBoolean("compatibleRendering", enabled).commit()) {
+                                    .putBoolean("compatibleRendering", enabled)
+                                    .putBoolean("compatibleRenderingChoiceV2", true)
+                                    .commit()) {
                                 result.error("rendering_mode_not_saved", "相容渲染模式未能儲存", null)
                             } else {
                                 result.success(null)
