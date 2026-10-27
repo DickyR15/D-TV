@@ -4,6 +4,19 @@ import 'package:hgtv/playback_preferences.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test('default speed and quality persist per user', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LocalStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.setPlaybackPreferences(
+      const PlaybackPreferences(speed: 1.25, quality: 1080),
+    );
+    final restored = LocalStore(store.preferences);
+    addTearDown(restored.dispose);
+    expect(restored.playbackPreferences.speed, 1.25);
+    expect(restored.playbackPreferences.quality, 1080);
+  });
+
   test('danmaku is disabled in new playback preferences', () {
     expect(const PlaybackPreferences().danmaku, isFalse);
     expect(
