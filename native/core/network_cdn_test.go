@@ -157,3 +157,21 @@ func TestHostProtocolFallbackTransportIsScopedToOneHostname(t *testing.T) {
 		t.Fatal("protocol fallback escaped its configured hostname", baseCalls.Load(), fallbackCalls.Load())
 	}
 }
+
+func TestHTTP1NoALPNTransportDisablesALPNAndHTTP2(t *testing.T) {
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.TLSClientConfig = &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		NextProtos: []string{"h2", "http/1.1"},
+	}
+	base.ForceAttemptHTTP2 = true
+
+	transport := newHTTP1NoALPNTransport(base)
+	defer transport.CloseIdleConnections()
+	if transport.ForceAttemptHTTP2 || transport.TLSClientConfig == nil ||
+		len(transport.TLSClientConfig.NextProtos) != 0 ||
+		transport.TLSNextProto == nil || len(transport.TLSNextProto) != 0 ||
+		transport.TLSClientConfig.MinVersion < tls.VersionTLS12 {
+		t.Fatal("HTTP/1.1 fallback still advertises ALPN/HTTP2 or weakened TLS")
+	}
+}
