@@ -396,49 +396,31 @@ class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
     builder: (context, _) {
       final t = Curves.easeInOut.transform(_controller.value);
       final glow = 0.12 + 0.16 * t;
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Transform.scale(
-            scale: 0.96 + 0.045 * t,
-            child: Container(
-              width: 136,
-              height: 136,
-              decoration: BoxDecoration(
-                color: const Color(0xFF080B16),
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFFF4B62).withValues(alpha: glow),
-                    blurRadius: 24 + 20 * t,
-                    spreadRadius: 1 + 2 * t,
-                  ),
-                  BoxShadow(
-                    color: const Color(0xFF19C6E8).withValues(alpha: glow * 0.6),
-                    blurRadius: 30 + 14 * t,
-                    spreadRadius: t,
-                  ),
-                ],
+      return Transform.scale(
+        scale: 0.96 + 0.045 * t,
+        child: Container(
+          width: 144,
+          height: 144,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0B0D12),
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF55C7D3).withValues(alpha: glow),
+                blurRadius: 24 + 20 * t,
+                spreadRadius: 1 + 2 * t,
               ),
-              child: CustomPaint(
-                painter: _DtvMarkPainter(phase: t),
+              BoxShadow(
+                color: const Color(0xFFAFC4D0).withValues(alpha: glow * 0.42),
+                blurRadius: 30 + 14 * t,
+                spreadRadius: t,
               ),
-            ),
+            ],
           ),
-          const SizedBox(height: 22),
-          Opacity(
-            opacity: 0.82 + 0.18 * t,
-            child: const Text(
-              'D TV',
-              style: TextStyle(
-                color: Color(0xFFF5F7FF),
-                fontSize: 27,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 3.2,
-              ),
-            ),
+          child: CustomPaint(
+            painter: _DtvMarkPainter(phase: t),
           ),
-        ],
+        ),
       );
     },
   );
@@ -472,10 +454,10 @@ class _DtvMarkPainter extends CustomPainter {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color(0xFFFFBB69),
-          Color(0xFFFF4B62),
-          Color(0xFFCC1748),
-          Color(0xFF11C8E8),
+          Color(0xFFF5F8FA),
+          Color(0xFFCBD5DC),
+          Color(0xFF7B8D9B),
+          Color(0xFFE5EBEF),
         ],
         stops: [0.0, 0.34, 0.68, 1.0],
       ).createShader(rect);
@@ -497,7 +479,7 @@ class _DtvMarkPainter extends CustomPainter {
       )
       ..lineTo(size.width * 0.36, size.height * 0.70)
       ..close();
-    canvas.drawPath(inner, Paint()..color = const Color(0xFF080B16));
+    canvas.drawPath(inner, Paint()..color = const Color(0xFF0B0D12));
 
     final play = Path()
       ..moveTo(size.width * 0.42, size.height * 0.38)
@@ -510,7 +492,7 @@ class _DtvMarkPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFFFC16B), Color(0xFFFF5687), Color(0xFFEF3265)],
+          colors: [Color(0xFFA7EDF1), Color(0xFF55C8D3), Color(0xFF218A9A)],
         ).createShader(rect),
     );
 
