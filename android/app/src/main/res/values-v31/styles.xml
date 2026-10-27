@@ -2,7 +2,9 @@
 <resources>
     <style name="LaunchTheme" parent="AppSystemBarTheme">
         <item name="android:windowSplashScreenBackground">#0B0D12</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/dtv_mark</item>
+        <!-- Android 12+ requires a splash icon resource. Keep it transparent so
+             the first visible D-TV mark is the animated Flutter logo. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/dtv_splash_transparent_icon</item>
     </style>
     <style name="NormalTheme" parent="AppSystemBarTheme" />
 </resources>
