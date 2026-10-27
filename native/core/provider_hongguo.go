@@ -243,7 +243,9 @@ func (d *Downloader) resolveHongguoQuickAppMedia(ctx context.Context, seriesID, 
 	}
 	ctx = context.WithValue(ctx, providerTextUserAgentKey{}, hongguoQuickAppUserAgent)
 	pageURL := hongguoQuickAppBaseURL + "/player/" + url.PathEscape(seriesID) + "/" + url.PathEscape(videoID)
-	body, err := d.fetchProviderText(ctx, pageURL, hongguoQuickAppBaseURL+"/")
+	requestCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	body, err := d.fetchProviderText(requestCtx, pageURL, hongguoQuickAppBaseURL+"/")
 	if err != nil {
 		return providerMedia{}, err
 	}
