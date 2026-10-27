@@ -548,17 +548,22 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	d := engine.downloader
 	result := nativeCatalogResult{Items: []nativeDrama{}, Page: page}
 	if query != "" && source == sourceHongguo {
-		entry, err := d.searchHongguoDramas(ctx, query)
+		var entry hongguoSearchEntry
+		var err error
+		if page == 1 {
+			entry, err = d.searchHongguoDramas(ctx, query)
+		} else if keyword, keywordErr := hongguoSearchKeyword(query); keywordErr != nil {
+			err = keywordErr
+		} else {
+			entry, err = d.fetchHongguoSearchPage(ctx, keyword, page)
+		}
 		if err != nil {
 			return result, err
 		}
 		for _, drama := range entry.Dramas {
 			result.Items = append(result.Items, nativeNormalize(drama))
 		}
-		result.Warning, result.Page = entry.Warning, 1
-		if entry.Limited && result.Warning == "" {
-			result.Warning = "已显示当前可获取的匹配结果，使用更完整的剧名可继续查找"
-		}
+		result.Warning, result.HasMore = entry.Warning, entry.HasMore
 		return result, nil
 	}
 	if query != "" && source == sourceHuangju {
