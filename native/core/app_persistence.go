@@ -6,8 +6,6 @@ import (
 )
 
 const nativeCatalogMaxBytes = 32 << 20
-
-const nativeCatalogMaxItems = 5000
 const nativeSourceMaxBytes = 4 << 20
 
 var errNativeCatalogLimit = errors.New("剧库超过本地保存上限（32 MiB），新内容尚未保存，已暂停继续加载")
