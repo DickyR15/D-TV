@@ -21,6 +21,7 @@ import 'player_screen.dart';
 import 'video_enhancement_assets.dart';
 import 'diary_service.dart';
 import 'app_navigation.dart';
+import 'source_auto_maintenance.dart';
 import 'ui_localization.dart';
 
 Future<void> main() async {
@@ -63,7 +64,25 @@ class _AppBootstrapState extends State<AppBootstrap>
   final navigator = GlobalKey<NavigatorState>();
   LocalStore? store;
   Object? error;
+  Color? systemAccentColor;
+  Timer? _sourceAutoCheckTimer;
   late AppDevice device = widget.device;
+
+  void _scheduleAutomaticSourceCheck() {
+    _sourceAutoCheckTimer?.cancel();
+    final currentStore = store;
+    if (currentStore == null) return;
+    _sourceAutoCheckTimer = Timer(const Duration(seconds: 45), () {
+      _sourceAutoCheckTimer = null;
+      if (!mounted || !identical(store, currentStore)) return;
+      unawaited(
+        SourceAutoMaintenance.checkSelectedSourceIfStale(
+          repository,
+          currentStore,
+        ),
+      );
+    });
+  }
 
   @override
   void dispose() {
@@ -72,6 +91,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     LanController.current = null;
     MediaLibrary.current?.dispose();
     MediaLibrary.current = null;
+    _sourceAutoCheckTimer?.cancel();
     store?.dispose();
     super.dispose();
   }
@@ -87,6 +107,9 @@ class _AppBootstrapState extends State<AppBootstrap>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && Platform.isAndroid) {
       unawaited(_refreshDevice());
+    }
+    if (state == AppLifecycleState.resumed) {
+      _scheduleAutomaticSourceCheck();
     }
     if (!Platform.isIOS) return;
     final library = MediaLibrary.current;
@@ -137,10 +160,12 @@ class _AppBootstrapState extends State<AppBootstrap>
     try {
       final preferences = await SharedPreferences.getInstance();
       await _refreshDevice();
+      final accent = await AppDevice.systemAccentColor();
       unawaited(_logStartupRendering());
       await repository.initialize();
       if (mounted) {
         setState(() {
+          systemAccentColor = accent;
           store = LocalStore(preferences);
           repository.access = store;
           MediaLibrary.attach(repository, store!);
@@ -192,6 +217,7 @@ class _AppBootstrapState extends State<AppBootstrap>
             );
           };
         });
+        _scheduleAutomaticSourceCheck();
       }
     } catch (failure) {
       if (mounted) {
@@ -211,6 +237,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     television: device.television,
     version: device.version,
     navigatorKey: navigator,
+    systemAccentColor: systemAccentColor,
   );
 }
 
@@ -224,6 +251,7 @@ class DuanjuApp extends StatelessWidget {
     this.television = false,
     this.version = appVersion,
     this.navigatorKey,
+    this.systemAccentColor,
   });
   final AppRepository repository;
   final LocalStore? store;
@@ -232,6 +260,7 @@ class DuanjuApp extends StatelessWidget {
   final bool television;
   final String version;
   final GlobalKey<NavigatorState>? navigatorKey;
+  final Color? systemAccentColor;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -247,8 +276,18 @@ class DuanjuApp extends StatelessWidget {
     locale: const Locale('zh', 'TW'),
     supportedLocales: const [Locale('zh', 'TW')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: AppTheme.light,
-    darkTheme: AppTheme.dark,
+    theme: AppTheme.lightFor(
+      AppTheme.accentFor(
+        store?.themeAccent ?? 'brand',
+        systemAccent: systemAccentColor,
+      ),
+    ),
+    darkTheme: AppTheme.darkFor(
+      AppTheme.accentFor(
+        store?.themeAccent ?? 'brand',
+        systemAccent: systemAccentColor,
+      ),
+    ),
     themeMode: store == null ? ThemeMode.dark : AppTheme.mode(store?.themeMode ?? 'system'),
     builder: (context, child) {
       final mode = store?.displayMode ?? 'auto';
