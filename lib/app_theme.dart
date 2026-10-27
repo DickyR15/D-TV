@@ -8,6 +8,41 @@ abstract final class AppTheme {
   /// D-TV 品牌色取自啟動圖示：珊瑚紅搭配深墨色背景。
   static const brandAccent = Color(0xFFFF526D);
 
+  static const accentOptions = <String>[
+    'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+  ];
+
+  static String accentLabel(String value) => switch (value) {
+    'system' => '跟隨系統取色',
+    'warmOrange' => '暖橙',
+    'roseRed' => '玫紅',
+    'amber' => '琥珀',
+    'teal' => '青綠',
+    'ocean' => '海藍',
+    'indigo' => '藍紫',
+    _ => 'D-TV 品牌色',
+  };
+
+  static Color? accentFor(String value, {Color? systemAccent}) => switch (value) {
+    'system' => systemAccent,
+    'warmOrange' => const Color(0xFFFFA45B),
+    'roseRed' => const Color(0xFFE8799C),
+    'amber' => const Color(0xFFBE8B47),
+    'teal' => const Color(0xFF4F9E96),
+    'ocean' => const Color(0xFF578BC8),
+    'indigo' => const Color(0xFF7774C8),
+    _ => null,
+  };
+
+  static Color accentPreview(String value) =>
+      accentFor(value) ?? brandAccent;
+
+  static ThemeData lightFor(Color? accent) =>
+      accent == null ? light : _theme(Brightness.light, accent: accent);
+
+  static ThemeData darkFor(Color? accent) =>
+      accent == null ? dark : _theme(Brightness.dark, accent: accent);
+
   static ThemeMode mode(String preference) => switch (preference) {
     'light' => ThemeMode.light,
     'dark' => ThemeMode.dark,
@@ -198,38 +233,40 @@ abstract final class AppTheme {
     }),
   );
 
-  static ThemeData _theme(Brightness brightness) {
+  static ThemeData _theme(Brightness brightness, {Color? accent}) {
     final dark = brightness == Brightness.dark;
     // Softer graphite surfaces are easier to watch for long TV sessions.
     final background = dark
         ? const Color(0xFF171820)
         : const Color(0xFFFBF6F7);
     final scheme = ColorScheme.fromSeed(
-      seedColor: brandAccent,
+      seedColor: accent ?? brandAccent,
       brightness: brightness,
-      primary: dark ? const Color(0xFFD13D55) : const Color(0xFFB51236),
-      onPrimary: Colors.white,
-      primaryContainer: dark
-          ? const Color(0xFF493039)
-          : const Color(0xFFFFD9E1),
-      onPrimaryContainer: dark
-          ? const Color(0xFFFFE4E9)
-          : const Color(0xFF510018),
-      secondary: dark
-          ? const Color(0xFFE5A1B0)
-          : const Color(0xFF853247),
-      onSecondary: dark
-          ? const Color(0xFF310612)
-          : Colors.white,
-      secondaryContainer: dark
-          ? const Color(0xFF403039)
-          : const Color(0xFFF4DDE3),
-      onSecondaryContainer: dark
-          ? const Color(0xFFFFD8E0)
-          : const Color(0xFF4F0E24),
-      tertiary: dark
-          ? const Color(0xFFF6C86B)
-          : const Color(0xFF805500),
+      primary: accent == null
+          ? (dark ? const Color(0xFFD13D55) : const Color(0xFFB51236))
+          : null,
+      onPrimary: accent == null ? Colors.white : null,
+      primaryContainer: accent == null
+          ? (dark ? const Color(0xFF493039) : const Color(0xFFFFD9E1))
+          : null,
+      onPrimaryContainer: accent == null
+          ? (dark ? const Color(0xFFFFE4E9) : const Color(0xFF510018))
+          : null,
+      secondary: accent == null
+          ? (dark ? const Color(0xFFE5A1B0) : const Color(0xFF853247))
+          : null,
+      onSecondary: accent == null
+          ? (dark ? const Color(0xFF310612) : Colors.white)
+          : null,
+      secondaryContainer: accent == null
+          ? (dark ? const Color(0xFF403039) : const Color(0xFFF4DDE3))
+          : null,
+      onSecondaryContainer: accent == null
+          ? (dark ? const Color(0xFFFFD8E0) : const Color(0xFF4F0E24))
+          : null,
+      tertiary: accent == null
+          ? (dark ? const Color(0xFFF6C86B) : const Color(0xFF805500))
+          : null,
       surface: dark
           ? const Color(0xFF1D1F28)
           : const Color(0xFFFFFBFC),
