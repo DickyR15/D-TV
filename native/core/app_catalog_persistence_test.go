@@ -327,6 +327,52 @@ func TestNativeCatalogSaveFailureRetriesWithoutAdvancing(t *testing.T) {
 	}
 }
 
+func TestNativeCatalogPressureEvictsOnlyExpiredCategoryCaches(t *testing.T) {
+	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
+		return nil, errors.New("network forbidden")
+	})
+	old := time.Now().Add(-nativeCatalogRetention - time.Hour)
+	for _, name := range []string{"expired-a", "expired-b"} {
+		key := "hongguo|" + name
+		engine.catalogs[key] = []nativeDrama{{
+			ID: "hongguo:" + name, Source: sourceHongguo, Title: "旧分类缓存",
+			Description: strings.Repeat("x", 17<<20),
+		}}
+		engine.catalogStates[key] = nativeCatalogState{UpdatedAt: old, Page: 20}
+	}
+	// Deep pagination is intentionally retained even when its cache is old.
+	deepKey := "hongguo|deep"
+	engine.catalogs[deepKey] = []nativeDrama{{ID: "hongguo:deep", Source: sourceHongguo, Title: "第501页"}}
+	engine.catalogStates[deepKey] = nativeCatalogState{UpdatedAt: old, Page: 501, HasMore: true}
+
+	activeKey := "hongguo|active"
+	if err := engine.saveCatalogCache(activeKey, &nativeCatalogResult{
+		Items: []nativeDrama{{ID: "hongguo:active", Source: sourceHongguo, Title: "目前使用中的目录"}},
+		Page: 1, HasMore: true,
+	}); err != nil {
+		t.Fatal("expired cache eviction should make room without truncating active data:", err)
+	}
+	if _, ok := engine.catalogs["hongguo|expired-a"]; ok {
+		t.Fatal("old completed category cache was not evicted under disk pressure")
+	}
+	if _, ok := engine.catalogs["hongguo|expired-b"]; ok {
+		t.Fatal("old completed category cache was not evicted under disk pressure")
+	}
+	if len(engine.catalogs[activeKey]) != 1 || len(engine.catalogs[deepKey]) != 1 ||
+		engine.catalogStates[deepKey].Page != 501 {
+		t.Fatal("cache pressure removed the active catalog or deep pagination")
+	}
+
+	restarted := reopenCatalogEngine(t, engine.directory, nil)
+	if len(restarted.catalogs[activeKey]) != 1 || len(restarted.catalogs[deepKey]) != 1 ||
+		restarted.catalogStates[deepKey].Page != 501 || len(restarted.catalogs[sourceHongguo]) != 1 {
+		t.Fatal("restart did not preserve active data and page 501 after cache cleanup")
+	}
+	if _, ok := restarted.catalogs["hongguo|expired-a"]; ok {
+		t.Fatal("evicted cache unexpectedly returned after restart")
+	}
+}
+
 func TestNativeCatalogSizeLimitPreservesPreviousFile(t *testing.T) {
 	var requests atomic.Int32
 	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
