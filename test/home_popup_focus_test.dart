@@ -37,7 +37,14 @@ void main() {
 
       final moreButton = find.byTooltip('更多');
       expect(moreButton, findsOneWidget);
-      final moreMenu = tester.widget<PopupMenuButton<String>>(moreButton);
+      // find.byTooltip resolves to the internal RawTooltip rather than the
+      // PopupMenuButton itself. Inspect the ancestor menu for its initial focus.
+      final moreMenuFinder = find.ancestor(
+        of: moreButton,
+        matching: find.byType(PopupMenuButton<String>),
+      );
+      expect(moreMenuFinder, findsOneWidget);
+      final moreMenu = tester.widget<PopupMenuButton<String>>(moreMenuFinder);
       expect(moreMenu.initialValue, 'users');
       await tester.tap(moreButton);
       await tester.pump();
