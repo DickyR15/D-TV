@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'app_layout.dart';
 import 'core_bridge.dart';
 import 'drama_actions.dart';
-import 'follow_state.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'remote_widgets.dart';
@@ -54,7 +53,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空觀看記錄？'),
-        content: const Text('這會刪除當前使用者的觀看進度，收藏狀態和手動已看標記會保留。'),
+        content: const Text('這會刪除當前使用者的觀看進度，收藏與新集數提醒會保留。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -79,7 +78,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空收藏？'),
-        content: const Text('這會移除目前使用者的全部收藏及追劇狀態，不會刪除最近觀看記錄。'),
+        content: const Text('這會移除目前使用者的全部收藏及更新提醒，不會刪除最近觀看記錄。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -142,9 +141,9 @@ class _SavedLibraryState extends State<SavedLibrary> {
   Widget _tile(Drama drama, {FocusNode? focusNode, VoidCallback? onFocus}) {
     final watched = widget.store.watched(drama.id);
     final state = widget.store.following(drama.id);
-    final badge = state == null
-        ? null
-        : '${state.label}${state.hasUpdates ? ' · ${state.updateLabel}' : ''}';
+    final badge = state != null && state.hasUpdates
+        ? state.updateLabel
+        : null;
     return DramaTile(
       key: ValueKey('saved-${drama.id}'),
       drama: drama,
@@ -154,7 +153,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
       onTap: () => widget.history ? widget.onContinue(drama) : widget.onOpen(drama),
       onMore: () => _actions(drama),
       onLongPress: () => _actions(drama),
-      // 收藏與最近觀看皆以長按開啟標記選單，不顯示三點操作鈕。
+      // 收藏與最近觀看皆以長按開啟操作選單，不顯示三點操作鈕。
       actions: null,
       badge: badge,
       subtitle: watched == null
@@ -181,9 +180,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
         final state = widget.store.following(drama.id);
         return widget.history ||
             _filter.isEmpty ||
-            (_filter == 'updates'
-                ? state?.hasUpdates == true
-                : state?.status.name == _filter);
+            (_filter == 'updates' && state?.hasUpdates == true);
       }).toList();
       final header = [
         Padding(
@@ -219,8 +216,6 @@ class _SavedLibraryState extends State<SavedLibrary> {
               children: [
                 for (final filter in [
                   ('', '全部'),
-                  for (final status in FollowStatus.values)
-                    (status.name, status.label),
                   ('updates', '有更新'),
                 ])
                   Padding(
