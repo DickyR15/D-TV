@@ -619,7 +619,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 		// for net/http's small-write buffer to fill while the CDN is streaming.
 		if flusher, ok := writer.(http.Flusher); ok {
 			flusher.Flush()
-			_, err := stream.nativeCopyMediaWithResume(
+			forwarded, err := stream.nativeCopyMediaWithResume(
 				ctx,
 				&nativeInitialFlushWriter{destination: writer, flusher: flusher},
 				upstream,
@@ -630,7 +630,8 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 			)
 			if err != nil {
 				stream.nativeLog(info, "transfer_error", finalURL.String(),
-					fmt.Sprintf("error=%s bytes_forwarded=%d", nativeStreamError(err), observed.bytes),
+					fmt.Sprintf("error=%s bytes_forwarded=%d local_response_bytes=%d %s",
+						nativeStreamError(err), forwarded, observed.bytes, nativeStreamErrorDetail(err)),
 					0, contentType)
 			}
 		}
@@ -707,6 +708,18 @@ func (stream *nativeStreamServer) nativeCopyMediaWithResume(
 	currentResponse := response
 	currentReader := firstReader
 	var written int64
+	reportIncomplete := func(cause error, attempt int, stage string) (int64, error) {
+		expected := int64(0)
+		if resumable {
+			expected = end - start + 1
+		}
+		stream.nativeLog(info, "transfer_incomplete", address,
+			fmt.Sprintf("stage=%s error=%s bytes_forwarded=%d expected_bytes=%d resumable=%t range_start=%d range_end=%d total_bytes=%d retry_attempt=%d %s",
+				stage, nativeStreamError(cause), written, expected, resumable, start, end, total, attempt,
+				nativeStreamErrorDetail(cause)),
+			0, currentResponse.Header.Get("Content-Type"))
+		return written, cause
+	}
 	for attempt := 0; ; attempt++ {
 		n, copyErr := io.Copy(destination, currentReader)
 		written += n
@@ -722,24 +735,26 @@ func (stream *nativeStreamServer) nativeCopyMediaWithResume(
 			return written, nil
 		}
 		if ctx.Err() != nil {
+			// A user switch or session release is an intentional cancellation, not a
+			// damaged transfer. Avoid counting it as a failed CDN attempt.
 			return written, ctx.Err()
 		}
 		// One idle-timeout rescue is worthwhile: some CDNs send headers and a
 		// small prefix, then pause long enough to trip the per-read watchdog.
 		// Resume from the next byte once, but don't loop on a CDN that stays idle.
 		if errors.Is(copyErr, errNativeStreamIdleTimeout) && attempt >= 1 {
-			return written, copyErr
+			return reportIncomplete(copyErr, attempt, "idle_timeout_retry_exhausted")
 		}
 		if !resumable || attempt >= nativeStreamResumeAttempts || written >= expected {
 			if copyErr == nil {
 				copyErr = io.ErrUnexpectedEOF
 			}
-			return written, copyErr
+			return reportIncomplete(copyErr, attempt, "resume_unavailable_or_exhausted")
 		}
 
 		nextStart := start + written
 		if nextStart < start || nextStart > end {
-			return written, io.ErrUnexpectedEOF
+			return reportIncomplete(io.ErrUnexpectedEOF, attempt, "invalid_resume_offset")
 		}
 		stream.nativeLog(info, "resume_attempt", address,
 			fmt.Sprintf("attempt=%d start=%d end=%d total=%d forwarded=%d",
@@ -748,7 +763,7 @@ func (stream *nativeStreamServer) nativeCopyMediaWithResume(
 
 		retryRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 		if err != nil {
-			return written, err
+			return reportIncomplete(err, attempt, "resume_request_build")
 		}
 		for _, name := range []string{"User-Agent", "Referer"} {
 			if value := originalRequest.Header.Get(name); value != "" {
@@ -762,19 +777,19 @@ func (stream *nativeStreamServer) nativeCopyMediaWithResume(
 		retryResponse, err := stream.nativeRequest(retryRequest)
 		if err != nil {
 			stream.nativeLog(info, "resume_failed", address,
-				"attempt="+strconv.Itoa(attempt+1)+" error="+nativeStreamError(err),
+				"attempt="+strconv.Itoa(attempt+1)+" error="+nativeStreamError(err)+" "+nativeStreamErrorDetail(err),
 				0, "")
-			return written, err
+			return reportIncomplete(err, attempt, "resume_request_failed")
 		}
 		resumeStart, resumeEnd, resumeTotal, rangeOK := nativeParseContentRange(retryResponse.Header.Get("Content-Range"))
 		if retryResponse.StatusCode != http.StatusPartialContent ||
 			!rangeOK || resumeStart != nextStart || resumeEnd > end || resumeTotal != total {
 			_ = retryResponse.Body.Close()
 			stream.nativeLog(info, "resume_rejected", address,
-				fmt.Sprintf("attempt=%d status=%d requested_start=%d response_range=%s",
-					attempt+1, retryResponse.StatusCode, nextStart, retryResponse.Header.Get("Content-Range")),
+				fmt.Sprintf("attempt=%d status=%d requested_start=%d requested_end=%d expected_total=%d response_range=%s",
+					attempt+1, retryResponse.StatusCode, nextStart, end, total, retryResponse.Header.Get("Content-Range")),
 				retryResponse.StatusCode, retryResponse.Header.Get("Content-Type"))
-			return written, fmt.Errorf("media range resume rejected: HTTP %d", retryResponse.StatusCode)
+			return reportIncomplete(fmt.Errorf("media range resume rejected: HTTP %d", retryResponse.StatusCode), attempt, "resume_range_rejected")
 		}
 		stream.nativeLog(info, "resume_response", address,
 			fmt.Sprintf("attempt=%d range_start=%d range_end=%d total=%d",
