@@ -35,6 +35,8 @@ void main() {
       // layout instead of requiring the whole widget tree to become idle.
       await tester.pump(const Duration(milliseconds: 300));
 
+      expect(find.text('熱門榜單・收藏追劇・隨選即播'), findsOneWidget);
+
       final moreButton = find.byTooltip('更多');
       expect(moreButton, findsOneWidget);
       // find.byTooltip resolves to the internal RawTooltip rather than the

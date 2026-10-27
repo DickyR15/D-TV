@@ -306,46 +306,68 @@ class DuanjuApp extends StatelessWidget {
         ),
       );
     },
-    home: store != null
-        ? store!.locked
-              ? ProfilesScreen(store: store!, locked: true)
-              : HomeScreen(
-                  key: ValueKey(
-                    'profile-${store!.profile.id}-${store!.profileEpoch}',
-                  ),
-                  repository: repository,
-                  store: store!,
-                )
-        : Scaffold(
-            body: Center(
-              child: bootstrapError == null
-                  ? const DtvLaunchAnimation()
-                  : Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            bootstrapError!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                          const SizedBox(height: 20),
-                          FilledButton(
-                            onPressed: onRetry,
-                            child: const Text('重新開啟'),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
+    home: AnimatedSwitcher(
+      duration: const Duration(milliseconds: 580),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.985, end: 1.0).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
           ),
+          child: child,
+        ),
+      ),
+      child: store != null
+          ? store!.locked
+                ? KeyedSubtree(
+                    key: ValueKey('locked-${store!.profileEpoch}'),
+                    child: ProfilesScreen(store: store!, locked: true),
+                  )
+                : HomeScreen(
+                    key: ValueKey(
+                      'profile-${store!.profile.id}-${store!.profileEpoch}',
+                    ),
+                    repository: repository,
+                    store: store!,
+                  )
+          : KeyedSubtree(
+              key: ValueKey<String>(
+                bootstrapError == null ? 'bootstrap-loading' : 'bootstrap-error',
+              ),
+              child: Scaffold(
+                backgroundColor: const Color(0xFF0B0D12),
+                body: Center(
+                  child: bootstrapError == null
+                      ? const DtvLaunchAnimation()
+                      : Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                bootstrapError!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              const SizedBox(height: 20),
+                              FilledButton(
+                                onPressed: onRetry,
+                                child: const Text('重新開啟'),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
+              ),
+            ),
+    ),
   );
 }
 
 
-/// A short, looping brand motion used only while the app finishes bootstrapping.
-/// It deliberately has no "starting" label or progress spinner.
+/// A cinematic D TV brand reveal shown while the app initializes.
 class DtvLaunchAnimation extends StatefulWidget {
   const DtvLaunchAnimation({super.key});
 
@@ -357,12 +379,13 @@ class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
     with TickerProviderStateMixin {
   late final AnimationController _entrance = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 850),
+    duration: const Duration(milliseconds: 1500),
   );
   late final AnimationController _pulse = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1250),
+    duration: const Duration(milliseconds: 1700),
   );
+  late final Listenable _animation = Listenable.merge([_entrance, _pulse]);
 
   @override
   void initState() {
@@ -383,28 +406,112 @@ class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _entrance,
+    animation: _animation,
     builder: (context, _) {
       final reveal = Curves.easeOutBack.transform(_entrance.value);
-      return AnimatedBuilder(
-        animation: _pulse,
-        builder: (context, _) {
-          final glow = Curves.easeInOut.transform(_pulse.value);
-          return Opacity(
-            opacity: _entrance.value,
-            child: Transform.scale(
-              // A one-time logo reveal followed by a restrained glow pulse.
-              scale: 0.72 + 0.28 * reveal,
-              child: SizedBox(
-                width: 128,
-                height: 128,
-                child: CustomPaint(
-                  painter: _DtvMarkPainter(phase: glow),
+      final glow = Curves.easeInOut.transform(_pulse.value);
+      final wordOpacity =
+          ((_entrance.value - 0.28) / 0.42).clamp(0.0, 1.0);
+      final lineOpacity =
+          ((_entrance.value - 0.12) / 0.68).clamp(0.0, 1.0);
+
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 260,
+              height: 224,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            const Color(0xFF087EFF).withValues(
+                              alpha: 0.13 + 0.15 * glow,
+                            ),
+                            const Color(0x00087EFF),
+                          ],
+                          stops: const [0.0, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Transform.scale(
+                    scale: 0.70 + 0.33 * reveal,
+                    child: SizedBox(
+                      width: 170,
+                      height: 170,
+                      child: CustomPaint(
+                        painter: _DtvMarkPainter(phase: glow),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 18,
+                    child: Opacity(
+                      opacity: lineOpacity,
+                      child: Container(
+                        width: 218 * lineOpacity,
+                        height: 2,
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Color(0x0039D8FF),
+                              Color(0xEE39D8FF),
+                              Color(0x0039D8FF),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            Opacity(
+              opacity: wordOpacity,
+              child: Transform.translate(
+                offset: Offset(0, 12 * (1 - wordOpacity)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'D TV',
+                      style: TextStyle(
+                        color: Color(0xFFF1F6FA),
+                        fontSize: 34,
+                        height: 1,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 5.5,
+                        shadows: [
+                          Shadow(color: Color(0x8833BFFF), blurRadius: 18),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '短劇・漫劇・AI 劇  |  精彩隨選即播',
+                      style: TextStyle(
+                        color: const Color(0xFF8BDFFF).withValues(
+                          alpha: 0.82 + 0.18 * glow,
+                        ),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          );
-        },
+          ],
+        ),
       );
     },
   );
