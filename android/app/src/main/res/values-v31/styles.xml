@@ -2,7 +2,7 @@
 <resources>
     <style name="LaunchTheme" parent="AppSystemBarTheme">
         <item name="android:windowSplashScreenBackground">#080910</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/dtv_splash_logo</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/dtv_icon</item>
         <item name="android:windowSplashScreenIconBackgroundColor">#080910</item>
     </style>
     <style name="NormalTheme" parent="AppSystemBarTheme" />
