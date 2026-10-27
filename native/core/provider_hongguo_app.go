@@ -164,10 +164,21 @@ func hongguoAppQuery(deviceID, installID string) url.Values {
 	}
 }
 
+func clientDeviceIDs(client *hongguoAppClient) (string, string, bool) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.state.DeviceID, client.state.InstallID, client.state.Registered
+}
+
 func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
 	client := downloader.hongguoClient()
 	comment, _ := ctx.Value(hongguoCommentKey{}).(bool)
 	signed := !comment && path != hongguoBookmallTabPath
+	if signed {
+		// Registration is best-effort: if the registration service is temporarily
+		// unavailable, preserve the existing IDs and still try the signed request.
+		_ = downloader.ensureHongguoDevice(ctx, "")
+	}
 	client.mu.Lock()
 	base, deviceID, installID := client.baseURL, client.state.DeviceID, client.state.InstallID
 	client.mu.Unlock()
@@ -191,6 +202,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		attempts = 3
 	}
 	var lastErr error
+	rotations := 0
 	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
 			select {
@@ -252,6 +264,16 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		}
 		if len(content) == 0 {
 			lastErr = errors.New("红果 App 接口未返回有效数据")
+			// An empty successful response is a known sign that the current
+			// device identity may have been rejected. Rotate only signed requests,
+			// bound rotations, and retry with the newly registered IDs.
+			if signed && rotations < hongguoDeviceRotations && downloader.ensureHongguoDevice(ctx, deviceID) == nil {
+				rotations++
+				deviceID, installID, _ = clientDeviceIDs(client)
+				query.Set("device_id", deviceID)
+				query.Set("iid", installID)
+				attempt--
+			}
 			continue
 		}
 		if len(content) > providerMaxBodyBytes {
