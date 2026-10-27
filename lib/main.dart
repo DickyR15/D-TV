@@ -21,7 +21,6 @@ import 'player_screen.dart';
 import 'video_enhancement_assets.dart';
 import 'diary_service.dart';
 import 'app_navigation.dart';
-import 'source_auto_maintenance.dart';
 import 'ui_localization.dart';
 
 Future<void> main() async {
@@ -65,24 +64,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   LocalStore? store;
   Object? error;
   Color? systemAccentColor;
-  Timer? _sourceAutoCheckTimer;
   late AppDevice device = widget.device;
-
-  void _scheduleAutomaticSourceCheck() {
-    _sourceAutoCheckTimer?.cancel();
-    final currentStore = store;
-    if (currentStore == null) return;
-    _sourceAutoCheckTimer = Timer(const Duration(seconds: 45), () {
-      _sourceAutoCheckTimer = null;
-      if (!mounted || !identical(store, currentStore)) return;
-      unawaited(
-        SourceAutoMaintenance.checkSelectedSourceIfStale(
-          repository,
-          currentStore,
-        ),
-      );
-    });
-  }
 
   @override
   void dispose() {
@@ -91,8 +73,6 @@ class _AppBootstrapState extends State<AppBootstrap>
     LanController.current = null;
     MediaLibrary.current?.dispose();
     MediaLibrary.current = null;
-    _sourceAutoCheckTimer?.cancel();
-    SourceAutoMaintenance.shutdown();
     store?.dispose();
     super.dispose();
   }
@@ -108,9 +88,6 @@ class _AppBootstrapState extends State<AppBootstrap>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && Platform.isAndroid) {
       unawaited(_refreshDevice());
-    }
-    if (state == AppLifecycleState.resumed) {
-      _scheduleAutomaticSourceCheck();
     }
     if (!Platform.isIOS) return;
     final library = MediaLibrary.current;
@@ -218,7 +195,6 @@ class _AppBootstrapState extends State<AppBootstrap>
             );
           };
         });
-        _scheduleAutomaticSourceCheck();
       }
     } catch (failure) {
       if (mounted) {

@@ -14,7 +14,6 @@ import 'app_theme.dart';
 import 'back_safe_dialog.dart';
 import 'core_bridge.dart';
 import 'diary_service.dart';
-import 'source_auto_maintenance.dart';
 import 'playback_diagnostics.dart';
 import 'danmaku_controller.dart';
 import 'danmaku_overlay.dart';
@@ -208,7 +207,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void initState() {
     super.initState();
-    SourceAutoMaintenance.playbackStarted();
     WidgetsBinding.instance.addObserver(this);
     _index = widget.initialIndex;
     _profileEpoch = widget.handoff?.profileEpoch ?? widget.store.profileEpoch;
@@ -2176,7 +2174,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         await _player.dispose();
       }),
     );
-    SourceAutoMaintenance.playbackStopped();
     if (Platform.isWindows) {
       unawaited(windowManager.setFullScreen(false));
     } else if (_mobile || _television && Platform.isAndroid) {
