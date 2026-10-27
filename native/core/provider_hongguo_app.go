@@ -184,7 +184,8 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		if deviceID == "" || !signed {
 			return nil, errors.New("红果辅助设备不可用")
 		}
-		ctx = context.WithValue(ctx, requestLaneKey{}, "hongguo-helper")
+		// This D-TV branch has no requestLaneKey lane scheduler; keep the helper
+		// request on the existing request path rather than referencing upstream-only code.
 	}
 	query := hongguoAppQuery(deviceID, installID)
 	for key, values := range extra {
