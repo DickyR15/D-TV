@@ -63,6 +63,13 @@ func nativeStreamError(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "deadline"
 	}
+	var wrappedURL *url.Error
+	if errors.As(err, &wrappedURL) && wrappedURL.Err != nil {
+		err = wrappedURL.Err
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "tls handshake timeout") {
+		return "tls"
+	}
 	var certificate *tls.CertificateVerificationError
 	if errors.As(err, &certificate) {
 		return "tls"
@@ -110,12 +117,40 @@ func nativeStreamErrorDetail(err error) string {
 	return fmt.Sprintf("error_type=%T cause=%q", err, truncate(cause, 180))
 }
 
-const nativeStreamHostFailureCooldown = 90 * time.Second
+const (
+	nativeStreamHostFailureCooldown      = 90 * time.Second
+	nativeStreamHostFailureMaxCooldown   = 15 * time.Minute
+	nativeStreamHostFailureResetAfter    = 30 * time.Minute
+)
+
+type nativeStreamHostFailureState struct {
+	consecutive int
+	until      time.Time
+	lastFailure time.Time
+	reason     string
+}
+
+func nativeStreamHostCooldownForFailures(failures int) time.Duration {
+	if failures < 1 {
+		failures = 1
+	}
+	cooldown := nativeStreamHostFailureCooldown
+	for i := 1; i < failures && cooldown < nativeStreamHostFailureMaxCooldown; i++ {
+		cooldown *= 2
+		if cooldown > nativeStreamHostFailureMaxCooldown {
+			cooldown = nativeStreamHostFailureMaxCooldown
+		}
+	}
+	return cooldown
+}
 
 // rememberNativeStreamHostFailure temporarily deprioritizes hosts that failed
-// during connection setup or media transfer. The cooldown is shared by the
-// playback resolver and stream proxy through Downloader.
+// during connection setup or media transfer. Repeated failures after a cooldown
+// expires increase the penalty; a successful media body clears the streak.
 func (downloader *Downloader) rememberNativeStreamHostFailure(address, reason string) {
+	if downloader == nil {
+		return
+	}
 	switch reason {
 	case "timeout", "connect", "tls", "dns", "deadline", "unexpected_eof", "upstream_http", "io_error":
 	default:
@@ -129,29 +164,41 @@ func (downloader *Downloader) rememberNativeStreamHostFailure(address, reason st
 	if host == "" {
 		return
 	}
+
 	downloader.streamHostMu.Lock()
 	if downloader.streamHostFailures == nil {
-		downloader.streamHostFailures = make(map[string]time.Time)
+		downloader.streamHostFailures = make(map[string]nativeStreamHostFailureState)
 	}
 	now := time.Now()
-	for failedHost, until := range downloader.streamHostFailures {
-		if !now.Before(until) {
+	for failedHost, state := range downloader.streamHostFailures {
+		if !now.Before(state.until) && (state.lastFailure.IsZero() || now.Sub(state.lastFailure) > nativeStreamHostFailureResetAfter) {
 			delete(downloader.streamHostFailures, failedHost)
 		}
 	}
-	previousUntil, wasCooling := downloader.streamHostFailures[host]
-	previouslyCooling := wasCooling && now.Before(previousUntil)
-	until := now.Add(nativeStreamHostFailureCooldown)
-	if current, exists := downloader.streamHostFailures[host]; !exists || current.Before(until) {
-		downloader.streamHostFailures[host] = until
+	state := downloader.streamHostFailures[host]
+	if now.Before(state.until) {
+		// Concurrent failures during one cooldown window are one failure episode.
+		// Do not let parallel range requests immediately force the host to max backoff.
+		downloader.streamHostMu.Unlock()
+		return
 	}
+	if state.consecutive > 0 && !state.lastFailure.IsZero() && now.Sub(state.lastFailure) <= nativeStreamHostFailureResetAfter {
+		state.consecutive++
+	} else {
+		state.consecutive = 1
+	}
+	cooldown := nativeStreamHostCooldownForFailures(state.consecutive)
+	state.until = now.Add(cooldown)
+	state.lastFailure = now
+	state.reason = reason
+	downloader.streamHostFailures[host] = state
 	downloader.streamHostMu.Unlock()
-	if !previouslyCooling {
-		downloader.recordDiagnostic(diagnosticEvent{
-			Level: "warn", Event: "stream.host_cooldown", Host: host,
-			Message: fmt.Sprintf("reason=%s cooldown_seconds=%d", reason, int(nativeStreamHostFailureCooldown/time.Second)),
-		})
-	}
+
+	downloader.recordDiagnostic(diagnosticEvent{
+		Level: "warn", Event: "stream.host_cooldown", Host: host,
+		Message: fmt.Sprintf("reason=%s consecutive_failures=%d cooldown_seconds=%d",
+			reason, state.consecutive, int(cooldown/time.Second)),
+	})
 }
 
 func (downloader *Downloader) clearNativeStreamHostFailure(address string) {
@@ -185,15 +232,8 @@ func (downloader *Downloader) nativeStreamHostCoolingDown(address string) bool {
 	}
 	downloader.streamHostMu.Lock()
 	defer downloader.streamHostMu.Unlock()
-	until, exists := downloader.streamHostFailures[host]
-	if !exists {
-		return false
-	}
-	if !time.Now().Before(until) {
-		delete(downloader.streamHostFailures, host)
-		return false
-	}
-	return true
+	state, exists := downloader.streamHostFailures[host]
+	return exists && time.Now().Before(state.until)
 }
 
 func (stream *nativeStreamServer) nativeLog(info nativeStreamDiagnostic, event, address, detail string, status int, contentType string) {
