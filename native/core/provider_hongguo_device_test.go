@@ -113,3 +113,35 @@ func TestHongguoRegisterFailurePausesAndKeepsOldDevice(t *testing.T) {
 		t.Fatal("registration was not paused after failure", got)
 	}
 }
+
+func TestHongguoSignedRequestRotatesRejectedDeviceOnForbiddenResponse(t *testing.T) {
+	var requests []string
+	registered := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path == "/service/2/device_register/" {
+			registered++
+			requests = append(requests, "register")
+			id := strconv.Itoa(1000 + registered)
+			return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"`+id+`","install_id_str":"`+id+`9"}`), nil
+		}
+		device := request.URL.Query().Get("device_id")
+		requests = append(requests, "detail@"+device)
+		if device == "1001" {
+			return sourceFixtureResponse(request, http.StatusForbidden, `{"code":403}`), nil
+		}
+		return sourceFixtureResponse(request, http.StatusOK, `{"code":0,"data":{}}`), nil
+	})
+	d.cfg.Retries = 1
+	client := d.hongguoClient()
+	client.state.DeviceID, client.state.InstallID, client.state.Registered = "7", "8", false
+
+	if _, err := d.hongguoAppRequest(context.Background(), http.MethodPost, "/novel/player/video_detail/v1/", nil, map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	if state := d.hongguoCatalogSnapshot(); state.DeviceID != "1002" || state.InstallID != "10029" || !state.Registered {
+		t.Fatal("forbidden device was not rotated", state)
+	}
+	if len(requests) != 4 || requests[0] != "register" || requests[1] != "detail@1001" || requests[2] != "register" || requests[3] != "detail@1002" {
+		t.Fatal("unexpected request sequence", requests)
+	}
+}
