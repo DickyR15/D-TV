@@ -175,14 +175,16 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	helper, _ := ctx.Value(hongguoHelperDeviceKey{}).(bool)
 	signed := !comment && path != hongguoBookmallTabPath
 	if signed {
-		_ = downloader.ensureHongguoDevice(ctx, helper, "")
+		if err := downloader.ensureHongguoDevice(ctx, helper, ""); err != nil && helper {
+			return nil, errors.New("红果辅助设备注册失败")
+		}
 	}
 	client.mu.Lock()
 	base := client.baseURL
-	deviceID, installID, _ := client.deviceLocked(helper)
+	deviceID, installID, registered := client.deviceLocked(helper)
 	client.mu.Unlock()
 	if helper {
-		if deviceID == "" || !signed {
+		if deviceID == "" || !registered || !signed {
 			return nil, errors.New("红果辅助设备不可用")
 		}
 		// This D-TV branch has no requestLaneKey lane scheduler; keep the helper
