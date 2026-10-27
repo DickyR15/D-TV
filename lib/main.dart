@@ -279,13 +279,13 @@ class DuanjuApp extends StatelessWidget {
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
     theme: AppTheme.lightFor(
       AppTheme.accentFor(
-        store?.themeAccent ?? 'brand',
+        store?.themeAccent ?? 'system',
         systemAccent: systemAccentColor,
       ),
     ),
     darkTheme: AppTheme.darkFor(
       AppTheme.accentFor(
-        store?.themeAccent ?? 'brand',
+        store?.themeAccent ?? 'system',
         systemAccent: systemAccentColor,
       ),
     ),
@@ -343,52 +343,7 @@ class DuanjuApp extends StatelessWidget {
         : Scaffold(
             body: Center(
               child: bootstrapError == null
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 68,
-                          height: 68,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF17101A),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: const Color(0xFFFF3658),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
-                            color: Color(0xFFFF3658),
-                            size: 48,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'D TV',
-                          style: TextStyle(
-                            color: Color(0xFFF4F4FA),
-                            fontSize: 30,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.8,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        const Text(
-                          '正在準備首頁',
-                          style: TextStyle(
-                            color: Color(0xFFB9B6C2),
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 22),
-                        const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        ),
-                      ],
-                    )
+                  ? const DtvLaunchAnimation()
                   : Padding(
                       padding: const EdgeInsets.all(32),
                       child: Column(
@@ -410,4 +365,174 @@ class DuanjuApp extends StatelessWidget {
             ),
           ),
   );
+}
+
+
+/// A short, looping brand motion used only while the app finishes bootstrapping.
+/// It deliberately has no "starting" label or progress spinner.
+class DtvLaunchAnimation extends StatefulWidget {
+  const DtvLaunchAnimation({super.key});
+
+  @override
+  State<DtvLaunchAnimation> createState() => _DtvLaunchAnimationState();
+}
+
+class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1050),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _controller,
+    builder: (context, _) {
+      final t = Curves.easeInOut.transform(_controller.value);
+      final glow = 0.12 + 0.16 * t;
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Transform.scale(
+            scale: 0.96 + 0.045 * t,
+            child: Container(
+              width: 136,
+              height: 136,
+              decoration: BoxDecoration(
+                color: const Color(0xFF080B16),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF4B62).withValues(alpha: glow),
+                    blurRadius: 24 + 20 * t,
+                    spreadRadius: 1 + 2 * t,
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF19C6E8).withValues(alpha: glow * 0.6),
+                    blurRadius: 30 + 14 * t,
+                    spreadRadius: t,
+                  ),
+                ],
+              ),
+              child: CustomPaint(
+                painter: _DtvMarkPainter(phase: t),
+              ),
+            ),
+          ),
+          const SizedBox(height: 22),
+          Opacity(
+            opacity: 0.82 + 0.18 * t,
+            child: const Text(
+              'D TV',
+              style: TextStyle(
+                color: Color(0xFFF5F7FF),
+                fontSize: 27,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 3.2,
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+class _DtvMarkPainter extends CustomPainter {
+  const _DtvMarkPainter({required this.phase});
+
+  final double phase;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final outer = Path()
+      ..moveTo(size.width * 0.20, size.height * 0.15)
+      ..lineTo(size.width * 0.51, size.height * 0.15)
+      ..cubicTo(
+        size.width * 0.81, size.height * 0.15,
+        size.width * 0.89, size.height * 0.35,
+        size.width * 0.89, size.height * 0.50,
+      )
+      ..cubicTo(
+        size.width * 0.89, size.height * 0.68,
+        size.width * 0.80, size.height * 0.85,
+        size.width * 0.51, size.height * 0.85,
+      )
+      ..lineTo(size.width * 0.20, size.height * 0.85)
+      ..close();
+    final bodyPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFFFFBB69),
+          Color(0xFFFF4B62),
+          Color(0xFFCC1748),
+          Color(0xFF11C8E8),
+        ],
+        stops: [0.0, 0.34, 0.68, 1.0],
+      ).createShader(rect);
+    canvas.drawPath(outer, bodyPaint);
+
+    // Hollow out the D and place the play triangle inside the negative space.
+    final inner = Path()
+      ..moveTo(size.width * 0.36, size.height * 0.30)
+      ..lineTo(size.width * 0.49, size.height * 0.30)
+      ..cubicTo(
+        size.width * 0.64, size.height * 0.30,
+        size.width * 0.70, size.height * 0.39,
+        size.width * 0.70, size.height * 0.50,
+      )
+      ..cubicTo(
+        size.width * 0.70, size.height * 0.62,
+        size.width * 0.63, size.height * 0.70,
+        size.width * 0.49, size.height * 0.70,
+      )
+      ..lineTo(size.width * 0.36, size.height * 0.70)
+      ..close();
+    canvas.drawPath(inner, Paint()..color = const Color(0xFF080B16));
+
+    final play = Path()
+      ..moveTo(size.width * 0.42, size.height * 0.38)
+      ..lineTo(size.width * 0.42, size.height * 0.62)
+      ..lineTo(size.width * 0.61, size.height * 0.50)
+      ..close();
+    canvas.drawPath(
+      play,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFC16B), Color(0xFFFF5687), Color(0xFFEF3265)],
+        ).createShader(rect),
+    );
+
+    final highlight = Path()
+      ..moveTo(size.width * 0.22, size.height * 0.17)
+      ..lineTo(size.width * 0.50, size.height * 0.17)
+      ..cubicTo(
+        size.width * 0.67, size.height * 0.17,
+        size.width * 0.78, size.height * 0.23,
+        size.width * 0.83, size.height * 0.35,
+      );
+    canvas.drawPath(
+      highlight,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.012
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: 0.14 + 0.12 * phase),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_DtvMarkPainter oldDelegate) =>
+      oldDelegate.phase != phase;
 }
