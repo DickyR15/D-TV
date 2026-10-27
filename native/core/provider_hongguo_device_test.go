@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func hongguoDeviceFixture(t *testing.T, rejected map[string]bool, registerFails bool) (*Downloader, *[]string) {
@@ -143,5 +144,33 @@ func TestHongguoSignedRequestRotatesRejectedDeviceOnForbiddenResponse(t *testing
 	}
 	if len(requests) != 4 || requests[0] != "register" || requests[1] != "detail@1001" || requests[2] != "register" || requests[3] != "detail@1002" {
 		t.Fatal("unexpected request sequence", requests)
+	}
+}
+
+// TestHongguoDeviceRotationClearsOnlyForbiddenHostCooldown verifies that an
+// identity-specific 403 can be retried after registration without removing
+// unrelated rate-limit or temporary-error backoffs.
+func TestHongguoDeviceRotationClearsOnlyForbiddenHostCooldown(t *testing.T) {
+	limiter := newRequestLimiter(2, 0)
+	limiter.backoffs["api.example.test"] = &requestBackoff{
+		host: "api.example.test", until: time.Now().Add(time.Minute), status: http.StatusForbidden,
+	}
+	limiter.backoffs["rate.example.test"] = &requestBackoff{
+		host: "rate.example.test", until: time.Now().Add(time.Minute), status: http.StatusTooManyRequests,
+	}
+	limiter.backoffs["blocked.example.test"] = &requestBackoff{
+		host: "blocked.example.test", until: time.Now().Add(time.Minute), status: http.StatusForbidden, reason: "browser challenge",
+	}
+
+	limiter.clearDeviceRejectionBackoff("API.EXAMPLE.TEST")
+
+	if _, ok := limiter.backoffs["api.example.test"]; ok {
+		t.Fatal("rotated device host remained in 403 cooldown")
+	}
+	if _, ok := limiter.backoffs["rate.example.test"]; !ok {
+		t.Fatal("device rotation cleared a 429 rate limit")
+	}
+	if _, ok := limiter.backoffs["blocked.example.test"]; !ok {
+		t.Fatal("device rotation cleared a browser challenge")
 	}
 }

@@ -260,12 +260,22 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			// Some rejected device identities are reported as HTTP 401/403
 			// instead of an empty 200 response. Rotate only signed requests and
 			// keep the retry count bounded; unrelated 4xx responses remain fatal.
-			if signed && (response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) &&
-				rotations < hongguoDeviceRotations && downloader.ensureHongguoDevice(ctx, deviceID) == nil {
+			if signed &&
+				(response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) &&
+				catalogResponseBlockReason(response, content) == "" &&
+				rotations < hongguoDeviceRotations &&
+				downloader.ensureHongguoDevice(ctx, deviceID) == nil {
 				rotations++
 				deviceID, installID, _ = clientDeviceIDs(client)
 				query.Set("device_id", deviceID)
 				query.Set("iid", installID)
+				// The shared limiter observes every 403 and places a host cooldown.
+				// Once a rejected device has been replaced, clear only that 403
+				// cooldown so the bounded retry can validate the new identity.
+				// Challenge/Cloudflare responses are excluded above and remain blocked.
+				if response.StatusCode == http.StatusForbidden && downloader.limiter != nil {
+					downloader.limiter.clearDeviceRejectionBackoff(request.URL.Hostname())
+				}
 				attempt--
 				continue
 			}
