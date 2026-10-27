@@ -357,7 +357,7 @@ class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1050),
+    duration: const Duration(milliseconds: 1250),
   )..repeat(reverse: true);
 
   @override
@@ -371,28 +371,12 @@ class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
     animation: _controller,
     builder: (context, _) {
       final t = Curves.easeInOut.transform(_controller.value);
-      final glow = 0.12 + 0.16 * t;
       return Transform.scale(
-        scale: 0.96 + 0.045 * t,
-        child: Container(
-          width: 144,
-          height: 144,
-          decoration: BoxDecoration(
-            color: const Color(0xFF0B0D12),
-            borderRadius: BorderRadius.circular(32),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF55C7D3).withValues(alpha: glow),
-                blurRadius: 24 + 20 * t,
-                spreadRadius: 1 + 2 * t,
-              ),
-              BoxShadow(
-                color: const Color(0xFFAFC4D0).withValues(alpha: glow * 0.42),
-                blurRadius: 30 + 14 * t,
-                spreadRadius: t,
-              ),
-            ],
-          ),
+        // Keep the logo at the native splash size; only a very subtle pulse.
+        scale: 0.99 + 0.02 * t,
+        child: SizedBox(
+          width: 128,
+          height: 128,
           child: CustomPaint(
             painter: _DtvMarkPainter(phase: t),
           ),
@@ -408,36 +392,31 @@ class _DtvMarkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
+    final side = size.width < size.height ? size.width : size.height;
+    final dx = (size.width - side) / 2;
+    final dy = (size.height - side) / 2;
+    canvas.save();
+    canvas.translate(dx, dy);
+    canvas.scale(side / 192.0);
+    final rect = const Rect.fromLTWH(0, 0, 192, 192);
+
+    // Keep the same vector geometry as Android's native dtv_mark.xml.
     final outer = Path()
-      ..moveTo(size.width * .18, size.height * .10)
-      ..lineTo(size.width * .50, size.height * .10)
-      ..cubicTo(size.width * .81, size.height * .10,
-          size.width * .92, size.height * .30,
-          size.width * .92, size.height * .50)
-      ..cubicTo(size.width * .92, size.height * .70,
-          size.width * .81, size.height * .90,
-          size.width * .50, size.height * .90)
-      ..lineTo(size.width * .18, size.height * .90)
-      ..cubicTo(size.width * .14, size.height * .90,
-          size.width * .12, size.height * .87,
-          size.width * .12, size.height * .82)
-      ..lineTo(size.width * .12, size.height * .18)
-      ..cubicTo(size.width * .12, size.height * .13,
-          size.width * .14, size.height * .10,
-          size.width * .18, size.height * .10)
+      ..moveTo(34, 21)
+      ..lineTo(96, 21)
+      ..cubicTo(137, 21, 158, 49, 158, 96)
+      ..cubicTo(158, 143, 137, 171, 96, 171)
+      ..lineTo(34, 171)
       ..close();
 
-    canvas.saveLayer(rect, Paint());
     canvas.drawPath(
       outer,
       Paint()
-        ..color = const Color(0xAA128DFF)
-        ..maskFilter = MaskFilter.blur(
-          BlurStyle.normal,
-          size.width * (.035 + .01 * phase),
-        ),
+        ..color = const Color(0xFF087EFF).withValues(alpha: 0.25 + 0.12 * phase)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4.0 + 2.0 * phase),
     );
+
+    canvas.saveLayer(rect, Paint());
     canvas.drawPath(
       outer,
       Paint()
@@ -445,54 +424,55 @@ class _DtvMarkPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFFFFFFFF),
+            Color(0xFFEAF1F7),
             Color(0xFFE0EAF2),
             Color(0xFF718CA4),
             Color(0xFFB5CDE0),
-            Color(0xFFF8FBFF),
           ],
-          stops: [0.0, .22, .52, .76, 1.0],
+          stops: [0.0, 0.28, 0.65, 1.0],
         ).createShader(rect),
     );
 
-    final inner = Path()
-      ..moveTo(size.width * .34, size.height * .27)
-      ..lineTo(size.width * .49, size.height * .27)
-      ..cubicTo(size.width * .65, size.height * .27,
-          size.width * .72, size.height * .38,
-          size.width * .72, size.height * .50)
-      ..cubicTo(size.width * .72, size.height * .63,
-          size.width * .65, size.height * .73,
-          size.width * .49, size.height * .73)
-      ..lineTo(size.width * .34, size.height * .73)
+    final highlight = Path()
+      ..moveTo(37, 21)
+      ..lineTo(93, 21)
+      ..cubicTo(108, 21, 120, 25, 130, 34)
+      ..lineTo(111, 47)
+      ..cubicTo(101, 40, 91, 38, 77, 38)
+      ..lineTo(37, 38)
       ..close();
-    canvas.drawPath(inner, Paint()..blendMode = BlendMode.clear);
+    canvas.drawPath(highlight, Paint()..color = Colors.white.withValues(alpha: 0.92));
 
-    final bevel = Path()
-      ..moveTo(size.width * .19, size.height * .13)
-      ..lineTo(size.width * .49, size.height * .13)
-      ..cubicTo(size.width * .68, size.height * .13,
-          size.width * .79, size.height * .20,
-          size.width * .85, size.height * .33);
-    canvas.drawPath(
-      bevel,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = size.width * .018
-        ..strokeCap = StrokeCap.round
-        ..color = Colors.white.withValues(alpha: .58 + .16 * phase),
-    );
+    final lowerShade = Path()
+      ..moveTo(35, 147)
+      ..lineTo(65, 135)
+      ..lineTo(96, 135)
+      ..cubicTo(119, 135, 134, 124, 143, 106)
+      ..lineTo(152, 132)
+      ..cubicTo(141, 159, 122, 173, 96, 173)
+      ..lineTo(35, 173)
+      ..close();
+    canvas.drawPath(lowerShade, Paint()..color = const Color(0xFF718CA4));
+
+    final inner = Path()
+      ..moveTo(65, 51)
+      ..lineTo(96, 51)
+      ..cubicTo(121, 51, 136, 68, 136, 96)
+      ..cubicTo(136, 124, 121, 141, 96, 141)
+      ..lineTo(65, 141)
+      ..close();
+    canvas.drawPath(inner, Paint()..color = const Color(0xFF071322));
 
     final play = Path()
-      ..moveTo(size.width * .42, size.height * .38)
-      ..lineTo(size.width * .42, size.height * .62)
-      ..lineTo(size.width * .62, size.height * .50)
+      ..moveTo(77, 70)
+      ..lineTo(77, 122)
+      ..lineTo(119, 96)
       ..close();
     canvas.drawPath(
       play,
       Paint()
-        ..color = const Color(0xCC087EFF)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * .025),
+        ..color = const Color(0xFF087EFF)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3.0 + 1.5 * phase),
     );
     canvas.drawPath(
       play,
@@ -505,21 +485,29 @@ class _DtvMarkPainter extends CustomPainter {
     );
 
     final playHighlight = Path()
-      ..moveTo(size.width * .435, size.height * .395)
-      ..lineTo(size.width * .435, size.height * .51)
-      ..lineTo(size.width * .535, size.height * .45);
+      ..moveTo(80, 73)
+      ..lineTo(80, 95)
+      ..lineTo(99, 84)
+      ..close();
+    canvas.drawPath(playHighlight, Paint()..color = const Color(0xFF53F3FF));
+
+    final shine = Path()
+      ..moveTo(38, 23)
+      ..lineTo(92, 23)
+      ..cubicTo(109, 23, 121, 28, 132, 38);
     canvas.drawPath(
-      playHighlight,
+      shine,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = size.width * .012
+        ..strokeWidth = 1.1
         ..strokeCap = StrokeCap.round
-        ..color = Colors.white.withValues(alpha: .5 + .12 * phase),
+        ..color = Colors.white.withValues(alpha: 0.36 + 0.24 * phase),
     );
+
+    canvas.restore();
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(_DtvMarkPainter oldDelegate) =>
-      oldDelegate.phase != phase;
+  bool shouldRepaint(_DtvMarkPainter oldDelegate) => oldDelegate.phase != phase;
 }

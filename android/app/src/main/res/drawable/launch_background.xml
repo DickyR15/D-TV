@@ -6,8 +6,8 @@
         </shape>
     </item>
     <item
-        android:width="112dp"
-        android:height="112dp"
+        android:width="128dp"
+        android:height="128dp"
         android:gravity="center"
         android:drawable="@drawable/dtv_mark" />
 </layer-list>
