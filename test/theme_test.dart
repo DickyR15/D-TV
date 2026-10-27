@@ -46,6 +46,30 @@ void main() {
     },
   );
 
+  test('theme accent persists across backup and supports older backup files', () async {
+    final store = await localStore();
+    addTearDown(store.dispose);
+    expect(store.themeAccent, 'brand');
+    await store.setThemeAccent('teal');
+    final backup = await store.exportBackup();
+    await store.setThemeAccent('brand');
+    await store.importBackup(backup);
+    expect(store.themeAccent, 'teal');
+
+    final oldBackup = jsonDecode(backup) as Map<String, dynamic>;
+    oldBackup.remove('themeAccent');
+    await store.setThemeAccent('ocean');
+    await store.importBackup(jsonEncode(oldBackup));
+    expect(store.themeAccent, 'ocean');
+
+    oldBackup['themeAccent'] = 'not-a-theme';
+    await expectLater(
+      store.importBackup(jsonEncode(oldBackup)),
+      throwsFormatException,
+    );
+    expect(store.themeAccent, 'ocean');
+  });
+
   testWidgets('settings theme choice immediately updates the running app', (
     tester,
   ) async {
@@ -117,6 +141,9 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+    expect(find.byKey(const ValueKey('theme-accent-setting')), findsOneWidget);
+    expect(find.byKey(const ValueKey('playback-setting')), findsOneWidget);
+    expect(find.text('片源管理'), findsNothing);
     await tester.drag(find.byType(ListView), const Offset(0, -900));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('app-author')), findsOneWidget);
