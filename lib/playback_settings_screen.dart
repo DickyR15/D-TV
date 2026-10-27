@@ -27,11 +27,23 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       widget.store.playbackPreferences.televisionDecoder;
   bool? _compatibleRendering;
   bool _saving = false;
+  final FocusNode _speedFocus = FocusNode(debugLabel: 'playback-default-speed');
 
   @override
   void initState() {
     super.initState();
     _loadCompatibleRendering();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && AppLayout.isTelevision(context)) {
+        _speedFocus.requestFocus();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _speedFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCompatibleRendering() async {
@@ -131,6 +143,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           children: [
             DropdownButtonFormField<double>(
               key: const ValueKey('playback-default-speed'),
+              focusNode: _speedFocus,
+              autofocus: AppLayout.isTelevision(context),
               initialValue: _speed,
               decoration: const InputDecoration(
                 labelText: '預設倍速',
