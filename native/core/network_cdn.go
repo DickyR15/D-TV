@@ -42,6 +42,24 @@ func (transport *hostProtocolFallbackTransport) CloseIdleConnections() {
 	}
 }
 
+func newHTTP1NoALPNTransport(base *http.Transport) *http.Transport {
+	transport := base.Clone()
+	config := &tls.Config{MinVersion: tls.VersionTLS12}
+	if base.TLSClientConfig != nil {
+		config = base.TLSClientConfig.Clone()
+		if config.MinVersion < tls.VersionTLS12 {
+			config.MinVersion = tls.VersionTLS12
+		}
+	}
+	// Do not advertise ALPN at all: some older API gateways abort TLS when
+	// the client offers h2/http1.1 but the gateway has no matching protocol.
+	config.NextProtos = nil
+	transport.TLSClientConfig = config
+	transport.ForceAttemptHTTP2 = false
+	transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	return transport
+}
+
 type cdnTransport struct {
 	base       *http.Transport
 	resolver   *dnsResolver
