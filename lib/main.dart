@@ -354,33 +354,57 @@ class DtvLaunchAnimation extends StatefulWidget {
 }
 
 class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
+    with TickerProviderStateMixin {
+  late final AnimationController _entrance = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 850),
+  );
+  late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1250),
-  )..repeat(reverse: true);
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(
+      _entrance.forward().whenComplete(() {
+        if (mounted) _pulse.repeat(reverse: true);
+      }),
+    );
+  }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _entrance.dispose();
+    _pulse.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
+    animation: _entrance,
     builder: (context, _) {
-      final t = Curves.easeInOut.transform(_controller.value);
-      return Transform.scale(
-        // Keep the logo at the native splash size; only a very subtle pulse.
-        scale: 0.99 + 0.02 * t,
-        child: SizedBox(
-          width: 128,
-          height: 128,
-          child: CustomPaint(
-            painter: _DtvMarkPainter(phase: t),
-          ),
-        ),
+      final reveal = Curves.easeOutBack.transform(_entrance.value);
+      return AnimatedBuilder(
+        animation: _pulse,
+        builder: (context, _) {
+          final glow = Curves.easeInOut.transform(_pulse.value);
+          return Opacity(
+            opacity: _entrance.value,
+            child: Transform.scale(
+              // A one-time logo reveal followed by a restrained glow pulse.
+              scale: 0.72 + 0.28 * reveal,
+              child: SizedBox(
+                width: 128,
+                height: 128,
+                child: CustomPaint(
+                  painter: _DtvMarkPainter(phase: glow),
+                ),
+              ),
+            ),
+          );
+        },
       );
     },
   );
