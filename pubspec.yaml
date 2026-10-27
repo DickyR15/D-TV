@@ -1,7 +1,7 @@
 name: hgtv
 description: D TV 短劇播放器（繁體中文台灣版）
 publish_to: none
-version: 0.2.160+337
+version: 0.2.161+338
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
