@@ -411,9 +411,9 @@ class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
       final reveal = Curves.easeOutBack.transform(_entrance.value);
       final glow = Curves.easeInOut.transform(_pulse.value);
       final wordOpacity =
-          ((_entrance.value - 0.28) / 0.42).clamp(0.0, 1.0);
+          ((_entrance.value - 0.28) / 0.42).clamp(0.0, 1.0).toDouble();
       final lineOpacity =
-          ((_entrance.value - 0.12) / 0.68).clamp(0.0, 1.0);
+          ((_entrance.value - 0.12) / 0.68).clamp(0.0, 1.0).toDouble();
 
       return Center(
         child: Column(

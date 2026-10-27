@@ -51,6 +51,7 @@ void main() {
     await tester.tap(find.text('手動代理').last);
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
     expect(repository.writes, isNotEmpty);
     expect(repository.current.proxyMode, 'manual');
 
@@ -58,6 +59,7 @@ void main() {
     expect(proxy, findsOneWidget);
     await tester.enterText(proxy, 'http://127.0.0.1:7890');
     await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
     expect(repository.current.proxyUrl, 'http://127.0.0.1:7890');
 
     await tester.pumpWidget(const SizedBox.shrink());
