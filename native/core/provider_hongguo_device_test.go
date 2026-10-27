@@ -46,8 +46,8 @@ func TestHongguoSignedRequestKeepsCurrentDevice(t *testing.T) {
 	if _, err := d.hongguoAppRequest(context.Background(), http.MethodPost, "/novel/player/video_detail/v1/", nil, map[string]any{}); err != nil {
 		t.Fatal(err)
 	}
-	if state := d.hongguoCatalogSnapshot(); state.DeviceID != "7" || state.Registered {
-		t.Fatal("signed request changed the device", state)
+	if state := d.hongguoCatalogSnapshot(); state.DeviceID != "7" || !state.Registered {
+		t.Fatal("signed request changed the registered device", state)
 	}
 	if got := *requests; len(got) != 1 || got[0] != "detail@7" {
 		t.Fatal("unexpected request sequence", got)
