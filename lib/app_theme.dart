@@ -237,68 +237,68 @@ abstract final class AppTheme {
 
   static ThemeData _theme(Brightness brightness, {Color? accent}) {
     final dark = brightness == Brightness.dark;
-    // Softer graphite surfaces are easier to watch for long TV sessions.
+    // Neutral graphite surfaces keep the TV interface calm during long sessions.
     final background = dark
-        ? const Color(0xFF171820)
-        : const Color(0xFFFBF6F7);
+        ? const Color(0xFF101318)
+        : const Color(0xFFF3F6F8);
     final scheme = ColorScheme.fromSeed(
       seedColor: accent ?? brandAccent,
       brightness: brightness,
       primary: accent == null
-          ? (dark ? const Color(0xFFD13D55) : const Color(0xFFB51236))
+          ? (dark ? const Color(0xFF76D6E0) : const Color(0xFF087987))
           : null,
-      onPrimary: accent == null ? Colors.white : null,
+      onPrimary: accent == null ? (dark ? const Color(0xFF062E34) : Colors.white) : null,
       primaryContainer: accent == null
-          ? (dark ? const Color(0xFF493039) : const Color(0xFFFFD9E1))
+          ? (dark ? const Color(0xFF193B43) : const Color(0xFFD1F2F5))
           : null,
       onPrimaryContainer: accent == null
-          ? (dark ? const Color(0xFFFFE4E9) : const Color(0xFF510018))
+          ? (dark ? const Color(0xFFDDFBFD) : const Color(0xFF073F46))
           : null,
       secondary: accent == null
-          ? (dark ? const Color(0xFFE5A1B0) : const Color(0xFF853247))
+          ? (dark ? const Color(0xFFA8C4CD) : const Color(0xFF315B66))
           : null,
       onSecondary: accent == null
-          ? (dark ? const Color(0xFF310612) : Colors.white)
+          ? (dark ? const Color(0xFF14282E) : Colors.white)
           : null,
       secondaryContainer: accent == null
-          ? (dark ? const Color(0xFF403039) : const Color(0xFFF4DDE3))
+          ? (dark ? const Color(0xFF2A4149) : const Color(0xFFDBEDF1))
           : null,
       onSecondaryContainer: accent == null
-          ? (dark ? const Color(0xFFFFD8E0) : const Color(0xFF4F0E24))
+          ? (dark ? const Color(0xFFDEEDF1) : const Color(0xFF18363D))
           : null,
       tertiary: accent == null
-          ? (dark ? const Color(0xFFF6C86B) : const Color(0xFF805500))
+          ? (dark ? const Color(0xFFA9B4CB) : const Color(0xFF495B7D))
           : null,
       surface: dark
-          ? const Color(0xFF1D1F28)
-          : const Color(0xFFFFFBFC),
+          ? const Color(0xFF191D23)
+          : Colors.white,
       onSurface: dark
-          ? const Color(0xFFF2EDF0)
-          : const Color(0xFF272027),
+          ? const Color(0xFFEEF2F5)
+          : const Color(0xFF202830),
       onSurfaceVariant: dark
-          ? const Color(0xFFC9BEC5)
-          : const Color(0xFF655760),
+          ? const Color(0xFFB1BCC5)
+          : const Color(0xFF55636E),
       outline: dark
-          ? const Color(0xFF9C8992)
-          : const Color(0xFF807079),
+          ? const Color(0xFF8797A4)
+          : const Color(0xFF6D7C87),
       outlineVariant: dark
-          ? const Color(0xFF46404A)
-          : const Color(0xFFE8D9DE),
+          ? const Color(0xFF3A454F)
+          : const Color(0xFFD5DEE4),
       surfaceContainerLowest: dark
-          ? const Color(0xFF191A22)
+          ? const Color(0xFF14181D)
           : Colors.white,
       surfaceContainerLow: dark
-          ? const Color(0xFF20212A)
-          : const Color(0xFFFFF3F6),
+          ? const Color(0xFF1A2026)
+          : const Color(0xFFF5F8FA),
       surfaceContainer: dark
-          ? const Color(0xFF252630)
-          : const Color(0xFFF7E9EE),
+          ? const Color(0xFF222A31)
+          : const Color(0xFFECF1F4),
       surfaceContainerHigh: dark
-          ? const Color(0xFF2D2E38)
-          : const Color(0xFFF0E0E6),
+          ? const Color(0xFF2B343D)
+          : const Color(0xFFE3EAEF),
       surfaceContainerHighest: dark
-          ? const Color(0xFF393A45)
-          : const Color(0xFFE8D5DD),
+          ? const Color(0xFF343E48)
+          : const Color(0xFFD8E2E8),
       surfaceTint: Colors.transparent,
     );
 
