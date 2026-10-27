@@ -89,7 +89,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       builder: (dialogContext) => AlertDialog(
         title: Text(enabled ? '開啟相容渲染模式？' : '關閉相容渲染模式？'),
         content: const Text(
-          '需要重新啟動 App 才會生效，播放會中斷。電視裝置預設使用相容渲染；關閉後可測試標準渲染模式。',
+          '需要重新啟動 App 才會生效，播放會中斷。預設使用標準渲染（Impeller）；若出現介面閃爍、黑屏或圖形異常，再開啟 Skia 相容渲染測試。',
         ),
         actions: [
           TextButton(

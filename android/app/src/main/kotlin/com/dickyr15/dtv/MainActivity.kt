@@ -89,26 +89,24 @@ class MainActivity : FlutterActivity() {
 
     private fun compatibleRendering(): Boolean {
         val preferences = renderingPreferences()
-        // Older releases forced Skia on every TV even when the saved switch
-        // was false. Preserve that safe behavior once while migrating to the
-        // now-functional explicit on/off preference.
+        // Migrate an existing explicit choice, but do not force Skia on TVs.
+        // Standard Impeller rendering is the default; Skia remains an opt-in
+        // compatibility switch for troubleshooting renderer-specific issues.
         if (!preferences.getBoolean("compatibleRenderingChoiceV2", false)) {
-            val migrated = isTelevisionDevice() ||
-                preferences.getBoolean("compatibleRendering", false)
+            val migrated = preferences.getBoolean("compatibleRendering", false)
             preferences.edit()
                 .putBoolean("compatibleRendering", migrated)
                 .putBoolean("compatibleRenderingChoiceV2", true)
                 .apply()
             return migrated
         }
-        return preferences.getBoolean("compatibleRendering", isTelevisionDevice())
+        return preferences.getBoolean("compatibleRendering", false)
     }
 
     override fun getFlutterShellArgs(): FlutterShellArgs {
         val args = super.getFlutterShellArgs()
-        // Android TV boxes using Mali/Vulkan have shown graphics-buffer allocation
-        // failures under Impeller. Use the compatible Skia renderer on TV by default;
-        // the saved preference continues to enable Skia on phones/tablets as well.
+        // Use Skia only when the user explicitly enables compatibility rendering.
+        // The default remains Impeller; this switch is for renderer troubleshooting.
         if (compatibleRendering()) {
             args.add("--enable-impeller=false")
         }
