@@ -14,9 +14,9 @@
     <application
         android:label="${appLabel}"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_dtv"
-        android:roundIcon="@mipmap/ic_dtv"
-        android:logo="@mipmap/ic_dtv"
+        android:icon="@drawable/dtv_icon"
+        android:roundIcon="@drawable/dtv_icon"
+        android:logo="@drawable/dtv_icon"
         android:banner="${appBanner}"
         android:usesCleartextTraffic="true"
         android:allowBackup="false">
