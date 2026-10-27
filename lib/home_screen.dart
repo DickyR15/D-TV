@@ -2270,9 +2270,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         final tileWidth =
                             (gridWidth - (gridColumns - 1) * gridSpacing) /
                                 gridColumns;
-                        return RefreshIndicator(
-                          onRefresh: _refreshCatalog,
-                          child: CustomScrollView(
+                        return CustomScrollView(
                             controller: _scroll,
                             physics: const AlwaysScrollableScrollPhysics(),
                             slivers: [
@@ -2331,8 +2329,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                             ],
-                          ),
-                        );
+                          );
                       },
                     ),
             ),
