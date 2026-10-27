@@ -50,7 +50,7 @@ class DiaryService {
     final path = nativeLogPath;
     if (path == null) return;
     final lines = <String>[];
-    for (final name in ['$path.1', path]) {
+    for (final name in ['$path.2', '$path.1', path]) {
       RandomAccessFile? file;
       try {
         file = await File(name).open();
@@ -185,6 +185,7 @@ class DiaryService {
   static Future<void> showDiaryDialog(
     BuildContext context, {
     VoidCallback? onDialogDismissed,
+    Future<void> Function()? clearNativeLogs,
   }) async {
     await refreshNativeLogs();
     if (!context.mounted) return;
@@ -314,7 +315,14 @@ class DiaryService {
                   color: Colors.white70,
                 ),
                 tooltip: '清空紀錄',
-                onPressed: () => clear(),
+                onPressed: () async {
+                  try {
+                    await clearNativeLogs?.call();
+                    clear();
+                  } catch (error) {
+                    add('[Diary] clear_native_logs_failed error=$error');
+                  }
+                },
               ),
             ],
           ),
