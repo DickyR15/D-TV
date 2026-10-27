@@ -38,6 +38,11 @@ func hongguoDeviceFixture(t *testing.T, rejected map[string]bool, registerFails 
 
 func TestHongguoSignedRequestKeepsCurrentDevice(t *testing.T) {
 	d, requests := hongguoDeviceFixture(t, nil, false)
+	// A previously registered device should be reused without registering again.
+	client := d.hongguoClient()
+	client.mu.Lock()
+	client.state.Registered = true
+	client.mu.Unlock()
 	if _, err := d.hongguoAppRequest(context.Background(), http.MethodPost, "/novel/player/video_detail/v1/", nil, map[string]any{}); err != nil {
 		t.Fatal(err)
 	}
