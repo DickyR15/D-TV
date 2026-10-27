@@ -1698,20 +1698,39 @@ class _HomeScreenState extends State<HomeScreen> {
           const _DtvBrandMark(size: 58),
           const SizedBox(width: 14),
           Flexible(
-            child: Text(
-              'D TV',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: theme.colorScheme.onSurface,
-                fontSize: 31,
-                height: 1,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.15,
-                shadows: const [
-                  Shadow(color: Color(0x5533BFFF), blurRadius: 10),
-                ],
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'D TV',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 31,
+                    height: 1,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.15,
+                    shadows: const [
+                      Shadow(color: Color(0x5533BFFF), blurRadius: 10),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '短劇・漫劇・AI 劇',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
