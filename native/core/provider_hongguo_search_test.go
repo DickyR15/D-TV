@@ -47,7 +47,7 @@ func TestHongguoSearchPageContinuesUsingServerCursor(t *testing.T) {
 			body := "{\"search_tabs\":[{\"tab_type\":\"29\",\"search_id\":\"search-1\",\"passback\":\"cursor-1\",\"next_offset\":\"10\",\"has_more\":true,\"data\":[{\"video_data\":[{\"series_id\":\"101\",\"name\":\"示例第一季\"}]}]}]}"
 			return sourceFixtureResponse(request, http.StatusOK, body), nil
 		}
-		body := "{\"search_tabs\":[{\"tab_type\":\"29\",\"search_id\":\"search-1\",\"passback\":\"cursor-2\",\"next_offset\":\"20\",\"has_more\":false,\"data\":[{\"video_data\":[{\"series_id\":\"102\",\"name\":\"示例第二季\"}]}]}]}"
+		body := "{\"search_tabs\":[{\"tab_type\":\"29\",\"search_id\":\"search-1\",\"passback\":\"cursor-2\",\"next_offset\":\"20\",\"has_more\":false,\"data\":[{\"video_data\":[{\"series_id\":\"101\",\"name\":\"示例第一季\"},{\"series_id\":\"102\",\"name\":\"示例第二季\"}]}]}]}"
 		return sourceFixtureResponse(request, http.StatusOK, body), nil
 	})
 	d.cfg.Retries = 1
@@ -66,6 +66,9 @@ func TestHongguoSearchPageContinuesUsingServerCursor(t *testing.T) {
 	}
 	if second.HasMore || len(second.Dramas) != 1 {
 		t.Fatalf("unexpected second page: %+v", second)
+	}
+	if second.Dramas[0].ID != "hongguo:102" {
+		t.Fatalf("second page did not filter an ID repeated from page one: %+v", second.Dramas)
 	}
 	if len(queries) != 2 {
 		t.Fatalf("expected two requests, got %d", len(queries))

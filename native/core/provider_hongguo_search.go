@@ -38,6 +38,7 @@ type hongguoSearchCursor struct {
 	SearchID   string
 	Passback   string
 	NextOffset string
+	SeenIDs    []string
 	HasMore    bool
 	ExpiresAt  time.Time
 }
@@ -350,18 +351,31 @@ func (downloader *Downloader) fetchHongguoSearchPage(ctx context.Context, keywor
 	}
 	cells := anyList(tab["data"])
 	entry := hongguoSearchEntry{Dramas: make([]Drama, 0, len(cells)), HasMore: tab["has_more"] == true}
-	seen := make(map[string]bool, len(cells))
+	seen := make(map[string]bool, len(previous.SeenIDs)+len(cells))
+	seenIDs := append([]string(nil), previous.SeenIDs...)
+	for _, id := range seenIDs {
+		if id != "" {
+			seen[id] = true
+		}
+	}
+	recognized := 0
 	for _, cell := range cells {
 		row, _ := cell.(map[string]any)
 		for _, video := range anyList(row["video_data"]) {
 			drama := hongguoDramaFromAny(map[string]any{"video_data": video}, "短剧")
-			if drama.ID != "" && !seen[drama.ID] {
-				seen[drama.ID] = true
-				entry.Dramas = append(entry.Dramas, drama)
+			if drama.ID == "" {
+				continue
 			}
+			recognized++
+			if seen[drama.ID] {
+				continue
+			}
+			seen[drama.ID] = true
+			seenIDs = append(seenIDs, drama.ID)
+			entry.Dramas = append(entry.Dramas, drama)
 		}
 	}
-	if len(cells) > 0 && len(entry.Dramas) == 0 {
+	if len(cells) > 0 && recognized == 0 {
 		return hongguoSearchEntry{}, errors.New("红果搜索结果中没有可识别的剧集")
 	}
 	entry.Total, _ = strconv.Atoi(mapString(tab, "total", "total_count"))
@@ -383,7 +397,7 @@ func (downloader *Downloader) fetchHongguoSearchPage(ctx context.Context, keywor
 	}
 	downloader.storeHongguoSearchCursor(keyword, hongguoSearchCursor{
 		Page: pageNum, SearchID: searchID, Passback: passback, NextOffset: nextOffset,
-		HasMore: entry.HasMore, ExpiresAt: time.Now().Add(5 * time.Minute),
+		SeenIDs: seenIDs, HasMore: entry.HasMore, ExpiresAt: time.Now().Add(5 * time.Minute),
 	})
 	return entry, nil
 }
