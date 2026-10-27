@@ -46,17 +46,21 @@ void main() {
     },
   );
 
-  test('theme accent persists across backup and supports older backup files', () async {
+  test('theme accent persists, migrates old brand values, and validates backups', () async {
     final store = await localStore();
     addTearDown(store.dispose);
-    expect(store.themeAccent, 'brand');
+    expect(store.themeAccent, 'system');
     await store.setThemeAccent('teal');
     final backup = await store.exportBackup();
-    await store.setThemeAccent('brand');
+    await store.setThemeAccent('system');
     await store.importBackup(backup);
     expect(store.themeAccent, 'teal');
 
     final oldBackup = jsonDecode(backup) as Map<String, dynamic>;
+    oldBackup['themeAccent'] = 'brand';
+    await store.importBackup(jsonEncode(oldBackup));
+    expect(store.themeAccent, 'system');
+
     oldBackup.remove('themeAccent');
     await store.setThemeAccent('ocean');
     await store.importBackup(jsonEncode(oldBackup));
