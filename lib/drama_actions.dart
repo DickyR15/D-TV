@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'follow_state.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'widgets.dart';
@@ -19,16 +18,6 @@ Future<void> showDramaActions(
     if (onContinue != null && store.watched(drama.id) != null)
       ('continue', '繼續觀看', Icons.play_arrow_rounded),
     ('favorite', following == null ? '加入收藏' : '取消收藏', Icons.bookmark_outline),
-    for (final status in FollowStatus.values)
-      (
-        'status:${status.name}',
-        '標記${status.label}',
-        switch (status) {
-          FollowStatus.planned => Icons.bookmark_add_outlined,
-          FollowStatus.watching => Icons.play_circle_outline,
-          FollowStatus.watched => Icons.check_circle_outline,
-        },
-      ),
     if (following != null && following.hasUpdates)
       ('read', '標記 ${following.updateLabel}已讀', Icons.mark_email_read_outlined),
     if (history && store.watched(drama.id) != null)
@@ -47,18 +36,9 @@ Future<void> showDramaActions(
                 Icon(entry.$2.$3, size: 22),
                 const SizedBox(width: 14),
                 Expanded(child: Text(entry.$2.$2)),
-                if (entry.$2.$1 == 'status:${following?.status.name}')
-                  const Icon(Icons.check_rounded, size: 20),
               ],
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 10, 24, 8),
-          child: Text(
-            '手動標記已看會保留真實播放進度。',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ),
       ],
     ),
   );
@@ -66,13 +46,6 @@ Future<void> showDramaActions(
       !context.mounted ||
       epoch != store.profileEpoch ||
       !store.allowsSource(drama.source)) {
-    return;
-  }
-  if (choice.startsWith('status:')) {
-    final status = FollowStatus.values.firstWhere(
-      (value) => choice == 'status:${value.name}',
-    );
-    await saveUserChange(context, () => store.setFollowStatus(drama, status));
     return;
   }
   switch (choice) {
