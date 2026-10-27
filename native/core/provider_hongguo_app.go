@@ -48,7 +48,7 @@ type hongguoAppClient struct {
 	pending             map[string]*hongguoDetailCall
 	searches            map[string]hongguoSearchEntry
 	searchPending       map[string]*hongguoSearchCall
-	searchIDs           map[string]string
+	searchCursors       map[string]hongguoSearchCursor
 	suggestions         map[string]hongguoSuggestionEntry
 	suggestPending      map[string]*hongguoSuggestionCall
 	danmaku             map[string]hongguoDanmakuCacheEntry
@@ -61,7 +61,7 @@ func (downloader *Downloader) hongguoClient() *hongguoAppClient {
 			baseURL: hongguoAppBaseURL,
 			state:   hongguoCatalogState{Version: 1, DeviceID: newHongguoDeviceID(), InstallID: newHongguoDeviceID(), Feeds: map[string]hongguoCatalogCursor{}},
 			details: map[string]hongguoDetailEntry{}, pending: map[string]*hongguoDetailCall{},
-			searches: map[string]hongguoSearchEntry{}, searchPending: map[string]*hongguoSearchCall{}, searchIDs: map[string]string{},
+			searches: map[string]hongguoSearchEntry{}, searchPending: map[string]*hongguoSearchCall{}, searchCursors: map[string]hongguoSearchCursor{},
 			suggestions: map[string]hongguoSuggestionEntry{}, suggestPending: map[string]*hongguoSuggestionCall{},
 		}
 	})
