@@ -189,7 +189,6 @@ class DiaryService {
     await refreshNativeLogs();
     if (!context.mounted) return;
     final logFocus = FocusNode(debugLabel: 'playback-debug-log-list');
-    final topCopyFocus = FocusNode(debugLabel: 'playback-log-copy-all');
     final clearFocus = FocusNode(debugLabel: 'playback-log-clear');
     final exportFocus = FocusNode(debugLabel: 'playback-log-export');
     final copyFocus = FocusNode(debugLabel: 'playback-log-copy');
@@ -208,10 +207,8 @@ class DiaryService {
           identical(current, target) || target.hasPrimaryFocus;
 
       if (key == LogicalKeyboardKey.arrowLeft) {
-        if (isCurrent(topCopyFocus)) {
-          clearFocus.requestFocus();
-        } else if (isCurrent(clearFocus)) {
-          topCopyFocus.requestFocus();
+        if (isCurrent(clearFocus)) {
+          logFocus.requestFocus();
         } else if (isCurrent(exportFocus)) {
           closeFocus.requestFocus();
         } else if (isCurrent(copyFocus)) {
@@ -219,21 +216,17 @@ class DiaryService {
         } else if (isCurrent(closeFocus)) {
           copyFocus.requestFocus();
         } else {
-          topCopyFocus.requestFocus();
+          clearFocus.requestFocus();
         }
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowRight) {
-        if (isCurrent(topCopyFocus)) {
-          clearFocus.requestFocus();
-        } else if (isCurrent(clearFocus)) {
-          topCopyFocus.requestFocus();
+        if (isCurrent(clearFocus)) {
+          logFocus.requestFocus();
         } else if (isCurrent(exportFocus)) {
           copyFocus.requestFocus();
         } else if (isCurrent(copyFocus)) {
           closeFocus.requestFocus();
-        } else if (isCurrent(closeFocus)) {
-          exportFocus.requestFocus();
         } else {
           exportFocus.requestFocus();
         }
@@ -244,15 +237,15 @@ class DiaryService {
             isCurrent(copyFocus) ||
             isCurrent(closeFocus)) {
           logFocus.requestFocus();
-        } else if (isCurrent(topCopyFocus) || isCurrent(clearFocus)) {
+        } else if (isCurrent(clearFocus)) {
           return KeyEventResult.handled;
         } else if (isCurrent(logFocus)) {
-          topCopyFocus.requestFocus();
+          clearFocus.requestFocus();
         }
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowDown) {
-        if (isCurrent(topCopyFocus) || isCurrent(clearFocus)) {
+        if (isCurrent(clearFocus)) {
           logFocus.requestFocus();
         } else if (isCurrent(logFocus)) {
           exportFocus.requestFocus();
@@ -302,12 +295,6 @@ class DiaryService {
                 ),
               ),
               IconButton(
-                focusNode: topCopyFocus,
-                icon: const Icon(Icons.copy_rounded, color: Colors.white70),
-                tooltip: '複製全部紀錄',
-                onPressed: () => copyToClipboard(dialogContext),
-              ),
-              IconButton(
                 focusNode: clearFocus,
                 icon: const Icon(
                   Icons.delete_outline_rounded,
@@ -349,7 +336,7 @@ class DiaryService {
                   child: _PlaybackLogList(
                     entries: list,
                     focusNode: logFocus,
-                    topCopyFocus: topCopyFocus,
+                    clearFocus: clearFocus,
                     exportFocus: exportFocus,
                   ),
                 );
@@ -384,7 +371,6 @@ class DiaryService {
     } finally {
       for (final node in [
         logFocus,
-        topCopyFocus,
         clearFocus,
         exportFocus,
         copyFocus,
@@ -401,13 +387,13 @@ class _PlaybackLogList extends StatefulWidget {
   const _PlaybackLogList({
     required this.entries,
     required this.focusNode,
-    required this.topCopyFocus,
+    required this.clearFocus,
     required this.exportFocus,
   });
 
   final List<String> entries;
   final FocusNode focusNode;
-  final FocusNode topCopyFocus;
+  final FocusNode clearFocus;
   final FocusNode exportFocus;
 
   @override
@@ -423,7 +409,7 @@ class _PlaybackLogListState extends State<_PlaybackLogList> {
     }
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowLeft) {
-      widget.topCopyFocus.requestFocus();
+      widget.clearFocus.requestFocus();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight) {
@@ -454,7 +440,7 @@ class _PlaybackLogListState extends State<_PlaybackLogList> {
       if (movingDown) {
         widget.exportFocus.requestFocus();
       } else {
-        widget.topCopyFocus.requestFocus();
+        widget.clearFocus.requestFocus();
       }
     }
     return KeyEventResult.handled;
