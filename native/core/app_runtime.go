@@ -284,10 +284,7 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	// The Hongguo backup playback API rejects the default ALPN offer with
 	// "tls: no application protocol". Use a dedicated no-ALPN HTTP/1.1
 	// transport for that hostname only; keep normal negotiation elsewhere.
-	hongguoBackupHTTP1 := transport.Clone()
-	hongguoBackupHTTP1.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-	hongguoBackupHTTP1.ForceAttemptHTTP2 = false
-	hongguoBackupHTTP1.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	hongguoBackupHTTP1 := newHTTP1NoALPNTransport(transport)
 	providerTransport := &hostProtocolFallbackTransport{
 		base: cdn, fallback: hongguoBackupHTTP1, host: "djapi.999888456.xyz",
 	}
