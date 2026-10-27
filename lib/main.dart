@@ -92,6 +92,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     MediaLibrary.current?.dispose();
     MediaLibrary.current = null;
     _sourceAutoCheckTimer?.cancel();
+    SourceAutoMaintenance.shutdown();
     store?.dispose();
     super.dispose();
   }
