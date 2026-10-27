@@ -632,3 +632,134 @@ func TestNativeStreamTransportReusesAnIdleConnection(t *testing.T) {
 		t.Fatalf("opened %d TCP connections for two sequential reads, want one reused connection", got)
 	}
 }
+
+
+func TestNativeStreamHostCooldownEscalatesAfterRepeatedFailureEpisodes(t *testing.T) {
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	downloader := engine.downloader
+	address := "https://cdn.example.test/video.mp4"
+	parsed, err := url.Parse(address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := strings.ToLower(parsed.Hostname())
+
+	downloader.rememberNativeStreamHostFailure(address, "tls")
+	readState := func() nativeStreamHostFailureState {
+		downloader.streamHostMu.Lock()
+		defer downloader.streamHostMu.Unlock()
+		return downloader.streamHostFailures[host]
+	}
+	first := readState()
+	if first.consecutive != 1 {
+		t.Fatalf("first failure streak=%d, want 1", first.consecutive)
+	}
+	if remaining := time.Until(first.until); remaining < nativeStreamHostFailureCooldown-time.Second ||
+		remaining > nativeStreamHostFailureCooldown+time.Second {
+		t.Fatalf("first cooldown remaining=%s, want about %s", remaining, nativeStreamHostFailureCooldown)
+	}
+
+	// Parallel errors while the same penalty is active are not separate retry
+	// episodes and must not immediately drive the host to maximum backoff.
+	downloader.rememberNativeStreamHostFailure(address, "timeout")
+	if got := readState().consecutive; got != 1 {
+		t.Fatalf("failure count increased during active cooldown: %d", got)
+	}
+
+	// Simulate the caller retrying after the cooldown elapsed, without sleeping
+	// for the real 90 seconds.
+	downloader.streamHostMu.Lock()
+	state := downloader.streamHostFailures[host]
+	state.until = time.Now().Add(-time.Second)
+	downloader.streamHostFailures[host] = state
+	downloader.streamHostMu.Unlock()
+	downloader.rememberNativeStreamHostFailure(address, "tls")
+	second := readState()
+	if second.consecutive != 2 {
+		t.Fatalf("second failure streak=%d, want 2", second.consecutive)
+	}
+	wantCooldown := nativeStreamHostCooldownForFailures(2)
+	if remaining := time.Until(second.until); remaining < wantCooldown-time.Second ||
+		remaining > wantCooldown+time.Second {
+		t.Fatalf("second cooldown remaining=%s, want about %s", remaining, wantCooldown)
+	}
+
+	downloader.clearNativeStreamHostFailure(address)
+	if downloader.nativeStreamHostCoolingDown(address) {
+		t.Fatal("a successful stream should clear both cooldown and failure streak")
+	}
+	downloader.rememberNativeStreamHostFailure(address, "tls")
+	if got := readState().consecutive; got != 1 {
+		t.Fatalf("failure streak after successful recovery=%d, want 1", got)
+	}
+}
+
+func TestNativeStreamErrorClassifiesTLSHandshakeTimeout(t *testing.T) {
+	wrapped := &url.Error{
+		Op:  "Get",
+		URL: "https://private.example.test/video.mp4?token=secret",
+		Err: errors.New("net/http: TLS handshake timeout"),
+	}
+	if got := nativeStreamError(wrapped); got != "tls" {
+		t.Fatalf("TLS handshake timeout classified as %q, want tls", got)
+	}
+}
+
+func TestNativeStreamLogsIncompleteTransferByteRange(t *testing.T) {
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := newNativeStreamServer(engine.downloader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.server.Close()
+
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://cdn.example.test/video.mp4?token=secret", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := &http.Response{
+		StatusCode:    http.StatusOK,
+		Header:        make(http.Header),
+		Body:          io.NopCloser(strings.NewReader("")),
+		ContentLength: -1,
+		Request:       request,
+	}
+	response.Header.Set("Content-Type", "video/mp4")
+	var destination bytes.Buffer
+	written, err := stream.nativeCopyMediaWithResume(
+		context.Background(),
+		&destination,
+		request,
+		request.URL.String(),
+		response,
+		nativeStreamIdleTimeoutReader{},
+		nativeStreamDiagnostic{request: 77, session: "transfer-test", asset: "media", method: http.MethodGet, started: time.Now()},
+	)
+	if !errors.Is(err, errNativeStreamIdleTimeout) || written != 0 {
+		t.Fatalf("written=%d error=%v, want zero bytes and idle timeout", written, err)
+	}
+	_, diagnosticText := streamDiagnosticEvents(t, stream)
+	for _, marker := range []string{
+		"stream.transfer_incomplete",
+		"stage=resume_unavailable_or_exhausted",
+		"bytes_forwarded=0",
+		"expected_bytes=0",
+		"resumable=false",
+		"range_start=0",
+		"range_end=0",
+		"total_bytes=0",
+	} {
+		if !strings.Contains(diagnosticText, marker) {
+			t.Errorf("missing incomplete-transfer diagnostic %q", marker)
+		}
+	}
+	if strings.Contains(diagnosticText, "token=secret") {
+		t.Fatal("transfer diagnostics leaked a signed media URL")
+	}
+}
