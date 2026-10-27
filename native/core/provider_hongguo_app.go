@@ -36,6 +36,7 @@ type hongguoCatalogState struct {
 	Registered bool                            `json:"registered,omitempty"`
 	HelperDeviceID  string                          `json:"helperDeviceId,omitempty"`
 	HelperInstallID string                          `json:"helperInstallId,omitempty"`
+	HelperRegistered bool                           `json:"helperRegistered,omitempty"`
 	Feeds      map[string]hongguoCatalogCursor `json:"feeds"`
 }
 
