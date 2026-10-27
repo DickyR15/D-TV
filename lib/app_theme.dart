@@ -9,7 +9,7 @@ abstract final class AppTheme {
   static const brandAccent = Color(0xFFFF526D);
 
   static const accentOptions = <String>[
-    'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+    'system', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
   ];
 
   static String accentLabel(String value) => switch (value) {
@@ -20,7 +20,7 @@ abstract final class AppTheme {
     'teal' => '青綠',
     'ocean' => '海藍',
     'indigo' => '藍紫',
-    _ => 'D-TV 品牌色',
+    _ => '跟隨系統取色',
   };
 
   static Color? accentFor(String value, {Color? systemAccent}) => switch (value) {
@@ -34,8 +34,10 @@ abstract final class AppTheme {
     _ => null,
   };
 
-  static Color accentPreview(String value) =>
-      accentFor(value) ?? brandAccent;
+  static Color accentPreview(String value) => switch (value) {
+    'system' => const Color(0xFF8992A6),
+    _ => accentFor(value) ?? const Color(0xFF8992A6),
+  };
 
   static ThemeData lightFor(Color? accent) =>
       accent == null ? light : _theme(Brightness.light, accent: accent);
