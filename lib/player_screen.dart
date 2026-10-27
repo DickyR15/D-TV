@@ -18,7 +18,6 @@ import 'source_auto_maintenance.dart';
 import 'playback_diagnostics.dart';
 import 'danmaku_controller.dart';
 import 'danmaku_overlay.dart';
-import 'follow_state.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'playback_loader.dart';
@@ -2718,63 +2717,23 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _mobileFollowControl(Drama drama) {
-    final state = widget.store.following(drama.id);
-    return PopupMenuButton<String>(
-      key: const ValueKey('player-follow-status'),
-      tooltip: '收藏與觀看狀態',
-      onSelected: (value) async {
+    final following = widget.store.following(drama.id);
+    return FilledButton.tonalIcon(
+      key: const ValueKey('player-favorite-toggle'),
+      onPressed: () async {
         if (_profileEpoch != widget.store.profileEpoch) return;
-        if (value == 'remove') {
-          await saveUserChange(
-            context,
-            () => widget.store.toggleFavorite(drama),
-          );
-        } else {
-          final status = FollowStatus.values.firstWhere(
-            (status) => status.name == value,
-          );
-          await saveUserChange(
-            context,
-            () => widget.store.setFollowStatus(drama, status),
-          );
-        }
+        await saveUserChange(
+          context,
+          () => widget.store.toggleFavorite(drama),
+        );
         if (mounted && !_closed) setState(() {});
       },
-      itemBuilder: (_) => [
-        for (final status in FollowStatus.values)
-          CheckedPopupMenuItem(
-            value: status.name,
-            checked: state?.status == status,
-            child: Text(status.label),
-          ),
-        if (state != null)
-          const PopupMenuItem(value: 'remove', child: Text('取消收藏')),
-      ],
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 36),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: state == null
-              ? Theme.of(context).colorScheme.surfaceContainerHighest
-              : Theme.of(context).colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              state == null
-                  ? Icons.bookmark_add_outlined
-                  : Icons.bookmark_rounded,
-              size: 18,
-            ),
-            const SizedBox(width: 6),
-            Text(state?.label ?? '加入收藏'),
-            const SizedBox(width: 2),
-            const Icon(Icons.expand_more_rounded, size: 16),
-          ],
-        ),
+      icon: Icon(
+        following == null
+            ? Icons.bookmark_add_outlined
+            : Icons.bookmark_remove_outlined,
       ),
+      label: Text(following == null ? '加入收藏' : '取消收藏'),
     );
   }
 
