@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -26,7 +27,6 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late TelevisionDecoder _decoder =
       widget.store.playbackPreferences.televisionDecoder;
   bool? _compatibleRendering;
-  bool _saving = false;
   final FocusNode _speedFocus = FocusNode(debugLabel: 'playback-default-speed');
 
   @override
@@ -55,9 +55,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
     if (mounted) setState(() => _compatibleRendering = value);
   }
 
-  Future<void> _save() async {
-    if (_saving) return;
-    setState(() => _saving = true);
+  Future<void> _persistPreferences() async {
     try {
       final current = widget.store.playbackPreferences;
       await widget.store.setPlaybackPreferences(
@@ -67,20 +65,28 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           televisionDecoder: _decoder,
         ),
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('播放預設已儲存，將套用於後續播放')),
-        );
-      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('播放預設儲存失敗：$error')),
+          SnackBar(content: Text('設定自動儲存失敗：$error')),
         );
       }
-    } finally {
-      if (mounted) setState(() => _saving = false);
     }
+  }
+
+  void _updateSpeed(double value) {
+    setState(() => _speed = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateQuality(int value) {
+    setState(() => _quality = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateDecoder(TelevisionDecoder value) {
+    setState(() => _decoder = value);
+    unawaited(_persistPreferences());
   }
 
   Future<void> _setCompatibleRendering(bool enabled) async {
@@ -128,12 +134,6 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: const Text('播放'),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : _save,
-          child: const Text('儲存'),
-        ),
-      ],
     ),
     body: Center(
       child: ConstrainedBox(
@@ -157,8 +157,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                     child: Text('${speed.toStringAsFixed(speed == 1 ? 1 : 2)}x'),
                   ),
               ],
-              onChanged: _saving ? null : (value) {
-                if (value != null) setState(() => _speed = value);
+              onChanged: (value) {
+                if (value != null) _updateSpeed(value);
               },
             ),
             const SizedBox(height: 20),
@@ -176,8 +176,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                     child: Text(_qualityLabel(quality)),
                   ),
               ],
-              onChanged: _saving ? null : (value) {
-                if (value != null) setState(() => _quality = value);
+              onChanged: (value) {
+                if (value != null) _updateQuality(value);
               },
             ),
             if (Platform.isAndroid && AppLayout.isTelevision(context)) ...[
@@ -203,10 +203,10 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                     child: Text('軟體解碼（相容）'),
                   ),
                 ],
-                onChanged: _saving || _androidPlayerEngine == 'mpv_embed'
+                onChanged: _androidPlayerEngine == 'mpv_embed'
                     ? null
                     : (value) {
-                        if (value != null) setState(() => _decoder = value);
+                        if (value != null) _updateDecoder(value);
                       },
               ),
               if (_androidPlayerEngine == 'mpv_embed')
@@ -236,7 +236,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速與清晰度會保存到目前使用者。切換解碼方式只影響支援該選項的建置；相容渲染設定會在重新啟動後生效。',
+              '倍速、清晰度及支援的解碼方式會在變更時自動儲存。相容渲染設定會在重新啟動後生效。',
             ),
           ],
         ),
