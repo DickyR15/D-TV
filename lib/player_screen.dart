@@ -2477,6 +2477,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                           onPressed: () => DiaryService.showDiaryDialog(
                             context,
                             onDialogDismissed: _recordNestedRoutePop,
+                            clearNativeLogs: widget.repository.clearDiagnostics,
                           ),
                           icon: const Icon(Icons.receipt_long_rounded),
                           label: const Text('檢視播放紀錄'),
