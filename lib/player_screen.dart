@@ -2343,18 +2343,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Widget _videoOutput({
-    required BoxFit fit,
-    required Widget Function(BuildContext) controls,
-  }) {
+  Widget _videoOutput({required BoxFit fit, required Widget controls}) {
     if (_player is LunaExoPlayer) {
       return LunaExoVideoView(
         player: _player as LunaExoPlayer,
         fit: fit,
-        controls: controls,
+        controls: (_) => controls,
       );
     }
-    return Video(controller: _video!, fit: fit, controls: controls);
+    return Video(controller: _video!, fit: fit, controls: (_) => controls);
   }
 
   Widget _videoPane(BuildContext context) {
@@ -2477,7 +2474,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                               scale: 1.22,
                               child: _videoOutput(
                                 fit: BoxFit.cover,
-                                controls: (_) => const SizedBox.shrink(),
+                                controls: const SizedBox.shrink(),
                               ),
                             ),
                           ),
@@ -2492,7 +2489,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               else
                 _videoOutput(
                   fit: BoxFit.contain,
-                  controls: (_) => layeredControls,
+                  controls: layeredControls,
                 ),
               if (_loading &&
                   _showLoadingOverlay &&
