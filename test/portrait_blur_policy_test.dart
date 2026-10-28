@@ -23,7 +23,10 @@ void main() {
     expect(eligible(loading: true), isFalse);
     expect(eligible(hasError: true), isFalse);
     expect(eligible(aspectRatio: 16 / 9), isFalse);
+    expect(eligible(aspectRatio: 0.999), isTrue);
+    expect(eligible(aspectRatio: 1.0), isFalse);
     expect(eligible(aspectRatio: 0), isFalse);
     expect(eligible(aspectRatio: double.nan), isFalse);
+    expect(eligible(aspectRatio: double.infinity), isFalse);
   });
 }
