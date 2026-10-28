@@ -9,30 +9,34 @@ import 'fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('portrait blur switch defaults off and auto-saves', (tester) async {
+  testWidgets('1.0.0 hides deferred blur control and keeps auto-save', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final store = testStore(await SharedPreferences.getInstance());
     addTearDown(store.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: PlaybackSettingsScreen(store: store, portraitBlurSupported: true),
-      ),
+      MaterialApp(home: PlaybackSettingsScreen(store: store)),
     );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('playback-default-speed')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-default-quality')), findsOneWidget);
-    final switchFinder = find.byKey(const ValueKey('playback-portrait-blur-background'));
-    expect(switchFinder, findsOneWidget);
-    expect(tester.widget<SwitchListTile>(switchFinder).value, isFalse);
+    expect(find.byKey(const ValueKey('playback-portrait-blur-background')), findsNothing);
+    expect(find.text('直式影片模糊背景'), findsNothing);
 
-    await tester.tap(switchFinder);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 10));
-    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('playback-default-speed')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1.25x').last);
+    await tester.pumpAndSettle();
 
-    expect(store.playbackPreferences.portraitBlurBackground, isTrue);
-    expect(PlaybackPreferences.fromJson(store.playbackPreferences.toJson()).portraitBlurBackground, isTrue);
+    expect(store.playbackPreferences.speed, 1.25);
+    expect(
+      PlaybackPreferences.fromJson(store.playbackPreferences.toJson()).speed,
+      1.25,
+    );
+    expect(
+      store.playbackPreferences.toJson().containsKey('portraitBlurBackground'),
+      isFalse,
+    );
   });
 }

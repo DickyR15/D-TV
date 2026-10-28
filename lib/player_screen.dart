@@ -36,8 +36,6 @@ import 'lan_controller.dart';
 import 'lan_screen.dart';
 import 'video_enhancement.dart';
 import 'video_output_size.dart';
-import 'portrait_blur_background.dart';
-import 'portrait_blur_policy.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
@@ -155,7 +153,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   String? _saveWarning;
   PlaybackPlan? _plan;
   double _speed = 1;
-  bool _portraitBlurBackground = false;
   double _aspectRatio = 9 / 16;
   double _resumePosition = 0;
   bool _rotating = false;
@@ -193,7 +190,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     danmaku: _danmakuEnabled,
     preload: _preloadEnabled,
     enhancement: _enhancement.preferences,
-    portraitBlurBackground: _portraitBlurBackground,
     televisionDecoder: _televisionDecoder,
   );
   String get _qualityLabel => _plan?.local == true
@@ -220,7 +216,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       unawaited(widget.store.migrateDanmakuDefaultOff());
     }
     _speed = preferences.speed;
-    _portraitBlurBackground = preferences.portraitBlurBackground;
     _requestedQuality = preferences.quality;
     _autoAdvance = true;
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
@@ -1842,7 +1837,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       _autoAdvance = true;
       _danmakuEnabled = nextPreferences.danmaku;
       _preloadEnabled = true;
-      _portraitBlurBackground = nextPreferences.portraitBlurBackground;
       _televisionDecoder = nextPreferences.televisionDecoder;
     });
     _danmaku.setEnabled(_danmakuEnabled);
@@ -2358,25 +2352,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         controls: (_) => controls,
       );
     }
-    final portraitBlurActive = shouldUsePortraitBlurBackground(
-      enabled: _portraitBlurBackground,
-      mpvEmbedBackend: _mpvEmbedBackend,
-      loading: _loading,
-      hasError: _error != null,
-      aspectRatio: _aspectRatio,
-    );
-    final video = Video(
+    return Video(
       controller: _video!,
       fit: fit,
-      fill: portraitBlurActive ? Colors.transparent : Colors.black,
+      fill: Colors.black,
       controls: (_) => controls,
-    );
-    if (!_mpvEmbedBackend) return video;
-    return PortraitBlurBackground(
-      player: _player,
-      active: portraitBlurActive,
-      onDiagnostic: (message) => DiaryService.add('[PortraitBlur] $message'),
-      child: video,
     );
   }
 
