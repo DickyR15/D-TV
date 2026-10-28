@@ -2464,7 +2464,15 @@ class _PlayerScreenState extends State<PlayerScreen>
         controls: (_) => controls,
       );
     }
-    return Video(controller: _video!, fit: fit, controls: (_) => controls);
+    // The default Video.fill is opaque black, which hides the blurred
+    // backdrop beneath the letterboxed area. Transparent fill lets the
+    // captured-frame background show through without stretching the video.
+    return Video(
+      controller: _video!,
+      fit: fit,
+      fill: Colors.transparent,
+      controls: (_) => controls,
+    );
   }
 
   Widget _videoPane(BuildContext context) {
