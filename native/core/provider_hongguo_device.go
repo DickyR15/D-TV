@@ -44,6 +44,32 @@ func (downloader *Downloader) ensureHongguoDevice(ctx context.Context, rejected 
 	return nil
 }
 
+func (downloader *Downloader) ensureHongguoHelperDevice(ctx context.Context, rejected string) error {
+	client := downloader.hongguoClient()
+	client.deviceMu.Lock()
+	defer client.deviceMu.Unlock()
+	client.mu.Lock()
+	current := client.state.HelperDeviceID
+	client.mu.Unlock()
+	if rejected == "" && current != "" || rejected != "" && rejected != current {
+		return nil
+	}
+	if time.Now().Before(client.registerPausedUntil) {
+		return errors.New("红果设备注册暂不可用")
+	}
+	deviceID, installID, err := downloader.registerHongguoDevice(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			client.registerPausedUntil = time.Now().Add(hongguoDeviceRegisterPause)
+		}
+		return err
+	}
+	client.mu.Lock()
+	client.state.HelperDeviceID, client.state.HelperInstallID = deviceID, installID
+	client.mu.Unlock()
+	return nil
+}
+
 func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string, string, error) {
 	header := map[string]any{
 		"display_name": "红果免费短剧", "aid": 8662, "app_version": "7.3.5.32", "version_code": 73532,
