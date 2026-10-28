@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -48,11 +49,18 @@ class _PortraitBlurBackgroundState extends State<PortraitBlurBackground> {
   bool _capturing = false;
   bool _disabledForSession = false;
   bool _reportedFailure = false;
+  bool _timingsRegistered = false;
+  int _successfulCaptures = 0;
+  Duration _maxBuildDuration = Duration.zero;
+  Duration _maxRasterDuration = Duration.zero;
 
   @override
   void initState() {
     super.initState();
-    if (widget.active) unawaited(_startCapture());
+    if (widget.active) {
+      _registerTimings(true);
+      unawaited(_startCapture());
+    }
   }
 
   @override
@@ -60,9 +68,35 @@ class _PortraitBlurBackgroundState extends State<PortraitBlurBackground> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.player != widget.player || oldWidget.active != widget.active) {
       if (!widget.active || oldWidget.player != widget.player) {
+        _registerTimings(false);
         _stopCapture(clearFrame: true);
       }
-      if (widget.active) unawaited(_startCapture());
+      if (widget.active) {
+        _registerTimings(true);
+        unawaited(_startCapture());
+      }
+    }
+  }
+
+  void _registerTimings(bool enabled) {
+    if (enabled && !_timingsRegistered) {
+      SchedulerBinding.instance.addTimingsCallback(_onFrameTimings);
+      _timingsRegistered = true;
+    } else if (!enabled && _timingsRegistered) {
+      SchedulerBinding.instance.removeTimingsCallback(_onFrameTimings);
+      _timingsRegistered = false;
+    }
+  }
+
+  void _onFrameTimings(List<FrameTiming> timings) {
+    if (!widget.active || _frame == null) return;
+    for (final timing in timings) {
+      if (timing.buildDuration > _maxBuildDuration) {
+        _maxBuildDuration = timing.buildDuration;
+      }
+      if (timing.rasterDuration > _maxRasterDuration) {
+        _maxRasterDuration = timing.rasterDuration;
+      }
     }
   }
 
@@ -108,6 +142,7 @@ class _PortraitBlurBackgroundState extends State<PortraitBlurBackground> {
   void _stopCapture({required bool clearFrame}) {
     _timer?.cancel();
     _timer = null;
+    _registerTimings(false);
     _mpv?.closed = true;
     _mpv = null;
     _consecutiveFailures = 0;
@@ -133,6 +168,7 @@ class _PortraitBlurBackgroundState extends State<PortraitBlurBackground> {
       return;
     }
     _capturing = true;
+    final captureWatch = Stopwatch()..start();
     final file = File(
       p.join(directory.path, 'frame_' + (++_sequence).toString() + '.jpg'),
     );
@@ -148,7 +184,15 @@ class _PortraitBlurBackgroundState extends State<PortraitBlurBackground> {
       if (!mounted || !widget.active) return;
       _consecutiveFailures = 0;
       _reportedFailure = false;
+      _successfulCaptures++;
       setState(() => _frame = bytes);
+      if (_successfulCaptures == 1 || _successfulCaptures % 10 == 0) {
+        widget.onDiagnostic(
+          '影格擷取成功 #$_successfulCaptures：JPEG ${bytes.length} bytes；擷取／解碼 ${captureWatch.elapsedMilliseconds} ms；Flutter build 最大 ${_maxBuildDuration.inMilliseconds} ms；raster 最大 ${_maxRasterDuration.inMilliseconds} ms',
+        );
+        _maxBuildDuration = Duration.zero;
+        _maxRasterDuration = Duration.zero;
+      }
     } catch (error) {
       _recordFailure('影格擷取失敗：$error');
     } finally {
@@ -220,6 +264,8 @@ class _PortraitBlurBackgroundState extends State<PortraitBlurBackground> {
       _disabledForSession = true;
       _timer?.cancel();
       _timer = null;
+      _registerTimings(false);
+      if (_frame != null && mounted) setState(() => _frame = null);
       widget.onDiagnostic('連續三次無法取得有效影格，已停用本次模糊背景擷取');
     }
   }
@@ -227,6 +273,7 @@ class _PortraitBlurBackgroundState extends State<PortraitBlurBackground> {
   @override
   void dispose() {
     _timer?.cancel();
+    _registerTimings(false);
     _mpv?.closed = true;
     final directory = _directory;
     if (directory != null) {

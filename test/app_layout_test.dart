@@ -4,10 +4,6 @@ import 'package:hgtv/app_layout.dart';
 
 void main() {
   test('fallback app version matches the 1.0.0 candidate build', () {
-    expect(appVersion, '1.0.0+339');
-  });
-
-  test('fallback app version matches the 1.0.0 candidate build', () {
     expect(appVersion, '1.0.0+340');
   });
 
