@@ -260,7 +260,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pinAuthor = !widget.embedded && AppLayout.isTelevision(context);
+    // Pin the author row to the bottom in TV mode even when SettingsScreen is
+    // embedded inside the home shell. In the embedded TV route, an inert row
+    // at the end of ListView cannot reliably receive D-pad focus to scroll into
+    // view, so it must not depend on list navigation.
+    final pinAuthor = AppLayout.isTelevision(context);
     final settings = AnimatedBuilder(
     animation: widget.store,
     builder: (_, _) => Scaffold(

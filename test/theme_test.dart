@@ -175,7 +175,7 @@ void main() {
     expect(find.text('DickyR15'), findsOneWidget);
   });
 
-  testWidgets('TV settings keeps author visible in a short viewport', (
+  testWidgets('embedded TV settings pins author footer in a short viewport', (
     tester,
   ) async {
     final store = await localStore();
@@ -186,7 +186,11 @@ void main() {
       AppLayout(
         television: true,
         child: MaterialApp(
-          home: SettingsScreen(repository: NativeRepository(), store: store),
+          home: SettingsScreen(
+          repository: NativeRepository(),
+          store: store,
+          embedded: true,
+        ),
         ),
       ),
     );
