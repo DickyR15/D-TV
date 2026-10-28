@@ -58,6 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
   int _tabBeforeSettings = 4;
   bool _initialTabResolved = false;
+  FormFactor? _lastFormFactor;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
   late final CatalogBrowser _browser;
@@ -811,16 +812,25 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_initialTabResolved) return;
-    _initialTabResolved = true;
+    final formFactor = AppLayout.formFactorOf(context);
+    if (!_initialTabResolved) {
+      _initialTabResolved = true;
+      _lastFormFactor = formFactor;
+      if (formFactor == FormFactor.television) _tab = 4;
+      return;
+    }
+    if (_lastFormFactor == formFactor) return;
 
-    // Large-screen layouts open directly on the Redfruit Hot ranking.
-    // Narrow/mobile layouts keep the catalog tab so bottom navigation remains valid.
-    // TV starts on the Redfruit ranking as before; phone, pad and window
-    // modes start on the catalog, like the upstream app's Explore entry.
-    final wideHome =
-        AppLayout.formFactorOf(context) == FormFactor.television;
-    if (wideHome) _tab = 4;
+    final wasTelevision = _lastFormFactor == FormFactor.television;
+    _lastFormFactor = formFactor;
+    // The TV-only rankings tab is outside the phone bottom-navigation range.
+    // Reset to the catalog when leaving TV mode; entering TV mode starts at
+    // the default hot ranking as it does on a fresh launch.
+    if (formFactor == FormFactor.television) {
+      _tab = 4;
+    } else if (wasTelevision || _tab >= 3) {
+      _tab = 0;
+    }
   }
 
   @override
@@ -1279,6 +1289,11 @@ class _HomeScreenState extends State<HomeScreen> {
         final compactBrandBar =
             television || (Platform.isAndroid && desktop);
         final wide = television || desktop;
+        final wideControls = wide && constraints.maxWidth >= 840;
+        final brandHeaderWidth = (
+          constraints.maxWidth -
+          (desktop && constraints.maxWidth < 840 ? 360.0 : 220.0)
+        ).clamp(220.0, 460.0).toDouble();
         final bannerWidth = (constraints.maxWidth -
                 (constraints.maxWidth >= 1450 ? 600.0 : 530.0))
             .clamp(300.0, 980.0)
@@ -1293,7 +1308,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 : null,
             titleSpacing: 12,
             title: compactBrandBar
-                ? _compactBrandHeader(width: constraints.maxWidth - 220)
+                ? _compactBrandHeader(width: brandHeaderWidth)
                 : wide
                 ? _homeBrandBanner(
                     width: bannerWidth,
@@ -1350,7 +1365,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     : _brandTitle()
                   ),
             actions: [
-                if (wide && (_isCatalogTab || _isRankingTab)) ...[
+                if (wideControls && (_isCatalogTab || _isRankingTab)) ...[
                   SizedBox(
                     width: constraints.maxWidth >= 1450 ? 340 : 260,
                     height: 48,
@@ -1449,7 +1464,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.sync_rounded),
                   ),
                 if (_isCatalogTab) ...[
-                  if (!television && !desktop)
+                  if (!television && (!desktop || constraints.maxWidth < 840))
                     IconButton(
                       key: const ValueKey('open-rankings'),
                       tooltip: '熱播榜單',
@@ -1458,7 +1473,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           : _openRankings,
                       icon: const Icon(Icons.leaderboard_outlined),
                     ),
-                  if (!wide)
+                  if (!wideControls)
                     IconButton(
                     key: const ValueKey('toggle-search'),
                     tooltip: _searchVisible ? '收起搜尋' : '搜尋',
@@ -1471,7 +1486,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? null
                         : _toggleSearch,
                   ),
-                  if (television && !wide)
+                  if (television && !wideControls)
                     IconButton(
                       key: const ValueKey('phone-qr-search'),
                       tooltip: '手機掃描 QR Code',
