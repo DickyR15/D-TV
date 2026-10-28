@@ -2,6 +2,9 @@ package core
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -43,6 +46,53 @@ func TestRestoreHongguoCatalogKeepsWebsiteHistoryCursorBeyondPage500(t *testing.
 	cursor, ok := got.Feeds["web:real-drama"]
 	if !ok || !cursor.Initialized || cursor.Offset != 501 {
 		t.Fatalf("website history cursor at page 501 was not restored: %#v", got.Feeds["web:real-drama"])
+	}
+}
+
+
+func TestHongguoWebsiteHistoryContinuesBeyondPage500(t *testing.T) {
+	var calls int
+	bodyData := map[string]any{"loaderData": map[string]any{"category_page": map[string]any{
+		"isSuccess": true,
+		"pagination": map[string]any{"totalPages": 501},
+		"recommendList": func() []any {
+			rows := make([]any, 24)
+			for i := range rows {
+				rows[i] = map[string]any{"series_id": fmt.Sprintf("900%03d", i), "series_title": fmt.Sprintf("第 501 頁劇集 %d", i)}
+			}
+			return rows
+		}(),
+	}}}}
+	encoded, err := json.Marshal(bodyData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := "window._ROUTER_DATA = " + string(encoded) + ";"
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		calls++
+		if request.URL.Host != "hongguoduanju.com" || request.URL.Path != "/category/real-drama" || request.URL.Query().Get("page") != "501" {
+			t.Fatalf("unexpected website history request: %s", request.URL.String())
+		}
+		return sourceFixtureResponse(request, http.StatusOK, body), nil
+	})
+	client := d.hongguoClient()
+	client.mu.Lock()
+	client.state.Feeds = make(map[string]hongguoCatalogCursor)
+	for _, route := range hongguoWebCatalogRoutes {
+		client.state.Feeds["web:"+route.path] = hongguoCatalogCursor{Initialized: true, Exhausted: route.path != "real-drama", Offset: 500, PageSignature: "previous-page", UpdatedAt: time.Now()}
+	}
+	client.mu.Unlock()
+
+	items, err := d.fetchHongguoWebsiteCatalogPage(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || len(items) != 24 {
+		t.Fatalf("page 501 was not loaded on demand: requests=%d items=%d", calls, len(items))
+	}
+	cursor := d.hongguoCatalogSnapshot().Feeds["web:real-drama"]
+	if cursor.Offset != 501 || cursor.Exhausted {
+		t.Fatalf("website history stopped at page 501: %+v", cursor)
 	}
 }
 
