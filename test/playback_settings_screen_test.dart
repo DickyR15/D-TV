@@ -8,7 +8,7 @@ import 'fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('portrait blur background switch auto-saves and defaults off', (
+  testWidgets('1.0.0 playback settings omit deferred portrait blur option', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -20,20 +20,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final setting = find.byKey(
-      const ValueKey('playback-portrait-blur-background'),
-    );
-    expect(setting, findsOneWidget);
-    expect(tester.widget<SwitchListTile>(setting).value, isFalse);
+    expect(find.byKey(const ValueKey('playback-default-speed')), findsOneWidget);
+    expect(find.byKey(const ValueKey('playback-default-quality')), findsOneWidget);
     expect(
-      find.text('直式短劇左右以目前影片影格放大、模糊後填滿，不裁切中央影片；預設關閉。使用原生 MPV 影格擷取，不另開播放器，會定時更新背景；可能增加少量 GPU／CPU 負載。'),
-      findsOneWidget,
+      find.byKey(const ValueKey('playback-portrait-blur-background')),
+      findsNothing,
     );
-
-    await tester.tap(setting);
-    await tester.pumpAndSettle();
-    expect(store.playbackPreferences.portraitBlurBackground, isTrue);
-
-    await tester.pumpWidget(const SizedBox.shrink());
+    expect(find.text('直式影片模糊背景'), findsNothing);
   });
 }
