@@ -32,7 +32,9 @@ class AppOrientationController {
     bool fullscreen = false,
     double aspectRatio = 1,
   }) {
-    if (television || (aspectRatio >= 1 && (fullscreen || phone))) {
+    if (television ||
+        fullscreen && aspectRatio >= 1 ||
+        phone && aspectRatio > 1) {
       return const [
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
