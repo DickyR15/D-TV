@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' show ImageFilter;
 import 'dart:typed_data';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -2590,6 +2590,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                               child: Image.memory(
                                 _portraitBackdropFrame!,
                                 fit: BoxFit.cover,
+                                cacheWidth: 480,
                                 gaplessPlayback: true,
                                 filterQuality: FilterQuality.low,
                                 errorBuilder: (context, error, stackTrace) =>

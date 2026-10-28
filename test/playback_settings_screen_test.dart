@@ -26,7 +26,7 @@ void main() {
     expect(setting, findsOneWidget);
     expect(tester.widget<SwitchListTile>(setting).value, isFalse);
     expect(
-      find.text('直式短劇左右以放大模糊畫面填滿，不裁切中央影片；預設關閉。重用目前播放畫面，不另開解碼器，但可能增加 GPU 負載。'),
+      find.text('直式短劇左右以目前影片影格放大、模糊後填滿，不裁切中央影片；預設關閉。使用原生 MPV 影格擷取，不另開播放器，會定時更新背景；可能增加少量 GPU／CPU 負載。'),
       findsOneWidget,
     );
 
