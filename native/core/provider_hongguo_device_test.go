@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+func TestHongguoAppBaseURLMatchesUpstreamFallbackHost(t *testing.T) {
+	const want = "https://api5-normal-sinfonlinea.fqnovel.com"
+	if hongguoAppBaseURL != want {
+		t.Fatalf("Hongguo App API host = %q, want upstream fallback host %q", hongguoAppBaseURL, want)
+	}
+}
+
 func hongguoDeviceFixture(t *testing.T, rejected map[string]bool, registerFails bool) (*Downloader, *[]string) {
 	var requests []string
 	registered := 0

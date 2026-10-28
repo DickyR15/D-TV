@@ -2,6 +2,9 @@
 
 ## 1.0.0（驗收候選版，build 340）
 
+- 對齊可信上游 `zhangbaio/hongguo` 使用的 App API 備援主機 `api5-normal-sinfonlinea.fqnovel.com`，並新增 Go 回歸測試；這是端點配置修正，尚未證明紅果取流已恢復。
+
+
 - 修正 App 內部 fallback 版本顯示與 `pubspec.yaml` 不一致的問題；本地候選 build number 為 340。Android CI 的 versionCode 另使用遞增的 GitHub Actions run number。此為自用驗收候選，未建立正式 GitHub Release。
 
 - 統一手機、平板、視窗及 Android TV 的介面模式與方向行為；改善電視遙控器焦點、播放器控制列及 D TV 啟動畫面。
