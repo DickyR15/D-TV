@@ -13,9 +13,14 @@ const _androidPlayerEngine = String.fromEnvironment(
 );
 
 class PlaybackSettingsScreen extends StatefulWidget {
-  const PlaybackSettingsScreen({super.key, required this.store});
+  const PlaybackSettingsScreen({
+    super.key,
+    required this.store,
+    this.portraitBlurSupported,
+  });
 
   final LocalStore store;
+  final bool? portraitBlurSupported;
 
   @override
   State<PlaybackSettingsScreen> createState() => _PlaybackSettingsScreenState();
@@ -26,7 +31,12 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late int _quality = widget.store.playbackPreferences.quality;
   late TelevisionDecoder _decoder =
       widget.store.playbackPreferences.televisionDecoder;
+  late bool _portraitBlurBackground =
+      widget.store.playbackPreferences.portraitBlurBackground;
   bool? _compatibleRendering;
+  bool get _portraitBlurSupported =>
+      widget.portraitBlurSupported ??
+      (Platform.isAndroid && _androidPlayerEngine == 'mpv_embed');
   final FocusNode _speedFocus = FocusNode(debugLabel: 'playback-default-speed');
 
   @override
@@ -63,6 +73,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           speed: _speed,
           quality: _quality,
           televisionDecoder: _decoder,
+          portraitBlurBackground: _portraitBlurBackground,
         ),
       );
     } catch (error) {
@@ -86,6 +97,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateDecoder(TelevisionDecoder value) {
     setState(() => _decoder = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updatePortraitBlurBackground(bool value) {
+    setState(() => _portraitBlurBackground = value);
     unawaited(_persistPreferences());
   }
 
@@ -181,6 +197,19 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               },
             ),
             const SizedBox(height: 12),
+            SwitchListTile(
+              key: const ValueKey('playback-portrait-blur-background'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('直式影片模糊背景'),
+              subtitle: Text(
+                _portraitBlurSupported
+                    ? '僅對直式影片生效；需要 MPV 成功擷取影格，失敗時會保留原畫。'
+                    : '僅 Android MPV Embed 支援；目前播放器不支援背景影格擷取。',
+              ),
+              value: _portraitBlurBackground,
+              onChanged: _portraitBlurSupported ? _updatePortraitBlurBackground : null,
+            ),
+            const SizedBox(height: 12),
             if (Platform.isAndroid && AppLayout.isTelevision(context)) ...[
               const SizedBox(height: 20),
               DropdownButtonFormField<TelevisionDecoder>(
@@ -237,7 +266,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、清晰度及支援的解碼方式會在變更時自動儲存。相容渲染設定會在重新啟動後生效。',
+              '倍速、清晰度、直式影片模糊背景及支援的解碼方式會在變更時自動儲存。模糊背景僅適用於 Android MPV Embed；相容渲染設定會在重新啟動後生效。',
             ),
           ],
         ),

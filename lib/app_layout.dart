@@ -7,7 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 export 'app_build.dart';
 
-const appVersion = '1.0.0+339';
+const appVersion = '1.0.0+340';
 
 /// Layout family selected in settings or inferred from the active device.
 enum FormFactor { phone, pad, window, television }

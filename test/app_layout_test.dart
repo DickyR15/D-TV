@@ -7,6 +7,10 @@ void main() {
     expect(appVersion, '1.0.0+339');
   });
 
+  test('fallback app version matches the 1.0.0 candidate build', () {
+    expect(appVersion, '1.0.0+340');
+  });
+
   group('interface mode resolution', () {
     test('auto selects TV before screen-size rules', () {
       expect(
