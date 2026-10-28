@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // resolveHongguoMultiModelMedia is a second, official App playback path. It is
@@ -16,7 +17,41 @@ func (downloader *Downloader) resolveHongguoMultiModelMedia(ctx context.Context,
 	if !hongguoNumericID.MatchString(videoID) {
 		return providerMedia{}, errors.New("紅果備用播放 ID 無效")
 	}
-	payload := map[string]any{
+
+	// Prefer the documented multi_video_model API and response shape used by
+	// the upstream downloader. Keep the existing preload route as a fallback
+	// because it may still be accepted by newer App versions.
+	officialPayload := map[string]any{
+		"biz_param": map[string]any{
+			"detail_page_version": 0,
+			"device_level": 3,
+			"disable_digg_stat": false,
+			"disable_video_relate_book": false,
+			"need_all_video_definition": true,
+			"need_mp4_align": false,
+			"use_os_player": false,
+			"use_server_dns": false,
+			"video_platform": 1024,
+		},
+		"mixed_video_id_map": map[string]any{"1": []string{videoID}},
+	}
+	officialCtx, cancelOfficial := context.WithTimeout(ctx, 8*time.Second)
+	officialResult, officialErr := downloader.hongguoAppRequest(
+		officialCtx, http.MethodPost, "/novel/player/multi_video_model/v1/", nil, officialPayload,
+	)
+	cancelOfficial()
+	if officialErr == nil {
+		media, parseErr := downloader.resolveHongguoMultiModelResult(ctx, officialResult, videoID)
+		if parseErr == nil {
+			return media, nil
+		}
+		officialErr = parseErr
+	}
+	if err := ctx.Err(); err != nil {
+		return providerMedia{}, err
+	}
+
+	preloadPayload := map[string]any{
 		"biz_param": map[string]any{
 			"detail_page_version": 0,
 			"device_level": 3,
@@ -30,10 +65,31 @@ func (downloader *Downloader) resolveHongguoMultiModelMedia(ctx context.Context,
 		"dr_scene": "preload",
 		"mixed_video_id_map": map[string]any{"1004": []string{videoID}},
 	}
-	result, err := downloader.hongguoAppRequest(ctx, http.MethodPost, "/novel/player/multi_video_model/preload/v1", nil, payload)
-	if err != nil {
-		return providerMedia{}, err
+	preloadResult, preloadErr := downloader.hongguoAppRequest(
+		ctx, http.MethodPost, "/novel/player/multi_video_model/preload/v1", nil, preloadPayload,
+	)
+	if preloadErr != nil {
+		if officialErr != nil {
+			return providerMedia{}, fmt.Errorf(
+				"標準多影片模型取流失敗：%v；預載備用取流失敗：%w",
+				publicError(officialErr), preloadErr,
+			)
+		}
+		return providerMedia{}, preloadErr
 	}
+	media, preloadParseErr := downloader.resolveHongguoMultiModelResult(ctx, preloadResult, videoID)
+	if preloadParseErr != nil && officialErr != nil {
+		return providerMedia{}, fmt.Errorf(
+			"標準多影片模型取流失敗：%v；預載備用取流失敗：%w",
+			publicError(officialErr), preloadParseErr,
+		)
+	}
+	return media, preloadParseErr
+}
+
+func (downloader *Downloader) resolveHongguoMultiModelResult(
+	ctx context.Context, result map[string]any, videoID string,
+) (providerMedia, error) {
 	model, err := hongguoMultiModelFromResponse(result, videoID)
 	if err != nil {
 		return providerMedia{}, err
