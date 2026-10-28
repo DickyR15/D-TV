@@ -71,7 +71,7 @@ func TestHongguoWebsiteHistoryContinuesBeyondPage500(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		calls++
 		if request.URL.Host != "hongguoduanju.com" || request.URL.Path != "/category/real-drama" || request.URL.Query().Get("page") != "501" {
-			t.Fatalf("unexpected website history request: %s", request.URL.String())
+			t.Errorf("unexpected website history request: %s", request.URL.String())
 		}
 		return sourceFixtureResponse(request, http.StatusOK, body), nil
 	})
