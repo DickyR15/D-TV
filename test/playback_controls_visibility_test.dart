@@ -47,8 +47,6 @@ void main() {
     visibility.revealFromUser();
     expect(visibility.suppressAutomaticReveal, isFalse);
   });
-}
-
 
   test('TV playback starts without controls even when readiness requests them', () {
     expect(
@@ -71,3 +69,5 @@ void main() {
       isFalse,
     );
   });
+
+}
