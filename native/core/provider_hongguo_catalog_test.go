@@ -62,7 +62,7 @@ func TestHongguoWebsiteHistoryContinuesBeyondPage500(t *testing.T) {
 			}
 			return rows
 		}(),
-	}}}}
+	}}}
 	encoded, err := json.Marshal(bodyData)
 	if err != nil {
 		t.Fatal(err)
