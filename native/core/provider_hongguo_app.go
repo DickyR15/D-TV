@@ -167,6 +167,11 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	client := downloader.hongguoClient()
 	comment, _ := ctx.Value(hongguoCommentKey{}).(bool)
 	signed := !comment && path != hongguoBookmallTabPath
+	if signed {
+		// Register the device before signing requests. Keep the existing fallback
+		// behavior if registration is temporarily unavailable.
+		_ = downloader.ensureHongguoDevice(ctx, "")
+	}
 	client.mu.Lock()
 	base, deviceID, installID := client.baseURL, client.state.DeviceID, client.state.InstallID
 	client.mu.Unlock()
@@ -190,6 +195,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		attempts = 3
 	}
 	var lastErr error
+	rotations := 0
 	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
 			select {
@@ -251,6 +257,18 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		}
 		if len(content) == 0 {
 			lastErr = errors.New("红果 App 接口未返回有效数据")
+			// An empty response can indicate that Redfruit rejected the current
+			// device identity. Rotate it a bounded number of times, then retry
+			// the same request with a freshly registered identity.
+			if signed && rotations < 3 && downloader.ensureHongguoDevice(ctx, deviceID) == nil {
+				rotations++
+				client.mu.Lock()
+				deviceID, installID = client.state.DeviceID, client.state.InstallID
+				client.mu.Unlock()
+				query.Set("device_id", deviceID)
+				query.Set("iid", installID)
+				attempt--
+			}
 			continue
 		}
 		if len(content) > providerMaxBodyBytes {
