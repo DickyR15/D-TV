@@ -2494,7 +2494,12 @@ class _PlayerScreenState extends State<PlayerScreen>
             playbackGeneration: _generation,
             title: title,
             enabled: !_loading && _error == null,
-            showOnPlaybackReady: _showControlsOnPlaybackReady,
+            // On TV, start with a clean video. The user can reveal controls
+            // by pressing OK/Select; loading/playing events must not flash them.
+            showOnPlaybackReady: playbackControlsVisibleOnReady(
+              television: true,
+              requested: _showControlsOnPlaybackReady,
+            ),
             enhancement: _enhancementForUi,
             onTogglePlayback: _togglePlayback,
             onSeek: _seek,

@@ -393,8 +393,13 @@ class MainActivity : FlutterActivity() {
         televisionMode = if (savedInstanceState?.containsKey("duanju.televisionMode") == true) {
             savedInstanceState.getBoolean("duanju.televisionMode")
         } else isTelevisionDevice()
+        // Apply TV orientation before Activity/Flutter creates its first window.
+        // Setting it only after super.onCreate() lets Android briefly show the
+        // default portrait frame on devices that report their orientation late.
+        if (televisionMode) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
         super.onCreate(savedInstanceState)
-        if (televisionMode) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
             window.isStatusBarContrastEnforced = false

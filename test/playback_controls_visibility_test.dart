@@ -48,3 +48,26 @@ void main() {
     expect(visibility.suppressAutomaticReveal, isFalse);
   });
 }
+
+
+  test('TV playback starts without controls even when readiness requests them', () {
+    expect(
+      playbackControlsVisibleOnReady(television: true, requested: true),
+      isFalse,
+    );
+    expect(
+      playbackControlsVisibleOnReady(television: true, requested: false),
+      isFalse,
+    );
+  });
+
+  test('non-TV playback keeps its requested startup control behavior', () {
+    expect(
+      playbackControlsVisibleOnReady(television: false, requested: true),
+      isTrue,
+    );
+    expect(
+      playbackControlsVisibleOnReady(television: false, requested: false),
+      isFalse,
+    );
+  });
