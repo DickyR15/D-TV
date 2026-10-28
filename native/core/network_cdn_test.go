@@ -175,3 +175,38 @@ func TestHTTP1NoALPNTransportDisablesALPNAndHTTP2(t *testing.T) {
 		t.Fatal("HTTP/1.1 fallback still advertises ALPN/HTTP2 or weakened TLS")
 	}
 }
+
+
+func TestHTTP1NoALPNTransportCompletesTLSWithoutNegotiatedProtocol(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.TLS == nil {
+			t.Error("fallback request did not use TLS")
+		} else if request.TLS.NegotiatedProtocol != "" {
+			t.Errorf("fallback unexpectedly negotiated ALPN protocol %q", request.TLS.NegotiatedProtocol)
+		}
+		_, _ = io.WriteString(writer, "ok")
+	}))
+	server.EnableHTTP2 = false
+	server.StartTLS()
+	defer server.Close()
+
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.Proxy = nil
+	base.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	fallback := newHTTP1NoALPNTransport(base)
+	defer fallback.CloseIdleConnections()
+
+	response, err := (&http.Client{Transport: fallback}).Get(server.URL)
+	if err != nil {
+		t.Fatalf("HTTP/1.1 fallback failed against a TLS server that does not negotiate ALPN: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || response.ProtoMajor != 1 ||
+		response.TLS == nil || response.TLS.NegotiatedProtocol != "" {
+		t.Fatalf("unexpected fallback response: status=%d proto=%s tls=%+v", response.StatusCode, response.Proto, response.TLS)
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != "ok" {
+		t.Fatalf("unexpected response body %q, err=%v", body, err)
+	}
+}
