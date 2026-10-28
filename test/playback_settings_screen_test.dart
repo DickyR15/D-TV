@@ -29,7 +29,7 @@ void main() {
 
     await tester.tap(switchFinder);
     await tester.pump();
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await tester.pump(const Duration(milliseconds: 10));
     await tester.pump();
 
     expect(store.playbackPreferences.portraitBlurBackground, isTrue);
