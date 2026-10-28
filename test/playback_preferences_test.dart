@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/playback_preferences.dart';
+import 'package:hgtv/portrait_video_background.dart';
 
 void main() {
   test('portrait blur background defaults off for old settings', () {
@@ -21,4 +22,17 @@ void main() {
       isFalse,
     );
   });
+
+  group('portrait video background aspect ratio', () {
+    test('only enables for a valid portrait frame', () {
+      expect(shouldUsePortraitVideoBackground(9 / 16), isTrue);
+      expect(shouldUsePortraitVideoBackground(3 / 4), isTrue);
+      expect(shouldUsePortraitVideoBackground(1.0), isFalse);
+      expect(shouldUsePortraitVideoBackground(16 / 9), isFalse);
+      expect(shouldUsePortraitVideoBackground(0), isFalse);
+      expect(shouldUsePortraitVideoBackground(double.nan), isFalse);
+      expect(shouldUsePortraitVideoBackground(double.infinity), isFalse);
+    });
+  });
+
 }
