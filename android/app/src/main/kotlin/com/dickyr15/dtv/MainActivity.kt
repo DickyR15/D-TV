@@ -425,18 +425,9 @@ class MainActivity : FlutterActivity() {
                         "deviceInfo" -> {
                             val packageInfo = packageManager.getPackageInfo(packageName, 0)
                             val versionName = packageInfo.versionName.orEmpty()
-                            val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                packageInfo.longVersionCode
-                            } else {
-                                @Suppress("DEPRECATION")
-                                val legacyVersionCode = packageInfo.versionCode.toLong()
-                                legacyVersionCode
-                            }
-                            // Include the Android build number in About and startup diagnostics,
-                            // so every CI APK can be identified unambiguously.
-                            val displayVersion = if (versionName.isNotBlank()) {
-                                "$versionName+$versionCode"
-                            } else versionCode.toString()
+                            // Keep the user-facing version stable; Android versionCode
+                            // remains an independent, monotonically increasing build identifier.
+                            val displayVersion = versionName.ifBlank { "未知版本" }
                             result.success(mapOf("television" to isTelevisionDevice(), "version" to displayVersion))
                         }
                         "setTelevisionMode" -> {

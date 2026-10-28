@@ -3,8 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/app_layout.dart';
 
 void main() {
-  test('fallback app version matches the 1.0.0 candidate build', () {
-    expect(appVersion, '1.0.0+340');
+  test('user-facing app version excludes the internal build number', () {
+    expect(appVersion, '1.0.0');
+    expect(formatAppVersion('1.0.0'), '1.0.0');
+    expect(formatAppVersion(' 1.0.0 '), '1.0.0');
+    expect(formatAppVersion(''), '1.0.0');
   });
 
   group('interface mode resolution', () {

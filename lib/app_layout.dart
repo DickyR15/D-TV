@@ -7,7 +7,13 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 export 'app_build.dart';
 
-const appVersion = '1.0.0+340';
+const appVersion = '1.0.0';
+
+/// Returns the user-facing version name without the internal build number.
+String formatAppVersion(String versionName) {
+  final normalized = versionName.trim();
+  return normalized.isEmpty ? appVersion : normalized;
+}
 
 /// Layout family selected in settings or inferred from the active device.
 enum FormFactor { phone, pad, window, television }
@@ -71,9 +77,7 @@ class AppDevice {
       try {
         final info = await PackageInfo.fromPlatform();
         return AppDevice(
-          version: info.buildNumber.isNotEmpty
-              ? '${info.version}+${info.buildNumber}'
-              : info.version,
+          version: formatAppVersion(info.version),
         );
       } catch (_) {
         return fallback;
