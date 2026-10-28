@@ -3,6 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/app_layout.dart';
 
 void main() {
+  test('fallback app version matches the 1.0.0 candidate build', () {
+    expect(appVersion, '1.0.0+339');
+  });
+
   group('interface mode resolution', () {
     test('auto selects TV before screen-size rules', () {
       expect(
