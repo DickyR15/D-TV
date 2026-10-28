@@ -251,7 +251,11 @@ class AppLayout extends InheritedWidget {
     String mode, {
     FormFactor? currentFactor,
   }) {
-    final key = mode == 'standard' ? currentFactor?.name ?? 'auto' : mode;
+    final key = mode == 'standard'
+        ? currentFactor?.name ?? 'auto'
+        : mode == 'window' && !isDesktopPlatform
+        ? 'pad'
+        : mode;
     return _displayModeLabels[key] ?? _displayModeLabels['auto']!;
   }
 

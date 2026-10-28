@@ -7,22 +7,32 @@ import 'package:flutter/widgets.dart';
 import 'app_layout.dart';
 
 class AppOrientationController {
-  AppOrientationController({required this._television});
+  AppOrientationController({
+    required bool television,
+    bool phone = false,
+  }) : _television = television,
+       _phone = phone,
+       _playbackOrientations = orientations(
+         television: television,
+         phone: phone,
+       );
 
   bool _television;
+  bool _phone;
   bool _disposed = false;
   bool? _nativeTelevision;
   Object? _playbackOwner;
-  List<DeviceOrientation> _playbackOrientations = DeviceOrientation.values;
+  List<DeviceOrientation> _playbackOrientations;
   List<DeviceOrientation>? _appliedOrientations;
   Future<void> _pending = Future<void>.value();
 
   static List<DeviceOrientation> orientations({
     required bool television,
+    bool phone = false,
     bool fullscreen = false,
     double aspectRatio = 1,
   }) {
-    if (television || fullscreen && aspectRatio >= 1) {
+    if (television || (aspectRatio >= 1 && (fullscreen || phone))) {
       return const [
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
@@ -34,14 +44,25 @@ class AppOrientationController {
         DeviceOrientation.portraitDown,
       ];
     }
+    if (phone) return const [DeviceOrientation.portraitUp];
     return DeviceOrientation.values;
   }
 
-  Future<void> setTelevision(bool television) {
-    if (_television != television) {
+  Future<void> setTelevision(bool television) =>
+      setDeviceModes(television: television, phone: _phone);
+
+  Future<void> setDeviceModes({
+    required bool television,
+    required bool phone,
+  }) {
+    if (_television != television || _phone != phone) {
       _television = television;
+      _phone = phone;
       _playbackOwner = null;
-      _playbackOrientations = DeviceOrientation.values;
+      _playbackOrientations = orientations(
+        television: television,
+        phone: phone,
+      );
     }
     return _apply();
   }
@@ -57,6 +78,7 @@ class AppOrientationController {
       _playbackOwner = owner;
       _playbackOrientations = orientations(
         television: false,
+        phone: _phone,
         fullscreen: fullscreen,
         aspectRatio: aspectRatio,
       );
@@ -80,7 +102,10 @@ class AppOrientationController {
     if (_television) return refresh();
     if (!identical(_playbackOwner, owner)) return Future<void>.value();
     _playbackOwner = null;
-    _playbackOrientations = DeviceOrientation.values;
+    _playbackOrientations = orientations(
+      television: false,
+      phone: _phone,
+    );
     return _apply();
   }
 
@@ -109,6 +134,8 @@ class AppOrientationController {
       if (_disposed || television != _television) return;
       final preferred = television
           ? orientations(television: true)
+          : _phone && _playbackOwner == null
+          ? orientations(television: false, phone: true)
           : _playbackOrientations;
       if (force || !listEquals(preferred, _appliedOrientations)) {
         await SystemChrome.setPreferredOrientations(preferred);
@@ -128,10 +155,12 @@ class AppOrientationScope extends StatefulWidget {
   const AppOrientationScope({
     super.key,
     required this.television,
+    this.phone = false,
     required this.child,
   });
 
   final bool television;
+  final bool phone;
   final Widget child;
 
   static AppOrientationController? maybeOf(BuildContext context) => context
@@ -146,6 +175,7 @@ class _AppOrientationScopeState extends State<AppOrientationScope>
     with WidgetsBindingObserver {
   late final _controller = AppOrientationController(
     television: widget.television,
+    phone: widget.phone,
   );
 
   @override
@@ -158,8 +188,14 @@ class _AppOrientationScopeState extends State<AppOrientationScope>
   @override
   void didUpdateWidget(covariant AppOrientationScope oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.television != widget.television) {
-      _apply(_controller.setTelevision(widget.television));
+    if (oldWidget.television != widget.television ||
+        oldWidget.phone != widget.phone) {
+      _apply(
+        _controller.setDeviceModes(
+          television: widget.television,
+          phone: widget.phone,
+        ),
+      );
     }
   }
 

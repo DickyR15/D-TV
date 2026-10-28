@@ -1773,7 +1773,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       if (Platform.isWindows) {
         await windowManager.setFullScreen(fullscreen);
-      } else if (_mobile) {
+      } else if (_mobile || _formFactor == FormFactor.pad) {
         await (_orientationController?.setPlayback(
               this,
               fullscreen: fullscreen,
@@ -1782,6 +1782,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             SystemChrome.setPreferredOrientations(
               AppOrientationController.orientations(
                 television: _television,
+                phone: _mobile,
                 fullscreen: fullscreen,
                 aspectRatio: _aspectRatio,
               ),
@@ -2176,12 +2177,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     if (Platform.isWindows) {
       unawaited(windowManager.setFullScreen(false));
-    } else if (_mobile || _television && Platform.isAndroid) {
+    } else if (_mobile ||
+        _formFactor == FormFactor.pad ||
+        _television && Platform.isAndroid) {
       unawaited(
         (_orientationController?.releasePlayback(this) ??
                 SystemChrome.setPreferredOrientations(
                   AppOrientationController.orientations(
                     television: _television,
+                    phone: _mobile,
                   ),
                 ))
             .catchError((Object _) {}),

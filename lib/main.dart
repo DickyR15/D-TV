@@ -287,6 +287,7 @@ class DuanjuApp extends StatelessWidget {
           color: theme.scaffoldBackgroundColor,
           child: AppOrientationScope(
             television: tv,
+            phone: formFactor == FormFactor.phone,
             child: AppLayout(
               television: tv,
               formFactor: formFactor,
