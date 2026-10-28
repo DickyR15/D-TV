@@ -33,7 +33,9 @@ type hongguoCatalogState struct {
 	Version    int                             `json:"version"`
 	DeviceID   string                          `json:"deviceId"`
 	InstallID  string                          `json:"installId"`
-	Registered bool                            `json:"registered,omitempty"`
+	Registered      bool                            `json:"registered,omitempty"`
+	HelperDeviceID  string                          `json:"helperDeviceId,omitempty"`
+	HelperInstallID string                          `json:"helperInstallId,omitempty"`
 	Feeds      map[string]hongguoCatalogCursor `json:"feeds"`
 }
 
@@ -59,7 +61,7 @@ func (downloader *Downloader) hongguoClient() *hongguoAppClient {
 	downloader.hongguoOnce.Do(func() {
 		downloader.hongguo = &hongguoAppClient{
 			baseURL: hongguoAppBaseURL,
-			state:   hongguoCatalogState{Version: 1, DeviceID: newHongguoDeviceID(), InstallID: newHongguoDeviceID(), Feeds: map[string]hongguoCatalogCursor{}},
+			state:   hongguoCatalogState{Version: 1, DeviceID: newHongguoDeviceID(), InstallID: newHongguoDeviceID(), HelperDeviceID: newHongguoDeviceID(), HelperInstallID: newHongguoDeviceID(), Feeds: map[string]hongguoCatalogCursor{}},
 			details: map[string]hongguoDetailEntry{}, pending: map[string]*hongguoDetailCall{},
 			searches: map[string]hongguoSearchEntry{}, searchPending: map[string]*hongguoSearchCall{}, searchCursors: map[string]hongguoSearchCursor{},
 			suggestions: map[string]hongguoSuggestionEntry{}, suggestPending: map[string]*hongguoSuggestionCall{},
@@ -85,6 +87,9 @@ func (downloader *Downloader) restoreHongguoCatalog(state *hongguoCatalogState) 
 		return
 	}
 	cloned := cloneHongguoCatalogState(state)
+	if !hongguoNumericID.MatchString(cloned.HelperDeviceID) || !hongguoNumericID.MatchString(cloned.HelperInstallID) || cloned.HelperDeviceID == "0" || cloned.HelperInstallID == "0" {
+		cloned.HelperDeviceID, cloned.HelperInstallID = newHongguoDeviceID(), newHongguoDeviceID()
+	}
 	for name, cursor := range cloned.Feeds {
 		known := false
 		for _, genre := range hongguoAppGenres {
@@ -160,24 +165,47 @@ func hongguoAppQuery(deviceID, installID string) url.Values {
 	}
 }
 
-func clientDeviceIDs(client *hongguoAppClient) (string, string, bool) {
+type hongguoHelperDeviceKey struct{}
+
+func (client *hongguoAppClient) deviceLocked(helper bool) (string, string, bool) {
+	if helper {
+		return client.state.HelperDeviceID, client.state.HelperInstallID, client.state.HelperDeviceID != ""
+	}
+	return client.state.DeviceID, client.state.InstallID, client.state.Registered
+}
+
+func (client *hongguoAppClient) device(helper bool) (string, string, bool) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	return client.state.DeviceID, client.state.InstallID, client.state.Registered
+	return client.deviceLocked(helper)
+}
+
+func clientDeviceIDs(client *hongguoAppClient) (string, string, bool) {
+	return client.device(false)
 }
 
 func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
 	client := downloader.hongguoClient()
 	comment, _ := ctx.Value(hongguoCommentKey{}).(bool)
+	helper, _ := ctx.Value(hongguoHelperDeviceKey{}).(bool)
 	signed := !comment && path != hongguoBookmallTabPath
 	if signed {
-		// Registration is best-effort: if the registration service is temporarily
-		// unavailable, preserve the existing IDs and still try the signed request.
-		_ = downloader.ensureHongguoDevice(ctx, "")
+		if helper {
+			_ = downloader.ensureHongguoHelperDevice(ctx, "")
+		} else {
+			_ = downloader.ensureHongguoDevice(ctx, "")
+		}
 	}
 	client.mu.Lock()
-	base, deviceID, installID := client.baseURL, client.state.DeviceID, client.state.InstallID
+	base := client.baseURL
 	client.mu.Unlock()
+	deviceID, installID, _ := client.device(helper)
+	if helper {
+		if deviceID == "" || !signed {
+			return nil, errors.New("红果辅助设备不可用")
+		}
+		ctx = context.WithValue(ctx, requestLaneKey{}, "hongguo-helper")
+	}
 	query := hongguoAppQuery(deviceID, installID)
 	for key, values := range extra {
 		query[key] = append([]string(nil), values...)
@@ -199,6 +227,12 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	}
 	var lastErr error
 	rotations := 0
+	ensureDevice := func(rejected string) error {
+		if helper {
+			return downloader.ensureHongguoHelperDevice(ctx, rejected)
+		}
+		return downloader.ensureHongguoDevice(ctx, rejected)
+	}
 	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
 			select {
@@ -260,9 +294,9 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				(response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) &&
 				catalogResponseBlockReason(response, content) == "" &&
 				rotations < hongguoDeviceRotations &&
-				downloader.ensureHongguoDevice(ctx, deviceID) == nil {
+				ensureDevice(deviceID) == nil {
 				rotations++
-				deviceID, installID, _ = clientDeviceIDs(client)
+				deviceID, installID, _ = client.device(helper)
 				query.Set("device_id", deviceID)
 				query.Set("iid", installID)
 				// The shared limiter observes every 403 and places a host cooldown.
@@ -285,9 +319,9 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			// An empty successful response is a known sign that the current
 			// device identity may have been rejected. Rotate only signed requests,
 			// bound rotations, and retry with the newly registered IDs.
-			if signed && rotations < hongguoDeviceRotations && downloader.ensureHongguoDevice(ctx, deviceID) == nil {
+			if signed && rotations < hongguoDeviceRotations && ensureDevice(deviceID) == nil {
 				rotations++
-				deviceID, installID, _ = clientDeviceIDs(client)
+				deviceID, installID, _ = client.device(helper)
 				query.Set("device_id", deviceID)
 				query.Set("iid", installID)
 				attempt--
