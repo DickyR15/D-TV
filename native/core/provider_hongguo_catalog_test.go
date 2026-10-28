@@ -26,7 +26,7 @@ func TestHongguoCatalogContinuesWithWebsiteAfterAppFeedsExhaust(t *testing.T) {
 	}
 }
 
-func TestRestoreHongguoCatalogKeepsWebsiteHistoryCursor(t *testing.T) {
+func TestRestoreHongguoCatalogKeepsWebsiteHistoryCursorBeyondPage500(t *testing.T) {
 	downloader := &Downloader{}
 	state := &hongguoCatalogState{
 		Version: 1,
@@ -34,15 +34,15 @@ func TestRestoreHongguoCatalogKeepsWebsiteHistoryCursor(t *testing.T) {
 		InstallID: "10019",
 		Feeds: map[string]hongguoCatalogCursor{
 			"web:real-drama": {
-				Offset: 17, Initialized: true, UpdatedAt: time.Now(),
+				Offset: 501, Initialized: true, UpdatedAt: time.Now(),
 			},
 		},
 	}
 	downloader.restoreHongguoCatalog(state)
 	got := downloader.hongguoCatalogSnapshot()
 	cursor, ok := got.Feeds["web:real-drama"]
-	if !ok || !cursor.Initialized || cursor.Offset != 17 {
-		t.Fatalf("website history cursor was not restored: %#v", got.Feeds["web:real-drama"])
+	if !ok || !cursor.Initialized || cursor.Offset != 501 {
+		t.Fatalf("website history cursor at page 501 was not restored: %#v", got.Feeds["web:real-drama"])
 	}
 }
 

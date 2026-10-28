@@ -94,11 +94,7 @@ func (downloader *Downloader) restoreHongguoCatalog(state *hongguoCatalogState) 
 		for _, route := range hongguoWebCatalogRoutes {
 			isWebsiteFeed = isWebsiteFeed || name == "web:"+route.path
 		}
-		maxOffset := 1_000_000
-		if isWebsiteFeed {
-			maxOffset = 500
-		}
-		if (!known && !isWebsiteFeed) || !cursor.Initialized || cursor.Offset < 0 || cursor.Offset > maxOffset || len(cursor.SessionID) > 4096 || len(cursor.LastID) > 256 || len(cursor.PageSignature) > 64 {
+		if (!known && !isWebsiteFeed) || !cursor.Initialized || cursor.Offset < 0 || cursor.Offset > 1_000_000 || len(cursor.SessionID) > 4096 || len(cursor.LastID) > 256 || len(cursor.PageSignature) > 64 {
 			delete(cloned.Feeds, name)
 		}
 	}
