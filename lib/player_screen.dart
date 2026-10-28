@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -24,8 +22,8 @@ import 'models.dart';
 import 'playback_loader.dart';
 import 'playback_preloader.dart';
 import 'playback_recovery.dart';
+import 'playback_controls_visibility.dart';
 import 'playback_preferences.dart';
-import 'portrait_video_background.dart';
 import 'luna_exo_player.dart';
 import 'player_controls.dart';
 import 'player_interactions.dart';
@@ -159,12 +157,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   double _resumePosition = 0;
   bool _rotating = false;
   bool _television = false;
-  bool _portraitBlurBackground = false;
-  Uint8List? _portraitBackdropFrame;
-  Timer? _portraitBackdropTimer;
-  bool _portraitBackdropCaptureInFlight = false;
-  bool _portraitBackdropCaptureWarningLogged = false;
-  bool _videoAspectRatioKnown = false;
   FormFactor _formFactor = FormFactor.phone;
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.hardware;
   bool _tvDecoderPolicyMigrated = false;
@@ -199,7 +191,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     preload: _preloadEnabled,
     enhancement: _enhancement.preferences,
     televisionDecoder: _televisionDecoder,
-    portraitBlurBackground: _portraitBlurBackground,
   );
   String get _qualityLabel => _plan?.local == true
       ? '本機原畫'
@@ -226,7 +217,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _speed = preferences.speed;
     _requestedQuality = preferences.quality;
-    _portraitBlurBackground = preferences.portraitBlurBackground;
     _autoAdvance = true;
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
     _preloadEnabled = true;
@@ -409,13 +399,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             !_closed) {
           setState(() {
             _aspectRatio = size.width / size.height;
-            _videoAspectRatioKnown = true;
-            if (!shouldUsePortraitVideoBackground(_aspectRatio)) {
-              _portraitBackdropFrame = null;
-            }
           });
           _scheduleSystemUi();
-          _refreshPortraitBackdropCapture();
         }
         unawaited(_logVideoOutput(parameters));
       }),
@@ -1333,12 +1318,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _resumePosition = position;
     _showControlsOnPlaybackReady = showControlsOnReady;
-    _portraitBackdropTimer?.cancel();
-    _portraitBackdropTimer = null;
-    _videoAspectRatioKnown = false;
     setState(() {
       _index = index;
-      _portraitBackdropFrame = null;
       _loading = true;
       _showLoadingOverlay = false;
       _error = null;
@@ -1631,7 +1612,6 @@ class _PlayerScreenState extends State<PlayerScreen>
             _loading = false;
             _showLoadingOverlay = false;
           });
-          _refreshPortraitBackdropCapture();
           _danmaku.setPlan(plan);
           _syncDanmaku();
           _acknowledgeHandoff();
@@ -2177,8 +2157,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
     _healthTimer?.cancel();
-    _portraitBackdropTimer?.cancel();
-    _portraitBackdropTimer = null;
     _loadingOverlayTimer?.cancel();
     _syncDiagnosticTimer?.cancel();
     _errorTimer?.cancel();
@@ -2366,96 +2344,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  void _refreshPortraitBackdropCapture() {
-    final shouldCapture =
-        !_closed &&
-        _portraitBlurBackground &&
-        _videoAspectRatioKnown &&
-        shouldUsePortraitVideoBackground(_aspectRatio) &&
-        !_loading &&
-        _error == null &&
-        _player.platform is NativePlayer;
-
-    if (!shouldCapture) {
-      _portraitBackdropTimer?.cancel();
-      _portraitBackdropTimer = null;
-      if ((!_portraitBlurBackground ||
-              !_videoAspectRatioKnown ||
-              !shouldUsePortraitVideoBackground(_aspectRatio) ||
-              _error != null) &&
-          _portraitBackdropFrame != null &&
-          mounted) {
-        setState(() => _portraitBackdropFrame = null);
-      }
-      return;
-    }
-    if (_portraitBackdropTimer != null) return;
-
-    unawaited(_capturePortraitBackdropFrame(_generation));
-    _portraitBackdropTimer = Timer.periodic(
-      const Duration(milliseconds: 1800),
-      (_) {
-        if (!_foreground ||
-            _lifecycleState != AppLifecycleState.resumed ||
-            !_player.state.playing ||
-            _pictureInPictureVisible) {
-          return;
-        }
-        unawaited(_capturePortraitBackdropFrame(_generation));
-      },
-    );
-  }
-
-  Future<void> _capturePortraitBackdropFrame(int generation) async {
-    if (_portraitBackdropCaptureInFlight ||
-        _closed ||
-        generation != _generation ||
-        !_portraitBlurBackground ||
-        !_videoAspectRatioKnown ||
-        !shouldUsePortraitVideoBackground(_aspectRatio) ||
-        _loading ||
-        _error != null ||
-        _player.platform is! NativePlayer) {
-      return;
-    }
-
-    _portraitBackdropCaptureInFlight = true;
-    try {
-      // Native MPV exposes the current decoded frame as image bytes. Reuse the
-      // existing decoder and let Flutter blur a still image behind the single
-      // foreground surface; duplicating the native video output is unreliable.
-      final frame = await _player.screenshot(format: 'image/jpeg');
-      if (frame == null || frame.isEmpty) {
-        if (!_portraitBackdropCaptureWarningLogged) {
-          _portraitBackdropCaptureWarningLogged = true;
-          DiaryService.add(
-            '[PortraitBackdrop] MPV screenshot returned no frame; '
-            'blurred side fill is unavailable for this playback backend',
-          );
-        }
-        return;
-      }
-      if (!mounted ||
-          _closed ||
-          generation != _generation ||
-          !_portraitBlurBackground ||
-          !_videoAspectRatioKnown ||
-          !shouldUsePortraitVideoBackground(_aspectRatio)) {
-        return;
-      }
-      setState(() => _portraitBackdropFrame = frame);
-    } catch (error) {
-      if (!_portraitBackdropCaptureWarningLogged) {
-        _portraitBackdropCaptureWarningLogged = true;
-        DiaryService.add(
-          '[PortraitBackdrop] screenshot failed: ${error.runtimeType}',
-        );
-      }
-    } finally {
-      _portraitBackdropCaptureInFlight = false;
-    }
-  }
-
   Widget _videoOutput({required BoxFit fit, required Widget controls}) {
     if (_player is LunaExoPlayer) {
       return LunaExoVideoView(
@@ -2464,13 +2352,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         controls: (_) => controls,
       );
     }
-    // The default Video.fill is opaque black, which hides the blurred
-    // backdrop beneath the letterboxed area. Transparent fill lets the
-    // captured-frame background show through without stretching the video.
     return Video(
       controller: _video!,
       fit: fit,
-      fill: Colors.transparent,
       controls: (_) => controls,
     );
   }
@@ -2558,16 +2442,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         controls,
       ],
     );
-    final usePortraitBlurBackground =
-        _portraitBlurBackground &&
-        _videoAspectRatioKnown &&
-        shouldUsePortraitVideoBackground(_aspectRatio) &&
-        _portraitBackdropFrame != null &&
-        !_pictureInPictureVisible &&
-        !_loading &&
-        _error == null &&
-        widget.videoBuilder == null &&
-        _player.platform is NativePlayer;
     return Theme(
       data: videoTheme,
       child: LayoutBuilder(
@@ -2586,37 +2460,6 @@ class _PlayerScreenState extends State<PlayerScreen>
             key: _videoPaneKey,
             fit: StackFit.expand,
             children: [
-              if (usePortraitBlurBackground)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: ClipRect(
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ImageFiltered(
-                            imageFilter: ImageFilter.blur(
-                              sigmaX: 22,
-                              sigmaY: 22,
-                            ),
-                            child: Transform.scale(
-                              scale: 1.28,
-                              child: Image.memory(
-                                _portraitBackdropFrame!,
-                                fit: BoxFit.cover,
-                                cacheWidth: 480,
-                                gaplessPlayback: true,
-                                filterQuality: FilterQuality.low,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    const ColoredBox(color: Colors.black),
-                              ),
-                            ),
-                          ),
-                          const ColoredBox(color: Color(0x52000000)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
               if (widget.videoBuilder != null)
                 widget.videoBuilder!(layeredControls)
               else
