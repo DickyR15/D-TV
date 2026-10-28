@@ -12,6 +12,7 @@ class PlaybackPreferences {
     this.danmaku = false,
     this.preload = true,
     this.enhancement = const VideoEnhancementPreferences(),
+    this.portraitBlurBackground = false,
     this.televisionDecoder = TelevisionDecoder.hardware,
   });
 
@@ -21,6 +22,7 @@ class PlaybackPreferences {
   final bool danmaku;
   final bool preload;
   final VideoEnhancementPreferences enhancement;
+  final bool portraitBlurBackground;
   final TelevisionDecoder televisionDecoder;
 
   PlaybackPreferences copyWith({
@@ -30,6 +32,7 @@ class PlaybackPreferences {
     bool? danmaku,
     bool? preload,
     VideoEnhancementPreferences? enhancement,
+    bool? portraitBlurBackground,
     TelevisionDecoder? televisionDecoder,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
@@ -38,6 +41,7 @@ class PlaybackPreferences {
     danmaku: danmaku ?? this.danmaku,
     preload: preload ?? this.preload,
     enhancement: enhancement ?? this.enhancement,
+    portraitBlurBackground: portraitBlurBackground ?? this.portraitBlurBackground,
     televisionDecoder: televisionDecoder ?? this.televisionDecoder,
   );
 
@@ -48,6 +52,7 @@ class PlaybackPreferences {
     'danmaku': danmaku,
     'preload': preload,
     'enhancement': enhancement.toJson(),
+    'portraitBlurBackground': portraitBlurBackground,
     'televisionDecoder': televisionDecoder.name,
   };
 
@@ -57,6 +62,7 @@ class PlaybackPreferences {
     final autoAdvance = value['autoAdvance'] as bool? ?? true;
     final danmaku = value['danmaku'] as bool? ?? false;
     final preload = value['preload'] as bool? ?? true;
+    final portraitBlurBackground = value['portraitBlurBackground'] as bool? ?? false;
     if (!playbackSpeeds.contains(speed) || quality < 0 || quality > 4320) {
       throw const FormatException('播放偏好無效');
     }
@@ -67,6 +73,7 @@ class PlaybackPreferences {
       danmaku: danmaku,
       preload: preload,
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
+      portraitBlurBackground: portraitBlurBackground,
       televisionDecoder:
           TelevisionDecoder.values.asNameMap()[value['televisionDecoder']] ??
           TelevisionDecoder.hardware,

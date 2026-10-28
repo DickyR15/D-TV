@@ -9,20 +9,35 @@ import 'fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('1.0.0 hides deferred blur control and keeps auto-save', (tester) async {
+  testWidgets('portrait blur switch defaults off and auto-saves', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final store = testStore(await SharedPreferences.getInstance());
     addTearDown(store.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(home: PlaybackSettingsScreen(store: store)),
+      MaterialApp(
+        home: PlaybackSettingsScreen(
+          store: store,
+          portraitBlurSupported: true,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('playback-default-speed')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-default-quality')), findsOneWidget);
-    expect(find.byKey(const ValueKey('playback-portrait-blur-background')), findsNothing);
-    expect(find.text('直式影片模糊背景'), findsNothing);
+    expect(find.text('儲存'), findsNothing);
+    final switchFinder = find.byKey(const ValueKey('playback-portrait-blur-background'));
+    expect(switchFinder, findsOneWidget);
+    expect(tester.widget<SwitchListTile>(switchFinder).value, isFalse);
+
+    await tester.tap(switchFinder);
+    await tester.pumpAndSettle();
+    expect(store.playbackPreferences.portraitBlurBackground, isTrue);
+    expect(
+      PlaybackPreferences.fromJson(store.playbackPreferences.toJson()).portraitBlurBackground,
+      isTrue,
+    );
 
     await tester.tap(find.byKey(const ValueKey('playback-default-speed')));
     await tester.pumpAndSettle();
@@ -30,13 +45,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.playbackPreferences.speed, 1.25);
+    expect(store.playbackPreferences.portraitBlurBackground, isTrue);
     expect(
       PlaybackPreferences.fromJson(store.playbackPreferences.toJson()).speed,
       1.25,
-    );
-    expect(
-      store.playbackPreferences.toJson().containsKey('portraitBlurBackground'),
-      isFalse,
     );
   });
 }
