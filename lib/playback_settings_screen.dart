@@ -26,6 +26,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late int _quality = widget.store.playbackPreferences.quality;
   late TelevisionDecoder _decoder =
       widget.store.playbackPreferences.televisionDecoder;
+  late bool _portraitBlurBackground =
+      widget.store.playbackPreferences.portraitBlurBackground;
   bool? _compatibleRendering;
   final FocusNode _speedFocus = FocusNode(debugLabel: 'playback-default-speed');
 
@@ -63,6 +65,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           speed: _speed,
           quality: _quality,
           televisionDecoder: _decoder,
+          portraitBlurBackground: _portraitBlurBackground,
         ),
       );
     } catch (error) {
@@ -86,6 +89,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateDecoder(TelevisionDecoder value) {
     setState(() => _decoder = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updatePortraitBlurBackground(bool value) {
+    setState(() => _portraitBlurBackground = value);
     unawaited(_persistPreferences());
   }
 
@@ -180,6 +188,17 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                 if (value != null) _updateQuality(value);
               },
             ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              key: const ValueKey('playback-portrait-blur-background'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('直式影片模糊背景'),
+              subtitle: const Text(
+                '直式短劇左右以放大模糊畫面填滿，不裁切中央影片；預設關閉。重用目前播放畫面，不另開解碼器，但可能增加 GPU 負載。',
+              ),
+              value: _portraitBlurBackground,
+              onChanged: _updatePortraitBlurBackground,
+            ),
             if (Platform.isAndroid && AppLayout.isTelevision(context)) ...[
               const SizedBox(height: 20),
               DropdownButtonFormField<TelevisionDecoder>(
@@ -236,7 +255,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、清晰度及支援的解碼方式會在變更時自動儲存。相容渲染設定會在重新啟動後生效。',
+              '倍速、清晰度、直式模糊背景及支援的解碼方式會在變更時自動儲存。相容渲染設定會在重新啟動後生效。',
             ),
           ],
         ),

@@ -13,6 +13,7 @@ class PlaybackPreferences {
     this.preload = true,
     this.enhancement = const VideoEnhancementPreferences(),
     this.televisionDecoder = TelevisionDecoder.hardware,
+    this.portraitBlurBackground = false,
   });
 
   final double speed;
@@ -22,6 +23,7 @@ class PlaybackPreferences {
   final bool preload;
   final VideoEnhancementPreferences enhancement;
   final TelevisionDecoder televisionDecoder;
+  final bool portraitBlurBackground;
 
   PlaybackPreferences copyWith({
     double? speed,
@@ -31,6 +33,7 @@ class PlaybackPreferences {
     bool? preload,
     VideoEnhancementPreferences? enhancement,
     TelevisionDecoder? televisionDecoder,
+    bool? portraitBlurBackground,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
@@ -39,6 +42,8 @@ class PlaybackPreferences {
     preload: preload ?? this.preload,
     enhancement: enhancement ?? this.enhancement,
     televisionDecoder: televisionDecoder ?? this.televisionDecoder,
+    portraitBlurBackground:
+        portraitBlurBackground ?? this.portraitBlurBackground,
   );
 
   Map<String, dynamic> toJson() => {
@@ -49,6 +54,7 @@ class PlaybackPreferences {
     'preload': preload,
     'enhancement': enhancement.toJson(),
     'televisionDecoder': televisionDecoder.name,
+    'portraitBlurBackground': portraitBlurBackground,
   };
 
   factory PlaybackPreferences.fromJson(Map<String, dynamic> value) {
@@ -57,6 +63,8 @@ class PlaybackPreferences {
     final autoAdvance = value['autoAdvance'] as bool? ?? true;
     final danmaku = value['danmaku'] as bool? ?? false;
     final preload = value['preload'] as bool? ?? true;
+    final portraitBlurBackground =
+        value['portraitBlurBackground'] as bool? ?? false;
     if (!playbackSpeeds.contains(speed) || quality < 0 || quality > 4320) {
       throw const FormatException('播放偏好無效');
     }
@@ -70,6 +78,7 @@ class PlaybackPreferences {
       televisionDecoder:
           TelevisionDecoder.values.asNameMap()[value['televisionDecoder']] ??
           TelevisionDecoder.hardware,
+      portraitBlurBackground: portraitBlurBackground,
     );
   }
 }

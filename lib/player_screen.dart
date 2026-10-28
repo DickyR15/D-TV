@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -156,6 +157,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   double _resumePosition = 0;
   bool _rotating = false;
   bool _television = false;
+  bool _portraitBlurBackground = false;
   FormFactor _formFactor = FormFactor.phone;
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.hardware;
   bool _tvDecoderPolicyMigrated = false;
@@ -190,6 +192,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     preload: _preloadEnabled,
     enhancement: _enhancement.preferences,
     televisionDecoder: _televisionDecoder,
+    portraitBlurBackground: _portraitBlurBackground,
   );
   String get _qualityLabel => _plan?.local == true
       ? '本機原畫'
@@ -216,6 +219,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _speed = preferences.speed;
     _requestedQuality = preferences.quality;
+    _portraitBlurBackground = preferences.portraitBlurBackground;
     _autoAdvance = true;
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
     _preloadEnabled = true;
@@ -2339,6 +2343,20 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  Widget _videoOutput({
+    required BoxFit fit,
+    required Widget Function(BuildContext) controls,
+  }) {
+    if (_player is LunaExoPlayer) {
+      return LunaExoVideoView(
+        player: _player as LunaExoPlayer,
+        fit: fit,
+        controls: controls,
+      );
+    }
+    return Video(controller: _video!, fit: fit, controls: controls);
+  }
+
   Widget _videoPane(BuildContext context) {
     final videoTheme = _television
         ? televisionTheme(AppTheme.dark)
@@ -2417,6 +2435,14 @@ class _PlayerScreenState extends State<PlayerScreen>
         controls,
       ],
     );
+    final usePortraitBlurBackground =
+        _portraitBlurBackground &&
+        _aspectRatio > 0 &&
+        _aspectRatio < .95 &&
+        !_pictureInPictureVisible &&
+        !_loading &&
+        _error == null &&
+        widget.videoBuilder == null;
     return Theme(
       data: videoTheme,
       child: LayoutBuilder(
@@ -2435,17 +2461,36 @@ class _PlayerScreenState extends State<PlayerScreen>
             key: _videoPaneKey,
             fit: StackFit.expand,
             children: [
+              if (usePortraitBlurBackground)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: ClipRect(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ImageFiltered(
+                            imageFilter: ImageFilter.blur(
+                              sigmaX: 18,
+                              sigmaY: 18,
+                            ),
+                            child: Transform.scale(
+                              scale: 1.22,
+                              child: _videoOutput(
+                                fit: BoxFit.cover,
+                                controls: (_) => const SizedBox.shrink(),
+                              ),
+                            ),
+                          ),
+                          const ColoredBox(color: Color(0x52000000)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               if (widget.videoBuilder != null)
                 widget.videoBuilder!(layeredControls)
-              else if (_player is LunaExoPlayer)
-                LunaExoVideoView(
-                  player: _player as LunaExoPlayer,
-                  fit: BoxFit.contain,
-                  controls: (_) => layeredControls,
-                )
               else
-                Video(
-                  controller: _video!,
+                _videoOutput(
                   fit: BoxFit.contain,
                   controls: (_) => layeredControls,
                 ),
