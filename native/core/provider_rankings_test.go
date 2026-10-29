@@ -70,6 +70,44 @@ func TestHongguoRankingStreamAndValidation(t *testing.T) {
 	}
 }
 
+func TestHongguoRankingRecoversFullPageWhenLoaderIsShort(t *testing.T) {
+	board, ok := findRankingBoard("hongguo-ai")
+	if !ok {
+		t.Fatal("AI hot board not found")
+	}
+
+	fullRows := make([]map[string]any, 0, 20)
+	for rank := 1; rank <= 20; rank++ {
+		id := strconv.FormatInt(7681903520873700000+int64(rank), 10)
+		fullRows = append(fullRows, map[string]any{
+			"id": id, "seriesId": id, "rank": rank, "title": "AI 熱播短劇 " + strconv.Itoa(rank),
+		})
+	}
+
+	// Simulate the official page where the embedded loader omits one row,
+	// but the visible HTML still contains all twenty ranked cards.
+	body := rankingFixture(board, 1, fullRows[:19])
+	var pageHTML strings.Builder
+	pageHTML.WriteString(`<nav aria-label="榜單分頁"><a href="/rank/hot-ai-drama" aria-current="page">1</a><a href="/rank/hot-ai-drama?page=2" rel="next">2</a></nav><ol aria-label="AI 熱播榜">`)
+	for index, row := range fullRows {
+		id := row["id"].(string)
+		title := row["title"].(string)
+		rank := index + 1
+		pageHTML.WriteString(`<article aria-labelledby="rank-title-` + id + `"><a href="/detail?series_id=` + id + `"><h2 id="rank-title-` + id + `">` + title + `</h2></a><a aria-label="查看第 ` + strconv.Itoa(rank) + ` 部短劇" href="/detail?series_id=` + id + `"><span>` + strconv.Itoa(rank) + `</span></a></article>`)
+	}
+	pageHTML.WriteString("</ol>")
+	body += pageHTML.String()
+
+	result, err := parseHongguoRanking(body, board, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Items) != 20 || result.Items[0].Rank != 1 || result.Items[19].Rank != 20 || !result.HasMore {
+		t.Fatalf("incomplete embedded payload should recover all twenty HTML ranks: items=%d first=%d last=%d hasMore=%t",
+			len(result.Items), result.Items[0].Rank, result.Items[len(result.Items)-1].Rank, result.HasMore)
+	}
+}
+
 func TestHuangdouRankingPreservesOrderAndMetrics(t *testing.T) {
 	rows := []any{
 		map[string]any{"id": "rp_first", "name": "低热度先返回", "hot_rate": "20", "click": "100"},
