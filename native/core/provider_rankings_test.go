@@ -88,9 +88,26 @@ func TestHongguoRankingRecoversFullPageWhenLoaderIsShort(t *testing.T) {
 		})
 	}
 
-	// Simulate the official page where the embedded loader omits one row,
-	// but the visible HTML still contains all twenty ranked cards.
+	// Simulate the official page where both embedded data formats omit one
+	// row, but the visible HTML still contains all twenty ranked cards.
 	body := rankingFixtureWithTotalPages(board, 1, fullRows[:19], 5)
+	jsonLDItems := make([]map[string]any, 0, 19)
+	for _, row := range fullRows[:19] {
+		id := row["id"].(string)
+		jsonLDItems = append(jsonLDItems, map[string]any{
+			"position": row["rank"], "name": row["title"],
+			"url": "https://hongguoduanju.com/detail?series_id=" + id,
+		})
+	}
+	jsonLD, err := json.Marshal(map[string]any{
+		"@type": "ItemList",
+		"url": "https://hongguoduanju.com/rank/hot-ai-drama",
+		"itemListElement": jsonLDItems,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body += "<script type='application/ld+json'>" + string(jsonLD) + "</script>"
 	var pageHTML strings.Builder
 	pageHTML.WriteString(`<nav aria-label="榜單分頁"><a href="/rank/hot-ai-drama" aria-current="page">1</a><a href="/rank/hot-ai-drama?page=2" rel="next">2</a></nav><ol aria-label="AI 熱播榜">`)
 	for index, row := range fullRows {
