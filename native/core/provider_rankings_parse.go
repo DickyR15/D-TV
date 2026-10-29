@@ -79,7 +79,8 @@ func parseHongguoRanking(body string, board rankingBoard, page int) (rankingPage
 	// The four Red Fruit hot boards expose 20 ranked items per page. A short
 	// payload can still be syntactically valid but silently produce 99 items
 	// after the five-page preload. In that case, parse the actual page cards
-	// before accepting an incomplete API/loader payload.
+	// before accepting an incomplete API/loader payload. Keep this check scoped
+	// to the five-page top-100 window; smaller or single-page boards are valid.
 	expectsTwentyRows := page <= 5 && content.Pagination.TotalPages >= 5
 	if expectsTwentyRows && len(content.Rows) != 20 {
 		return parseHongguoRankingDocument(body, board, page, loader)
