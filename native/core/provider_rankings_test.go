@@ -106,9 +106,13 @@ func TestHongguoRankingRecoversFullPageWhenLoaderIsShort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Items) != 20 || result.Items[0].Rank != 1 || result.Items[19].Rank != 20 || !result.HasMore {
-		t.Fatalf("incomplete embedded payload should recover all twenty HTML ranks: items=%d first=%d last=%d hasMore=%t",
-			len(result.Items), result.Items[0].Rank, result.Items[len(result.Items)-1].Rank, result.HasMore)
+	if len(result.Items) != 20 {
+		t.Fatalf("incomplete embedded payload should recover all twenty HTML ranks: items=%d hasMore=%t",
+			len(result.Items), result.HasMore)
+	}
+	if result.Items[0].Rank != 1 || result.Items[19].Rank != 20 || !result.HasMore {
+		t.Fatalf("recovered HTML ranks or pagination are incorrect: first=%d last=%d hasMore=%t",
+			result.Items[0].Rank, result.Items[19].Rank, result.HasMore)
 	}
 }
 
