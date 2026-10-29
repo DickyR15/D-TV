@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	xhtml "golang.org/x/net/html"
 )
 
 func rankingFixture(board rankingBoard, page int, rows []map[string]any) string {
@@ -118,6 +120,29 @@ func TestHongguoRankingRecoversFullPageWhenLoaderIsShort(t *testing.T) {
 	}
 	pageHTML.WriteString("</ol>")
 	body += pageHTML.String()
+
+	document, parseErr := xhtml.Parse(strings.NewReader(body))
+	if parseErr != nil {
+		t.Fatal(parseErr)
+	}
+	lists := providerHTMLNodes(document, func(node *xhtml.Node) bool {
+		return node.Data == "ol" && providerHTMLAttr(node, "aria-label") != ""
+	})
+	if len(lists) != 1 {
+		t.Fatalf("expected one HTML ranking list, found %d", len(lists))
+	}
+	articles := providerHTMLNodes(lists[0], func(node *xhtml.Node) bool {
+		return node.Data == "article" && strings.HasPrefix(providerHTMLAttr(node, "aria-labelledby"), "rank-title-")
+	})
+	if len(articles) != 20 {
+		t.Fatalf("expected 20 visible ranking cards, found %d", len(articles))
+	}
+	for index, article := range articles {
+		if _, valid := parseHongguoRankingArticle(article); !valid {
+			t.Fatalf("visible HTML ranking card %d was not parseable: label=%q",
+				index+1, providerHTMLAttr(article, "aria-labelledby"))
+		}
+	}
 
 	result, err := parseHongguoRanking(body, board, 1)
 	if err != nil {
