@@ -111,7 +111,7 @@ func TestHongguoRankingRecoversFullPageWhenLoaderIsShort(t *testing.T) {
 	}
 	body += "<script type='application/ld+json'>" + string(jsonLD) + "</script>"
 	var pageHTML strings.Builder
-	pageHTML.WriteString(`<nav aria-label="榜單分頁"><a href="/rank/hot-ai-drama" aria-current="page">1</a><a href="/rank/hot-ai-drama?page=2" rel="next">2</a></nav><ol aria-label="AI 熱播榜">`)
+	pageHTML.WriteString(`<nav aria-label="榜单分页"><a href="/rank/hot-ai-drama" aria-current="page">1</a><a href="/rank/hot-ai-drama?page=2" rel="next">2</a></nav><ol aria-label="AI 熱播榜">`)
 	for index, row := range fullRows {
 		id := row["id"].(string)
 		title := row["title"].(string)
