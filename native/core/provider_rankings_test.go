@@ -15,9 +15,13 @@ import (
 )
 
 func rankingFixture(board rankingBoard, page int, rows []map[string]any) string {
+	return rankingFixtureWithTotalPages(board, page, rows, 2)
+}
+
+func rankingFixtureWithTotalPages(board rankingBoard, page int, rows []map[string]any, totalPages int) string {
 	key := "rank_" + board.path + "/page"
 	loader, _ := json.Marshal(map[string]any{"loaderData": map[string]any{key: map[string]any{"rankKey": board.upstreamKey, "pageNum": page, "updatedText": "9月13日已更新", "content": map[string]any{}}}})
-	args, _ := json.Marshal([]any{key, "content", map[string]any{"isSuccess": true, "rankList": rows, "pagination": map[string]int{"pageNum": page, "totalPages": 2}}})
+	args, _ := json.Marshal([]any{key, "content", map[string]any{"isSuccess": true, "rankList": rows, "pagination": map[string]int{"pageNum": page, "totalPages": totalPages}}})
 	return "<script>window._ROUTER_DATA=" + string(loader) + "</script><script data-script-src='modern-run-router-data-fn' data-fn-name='r' data-fn-args='" + html.EscapeString(string(args)) + "'></script>"
 }
 
@@ -86,7 +90,7 @@ func TestHongguoRankingRecoversFullPageWhenLoaderIsShort(t *testing.T) {
 
 	// Simulate the official page where the embedded loader omits one row,
 	// but the visible HTML still contains all twenty ranked cards.
-	body := rankingFixture(board, 1, fullRows[:19])
+	body := rankingFixtureWithTotalPages(board, 1, fullRows[:19], 5)
 	var pageHTML strings.Builder
 	pageHTML.WriteString(`<nav aria-label="榜單分頁"><a href="/rank/hot-ai-drama" aria-current="page">1</a><a href="/rank/hot-ai-drama?page=2" rel="next">2</a></nav><ol aria-label="AI 熱播榜">`)
 	for index, row := range fullRows {
