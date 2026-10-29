@@ -80,8 +80,7 @@ func parseHongguoRanking(body string, board rankingBoard, page int) (rankingPage
 	// payload can still be syntactically valid but silently produce 99 items
 	// after the five-page preload. In that case, parse the actual page cards
 	// before accepting an incomplete API/loader payload.
-	expectsTwentyRows := page < content.Pagination.TotalPages ||
-		page == 5 && content.Pagination.TotalPages >= 5
+	expectsTwentyRows := page <= 5 && content.Pagination.TotalPages >= 5
 	if expectsTwentyRows && len(content.Rows) != 20 {
 		return parseHongguoRankingDocument(body, board, page, loader)
 	}
