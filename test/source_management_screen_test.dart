@@ -41,6 +41,7 @@ void main() {
     );
     final unlockButton = find.byKey(const ValueKey('unlock-advanced-sources'));
     await tester.ensureVisible(unlockButton);
+    await tester.pumpAndSettle();
     await tester.tap(unlockButton);
     await tester.pumpAndSettle();
 
@@ -52,6 +53,7 @@ void main() {
 
     final huangdouSwitch = find.byKey(const ValueKey('source-switch-huangdou'));
     await tester.ensureVisible(huangdouSwitch);
+    await tester.pumpAndSettle();
     await tester.tap(huangdouSwitch);
     await tester.pumpAndSettle();
     expect(store.sourceEnabled('huangdou'), isTrue);
