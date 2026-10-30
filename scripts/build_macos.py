@@ -50,8 +50,8 @@ def ensure_macos_project(flutter):
     if info.is_file():
         with info.open("rb") as stream:
             values = plistlib.load(stream)
-        values["CFBundleDisplayName"] = "D-TV"
-        values["CFBundleName"] = "D-TV"
+        values["CFBundleDisplayName"] = "D TV"
+        values["CFBundleName"] = "D TV"
         with info.open("wb") as stream:
             plistlib.dump(values, stream)
 
@@ -68,7 +68,7 @@ def ensure_macos_project(flutter):
             plistlib.dump(values, stream)
 
 
-def build_universal_core():
+def build_universal_core(variant):
     go = shutil.which("go")
     clang = shutil.which("clang")
     lipo = shutil.which("lipo") or "/usr/bin/lipo"
@@ -102,7 +102,7 @@ def build_universal_core():
                 "build",
                 "-trimpath",
                 "-buildmode=c-shared",
-                "-ldflags=-s -w",
+                "-ldflags=" + variant.linker_flags,
                 "-o",
                 str(output),
                 "./bridge",
@@ -156,7 +156,7 @@ def main():
         raise SystemExit("找不到 Xcode Command Line Tools。")
 
     ensure_macos_project(flutter)
-    core = build_universal_core()
+    core = build_universal_core(variant)
     run([flutter, "pub", "get"])
     pod = shutil.which("pod")
     if pod and (ROOT / "macos" / "Podfile").is_file():
