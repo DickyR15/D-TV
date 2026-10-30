@@ -163,7 +163,7 @@ jobs:
   ios-ipa:
     name: iOS device IPA and simulator build
     needs: core-validation
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
@@ -210,7 +210,7 @@ jobs:
   macos-universal:
     name: macOS Universal DMG (arm64 + x86_64)
     needs: core-validation
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
