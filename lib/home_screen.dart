@@ -104,6 +104,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _homePopupOpen = false;
   final FocusNode _homePopupUsersFocus =
       FocusNode(debugLabel: 'home-more-users');
+  final FocusNode _desktopShortcutFocus =
+      FocusNode(debugLabel: 'desktop-shortcuts');
   Timer? _startupFocusRetry;
   Timer? _appUpdateCheckTimer;
   bool _updateDialogOpen = false;
@@ -1011,6 +1013,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _cancelStartupFocusRetry();
     _appUpdateCheckTimer?.cancel();
     _homePopupUsersFocus.dispose();
+    _desktopShortcutFocus.dispose();
     _updater.removeListener(_updateChanged);
     _updater.dispose();
     _followUpdater.dispose();
@@ -1916,8 +1919,11 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         if (!television) {
           if (!AppLayout.isDesktopPlatform) return scaffold;
-          return CallbackShortcuts(
-            bindings: {
+          return Focus(
+            focusNode: _desktopShortcutFocus,
+            autofocus: true,
+            child: CallbackShortcuts(
+              bindings: {
               const SingleActivator(LogicalKeyboardKey.digit1, control: true):
                   () => _desktopNavigate(0),
               const SingleActivator(LogicalKeyboardKey.digit2, control: true):
@@ -1940,8 +1946,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   _focusDesktopSearch,
               const SingleActivator(LogicalKeyboardKey.f1):
                   _showDesktopShortcutHelp,
-            },
-            child: scaffold,
+              },
+              child: scaffold,
+            ),
           );
         }
         return Listener(
