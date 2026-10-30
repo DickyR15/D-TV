@@ -69,10 +69,12 @@ class AppDevice {
   const AppDevice({
     this.television = false,
     this.emulator = false,
+    this.emulatorIndicators = const [],
     this.version = appVersion,
   });
   final bool television;
   final bool emulator;
+  final List<String> emulatorIndicators;
   final String version;
   static const channel = MethodChannel('duanju/device');
 
@@ -96,10 +98,14 @@ class AppDevice {
       final television = data?['television'];
       if (television is! bool) return fallback;
       final emulator = data?['emulator'];
+      final emulatorIndicators = data?['emulatorIndicators'];
       final version = data?['version'];
       return AppDevice(
         television: television,
         emulator: emulator is bool ? emulator : fallback.emulator,
+        emulatorIndicators: emulatorIndicators is List
+            ? emulatorIndicators.whereType<String>().toList(growable: false)
+            : fallback.emulatorIndicators,
         version: version is String && version.isNotEmpty
             ? version
             : fallback.version,
