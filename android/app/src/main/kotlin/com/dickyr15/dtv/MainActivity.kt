@@ -41,7 +41,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterShellArgs
 import io.flutter.plugin.common.MethodChannel
 
-open private const val PICTURE_IN_PICTURE_ACTION = "com.dickyr15.dtv.PICTURE_IN_PICTURE_ACTION"
+private const val PICTURE_IN_PICTURE_ACTION = "com.dickyr15.dtv.PICTURE_IN_PICTURE_ACTION"
 
 private data class PlayerPictureInPicture(
     val width: Int,
@@ -52,7 +52,7 @@ private data class PlayerPictureInPicture(
     val autoEnter: Boolean
 )
 
-class MainActivity : FlutterActivity() {
+open class MainActivity : FlutterActivity() {
     private var headroomReadAt = 0L
     private var thermalHeadroom: Double? = null
     private var deviceChannel: MethodChannel? = null
