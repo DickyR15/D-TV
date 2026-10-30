@@ -18,6 +18,7 @@ env.setdefault('GOSUMDB', 'off')
 flutter = shutil.which('flutter')
 if not flutter:
     raise SystemExit('請先將 Flutter SDK 的 bin 目錄加入 PATH。')
+subprocess.run([sys.executable, str(root / 'scripts' / 'prepare_branding.py')], cwd=root, check=True)
 subprocess.run([sys.executable, str(root / 'scripts' / 'build_native.py'), '--platform', 'windows', *variant.arguments],
                cwd=root, env=env, check=True)
 subprocess.run([flutter, 'pub', 'get'], cwd=root, env=env, check=True)
