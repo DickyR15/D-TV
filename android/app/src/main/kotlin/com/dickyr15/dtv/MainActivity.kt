@@ -110,16 +110,27 @@ open class MainActivity : FlutterActivity() {
     }
 
     private fun emulatorIndicators(): List<String> {
-        val buildValues = listOf(
-            Build.FINGERPRINT,
-            Build.MODEL,
-            Build.MANUFACTURER,
-            Build.HARDWARE,
-            Build.PRODUCT,
-            Build.BRAND,
-            Build.DEVICE,
-            Build.BOARD,
-            Build.HOST
+        val properties = mapOf(
+            "ro.product.model" to readSystemProperty("ro.product.model"),
+            "ro.product.manufacturer" to readSystemProperty("ro.product.manufacturer"),
+            "ro.product.device" to readSystemProperty("ro.product.device"),
+            "ro.product.name" to readSystemProperty("ro.product.name"),
+            "ro.product.board" to readSystemProperty("ro.product.board"),
+            "ro.hardware" to readSystemProperty("ro.hardware"),
+            "ro.build.fingerprint" to readSystemProperty("ro.build.fingerprint")
+        )
+        val buildValues = (
+            listOf(
+                Build.FINGERPRINT,
+                Build.MODEL,
+                Build.MANUFACTURER,
+                Build.HARDWARE,
+                Build.PRODUCT,
+                Build.BRAND,
+                Build.DEVICE,
+                Build.BOARD,
+                Build.HOST
+            ) + properties.values
         ).joinToString(" ").lowercase(Locale.ROOT)
 
         val emulatorMarkers = listOf(
@@ -137,7 +148,6 @@ open class MainActivity : FlutterActivity() {
             "雷电",
             "nox",
             "bluestacks",
-            "bst",
             "mumu",
             "nemu",
             "droid4x",
@@ -153,7 +163,7 @@ open class MainActivity : FlutterActivity() {
 
         val qemu = readSystemProperty("ro.kernel.qemu")
         val bootQemu = readSystemProperty("ro.boot.qemu")
-        val hardwareProperty = readSystemProperty("ro.hardware").lowercase(Locale.ROOT)
+        val hardwareProperty = properties["ro.hardware"].orEmpty().lowercase(Locale.ROOT)
         if (qemu == "1") indicators += "ro.kernel.qemu"
         if (bootQemu == "1") indicators += "ro.boot.qemu"
         if (hardwareProperty in setOf("goldfish", "ranchu", "vbox86", "vbox86p", "nox", "nemu", "ttvm")) {
@@ -515,11 +525,12 @@ open class MainActivity : FlutterActivity() {
                             // Keep the user-facing version stable; Android versionCode
                             // remains an independent, monotonically increasing build identifier.
                             val displayVersion = versionName.ifBlank { "未知版本" }
+                            val emulatorSignals = emulatorIndicators()
                             result.success(
                                 mapOf(
                                     "television" to isTelevisionDevice(),
-                                    "emulator" to isEmulatorDevice(),
-                                    "emulatorIndicators" to emulatorIndicators(),
+                                    "emulator" to emulatorSignals.isNotEmpty(),
+                                    "emulatorIndicators" to emulatorSignals,
                                     "version" to displayVersion
                                 )
                             )
