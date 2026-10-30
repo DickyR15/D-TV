@@ -390,8 +390,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _busy ? null : () => _backup(false),
                 ),
                 ListTile(
+                  key: const ValueKey('restore-settings-backup'),
                   leading: const Icon(Icons.restore),
                   title: const Text('還原設定備份'),
+                  subtitle: const Text(
+                    '取代本機使用者、收藏清單、觀看紀錄與偏好設定；已下載影片會保留',
+                  ),
                   onTap: _busy ? null : () => _backup(true),
                 ),
               ],
