@@ -447,6 +447,31 @@ class LocalStore extends ChangeNotifier {
     });
   }
 
+  /// One-time default migration for landscape Android MPV devices.
+  /// Earlier versions serialized the default-off value whenever another
+  /// playback preference was saved, so a missing-key check alone is not enough.
+  bool get needsPortraitBlurLandscapeDefaultMigration =>
+      !locked && _bool(_key('portraitBlurLandscapeDefaultV1')) != true;
+
+  Future<void> migratePortraitBlurLandscapeDefault() {
+    final epoch = _epoch;
+    return _queue(() async {
+      if (locked ||
+          epoch != _epoch ||
+          _bool(_key('portraitBlurLandscapeDefaultV1')) == true) {
+        return;
+      }
+      final migrated = playbackPreferences.copyWith(
+        portraitBlurBackground: true,
+      );
+      await _commit({
+        _key('playback'): jsonEncode(migrated.toJson()),
+        _key('portraitBlurLandscapeDefaultV1'): true,
+      });
+      _notify();
+    });
+  }
+
   CatalogView get catalogView {
     if (locked) return const CatalogView();
     try {
