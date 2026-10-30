@@ -7,7 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 export 'app_build.dart';
 
-const appVersion = '0.2.160+337';
+const appVersion = '0.2.160+338';
 
 ThemeData televisionTheme(ThemeData theme) {
   final colors = theme.colorScheme;
@@ -48,10 +48,25 @@ ThemeData televisionTheme(ThemeData theme) {
 }
 
 class AppDevice {
-  const AppDevice({this.television = false, this.version = appVersion});
+  const AppDevice({
+    this.television = false,
+    this.emulator = false,
+    this.version = appVersion,
+  });
   final bool television;
+  final bool emulator;
   final String version;
   static const channel = MethodChannel('duanju/device');
+
+  static bool resolveTelevisionMode({
+    required String displayMode,
+    required bool television,
+    required bool emulator,
+  }) {
+    if (displayMode == 'television') return true;
+    if (displayMode == 'standard') return false;
+    return television || emulator;
+  }
 
   static Future<AppDevice> detect({
     AppDevice fallback = const AppDevice(),
@@ -74,9 +89,11 @@ class AppDevice {
           .timeout(const Duration(seconds: 2));
       final television = data?['television'];
       if (television is! bool) return fallback;
+      final emulator = data?['emulator'];
       final version = data?['version'];
       return AppDevice(
         television: television,
+        emulator: emulator is bool ? emulator : fallback.emulator,
         version: version is String && version.isNotEmpty
             ? version
             : fallback.version,
