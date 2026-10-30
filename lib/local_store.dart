@@ -45,6 +45,8 @@ class LocalStore extends ChangeNotifier {
   int _epoch = 0;
   int _failures = 0;
   Map<String, bool> _sourceSwitches = {};
+  bool _advancedSourcesUnlocked = false;
+  int _sourceAccessEpoch = 0;
   DateTime _retryAfter = DateTime(2000);
 
   void _initialize() {
@@ -95,6 +97,8 @@ class LocalStore extends ChangeNotifier {
   }
 
   void _block(String message) {
+    _sourceAccessEpoch++;
+    _advancedSourcesUnlocked = false;
     _configurationError = message;
     _locked = true;
     _profiles = [
@@ -120,6 +124,9 @@ class LocalStore extends ChangeNotifier {
   List<LocalProfile> get profiles => List.unmodifiable(_profiles);
   LocalProfile get profile =>
       _profiles.firstWhere((profile) => profile.id == _current);
+  bool get administratorPasswordConfigured =>
+      _profiles.any((candidate) => candidate.admin && candidate.protected);
+  bool get advancedSourcesUnlocked => _advancedSourcesUnlocked;
   bool get locked => _locked || _configurationError != null;
   int get profileEpoch => _epoch;
   bool get forceLogin {
@@ -144,6 +151,34 @@ class LocalStore extends ChangeNotifier {
   bool sourceEnabled(String source) =>
       _sourceSwitches[source] ?? !SourceSite.isRestricted(source);
 
+  /// Validates the existing administrator password for advanced source settings.
+  Future<void> unlockAdvancedSources(String pin) {
+    final requestEpoch = _sourceAccessEpoch;
+    final profileEpoch = _epoch;
+    return _queue(() async {
+      _requireAdmin();
+      final admin = _profiles.firstWhere((candidate) => candidate.admin);
+      if (!admin.protected) throw StateError('請先為管理員設定密碼');
+      await _checkPin(admin, pin);
+      if (requestEpoch != _sourceAccessEpoch ||
+          profileEpoch != _epoch ||
+          locked ||
+          !profile.admin) {
+        throw StateError('管理員身分已變更，請重新驗證');
+      }
+      _advancedSourcesUnlocked = true;
+      _notify();
+    });
+  }
+
+  /// Revokes advanced source access when the management screen is closed.
+  void lockAdvancedSources() {
+    _sourceAccessEpoch++;
+    if (!_advancedSourcesUnlocked) return;
+    _advancedSourcesUnlocked = false;
+    _notify();
+  }
+
   void _loadSourceSwitches() {
     try {
       final raw = _string('sourceSwitches');
@@ -160,9 +195,14 @@ class LocalStore extends ChangeNotifier {
       return Future.error(StateError('片源設定無效'));
     }
     final epoch = _epoch;
+    final sourceAccessEpoch = _sourceAccessEpoch;
     return _queue(() async {
       _requireAdmin();
       if (epoch != _epoch) throw StateError('目前使用者已變更，請重試');
+      if (SourceSite.isRestricted(source) &&
+          (!_advancedSourcesUnlocked || sourceAccessEpoch != _sourceAccessEpoch)) {
+        throw StateError('請先輸入管理員密碼解鎖進階片源');
+      }
       final switches = {..._sourceSwitches, source: enabled};
       await _commit({'sourceSwitches': jsonEncode(switches)});
       _sourceSwitches = switches;
@@ -996,13 +1036,21 @@ class LocalStore extends ChangeNotifier {
     await _commit({'activeProfile': id});
     _current = id;
     _locked = false;
+    _sourceAccessEpoch++;
+    _advancedSourcesUnlocked = false;
     _loadLibrary();
     _loadSeriesCandidates();
     _epoch++;
     _notify();
   });
   void lock() {
-    if (!profile.protected) return;
+    final wasAdvancedUnlocked = _advancedSourcesUnlocked;
+    _sourceAccessEpoch++;
+    _advancedSourcesUnlocked = false;
+    if (!profile.protected) {
+      if (wasAdvancedUnlocked) _notify();
+      return;
+    }
     _locked = true;
     _epoch++;
     _notify();
@@ -1076,6 +1124,10 @@ class LocalStore extends ChangeNotifier {
       ),
     });
     _profiles = profiles;
+    if (targetId == 'default' && pin != null) {
+      _sourceAccessEpoch++;
+      _advancedSourcesUnlocked = false;
+    }
     _notify();
   });
   Future<void> deleteProfile(String id) => _queue(() async {
