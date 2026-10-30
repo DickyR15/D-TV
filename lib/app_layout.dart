@@ -66,8 +66,13 @@ ThemeData televisionTheme(ThemeData theme) {
 }
 
 class AppDevice {
-  const AppDevice({this.television = false, this.version = appVersion});
+  const AppDevice({
+    this.television = false,
+    this.emulator = false,
+    this.version = appVersion,
+  });
   final bool television;
+  final bool emulator;
   final String version;
   static const channel = MethodChannel('duanju/device');
 
@@ -90,9 +95,11 @@ class AppDevice {
           .timeout(const Duration(seconds: 2));
       final television = data?['television'];
       if (television is! bool) return fallback;
+      final emulator = data?['emulator'];
       final version = data?['version'];
       return AppDevice(
         television: television,
+        emulator: emulator is bool ? emulator : fallback.emulator,
         version: version is String && version.isNotEmpty
             ? version
             : fallback.version,
@@ -246,6 +253,7 @@ class AppLayout extends InheritedWidget {
     required String mode,
     required bool detectedTelevision,
     required Size screenSize,
+    bool detectedEmulator = false,
     bool? desktopPlatform,
   }) {
     final desktop = desktopPlatform ?? isDesktopPlatform;
@@ -262,7 +270,12 @@ class AppLayout extends InheritedWidget {
         return _inferFromSize(screenSize, desktop: desktop);
       case 'auto':
       default:
-        if (detectedTelevision) return FormFactor.television;
+        // Android emulators are also D-TV's remote/TV-layout test targets.
+        // Explicit phone, pad, window and standard modes above still override
+        // this automatic emulator classification.
+        if (detectedTelevision || detectedEmulator) {
+          return FormFactor.television;
+        }
         return _inferFromSize(screenSize, desktop: desktop);
     }
   }
