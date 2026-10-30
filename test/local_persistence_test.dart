@@ -254,5 +254,22 @@ void main() {
         expect(store.exportRecoveryData(), contains('舊資料'));
       },
     );
-  }
+  }  test('ignored update version persists and is included in a settings backup', () async {
+    final (store, platform) = await create();
+    await store.ignoreUpdateVersion('v1.0.1');
+    expect(store.ignoredUpdateVersion, 'v1.0.1');
+
+    final backup = jsonDecode(await store.exportBackup()) as Map<String, dynamic>;
+    expect(backup['ignoredUpdateVersion'], 'v1.0.1');
+    backup['ignoredUpdateVersion'] = 'v1.0.2';
+    await store.importBackup(jsonEncode(backup));
+    expect(store.ignoredUpdateVersion, 'v1.0.2');
+
+    final restored = await restart(platform);
+    expect(restored.ignoredUpdateVersion, 'v1.0.2');
+    await restored.clearIgnoredUpdateVersion();
+    expect(restored.ignoredUpdateVersion, isEmpty);
+  });
+
+
 }
