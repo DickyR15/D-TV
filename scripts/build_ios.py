@@ -91,7 +91,7 @@ def build_core(simulator=False, variant=BuildVariant()):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='構建HGTV / HGTV iOS 核心和應用')
+    parser = argparse.ArgumentParser(description='建置 D TV iOS 核心和應用')
     parser.add_argument('--core-only', action='store_true')
     parser.add_argument('--simulator', action='store_true', help='額外生成模擬器核心；不啟動模擬器')
     parser.add_argument('--export-options', type=Path, help='使用自己的 Xcode 簽名配置匯出 IPA')
@@ -108,7 +108,7 @@ def main():
     run(['pod', 'install'], cwd=root / 'ios')
     output = root / 'dist' / 'ios'
     output.mkdir(parents=True, exist_ok=True)
-    version = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.MULTILINE).group(1)
+    version = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.MULTILINE).group(1).split('+', 1)[0]
     artifacts = []
     if options.export_options:
         config = options.export_options.expanduser().resolve()
@@ -116,7 +116,7 @@ def main():
             raise SystemExit('ExportOptions.plist 不存在。')
         run([flutter, 'build', 'ipa', '--release', '--no-pub', '--export-options-plist', str(config), *variant.flutter_arguments])
         for package in (root / 'build' / 'ios' / 'ipa').glob('*.ipa'):
-            destination = output / f'{variant.slug}-{version}-ios.ipa'
+            destination = output / f'DTV-{version}-iOS.ipa'
             shutil.copy2(package, destination)
             artifacts.append(destination)
     else:
@@ -133,7 +133,7 @@ def main():
             shutil.rmtree(payload)
         payload.mkdir(parents=True)
         shutil.copytree(application, payload / application.name, symlinks=True)
-        ipa = output / f'{variant.slug}-{version}-ios-unsigned.ipa'
+        ipa = output / f'DTV-{version}-iOS.ipa'
         if ipa.exists():
             ipa.unlink()
         run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(payload), str(ipa)])
