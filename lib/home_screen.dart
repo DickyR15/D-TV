@@ -94,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _playbackRouteActive = false;
   bool _exitConfirmationShowing = false;
   bool _homePopupOpen = false;
+  Timer? _startupFocusRetry;
   PhoneSearchServer? _phoneSearchServer;
   StreamSubscription<String>? _phoneSearchSubscription;
   Future<PhoneSearchServer>? _phoneSearchServerStarting;
@@ -838,14 +839,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _requestDefaultTelevisionFocus() {
-    // Device detection can switch the layout from desktop to TV after the
-    // navigation targets are already mounted. In that case, changing
-    // RemoteTarget.autofocus from false to true does not request focus again.
+    // Startup is shown through an AnimatedSwitcher splash. A focus request
+    // during the first frame can be overwritten while the splash route fades
+    // out, so keep one guarded retry after that transition has completed.
+    _startupFocusRetry?.cancel();
     final node = _navigationFocusNodes.putIfAbsent(
       4,
       () => FocusNode(debugLabel: 'D TV navigation 4'),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    void requestDefaultFocus() {
       if (!mounted ||
           !AppLayout.isTelevision(context) ||
           _tab != 4 ||
@@ -853,12 +855,36 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       node.requestFocus();
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      requestDefaultFocus();
     });
+    _startupFocusRetry = Timer(const Duration(milliseconds: 750), () {
+      _startupFocusRetry = null;
+      // Do not steal focus after the user has started navigating. A changed
+      // tab, key event, or pointer action cancels this one-time startup retry.
+      if (!mounted || _tab != 4 || !AppLayout.isTelevision(context)) return;
+      if (!node.hasPrimaryFocus) requestDefaultFocus();
+    });
+  }
+
+  void _cancelStartupFocusRetry() {
+    _startupFocusRetry?.cancel();
+    _startupFocusRetry = null;
+  }
+
+  KeyEventResult _handleStartupFocusKey(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      _cancelStartupFocusRetry();
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
   void dispose() {
     appNavigationObserver.changes.removeListener(_onAppNavigationChanged);
+    _cancelStartupFocusRetry();
     _updater.removeListener(_updateChanged);
     _updater.dispose();
     _followUpdater.dispose();
@@ -1655,7 +1681,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
         );
         if (!television) return scaffold;
-        return PopScope(
+        return Listener(
+          onPointerDown: (_) => _cancelStartupFocusRetry(),
+          child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onKeyEvent: _handleStartupFocusKey,
+            child: PopScope(
           canPop: !television,
           onPopInvokedWithResult: (didPop, result) {
             if (!didPop) _televisionBack();
@@ -1666,6 +1698,8 @@ class _HomeScreenState extends State<HomeScreen> {
               const SingleActivator(LogicalKeyboardKey.goBack): _televisionBack,
             },
             child: scaffold,
+          ),
+            ),
           ),
         );
       },
@@ -1948,6 +1982,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       if (activeIndex < 0) return KeyEventResult.ignored;
       final key = event.logicalKey;
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        _cancelStartupFocusRetry();
+      }
       if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
         final step = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
         final nextIndex = (activeIndex + step).clamp(0, entries.length - 1);
@@ -2001,6 +2038,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? ScrollPositionAlignmentPolicy.explicit
                         : null,
                     onFocus: () {
+                      if (entry.tab != 4) _cancelStartupFocusRetry();
                       if (_tab != entry.tab) {
                         _selectNavigationDestination(entry.tab);
                       }
