@@ -113,8 +113,8 @@ def parse_color(value: str, opacity: float):
 def render_master_icon(size: int = 1024):
     source = ROOT / "android/app/src/main/res/drawable/dtv_icon.xml"
     root = ET.parse(source).getroot()
-    width = float(root.attrib["viewportWidth"])
-    height = float(root.attrib["viewportHeight"])
+    width = float(root.attrib[ANDROID + "viewportWidth"])
+    height = float(root.attrib[ANDROID + "viewportHeight"])
     scale = min(size / width, size / height)
     offset_x = (size - width * scale) / 2
     offset_y = (size - height * scale) / 2
