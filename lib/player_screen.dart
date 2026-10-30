@@ -148,6 +148,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _pictureInPictureActive = false;
   bool _pictureInPictureRequested = false;
   bool _pictureInPictureHandlerInstalled = false;
+  String? _pictureInPictureStateSignature;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   String _loadingMessage = '正在準備播放';
   String? _error;
@@ -400,6 +401,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           setState(() {
             _aspectRatio = size.width / size.height;
           });
+          _syncPictureInPicture();
           _scheduleSystemUi();
         }
         unawaited(_logVideoOutput(parameters));
@@ -562,17 +564,24 @@ class _PlayerScreenState extends State<PlayerScreen>
     final width = ratio >= 1 ? (1000 * ratio).round() : 1000;
     final height = ratio >= 1 ? 1000 : (1000 / ratio).round();
     final playing = !_loading && _error == null && _player.state.playing;
+    final hasPrevious = _index > 0;
+    final hasNext = _index + 1 < widget.detail.episodes.length;
     final autoEnter = playing && !_television &&
         widget.store.playbackPreferences.autoPictureInPicture;
+    final signature = '$width:$height:$playing:$hasPrevious:$hasNext:$autoEnter';
+    if (_pictureInPictureStateSignature == signature) return;
+    _pictureInPictureStateSignature = signature;
     unawaited(
       AppDevice.channel.invokeMethod<void>('updatePictureInPicture', {
         'width': width,
         'height': height,
         'playing': playing,
-        'hasPrevious': _index > 0,
-        'hasNext': _index + 1 < widget.detail.episodes.length,
+        'hasPrevious': hasPrevious,
+        'hasNext': hasNext,
         'autoEnter': autoEnter,
-      }).catchError((Object _) {}),
+      }).catchError((Object _) {
+        _pictureInPictureStateSignature = null;
+      }),
     );
   }
 
