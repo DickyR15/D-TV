@@ -344,6 +344,12 @@ class LocalStore extends ChangeNotifier {
     }.contains(value) ? value! : 'auto';
   }
 
+  String get ignoredUpdateVersion {
+    if (_configurationError != null) return '';
+    final value = _string('ignoredUpdateVersion') ?? '';
+    return value.length <= 80 ? value : '';
+  }
+
   String get themeMode {
     final value = _configurationError == null ? _string('themeMode') : null;
     return {'light', 'dark', 'system'}.contains(value) ? value! : 'system';
@@ -579,6 +585,17 @@ class LocalStore extends ChangeNotifier {
       {'light', 'dark', 'system'}.contains(value)
       ? _setting('themeMode', value)
       : Future.value();
+
+  Future<void> ignoreUpdateVersion(String version) {
+    final normalized = version.trim();
+    if (normalized.isEmpty || normalized.length > 80) {
+      return Future.error(const FormatException('忽略更新版本格式無效'));
+    }
+    return _setting('ignoredUpdateVersion', normalized);
+  }
+
+  Future<void> clearIgnoredUpdateVersion() =>
+      _setting('ignoredUpdateVersion', '');
 
   Future<void> setThemeAccent(String value) =>
       const {
@@ -1062,6 +1079,7 @@ class LocalStore extends ChangeNotifier {
       'themeMode': themeMode,
       'themeAccent': themeAccent,
       'forceLogin': forceLogin,
+      'ignoredUpdateVersion': ignoredUpdateVersion,
       'libraries': {
         for (final profile in _profiles)
           profile.id: {
@@ -1123,6 +1141,11 @@ class LocalStore extends ChangeNotifier {
     }
     if (data.containsKey('forceLogin') && data['forceLogin'] is! bool) {
       throw const FormatException('備份登入設定無效');
+    }
+    if (data.containsKey('ignoredUpdateVersion') &&
+        (data['ignoredUpdateVersion'] is! String ||
+            (data['ignoredUpdateVersion'] as String).length > 80)) {
+      throw const FormatException('備份忽略更新版本無效');
     }
     final libraries = data['libraries'] as Map;
     for (final profile in profiles) {
@@ -1199,6 +1222,7 @@ class LocalStore extends ChangeNotifier {
       'forceLogin': data['forceLogin'] is bool
           ? data['forceLogin'] as bool
           : profiles.firstWhere((profile) => profile.admin).protected,
+      'ignoredUpdateVersion': data['ignoredUpdateVersion'] as String? ?? '',
     };
     final libraries = data['libraries'] as Map;
     for (final profile in profiles) {
