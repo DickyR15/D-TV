@@ -1,6 +1,7 @@
 import argparse
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -109,10 +110,22 @@ else:
 subprocess.run(package_args, cwd=root, env=env, check=True)
 
 if options.universal and options.build_number:
-    version = options.build_name or "1.0.0"
-    source = root / "dist" / "android" / f"{variant.slug}-{version}-universal.apk"
+    # package_release.py names the validated intermediate APK with the full
+    # pubspec version (including its existing +build metadata). Flutter's
+    # --build-name/-number overrides only the final public delivery filename.
+    pubspec = (root / "pubspec.yaml").read_text(encoding="utf-8")
+    match = re.search(r"^version:\\s*([\\w.+-]+)\\s*$", pubspec, re.MULTILINE)
+    if not match:
+        raise SystemExit("pubspec.yaml 缺少合法版本號。")
+    package_version = match.group(1)
+    version = options.build_name or package_version.split("+", 1)[0]
+    source = root / "dist" / "android" / (
+        f"{variant.slug}-{package_version}-universal.apk"
+    )
     target = root / "dist" / "android" / (
         f"D TV-Android-Universal_v{version}+{options.build_number}_MPV.apk"
     )
+    if not source.is_file():
+        raise SystemExit("找不到已驗證的 Universal APK：" + str(source))
     shutil.copy2(source, target)
     print(target)
