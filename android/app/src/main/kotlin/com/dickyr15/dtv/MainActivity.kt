@@ -670,6 +670,7 @@ class MainActivity : FlutterActivity() {
             .apply { isEnabled = enabled }
     }
 
+    @Suppress("DEPRECATION")
     private fun registerPictureInPictureReceiver() {
         if (pictureInPictureReceiver != null) return
         val receiver = object : BroadcastReceiver() {
@@ -683,7 +684,6 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            @Suppress("DEPRECATION")
             registerReceiver(receiver, filter)
         }
     }

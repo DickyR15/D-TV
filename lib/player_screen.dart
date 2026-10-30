@@ -519,23 +519,36 @@ class _PlayerScreenState extends State<PlayerScreen>
         final active = arguments is Map && arguments['active'] == true;
         _setPictureInPictureStatus(active: active, delayHiddenPause: !active);
       } else if (call.method == 'pictureInPicturePending') {
-        _setPictureInPictureStatus(requested: true);
+        _handlePictureInPicturePending();
       } else if (call.method == 'pictureInPictureAction') {
         final arguments = call.arguments;
         final action = arguments is Map ? arguments['action'] : null;
         switch (action) {
           case 'toggle':
             _togglePlayback();
+            break;
           case 'previous':
             if (_index > 0) unawaited(_play(_index - 1));
+            break;
           case 'next':
             if (_index + 1 < widget.detail.episodes.length) {
               unawaited(_play(_index + 1));
             }
+            break;
         }
       }
     });
     unawaited(_refreshPictureInPictureStatus());
+  }
+
+  void _handlePictureInPicturePending() {
+    _setPictureInPictureStatus(requested: true);
+    _pictureInPictureExitTimer?.cancel();
+    _pictureInPictureExitTimer = Timer(const Duration(seconds: 2), () {
+      if (!_closed && _pictureInPictureRequested && !_pictureInPictureActive) {
+        _setPictureInPictureStatus(requested: false, delayHiddenPause: true);
+      }
+    });
   }
 
   void _syncPictureInPicture() {
@@ -662,6 +675,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     _interactions.cancel();
+    _syncPictureInPicture();
     final rawRatio = _aspectRatio.isFinite && _aspectRatio > 0
         ? _aspectRatio
         : 16 / 9;
