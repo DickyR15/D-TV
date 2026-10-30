@@ -139,6 +139,14 @@ def locate_application():
 
 
 def main():
+    import argparse
+    from app_build import add_variant_argument
+
+    parser = argparse.ArgumentParser(description="建立 macOS arm64 + x86_64 Universal DMG。")
+    add_variant_argument(parser)
+    options = parser.parse_args()
+    variant = BuildVariant(options.all_sources)
+
     if platform.system() != "Darwin":
         raise SystemExit("macOS Universal 建置必須在 macOS + Xcode 環境執行。")
     flutter = shutil.which("flutter")
@@ -156,7 +164,19 @@ def main():
 
     environment = os.environ.copy()
     environment["MACOSX_DEPLOYMENT_TARGET"] = MINIMUM_MACOS
-    run([flutter, "build", "macos", "--release", "--no-pub"], env=environment)
+    environment["ARCHS"] = "arm64 x86_64"
+    environment["ONLY_ACTIVE_ARCH"] = "NO"
+    run(
+        [
+            flutter,
+            "build",
+            "macos",
+            "--release",
+            "--no-pub",
+            *variant.flutter_arguments,
+        ],
+        env=environment,
+    )
 
     application = locate_application()
     contents = application / "Contents"
@@ -184,7 +204,6 @@ def main():
     run(["codesign", "--force", "--deep", "--sign", "-", str(application)])
     run(["codesign", "--verify", "--deep", "--strict", str(application)])
 
-    variant = BuildVariant("--all-sources" in sys.argv)
     package_args = [
         sys.executable,
         str(ROOT / "scripts" / "package_release.py"),
