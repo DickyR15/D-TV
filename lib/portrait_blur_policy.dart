@@ -1,12 +1,12 @@
 bool shouldUsePortraitBlurBackground({
   required bool enabled,
-  required bool mpvEmbedBackend,
+  required bool mpvBackendAvailable,
   required bool loading,
   required bool hasError,
   required double aspectRatio,
 }) =>
     enabled &&
-    mpvEmbedBackend &&
+    mpvBackendAvailable &&
     !loading &&
     !hasError &&
     aspectRatio.isFinite &&

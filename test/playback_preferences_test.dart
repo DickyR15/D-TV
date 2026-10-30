@@ -34,21 +34,22 @@ void main() {
       isTrue,
     );
   });
-  test('1.0.0 ignores the deferred legacy portrait blur preference', () {
-    final preferences = PlaybackPreferences.fromJson(const {
-      'speed': 1.25,
-      'quality': 720,
-      'danmaku': false,
-      'portraitBlurBackground': true,
-    });
+  test('portrait blur defaults off and persists through JSON and copyWith', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.portraitBlurBackground, isFalse);
 
-    expect(preferences.speed, 1.25);
-    expect(preferences.quality, 720);
-    expect(preferences.danmaku, isFalse);
-    expect(preferences.toJson().containsKey('portraitBlurBackground'), isFalse);
+    final enabled = defaults.copyWith(portraitBlurBackground: true);
+    expect(enabled.portraitBlurBackground, isTrue);
     expect(
-      PlaybackPreferences.fromJson(preferences.toJson()).speed,
-      1.25,
+      PlaybackPreferences.fromJson(enabled.toJson()).portraitBlurBackground,
+      isTrue,
+    );
+
+    final disabled = enabled.copyWith(portraitBlurBackground: false);
+    expect(disabled.portraitBlurBackground, isFalse);
+    expect(
+      PlaybackPreferences.fromJson(disabled.toJson()).portraitBlurBackground,
+      isFalse,
     );
   });
   test('TV decoder defaults to automatic and persists each supported choice', () {

@@ -24,6 +24,8 @@ import 'playback_preloader.dart';
 import 'playback_recovery.dart';
 import 'playback_controls_visibility.dart';
 import 'playback_preferences.dart';
+import 'portrait_blur_background.dart';
+import 'portrait_blur_policy.dart';
 import 'luna_exo_player.dart';
 import 'player_controls.dart';
 import 'player_interactions.dart';
@@ -154,6 +156,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   String? _saveWarning;
   PlaybackPlan? _plan;
   double _speed = 1;
+  bool _portraitBlurBackground = false;
   double _aspectRatio = 9 / 16;
   double _resumePosition = 0;
   bool _rotating = false;
@@ -187,6 +190,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     danmaku: _danmakuEnabled,
     preload: _preloadEnabled,
     enhancement: _enhancement.preferences,
+    portraitBlurBackground: _portraitBlurBackground,
     televisionDecoder: _televisionDecoder,
     autoPictureInPicture: widget.store.playbackPreferences.autoPictureInPicture,
   );
@@ -218,6 +222,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _autoAdvance = preferences.autoAdvance;
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
     _preloadEnabled = preferences.preloads(television: false);
+    _portraitBlurBackground = preferences.portraitBlurBackground;
     _televisionDecoder = preferences.televisionDecoder;
     // Keep the Android MPV Embed surface path TV-only. On phones and tablets,
     // hardware-compatible mode uses mediacodec-copy with the regular MPV view.
@@ -1912,6 +1917,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _autoAdvance = nextPreferences.autoAdvance;
       _danmakuEnabled = nextPreferences.danmaku;
       _preloadEnabled = nextPreferences.preload ?? _preloadEnabled;
+      _portraitBlurBackground = nextPreferences.portraitBlurBackground;
       _televisionDecoder = nextPreferences.televisionDecoder;
     });
     _danmaku.setEnabled(_danmakuEnabled);
@@ -2432,11 +2438,29 @@ class _PlayerScreenState extends State<PlayerScreen>
         controls: (_) => controls,
       );
     }
-    return Video(
+    final blurSupported =
+        Platform.isAndroid &&
+        _androidPlayerEngine != 'exo' &&
+        _player.platform is NativePlayer;
+    final portraitBlurActive = shouldUsePortraitBlurBackground(
+      enabled: _portraitBlurBackground,
+      mpvBackendAvailable: blurSupported,
+      loading: _loading,
+      hasError: _error != null,
+      aspectRatio: _aspectRatio,
+    );
+    final video = Video(
       controller: _video!,
       fit: fit,
-      fill: Colors.black,
+      fill: portraitBlurActive ? Colors.transparent : Colors.black,
       controls: (_) => controls,
+    );
+    if (!blurSupported) return video;
+    return PortraitBlurBackground(
+      player: _player,
+      active: portraitBlurActive,
+      onDiagnostic: (message) => DiaryService.add('[PortraitBlur] $message'),
+      child: video,
     );
   }
 

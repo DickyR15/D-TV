@@ -10,7 +10,7 @@ import 'fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('1.0.0 hides deferred blur control and keeps auto-save', (tester) async {
+  testWidgets('blur background is opt-in and auto-saves with playback settings', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final store = testStore(await SharedPreferences.getInstance());
     addTearDown(store.dispose);
@@ -40,8 +40,14 @@ void main() {
       reason: 'fresh TV installs should enable next-episode preloading',
     );
     expect(find.byKey(const ValueKey('playback-auto-advance')), findsOneWidget);
-    expect(find.byKey(const ValueKey('playback-portrait-blur-background')), findsNothing);
-    expect(find.text('直式影片模糊背景'), findsNothing);
+    final blurFinder =
+        find.byKey(const ValueKey('playback-portrait-blur-background'));
+    expect(blurFinder, findsOneWidget);
+    expect(tester.widget<SwitchListTile>(blurFinder).value, isFalse);
+
+    await tester.tap(blurFinder);
+    await tester.pumpAndSettle();
+    expect(store.playbackPreferences.portraitBlurBackground, isTrue);
 
     await tester.tap(find.byKey(const ValueKey('playback-default-speed')));
     await tester.pumpAndSettle();
@@ -54,8 +60,8 @@ void main() {
       1.25,
     );
     expect(
-      store.playbackPreferences.toJson().containsKey('portraitBlurBackground'),
-      isFalse,
+      store.playbackPreferences.toJson()['portraitBlurBackground'],
+      isTrue,
     );
   });
 
@@ -76,7 +82,10 @@ void main() {
           home: AppLayout(
             television: false,
             formFactor: factor,
-            child: PlaybackSettingsScreen(store: store),
+            child: PlaybackSettingsScreen(
+              store: store,
+              portraitBlurSupported: true,
+            ),
           ),
         ),
       );

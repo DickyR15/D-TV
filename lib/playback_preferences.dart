@@ -35,6 +35,7 @@ class PlaybackPreferences {
     this.danmaku = false,
     this.preload,
     this.enhancement = const VideoEnhancementPreferences(),
+    this.portraitBlurBackground = false,
     this.televisionDecoder = TelevisionDecoder.automatic,
     this.autoPictureInPicture = false,
   });
@@ -45,6 +46,7 @@ class PlaybackPreferences {
   final bool danmaku;
   final bool? preload;
   final VideoEnhancementPreferences enhancement;
+  final bool portraitBlurBackground;
   final TelevisionDecoder televisionDecoder;
   final bool autoPictureInPicture;
 
@@ -59,6 +61,7 @@ class PlaybackPreferences {
     bool? danmaku,
     bool? preload,
     VideoEnhancementPreferences? enhancement,
+    bool? portraitBlurBackground,
     TelevisionDecoder? televisionDecoder,
     bool? autoPictureInPicture,
   }) => PlaybackPreferences(
@@ -68,6 +71,7 @@ class PlaybackPreferences {
     danmaku: danmaku ?? this.danmaku,
     preload: preload ?? this.preload,
     enhancement: enhancement ?? this.enhancement,
+    portraitBlurBackground: portraitBlurBackground ?? this.portraitBlurBackground,
     televisionDecoder: televisionDecoder ?? this.televisionDecoder,
     autoPictureInPicture: autoPictureInPicture ?? this.autoPictureInPicture,
   );
@@ -79,6 +83,7 @@ class PlaybackPreferences {
     'danmaku': danmaku,
     if (preload != null) 'preopenNextEpisode': preload,
     'enhancement': enhancement.toJson(),
+    'portraitBlurBackground': portraitBlurBackground,
     'televisionDecoderMode': televisionDecoder.name,
     'autoPictureInPicture': autoPictureInPicture,
   };
@@ -106,6 +111,7 @@ class PlaybackPreferences {
       danmaku: danmaku,
       preload: preload,
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
+      portraitBlurBackground: value['portraitBlurBackground'] as bool? ?? false,
       televisionDecoder: decoder,
       autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
     );

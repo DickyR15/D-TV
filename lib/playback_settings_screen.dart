@@ -16,9 +16,11 @@ class PlaybackSettingsScreen extends StatefulWidget {
   const PlaybackSettingsScreen({
     super.key,
     required this.store,
+    this.portraitBlurSupported,
   });
 
   final LocalStore store;
+  final bool? portraitBlurSupported;
 
   @override
   State<PlaybackSettingsScreen> createState() => _PlaybackSettingsScreenState();
@@ -29,6 +31,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late int _quality = widget.store.playbackPreferences.quality;
   late TelevisionDecoder _decoder =
       widget.store.playbackPreferences.televisionDecoder;
+  late bool _portraitBlurBackground =
+      widget.store.playbackPreferences.portraitBlurBackground;
+  bool get _portraitBlurSupported =>
+      widget.portraitBlurSupported ??
+      (Platform.isAndroid && _androidPlayerEngine != 'exo');
   late bool _preloadEnabled;
   late bool _autoAdvance;
   late bool _autoPictureInPicture;
@@ -83,6 +90,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           speed: _speed,
           quality: _quality,
           televisionDecoder: _decoder,
+          portraitBlurBackground: _portraitBlurBackground,
           preload: _preloadEnabled,
           autoAdvance: _autoAdvance,
           autoPictureInPicture: _autoPictureInPicture,
@@ -109,6 +117,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateDecoder(TelevisionDecoder value) {
     setState(() => _decoder = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updatePortraitBlurBackground(bool value) {
+    setState(() => _portraitBlurBackground = value);
     unawaited(_persistPreferences());
   }
 
@@ -251,6 +264,21 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                 padding: EdgeInsets.only(top: 8),
                 child: Text('目前使用 ExoPlayer，解碼方式由 Android 管理，無法手動切換。'),
               ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              key: const ValueKey('playback-portrait-blur-background'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('直式影片模糊背景（試驗）'),
+              subtitle: Text(
+                _portraitBlurSupported
+                    ? '將影片畫面模糊填滿左右黑邊；背景約每秒更新一次，預設關閉。'
+                    : '需要 Android MPV 播放器；目前平台或 ExoPlayer 不支援影格擷取。',
+              ),
+              value: _portraitBlurBackground,
+              onChanged: _portraitBlurSupported
+                  ? _updatePortraitBlurBackground
+                  : null,
+            ),
             SwitchListTile(
               key: const ValueKey('playback-preopen-next-episode'),
               contentPadding: EdgeInsets.zero,
@@ -298,7 +326,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、清晰度、解碼方式、下一集預載入及自動連播會在變更時自動儲存；相容渲染設定會在重新啟動後生效。',
+              '倍速、清晰度、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景為試驗功能，背景約每秒更新一次。',
             ),
           ],
         ),
