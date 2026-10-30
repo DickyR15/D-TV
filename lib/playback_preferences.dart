@@ -66,6 +66,11 @@ class PlaybackPreferences {
     // The old 'preload' value was forced on by 1.0.0 playback code.
     // Read only the new key so older installations receive device-aware defaults.
     final preload = value['preopenNextEpisode'] as bool?;
+    final savedDecoder =
+        TelevisionDecoder.values.asNameMap()[value['televisionDecoderMode']];
+    final decoder = savedDecoder == TelevisionDecoder.optimized
+        ? TelevisionDecoder.hardware
+        : savedDecoder ?? TelevisionDecoder.automatic;
     if (!playbackSpeeds.contains(speed) || quality < 0 || quality > 4320) {
       throw const FormatException('播放偏好無效');
     }
@@ -76,9 +81,7 @@ class PlaybackPreferences {
       danmaku: danmaku,
       preload: preload,
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
-      televisionDecoder:
-          TelevisionDecoder.values.asNameMap()[value['televisionDecoderMode']] ??
-          TelevisionDecoder.automatic,
+      televisionDecoder: decoder,
       autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
     );
   }
