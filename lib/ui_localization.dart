@@ -7,6 +7,41 @@ import 'package:flutter/services.dart';
 /// 僅處理畫面顯示文字；API 的分類 ID、查詢參數與原始資料不修改。
 const Map<String, String> _twPhrases = {
   '使用權限': '使用權限',
+  '番劇': '動畫連載',
+  '番剧': '動畫連載',
+  '劇場動畫': '劇場版動畫',
+  '动漫': '動畫',
+  '動漫': '動畫',
+  '缓存': '快取',
+  '緩存': '快取',
+  '缓存目录': '快取目錄',
+  '缓存清理': '清除快取',
+  '缓存数据': '快取資料',
+  '文件夹': '資料夾',
+  '文件路径': '檔案路徑',
+  '文件管理': '檔案管理',
+  '本地文件': '本機檔案',
+  '本地存储': '本機儲存空間',
+  '文件': '檔案',
+  '默认': '預設',
+  '密码': '密碼',
+  '登录': '登入',
+  '退出登录': '登出',
+  '登录状态': '登入狀態',
+  '搜索结果': '搜尋結果',
+  '消息提示': '訊息提示',
+  '消息': '訊息',
+  '信息': '資訊',
+  '账号': '帳號',
+  '用户名': '使用者名稱',
+  '连接失败': '連線失敗',
+  '正在连接': '正在連線',
+  '连接': '連線',
+  '安装包': '安裝檔',
+  '程序': '程式',
+  '系统': '系統',
+  '已启用': '已啟用',
+  '已禁用': '已停用',
   '使用权限': '使用權限',
   '路径': '路徑',
   '调试': '除錯',
@@ -616,7 +651,7 @@ String uiTraditional(String value) {
   } else {
     var converted = _convertOpenCc(value, s2t);
     converted = _convertOpenCc(converted, taiwan);
-    // HGTV-specific terminology that is not part of the general OpenCC dictionaries.
+    // D TV 專用詞彙，補足 OpenCC 未涵蓋的台灣用語。
     for (final entry in _twPhrases.entries) {
       converted = converted.replaceAll(entry.key, entry.value);
     }
