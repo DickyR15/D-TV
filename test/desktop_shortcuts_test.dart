@@ -10,6 +10,21 @@ import 'package:hgtv/search_input.dart';
 
 import 'fixtures.dart';
 
+class _EmptyDesktopRepository extends FixtureRepository {
+  @override
+  Future<CatalogPage> cached(String source, {String category = ''}) async =>
+      CatalogPage([]);
+
+  @override
+  Future<CatalogPage> catalog(
+    String source, {
+    int page = 1,
+    String query = '',
+    String category = '',
+    bool force = false,
+  }) async => CatalogPage([], page: page, hasMore: false);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -30,7 +45,7 @@ void main() {
         television: false,
         formFactor: FormFactor.window,
         child: MaterialApp(
-          home: HomeScreen(repository: FixtureRepository(), store: store),
+          home: HomeScreen(repository: _EmptyDesktopRepository(), store: store),
         ),
       ),
     );
