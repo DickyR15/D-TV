@@ -129,9 +129,8 @@ jobs:
           cache: true
       - uses: android-actions/setup-android@v3
         with:
+          packages: "platforms;android-36 build-tools;36.0.0 platform-tools ndk;28.2.13676358"
           accept-android-sdk-licenses: true
-      - name: Install Android platform and NDK
-        run: python scripts/retry_command.py --attempts 3 -- sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools" "ndk;28.2.13676358"
       - name: Build one APK with ARM64, ARMv7 and x86_64
         id: build-universal
         shell: bash
