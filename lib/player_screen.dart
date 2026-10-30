@@ -159,17 +159,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _rotating = false;
   bool _television = false;
   FormFactor _formFactor = FormFactor.phone;
-  TelevisionDecoder _televisionDecoder = TelevisionDecoder.hardware;
+  TelevisionDecoder _televisionDecoder = TelevisionDecoder.automatic;
+  late final bool _useMpvEmbedForThisPlayer;
   bool _tvDecoderPolicyMigrated = false;
   // MPV-specific decoder properties must never be shown or applied when
   // Android is using the official video_player / ExoPlayer backend.
   // MPV-specific settings only apply when the active backend actually exposes
   // MPV's native platform. Android now defaults to the ExoPlayer backend.
-  bool get _mpvEmbedBackend =>
-      Platform.isAndroid &&
-      _androidPlayerEngine == 'mpv_embed' &&
-      widget.playerFactory == null &&
-      widget.videoBuilder == null;
+  bool get _mpvEmbedBackend => _useMpvEmbedForThisPlayer;
   bool get _televisionDecoderApplies =>
       Platform.isAndroid && _television && _player.platform is NativePlayer;
   bool get _televisionRenderingApplies =>
@@ -223,6 +220,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
     _preloadEnabled = preferences.preloads(television: false);
     _televisionDecoder = preferences.televisionDecoder;
+    // MPV Embed requires MediaCodec frames. Auto and software modes use the
+    // regular GPU output so mpv can fall back to software decoding.
+    _useMpvEmbedForThisPlayer =
+        Platform.isAndroid &&
+        _androidPlayerEngine == 'mpv_embed' &&
+        preferences.televisionDecoder == TelevisionDecoder.hardware &&
+        widget.playerFactory == null &&
+        widget.videoBuilder == null;
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
     _danmaku = DanmakuController(widget.repository)
@@ -1505,16 +1510,25 @@ class _PlayerScreenState extends State<PlayerScreen>
             if (_television) {
               final optimized =
                   _televisionDecoder == TelevisionDecoder.optimized;
-              await _setPlaybackProperty(
-                platform,
-                'hwdec',
-                _mpvEmbedBackend
-                    ? 'mediacodec'
-                    : _televisionDecoder == TelevisionDecoder.software
-                    ? 'no'
-                    : 'mediacodec-copy',
-              );
+              final hwdec = switch (_televisionDecoder) {
+                TelevisionDecoder.automatic => 'auto-safe',
+                TelevisionDecoder.hardware =>
+                  _mpvEmbedBackend ? 'mediacodec' : 'mediacodec-copy',
+                TelevisionDecoder.software => 'no',
+                // Preserve compatibility with existing saved preferences.
+                TelevisionDecoder.optimized => 'mediacodec-copy',
+              };
+              await _setPlaybackProperty(platform, 'hwdec', hwdec);
               await _setPlaybackProperty(platform, 'hwdec-codecs', 'all');
+              if (_televisionDecoder == TelevisionDecoder.automatic) {
+                // Automatic mode falls back to software after repeated decoder
+                // failures, rather than leaving a stream on a broken HW path.
+                await _setPlaybackProperty(
+                  platform,
+                  'hwdec-software-fallback',
+                  '3',
+                );
+              }
               if (_mpvEmbedBackend) {
                 // Onn. 4K Pro logs repeatedly report "Failed to create file
                 // cache." Keep demuxer cache in RAM instead of creating a
