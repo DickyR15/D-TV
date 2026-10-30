@@ -9,7 +9,7 @@ import 'fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('restore settings backup explains replaced data and retained videos', (
+  testWidgets('restore settings backup explains replaced data without obsolete download claims', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -51,7 +51,8 @@ void main() {
           .having((value) => value.data, 'restore backup explanation', contains('收藏清單'))
           .having((value) => value.data, 'restore backup explanation', contains('觀看紀錄'))
           .having((value) => value.data, 'restore backup explanation', contains('偏好設定'))
-          .having((value) => value.data, 'restore backup explanation', contains('已下載影片會保留')),
+          .having((value) => value.data, 'restore backup explanation', isNot(contains('已下載影片')))
+          .having((value) => value.data, 'restore backup explanation', isNot(contains('影片檔案'))),
     );
   });
 }
