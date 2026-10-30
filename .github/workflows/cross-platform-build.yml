@@ -44,6 +44,8 @@ jobs:
           python-version: "3.12"
       - name: Install D TV icon generator dependencies
         run: python -m pip install --disable-pip-version-check Pillow aggdraw
+      - name: Generate D TV platform icons
+        run: python scripts/prepare_branding.py
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
@@ -118,6 +120,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install D TV icon generator dependencies
+        run: python -m pip install --disable-pip-version-check Pillow aggdraw
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
