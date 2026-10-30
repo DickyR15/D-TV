@@ -223,23 +223,29 @@ class _PlayerScreenState extends State<PlayerScreen>
     _autoAdvance = preferences.autoAdvance;
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
     _preloadEnabled = preferences.preloads(television: false);
-    _portraitBlurBackground = preferences.portraitBlurBackground;
     _televisionDecoder = preferences.televisionDecoder;
-    // Keep the Android MPV Embed surface path TV-only. On phones and tablets,
-    // hardware-compatible mode uses mediacodec-copy with the regular MPV view.
+    // Android TV uses the previously validated MPV Embed + MediaCodec
+    // surface path for automatic and hardware modes. Software mode stays on
+    // the regular GPU path; phones/tablets use the regular MPV view.
     final inheritedLayout = context.getInheritedWidgetOfExactType<AppLayout>();
     final isTelevisionLayout =
         inheritedLayout?.formFactor == FormFactor.television ||
         (inheritedLayout?.formFactor == null &&
             inheritedLayout?.television == true);
+    // Keep the validated native Surface + MediaCodec route on Android TV.
+    // The Flutter two-layer blur experiment is temporarily limited to
+    // non-TV Android because its GPU-copy path has not passed TV sync testing.
+    _portraitBlurBackground =
+        preferences.portraitBlurBackground && !isTelevisionLayout;
     _useMpvEmbedForThisPlayer = shouldUseMpvEmbedForPlayback(
       android: Platform.isAndroid,
       television: isTelevisionLayout,
       mpvEmbedConfigured: _androidPlayerEngine == 'mpv_embed',
-      hardwareDecoderSelected:
-          preferences.televisionDecoder == TelevisionDecoder.hardware,
+      softwareDecoderSelected:
+          preferences.televisionDecoder == TelevisionDecoder.software,
       customPlayer: widget.playerFactory != null || widget.videoBuilder != null,
-      portraitBlurEnabled: preferences.portraitBlurBackground,
+      portraitBlurEnabled: preferences.portraitBlurBackground &&
+          !isTelevisionLayout,
     );
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);

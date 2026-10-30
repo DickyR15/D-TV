@@ -97,6 +97,8 @@ void main() {
     );
 
     expect(hwdec(TelevisionDecoder.automatic, android: true), 'auto-safe');
+    expect(hwdec(TelevisionDecoder.automatic, android: true, mpvEmbed: true),
+        'mediacodec');
     expect(hwdec(TelevisionDecoder.hardware, android: true), 'mediacodec-copy');
     expect(
       hwdec(TelevisionDecoder.hardware, android: true, mpvEmbed: true),

@@ -17,8 +17,13 @@ String? playbackHwdecFor({
 }) {
   if (decoder == TelevisionDecoder.software) return 'no';
 
+  // Android TV's validated default path is MPV Embed + MediaCodec. Automatic
+  // means hardware-first there; don't silently fall back to the standard GPU
+  // VO path, which previously caused video to lag behind audio on TV boxes.
+  if (android && mpvEmbed) return 'mediacodec';
+
   if (decoder == TelevisionDecoder.hardware) {
-    if (android) return mpvEmbed ? 'mediacodec' : 'mediacodec-copy';
+    if (android) return 'mediacodec-copy';
     if (ios || macos) return 'videotoolbox-copy';
   }
 

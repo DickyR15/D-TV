@@ -5,6 +5,7 @@
 - 不啟動第二個播放器、不建立第二個解碼器、不截圖或定時讀取 JPEG；畫面跟隨同一個解碼影格同步更新。
 - 啟用時改走 MPV GPU 紋理輸出，並避開 Android MPV Embed 原生 Surface 路徑；硬體解碼仍可使用 MediaCodec-copy。切換設定後下次進入影片生效。
 - 目前限 Android MPV；ExoPlayer 與非 Android 平台停用。TCL 75QM8B、Onn. 4K Pro 與雷電模擬器仍需實機驗證 GPU 合成效能、掉幀及音畫同步。
+- 音畫同步優先：Android TV 的「預設」與「硬解」恢復使用已驗證的 MPV Embed + MediaCodec 原生 Surface；TV 暫停套用直式模糊背景，避免未通過實機同步驗證的 GPU-copy 路徑影響播放。非 TV Android MPV 保留模糊背景試驗。
 - 修正 Android TV 啟動時焦點短暫落到「分類」就切換首頁的問題：焦點移動與頁面選取分離；啟動預設維持「紅果熱播榜」，只有遙控器方向鍵選取或按確認才切換頁面。新增焦點短暫落到分類時仍會回復紅果熱播榜的回歸測試。
 
 

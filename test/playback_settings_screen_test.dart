@@ -104,4 +104,31 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('TV playback settings keeps portrait blur disabled for sync stability', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'playback': '{"portraitBlurBackground": true}',
+    });
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: PlaybackSettingsScreen(store: store),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final blur = tester.widget<SwitchListTile>(
+      find.byKey(const ValueKey('playback-portrait-blur-background')),
+    );
+    expect(blur.value, isFalse);
+    expect(blur.onChanged, isNull);
+  });
+
 }

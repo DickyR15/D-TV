@@ -35,14 +35,14 @@ void main() {
       bool android = true,
       bool television = true,
       bool configured = true,
-      bool hardware = true,
+      bool software = false,
       bool customPlayer = false,
       bool blur = false,
     }) => shouldUseMpvEmbedForPlayback(
       android: android,
       television: television,
       mpvEmbedConfigured: configured,
-      hardwareDecoderSelected: hardware,
+      softwareDecoderSelected: software,
       customPlayer: customPlayer,
       portraitBlurEnabled: blur,
     );
@@ -50,7 +50,7 @@ void main() {
     expect(embed(), isTrue);
     expect(embed(blur: true), isFalse);
     expect(embed(television: false), isFalse);
-    expect(embed(hardware: false), isFalse);
+    expect(embed(software: true), isFalse);
     expect(embed(customPlayer: true), isFalse);
     expect(embed(android: false), isFalse);
   });
