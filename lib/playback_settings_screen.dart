@@ -274,11 +274,9 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               subtitle: Text(
                 _portraitBlurSupported
                     ? '同一即時影格分層合成，背景放大模糊、前景保持清晰；下次開啟影片生效。'
-                    : (Platform.isAndroid &&
-                          _androidPlayerEngine != 'exo' &&
-                          AppLayout.isTelevision(context)
-                      ? '電視端暫停此功能，優先維持已驗證的 MPV Embed 音畫同步路徑。'
-                      : '需要 Android MPV 紋理輸出；目前平台或 ExoPlayer 不支援。'),
+                    : (AppLayout.isTelevision(context)
+                        ? '電視端暫停此功能，優先維持已驗證的 MPV Embed 音畫同步路徑。'
+                        : '需要 Android MPV 紋理輸出；目前平台或 ExoPlayer 不支援。'),
               ),
               value: _portraitBlurSupported && _portraitBlurBackground,
               onChanged: _portraitBlurSupported
