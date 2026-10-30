@@ -354,7 +354,10 @@ void main() {
     'danmaku preference survives restart, backup, old backups and user switching',
     () async {
       SharedPreferences.setMockInitialValues({});
-      final store = LocalStore(await SharedPreferences.getInstance());
+      final store = LocalStore(
+        await SharedPreferences.getInstance(),
+        pinHasher: testPinHasher,
+      );
       addTearDown(store.dispose);
       await store.saveProfile(
         id: 'default',
@@ -377,7 +380,10 @@ void main() {
       expect(store.playbackPreferences.danmaku, isFalse);
       await store.switchProfile('default', pin: 'synthetic-pin');
       expect(store.playbackPreferences.danmaku, isFalse);
-      final restarted = LocalStore(await SharedPreferences.getInstance());
+      final restarted = LocalStore(
+        await SharedPreferences.getInstance(),
+        pinHasher: testPinHasher,
+      );
       addTearDown(restarted.dispose);
       await restarted.switchProfile('default', pin: 'synthetic-pin');
       expect(restarted.playbackPreferences.danmaku, isFalse);
