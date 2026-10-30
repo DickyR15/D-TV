@@ -198,7 +198,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
           'exportDiagnosticText',
           <String, dynamic>{
             'text': '$content\n',
-            'fileNamePrefix': 'D-TV-source-diagnostic-${source.id}',
+            'fileNamePrefix': 'DTV-片源診斷-${source.id}',
           },
         );
         savedPath = result?['path'] as String?;
@@ -210,7 +210,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
             .split('.')
             .first;
         final file = File(
-          '${directory.path}${Platform.pathSeparator}D-TV-source-diagnostic-${source.id}_$stamp.txt',
+          '${directory.path}${Platform.pathSeparator}DTV-片源診斷-${source.id}_$stamp.txt',
         );
         await file.writeAsString('$content\n', flush: true);
         savedPath = file.path;
@@ -218,7 +218,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
       if (!mounted) return;
       final location = savedPath?.isNotEmpty == true
           ? savedPath!
-          : 'Download/D-TV/D-TV-source-diagnostic-${source.id}.txt';
+          : 'Download/D-TV/DTV-片源診斷-${source.id}.txt';
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
@@ -285,12 +285,12 @@ class _SourcesScreenState extends State<SourcesScreen> {
               children: [
                 const Padding(
                   padding: EdgeInsets.only(bottom: 16),
-                  child: Text('顯示目前可用站源的狀態與最近一次自動檢查記錄。'),
+                  child: Text('顯示目前可用片源的狀態與最近一次自動檢查紀錄。'),
                 ),
                 if (sources.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24),
-                    child: Text('目前使用者沒有可診斷的站源'),
+                    child: Text('目前使用者沒有可診斷的片源'),
                   ),
                 for (final group in sourceGroups)
                   if (group.id == 'huangguo')
