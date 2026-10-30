@@ -1688,17 +1688,19 @@ class _HomeScreenState extends State<HomeScreen> {
             skipTraversal: true,
             onKeyEvent: _handleStartupFocusKey,
             child: PopScope(
-          canPop: !television,
-          onPopInvokedWithResult: (didPop, result) {
-            if (!didPop) _televisionBack();
-          },
-          child: CallbackShortcuts(
-            bindings: {
-              const SingleActivator(LogicalKeyboardKey.escape): _televisionBack,
-              const SingleActivator(LogicalKeyboardKey.goBack): _televisionBack,
-            },
-            child: scaffold,
-          ),
+              canPop: !television,
+              onPopInvokedWithResult: (didPop, result) {
+                if (!didPop) _televisionBack();
+              },
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.escape):
+                      _televisionBack,
+                  const SingleActivator(LogicalKeyboardKey.goBack):
+                      _televisionBack,
+                },
+                child: scaffold,
+              ),
             ),
           ),
         );
