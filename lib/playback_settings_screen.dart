@@ -64,6 +64,14 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
     );
     _autoAdvance = preferences.autoAdvance;
     _autoPictureInPicture = preferences.autoPictureInPicture;
+    final size = MediaQuery.maybeOf(context)?.size ?? Size.zero;
+    final landscape = size.width > size.height;
+    if (landscape &&
+        _portraitBlurSupported &&
+        widget.store.needsPortraitBlurLandscapeDefaultMigration) {
+      _portraitBlurBackground = true;
+      unawaited(widget.store.migratePortraitBlurLandscapeDefault());
+    }
     _playbackValuesInitialized = true;
   }
 
@@ -268,10 +276,10 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             SwitchListTile(
               key: const ValueKey('playback-portrait-blur-background'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('直式影片模糊背景（試驗）'),
+              title: const Text('直式影片模糊背景'),
               subtitle: Text(
                 _portraitBlurSupported
-                    ? '以同一個播放器影格合成模糊背景與清晰前景，不另開解碼器；下次開啟影片生效。'
+                    ? '橫式畫面播放直式影片時，以同一個播放器影格合成模糊背景與清晰前景，不另開解碼器。'
                     : '需要 Android MPV 紋理輸出；目前平台或 ExoPlayer 不支援。',
               ),
               value: _portraitBlurSupported && _portraitBlurBackground,
@@ -326,7 +334,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、清晰度、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景為試驗功能，使用同一個即時影格，不會啟動第二個解碼器。',
+              '倍速、清晰度、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
             ),
           ],
         ),
