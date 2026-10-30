@@ -1161,7 +1161,7 @@ class LocalStore extends ChangeNotifier {
     _requireAdmin();
     final content = jsonEncode({
       'schema': 1,
-      'app': 'zhenguojian',
+      'app': 'dtv',
       'profiles': _profiles.map((profile) => profile.toJson()).toList(),
       'displayMode': displayMode,
       'themeMode': themeMode,
@@ -1215,7 +1215,8 @@ class LocalStore extends ChangeNotifier {
       throw const FormatException('備份檔案過大');
     }
     final data = jsonDecode(content) as Map<String, dynamic>;
-    if (data['schema'] != 1 || data['app'] != 'zhenguojian') {
+    if (data['schema'] != 1 ||
+        !{'dtv', 'zhenguojian', 'hongguojian'}.contains(data['app'])) {
       throw const FormatException('不支援的備份格式');
     }
     final profiles = _readProfiles(data['profiles']);
