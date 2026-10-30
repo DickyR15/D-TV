@@ -9,7 +9,7 @@ from app_build import BuildVariant, add_variant_argument
 root = Path(__file__).resolve().parents[1]
 ALL_ABIS = ["arm64-v8a", "armeabi-v7a", "x86_64"]
 
-parser = argparse.ArgumentParser(description="驗證並封裝 D-TV 發行產物。")
+parser = argparse.ArgumentParser(description="驗證並封裝 D TV 發行產物。")
 parser.add_argument("--platform", choices=["android", "windows", "macos"], required=True)
 parser.add_argument("--abi", action="append", choices=ALL_ABIS)
 parser.add_argument("--universal", action="store_true", help="驗證包含三種 ABI 的單一 Android APK。")
@@ -117,9 +117,7 @@ elif options.platform == "windows":
         for source in sorted(bundle.rglob("*")):
             if source.is_file():
                 relative = source.relative_to(bundle).as_posix()
-                if relative == "DTV.exe":
-                    relative = "DTV.exe"
-                archive.write(source, relative)
+                                archive.write(source, relative)
 
     # Reopen the closed archive for CRC validation. Checking it while the ZIP
     # writer is still open can report false corruption on large Windows AOT
