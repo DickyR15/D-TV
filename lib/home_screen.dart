@@ -24,6 +24,7 @@ import 'settings_screen.dart';
 import 'profiles_screen.dart';
 import 'search_input.dart';
 import 'drama_actions.dart';
+import 'diary_service.dart';
 import 'follow_updater.dart';
 import 'library_updater.dart';
 import 'saved_library.dart';
@@ -821,6 +822,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _tab = 4;
         _requestDefaultTelevisionFocus();
       }
+      DiaryService.add(
+        '[Focus] home startup formFactor=${formFactor.name} tab=$_tab',
+      );
       return;
     }
     if (_lastFormFactor == formFactor) return;
@@ -855,6 +859,10 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       node.requestFocus();
+      DiaryService.add(
+        '[Focus] requested Red Fruit Hot; '
+        'primary=${FocusManager.instance.primaryFocus?.debugLabel ?? 'unlabelled'}',
+      );
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -865,7 +873,13 @@ class _HomeScreenState extends State<HomeScreen> {
       // Do not steal focus after the user has started navigating. A changed
       // tab, key event, or pointer action cancels this one-time startup retry.
       if (!mounted || _tab != 4 || !AppLayout.isTelevision(context)) return;
-      if (!node.hasPrimaryFocus) requestDefaultFocus();
+      if (!node.hasPrimaryFocus) {
+        DiaryService.add(
+          '[Focus] startup retry; previous='
+          '${FocusManager.instance.primaryFocus?.debugLabel ?? 'unlabelled'}',
+        );
+        requestDefaultFocus();
+      }
     });
   }
 
