@@ -1069,6 +1069,7 @@ class LocalStore extends ChangeNotifier {
     required List<String> sources,
     required bool download,
     String? pin,
+    String? currentPin,
   }) => _queue(() async {
     _requireAdmin();
     final old = _profiles.where((profile) => profile.id == id).firstOrNull;
@@ -1089,6 +1090,9 @@ class LocalStore extends ChangeNotifier {
     }
     var salt = old?.salt ?? '', hash = old?.pinHash ?? '';
     if (pin != null) {
+      if (targetId == 'default' && old?.protected == true) {
+        await _checkPin(old!, currentPin ?? '');
+      }
       if (pin.isEmpty) {
         if (targetId == 'default' && _profiles.length > 1) {
           throw StateError('存在其他使用者時不能取消管理員密碼');
