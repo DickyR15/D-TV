@@ -23,7 +23,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: dtv-cross-platform-\${{ github.ref }}
+  group: dtv-cross-platform-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -48,7 +48,7 @@ jobs:
           cache-dependency-path: native/go.sum
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: \${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
@@ -75,7 +75,7 @@ jobs:
           cache-dependency-path: native/go.sum
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: \${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - uses: msys2/setup-msys2@v2
@@ -124,7 +124,7 @@ jobs:
           cache-dependency-path: native/go.sum
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: \${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - uses: android-actions/setup-android@v3
@@ -139,7 +139,7 @@ jobs:
         shell: bash
         run: |
           version=$(sed -n "s/^version: *['\"]\?\([^'\"]*\)['\"]\?$/\1/p" pubspec.yaml | head -n1)
-          version="\${version%%+*}"
+          version="${version%%+*}"
           python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --build-name "$version" --build-number "$GITHUB_RUN_NUMBER"
       - name: Install and launch Universal APK on x86_64 Android emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -150,7 +150,7 @@ jobs:
           profile: pixel_7
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
-            apk="dist/android/D TV-Android-Universal_v1.0.0+\${{ github.run_number }}_MPV.apk"
+            apk="dist/android/D TV-Android-Universal_v1.0.0+${{ github.run_number }}_MPV.apk"
             adb install -r "$apk"
             adb shell am start -n com.dickyr15.dtv/.MainActivity
             sleep 15
@@ -181,7 +181,7 @@ jobs:
           ruby-version: "3.3"
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: \${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - name: Install CocoaPods
@@ -228,7 +228,7 @@ jobs:
           ruby-version: "3.3"
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: \${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
       - name: Install CocoaPods
