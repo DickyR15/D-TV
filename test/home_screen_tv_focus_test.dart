@@ -13,7 +13,11 @@ void main() {
   testWidgets(
     'switching from desktop detection to TV focuses Red Fruit Hot ranking',
     (tester) async {
-      SharedPreferences.setMockInitialValues({});
+      // The test concerns focus only; disable the synthetic catalog so its
+      // intentionally missing remote poster fixtures are never requested.
+      SharedPreferences.setMockInitialValues({
+        'sourceSwitches': '{"hongguo": false}',
+      });
       final store = testStore(await SharedPreferences.getInstance());
       addTearDown(store.dispose);
       final repository = FixtureRepository();
