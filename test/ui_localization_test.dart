@@ -77,6 +77,10 @@ void main() {
       uiTraditional('番剧、动漫、缓存、文件夹、文件、密码、登录、账号、信息、连接、安装包'),
       '動畫連載、動畫、快取、資料夾、檔案、密碼、登入、帳號、資訊、連線、安裝檔',
     );
+    expect(
+      uiTraditional('番劇、動漫、緩存、文件夾、登錄、賬號、連接、安裝包'),
+      '動畫連載、動畫、快取、資料夾、登入、帳號、連線、安裝檔',
+    );
   });
 
   test('source names and descriptions use Taiwan Traditional Chinese', () {
@@ -94,6 +98,6 @@ void main() {
   });
 
   test('keeps source identifiers and Latin labels untouched', () {
-    expect(uiTraditional('hongguo-hot / HGTV / AI'), 'hongguo-hot / HGTV / AI');
+    expect(uiTraditional('hongguo-hot / D TV / AI'), 'hongguo-hot / D TV / AI');
   });
 }
