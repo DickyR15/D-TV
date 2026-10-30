@@ -227,7 +227,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('恢復'),
+                child: const Text('還原'),
               ),
             ],
           ),
@@ -303,7 +303,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 focusNode: _deviceInterconnectFocus,
                 leading: const Icon(Icons.devices_rounded),
                 title: const Text('裝置互聯'),
-                subtitle: const Text('區域網自動同步收藏與推送播放'),
+                subtitle: const Text('區域網路自動同步收藏與推送播放'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => openLanSync(context),
               ),
