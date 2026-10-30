@@ -448,6 +448,31 @@ open class MainActivity : FlutterActivity() {
                             val displayVersion = versionName.ifBlank { "未知版本" }
                             result.success(mapOf("television" to isTelevisionDevice(), "version" to displayVersion))
                         }
+                        "openExternalUrl" -> {
+                            val rawUrl = call.argument<String>("url")
+                            val uri = runCatching { Uri.parse(rawUrl.orEmpty()) }.getOrNull()
+                            if (uri == null ||
+                                uri.scheme?.lowercase() !in setOf("http", "https") ||
+                                uri.host.isNullOrBlank()) {
+                                result.error("invalid_url", "更新網址無效", null)
+                            } else {
+                                runCatching {
+                                    startActivity(
+                                        Intent(Intent.ACTION_VIEW, uri).addFlags(
+                                            Intent.FLAG_ACTIVITY_NEW_TASK
+                                        )
+                                    )
+                                }.onSuccess {
+                                    result.success(null)
+                                }.onFailure { error ->
+                                    result.error(
+                                        "cannot_open_url",
+                                        error.message ?: "無法開啟更新頁面",
+                                        null
+                                    )
+                                }
+                            }
+                        }
                         "setTelevisionMode" -> {
                             val enabled = call.argument<Boolean>("enabled")
                             if (enabled == null) {
