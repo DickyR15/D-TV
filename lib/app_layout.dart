@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -103,6 +104,47 @@ class AppDevice {
     } on TimeoutException {
       return fallback;
     }
+  }
+
+  static Future<void> openExternalUrl(String value) async {
+    final uri = Uri.tryParse(value);
+    if (uri == null ||
+        (uri.scheme != 'https' && uri.scheme != 'http') ||
+        uri.host.isEmpty) {
+      throw const FormatException('更新網址無效');
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      await channel.invokeMethod<void>('openExternalUrl', {
+        'url': uri.toString(),
+      });
+      return;
+    }
+    if (Platform.isWindows) {
+      await Process.start(
+        'cmd',
+        ['/c', 'start', '', uri.toString()],
+        runInShell: true,
+        mode: ProcessStartMode.detached,
+      );
+      return;
+    }
+    if (Platform.isMacOS) {
+      await Process.start(
+        'open',
+        [uri.toString()],
+        mode: ProcessStartMode.detached,
+      );
+      return;
+    }
+    if (Platform.isLinux) {
+      await Process.start(
+        'xdg-open',
+        [uri.toString()],
+        mode: ProcessStartMode.detached,
+      );
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: uri.toString()));
   }
 
   static Future<double> getBrightness() async {
