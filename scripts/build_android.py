@@ -114,7 +114,7 @@ if options.universal and options.build_number:
     # pubspec version (including its existing +build metadata). Flutter's
     # --build-name/-number overrides only the final public delivery filename.
     pubspec = (root / "pubspec.yaml").read_text(encoding="utf-8")
-    match = re.search(r"^version:\\s*([\\w.+-]+)\\s*$", pubspec, re.MULTILINE)
+    match = re.search(r"^version:\s*([\w.+-]+)\s*$", pubspec, re.MULTILINE)
     if not match:
         raise SystemExit("pubspec.yaml 缺少合法版本號。")
     package_version = match.group(1)
