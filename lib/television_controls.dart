@@ -708,9 +708,9 @@ class TelevisionSettingsDialog extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   for (final (value, label) in [
-                    (TelevisionDecoder.optimized, '硬解（預設）'),
-                    (TelevisionDecoder.hardware, '硬解（相容）'),
-                    (TelevisionDecoder.software, '軟解（相容）'),
+                    (TelevisionDecoder.automatic, '自動（硬解優先）'),
+                    (TelevisionDecoder.hardware, '硬體解碼'),
+                    (TelevisionDecoder.software, '軟體解碼'),
                   ])
                     RemoteButton(
                       key: ValueKey('tv-decoder-${value.name}'),
@@ -724,7 +724,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              const Text('有聲音沒畫面時可切換嘗試', style: TextStyle(fontSize: 14)),
+              const Text('黑畫面、花屏或播放卡頓時，可切換解碼方式排查', style: TextStyle(fontSize: 14)),
               const SizedBox(height: 20),
             ],
             if (compatibleRendering != null) ...[
