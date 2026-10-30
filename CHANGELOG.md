@@ -21,6 +21,7 @@
 
 - 修正 App 內部 fallback 版本顯示與 `pubspec.yaml` 不一致的問題；本地候選 build number 為 340。Android CI 的 versionCode 另使用遞增的 GitHub Actions run number。此為自用驗收候選，未建立正式 GitHub Release。
 
+- 解碼方式設定與原作者一致，改為所有介面皆可使用；預設、硬解（相容）、軟解（相容）會依平台套用原生 MPV 解碼參數，保留 Android TV 的 MPV Embed 輸出路徑，ExoPlayer 則明確停用手動切換。
 - 統一手機、平板、視窗及 Android TV 的介面模式與方向行為；改善電視遙控器焦點、播放器控制列及 D TV 啟動畫面。
 - 新增介面配色與獨立播放設定；播放偏好及網路資源設定可自動儲存。
 - 一般設定移除手動片源管理、更新劇庫與連線檢測入口；劇庫優先使用持久快取，並依瀏覽需求載入目錄頁面。

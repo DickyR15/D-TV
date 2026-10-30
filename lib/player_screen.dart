@@ -219,10 +219,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
     _preloadEnabled = preferences.preloads(television: false);
     _televisionDecoder = preferences.televisionDecoder;
-    // MPV Embed requires MediaCodec frames. Auto and software modes use the
-    // regular GPU output so mpv can fall back to software decoding.
+    // Keep the Android MPV Embed surface path TV-only. On phones and tablets,
+    // hardware-compatible mode uses mediacodec-copy with the regular MPV view.
+    final inheritedLayout = context.getInheritedWidgetOfExactType<AppLayout>();
+    final isTelevisionLayout =
+        inheritedLayout?.formFactor == FormFactor.television ||
+        (inheritedLayout?.formFactor == null &&
+            inheritedLayout?.television == true);
     _useMpvEmbedForThisPlayer =
         Platform.isAndroid &&
+        isTelevisionLayout &&
         _androidPlayerEngine == 'mpv_embed' &&
         preferences.televisionDecoder == TelevisionDecoder.hardware &&
         widget.playerFactory == null &&
@@ -1505,19 +1511,21 @@ class _PlayerScreenState extends State<PlayerScreen>
         final setupClock = Stopwatch()..start();
         final platform = _player.platform;
         if (platform is NativePlayer) {
+          final hwdec = playbackHwdecFor(
+            decoder: _televisionDecoder,
+            android: Platform.isAndroid,
+            ios: Platform.isIOS,
+            macos: Platform.isMacOS,
+            windows: Platform.isWindows,
+            mpvEmbed: _mpvEmbedBackend,
+          );
+          if (hwdec != null) {
+            await _setPlaybackProperty(platform, 'hwdec', hwdec);
+          }
           if (Platform.isAndroid) {
             if (_television) {
               final optimized =
                   _televisionDecoder == TelevisionDecoder.optimized;
-              final hwdec = switch (_televisionDecoder) {
-                TelevisionDecoder.automatic => 'auto-safe',
-                TelevisionDecoder.hardware =>
-                  _mpvEmbedBackend ? 'mediacodec' : 'mediacodec-copy',
-                TelevisionDecoder.software => 'no',
-                // Preserve compatibility with existing saved preferences.
-                TelevisionDecoder.optimized => 'mediacodec-copy',
-              };
-              await _setPlaybackProperty(platform, 'hwdec', hwdec);
               await _setPlaybackProperty(platform, 'hwdec-codecs', 'all');
               // MPV auto-safe falls back to software when no supported HW
               // decoder can be initialized; its decoder-failure fallback is
@@ -1581,11 +1589,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 _mpvEmbedBackend ? '8' : '5',
               );
             } else {
-              await _setPlaybackProperty(
-                platform,
-                'hwdec',
-                _mpvEmbedBackend ? 'mediacodec' : 'auto-safe',
-              );
               await _setPlaybackProperty(platform, 'hwdec-codecs', 'all');
               if (!_mpvEmbedBackend) {
                 await _setPlaybackProperty(platform, 'vd-lavc-skiploopfilter', 'nonkey');
@@ -1602,8 +1605,6 @@ class _PlayerScreenState extends State<PlayerScreen>
               'framedrop',
               _television ? 'decoder' : 'vo',
             );
-          } else if (Platform.isWindows) {
-            await _setPlaybackProperty(platform, 'hwdec', 'd3d11va-copy');
           }
           await _setPlaybackProperty(
             platform,

@@ -218,6 +218,39 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                 if (value != null) _updateQuality(value);
               },
             ),
+            const SizedBox(height: 20),
+            DropdownButtonFormField<TelevisionDecoder>(
+              key: const ValueKey('playback-decoder'),
+              initialValue: _decoder,
+              decoration: const InputDecoration(
+                labelText: '解碼方式',
+                helperText: '有聲音沒畫面或卡頓時，可切換相容方式；下次開啟影片時生效',
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: TelevisionDecoder.automatic,
+                  child: Text('預設'),
+                ),
+                DropdownMenuItem(
+                  value: TelevisionDecoder.hardware,
+                  child: Text('硬解（相容）'),
+                ),
+                DropdownMenuItem(
+                  value: TelevisionDecoder.software,
+                  child: Text('軟解（相容）'),
+                ),
+              ],
+              onChanged: Platform.isAndroid && _androidPlayerEngine == 'exo'
+                  ? null
+                  : (value) {
+                      if (value != null) _updateDecoder(value);
+                    },
+            ),
+            if (Platform.isAndroid && _androidPlayerEngine == 'exo')
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('目前使用 ExoPlayer，解碼方式由 Android 管理，無法手動切換。'),
+              ),
             SwitchListTile(
               key: const ValueKey('playback-preopen-next-episode'),
               contentPadding: EdgeInsets.zero,
@@ -246,42 +279,6 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             const SizedBox(height: 20),
             if (Platform.isAndroid && AppLayout.isTelevision(context)) ...[
               const SizedBox(height: 20),
-              DropdownButtonFormField<TelevisionDecoder>(
-                key: const ValueKey('playback-tv-decoder'),
-                initialValue: _decoder,
-                decoration: const InputDecoration(
-                  labelText: '電視解碼方式',
-                  helperText: '自動會優先使用相容的硬體解碼；硬解不支援或失敗時改用軟解。',
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: TelevisionDecoder.automatic,
-                    child: Text('自動（硬體解碼優先）'),
-                  ),
-                  DropdownMenuItem(
-                    value: TelevisionDecoder.hardware,
-                    child: Text('硬體解碼'),
-                  ),
-                  DropdownMenuItem(
-                    value: TelevisionDecoder.software,
-                    child: Text('軟體解碼（相容性排查）'),
-                  ),
-                ],
-                onChanged: _androidPlayerEngine == 'exo'
-                    ? null
-                    : (value) {
-                        if (value != null) _updateDecoder(value);
-                      },
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _androidPlayerEngine == 'exo'
-                      ? '目前播放器為 ExoPlayer，解碼方式由 Android 自行管理。'
-                      : '自動／軟解使用標準 MPV 輸出；手動硬解使用 MediaCodec。變更後重新播放套用。',
-                ),
-              ),
-              const SizedBox(height: 20),
               if (_compatibleRendering != null)
                 SwitchListTile(
                   key: const ValueKey('playback-compatible-rendering'),
@@ -301,7 +298,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、清晰度、下一集預載入、自動連播及支援的解碼方式會在變更時自動儲存；相容渲染設定會在重新啟動後生效。',
+              '倍速、清晰度、解碼方式、下一集預載入及自動連播會在變更時自動儲存；相容渲染設定會在重新啟動後生效。',
             ),
           ],
         ),

@@ -78,4 +78,36 @@ void main() {
     );
   });
 
+  test('decoder modes map to native hardware/software paths across platforms', () {
+    String? hwdec(
+      TelevisionDecoder decoder, {
+      bool android = false,
+      bool ios = false,
+      bool macos = false,
+      bool windows = false,
+      bool mpvEmbed = false,
+    }) => playbackHwdecFor(
+      decoder: decoder,
+      android: android,
+      ios: ios,
+      macos: macos,
+      windows: windows,
+      mpvEmbed: mpvEmbed,
+    );
+
+    expect(hwdec(TelevisionDecoder.automatic, android: true), 'auto-safe');
+    expect(hwdec(TelevisionDecoder.hardware, android: true), 'mediacodec-copy');
+    expect(
+      hwdec(TelevisionDecoder.hardware, android: true, mpvEmbed: true),
+      'mediacodec',
+    );
+    expect(hwdec(TelevisionDecoder.software, android: true), 'no');
+    expect(hwdec(TelevisionDecoder.automatic, windows: true), 'd3d11va-copy');
+    expect(hwdec(TelevisionDecoder.software, windows: true), 'no');
+    expect(hwdec(TelevisionDecoder.hardware, macos: true), 'videotoolbox-copy');
+    expect(hwdec(TelevisionDecoder.automatic, macos: true), 'auto-safe');
+    expect(hwdec(TelevisionDecoder.hardware, ios: true), 'videotoolbox-copy');
+    expect(hwdec(TelevisionDecoder.automatic, ios: true), isNull);
+  });
+
 }

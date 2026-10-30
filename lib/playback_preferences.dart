@@ -4,6 +4,29 @@ const playbackSpeeds = [.5, .75, 1.0, 1.25, 1.5, 2.0, 3.0];
 
 enum TelevisionDecoder { automatic, optimized, hardware, software }
 
+/// Maps the shared decoder preference to the native MPV decoder backend.
+/// This follows the upstream default / hardware-compatible / software-compatible
+/// behavior while preserving D-TV's Android MPV Embed surface path.
+String? playbackHwdecFor({
+  required TelevisionDecoder decoder,
+  required bool android,
+  required bool ios,
+  required bool macos,
+  required bool windows,
+  bool mpvEmbed = false,
+}) {
+  if (decoder == TelevisionDecoder.software) return 'no';
+
+  if (decoder == TelevisionDecoder.hardware) {
+    if (android) return mpvEmbed ? 'mediacodec' : 'mediacodec-copy';
+    if (ios || macos) return 'videotoolbox-copy';
+  }
+
+  if (windows) return 'd3d11va-copy';
+  if (android || macos) return 'auto-safe';
+  return null;
+}
+
 class PlaybackPreferences {
   const PlaybackPreferences({
     this.speed = 1,
