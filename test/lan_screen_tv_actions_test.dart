@@ -17,8 +17,6 @@ void main() {
     final store = testStore(await SharedPreferences.getInstance());
     final repository = FixtureRepository();
     final controller = LanController(repository, store, kind: 'tv');
-    addTearDown(controller.dispose);
-    addTearDown(store.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -40,5 +38,10 @@ void main() {
     // cannot be pushed below the visible viewport by the status cards.
     expect(find.byKey(const ValueKey('lan-sync-now')), findsNothing);
     expect(find.byKey(const ValueKey('lan-manual-sync')), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+    store.dispose();
+    await tester.pump();
   });
 }
