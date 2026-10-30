@@ -23,6 +23,34 @@ void main() {
       );
     });
 
+    test('auto treats an Android emulator as the TV test layout', () {
+      expect(
+        AppLayout.resolveFormFactor(
+          mode: 'auto',
+          detectedTelevision: false,
+          detectedEmulator: true,
+          screenSize: const Size(432, 768),
+          desktopPlatform: false,
+        ),
+        FormFactor.television,
+      );
+      // The selected form factor is also what HomeScreen uses to open the
+      // Redfruit Hot page and request its initial D-pad focus.
+    });
+
+    test('auto keeps physical phones on the phone layout', () {
+      expect(
+        AppLayout.resolveFormFactor(
+          mode: 'auto',
+          detectedTelevision: false,
+          detectedEmulator: false,
+          screenSize: const Size(432, 768),
+          desktopPlatform: false,
+        ),
+        FormFactor.phone,
+      );
+    });
+
     test('auto distinguishes phone, pad and desktop window', () {
       expect(
         AppLayout.resolveFormFactor(
