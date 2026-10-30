@@ -165,6 +165,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.automatic;
   late final bool _useMpvEmbedForThisPlayer;
   bool _tvDecoderPolicyMigrated = false;
+  bool _portraitBlurDefaultMigrationRequested = false;
   // Android MPV Embed renders MediaCodec frames into the Flutter Texture
   // Registry surface. Portrait blur can composite that same texture twice
   // without switching to mediacodec-copy or creating another decoder.
@@ -1006,6 +1007,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _orientationController = AppOrientationScope.maybeOf(context);
     final orientation = MediaQuery.orientationOf(context);
+    if (Platform.isAndroid &&
+        _androidPlayerEngine != 'exo' &&
+        orientation == Orientation.landscape &&
+        !_portraitBlurDefaultMigrationRequested &&
+        widget.store.needsPortraitBlurLandscapeDefaultMigration) {
+      _portraitBlurDefaultMigrationRequested = true;
+      _portraitBlurBackground = true;
+      unawaited(widget.store.migratePortraitBlurLandscapeDefault());
+    }
     if (_lastOrientation != null && _lastOrientation != orientation) {
       _automaticFullscreenSuppressed = false;
       _interactions.cancel();
