@@ -1377,7 +1377,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SingleChildScrollView(
               child: Text(
                 availableUpdate.notes.trim().isEmpty
-                    ? '目前版本：${AppLayout.versionOf(context)}\\n新版本：${availableUpdate.version}\\n\\n有新版本可供下載。'
+                    ? '目前版本：${AppLayout.versionOf(context)}\n新版本：${availableUpdate.version}\n\n有新版本可供下載。'
                     : availableUpdate.notes.trim().characters.take(1800).toString(),
               ),
             ),
@@ -1435,20 +1435,11 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     } catch (error) {
-          await Clipboard.setData(ClipboardData(text: update.releaseUrl));
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('無法開啟瀏覽器，已複製更新網址')),
-            );
-          }
-          DiaryService.add('[Update] open_release_failed=${error.runtimeType}');
-        }
-      }
-    } catch (error) {
       _updateDialogOpen = false;
       DiaryService.add('[Update] check_failed=${error.runtimeType}');
     }
   }
+
   void _changeTab(int tab) {
     setState(() {
       _tab = tab;
