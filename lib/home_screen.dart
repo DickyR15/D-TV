@@ -1624,13 +1624,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         key: const ValueKey('home-more-users-focus'),
                         focusNode: _homePopupUsersFocus,
                         onKeyEvent: (node, event) {
+                          final key = event.logicalKey;
                           if (event is KeyDownEvent &&
-                              const {
-                                LogicalKeyboardKey.select,
-                                LogicalKeyboardKey.enter,
-                                LogicalKeyboardKey.numpadEnter,
-                                LogicalKeyboardKey.space,
-                              }.contains(event.logicalKey)) {
+                              (key == LogicalKeyboardKey.select ||
+                                  key == LogicalKeyboardKey.enter ||
+                                  key == LogicalKeyboardKey.numpadEnter ||
+                                  key == LogicalKeyboardKey.space)) {
                             Navigator.of(context).pop('users');
                             return KeyEventResult.handled;
                           }
