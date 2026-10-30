@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'app_layout.dart';
+import 'app_update_service.dart';
 import 'app_bottom_navigation.dart';
 import 'core_bridge.dart';
 import 'catalog_filters.dart';
@@ -98,6 +100,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final FocusNode _homePopupUsersFocus =
       FocusNode(debugLabel: 'home-more-users');
   Timer? _startupFocusRetry;
+  Timer? _appUpdateCheckTimer;
+  bool _updateDialogOpen = false;
   PhoneSearchServer? _phoneSearchServer;
   StreamSubscription<String>? _phoneSearchSubscription;
   Future<PhoneSearchServer>? _phoneSearchServerStarting;
@@ -820,6 +824,14 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       _loading = false;
     }
+    // Check only release builds. The request is delayed so the first screen
+    // and ranking data are not held up by the GitHub API.
+    if (kReleaseMode && (Platform.isAndroid || Platform.isWindows)) {
+      _appUpdateCheckTimer = Timer(
+        const Duration(seconds: 6),
+        () => unawaited(_checkForAppUpdate()),
+      );
+    }
   }
 
   @override
@@ -910,6 +922,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     appNavigationObserver.changes.removeListener(_onAppNavigationChanged);
     _cancelStartupFocusRetry();
+    _appUpdateCheckTimer?.cancel();
     _homePopupUsersFocus.dispose();
     _updater.removeListener(_updateChanged);
     _updater.dispose();
@@ -1252,6 +1265,63 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_loadCategories());
   }
 
+
+  Future<void> _checkForAppUpdate() async {
+    if (!mounted || _updateDialogOpen) return;
+    try {
+      final update = await const AppUpdateService().checkForUpdate();
+      if (!mounted ||
+          update == null ||
+          (ModalRoute.of(context)?.isCurrent == false)) {
+        return;
+      }
+      _updateDialogOpen = true;
+      final openRelease = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('發現 D TV 新版本 ${update.version}'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: SingleChildScrollView(
+              child: Text(
+                update.notes.trim().isEmpty
+                    ? '目前版本：${AppLayout.versionOf(context)}\\n新版本：${update.version}\\n\\n有新版本可供下載。'
+                    : update.notes.trim().characters.take(1800).toString(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('稍後提醒'),
+            ),
+            FilledButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('查看更新'),
+            ),
+          ],
+        ),
+      );
+      _updateDialogOpen = false;
+      if (openRelease == true && mounted) {
+        try {
+          await AppDevice.openExternalUrl(update.releaseUrl);
+        } catch (error) {
+          await Clipboard.setData(ClipboardData(text: update.releaseUrl));
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('無法開啟瀏覽器，已複製更新網址')),
+            );
+          }
+          DiaryService.add('[Update] open_release_failed=${error.runtimeType}');
+        }
+      }
+    } catch (error) {
+      _updateDialogOpen = false;
+      DiaryService.add('[Update] check_failed=${error.runtimeType}');
+    }
+  }
   void _changeTab(int tab) {
     setState(() {
       _tab = tab;
