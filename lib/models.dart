@@ -30,27 +30,27 @@ class SourceSite {
   };
 
   static const hongguo = SourceSite('hongguo', '紅果', '短劇 · 漫劇 · AI 劇');
-  static const dsd = SourceSite('dsd', '帝果', '分類影片 · 線上搜尋');
-  static const sorani = SourceSite('sorani', '青空', '番劇 · 劇場動畫 · 特攝');
-  static const guipian = SourceSite('guipian', '鬼片', '鬼片 · 電視劇 · 動漫');
+  static const dsd = SourceSite('dsd', '帝果', '影片分類 · 線上搜尋');
+  static const sorani = SourceSite('sorani', '青空', '動畫連載 · 劇場版動畫 · 特攝');
+  static const guipian = SourceSite('guipian', '鬼片', '恐怖片 · 電視劇 · 動畫');
   static const hanxiaoquan = SourceSite(
     'hanxiaoquan',
     '韓小圈',
-    '韓劇 · 韓國電影 · 綜藝動漫',
+    '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
 
-  /// 預設開啟的站源：紅果、韓小圈、鬼片網、青空次元。
+  /// 預設開啟的一般片源：紅果、韓小圈、鬼片、青空。
   static const primaryValues = [hongguo, hanxiaoquan, guipian, sorani];
 
-  /// 敏感站源：預設關閉，可在站源管理中開啟。
+  /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
     SourceSite('huangdou', '黃豆', '精選短劇'),
-    SourceSite('huangju', '劇果', '熱門 · 最新 · 分類短劇'),
-    SourceSite('yeguo', '野果', '分類短劇 · 線上搜尋'),
+    SourceSite('huangju', '劇果', '熱門 · 最新 · 短劇分類'),
+    SourceSite('yeguo', '野果', '短劇分類 · 線上搜尋'),
     dsd,
-    SourceSite('huangguo-video', '黃果影片', '影片劇集'),
+    SourceSite('huangguo-video', '黃果影片', '影片與劇集'),
     SourceSite('huangguoai', '黃果 AI', 'AI 短劇'),
-    SourceSite('cloudfront', '黃果舊版', '舊 API 劇庫'),
+    SourceSite('cloudfront', '黃果舊版', '舊版 API 片庫'),
   ];
   static const knownValues = [...primaryValues, ...restrictedValues];
   static const allValues = [...primaryValues, ...restrictedValues];
