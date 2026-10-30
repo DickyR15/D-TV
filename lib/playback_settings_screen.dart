@@ -251,7 +251,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                 initialValue: _decoder,
                 decoration: const InputDecoration(
                   labelText: '電視解碼方式',
-                  helperText: '標準 MPV 建置版本會在下一次播放套用',
+                  helperText: '自動會優先使用相容的硬體解碼；硬解不支援或失敗時改用軟解。',
                 ),
                 items: const [
                   DropdownMenuItem(
