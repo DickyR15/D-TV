@@ -54,7 +54,7 @@ class PlaybackPreferences {
     'danmaku': danmaku,
     if (preload != null) 'preopenNextEpisode': preload,
     'enhancement': enhancement.toJson(),
-    'televisionDecoder': televisionDecoder.name,
+    'televisionDecoderMode': televisionDecoder.name,
     'autoPictureInPicture': autoPictureInPicture,
   };
 
@@ -77,7 +77,7 @@ class PlaybackPreferences {
       preload: preload,
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
       televisionDecoder:
-          TelevisionDecoder.values.asNameMap()[value['televisionDecoder']] ??
+          TelevisionDecoder.values.asNameMap()[value['televisionDecoderMode']] ??
           TelevisionDecoder.automatic,
       autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
     );
