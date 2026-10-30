@@ -101,6 +101,27 @@ open class MainActivity : FlutterActivity() {
         return remoteNavigation || packageManager.hasSystemFeature(PackageManager.FEATURE_LIVE_TV)
     }
 
+    private fun isEmulatorDevice(): Boolean {
+        val fingerprint = Build.FINGERPRINT.lowercase(Locale.ROOT)
+        val model = Build.MODEL.lowercase(Locale.ROOT)
+        val manufacturer = Build.MANUFACTURER.lowercase(Locale.ROOT)
+        val hardware = Build.HARDWARE.lowercase(Locale.ROOT)
+        val product = Build.PRODUCT.lowercase(Locale.ROOT)
+        return fingerprint.startsWith("generic") ||
+            fingerprint.contains("emulator") ||
+            model.contains("google_sdk") ||
+            model.contains("emulator") ||
+            model.contains("android sdk built for") ||
+            manufacturer.contains("genymotion") ||
+            hardware in setOf("goldfish", "ranchu", "vbox86") ||
+            hardware.contains("emulator") ||
+            product.startsWith("sdk_gphone") ||
+            product.startsWith("google_sdk") ||
+            product.contains("emulator") ||
+            (Build.BRAND.startsWith("generic", ignoreCase = true) &&
+                Build.DEVICE.startsWith("generic", ignoreCase = true))
+    }
+
     private fun renderingPreferences() =
         getSharedPreferences("duanju_rendering", Context.MODE_PRIVATE)
 
@@ -446,7 +467,13 @@ open class MainActivity : FlutterActivity() {
                             // Keep the user-facing version stable; Android versionCode
                             // remains an independent, monotonically increasing build identifier.
                             val displayVersion = versionName.ifBlank { "未知版本" }
-                            result.success(mapOf("television" to isTelevisionDevice(), "version" to displayVersion))
+                            result.success(
+                                mapOf(
+                                    "television" to isTelevisionDevice(),
+                                    "emulator" to isEmulatorDevice(),
+                                    "version" to displayVersion
+                                )
+                            )
                         }
                         "openExternalUrl" -> {
                             val rawUrl = call.argument<String>("url")
