@@ -147,6 +147,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _pictureInPictureActive = false;
   bool _pictureInPictureRequested = false;
   bool _pictureInPictureHandlerInstalled = false;
+  String? _pictureInPictureStateSignature;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   String _loadingMessage = '正在準備播放';
   String? _error;
@@ -191,6 +192,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     preload: _preloadEnabled,
     enhancement: _enhancement.preferences,
     televisionDecoder: _televisionDecoder,
+    autoPictureInPicture: widget.store.playbackPreferences.autoPictureInPicture,
   );
   String get _qualityLabel => _plan?.local == true
       ? '本機原畫'
@@ -217,9 +219,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _speed = preferences.speed;
     _requestedQuality = preferences.quality;
-    _autoAdvance = true;
+    _autoAdvance = preferences.autoAdvance;
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
-    _preloadEnabled = true;
+    _preloadEnabled = preferences.preloads(television: false);
     _televisionDecoder = preferences.televisionDecoder;
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
@@ -518,9 +520,69 @@ class _PlayerScreenState extends State<PlayerScreen>
         final arguments = call.arguments;
         final active = arguments is Map && arguments['active'] == true;
         _setPictureInPictureStatus(active: active, delayHiddenPause: !active);
+      } else if (call.method == 'pictureInPicturePending') {
+        _handlePictureInPicturePending();
+      } else if (call.method == 'pictureInPictureAction') {
+        final arguments = call.arguments;
+        final action = arguments is Map ? arguments['action'] : null;
+        switch (action) {
+          case 'toggle':
+            _togglePlayback();
+            break;
+          case 'previous':
+            if (_index > 0) unawaited(_play(_index - 1));
+            break;
+          case 'next':
+            if (_index + 1 < widget.detail.episodes.length) {
+              unawaited(_play(_index + 1));
+            }
+            break;
+        }
       }
     });
     unawaited(_refreshPictureInPictureStatus());
+  }
+
+  void _handlePictureInPicturePending() {
+    _setPictureInPictureStatus(requested: true);
+    _pictureInPictureExitTimer?.cancel();
+    _pictureInPictureExitTimer = Timer(const Duration(seconds: 2), () {
+      if (!_closed && _pictureInPictureRequested && !_pictureInPictureActive) {
+        _setPictureInPictureStatus(requested: false, delayHiddenPause: true);
+      }
+    });
+  }
+
+  void _syncPictureInPicture() {
+    if (defaultTargetPlatform != TargetPlatform.android ||
+        !_pictureInPictureSupported) {
+      return;
+    }
+    final ratio = _aspectRatio.isFinite && _aspectRatio > 0
+        ? _aspectRatio.clamp(1 / 2.39, 2.39).toDouble()
+        : 16 / 9;
+    final width = ratio >= 1 ? (1000 * ratio).round() : 1000;
+    final height = ratio >= 1 ? 1000 : (1000 / ratio).round();
+    final playing = !_loading && _error == null && _player.state.playing;
+    final hasPrevious = _index > 0;
+    final hasNext = _index + 1 < widget.detail.episodes.length;
+    final autoEnter = playing && !_television &&
+        widget.store.playbackPreferences.autoPictureInPicture;
+    final signature = '$width:$height:$playing:$hasPrevious:$hasNext:$autoEnter';
+    if (_pictureInPictureStateSignature == signature) return;
+    _pictureInPictureStateSignature = signature;
+    unawaited(
+      AppDevice.channel.invokeMethod<void>('updatePictureInPicture', {
+        'width': width,
+        'height': height,
+        'playing': playing,
+        'hasPrevious': hasPrevious,
+        'hasNext': hasNext,
+        'autoEnter': autoEnter,
+      }).catchError((Object _) {
+        _pictureInPictureStateSignature = null;
+      }),
+    );
   }
 
   Future<void> _refreshPictureInPictureStatus() async {
@@ -534,6 +596,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         supported: status?['supported'] == true,
         active: status?['active'] == true,
       );
+      _syncPictureInPicture();
     } on PlatformException {
       if (mounted && !_closed) {
         _setPictureInPictureStatus(supported: false, active: false);
@@ -621,6 +684,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     _interactions.cancel();
+    _syncPictureInPicture();
     final rawRatio = _aspectRatio.isFinite && _aspectRatio > 0
         ? _aspectRatio
         : 16 / 9;
@@ -811,6 +875,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _syncPreload() {
     if (_closed) return;
+    _syncPictureInPicture();
     if (!_preloadEnabled ||
         !_foreground ||
         widget.localOnly ||
@@ -878,6 +943,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _formFactor = formFactor;
     _television = television;
+    if (widget.store.playbackPreferences.preload == null) {
+      _preloadEnabled = widget.store.playbackPreferences.preloads(
+        television: television,
+      );
+    }
     // Migrate the aggressive legacy default once on Android TV while preserving
     // an intentional optimized/software choice made after this migration.
     if (Platform.isAndroid &&
@@ -1819,10 +1889,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       throw StateError('目前使用者已變更');
     }
     _interactions.cancel();
-    final nextPreferences = preferences.copyWith(
-      autoAdvance: true,
-      preload: true,
-    );
+    final nextPreferences = preferences;
     await widget.store.setPlaybackPreferences(nextPreferences);
     if (!mounted || _closed || widget.store.profileEpoch != _profileEpoch) {
       return;
@@ -1834,9 +1901,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() {
       _speed = nextPreferences.speed;
       _requestedQuality = nextPreferences.quality;
-      _autoAdvance = true;
+      _autoAdvance = nextPreferences.autoAdvance;
       _danmakuEnabled = nextPreferences.danmaku;
-      _preloadEnabled = true;
+      _preloadEnabled = nextPreferences.preload ?? _preloadEnabled;
       _televisionDecoder = nextPreferences.televisionDecoder;
     });
     _danmaku.setEnabled(_danmakuEnabled);
@@ -1844,6 +1911,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (qualityChanged) _preloader.clear();
     _syncPreload();
     _menuRevision.value++;
+    _syncPictureInPicture();
     await _interactions.applySpeed();
     if (qualityChanged && _plan?.local != true) {
       await _retry(quality: nextPreferences.quality);
@@ -2059,9 +2127,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         _preferences.copyWith(
           speed: selection.speed,
           quality: selection.quality,
-          autoAdvance: true,
+          autoAdvance: selection.autoAdvance ?? _autoAdvance,
           danmaku: selection.danmaku,
-          preload: true,
+          preload: selection.preload ?? _preloadEnabled,
           enhancement: selection.enhancement,
           televisionDecoder: selection.decoder,
         ),
@@ -2162,6 +2230,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
     if (_pictureInPictureHandlerInstalled) {
+      unawaited(
+        AppDevice.channel.invokeMethod<void>('updatePictureInPicture', null)
+            .catchError((Object _) {}),
+      );
       AppDevice.channel.setMethodCallHandler(null);
     }
     _interactions.dispose();

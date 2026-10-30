@@ -6,12 +6,15 @@ import android.media.MediaScannerConnection
 import android.app.UiModeManager
 import android.app.ActivityManager
 import android.app.PictureInPictureParams
+import android.app.PendingIntent
+import android.app.RemoteAction
 import android.os.Build
 import android.os.Environment
 import android.os.Bundle
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.os.SystemClock
+import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.ComponentName
 import android.content.Context
@@ -21,6 +24,7 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.graphics.drawable.Icon
 import android.net.ConnectivityManager
 import android.net.Uri
 import android.util.Rational
@@ -37,10 +41,23 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterShellArgs
 import io.flutter.plugin.common.MethodChannel
 
-open class MainActivity : FlutterActivity() {
+open private const val PICTURE_IN_PICTURE_ACTION = "com.dickyr15.dtv.PICTURE_IN_PICTURE_ACTION"
+
+private data class PlayerPictureInPicture(
+    val width: Int,
+    val height: Int,
+    val playing: Boolean,
+    val hasPrevious: Boolean,
+    val hasNext: Boolean,
+    val autoEnter: Boolean
+)
+
+class MainActivity : FlutterActivity() {
     private var headroomReadAt = 0L
     private var thermalHeadroom: Double? = null
     private var deviceChannel: MethodChannel? = null
+    private var pictureInPicture: PlayerPictureInPicture? = null
+    private var pictureInPictureReceiver: BroadcastReceiver? = null
     private var televisionMode = false
     private var pendingExportPlaybackLogText: String? = null
     private var pendingExportPlaybackLogPrefix: String = "D-TV-playback-log"
@@ -420,6 +437,7 @@ open class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         deviceChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "duanju/device")
             .also { channel ->
+                registerPictureInPictureReceiver()
                 channel.setMethodCallHandler { call, result ->
                     when (call.method) {
                         "deviceInfo" -> {
@@ -534,6 +552,20 @@ open class MainActivity : FlutterActivity() {
                                 call.argument<Int>("bottom")
                             ))
                         }
+                        "updatePictureInPicture" -> {
+                            pictureInPicture = if (call.arguments == null) null else PlayerPictureInPicture(
+                                call.argument<Int>("width") ?: 16,
+                                call.argument<Int>("height") ?: 9,
+                                call.argument<Boolean>("playing") ?: false,
+                                call.argument<Boolean>("hasPrevious") ?: false,
+                                call.argument<Boolean>("hasNext") ?: false,
+                                call.argument<Boolean>("autoEnter") ?: false
+                            )
+                            if (pictureInPictureSupported()) {
+                                runCatching { setPictureInPictureParams(pictureInPictureParams()) }
+                            }
+                            result.success(null)
+                        }
                         "getBrightness" -> {
                             val lp = window.attributes
                             val current = if (lp.screenBrightness >= 0f) {
@@ -618,19 +650,82 @@ open class MainActivity : FlutterActivity() {
         if (!pictureInPictureSupported()) return pictureInPictureStatus()
         val safeWidth = width.coerceIn(1, 10000)
         val safeHeight = height.coerceIn(1, 10000)
+        pictureInPicture = pictureInPicture?.copy(width = safeWidth, height = safeHeight)
+            ?: PlayerPictureInPicture(safeWidth, safeHeight, true, false, false, false)
         return runCatching {
-            val builder = PictureInPictureParams.Builder()
-            builder.setAspectRatio(Rational(safeWidth, safeHeight))
-            if (left != null && top != null && right != null && bottom != null &&
-                right > left && bottom > top) {
-                builder.setSourceRectHint(Rect(left, top, right, bottom))
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setAutoEnterEnabled(true)
-            }
-            val entered = enterPictureInPictureMode(builder.build())
+            val sourceRect = if (left != null && top != null && right != null && bottom != null &&
+                right > left && bottom > top) Rect(left, top, right, bottom) else null
+            val entered = enterPictureInPictureMode(pictureInPictureParams(sourceRect))
             pictureInPictureStatus() + ("requested" to entered)
         }.getOrElse { pictureInPictureStatus() }
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
+    private fun pictureInPictureParams(sourceRect: Rect? = null): PictureInPictureParams {
+        val state = pictureInPicture
+        val builder = PictureInPictureParams.Builder()
+        if (state != null) {
+            builder.setAspectRatio(Rational(state.width.coerceIn(1, 10000), state.height.coerceIn(1, 10000)))
+            builder.setActions(listOf(
+                pictureInPictureAction(1, "previous", R.drawable.dtv_pip_previous, "上一集", state.hasPrevious),
+                pictureInPictureAction(2, "toggle", if (state.playing) R.drawable.dtv_pip_pause else R.drawable.dtv_pip_play, if (state.playing) "暫停" else "播放", true),
+                pictureInPictureAction(3, "next", R.drawable.dtv_pip_next, "下一集", state.hasNext)
+            ))
+        } else {
+            builder.setActions(emptyList())
+        }
+        if (sourceRect != null) builder.setSourceRectHint(sourceRect)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(state?.autoEnter == true)
+        }
+        return builder.build()
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
+    private fun pictureInPictureAction(
+        requestCode: Int,
+        action: String,
+        iconResource: Int,
+        title: String,
+        enabled: Boolean
+    ): RemoteAction {
+        val intent = Intent(PICTURE_IN_PICTURE_ACTION)
+            .setPackage(packageName)
+            .putExtra("action", action)
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return RemoteAction(Icon.createWithResource(this, iconResource), title, title, pendingIntent)
+            .apply { isEnabled = enabled }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun registerPictureInPictureReceiver() {
+        if (pictureInPictureReceiver != null) return
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val action = intent?.getStringExtra("action") ?: return
+                deviceChannel?.invokeMethod("pictureInPictureAction", mapOf("action" to action))
+            }
+        }
+        pictureInPictureReceiver = receiver
+        val filter = IntentFilter(PICTURE_IN_PICTURE_ACTION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(receiver, filter)
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val state = pictureInPicture
+        if (state?.autoEnter != true || !pictureInPictureSupported()) return
+        deviceChannel?.invokeMethod("pictureInPicturePending", null)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
+        val entered = runCatching { enterPictureInPictureMode(pictureInPictureParams()) }.getOrDefault(false)
+        if (!entered) deviceChannel?.invokeMethod("pictureInPictureChanged", mapOf("active" to false))
     }
 
     override fun onPictureInPictureModeChanged(
@@ -645,6 +740,9 @@ open class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        pictureInPictureReceiver?.let { receiver -> runCatching { unregisterReceiver(receiver) } }
+        pictureInPictureReceiver = null
+        pictureInPicture = null
         deviceChannel?.setMethodCallHandler(null)
         deviceChannel = null
         super.cleanUpFlutterEngine(flutterEngine)
