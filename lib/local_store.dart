@@ -1014,10 +1014,17 @@ class LocalStore extends ChangeNotifier {
   }
 
   Future<void> _checkPin(LocalProfile target, String pin) async {
+    if (!target.protected) return;
     if (DateTime.now().isBefore(_retryAfter)) {
       throw StateError('密碼輸入過於頻繁，請稍後再試');
     }
-    if (!await checkProfilePin(target, pin)) {
+    final actual = await _pinHasher(pin, target.salt);
+    final expected = target.pinHash;
+    var difference = actual.length ^ expected.length;
+    for (var index = 0; index < actual.length && index < expected.length; index++) {
+      difference |= actual.codeUnitAt(index) ^ expected.codeUnitAt(index);
+    }
+    if (difference != 0) {
       _failures++;
       if (_failures >= 3) {
         _retryAfter = DateTime.now().add(
