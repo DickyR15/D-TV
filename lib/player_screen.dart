@@ -1519,15 +1519,9 @@ class _PlayerScreenState extends State<PlayerScreen>
               };
               await _setPlaybackProperty(platform, 'hwdec', hwdec);
               await _setPlaybackProperty(platform, 'hwdec-codecs', 'all');
-              if (_televisionDecoder == TelevisionDecoder.automatic) {
-                // Automatic mode falls back to software after repeated decoder
-                // failures, rather than leaving a stream on a broken HW path.
-                await _setPlaybackProperty(
-                  platform,
-                  'hwdec-software-fallback',
-                  '3',
-                );
-              }
+              // MPV auto-safe falls back to software when no supported HW
+              // decoder can be initialized; its decoder-failure fallback is
+              // also enabled by default (hwdec-software-fallback=3).
               if (_mpvEmbedBackend) {
                 // Onn. 4K Pro logs repeatedly report "Failed to create file
                 // cache." Keep demuxer cache in RAM instead of creating a
