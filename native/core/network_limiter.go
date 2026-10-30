@@ -91,6 +91,8 @@ type requestLimiter struct {
 
 type backgroundCatalogKey struct{}
 
+type requestLaneKey struct{}
+
 func newRequestLimiter(concurrency int, interval time.Duration) *requestLimiter {
 	if concurrency < 1 {
 		concurrency = 1
@@ -112,6 +114,11 @@ func (limiter *requestLimiter) acquire(ctx context.Context, request *http.Reques
 		if strings.HasSuffix(host, ".cloudfront.net") {
 			source = "cloudfront"
 		}
+	}
+	// Give the helper device its own per-source gate so paired pagination
+	// requests can run concurrently without bypassing host-level backoff.
+	if lane, _ := ctx.Value(requestLaneKey{}).(string); lane != "" {
+		source += "#" + lane
 	}
 	limiter.mu.Lock()
 	if !background {
