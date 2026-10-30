@@ -34,6 +34,8 @@ import 'ui_localization.dart';
 import 'phone_search_dialog.dart';
 import 'app_navigation.dart';
 
+enum _UpdatePromptAction { remindLater, ignoreVersion, openRelease }
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.repository, required this.store});
   final AppRepository repository;
@@ -46,6 +48,9 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _recommendationCategory = 'app:recommendations';
   static const _revealBatch = 60;
   final _search = TextEditingController();
+  final FocusNode _desktopSearchFocus = FocusNode(
+    debugLabel: 'desktop-search',
+  );
   final _scroll = ScrollController();
   final Map<int, FocusNode> _navigationFocusNodes = {};
   final RemoteGridFocusController _savedGridFocus = RemoteGridFocusController();
@@ -441,6 +446,88 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!_searchVisible) _search.clear();
     });
     if (!_searchVisible && hadQuery) _searchChanged('');
+  }
+
+  void _desktopNavigate(int tab) {
+    if (!AppLayout.isDesktopPlatform || AppLayout.isTelevision(context)) return;
+    _selectNavigationDestination(tab);
+  }
+
+  void _focusDesktopSearch() {
+    if (!AppLayout.isDesktopPlatform ||
+        AppLayout.isTelevision(context) ||
+        widget.store.sources.isEmpty) {
+      return;
+    }
+    if (!_isCatalogTab && !_isRankingTab) _selectCatalogTab(0);
+    if (_showRecommendations) _changeCategory('');
+    setState(() => _searchVisible = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _searchVisible && _desktopSearchFocus.canRequestFocus) {
+        _desktopSearchFocus.requestFocus();
+      }
+    });
+  }
+
+  Future<void> _showDesktopShortcutHelp() async {
+    if (!mounted || !AppLayout.isDesktopPlatform) return;
+    Widget shortcutRow(String shortcut, String action) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 148,
+            child: Text(
+              shortcut,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(child: Text(action)),
+        ],
+      ),
+    );
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('桌面快捷鍵'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('導覽', style: Theme.of(context).textTheme.titleSmall),
+                shortcutRow('Ctrl + 1', '分類'),
+                shortcutRow('Ctrl + 2', '收藏'),
+                shortcutRow('Ctrl + 3', '最近觀看'),
+                shortcutRow('Ctrl + 4', '紅果熱播榜'),
+                shortcutRow('Ctrl + 5', '真人劇熱播榜'),
+                shortcutRow('Ctrl + 6', 'AI 劇熱播榜'),
+                shortcutRow('Ctrl + 7', '漫劇熱播榜'),
+                shortcutRow('Ctrl + 8', '設定'),
+                shortcutRow('Ctrl + F／Ctrl + K', '搜尋'),
+                const Divider(height: 20),
+                Text('播放中', style: Theme.of(context).textTheme.titleSmall),
+                shortcutRow('Space', '播放／暫停'),
+                shortcutRow('←／→', '後退／快進 5 秒'),
+                shortcutRow('按住 →', '暫時 3 倍速'),
+                shortcutRow('↑／↓', '音量增加／降低'),
+                shortcutRow('M', '靜音／取消靜音'),
+                shortcutRow('F／F11', '切換全螢幕'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('關閉'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<PhoneSearchServer> _ensurePhoneSearchServer() {
@@ -943,6 +1030,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _phoneSearchServer = null;
     if (phoneSearchServer != null) unawaited(phoneSearchServer.close());
     _search.dispose();
+    _desktopSearchFocus.dispose();
     _scroll.removeListener(_onCatalogScroll);
     _scroll.dispose();
     for (final node in _navigationFocusNodes.values) {
@@ -1271,43 +1359,82 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final update = await const AppUpdateService().checkForUpdate();
       if (!mounted ||
-          update == null ||
+          !AppUpdateService.shouldNotify(
+            update,
+            ignoredVersion: widget.store.ignoredUpdateVersion,
+          ) ||
           (ModalRoute.of(context)?.isCurrent == false)) {
         return;
       }
+      final availableUpdate = update!;
       _updateDialogOpen = true;
-      final openRelease = await showDialog<bool>(
+      final action = await showDialog<_UpdatePromptAction>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text('發現 D TV 新版本 ${update.version}'),
+          title: Text('發現 D TV 新版本 ${availableUpdate.version}'),
           content: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: SingleChildScrollView(
               child: Text(
-                update.notes.trim().isEmpty
-                    ? '目前版本：${AppLayout.versionOf(context)}\n新版本：${update.version}\n\n有新版本可供下載。'
-                    : update.notes.trim().characters.take(1800).toString(),
+                availableUpdate.notes.trim().isEmpty
+                    ? '目前版本：${AppLayout.versionOf(context)}\\n新版本：${availableUpdate.version}\\n\\n有新版本可供下載。'
+                    : availableUpdate.notes.trim().characters.take(1800).toString(),
               ),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _UpdatePromptAction.ignoreVersion,
+              ),
+              child: const Text('忽略此版本'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _UpdatePromptAction.remindLater,
+              ),
               child: const Text('稍後提醒'),
             ),
             FilledButton(
               autofocus: true,
-              onPressed: () => Navigator.pop(dialogContext, true),
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _UpdatePromptAction.openRelease,
+              ),
               child: const Text('查看更新'),
             ),
           ],
         ),
       );
       _updateDialogOpen = false;
-      if (openRelease == true && mounted) {
+      if (action == _UpdatePromptAction.ignoreVersion && mounted) {
+        await widget.store.ignoreUpdateVersion(availableUpdate.version);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已忽略版本 ${availableUpdate.version}')),
+          );
+        }
+        DiaryService.add('[Update] ignored_version=${availableUpdate.version}');
+        return;
+      }
+      if (action == _UpdatePromptAction.openRelease && mounted) {
         try {
-          await AppDevice.openExternalUrl(update.releaseUrl);
+          await AppDevice.openExternalUrl(availableUpdate.releaseUrl);
         } catch (error) {
+          await Clipboard.setData(
+            ClipboardData(text: availableUpdate.releaseUrl),
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('無法開啟瀏覽器，已複製更新網址')),
+            );
+          }
+          DiaryService.add('[Update] open_release_failed=${error.runtimeType}');
+        }
+      }
+    } catch (error) {
           await Clipboard.setData(ClipboardData(text: update.releaseUrl));
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -1796,7 +1923,36 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
         );
-        if (!television) return scaffold;
+        if (!television) {
+          if (!AppLayout.isDesktopPlatform) return scaffold;
+          return CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.digit1, control: true):
+                  () => _desktopNavigate(0),
+              const SingleActivator(LogicalKeyboardKey.digit2, control: true):
+                  () => _desktopNavigate(1),
+              const SingleActivator(LogicalKeyboardKey.digit3, control: true):
+                  () => _desktopNavigate(2),
+              const SingleActivator(LogicalKeyboardKey.digit4, control: true):
+                  () => _desktopNavigate(4),
+              const SingleActivator(LogicalKeyboardKey.digit5, control: true):
+                  () => _desktopNavigate(5),
+              const SingleActivator(LogicalKeyboardKey.digit6, control: true):
+                  () => _desktopNavigate(6),
+              const SingleActivator(LogicalKeyboardKey.digit7, control: true):
+                  () => _desktopNavigate(7),
+              const SingleActivator(LogicalKeyboardKey.digit8, control: true):
+                  () => _desktopNavigate(9),
+              const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+                  _focusDesktopSearch,
+              const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+                  _focusDesktopSearch,
+              const SingleActivator(LogicalKeyboardKey.f1):
+                  _showDesktopShortcutHelp,
+            },
+            child: scaffold,
+          );
+        }
         return Listener(
           onPointerDown: (_) => _cancelStartupFocusRetry(),
           child: Focus(
@@ -2229,6 +2385,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SearchInput(
               key: ValueKey('search-${_group.id}'),
               controller: _search,
+              focusNode: _desktopSearchFocus,
               autofocus: true,
               hint: _searchHint,
               suggestions: _searchSuggestions
