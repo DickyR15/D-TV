@@ -1882,7 +1882,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _automaticFullscreenSuppressed = !fullscreen;
     });
     try {
-      if (Platform.isWindows) {
+      if (Platform.isWindows || Platform.isMacOS) {
         await windowManager.setFullScreen(fullscreen);
       } else if (_mobile || _formFactor == FormFactor.pad) {
         await (_orientationController?.setPlayback(
@@ -2289,7 +2289,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         await _player.dispose();
       }),
     );
-    if (Platform.isWindows) {
+    if (Platform.isWindows || Platform.isMacOS) {
       unawaited(windowManager.setFullScreen(false));
     } else if (_mobile ||
         _formFactor == FormFactor.pad ||
