@@ -12,6 +12,49 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
+    'Android emulator auto detection starts on Red Fruit Hot with D-pad focus',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'sourceSwitches': '{"hongguo": false}',
+      });
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      final formFactor = AppLayout.resolveFormFactor(
+        mode: 'auto',
+        detectedTelevision: false,
+        detectedEmulator: true,
+        screenSize: const Size(432, 768),
+        desktopPlatform: false,
+      );
+      expect(formFactor, FormFactor.television);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppLayout(
+            television: true,
+            formFactor: formFactor,
+            child: HomeScreen(
+              repository: FixtureRepository(),
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final hotFinder = find.byKey(const ValueKey('side-nav-4'));
+      final categoryFinder = find.byKey(const ValueKey('side-nav-8'));
+      expect(tester.widget<RemoteTarget>(hotFinder).selected, isTrue);
+      expect(tester.widget<RemoteTarget>(categoryFinder).selected, isFalse);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'D TV navigation 4',
+      );
+    },
+  );
+
+  testWidgets(
     'switching from desktop detection to TV focuses Red Fruit Hot ranking',
     (tester) async {
       // The test concerns focus only; disable the synthetic catalog so its
