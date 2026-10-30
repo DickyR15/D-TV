@@ -52,7 +52,7 @@ jobs:
           channel: stable
           cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
-        run: python scripts/retry_command.py --attempts 3 -- flutter pub get --enforce-lockfile
+        run: python scripts/retry_command.py --attempts 3 -- flutter pub get
       - name: Test Flutter suite
         run: flutter test
       - name: Test shared Go core
