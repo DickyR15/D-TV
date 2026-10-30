@@ -58,6 +58,8 @@ flutter = shutil.which("flutter")
 if not flutter:
     raise SystemExit("請先將 Flutter SDK 的 bin 目錄加入 PATH。")
 
+subprocess.run([sys.executable, str(root / "scripts" / "prepare_branding.py")], cwd=root, check=True)
+
 abi_args = [item for abi in abis for item in ["--abi", abi]]
 subprocess.run(
     [
