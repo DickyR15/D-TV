@@ -146,7 +146,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              '忘記管理員密碼無法找回，需清除本機設定資料後重新下載安裝 D-TV；收藏、觀看紀錄與偏好設定也會一併清除。',
+              '忘記管理員密碼無法找回。必須先移除 D TV 的本機設定資料，再重新下載並安裝；這會一併清除收藏、觀看紀錄及偏好設定。',
             ),
           ],
         ),
@@ -196,7 +196,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                     ),
                     const SizedBox(height: 4),
                     if (advanced.isEmpty)
-                      const Text('目前這個版本未包含進階片源，請使用完整片源版 D-TV。')
+                      const Text('目前這個版本未包含進階片源，請使用完整片源版 D TV。')
                     else if (unlocked) ...[
                       const Text('已解鎖。離開此頁面後，進階片源管理會自動重新上鎖。'),
                       const SizedBox(height: 8),
