@@ -2,7 +2,7 @@ import 'video_enhancement_preferences.dart';
 
 const playbackSpeeds = [.5, .75, 1.0, 1.25, 1.5, 2.0, 3.0];
 
-enum TelevisionDecoder { optimized, hardware, software }
+enum TelevisionDecoder { automatic, optimized, hardware, software }
 
 class PlaybackPreferences {
   const PlaybackPreferences({
@@ -12,7 +12,7 @@ class PlaybackPreferences {
     this.danmaku = false,
     this.preload,
     this.enhancement = const VideoEnhancementPreferences(),
-    this.televisionDecoder = TelevisionDecoder.hardware,
+    this.televisionDecoder = TelevisionDecoder.automatic,
     this.autoPictureInPicture = false,
   });
 
@@ -78,7 +78,7 @@ class PlaybackPreferences {
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
       televisionDecoder:
           TelevisionDecoder.values.asNameMap()[value['televisionDecoder']] ??
-          TelevisionDecoder.hardware,
+          TelevisionDecoder.automatic,
       autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
     );
   }
