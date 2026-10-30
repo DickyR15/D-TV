@@ -1126,6 +1126,8 @@ class LocalStore extends ChangeNotifier {
             'playback': jsonDecode(
               _string(_key('playback', profile.id)) ?? '{}',
             ),
+            'portraitBlurLandscapeDefaultV1':
+                _bool(_key('portraitBlurLandscapeDefaultV1', profile.id)) ?? false,
             'downloadPreferences': jsonDecode(
               _string(_key('downloadPreferences', profile.id)) ?? '{}',
             ),
@@ -1212,6 +1214,10 @@ class LocalStore extends ChangeNotifier {
       PlaybackPreferences.fromJson(
         Map<String, dynamic>.from(library['playback'] as Map? ?? {}),
       );
+      if (library.containsKey('portraitBlurLandscapeDefaultV1') &&
+          library['portraitBlurLandscapeDefaultV1'] is! bool) {
+        throw const FormatException('備份模糊背景預設設定無效');
+      }
       DownloadPreferences.fromJson(
         Map<String, dynamic>.from(library['downloadPreferences'] as Map? ?? {}),
       );
@@ -1269,6 +1275,9 @@ class LocalStore extends ChangeNotifier {
         _key('source', profile.id): library['source'] as String,
         _key('hideVip', profile.id): library['hideVip'] as bool,
         _key('playback', profile.id): jsonEncode(library['playback'] ?? {}),
+        if (library.containsKey('portraitBlurLandscapeDefaultV1'))
+          _key('portraitBlurLandscapeDefaultV1', profile.id):
+              library['portraitBlurLandscapeDefaultV1'] as bool,
         _key('downloadPreferences', profile.id): jsonEncode(
           library['downloadPreferences'] ?? {},
         ),
