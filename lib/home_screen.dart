@@ -950,7 +950,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _requestDefaultTelevisionFocus();
       }
       DiaryService.add(
-        '[Focus] home startup formFactor=${formFactor.name} tab=$_tab',
+        '[Focus] home startup formFactor=${formFactor.name} '
+        'displayMode=${widget.store.displayMode} '
+        'screen=${screenSize.width.toStringAsFixed(0)}x'
+        '${screenSize.height.toStringAsFixed(0)} tab=$_tab',
       );
       return;
     }
