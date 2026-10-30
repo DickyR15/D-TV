@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -24,7 +25,6 @@ import 'playback_preloader.dart';
 import 'playback_recovery.dart';
 import 'playback_controls_visibility.dart';
 import 'playback_preferences.dart';
-import 'portrait_blur_background.dart';
 import 'portrait_blur_policy.dart';
 import 'luna_exo_player.dart';
 import 'player_controls.dart';
@@ -165,8 +165,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.automatic;
   late final bool _useMpvEmbedForThisPlayer;
   bool _tvDecoderPolicyMigrated = false;
-  // This PlayerScreen keeps one output pipeline for its lifetime. Hardware
-  // mode selects MPV Embed at creation; auto/software use the regular GPU VO.
+  // This PlayerScreen keeps one output pipeline for its lifetime.
+  // Portrait blur requires a retainable Flutter GPU texture, so it bypasses
+  // the native Surface-only MPV Embed route for this playback session.
   // ExoPlayer does not expose MPV decoder properties.
   bool get _mpvEmbedBackend => _useMpvEmbedForThisPlayer;
   bool get _televisionDecoderApplies =>
@@ -231,13 +232,15 @@ class _PlayerScreenState extends State<PlayerScreen>
         inheritedLayout?.formFactor == FormFactor.television ||
         (inheritedLayout?.formFactor == null &&
             inheritedLayout?.television == true);
-    _useMpvEmbedForThisPlayer =
-        Platform.isAndroid &&
-        isTelevisionLayout &&
-        _androidPlayerEngine == 'mpv_embed' &&
-        preferences.televisionDecoder == TelevisionDecoder.hardware &&
-        widget.playerFactory == null &&
-        widget.videoBuilder == null;
+    _useMpvEmbedForThisPlayer = shouldUseMpvEmbedForPlayback(
+      android: Platform.isAndroid,
+      television: isTelevisionLayout,
+      mpvEmbedConfigured: _androidPlayerEngine == 'mpv_embed',
+      hardwareDecoderSelected:
+          preferences.televisionDecoder == TelevisionDecoder.hardware,
+      customPlayer: widget.playerFactory != null || widget.videoBuilder != null,
+      portraitBlurEnabled: preferences.portraitBlurBackground,
+    );
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
     _danmaku = DanmakuController(widget.repository)
@@ -2445,29 +2448,65 @@ class _PlayerScreenState extends State<PlayerScreen>
         controls: (_) => controls,
       );
     }
-    final blurSupported =
+    final textureRendererAvailable =
         Platform.isAndroid &&
         _androidPlayerEngine != 'exo' &&
-        _player.platform is NativePlayer;
+        _player.platform is NativePlayer &&
+        !_mpvEmbedBackend;
     final portraitBlurActive = shouldUsePortraitBlurBackground(
       enabled: _portraitBlurBackground,
-      mpvBackendAvailable: blurSupported,
+      textureRendererAvailable: textureRendererAvailable,
       loading: _loading,
       hasError: _error != null,
       aspectRatio: _aspectRatio,
     );
-    final video = Video(
-      controller: _video!,
-      fit: fit,
-      fill: portraitBlurActive ? Colors.transparent : Colors.black,
-      controls: (_) => controls,
-    );
-    if (!blurSupported) return video;
-    return PortraitBlurBackground(
-      player: _player,
-      active: portraitBlurActive,
-      onDiagnostic: (message) => DiaryService.add('[PortraitBlur] $message'),
-      child: video,
+    if (!portraitBlurActive) {
+      return Video(
+        controller: _video!,
+        fit: fit,
+        fill: Colors.black,
+        controls: (_) => controls,
+      );
+    }
+
+    // Both Video widgets subscribe to the same VideoController texture ID.
+    // MPV decodes once; Flutter composites that one live texture twice:
+    // cover + blur behind, contain + controls in front.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned.fill(
+          child: ClipRect(
+            child: ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+              child: Transform.scale(
+                scale: 1.08,
+                child: Video(
+                  controller: _video!,
+                  fit: BoxFit.cover,
+                  fill: Colors.black,
+                  controls: null,
+                  subtitleViewConfiguration:
+                      const SubtitleViewConfiguration(visible: false),
+                  wakelock: false,
+                  pauseUponEnteringBackgroundMode: false,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: ColoredBox(color: Colors.black.withValues(alpha: .24)),
+        ),
+        Positioned.fill(
+          child: Video(
+            controller: _video!,
+            fit: fit,
+            fill: Colors.transparent,
+            controls: (_) => controls,
+          ),
+        ),
+      ],
     );
   }
 

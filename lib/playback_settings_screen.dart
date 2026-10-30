@@ -271,8 +271,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               title: const Text('直式影片模糊背景（試驗）'),
               subtitle: Text(
                 _portraitBlurSupported
-                    ? '將影片畫面模糊填滿左右黑邊；背景約每秒更新一次，預設關閉。'
-                    : '需要 Android MPV 播放器；目前平台或 ExoPlayer 不支援影格擷取。',
+                    ? '同一即時影格分層合成，背景放大模糊、前景保持清晰；下次開啟影片生效。'
+                    : '需要 Android MPV 紋理輸出；目前平台或 ExoPlayer 不支援。',
               ),
               value: _portraitBlurBackground,
               onChanged: _portraitBlurSupported
@@ -326,7 +326,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、清晰度、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景為試驗功能，背景約每秒更新一次。',
+              '倍速、清晰度、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景為試驗功能，使用同一個即時影格，不會啟動第二個解碼器。',
             ),
           ],
         ),

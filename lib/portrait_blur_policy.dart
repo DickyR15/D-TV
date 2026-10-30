@@ -1,12 +1,27 @@
+bool shouldUseMpvEmbedForPlayback({
+  required bool android,
+  required bool television,
+  required bool mpvEmbedConfigured,
+  required bool hardwareDecoderSelected,
+  required bool customPlayer,
+  required bool portraitBlurEnabled,
+}) =>
+    android &&
+    television &&
+    mpvEmbedConfigured &&
+    hardwareDecoderSelected &&
+    !customPlayer &&
+    !portraitBlurEnabled;
+
 bool shouldUsePortraitBlurBackground({
   required bool enabled,
-  required bool mpvBackendAvailable,
+  required bool textureRendererAvailable,
   required bool loading,
   required bool hasError,
   required double aspectRatio,
 }) =>
     enabled &&
-    mpvBackendAvailable &&
+    textureRendererAvailable &&
     !loading &&
     !hasError &&
     aspectRatio.isFinite &&
