@@ -95,6 +95,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _playbackRouteActive = false;
   bool _exitConfirmationShowing = false;
   bool _homePopupOpen = false;
+  final FocusNode _homePopupUsersFocus =
+      FocusNode(debugLabel: 'home-more-users');
   Timer? _startupFocusRetry;
   PhoneSearchServer? _phoneSearchServer;
   StreamSubscription<String>? _phoneSearchSubscription;
@@ -622,6 +624,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void _homePopupOpened() {
     _homePopupOpen = true;
     _resetBackConfirmation();
+    if (!AppLayout.isTelevision(context)) return;
+    // PopupMenuButton opens a route but the remote can remain on the anchor.
+    // Explicitly land on the first useful action so TV users do not need to
+    // press Select again and step down through the menu.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _homePopupOpen && _homePopupUsersFocus.context != null) {
+        _homePopupUsersFocus.requestFocus();
+      }
+    });
   }
 
   void _homePopupSelected() {
@@ -899,6 +910,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     appNavigationObserver.changes.removeListener(_onAppNavigationChanged);
     _cancelStartupFocusRetry();
+    _homePopupUsersFocus.dispose();
     _updater.removeListener(_updateChanged);
     _updater.dispose();
     _followUpdater.dispose();
@@ -1560,6 +1572,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                 ],
                 PopupMenuButton<String>(
+                  key: const ValueKey('home-more-menu'),
                   tooltip: '更多',
                   // Explicitly focus the user-management entry on first open.
                   initialValue: 'users',
@@ -1605,7 +1618,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                   },
                   itemBuilder: (_) => [
-                    const PopupMenuItem(value: 'users', child: Text('使用者管理')),
+                    PopupMenuItem(
+                      value: 'users',
+                      child: Focus(
+                        key: const ValueKey('home-more-users-focus'),
+                        focusNode: _homePopupUsersFocus,
+                        onKeyEvent: (node, event) {
+                          if (event is KeyDownEvent &&
+                              const {
+                                LogicalKeyboardKey.select,
+                                LogicalKeyboardKey.enter,
+                                LogicalKeyboardKey.numpadEnter,
+                                LogicalKeyboardKey.space,
+                              }.contains(event.logicalKey)) {
+                            Navigator.of(context).pop('users');
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: const Text('使用者管理'),
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: 'settings',
                       child: Text('設定與備份'),
