@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_layout.dart';
 import 'local_profiles.dart';
@@ -79,13 +81,50 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       if (reload) {
         await widget.store.reload();
       } else if (export) {
-        await FilePicker.saveFile(
-          fileName: '$appSlug-recovery.json',
-          bytes: Uint8List.fromList(
-            utf8.encode(widget.store.exportRecoveryData()),
-          ),
-          mimeType: 'application/json',
-        );
+        final recoveryData = widget.store.exportRecoveryData();
+        if (Platform.isAndroid) {
+          // Android TV images may not include a document-picker activity.
+          // Export directly through MediaStore, matching the normal settings backup.
+          final saved = await const MethodChannel('duanju/device')
+              .invokeMapMethod<String, dynamic>(
+            'exportSettingsBackup',
+            <String, dynamic>{'content': recoveryData},
+          );
+          if (mounted) {
+            final path = saved?['path'] as String? ?? 'Download/D-TV';
+            await showDialog<void>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('原始設定匯出成功'),
+                content: SelectableText(
+                  '已儲存原始設定：\\n$path\\n\\n'
+                  '請從檔案管理器開啟 Download/D-TV 資料夾，'
+                  '將 JSON 檔案複製到電腦保存。',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: path));
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('複製檔案位置'),
+                  ),
+                  FilledButton(
+                    autofocus: true,
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('完成'),
+                  ),
+                ],
+              ),
+            );
+          }
+        } else {
+          await FilePicker.saveFile(
+            fileName: '$appSlug-recovery.json',
+            bytes: Uint8List.fromList(utf8.encode(recoveryData)),
+            mimeType: 'application/json',
+          );
+        }
       } else {
         final file = await FilePicker.pickFile(
           type: FileType.custom,
