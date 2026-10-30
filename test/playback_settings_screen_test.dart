@@ -129,6 +129,14 @@ void main() {
     );
     expect(blur.value, isFalse);
     expect(blur.onChanged, isNull);
+    expect(
+      blur.subtitle,
+      isA<Text>().having(
+        (value) => value.data,
+        'TV blur pause reason',
+        contains('電視端暫停此功能'),
+      ),
+    );
   });
 
 }
