@@ -2309,12 +2309,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     scrollAlignmentPolicy: television
                         ? ScrollPositionAlignmentPolicy.explicit
                         : null,
-                    onFocus: () {
-                      if (entry.tab != 4) _cancelStartupFocusRetry();
-                      if (_tab != entry.tab) {
-                        _selectNavigationDestination(entry.tab);
-                      }
-                    },
+                    // Focus is only a remote-navigation state. It must not
+                    // change the selected page: autofocus can move briefly
+                    // during the splash/route transition. Real user navigation
+                    // selects a page in handleNavigationKey or onPressed.
+                    onFocus: () {},
                     onPressed: () {
                       _navigationFocusNodes[entry.tab]?.requestFocus();
                       _selectNavigationDestination(entry.tab);

@@ -92,6 +92,53 @@ void main() {
     },
   );
   testWidgets(
+    'transient category focus cannot replace the Red Fruit Hot startup page',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'sourceSwitches': '{"hongguo": false}',
+      });
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppLayout(
+            television: true,
+            formFactor: FormFactor.television,
+            child: HomeScreen(
+              repository: FixtureRepository(),
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final hotFinder = find.byKey(const ValueKey('side-nav-4'));
+      final categoryFinder = find.byKey(const ValueKey('side-nav-8'));
+      final hot = tester.widget<RemoteTarget>(hotFinder);
+      final category = tester.widget<RemoteTarget>(categoryFinder);
+
+      expect(hot.selected, isTrue);
+      category.focusNode!.requestFocus();
+      await tester.pump();
+
+      // A transient autofocus/focus-restoration event must not navigate away.
+      expect(tester.widget<RemoteTarget>(hotFinder).selected, isTrue);
+      expect(tester.widget<RemoteTarget>(categoryFinder).selected, isFalse);
+
+      // The startup retry remains armed and returns focus to Red Fruit Hot.
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'D TV navigation 4',
+      );
+      expect(tester.widget<RemoteTarget>(hotFinder).selected, isTrue);
+    },
+  );
+
+  testWidgets(
     'TV more menu opens with User Management focused and selectable',
     (tester) async {
       SharedPreferences.setMockInitialValues({
