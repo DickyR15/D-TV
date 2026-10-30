@@ -47,7 +47,13 @@ void main() {
 
     expect(store.advancedSourcesUnlocked, isTrue);
     for (final name in ['黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版']) {
-      expect(find.text(name), findsOneWidget);
+      final sourceName = find.text(name);
+      await tester.scrollUntilVisible(
+        sourceName,
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(sourceName, findsOneWidget);
     }
     expect(store.sourceEnabled('huangdou'), isFalse);
 
