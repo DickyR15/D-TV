@@ -51,4 +51,44 @@ void main() {
       );
     },
   );
+  testWidgets(
+    'startup reasserts Red Fruit Hot focus if the splash transition steals focus',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'sourceSwitches': '{"hongguo": false}',
+      });
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      final repository = FixtureRepository();
+      final transitionFocus = FocusNode(debugLabel: 'splash-transition-focus');
+      addTearDown(transitionFocus.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Focus(
+            focusNode: transitionFocus,
+            child: AppLayout(
+              television: true,
+              formFactor: FormFactor.television,
+              child: HomeScreen(repository: repository, store: store),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Simulate the splash/route transition taking focus after HomeScreen's
+      // first post-frame request. The guarded retry must restore the hot board.
+      transitionFocus.requestFocus();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 800));
+      await tester.pump();
+
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'D TV navigation 4',
+      );
+    },
+  );
+
 }
