@@ -45,4 +45,6 @@ flutter:
   assets:
     - assets/video_enhancement/
     - assets/opencc/
-    - assets/brand/
+    - assets/brand/dtv-app-icon.png
+    - assets/brand/dtv-home-header.webp
+    - assets/brand/dtv-tv-banner.webp
