@@ -120,6 +120,11 @@ elif options.platform == "windows":
                 if relative == "zhenguojian.exe":
                     relative = variant.slug + ".exe"
                 archive.write(source, relative)
+
+    # Reopen the closed archive for CRC validation. Checking it while the ZIP
+    # writer is still open can report false corruption on large Windows AOT
+    # snapshots such as data/app.so.
+    with zipfile.ZipFile(target, "r") as archive:
         corrupt = archive.testzip()
         if corrupt:
             raise SystemExit("Windows ZIP 壓縮資料損壞：" + corrupt)
