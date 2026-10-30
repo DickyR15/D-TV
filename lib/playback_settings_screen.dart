@@ -57,13 +57,6 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_playbackValuesInitialized) return;
-    final preferences = widget.store.playbackPreferences;
-    _preloadEnabled = preferences.preloads(
-      television: AppLayout.isTelevision(context),
-    );
-    _autoAdvance = preferences.autoAdvance;
-    _autoPictureInPicture = preferences.autoPictureInPicture;
     final size = MediaQuery.maybeOf(context)?.size ?? Size.zero;
     final landscape = size.width > size.height;
     if (landscape &&
@@ -72,6 +65,13 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       _portraitBlurBackground = true;
       unawaited(widget.store.migratePortraitBlurLandscapeDefault());
     }
+    if (_playbackValuesInitialized) return;
+    final preferences = widget.store.playbackPreferences;
+    _preloadEnabled = preferences.preloads(
+      television: AppLayout.isTelevision(context),
+    );
+    _autoAdvance = preferences.autoAdvance;
+    _autoPictureInPicture = preferences.autoPictureInPicture;
     _playbackValuesInitialized = true;
   }
 
