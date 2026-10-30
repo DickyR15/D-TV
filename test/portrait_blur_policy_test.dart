@@ -30,28 +30,27 @@ void main() {
     expect(eligible(aspectRatio: double.infinity), isFalse);
   });
 
-  test('MPV Embed is bypassed only when portrait blur requires a reusable texture', () {
+  test('Android TV keeps MPV Embed while Flutter composites portrait blur', () {
     bool embed({
       bool android = true,
       bool television = true,
       bool configured = true,
       bool software = false,
       bool customPlayer = false,
-      bool blur = false,
     }) => shouldUseMpvEmbedForPlayback(
       android: android,
       television: television,
       mpvEmbedConfigured: configured,
       softwareDecoderSelected: software,
       customPlayer: customPlayer,
-      portraitBlurEnabled: blur,
     );
 
+    // Blur is a Flutter composition effect and must not select mediacodec-copy.
     expect(embed(), isTrue);
-    expect(embed(blur: true), isFalse);
     expect(embed(television: false), isFalse);
     expect(embed(software: true), isFalse);
     expect(embed(customPlayer: true), isFalse);
     expect(embed(android: false), isFalse);
+    expect(embed(configured: false), isFalse);
   });
 }

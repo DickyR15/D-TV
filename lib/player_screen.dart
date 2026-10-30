@@ -165,9 +165,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.automatic;
   late final bool _useMpvEmbedForThisPlayer;
   bool _tvDecoderPolicyMigrated = false;
-  // This PlayerScreen keeps one output pipeline for its lifetime.
-  // Portrait blur requires a retainable Flutter GPU texture, so it bypasses
-  // the native Surface-only MPV Embed route for this playback session.
+  // Android MPV Embed renders MediaCodec frames into the Flutter Texture
+  // Registry surface. Portrait blur can composite that same texture twice
+  // without switching to mediacodec-copy or creating another decoder.
   // ExoPlayer does not expose MPV decoder properties.
   bool get _mpvEmbedBackend => _useMpvEmbedForThisPlayer;
   bool get _televisionDecoderApplies =>
@@ -232,11 +232,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         inheritedLayout?.formFactor == FormFactor.television ||
         (inheritedLayout?.formFactor == null &&
             inheritedLayout?.television == true);
-    // Keep the validated native Surface + MediaCodec route on Android TV.
-    // The Flutter two-layer blur experiment is temporarily limited to
-    // non-TV Android because its GPU-copy path has not passed TV sync testing.
-    _portraitBlurBackground =
-        preferences.portraitBlurBackground && !isTelevisionLayout;
+    // Keep MPV Embed + MediaCodec for Android TV even when blur is enabled.
+    // The blur is composed from the same Flutter Texture Registry output;
+    // it must never force the mediacodec-copy path that caused TV A/V drift.
+    _portraitBlurBackground = preferences.portraitBlurBackground;
     _useMpvEmbedForThisPlayer = shouldUseMpvEmbedForPlayback(
       android: Platform.isAndroid,
       television: isTelevisionLayout,
@@ -244,8 +243,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       softwareDecoderSelected:
           preferences.televisionDecoder == TelevisionDecoder.software,
       customPlayer: widget.playerFactory != null || widget.videoBuilder != null,
-      portraitBlurEnabled: preferences.portraitBlurBackground &&
-          !isTelevisionLayout,
     );
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
@@ -2457,8 +2454,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final textureRendererAvailable =
         Platform.isAndroid &&
         _androidPlayerEngine != 'exo' &&
-        _player.platform is NativePlayer &&
-        !_mpvEmbedBackend;
+        _player.platform is NativePlayer;
     final portraitBlurActive = shouldUsePortraitBlurBackground(
       enabled: _portraitBlurBackground,
       textureRendererAvailable: textureRendererAvailable,

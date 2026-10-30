@@ -35,9 +35,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       widget.store.playbackPreferences.portraitBlurBackground;
   bool get _portraitBlurSupported =>
       widget.portraitBlurSupported ??
-      (Platform.isAndroid &&
-          _androidPlayerEngine != 'exo' &&
-          !AppLayout.isTelevision(context));
+      (Platform.isAndroid && _androidPlayerEngine != 'exo');
   late bool _preloadEnabled;
   late bool _autoAdvance;
   late bool _autoPictureInPicture;
@@ -273,10 +271,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               title: const Text('直式影片模糊背景（試驗）'),
               subtitle: Text(
                 _portraitBlurSupported
-                    ? '同一即時影格分層合成，背景放大模糊、前景保持清晰；下次開啟影片生效。'
-                    : (AppLayout.isTelevision(context)
-                        ? '電視端暫停此功能，優先維持已驗證的 MPV Embed 音畫同步路徑。'
-                        : '需要 Android MPV 紋理輸出；目前平台或 ExoPlayer 不支援。'),
+                    ? '以同一個播放器影格合成模糊背景與清晰前景，不另開解碼器；下次開啟影片生效。'
+                    : '需要 Android MPV 紋理輸出；目前平台或 ExoPlayer 不支援。',
               ),
               value: _portraitBlurSupported && _portraitBlurBackground,
               onChanged: _portraitBlurSupported

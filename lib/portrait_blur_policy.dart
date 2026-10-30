@@ -4,14 +4,12 @@ bool shouldUseMpvEmbedForPlayback({
   required bool mpvEmbedConfigured,
   required bool softwareDecoderSelected,
   required bool customPlayer,
-  required bool portraitBlurEnabled,
 }) =>
     android &&
     television &&
     mpvEmbedConfigured &&
     !softwareDecoderSelected &&
-    !customPlayer &&
-    !portraitBlurEnabled;
+    !customPlayer;
 
 bool shouldUsePortraitBlurBackground({
   required bool enabled,

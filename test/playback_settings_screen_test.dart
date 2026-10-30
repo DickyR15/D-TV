@@ -104,7 +104,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('TV playback settings keeps portrait blur disabled for sync stability', (
+  testWidgets('TV playback settings allows experimental portrait blur with MPV texture', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({
@@ -118,7 +118,10 @@ void main() {
         home: AppLayout(
           television: true,
           formFactor: FormFactor.television,
-          child: PlaybackSettingsScreen(store: store),
+          child: PlaybackSettingsScreen(
+            store: store,
+            portraitBlurSupported: true,
+          ),
         ),
       ),
     );
@@ -127,14 +130,14 @@ void main() {
     final blur = tester.widget<SwitchListTile>(
       find.byKey(const ValueKey('playback-portrait-blur-background')),
     );
-    expect(blur.value, isFalse);
-    expect(blur.onChanged, isNull);
+    expect(blur.value, isTrue);
+    expect(blur.onChanged, isNotNull);
     expect(
       blur.subtitle,
       isA<Text>().having(
         (value) => value.data,
-        'TV blur pause reason',
-        contains('電視端暫停此功能'),
+        'TV blur explanation',
+        contains('不另開解碼器'),
       ),
     );
   });
