@@ -36,6 +36,11 @@ import 'app_navigation.dart';
 
 enum _UpdatePromptAction { remindLater, ignoreVersion, openRelease }
 
+const _androidPlayerEngine = String.fromEnvironment(
+  'DTV_ANDROID_PLAYER',
+  defaultValue: 'mpv_embed',
+);
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.repository, required this.store});
   final AppRepository repository;
@@ -66,6 +71,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
   int _tabBeforeSettings = 4;
   bool _initialTabResolved = false;
+  bool _portraitBlurDefaultMigrationRequested = false;
   FormFactor? _lastFormFactor;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
@@ -927,6 +933,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final formFactor = AppLayout.formFactorOf(context);
+    final screenSize = MediaQuery.maybeOf(context)?.size ?? Size.zero;
+    if (Platform.isAndroid &&
+        _androidPlayerEngine != 'exo' &&
+        screenSize.width > screenSize.height &&
+        !_portraitBlurDefaultMigrationRequested &&
+        widget.store.needsPortraitBlurLandscapeDefaultMigration) {
+      _portraitBlurDefaultMigrationRequested = true;
+      unawaited(widget.store.migratePortraitBlurLandscapeDefault());
+    }
     if (!_initialTabResolved) {
       _initialTabResolved = true;
       _lastFormFactor = formFactor;
