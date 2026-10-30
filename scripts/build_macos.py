@@ -180,6 +180,12 @@ def main():
     )
 
     application = locate_application()
+    if application.name != "D TV.app":
+        branded_application = application.with_name("D TV.app")
+        if branded_application.exists():
+            shutil.rmtree(branded_application)
+        application.rename(branded_application)
+        application = branded_application
     contents = application / "Contents"
     executable_name = plistlib.loads(
         (contents / "Info.plist").read_bytes()
