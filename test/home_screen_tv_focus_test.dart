@@ -113,7 +113,10 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.byKey(const ValueKey('home-more-menu')));
-      await tester.pumpAndSettle();
+      // The home route has repeating TV animations; advance the popup
+      // transition directly instead of waiting for the entire tree to settle.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
 
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
@@ -122,7 +125,8 @@ void main() {
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
 
       expect(find.text('使用者管理'), findsOneWidget);
     },
