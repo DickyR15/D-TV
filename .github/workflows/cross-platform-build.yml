@@ -42,6 +42,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install D TV icon generator dependencies
+        run: python -m pip install --disable-pip-version-check Pillow aggdraw
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
@@ -54,7 +56,7 @@ jobs:
       - name: Resolve Flutter dependencies (retry transient network errors)
         run: python scripts/retry_command.py --attempts 3 -- flutter pub get
       - name: Test Flutter suite
-        run: flutter test
+        run: flutter test --dart-define=ALL_SOURCES=true
       - name: Test shared Go core
         working-directory: native
         run: python ../scripts/retry_command.py --attempts 3 -- go test ./...
@@ -69,6 +71,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install D TV icon generator dependencies
+        run: python -m pip install --disable-pip-version-check Pillow aggdraw
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
@@ -85,22 +89,22 @@ jobs:
           install: mingw-w64-x86_64-gcc
       - name: Build and package Windows x64
         shell: pwsh
-        run: python scripts/retry_command.py --attempts 3 -- python scripts/build_windows.py
+        run: python scripts/retry_command.py --attempts 3 -- python scripts/build_windows.py --all-sources
       - name: Smoke launch the portable app
         shell: pwsh
         run: |
-          $exe = (Resolve-Path "build/windows/x64/runner/Release/zhenguojian.exe").Path
+          $exe = (Resolve-Path "build/windows/x64/runner/Release/DTV.exe").Path
           $process = Start-Process -FilePath $exe -PassThru
           Start-Sleep -Seconds 10
           $process.Refresh()
           if ($process.HasExited) {
-            throw "D-TV exited during its Windows portable startup smoke test (exit code $($process.ExitCode))."
+            throw "D TV exited during its Windows portable startup smoke test (exit code $($process.ExitCode))."
           }
           Stop-Process -Id $process.Id -Force
       - uses: actions/upload-artifact@v4
         with:
-          name: D-TV-Windows-x64-Portable
-          path: dist/windows/*.zip
+          name: DTV-Windows-Portable
+          path: dist/windows/DTV-*.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -138,7 +142,7 @@ jobs:
           version=$(sed -n "s/^version: *['\"]\?\([^'\"]*\)['\"]\?$/\1/p" pubspec.yaml | head -n1)
           version="${version%%+*}"
           echo "app_version=$version" >> "$GITHUB_OUTPUT"
-          python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --build-name "$version" --build-number "$GITHUB_RUN_NUMBER"
+          python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --all-sources --build-name "$version" --build-number "$GITHUB_RUN_NUMBER"
       - name: Install and launch Universal APK on x86_64 Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -148,14 +152,14 @@ jobs:
           profile: pixel_7
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
-            adb install -r "dist/android/D TV-Android-Universal_v${{ steps.build-universal.outputs.app_version }}+${{ github.run_number }}_MPV.apk"
+            adb install -r "dist/android/DTV-${{ steps.build-universal.outputs.app_version }}-Android.apk"
             adb shell am start -n com.dickyr15.dtv/.MainActivity
             sleep 15
             adb shell pidof com.dickyr15.dtv
       - uses: actions/upload-artifact@v4
         with:
-          name: D-TV-Android-Universal-APK
-          path: dist/android/D TV-Android-Universal_v*.apk
+          name: DTV-Android-APK
+          path: dist/android/DTV-*.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -169,6 +173,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install D TV icon generator dependencies
+        run: python -m pip install --disable-pip-version-check Pillow aggdraw
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
@@ -184,11 +190,11 @@ jobs:
       - name: Install CocoaPods
         run: gem install cocoapods --no-document
       - name: Build device IPA and universal simulator core
-        run: python scripts/retry_command.py --attempts 3 -- python scripts/build_ios.py --simulator
+        run: python scripts/retry_command.py --attempts 3 -- python scripts/build_ios.py --simulator --all-sources
       - name: Build iOS Simulator app
         # Flutter only supports Debug/Profile simulator builds; Release is
         # reserved for physical iOS devices.
-        run: flutter build ios --simulator --debug --no-codesign --no-pub
+        run: flutter build ios --simulator --debug --no-codesign --no-pub --dart-define=ALL_SOURCES=true
       - name: Install and launch on an iPhone Simulator
         shell: bash
         run: |
@@ -203,8 +209,8 @@ jobs:
           xcrun simctl launch "$device_id" "$bundle_id"
       - uses: actions/upload-artifact@v4
         with:
-          name: D-TV-iOS-Unsigned-IPA
-          path: dist/ios/*.ipa
+          name: DTV-iOS-IPA
+          path: dist/ios/DTV-*.ipa
           if-no-files-found: error
           retention-days: 14
 
@@ -218,6 +224,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install D TV icon generator dependencies
+        run: python -m pip install --disable-pip-version-check Pillow aggdraw
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
@@ -233,10 +241,10 @@ jobs:
       - name: Install CocoaPods
         run: gem install cocoapods --no-document
       - name: Build universal Go core, Flutter app and DMG
-        run: python scripts/retry_command.py --attempts 3 -- python scripts/build_macos.py
+        run: python scripts/retry_command.py --attempts 3 -- python scripts/build_macos.py --all-sources
       - uses: actions/upload-artifact@v4
         with:
-          name: D-TV-macOS-Universal-DMG
-          path: dist/macos/*.dmg
+          name: DTV-macOS-DMG
+          path: dist/macos/DTV-*.dmg
           if-no-files-found: error
           retention-days: 14
