@@ -233,8 +233,57 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
       } catch (_) {}
       final controlsEnabled =
           !_busy && !_cancelling && !link.syncing && !link.store.locked;
+      final television = AppLayout.isTelevision(context);
       return Scaffold(
         appBar: AppBar(title: const Text('收藏同步')),
+        bottomNavigationBar: television
+            ? SafeArea(
+                top: false,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 720),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              key: const ValueKey('lan-tv-sync-now'),
+                              icon: Icon(
+                                link.syncing
+                                    ? Icons.close_rounded
+                                    : Icons.sync_rounded,
+                              ),
+                              label: Text(
+                                link.syncing ? '取消本次同步' : '立即同步',
+                              ),
+                              onPressed: link.syncing
+                                  ? _cancelling
+                                        ? null
+                                        : _cancel
+                                  : remote == null || _busy || _cancelling
+                                  ? null
+                                  : () => _perform(() => link.synchronize()),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              key: const ValueKey('lan-tv-manual-sync'),
+                              icon: const Icon(Icons.sync_alt_rounded),
+                              label: const Text('手動同步'),
+                              onPressed: remote != null && controlsEnabled
+                                  ? _manual
+                                  : null,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            : null,
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
@@ -378,24 +427,26 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                           ),
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: FilledButton.icon(
-                          icon: Icon(
-                            link.syncing
-                                ? Icons.close_rounded
-                                : Icons.sync_rounded,
+                      if (!television)
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: FilledButton.icon(
+                            key: const ValueKey('lan-sync-now'),
+                            icon: Icon(
+                              link.syncing
+                                  ? Icons.close_rounded
+                                  : Icons.sync_rounded,
+                            ),
+                            label: Text(link.syncing ? '取消本次同步' : '立即同步'),
+                            onPressed: link.syncing
+                                ? _cancelling
+                                      ? null
+                                      : _cancel
+                                : remote == null || _busy || _cancelling
+                                ? null
+                                : () => _perform(() => link.synchronize()),
                           ),
-                          label: Text(link.syncing ? '取消本次同步' : '立即同步'),
-                          onPressed: link.syncing
-                              ? _cancelling
-                                    ? null
-                                    : _cancel
-                              : remote == null || _busy || _cancelling
-                              ? null
-                              : () => _perform(() => link.synchronize()),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -414,14 +465,16 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                       ),
                     ),
                   ),
-                ListTile(
-                  leading: const Icon(Icons.sync_alt_rounded),
-                  title: const Text('手動同步'),
-                  subtitle: const Text('雙向合併、覆蓋對方或覆蓋本機'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  enabled: remote != null && controlsEnabled,
-                  onTap: remote != null && controlsEnabled ? _manual : null,
-                ),
+                if (!television)
+                  ListTile(
+                    key: const ValueKey('lan-manual-sync'),
+                    leading: const Icon(Icons.sync_alt_rounded),
+                    title: const Text('手動同步'),
+                    subtitle: const Text('雙向合併、覆蓋對方或覆蓋本機'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    enabled: remote != null && controlsEnabled,
+                    onTap: remote != null && controlsEnabled ? _manual : null,
+                  ),
                 if (_error ?? link.error case final message?)
                   Padding(
                     padding: const EdgeInsets.all(16),
