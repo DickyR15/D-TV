@@ -78,20 +78,10 @@ void openLanSync(BuildContext context, {VoidCallback? onReturn}) {
     ).showSnackBar(const SnackBar(content: Text('裝置互聯尚未就緒')));
     return;
   }
-  // Capture the active display mode before pushing the route. This keeps
-  // TV-specific focus and pinned sync actions consistent even when this page
-  // is opened from a nested navigator or a context without the app wrapper.
-  final formFactor = AppLayout.formFactorOf(context);
-  final version = AppLayout.versionOf(context);
   Navigator.push<void>(
     context,
     MaterialPageRoute<void>(
-      builder: (_) => AppLayout(
-        television: formFactor == FormFactor.television,
-        formFactor: formFactor,
-        version: version,
-        child: LanSyncScreen(controller: controller),
-      ),
+      builder: (_) => LanSyncScreen(controller: controller),
     ),
   ).whenComplete(() => onReturn?.call());
 }
@@ -114,13 +104,10 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
   bool _initialFocusScheduled = false;
   LanController get link => widget.controller;
 
-  bool _isTelevision(BuildContext context) =>
-      AppLayout.isTelevision(context) || link.kind == 'tv';
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_initialFocusScheduled || !_isTelevision(context)) return;
+    if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
     _initialFocusScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _interconnectFocus.canRequestFocus) {
@@ -246,65 +233,25 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
       } catch (_) {}
       final controlsEnabled =
           !_busy && !_cancelling && !link.syncing && !link.store.locked;
-      // Use the physical device kind as a fallback: a TV launched from
-      // a large-screen layout must still keep its sync actions pinned.
-      final television = _isTelevision(context);
       return Scaffold(
         appBar: AppBar(title: const Text('收藏同步')),
-        bottomNavigationBar: television
-            ? SafeArea(
-                top: false,
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 720),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: FilledButton.icon(
-                              key: const ValueKey('lan-tv-sync-now'),
-                              icon: Icon(
-                                link.syncing
-                                    ? Icons.close_rounded
-                                    : Icons.sync_rounded,
-                              ),
-                              label: Text(
-                                link.syncing ? '取消本次同步' : '立即同步',
-                              ),
-                              onPressed: link.syncing
-                                  ? _cancelling
-                                        ? null
-                                        : _cancel
-                                  : remote == null || _busy || _cancelling
-                                  ? null
-                                  : () => _perform(() => link.synchronize()),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              key: const ValueKey('lan-tv-manual-sync'),
-                              icon: const Icon(Icons.sync_alt_rounded),
-                              label: const Text('手動同步'),
-                              onPressed: remote != null && controlsEnabled
-                                  ? _manual
-                                  : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+        // Keep the full interconnect list above Android TV's system
+        // navigation area. The additional scroll clearance lets the last
+        // actions be brought fully into view with the remote.
+        body: SafeArea(
+          top: false,
+          bottom: true,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: ListView(
+                controller: _screenScrollController,
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  max(64.0, MediaQuery.viewPaddingOf(context).bottom + 48),
                 ),
-              )
-            : null,
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: ListView(
-              controller: _screenScrollController,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               children: [
                 Card(
                   child: Column(
@@ -442,26 +389,25 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                           ),
                         ),
                       ),
-                      if (!television)
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: FilledButton.icon(
-                            key: const ValueKey('lan-sync-now'),
-                            icon: Icon(
-                              link.syncing
-                                  ? Icons.close_rounded
-                                  : Icons.sync_rounded,
-                            ),
-                            label: Text(link.syncing ? '取消本次同步' : '立即同步'),
-                            onPressed: link.syncing
-                                ? _cancelling
-                                      ? null
-                                      : _cancel
-                                : remote == null || _busy || _cancelling
-                                ? null
-                                : () => _perform(() => link.synchronize()),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: FilledButton.icon(
+                          key: const ValueKey('lan-sync-now'),
+                          icon: Icon(
+                            link.syncing
+                                ? Icons.close_rounded
+                                : Icons.sync_rounded,
                           ),
+                          label: Text(link.syncing ? '取消本次同步' : '立即同步'),
+                          onPressed: link.syncing
+                              ? _cancelling
+                                    ? null
+                                    : _cancel
+                              : remote == null || _busy || _cancelling
+                              ? null
+                              : () => _perform(() => link.synchronize()),
                         ),
+                      ),
                     ],
                   ),
                 ),
@@ -480,16 +426,15 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                       ),
                     ),
                   ),
-                if (!television)
-                  ListTile(
-                    key: const ValueKey('lan-manual-sync'),
-                    leading: const Icon(Icons.sync_alt_rounded),
-                    title: const Text('手動同步'),
-                    subtitle: const Text('雙向合併、覆蓋對方或覆蓋本機'),
-                    trailing: const Icon(Icons.chevron_right_rounded),
-                    enabled: remote != null && controlsEnabled,
-                    onTap: remote != null && controlsEnabled ? _manual : null,
-                  ),
+                ListTile(
+                  key: const ValueKey('lan-manual-sync'),
+                  leading: const Icon(Icons.sync_alt_rounded),
+                  title: const Text('手動同步'),
+                  subtitle: const Text('雙向合併、覆蓋對方或覆蓋本機'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  enabled: remote != null && controlsEnabled,
+                  onTap: remote != null && controlsEnabled ? _manual : null,
+                ),
                 if (_error ?? link.error case final message?)
                   Padding(
                     padding: const EdgeInsets.all(16),
@@ -533,6 +478,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                     ],
                   ),
               ],
+              ),
             ),
           ),
         ),
