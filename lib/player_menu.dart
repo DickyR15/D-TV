@@ -23,6 +23,7 @@ class PlayerMenu extends StatefulWidget {
     required this.local,
     required this.favorite,
     required this.mobile,
+    this.showAutoPictureInPicture = false,
     required this.onEpisode,
     required this.onPreferences,
     required this.onFavorite,
@@ -43,6 +44,7 @@ class PlayerMenu extends StatefulWidget {
   final bool local;
   final bool favorite;
   final bool mobile;
+  final bool showAutoPictureInPicture;
   final bool showDanmaku;
   final String danmakuStatus;
   final VoidCallback? onRetryDanmaku;
@@ -279,6 +281,23 @@ class _PlayerMenuState extends State<PlayerMenu> {
                   ),
           ),
           const SizedBox(height: 8),
+          if (widget.showAutoPictureInPicture) ...[
+            SwitchListTile.adaptive(
+              key: const ValueKey('player-auto-picture-in-picture'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('離開應用時自動小窗'),
+              subtitle: const Text('播放中切換到其他應用時，自動進入系統畫中畫'),
+              value: preferences.autoPictureInPicture,
+              onChanged: _busy
+                  ? null
+                  : (value) => _run(
+                      () => widget.onPreferences(
+                        preferences.copyWith(autoPictureInPicture: value),
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 8),
+          ],
           SwitchListTile.adaptive(
             key: const ValueKey('player-auto-advance'),
             contentPadding: EdgeInsets.zero,

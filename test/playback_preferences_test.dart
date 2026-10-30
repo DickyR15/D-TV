@@ -26,6 +26,21 @@ void main() {
   });
 
   
+  test('next-episode preload defaults on mobile and off on TV', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.preloads(television: false), isTrue);
+    expect(defaults.preloads(television: true), isFalse);
+    expect(PlaybackPreferences.fromJson(const {'preload': true}).preloads(television: true), isTrue);
+    expect(PlaybackPreferences.fromJson(const {'preload': false}).preloads(television: false), isFalse);
+  });
+
+  test('automatic picture in picture is disabled by default and persists', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.autoPictureInPicture, isFalse);
+    final enabled = defaults.copyWith(autoPictureInPicture: true);
+    expect(PlaybackPreferences.fromJson(enabled.toJson()).autoPictureInPicture, isTrue);
+  });
+
   test('TV decoder defaults to conservative hardware mode', () {
     expect(
       const PlaybackPreferences().televisionDecoder,

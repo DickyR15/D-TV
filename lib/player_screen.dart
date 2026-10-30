@@ -95,6 +95,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final PlaybackLoader _loader;
   late final PlaybackPreloader _preloader;
   bool _preloadEnabled = true;
+  bool _preloadPolicyInitialized = false;
   late final DanmakuController _danmaku;
   int _seekSequence = 0;
   bool _danmakuEnabled = true;
@@ -191,6 +192,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     autoAdvance: _autoAdvance,
     danmaku: _danmakuEnabled,
     preload: _preloadEnabled,
+    autoPictureInPicture: widget.store.playbackPreferences.autoPictureInPicture,
     enhancement: _enhancement.preferences,
     televisionDecoder: _televisionDecoder,
   );
@@ -219,9 +221,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _speed = preferences.speed;
     _requestedQuality = preferences.quality;
-    _autoAdvance = true;
+    _autoAdvance = preferences.autoAdvance;
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
-    _preloadEnabled = true;
+    _preloadEnabled = preferences.preloads(television: false);
     _televisionDecoder = preferences.televisionDecoder;
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
@@ -516,9 +518,49 @@ class _PlayerScreenState extends State<PlayerScreen>
         final arguments = call.arguments;
         final active = arguments is Map && arguments['active'] == true;
         _setPictureInPictureStatus(active: active, delayHiddenPause: !active);
+      } else if (call.method == 'pictureInPicturePending') {
+        _setPictureInPictureStatus(requested: true);
+      } else if (call.method == 'pictureInPictureAction') {
+        final arguments = call.arguments;
+        final action = arguments is Map ? arguments['action'] : null;
+        switch (action) {
+          case 'toggle':
+            _togglePlayback();
+          case 'previous':
+            if (_index > 0) unawaited(_play(_index - 1));
+          case 'next':
+            if (_index + 1 < widget.detail.episodes.length) {
+              unawaited(_play(_index + 1));
+            }
+        }
       }
     });
     unawaited(_refreshPictureInPictureStatus());
+  }
+
+  void _syncPictureInPicture() {
+    if (defaultTargetPlatform != TargetPlatform.android ||
+        !_pictureInPictureSupported) {
+      return;
+    }
+    final ratio = _aspectRatio.isFinite && _aspectRatio > 0
+        ? _aspectRatio.clamp(1 / 2.39, 2.39).toDouble()
+        : 16 / 9;
+    final width = ratio >= 1 ? (1000 * ratio).round() : 1000;
+    final height = ratio >= 1 ? 1000 : (1000 / ratio).round();
+    final playing = !_loading && _error == null && _player.state.playing;
+    final autoEnter = playing && !_television &&
+        widget.store.playbackPreferences.autoPictureInPicture;
+    unawaited(
+      AppDevice.channel.invokeMethod<void>('updatePictureInPicture', {
+        'width': width,
+        'height': height,
+        'playing': playing,
+        'hasPrevious': _index > 0,
+        'hasNext': _index + 1 < widget.detail.episodes.length,
+        'autoEnter': autoEnter,
+      }).catchError((Object _) {}),
+    );
   }
 
   Future<void> _refreshPictureInPictureStatus() async {
@@ -532,6 +574,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         supported: status?['supported'] == true,
         active: status?['active'] == true,
       );
+      _syncPictureInPicture();
     } on PlatformException {
       if (mounted && !_closed) {
         _setPictureInPictureStatus(supported: false, active: false);
@@ -809,6 +852,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _syncPreload() {
     if (_closed) return;
+    _syncPictureInPicture();
     if (!_preloadEnabled ||
         !_foreground ||
         widget.localOnly ||
@@ -874,6 +918,13 @@ class _PlayerScreenState extends State<PlayerScreen>
       _interactions.cancel();
     }
     _television = television;
+    if (!_preloadPolicyInitialized) {
+      _preloadPolicyInitialized = true;
+      _preloadEnabled = widget.store.playbackPreferences.preloads(
+        television: television,
+      );
+      _syncPreload();
+    }
     // Migrate the aggressive legacy default once on Android TV while preserving
     // an intentional optimized/software choice made after this migration.
     if (Platform.isAndroid &&
@@ -1815,8 +1866,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _interactions.cancel();
     final nextPreferences = preferences.copyWith(
-      autoAdvance: true,
-      preload: true,
+      preload: preferences.preload ?? _preloadEnabled,
     );
     await widget.store.setPlaybackPreferences(nextPreferences);
     if (!mounted || _closed || widget.store.profileEpoch != _profileEpoch) {
@@ -1829,9 +1879,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() {
       _speed = nextPreferences.speed;
       _requestedQuality = nextPreferences.quality;
-      _autoAdvance = true;
+      _autoAdvance = nextPreferences.autoAdvance;
       _danmakuEnabled = nextPreferences.danmaku;
-      _preloadEnabled = true;
+      _preloadEnabled = nextPreferences.preload ?? _preloadEnabled;
       _televisionDecoder = nextPreferences.televisionDecoder;
     });
     _danmaku.setEnabled(_danmakuEnabled);
@@ -1839,6 +1889,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (qualityChanged) _preloader.clear();
     _syncPreload();
     _menuRevision.value++;
+    _syncPictureInPicture();
     await _interactions.applySpeed();
     if (qualityChanged && _plan?.local != true) {
       await _retry(quality: nextPreferences.quality);
@@ -1911,6 +1962,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               local: _plan?.local == true,
               favorite: widget.store.isFavorite(widget.detail.drama.id),
               mobile: _mobile,
+              showAutoPictureInPicture: Platform.isAndroid && !_television,
               onEpisode: (index) => Navigator.pop(menuContext, index),
               onPreferences: _setPreferences,
               showDanmaku: widget.detail.drama.source == 'hongguo',
@@ -2054,9 +2106,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         _preferences.copyWith(
           speed: selection.speed,
           quality: selection.quality,
-          autoAdvance: true,
+          autoAdvance: selection.autoAdvance ?? _autoAdvance,
           danmaku: selection.danmaku,
-          preload: true,
+          preload: selection.preload ?? _preloadEnabled,
+          autoPictureInPicture: _preferences.autoPictureInPicture,
           enhancement: selection.enhancement,
           televisionDecoder: selection.decoder,
         ),
