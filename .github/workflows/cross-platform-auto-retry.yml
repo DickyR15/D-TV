@@ -16,9 +16,20 @@ permissions:
 
 jobs:
   retry-failed-jobs:
-    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt < 3 }}
+    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt < 10 }}
     runs-on: ubuntu-latest
     steps:
+      - name: Check out retry classifier
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Download failed job logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run view "${{ github.event.workflow_run.id }}" --repo "${{ github.repository }}" --log-failed > failed-run.log
+      - name: Retry only transient infrastructure failures
+        id: classify
+        run: python scripts/classify_failed_run.py failed-run.log
       - name: Skip retries for superseded commits
         id: head
         uses: actions/github-script@v7
@@ -35,15 +46,15 @@ jobs:
             core.info("Failed build SHA: " + run.head_sha);
             core.info("Current branch SHA: " + latestSha);
             return latestSha === run.head_sha ? "current" : "superseded";
-      - name: Re-run failed jobs (maximum 3 attempts)
-        if: ${{ steps.head.outputs.result == 'current' }}
+      - name: Re-run failed jobs (maximum 10 attempts)
+        if: ${{ steps.classify.outputs.retry == 'true' && steps.head.outputs.result == 'current' }}
         uses: actions/github-script@v7
         with:
           script: |
             const run = context.payload.workflow_run;
             core.warning(
-              "Current cross-platform build attempt " + run.run_attempt +
-              " failed. Re-running failed jobs; maximum attempts: 3. Run: " + run.html_url
+              "Transient failure in cross-platform build attempt " + run.run_attempt +
+              ". Re-running failed jobs; maximum attempts: 10. Run: " + run.html_url
             );
             await github.rest.actions.reRunFailedJobs({
               owner: context.repo.owner,
