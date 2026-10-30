@@ -72,6 +72,23 @@ void main() {
     expect(sorted.map((drama) => drama.id), ['heat-12', 'heat-2']);
   });
 
+  test('uses Taiwan wording throughout source management terminology', () {
+    expect(
+      uiTraditional('番剧、动漫、缓存、文件夹、文件、密码、登录、账号、信息、连接、安装包'),
+      '動畫連載、動畫、快取、資料夾、檔案、密碼、登入、帳號、資訊、連線、安裝檔',
+    );
+  });
+
+  test('source names and descriptions use Taiwan Traditional Chinese', () {
+    expect(
+      SourceSite.allValues.map((source) => source.name).toList(),
+      ['紅果', '韓小圈', '鬼片', '青空', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版'],
+    );
+    expect(SourceSite.sorani.description, '動畫連載 · 劇場版動畫 · 特攝');
+    expect(SourceSite.guipian.description, '恐怖片 · 電視劇 · 動畫');
+    expect(SourceSite.hanxiaoquan.description, '韓劇 · 韓國電影 · 綜藝節目 · 動畫');
+  });
+
   test('uses Taiwan wording for QR code terminology', () {
     expect(uiTraditional('二維碼、掃碼、手機'), 'QR Code、掃描、手機');
   });
