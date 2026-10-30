@@ -816,7 +816,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_initialTabResolved) {
       _initialTabResolved = true;
       _lastFormFactor = formFactor;
-      if (formFactor == FormFactor.television) _tab = 4;
+      if (formFactor == FormFactor.television) {
+        _tab = 4;
+        _requestDefaultTelevisionFocus();
+      }
       return;
     }
     if (_lastFormFactor == formFactor) return;
@@ -828,9 +831,29 @@ class _HomeScreenState extends State<HomeScreen> {
     // the default hot ranking as it does on a fresh launch.
     if (formFactor == FormFactor.television) {
       _tab = 4;
+      _requestDefaultTelevisionFocus();
     } else if (wasTelevision || _tab >= 3) {
       _tab = 0;
     }
+  }
+
+  void _requestDefaultTelevisionFocus() {
+    // Device detection can switch the layout from desktop to TV after the
+    // navigation targets are already mounted. In that case, changing
+    // RemoteTarget.autofocus from false to true does not request focus again.
+    final node = _navigationFocusNodes.putIfAbsent(
+      4,
+      () => FocusNode(debugLabel: 'D TV navigation 4'),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          !AppLayout.isTelevision(context) ||
+          _tab != 4 ||
+          !node.canRequestFocus) {
+        return;
+      }
+      node.requestFocus();
+    });
   }
 
   @override
