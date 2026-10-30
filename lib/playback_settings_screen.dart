@@ -255,31 +255,32 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                 ),
                 items: const [
                   DropdownMenuItem(
-                    value: TelevisionDecoder.hardware,
-                    child: Text('硬體解碼（建議）'),
+                    value: TelevisionDecoder.automatic,
+                    child: Text('自動（硬體解碼優先）'),
                   ),
                   DropdownMenuItem(
-                    value: TelevisionDecoder.optimized,
-                    child: Text('硬體解碼（效能最佳化）'),
+                    value: TelevisionDecoder.hardware,
+                    child: Text('硬體解碼'),
                   ),
                   DropdownMenuItem(
                     value: TelevisionDecoder.software,
-                    child: Text('軟體解碼（相容）'),
+                    child: Text('軟體解碼（相容性排查）'),
                   ),
                 ],
-                onChanged: _androidPlayerEngine == 'mpv_embed'
+                onChanged: _androidPlayerEngine == 'exo'
                     ? null
                     : (value) {
                         if (value != null) _updateDecoder(value);
                       },
               ),
-              if (_androidPlayerEngine == 'mpv_embed')
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text(
-                    '目前預設建置使用 MPV Embed，解碼器固定為 MediaCodec；解碼方式選單只適用於標準 MPV 測試建置。',
-                  ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _androidPlayerEngine == 'exo'
+                      ? '目前播放器為 ExoPlayer，解碼方式由 Android 自行管理。'
+                      : '自動／軟解使用標準 MPV 輸出；手動硬解使用 MediaCodec。變更後重新播放套用。',
                 ),
+              ),
               const SizedBox(height: 20),
               if (_compatibleRendering != null)
                 SwitchListTile(
