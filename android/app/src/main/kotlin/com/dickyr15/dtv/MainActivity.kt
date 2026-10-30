@@ -101,26 +101,74 @@ open class MainActivity : FlutterActivity() {
         return remoteNavigation || packageManager.hasSystemFeature(PackageManager.FEATURE_LIVE_TV)
     }
 
-    private fun isEmulatorDevice(): Boolean {
-        val fingerprint = Build.FINGERPRINT.lowercase(Locale.ROOT)
-        val model = Build.MODEL.lowercase(Locale.ROOT)
-        val manufacturer = Build.MANUFACTURER.lowercase(Locale.ROOT)
-        val hardware = Build.HARDWARE.lowercase(Locale.ROOT)
-        val product = Build.PRODUCT.lowercase(Locale.ROOT)
-        return fingerprint.startsWith("generic") ||
-            fingerprint.contains("emulator") ||
-            model.contains("google_sdk") ||
-            model.contains("emulator") ||
-            model.contains("android sdk built for") ||
-            manufacturer.contains("genymotion") ||
-            hardware in setOf("goldfish", "ranchu", "vbox86") ||
-            hardware.contains("emulator") ||
-            product.startsWith("sdk_gphone") ||
-            product.startsWith("google_sdk") ||
-            product.contains("emulator") ||
-            (Build.BRAND.startsWith("generic", ignoreCase = true) &&
-                Build.DEVICE.startsWith("generic", ignoreCase = true))
+    private fun readSystemProperty(name: String): String {
+        return runCatching {
+            val properties = Class.forName("android.os.SystemProperties")
+            val getter = properties.getMethod("get", String::class.java)
+            (getter.invoke(null, name) as? String).orEmpty()
+        }.getOrDefault("")
     }
+
+    private fun emulatorIndicators(): List<String> {
+        val buildValues = listOf(
+            Build.FINGERPRINT,
+            Build.MODEL,
+            Build.MANUFACTURER,
+            Build.HARDWARE,
+            Build.PRODUCT,
+            Build.BRAND,
+            Build.DEVICE,
+            Build.BOARD,
+            Build.HOST
+        ).joinToString(" ").lowercase(Locale.ROOT)
+
+        val emulatorMarkers = listOf(
+            "generic",
+            "emulator",
+            "google_sdk",
+            "sdk_gphone",
+            "goldfish",
+            "ranchu",
+            "vbox86",
+            "genymotion",
+            "ldplayer",
+            "leidian",
+            "雷電",
+            "雷电",
+            "nox",
+            "bluestacks",
+            "bst",
+            "mumu",
+            "nemu",
+            "droid4x",
+            "ttvm",
+            "tiantianvm",
+            "andy"
+        )
+        val matched = emulatorMarkers.filter(buildValues::contains)
+        val indicators = mutableListOf<String>()
+        if (matched.isNotEmpty()) {
+            indicators += "build:${matched.distinct().joinToString(",")}"
+        }
+
+        val qemu = readSystemProperty("ro.kernel.qemu")
+        val bootQemu = readSystemProperty("ro.boot.qemu")
+        val hardwareProperty = readSystemProperty("ro.hardware").lowercase(Locale.ROOT)
+        if (qemu == "1") indicators += "ro.kernel.qemu"
+        if (bootQemu == "1") indicators += "ro.boot.qemu"
+        if (hardwareProperty in setOf("goldfish", "ranchu", "vbox86", "vbox86p", "nox", "nemu", "ttvm")) {
+            indicators += "ro.hardware"
+        }
+
+        // LDPlayer versions commonly expose /ldinit even when Build.* values
+        // are configured to imitate a physical Android phone.
+        if (File("/ldinit").exists()) indicators += "/ldinit"
+        if (File("/dev/qemu_pipe").exists()) indicators += "/dev/qemu_pipe"
+        if (File("/dev/socket/qemud").exists()) indicators += "/dev/socket/qemud"
+        return indicators.distinct()
+    }
+
+    private fun isEmulatorDevice(): Boolean = emulatorIndicators().isNotEmpty()
 
     private fun renderingPreferences() =
         getSharedPreferences("duanju_rendering", Context.MODE_PRIVATE)
@@ -471,6 +519,7 @@ open class MainActivity : FlutterActivity() {
                                 mapOf(
                                     "television" to isTelevisionDevice(),
                                     "emulator" to isEmulatorDevice(),
+                                    "emulatorIndicators" to emulatorIndicators(),
                                     "version" to displayVersion
                                 )
                             )
