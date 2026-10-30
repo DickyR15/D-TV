@@ -510,6 +510,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _accessChanged() {
+    if (!_closed && mounted) {
+      final blurEnabled =
+          widget.store.playbackPreferences.portraitBlurBackground;
+      if (blurEnabled != _portraitBlurBackground) {
+        setState(() => _portraitBlurBackground = blurEnabled);
+      }
+    }
     if (!_closed &&
         (widget.store.profileEpoch != _profileEpoch || widget.store.locked)) {
       _preloader.clear();

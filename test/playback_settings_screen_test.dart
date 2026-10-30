@@ -20,7 +20,10 @@ void main() {
         home: AppLayout(
           television: true,
           formFactor: FormFactor.television,
-          child: PlaybackSettingsScreen(store: store),
+          child: PlaybackSettingsScreen(
+            store: store,
+            portraitBlurSupported: true,
+          ),
         ),
       ),
     );
