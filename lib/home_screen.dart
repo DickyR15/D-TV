@@ -1919,11 +1919,8 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         if (!television) {
           if (!AppLayout.isDesktopPlatform) return scaffold;
-          return Focus(
-            focusNode: _desktopShortcutFocus,
-            autofocus: true,
-            child: CallbackShortcuts(
-              bindings: {
+          return CallbackShortcuts(
+            bindings: {
               const SingleActivator(LogicalKeyboardKey.digit1, control: true):
                   () => _desktopNavigate(0),
               const SingleActivator(LogicalKeyboardKey.digit2, control: true):
@@ -1946,7 +1943,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   _focusDesktopSearch,
               const SingleActivator(LogicalKeyboardKey.f1):
                   _showDesktopShortcutHelp,
-              },
+            },
+            child: Focus(
+              focusNode: _desktopShortcutFocus,
+              autofocus: true,
               child: scaffold,
             ),
           );
