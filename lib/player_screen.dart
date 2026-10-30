@@ -162,10 +162,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.automatic;
   late final bool _useMpvEmbedForThisPlayer;
   bool _tvDecoderPolicyMigrated = false;
-  // MPV-specific decoder properties must never be shown or applied when
-  // Android is using the official video_player / ExoPlayer backend.
-  // MPV-specific settings only apply when the active backend actually exposes
-  // MPV's native platform. Android now defaults to the ExoPlayer backend.
+  // This PlayerScreen keeps one output pipeline for its lifetime. Hardware
+  // mode selects MPV Embed at creation; auto/software use the regular GPU VO.
+  // ExoPlayer does not expose MPV decoder properties.
   bool get _mpvEmbedBackend => _useMpvEmbedForThisPlayer;
   bool get _televisionDecoderApplies =>
       Platform.isAndroid && _television && _player.platform is NativePlayer;
