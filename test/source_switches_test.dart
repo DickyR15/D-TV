@@ -39,13 +39,58 @@ void main() {
     await store.setSourceEnabled('hongguo', false);
     expect(store.allowsSource('hongguo'), isFalse);
     if (allSourcesEnabled) {
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'source-pass-123',
+      );
+      await store.unlockAdvancedSources('source-pass-123');
       await store.setSourceEnabled('huangdou', true);
       expect(store.allowsSource('huangdou'), isTrue);
+      store.lockAdvancedSources();
+      await store.setForceLogin(false);
     }
     final restarted = testStore(store.preferences);
     addTearDown(restarted.dispose);
     expect(restarted.sourceEnabled('hongguo'), isFalse);
     expect(restarted.allowsSource('huangdou'), allSourcesEnabled);
+  });
+
+  test('advanced source switches require an unlocked administrator password', () async {
+    if (!allSourcesEnabled) return;
+    final store = await create();
+    await expectLater(
+      store.setSourceEnabled('huangdou', true),
+      throwsStateError,
+    );
+    await expectLater(
+      store.unlockAdvancedSources('source-pass-123'),
+      throwsStateError,
+    );
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+    await expectLater(
+      store.unlockAdvancedSources('incorrect-password'),
+      throwsStateError,
+    );
+    expect(store.advancedSourcesUnlocked, isFalse);
+    await store.unlockAdvancedSources('source-pass-123');
+    expect(store.advancedSourcesUnlocked, isTrue);
+    await store.setSourceEnabled('huangdou', true);
+    expect(store.sourceEnabled('huangdou'), isTrue);
+    store.lockAdvancedSources();
+    expect(store.advancedSourcesUnlocked, isFalse);
+    await expectLater(
+      store.setSourceEnabled('huangdou', false),
+      throwsStateError,
+    );
   });
 
   test('only the administrator can switch sources', () async {
