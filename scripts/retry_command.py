@@ -17,7 +17,7 @@ TRANSIENT_PATTERNS = [
     r"i/o timeout",
     r"network is unreachable",
     r"remote end closed connection",
-    r"server returned (?:5\\d\\d)",
+    r"server returned (?:5\d\d)",
     r"http (?:429|500|502|503|504)",
     r"rate limit",
     r"resource temporarily unavailable",
