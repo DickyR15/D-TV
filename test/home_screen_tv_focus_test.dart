@@ -90,5 +90,42 @@ void main() {
       );
     },
   );
+  testWidgets(
+    'TV more menu opens with User Management focused and selectable',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'sourceSwitches': '{"hongguo": false}',
+      });
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      final repository = FixtureRepository();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppLayout(
+            television: true,
+            formFactor: FormFactor.television,
+            child: HomeScreen(repository: repository, store: store),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('home-more-menu')));
+      await tester.pumpAndSettle();
+
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'home-more-users',
+      );
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(find.text('使用者管理'), findsOneWidget);
+    },
+  );
+
 
 }
