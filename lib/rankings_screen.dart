@@ -1312,7 +1312,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
     return Scaffold(
       appBar: widget.embedded ? null : AppBar(
         title: PopupMenuButton<SourceGroup>(
-          tooltip: '切換榜單站源',
+          tooltip: '切換榜單片源',
           enabled: groups.length > 1,
           onSelected: (group) =>
               _select(_boards.firstWhere((board) => board.groupId == group.id)),
@@ -1449,7 +1449,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   : items.isEmpty
                   ? StatusPanel(
                       title: _error == null ? '暫無榜單內容' : '榜單暫時無法載入',
-                      message: uiTraditional(_error ?? '目前站源暫無可顯示的榜單。'),
+                      message: uiTraditional(_error ?? '目前片源沒有可顯示的排行榜。'),
                       onRetry: _board == null
                           ? _initialize
                           : () => _load(force: true),
