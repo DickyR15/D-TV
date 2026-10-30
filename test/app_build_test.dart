@@ -16,7 +16,7 @@ void main() {
     SharedPreferences.setMockInitialValues({'source': 'huangdou'});
     final store = testStore(await SharedPreferences.getInstance());
     expect(appSlug, 'dtv');
-    // 預設只開啟紅果、韓小圈、鬼片網與青空次元，其餘站源需在站源管理中開啟。
+    // 預設只開啟紅果、韓小圈、鬼片與青空，其餘站源需在站源管理中開啟。
     expect(store.sources.length, allSourcesEnabled ? 4 : 1);
     expect(
       SourceSite.values.any((source) => source.id == 'dsd'),
