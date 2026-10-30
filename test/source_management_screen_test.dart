@@ -39,7 +39,9 @@ void main() {
       find.byKey(const ValueKey('advanced-source-password')),
       'source-pass-123',
     );
-    await tester.tap(find.byKey(const ValueKey('unlock-advanced-sources')));
+    final unlockButton = find.byKey(const ValueKey('unlock-advanced-sources'));
+    await tester.ensureVisible(unlockButton);
+    await tester.tap(unlockButton);
     await tester.pumpAndSettle();
 
     expect(store.advancedSourcesUnlocked, isTrue);
@@ -48,7 +50,9 @@ void main() {
     }
     expect(store.sourceEnabled('huangdou'), isFalse);
 
-    await tester.tap(find.byKey(const ValueKey('source-switch-huangdou')));
+    final huangdouSwitch = find.byKey(const ValueKey('source-switch-huangdou'));
+    await tester.ensureVisible(huangdouSwitch);
+    await tester.tap(huangdouSwitch);
     await tester.pumpAndSettle();
     expect(store.sourceEnabled('huangdou'), isTrue);
 
