@@ -217,7 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (context) => AlertDialog(
             title: const Text('還原備份？'),
             content: Text(
-              '包含 ${(data['profiles'] as List).length} 個使用者。還原會取代本機使用者、收藏清單、觀看紀錄與偏好設定；其他影片檔案不會一併處理。完成後請使用備份內的管理員密碼登入。',
+              '包含 ${(data['profiles'] as List).length} 個使用者。還原會取代本機使用者、收藏清單、觀看紀錄與偏好設定。完成後請使用備份內的管理員密碼登入。',
             ),
             actions: [
               TextButton(
@@ -386,7 +386,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.backup_outlined),
                   title: const Text('匯出設定備份'),
-                  subtitle: const Text('包含本機使用者、收藏清單、觀看紀錄與設定，不含影片檔案'),
+                  subtitle: const Text('包含本機使用者、收藏清單、觀看紀錄與設定'),
                   onTap: _busy ? null : () => _backup(false),
                 ),
                 ListTile(
@@ -394,7 +394,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   leading: const Icon(Icons.restore),
                   title: const Text('還原設定備份'),
                   subtitle: const Text(
-                    '取代本機使用者、收藏清單、觀看紀錄與偏好設定；已下載影片會保留',
+                    '取代本機使用者、收藏清單、觀看紀錄與偏好設定',
                   ),
                   onTap: _busy ? null : () => _backup(true),
                 ),
