@@ -5,7 +5,7 @@ abstract final class AppTheme {
   static final light = _theme(Brightness.light);
   static final dark = _theme(Brightness.dark);
 
-  /// D-TV 品牌色：低飽和青藍搭配石墨灰與銀白色。
+  /// D TV 品牌色：低飽和青藍搭配石墨灰與銀白色。
   static const brandAccent = Color(0xFF55BDCA);
 
   static const accentOptions = <String>[
