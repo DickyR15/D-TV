@@ -452,7 +452,8 @@ open class MainActivity : FlutterActivity() {
                             val rawUrl = call.argument<String>("url")
                             val uri = runCatching { Uri.parse(rawUrl.orEmpty()) }.getOrNull()
                             if (uri == null ||
-                                uri.scheme?.lowercase() !in setOf("http", "https") ||
+                                (uri.scheme?.lowercase() != "http" &&
+                                    uri.scheme?.lowercase() != "https") ||
                                 uri.host.isNullOrBlank()) {
                                 result.error("invalid_url", "更新網址無效", null)
                             } else {
