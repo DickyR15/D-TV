@@ -10,18 +10,22 @@ class PlaybackPreferences {
     this.quality = 0,
     this.autoAdvance = true,
     this.danmaku = false,
-    this.preload = true,
+    this.preload,
     this.enhancement = const VideoEnhancementPreferences(),
     this.televisionDecoder = TelevisionDecoder.hardware,
+    this.autoPictureInPicture = false,
   });
 
   final double speed;
   final int quality;
   final bool autoAdvance;
   final bool danmaku;
-  final bool preload;
+  final bool? preload;
   final VideoEnhancementPreferences enhancement;
   final TelevisionDecoder televisionDecoder;
+  final bool autoPictureInPicture;
+
+  bool preloads({required bool television}) => preload ?? !television;
 
   PlaybackPreferences copyWith({
     double? speed,
@@ -31,6 +35,7 @@ class PlaybackPreferences {
     bool? preload,
     VideoEnhancementPreferences? enhancement,
     TelevisionDecoder? televisionDecoder,
+    bool? autoPictureInPicture,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
@@ -39,6 +44,7 @@ class PlaybackPreferences {
     preload: preload ?? this.preload,
     enhancement: enhancement ?? this.enhancement,
     televisionDecoder: televisionDecoder ?? this.televisionDecoder,
+    autoPictureInPicture: autoPictureInPicture ?? this.autoPictureInPicture,
   );
 
   Map<String, dynamic> toJson() => {
@@ -46,9 +52,10 @@ class PlaybackPreferences {
     'quality': quality,
     'autoAdvance': autoAdvance,
     'danmaku': danmaku,
-    'preload': preload,
+    if (preload != null) 'preopenNextEpisode': preload,
     'enhancement': enhancement.toJson(),
     'televisionDecoder': televisionDecoder.name,
+    'autoPictureInPicture': autoPictureInPicture,
   };
 
   factory PlaybackPreferences.fromJson(Map<String, dynamic> value) {
@@ -56,7 +63,9 @@ class PlaybackPreferences {
     final quality = value['quality'] as int? ?? 0;
     final autoAdvance = value['autoAdvance'] as bool? ?? true;
     final danmaku = value['danmaku'] as bool? ?? false;
-    final preload = value['preload'] as bool? ?? true;
+    // The old 'preload' value was forced on by 1.0.0 playback code.
+    // Read only the new key so older installations receive device-aware defaults.
+    final preload = value['preopenNextEpisode'] as bool?;
     if (!playbackSpeeds.contains(speed) || quality < 0 || quality > 4320) {
       throw const FormatException('播放偏好無效');
     }
@@ -70,6 +79,7 @@ class PlaybackPreferences {
       televisionDecoder:
           TelevisionDecoder.values.asNameMap()[value['televisionDecoder']] ??
           TelevisionDecoder.hardware,
+      autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
     );
   }
 }

@@ -29,6 +29,10 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late int _quality = widget.store.playbackPreferences.quality;
   late TelevisionDecoder _decoder =
       widget.store.playbackPreferences.televisionDecoder;
+  late bool _preloadEnabled;
+  late bool _autoAdvance;
+  late bool _autoPictureInPicture;
+  bool _playbackValuesInitialized = false;
   bool? _compatibleRendering;
   final FocusNode _speedFocus = FocusNode(debugLabel: 'playback-default-speed');
 
@@ -41,6 +45,19 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
         _speedFocus.requestFocus();
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_playbackValuesInitialized) return;
+    final preferences = widget.store.playbackPreferences;
+    _preloadEnabled = preferences.preloads(
+      television: AppLayout.isTelevision(context),
+    );
+    _autoAdvance = preferences.autoAdvance;
+    _autoPictureInPicture = preferences.autoPictureInPicture;
+    _playbackValuesInitialized = true;
   }
 
   @override
@@ -66,6 +83,9 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           speed: _speed,
           quality: _quality,
           televisionDecoder: _decoder,
+          preload: _preloadEnabled,
+          autoAdvance: _autoAdvance,
+          autoPictureInPicture: _autoPictureInPicture,
         ),
       );
     } catch (error) {
@@ -89,6 +109,21 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateDecoder(TelevisionDecoder value) {
     setState(() => _decoder = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updatePreload(bool value) {
+    setState(() => _preloadEnabled = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateAutoAdvance(bool value) {
+    setState(() => _autoAdvance = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateAutoPictureInPicture(bool value) {
+    setState(() => _autoPictureInPicture = value);
     unawaited(_persistPreferences());
   }
 
@@ -183,6 +218,32 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                 if (value != null) _updateQuality(value);
               },
             ),
+            SwitchListTile(
+              key: const ValueKey('playback-preopen-next-episode'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('下一集預載入'),
+              subtitle: const Text('提前取得下一集的播放資料與網址，不會下載整集影片'),
+              value: _preloadEnabled,
+              onChanged: _updatePreload,
+            ),
+            SwitchListTile(
+              key: const ValueKey('playback-auto-advance'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('自動連播'),
+              subtitle: const Text('播放結束後自動播放下一集'),
+              value: _autoAdvance,
+              onChanged: _updateAutoAdvance,
+            ),
+            if (Platform.isAndroid && !AppLayout.isTelevision(context))
+              SwitchListTile(
+                key: const ValueKey('playback-auto-picture-in-picture'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('離開應用時自動小窗'),
+                subtitle: const Text('播放中返回桌面或切換其他應用時進入系統畫中畫'),
+                value: _autoPictureInPicture,
+                onChanged: _updateAutoPictureInPicture,
+              ),
+            const SizedBox(height: 20),
             if (Platform.isAndroid && AppLayout.isTelevision(context)) ...[
               const SizedBox(height: 20),
               DropdownButtonFormField<TelevisionDecoder>(
@@ -239,7 +300,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、清晰度及支援的解碼方式會在變更時自動儲存；相容渲染設定會在重新啟動後生效。',
+              '倍速、清晰度、下一集預載入、自動連播及支援的解碼方式會在變更時自動儲存；相容渲染設定會在重新啟動後生效。',
             ),
           ],
         ),

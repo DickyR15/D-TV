@@ -21,6 +21,8 @@ void main() {
 
     expect(find.byKey(const ValueKey('playback-default-speed')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-default-quality')), findsOneWidget);
+    expect(find.byKey(const ValueKey('playback-preopen-next-episode')), findsOneWidget);
+    expect(find.byKey(const ValueKey('playback-auto-advance')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-portrait-blur-background')), findsNothing);
     expect(find.text('直式影片模糊背景'), findsNothing);
 
