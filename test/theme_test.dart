@@ -168,7 +168,7 @@ void main() {
     expect(find.byKey(const ValueKey('theme-accent-setting')), findsOneWidget);
     expect(find.byKey(const ValueKey('display-mode-setting')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-setting')), findsOneWidget);
-    expect(find.text('片源管理'), findsNothing);
+    expect(find.byKey(const ValueKey('source-management-setting')), findsOneWidget);
     await tester.drag(find.byType(ListView), const Offset(0, -900));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('app-author')), findsOneWidget);
