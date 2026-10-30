@@ -25,6 +25,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   final FocusNode _forceLoginFocus = FocusNode(
     debugLabel: 'force-login-setting',
   );
+  final FocusNode _recoveryFocus = FocusNode(
+    debugLabel: 'recovery-settings-focus',
+  );
   bool _initialFocusScheduled = false;
   final Map<String, FocusNode> _profileEntryFocusNodes = {};
   final Map<String, FocusNode> _profileEditFocusNodes = {};
@@ -44,9 +47,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     super.didChangeDependencies();
     if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
     _initialFocusScheduled = true;
+    final initialFocus = widget.store.configurationError != null
+        ? _recoveryFocus
+        : _forceLoginFocus;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _forceLoginFocus.canRequestFocus) {
-        _forceLoginFocus.requestFocus();
+      if (mounted && initialFocus.canRequestFocus) {
+        initialFocus.requestFocus();
       }
     });
   }
@@ -54,6 +60,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   @override
   void dispose() {
     _forceLoginFocus.dispose();
+    _recoveryFocus.dispose();
     for (final node in _profileEntryFocusNodes.values) {
       node.dispose();
     }
@@ -197,7 +204,15 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
     builder: (_, _) => Scaffold(
-      appBar: AppBar(title: Text(widget.locked ? '解鎖$appName' : '使用者管理')),
+      appBar: AppBar(
+        title: Text(
+          widget.store.configurationError != null
+              ? '設定復原'
+              : widget.locked
+              ? '解鎖$appName'
+              : '使用者管理',
+        ),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
@@ -210,6 +225,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 Text(uiTraditional(widget.store.configurationError!)),
                 const SizedBox(height: 12),
                 FilledButton.icon(
+                  key: const ValueKey('profiles-recovery-restore'),
+                  focusNode: _recoveryFocus,
                   onPressed: _busy ? null : () => _recover(),
                   icon: const Icon(Icons.restore_rounded),
                   label: const Text('從備份恢復'),
