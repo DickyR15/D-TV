@@ -11,6 +11,7 @@ import 'app_theme.dart';
 import 'app_layout.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
+import 'source_management_screen.dart';
 import 'app_build.dart';
 import 'ui_localization.dart';
 import 'widgets.dart';
@@ -348,6 +349,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ),
+              if (widget.store.profile.admin)
+                ListTile(
+                  key: const ValueKey('source-management-setting'),
+                  leading: const Icon(Icons.source_outlined),
+                  title: const Text('片源管理'),
+                  subtitle: const Text('管理一般片源；進階片源需輸入管理員密碼解鎖'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => SourceManagementScreen(store: widget.store),
+                    ),
+                  ),
+                ),
               ListTile(
                 leading: const Icon(Icons.people_outline),
                 title: const Text('使用者管理'),
