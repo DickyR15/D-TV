@@ -44,4 +44,31 @@ void main() {
       1.25,
     );
   });
+  test('TV decoder defaults to automatic and persists each supported choice', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.televisionDecoder, TelevisionDecoder.automatic);
+
+    for (final decoder in [
+      TelevisionDecoder.automatic,
+      TelevisionDecoder.hardware,
+      TelevisionDecoder.software,
+    ]) {
+      final restored = PlaybackPreferences.fromJson(
+        PlaybackPreferences(televisionDecoder: decoder).toJson(),
+      );
+      expect(restored.televisionDecoder, decoder);
+    }
+  });
+
+  test('legacy decoder preference is ignored and receives automatic default', () {
+    final migrated = PlaybackPreferences.fromJson(const {
+      'televisionDecoder': 'hardware',
+    });
+    expect(migrated.televisionDecoder, TelevisionDecoder.automatic);
+    expect(
+      PlaybackPreferences.fromJson(migrated.toJson()).televisionDecoder,
+      TelevisionDecoder.automatic,
+    );
+  });
+
 }
