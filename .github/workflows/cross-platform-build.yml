@@ -148,8 +148,7 @@ jobs:
           profile: pixel_7
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
-            apk="dist/android/D TV-Android-Universal_v${{ steps.build-universal.outputs.app_version }}+${{ github.run_number }}_MPV.apk"
-            adb install -r "$apk"
+            adb install -r "dist/android/D TV-Android-Universal_v${{ steps.build-universal.outputs.app_version }}+${{ github.run_number }}_MPV.apk"
             adb shell am start -n com.dickyr15.dtv/.MainActivity
             sleep 15
             adb shell pidof com.dickyr15.dtv
