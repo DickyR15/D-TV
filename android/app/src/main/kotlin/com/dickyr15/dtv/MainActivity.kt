@@ -60,7 +60,7 @@ open class MainActivity : FlutterActivity() {
     private var pictureInPictureReceiver: BroadcastReceiver? = null
     private var televisionMode = false
     private var pendingExportPlaybackLogText: String? = null
-    private var pendingExportPlaybackLogPrefix: String = "D-TV-playback-log"
+    private var pendingExportPlaybackLogPrefix: String = "DTV-playback-log"
     private var pendingExportPlaybackLogResult: MethodChannel.Result? = null
     private var pendingExportSettingsBackupContent: String? = null
     private var pendingExportSettingsBackupResult: MethodChannel.Result? = null
@@ -224,11 +224,11 @@ open class MainActivity : FlutterActivity() {
 
     private fun exportPlaybackLog(
         text: String,
-        fileNamePrefix: String = "D-TV-playback-log"
+        fileNamePrefix: String = "DTV-playback-log"
     ): Map<String, String> {
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val safePrefix = fileNamePrefix.replace(Regex("[^A-Za-z0-9_-]"), "-").trim('-')
-            .take(64).ifEmpty { "D-TV-diagnostic" }
+            .take(64).ifEmpty { "DTV-diagnostic" }
         val fileName = "${safePrefix}_$stamp.txt"
 
         // Android 9 and earlier use legacy public-storage access. These
@@ -237,9 +237,9 @@ open class MainActivity : FlutterActivity() {
             val downloads = Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS
             )
-            val directory = File(downloads, "D-TV")
+            val directory = File(downloads, "D TV")
             if (!directory.exists() && !directory.mkdirs()) {
-                throw IllegalStateException("無法建立 Download/D-TV 資料夾")
+                throw IllegalStateException("無法建立 Download/D TV 資料夾")
             }
             val outputFile = File(directory, fileName)
             outputFile.writeText(text, Charsets.UTF_8)
@@ -249,7 +249,7 @@ open class MainActivity : FlutterActivity() {
                 arrayOf("text/plain"),
                 null
             )
-            return mapOf("fileName" to fileName, "path" to "Download/D-TV/$fileName")
+            return mapOf("fileName" to fileName, "path" to "Download/D TV/$fileName")
         }
 
         // Android 10+ uses MediaStore and needs no broad storage permission.
@@ -274,7 +274,7 @@ open class MainActivity : FlutterActivity() {
             if (contentResolver.update(uri, published, null, null) <= 0) {
                 throw IllegalStateException("無法完成日誌檔案儲存")
             }
-            return mapOf("fileName" to fileName, "path" to "Download/D-TV/$fileName")
+            return mapOf("fileName" to fileName, "path" to "Download/D TV/$fileName")
         } catch (error: Exception) {
             contentResolver.delete(uri, null, null)
             throw error
@@ -283,16 +283,16 @@ open class MainActivity : FlutterActivity() {
 
     private fun exportSettingsBackup(content: String): Map<String, String> {
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val fileName = "D-TV-settings-backup_$stamp.json"
+        val fileName = "DTV-settings-backup_$stamp.json"
 
         // Android 9 and earlier need the existing public Downloads permission.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             val downloads = Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS
             )
-            val directory = File(downloads, "D-TV")
+            val directory = File(downloads, "D TV")
             if (!directory.exists() && !directory.mkdirs()) {
-                throw IllegalStateException("無法建立 Download/D-TV 資料夾")
+                throw IllegalStateException("無法建立 Download/D TV 資料夾")
             }
             val outputFile = File(directory, fileName)
             outputFile.writeText(content, Charsets.UTF_8)
@@ -302,7 +302,7 @@ open class MainActivity : FlutterActivity() {
                 arrayOf("application/json"),
                 null
             )
-            return mapOf("fileName" to fileName, "path" to "Download/D-TV/$fileName")
+            return mapOf("fileName" to fileName, "path" to "Download/D TV/$fileName")
         }
 
         // Android 10+ can write straight to Downloads without opening a file picker.
@@ -327,7 +327,7 @@ open class MainActivity : FlutterActivity() {
             if (contentResolver.update(uri, published, null, null) <= 0) {
                 throw IllegalStateException("無法完成設定備份儲存")
             }
-            return mapOf("fileName" to fileName, "path" to "Download/D-TV/$fileName")
+            return mapOf("fileName" to fileName, "path" to "Download/D TV/$fileName")
         } catch (error: Exception) {
             contentResolver.delete(uri, null, null)
             throw error
@@ -416,7 +416,7 @@ open class MainActivity : FlutterActivity() {
             if (grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
                 backupResult.error(
                     "storage_permission_denied",
-                    "需要允許儲存空間權限，才能將設定備份匯出到 Download/D-TV。",
+                    "需要允許儲存空間權限，才能將設定備份匯出到 Download/D TV。",
                     null
                 )
                 return
@@ -438,13 +438,13 @@ open class MainActivity : FlutterActivity() {
         val pendingPrefix = pendingExportPlaybackLogPrefix
         pendingExportPlaybackLogResult = null
         pendingExportPlaybackLogText = null
-        pendingExportPlaybackLogPrefix = "D-TV-playback-log"
+        pendingExportPlaybackLogPrefix = "DTV-playback-log"
         if (pendingResult == null || pendingText == null) return
 
         if (grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
             pendingResult.error(
                 "storage_permission_denied",
-                "需要允許儲存空間權限，才能將 TXT 匯出到 Download/D-TV。",
+                "需要允許儲存空間權限，才能將 TXT 匯出到 Download/D TV。",
                 null
             )
             return
@@ -581,7 +581,7 @@ open class MainActivity : FlutterActivity() {
                             if (text.isNullOrBlank()) {
                                 result.error("empty_log", "沒有可匯出的日誌內容", null)
                             } else {
-                                handleExportPlaybackLog(text, "D-TV-playback-log", result)
+                                handleExportPlaybackLog(text, "DTV-playback-log", result)
                             }
                         }
                         "exportDiagnosticText" -> {
@@ -591,7 +591,7 @@ open class MainActivity : FlutterActivity() {
                                 ?.trim('-')
                                 ?.take(64)
                                 ?.takeIf { it.isNotEmpty() }
-                                ?: "D-TV-diagnostic"
+                                ?: "DTV-diagnostic"
                             if (text.isNullOrBlank()) {
                                 result.error("empty_diagnostic", "沒有可匯出的診斷資訊", null)
                             } else {
