@@ -97,7 +97,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
               builder: (dialogContext) => AlertDialog(
                 title: const Text('原始設定匯出成功'),
                 content: SelectableText(
-                  '已儲存原始設定：\\n$path\\n\\n'
+                  '已儲存原始設定：\n$path\n\n'
                   '請從檔案管理器開啟 Download/D-TV 資料夾，'
                   '將 JSON 檔案複製到電腦保存。',
                 ),
