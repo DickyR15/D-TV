@@ -86,6 +86,15 @@ class AppUpdateService {
     );
   }
 
+  static bool shouldNotify(
+    AppUpdateInfo? update, {
+    String? ignoredVersion,
+  }) {
+    if (update == null) return false;
+    final ignored = ignoredVersion?.trim() ?? '';
+    return ignored.isEmpty || update.version.trim() != ignored;
+  }
+
   static bool isNewerVersion(String installed, String available) {
     final current = _versionParts(installed);
     final latest = _versionParts(available);
