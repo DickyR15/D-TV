@@ -248,7 +248,8 @@ def main():
         master,
         ROOT / "ios/Runner/Assets.xcassets/AppIcon.appiconset",
     )
-    build_macos_icon_set(master)
+    if (ROOT / "macos/Runner.xcodeproj").is_dir():
+        build_macos_icon_set(master)
     build_windows(master)
     print("已從 D TV 自有藍白向量圖產生 Android、iOS、macOS、Windows 圖示。")
 
