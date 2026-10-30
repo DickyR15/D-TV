@@ -119,13 +119,10 @@ if options.universal and options.build_number:
         raise SystemExit("pubspec.yaml 缺少合法版本號。")
     package_version = match.group(1)
     version = options.build_name or package_version.split("+", 1)[0]
-    source = root / "dist" / "android" / (
-        f"{variant.slug}-{package_version}-universal.apk"
-    )
-    target = root / "dist" / "android" / (
-        f"D TV-Android-Universal_v{version}+{options.build_number}_MPV.apk"
-    )
+    source = root / "dist" / "android" / f"DTV-{version}-Android-Universal.apk"
+    target = root / "dist" / "android" / f"DTV-{version}-Android.apk"
     if not source.is_file():
         raise SystemExit("找不到已驗證的 Universal APK：" + str(source))
     shutil.copy2(source, target)
+    source.unlink()
     print(target)
