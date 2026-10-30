@@ -78,10 +78,20 @@ void openLanSync(BuildContext context, {VoidCallback? onReturn}) {
     ).showSnackBar(const SnackBar(content: Text('裝置互聯尚未就緒')));
     return;
   }
+  // Capture the active display mode before pushing the route. This keeps
+  // TV-specific focus and pinned sync actions consistent even when this page
+  // is opened from a nested navigator or a context without the app wrapper.
+  final formFactor = AppLayout.formFactorOf(context);
+  final version = AppLayout.versionOf(context);
   Navigator.push<void>(
     context,
     MaterialPageRoute<void>(
-      builder: (_) => LanSyncScreen(controller: controller),
+      builder: (_) => AppLayout(
+        television: formFactor == FormFactor.television,
+        formFactor: formFactor,
+        version: version,
+        child: LanSyncScreen(controller: controller),
+      ),
     ),
   ).whenComplete(() => onReturn?.call());
 }
@@ -104,10 +114,13 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
   bool _initialFocusScheduled = false;
   LanController get link => widget.controller;
 
+  bool _isTelevision(BuildContext context) =>
+      AppLayout.isTelevision(context) || link.kind == 'tv';
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
+    if (_initialFocusScheduled || !_isTelevision(context)) return;
     _initialFocusScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _interconnectFocus.canRequestFocus) {
@@ -233,7 +246,9 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
       } catch (_) {}
       final controlsEnabled =
           !_busy && !_cancelling && !link.syncing && !link.store.locked;
-      final television = AppLayout.isTelevision(context);
+      // Use the physical device kind as a fallback: a TV launched from
+      // a large-screen layout must still keep its sync actions pinned.
+      final television = _isTelevision(context);
       return Scaffold(
         appBar: AppBar(title: const Text('收藏同步')),
         bottomNavigationBar: television

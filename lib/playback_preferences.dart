@@ -25,7 +25,9 @@ class PlaybackPreferences {
   final TelevisionDecoder televisionDecoder;
   final bool autoPictureInPicture;
 
-  bool preloads({required bool television}) => preload ?? !television;
+  // Fresh installs enable next-episode preloading on phones and TVs.
+  // A saved explicit choice (including false) always takes precedence.
+  bool preloads({required bool television}) => preload ?? true;
 
   PlaybackPreferences copyWith({
     double? speed,

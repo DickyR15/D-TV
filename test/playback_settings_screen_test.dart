@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/playback_settings_screen.dart';
 import 'package:hgtv/playback_preferences.dart';
 
@@ -15,13 +16,28 @@ void main() {
     addTearDown(store.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(home: PlaybackSettingsScreen(store: store)),
+      MaterialApp(
+        home: AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: PlaybackSettingsScreen(store: store),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('playback-default-speed')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-default-quality')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-preopen-next-episode')), findsOneWidget);
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.byKey(const ValueKey('playback-preopen-next-episode')),
+          )
+          .value,
+      isTrue,
+      reason: 'fresh TV installs should enable next-episode preloading',
+    );
     expect(find.byKey(const ValueKey('playback-auto-advance')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-portrait-blur-background')), findsNothing);
     expect(find.text('直式影片模糊背景'), findsNothing);
