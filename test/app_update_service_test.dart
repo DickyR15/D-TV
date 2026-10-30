@@ -67,5 +67,31 @@ void main() {
       ),
       isNull,
     );
+  });  test('an explicitly ignored stable version is not notified again', () {
+    const ignored = AppUpdateInfo(
+      version: 'v1.0.1',
+      title: 'D TV 1.0.1',
+      releaseUrl: 'https://github.com/DickyR15/D-TV/releases/tag/v1.0.1',
+    );
+    const newer = AppUpdateInfo(
+      version: 'v1.0.2',
+      title: 'D TV 1.0.2',
+      releaseUrl: 'https://github.com/DickyR15/D-TV/releases/tag/v1.0.2',
+    );
+
+    expect(
+      AppUpdateService.shouldNotify(ignored, ignoredVersion: 'v1.0.1'),
+      isFalse,
+    );
+    expect(
+      AppUpdateService.shouldNotify(newer, ignoredVersion: 'v1.0.1'),
+      isTrue,
+    );
+    expect(AppUpdateService.shouldNotify(null), isFalse);
+    expect(
+      AppUpdateService.shouldNotify(ignored, ignoredVersion: '  '),
+      isTrue,
+    );
   });
+
 }
