@@ -157,7 +157,7 @@ def main():
 
     ensure_macos_project(flutter)
     core = build_universal_core()
-    run([flutter, "pub", "get", "--enforce-lockfile"])
+    run([flutter, "pub", "get"])
     pod = shutil.which("pod")
     if pod and (ROOT / "macos" / "Podfile").is_file():
         run([pod, "install"], cwd=ROOT / "macos")
