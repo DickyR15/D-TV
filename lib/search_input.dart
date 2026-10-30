@@ -15,6 +15,7 @@ class SearchInput extends StatefulWidget {
     this.suggestions,
     this.onCancel,
     this.autofocus = false,
+    this.focusNode,
   });
   final TextEditingController controller;
   final String hint;
@@ -23,12 +24,21 @@ class SearchInput extends StatefulWidget {
   final Future<List<String>> Function(String)? suggestions;
   final VoidCallback? onCancel;
   final bool autofocus;
+  final FocusNode? focusNode;
   @override
   State<SearchInput> createState() => _SearchInputState();
 }
 
 class _SearchInputState extends State<SearchInput> {
-  final _focus = FocusNode();
+  late FocusNode _focus;
+  bool _ownsFocus = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus = widget.focusNode ?? FocusNode();
+    _ownsFocus = widget.focusNode == null;
+  }
   Timer? _timer;
   Completer<Iterable<String>>? _pending;
   int _generation = 0;
@@ -47,13 +57,18 @@ class _SearchInputState extends State<SearchInput> {
   @override
   void didUpdateWidget(SearchInput oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      if (_ownsFocus) _focus.dispose();
+      _focus = widget.focusNode ?? FocusNode();
+      _ownsFocus = widget.focusNode == null;
+    }
     if (widget.suggestions == null) _cancel();
   }
 
   @override
   void dispose() {
     _cancel();
-    _focus.dispose();
+    if (_ownsFocus) _focus.dispose();
     super.dispose();
   }
 
