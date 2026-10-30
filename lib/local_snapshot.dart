@@ -34,6 +34,7 @@ class LocalSnapshot {
     'themeAccent',
     'sourceSwitches',
     'forceLogin',
+    'ignoredUpdateVersion',
   };
   static const _retiredKeys = {
     'sourceGateEnabled',
