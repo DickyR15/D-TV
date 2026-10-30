@@ -28,6 +28,14 @@ void main() {
     expect(store.allowsSource('dsd'), isFalse);
     expect(store.source, 'hongguo');
     if (allSourcesEnabled) {
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'source-pass-123',
+      );
+      await store.unlockAdvancedSources('source-pass-123');
       await store.setSourceEnabled('dsd', true);
       expect(store.sources.length, 5);
       expect(store.allowsSource('dsd'), isTrue);
