@@ -1285,7 +1285,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SingleChildScrollView(
               child: Text(
                 update.notes.trim().isEmpty
-                    ? '目前版本：${AppLayout.versionOf(context)}\\n新版本：${update.version}\\n\\n有新版本可供下載。'
+                    ? '目前版本：${AppLayout.versionOf(context)}\n新版本：${update.version}\n\n有新版本可供下載。'
                     : update.notes.trim().characters.take(1800).toString(),
               ),
             ),
