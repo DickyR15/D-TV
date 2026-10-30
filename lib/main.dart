@@ -112,10 +112,16 @@ class _AppBootstrapState extends State<AppBootstrap>
     if (!mounted ||
         (device.television == detected.television &&
             device.emulator == detected.emulator &&
+            listEquals(device.emulatorIndicators, detected.emulatorIndicators) &&
             device.version == detected.version)) {
       return;
     }
     setState(() => device = detected);
+    DiaryService.add(
+      '[Device] television=${detected.television}, '
+      'emulator=${detected.emulator}, '
+      'signals=${detected.emulatorIndicators.join("|")}',
+    );
   }
 
   Future<void> _logStartupRendering() async {
@@ -125,7 +131,9 @@ class _AppBootstrapState extends State<AppBootstrap>
           : '';
       DiaryService.add(
         '[App] 應用啟動，版本: ${device.version}, '
-        '平臺: ${Platform.operatingSystem}$rendering',
+        '平臺: ${Platform.operatingSystem}, '
+        'TV=${device.television}, emulator=${device.emulator}, '
+        'signals=${device.emulatorIndicators.join("|")}$rendering',
       );
     } catch (_) {
       // Diagnostics must never delay application startup.
