@@ -33,10 +33,13 @@ void main() {
       // Reproduce startup while Android TV device detection is still pending:
       // the desktop-style side navigation mounts before TV mode is resolved.
       await tester.pumpWidget(buildApp(FormFactor.window));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       await tester.pumpWidget(buildApp(FormFactor.television));
-      await tester.pumpAndSettle();
+      // The empty synthetic ranking intentionally keeps its loading indicator
+      // visible, so pump the focus callback instead of waiting for all frames
+      // to settle.
+      await tester.pump();
 
       final redFruitNavigation = tester.widget<RemoteTarget>(
         find.byKey(const ValueKey('side-nav-4')),
