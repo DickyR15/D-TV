@@ -104,6 +104,7 @@ def main():
     flutter = shutil.which('flutter')
     if not flutter or not shutil.which('pod'):
         raise SystemExit('請安裝 Flutter 和 CocoaPods。')
+    run([sys.executable, str(root / 'scripts' / 'prepare_branding.py')])
     run([flutter, 'pub', 'get'])
     run(['pod', 'install'], cwd=root / 'ios')
     output = root / 'dist' / 'ios'
