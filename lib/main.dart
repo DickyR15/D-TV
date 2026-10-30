@@ -111,6 +111,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     final detected = await AppDevice.detect(fallback: device);
     if (!mounted ||
         (device.television == detected.television &&
+            device.emulator == detected.emulator &&
             device.version == detected.version)) {
       return;
     }
@@ -151,7 +152,7 @@ class _AppBootstrapState extends State<AppBootstrap>
           final link = LanController(
             repository,
             store!,
-            kind: device.television
+            kind: (device.television || device.emulator)
                 ? 'tv'
                 : Platform.isWindows
                 ? 'computer'
@@ -212,6 +213,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     bootstrapError: error?.toString(),
     onRetry: _initialize,
     television: device.television,
+    emulator: device.emulator,
     version: device.version,
     navigatorKey: navigator,
     systemAccentColor: systemAccentColor,
@@ -226,6 +228,7 @@ class DuanjuApp extends StatelessWidget {
     this.bootstrapError,
     this.onRetry,
     this.television = false,
+    this.emulator = false,
     this.version = appVersion,
     this.navigatorKey,
     this.systemAccentColor,
@@ -235,6 +238,7 @@ class DuanjuApp extends StatelessWidget {
   final String? bootstrapError;
   final VoidCallback? onRetry;
   final bool television;
+  final bool emulator;
   final String version;
   final GlobalKey<NavigatorState>? navigatorKey;
   final Color? systemAccentColor;
@@ -272,6 +276,7 @@ class DuanjuApp extends StatelessWidget {
       final formFactor = AppLayout.resolveFormFactor(
         mode: mode,
         detectedTelevision: television,
+        detectedEmulator: emulator,
         screenSize: screenSize,
       );
       final tv = formFactor == FormFactor.television;
