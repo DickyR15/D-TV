@@ -269,7 +269,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             contentPadding: EdgeInsets.zero,
             title: const Text('下一集預載入'),
             subtitle: Text(widget.local ? '本地播放不預取網路影片' : widget.preloadStatus),
-            value: preferences.preload,
+            value: preferences.preload ?? true,
             onChanged: _busy
                 ? null
                 : (value) => _run(
