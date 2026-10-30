@@ -20,7 +20,15 @@ void main() {
   Future<LocalStore> create() async {
     SharedPreferences.setMockInitialValues({});
     final store = testStore(await SharedPreferences.getInstance());
-    // 敏感站源預設關閉；全部開啟以覆蓋完整站源範圍。
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+    await store.unlockAdvancedSources('source-pass-123');
+    // 先驗證管理員密碼，再開啟進階片源，覆蓋完整片源範圍。
     for (final source in SourceSite.values) {
       await store.setSourceEnabled(source.id, true);
     }
@@ -136,7 +144,7 @@ void main() {
       );
       addTearDown(updater.dispose);
       final pending = updater.update(store.sources);
-      await store.switchProfile('default');
+      await store.switchProfile('default', pin: 'source-pass-123');
       repository.pendingStart!.complete(repository.finished('hongguo'));
       await pending;
       expect(changed, isEmpty);
@@ -276,7 +284,7 @@ void main() {
       final batch = BatchDownloads(repository, store, [first, second]);
       addTearDown(batch.dispose);
       final pending = batch.prepare();
-      await store.switchProfile('default');
+      await store.switchProfile('default', pin: 'source-pass-123');
       repository.pendingDetail!.complete(repository.details[first.id]);
       await pending;
       await batch.submit();
