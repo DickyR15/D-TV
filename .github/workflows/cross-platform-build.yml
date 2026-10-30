@@ -187,7 +187,9 @@ jobs:
       - name: Build device IPA and universal simulator core
         run: python scripts/retry_command.py --attempts 3 -- python scripts/build_ios.py --simulator
       - name: Build iOS Simulator app
-        run: flutter build ios --simulator --release --no-codesign --no-pub
+        # Flutter only supports Debug/Profile simulator builds; Release is
+        # reserved for physical iOS devices.
+        run: flutter build ios --simulator --debug --no-codesign --no-pub
       - name: Install and launch on an iPhone Simulator
         shell: bash
         run: |
