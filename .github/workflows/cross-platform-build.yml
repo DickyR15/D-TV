@@ -136,10 +136,12 @@ jobs:
             ndk;28.2.13676358
           accept-android-sdk-licenses: true
       - name: Build one APK with ARM64, ARMv7 and x86_64
+        id: build-universal
         shell: bash
         run: |
           version=$(sed -n "s/^version: *['\"]\?\([^'\"]*\)['\"]\?$/\1/p" pubspec.yaml | head -n1)
           version="${version%%+*}"
+          echo "app_version=$version" >> "$GITHUB_OUTPUT"
           python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --build-name "$version" --build-number "$GITHUB_RUN_NUMBER"
       - name: Install and launch Universal APK on x86_64 Android emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -150,7 +152,7 @@ jobs:
           profile: pixel_7
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           script: |
-            apk="dist/android/D TV-Android-Universal_v1.0.0+${{ github.run_number }}_MPV.apk"
+            apk="dist/android/D TV-Android-Universal_v${{ steps.build-universal.outputs.app_version }}+${{ github.run_number }}_MPV.apk"
             adb install -r "$apk"
             adb shell am start -n com.dickyr15.dtv/.MainActivity
             sleep 15
