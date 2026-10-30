@@ -156,14 +156,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final content = await widget.store.exportBackup();
         if (Platform.isAndroid) {
           // Android TV images may not include a document-picker activity.
-          // Save directly to Download/D-TV through the native MediaStore API.
+          // Save directly to Download/D TV through the native MediaStore API.
           final saved = await const MethodChannel('duanju/device')
               .invokeMapMethod<String, dynamic>(
             'exportSettingsBackup',
             <String, dynamic>{'content': content},
           );
           if (mounted) {
-            final path = saved?['path'] as String? ?? 'Download/D-TV';
+            final path = saved?['path'] as String? ?? 'Download/D TV';
             setState(() => _message = '備份已儲存：$path');
             await showDialog<void>(
               context: context,
@@ -171,7 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('設定備份匯出成功'),
                 content: SelectableText(
                   '已儲存設定備份：\n$path\n\n'
-                  '請從檔案管理器開啟 Download/D-TV 資料夾，'
+                  '請從檔案管理器開啟 Download/D TV 資料夾，'
                   '將 JSON 備份檔複製到電腦保存。',
                 ),
                 actions: [
