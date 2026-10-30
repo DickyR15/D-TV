@@ -469,6 +469,7 @@ class ProfileEditor extends StatefulWidget {
 class _ProfileEditorState extends State<ProfileEditor> {
   late final _name = TextEditingController(text: widget.profile?.name ?? '');
   final _pin = TextEditingController(), _confirm = TextEditingController();
+  final _currentPin = TextEditingController();
   late final _sources =
       (widget.profile?.sources ??
               widget.store.sources.map((s) => s.id).toList())
@@ -481,6 +482,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
     _name.dispose();
     _pin.dispose();
     _confirm.dispose();
+    _currentPin.dispose();
     super.dispose();
   }
 
@@ -496,6 +498,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
         name: _name.text,
         sources: _sources.toList(),
         download: _download,
+        currentPin: _currentPin.text.isEmpty ? null : _currentPin.text,
         pin: _clearPin
             ? ''
             : _pin.text.isEmpty
@@ -553,7 +556,19 @@ class _ProfileEditorState extends State<ProfileEditor> {
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(labelText: '使用者名稱'),
             ),
-            const SizedBox(height: 12),
+            if (widget.profile?.admin == true && widget.profile?.protected == true) ...[
+              TextField(
+                key: const ValueKey('profile-editor-current-pin'),
+                controller: _currentPin,
+                obscureText: true,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: '目前管理員密碼',
+                  helperText: '變更管理員密碼前，請先輸入目前密碼',
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             TextField(
               key: const ValueKey('profile-editor-pin'),
               controller: _pin,
@@ -583,6 +598,12 @@ class _ProfileEditorState extends State<ProfileEditor> {
                 value: _clearPin,
                 onChanged: (v) => setState(() => _clearPin = v!),
               ),
+            if (widget.profile?.admin == true) ...[
+              const SizedBox(height: 12),
+              const Text(
+                '忘記管理員密碼無法找回，需清除 D TV 本機設定資料後重新下載安裝；這會一併清除收藏、觀看紀錄及偏好設定。',
+              ),
+            ],
             const SizedBox(height: 20),
             if (widget.profile?.admin != true) ...[
               Text('允許使用的片源', style: Theme.of(context).textTheme.titleMedium),
