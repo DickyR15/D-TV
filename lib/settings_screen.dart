@@ -335,6 +335,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: _chooseDisplayMode,
               ),
+              SwitchListTile(
+                key: const ValueKey('auto-check-updates-setting'),
+                secondary: const Icon(Icons.system_update_alt_rounded),
+                title: const Text('啟動時檢查新版本'),
+                subtitle: const Text(
+                  '開啟後會在啟動時檢查；關閉後仍可於「關於 D TV」手動檢查',
+                ),
+                value: widget.store.autoCheckUpdates,
+                onChanged: (enabled) => saveUserChange(
+                  context,
+                  () => widget.store.setAutoCheckUpdates(enabled),
+                ),
+              ),
               ListTile(
                 key: const ValueKey('playback-setting'),
                 leading: const Icon(Icons.tune_rounded),
