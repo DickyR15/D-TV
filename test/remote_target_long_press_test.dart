@@ -7,10 +7,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'TV remote long press waits for key-up and never also activates poster tap',
+    'TV remote long press opens immediately and suppresses repeats and key-up',
     (tester) async {
-      final focusNode = FocusNode(debugLabel: 'poster-focus');
-      addTearDown(focusNode.dispose);
+      final posterFocus = FocusNode(debugLabel: 'poster-focus');
+      final menuFocus = FocusNode(debugLabel: 'menu-focus');
+      addTearDown(posterFocus.dispose);
+      addTearDown(menuFocus.dispose);
       var tapCount = 0;
       var longPressCount = 0;
 
@@ -18,41 +20,58 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: Center(
-              child: RemoteTarget(
-                focusNode: focusNode,
-                autofocus: true,
-                onPressed: () => tapCount++,
-                onLongPress: () => longPressCount++,
-                child: const Text('測試海報'),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RemoteTarget(
+                    focusNode: posterFocus,
+                    autofocus: true,
+                    onPressed: () => tapCount++,
+                    onLongPress: () {
+                      longPressCount++;
+                      menuFocus.requestFocus();
+                    },
+                    child: const Text('測試海報'),
+                  ),
+                  Focus(
+                    focusNode: menuFocus,
+                    onKeyEvent: (_, event) =>
+                        RemoteActivationKeyGuard.handle(event)
+                            ? KeyEventResult.handled
+                            : KeyEventResult.ignored,
+                    child: const Text('選單焦點'),
+                  ),
+                ],
               ),
             ),
           ),
         ),
       );
       await tester.pump();
-      expect(focusNode.hasFocus, isTrue);
+      expect(posterFocus.hasFocus, isTrue);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 650));
 
-      // Repeated key events must not leak to ActivateIntent, and the action
-      // dialog must not take focus while the physical key remains held.
+      // The menu callback fires while the physical confirmation key is held.
+      expect(longPressCount, 1);
+      expect(menuFocus.hasFocus, isTrue);
       expect(tapCount, 0);
-      expect(longPressCount, 0);
+      expect(RemoteActivationKeyGuard.isBlocking, isTrue);
 
+      // Repeats and key-up from the same hold must not activate the menu or poster.
       await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
       await tester.pump();
-      expect(tapCount, 0);
-      expect(longPressCount, 0);
-
       await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
       await tester.pump();
       expect(tapCount, 0);
       expect(longPressCount, 1);
+      expect(RemoteActivationKeyGuard.isBlocking, isFalse);
 
-      // A later short confirmation remains a normal single activation.
+      // A new short confirmation still plays the poster exactly once.
+      menuFocus.unfocus();
+      posterFocus.requestFocus();
+      await tester.pump();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
       await tester.pump(const Duration(milliseconds: 150));
       await tester.sendKeyUpEvent(LogicalKeyboardKey.select);

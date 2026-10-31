@@ -25,7 +25,13 @@ Future<void> showDramaActions(
   ];
   final choice = await showDialog<String>(
     context: context,
-    builder: (context) => SimpleDialog(
+    builder: (context) => Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (_, event) => RemoteActivationKeyGuard.handle(event)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored,
+      child: SimpleDialog(
       title: Text(uiTraditional(drama.title), maxLines: 2, overflow: TextOverflow.ellipsis),
       children: [
         for (final entry in choices.indexed)
@@ -48,6 +54,7 @@ Future<void> showDramaActions(
             ),
           ),
       ],
+      ),
     ),
   );
   if (choice == null ||
