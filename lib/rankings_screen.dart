@@ -670,10 +670,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
       await _restoreCachedHotBoards(boards);
       if (!mounted || generation != _generation) return;
 
+      // Never fall back to an unrelated provider's first board. A source
+      // without a registered ranking board should show the empty-state message.
       final selectedBoard =
           boards.where((board) => board.id == widget.initialBoardId).firstOrNull ??
-          boards.where((board) => board.groupId == widget.initialGroup).firstOrNull ??
-          boards.firstOrNull;
+          boards.where((board) => board.groupId == widget.initialGroup).firstOrNull;
       final cached = selectedBoard == null
           ? null
           : _memory.pages[selectedBoard.id];

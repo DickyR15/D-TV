@@ -17,11 +17,18 @@ class SourceSite {
       id == 'guipian' ||
       id == 'hanxiaoquan';
   bool get searchSuggestions => id == 'hongguo';
-  String get groupId => switch (id) {
-    'huangguo-video' || 'huangguoai' || 'cloudfront' => 'huangguo',
-    _ => id,
-  };
-  String get groupName => groupId == 'huangguo' ? '黃果' : name;
+  // These are three independent providers and must remain separate in
+  // source switching and ranking filters.
+  String get groupId => id;
+  String get groupName => name;
+  bool get hasRankings => const {
+    'hongguo',
+    'huangdou',
+    'huangguoai',
+    'huangju',
+    'yeguo',
+    'dsd',
+  }.contains(id);
   String get entryName => switch (id) {
     'huangguo-video' => '影片',
     'huangguoai' => 'AI',

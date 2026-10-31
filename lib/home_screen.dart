@@ -613,7 +613,9 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => RankingsScreen(
           repository: widget.repository,
           store: widget.store,
-          initialGroup: _group.id,
+          initialGroup: _group.id == 'all'
+              ? (_group.sources.where((source) => source.hasRankings).firstOrNull?.groupId ?? _group.id)
+              : _group.id,
         ),
       ),
     ).whenComplete(() => _resetBackConfirmation(ignoreTrailingBack: true));
@@ -1728,13 +1730,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.sync_rounded),
                   ),
                 if (_isCatalogTab) ...[
-                  if (!television && (!desktop || constraints.maxWidth < 840))
+                  if (!television &&
+                      (!desktop || constraints.maxWidth < 840) &&
+                      _group.sources.any((source) => source.hasRankings))
                     IconButton(
                       key: const ValueKey('open-rankings'),
                       tooltip: '熱播榜單',
-                      onPressed: widget.store.sources.isEmpty
-                          ? null
-                          : _openRankings,
+                      onPressed: _openRankings,
                       icon: const Icon(Icons.leaderboard_outlined),
                     ),
                   if (!wideControls)

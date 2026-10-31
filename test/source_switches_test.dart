@@ -154,4 +154,29 @@ void main() {
     expect(store.sourceEnabled('hongguo'), isTrue);
     expect(store.sourceEnabled('huangdou'), isFalse);
   });
+  test('Huangguo providers remain independent source groups', () {
+    const sources = [
+      SourceSite('huangguo-video', '黃果影片', '影片與劇集'),
+      SourceSite('huangguoai', '黃果 AI', 'AI 短劇'),
+      SourceSite('cloudfront', '黃果舊版', '舊版 API 片庫'),
+    ];
+
+    final groups = SourceGroup.fromSources(sources);
+    expect(groups.map((group) => group.id).toList(), [
+      'huangguo-video',
+      'huangguoai',
+      'cloudfront',
+    ]);
+    expect(groups.map((group) => group.name).toList(), [
+      '黃果影片',
+      '黃果 AI',
+      '黃果舊版',
+    ]);
+    expect(sources.map((source) => source.hasRankings).toList(), [
+      false,
+      true,
+      false,
+    ]);
+  });
+
 }
