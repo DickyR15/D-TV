@@ -394,6 +394,11 @@ class LocalStore extends ChangeNotifier {
     return value.length <= 80 ? value : '';
   }
 
+  bool get checkForUpdatesOnStartup {
+    if (_configurationError != null) return true;
+    return _bool('checkForUpdatesOnStartup') ?? true;
+  }
+
   String get themeMode {
     final value = _configurationError == null ? _string('themeMode') : null;
     return {'light', 'dark', 'system'}.contains(value) ? value! : 'system';
@@ -665,6 +670,9 @@ class LocalStore extends ChangeNotifier {
 
   Future<void> clearIgnoredUpdateVersion() =>
       _setting('ignoredUpdateVersion', '');
+
+  Future<void> setCheckForUpdatesOnStartup(bool value) =>
+      _setting('checkForUpdatesOnStartup', value);
 
   Future<void> setThemeAccent(String value) =>
       const {
@@ -1172,6 +1180,7 @@ class LocalStore extends ChangeNotifier {
       'themeAccent': themeAccent,
       'forceLogin': forceLogin,
       'ignoredUpdateVersion': ignoredUpdateVersion,
+      'checkForUpdatesOnStartup': checkForUpdatesOnStartup,
       'libraries': {
         for (final profile in _profiles)
           profile.id: {
@@ -1241,6 +1250,10 @@ class LocalStore extends ChangeNotifier {
         (data['ignoredUpdateVersion'] is! String ||
             (data['ignoredUpdateVersion'] as String).length > 80)) {
       throw const FormatException('備份忽略更新版本無效');
+    }
+    if (data.containsKey('checkForUpdatesOnStartup') &&
+        data['checkForUpdatesOnStartup'] is! bool) {
+      throw const FormatException('備份啟動更新檢查設定無效');
     }
     final libraries = data['libraries'] as Map;
     for (final profile in profiles) {
@@ -1322,6 +1335,8 @@ class LocalStore extends ChangeNotifier {
           ? data['forceLogin'] as bool
           : profiles.firstWhere((profile) => profile.admin).protected,
       'ignoredUpdateVersion': data['ignoredUpdateVersion'] as String? ?? '',
+      'checkForUpdatesOnStartup':
+          data['checkForUpdatesOnStartup'] as bool? ?? true,
     };
     final libraries = data['libraries'] as Map;
     for (final profile in profiles) {

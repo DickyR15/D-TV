@@ -119,6 +119,13 @@ class AppDevice {
     }
   }
 
+  static Future<void> installApk(String filePath) async {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      throw UnsupportedError('APK 安裝只支援 Android');
+    }
+    await channel.invokeMethod<void>('installApk', {'path': filePath});
+  }
+
   static Future<void> openExternalUrl(String value) async {
     final uri = Uri.tryParse(value);
     if (uri == null ||

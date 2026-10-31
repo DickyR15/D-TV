@@ -254,21 +254,30 @@ void main() {
         expect(store.exportRecoveryData(), contains('舊資料'));
       },
     );
-  }  test('ignored update version persists and is included in a settings backup', () async {
+  }  test('update preferences persist and are included in a settings backup', () async {
     final (store, platform) = await create();
+    expect(store.checkForUpdatesOnStartup, isTrue);
     await store.ignoreUpdateVersion('v1.0.1');
+    await store.setCheckForUpdatesOnStartup(false);
     expect(store.ignoredUpdateVersion, 'v1.0.1');
+    expect(store.checkForUpdatesOnStartup, isFalse);
 
     final backup = jsonDecode(await store.exportBackup()) as Map<String, dynamic>;
     expect(backup['ignoredUpdateVersion'], 'v1.0.1');
+    expect(backup['checkForUpdatesOnStartup'], isFalse);
     backup['ignoredUpdateVersion'] = 'v1.0.2';
+    backup['checkForUpdatesOnStartup'] = true;
     await store.importBackup(jsonEncode(backup));
     expect(store.ignoredUpdateVersion, 'v1.0.2');
+    expect(store.checkForUpdatesOnStartup, isTrue);
 
     final restored = await restart(platform);
     expect(restored.ignoredUpdateVersion, 'v1.0.2');
+    expect(restored.checkForUpdatesOnStartup, isTrue);
+    await restored.setCheckForUpdatesOnStartup(false);
     await restored.clearIgnoredUpdateVersion();
     expect(restored.ignoredUpdateVersion, isEmpty);
+    expect(restored.checkForUpdatesOnStartup, isFalse);
   });
 
 
