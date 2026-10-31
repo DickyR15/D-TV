@@ -98,6 +98,7 @@ def main():
     add_variant_argument(parser)
     options = parser.parse_args()
     variant = BuildVariant(options.all_sources)
+    run([sys.executable, str(root / 'scripts' / 'generate_brand_assets.py')])
     build_core(options.simulator, variant)
     if options.core_only:
         return
