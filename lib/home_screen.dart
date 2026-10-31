@@ -2640,6 +2640,11 @@ class _HomeScreenState extends State<HomeScreen> {
       return KeyEventResult.ignored;
     }
 
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final scale = (screenHeight / 820.0).clamp(0.84, 1.08).toDouble();
+    final sideWidth = television ? 176.0 : 168.0;
+    final sideButtonWidth = sideWidth - 14.0;
+
     Widget buildEntry(
       ({int tab, IconData icon, String label}) entry, {
       required double itemHeight,
@@ -2647,7 +2652,9 @@ class _HomeScreenState extends State<HomeScreen> {
       required double labelSize,
       required double verticalPadding,
     }) {
-      return RemoteTarget(
+      return SizedBox(
+        width: sideButtonWidth,
+        child: RemoteTarget(
         key: ValueKey('side-nav-' + entry.tab.toString()),
         focusNode: _navigationFocusNodes.putIfAbsent(
           entry.tab,
@@ -2705,31 +2712,22 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+        ),
       );
     }
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final availableHeight = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : 760.0;
-        final scale = (availableHeight / 760.0)
-            .clamp(0.76, 1.14)
-            .toDouble();
         final itemHeight = television
             ? 62.0
-            : (58.0 * scale).clamp(48.0, 66.0).toDouble();
+            : (56.0 * scale).clamp(46.0, 60.0).toDouble();
         final iconSize = television
             ? 24.0
-            : (23.0 * scale).clamp(18.0, 25.0).toDouble();
+            : (22.0 * scale).clamp(19.0, 24.0).toDouble();
         final labelSize = television
             ? 16.0
-            : (16.0 * scale).clamp(14.5, 17.5).toDouble();
+            : (15.0 * scale).clamp(14.0, 16.5).toDouble();
         final verticalPadding = television ? 7.0 : 3.0;
-        final screenWidth = MediaQuery.sizeOf(context).width;
-        final sideWidth = television
-            ? 176.0
-            : (screenWidth * 0.12).clamp(168.0, 224.0).toDouble();
 
         return Focus(
           canRequestFocus: false,

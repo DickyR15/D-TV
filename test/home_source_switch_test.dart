@@ -56,6 +56,42 @@ void main() {
       }
     });
   }
+  testWidgets('desktop sidebar buttons keep a consistent width and height', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppLayout(
+          television: false,
+          formFactor: FormFactor.window,
+          child: HomeScreen(
+            repository: _HomeSourceSwitchRepository(),
+            store: store,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+
+    final tabs = [2, 1, 4, 5, 6, 7, 0, 9];
+    final rects = [
+      for (final tab in tabs)
+        tester.getRect(find.byKey(ValueKey('side-nav-$tab'))),
+    ];
+    for (final rect in rects.skip(1)) {
+      expect(rect.width, closeTo(rects.first.width, 0.1));
+      expect(rect.height, closeTo(rects.first.height, 0.1));
+    }
+    expect(rects.first.width, lessThan(180));
+    expect(rects.first.width, greaterThan(140));
+  });
+
   testWidgets('desktop source menu opens source management directly', (
     tester,
   ) async {
