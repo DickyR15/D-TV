@@ -75,7 +75,9 @@ func providerSourceForURL(raw string) string {
 		return sourceYeguo
 	case host == "dsd.com.se" || host == "www.dsd.com.se":
 		return sourceDSD
-	case host == "sorani.net" || host == "www.sorani.net" || host == "api.sorani.cc" || host == "sorani.cc":
+	case host == "sorani.net" || host == "www.sorani.net" || host == "api.sorani.cc" ||
+		host == "sorani.cc" || host == "sorani-vids.xyz" ||
+		strings.HasSuffix(host, ".sorani-vids.xyz"):
 		return sourceSorani
 	case host == "guipianwu.com" || host == "www.guipianwu.com":
 		return sourceGuipian

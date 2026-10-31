@@ -54,14 +54,24 @@ func validSoraniCategory(category string) bool {
 	return false
 }
 
-// soraniNumericID 校验上游自增数字 ID（videoId / episodeId）。
-func soraniNumericID(value string) bool {
+// soraniValidID accepts both the earlier numeric identifiers and the current
+// opaque alphanumeric IDs (for example 24-character Mongo-style video IDs).
+// Restrict the alphabet because these values are embedded in API path segments.
+func soraniValidID(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" || len(value) > soraniMaxID {
 		return false
 	}
-	number, err := strconv.Atoi(value)
-	return err == nil && number > 0
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') ||
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '-' || char == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func soraniCover(value any) string {
@@ -76,7 +86,7 @@ func soraniDramaFromMap(row map[string]any) (Drama, error) {
 	}
 	id := mapString(row, "id", "videoId")
 	title := mapString(row, "title", "name", "videoTitle")
-	if !soraniNumericID(id) || strings.TrimSpace(title) == "" {
+	if !soraniValidID(id) || strings.TrimSpace(title) == "" {
 		return Drama{}, errors.New("青空次元返回的剧集信息不完整")
 	}
 	description := mapString(row, "summary", "description", "intro", "desc")
@@ -267,7 +277,7 @@ func (d *Downloader) fetchSoraniCatalogPage(ctx context.Context, page int, categ
 }
 
 func (d *Downloader) fetchSoraniDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
-	if !soraniNumericID(sourceID) {
+	if !soraniValidID(sourceID) {
 		return Drama{}, nil, errors.New("青空次元剧集 ID 无效")
 	}
 	value, err := d.soraniRequest(ctx, "/video/"+url.PathEscape(sourceID), nil, 8<<20)
@@ -300,7 +310,7 @@ func (d *Downloader) fetchSoraniDetail(ctx context.Context, sourceID string) (Dr
 			continue
 		}
 		episodeID := mapString(episode, "episodeId", "id")
-		if !soraniNumericID(episodeID) || seenIDs[episodeID] {
+		if !soraniValidID(episodeID) || seenIDs[episodeID] {
 			return Drama{}, nil, errors.New("青空次元分集目录包含无效或重复分集")
 		}
 		order := index + 1
@@ -341,11 +351,11 @@ func (d *Downloader) fetchSoraniDetail(ctx context.Context, sourceID string) (Dr
 func (d *Downloader) resolveSoraniMedia(ctx context.Context, task Task) (providerMedia, error) {
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
 	prefix := providerChapterID(sourceSorani, sourceID, "")
-	if !valid || source != sourceSorani || !soraniNumericID(sourceID) || !strings.HasPrefix(task.Chapter.ID, prefix) {
+	if !valid || source != sourceSorani || !soraniValidID(sourceID) || !strings.HasPrefix(task.Chapter.ID, prefix) {
 		return providerMedia{}, errors.New("青空次元播放分集信息无效，请刷新详情")
 	}
 	episodeID := strings.TrimPrefix(task.Chapter.ID, prefix)
-	if !soraniNumericID(episodeID) {
+	if !soraniValidID(episodeID) {
 		return providerMedia{}, errors.New("青空次元分集 ID 无效")
 	}
 	// 目前仅 anime_jp_m3u8 一条线实测有效；lineCode 已编码进章节 ID 的前缀之外无额外承载位，

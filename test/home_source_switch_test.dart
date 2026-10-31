@@ -39,7 +39,7 @@ void main() {
 
       final key = switch (factor) {
         FormFactor.phone => const ValueKey('home-source-switch-mobile'),
-        FormFactor.window => const ValueKey('home-source-switch-wide'),
+        FormFactor.window => const ValueKey('home-source-switch-desktop'),
         FormFactor.television => const ValueKey('home-source-switch-tv'),
         FormFactor.pad => const ValueKey('unused'),
       };
@@ -47,4 +47,42 @@ void main() {
       expect(find.text('紅果'), findsWidgets);
     });
   }
+  testWidgets('desktop source menu opens source management directly', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppLayout(
+          television: false,
+          formFactor: FormFactor.window,
+          child: HomeScreen(
+            repository: FixtureRepository(),
+            store: store,
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+
+    final switcher = find.byKey(
+      const ValueKey('home-source-switch-desktop'),
+    );
+    expect(switcher, findsOneWidget);
+    await tester.tap(switcher);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('片源管理'), findsOneWidget);
+    await tester.tap(find.text('片源管理'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('一般片源'), findsOneWidget);
+    expect(find.text('進階片源'), findsOneWidget);
+  });
+
 }

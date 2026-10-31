@@ -24,6 +24,7 @@ import 'widgets.dart';
 import 'vip_icon.dart';
 import 'settings_screen.dart';
 import 'profiles_screen.dart';
+import 'source_management_screen.dart';
 import 'search_input.dart';
 import 'drama_actions.dart';
 import 'diary_service.dart';
@@ -51,6 +52,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const _recommendationCategory = 'app:recommendations';
+  static const _manageSourcesMenuValue = '__manage_sources__';
   static const _revealBatch = 60;
   final _search = TextEditingController();
   final FocusNode _desktopSearchFocus = FocusNode(
@@ -615,6 +617,20 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     ).whenComplete(() => _resetBackConfirmation(ignoreTrailingBack: true));
+  }
+
+  void _openSourceManagement() {
+    if (!widget.store.profile.admin || widget.store.locked) return;
+    _resetBackConfirmation();
+    Navigator.of(context)
+        .push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => SourceManagementScreen(store: widget.store),
+          ),
+        )
+        .whenComplete(
+          () => _resetBackConfirmation(ignoreTrailingBack: true),
+        );
   }
 
   Future<void> _chooseDisplayMode() async {
@@ -1603,6 +1619,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? _sourceSwitcher(keyName: 'home-source-switch-mobile', branded: true)
                 : _brandTitle(),
             actions: [
+                // Desktop source selection belongs in the AppBar action row,
+                // not floating in the middle of the brand banner.
+                if (desktop && !compactBrandBar && widget.store.sources.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _sourceSwitcher(
+                      keyName: 'home-source-switch-desktop',
+                      compact: true,
+                    ),
+                  ),
                 if (wideControls && (_isCatalogTab || _isRankingTab)) ...[
                   SizedBox(
                     width: constraints.maxWidth >= 1450 ? 340 : 260,
@@ -1950,34 +1976,52 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
-  /// Home-level source selector. Keep this separate from source management:
-  /// it changes the active catalog group without opening settings.
+  /// Home-level source selector with a direct administrator shortcut.
+  /// Changing the selected group never opens the separate management screen.
   Widget _sourceSwitcher({
     required String keyName,
     bool branded = false,
     bool compact = false,
   }) {
     final canSwitch = _sourceGroups.length > 1;
+    final canManage = widget.store.profile.admin && !widget.store.locked;
     final currentName = uiTraditional(_group.name);
-    return PopupMenuButton<SourceGroup>(
+    return PopupMenuButton<Object>(
       key: ValueKey(keyName),
-      tooltip: canSwitch ? '切換片源' : '目前片源：$currentName',
-      enabled: canSwitch,
+      tooltip: canSwitch || canManage
+          ? '切換片源／片源管理'
+          : '目前片源：$currentName',
+      enabled: canSwitch || canManage,
       onOpened: _homePopupOpened,
       onCanceled: _homePopupCanceled,
-      onSelected: (group) {
+      onSelected: (selection) {
         _homePopupSelected();
-        _changeGroup(group);
+        if (selection == _manageSourcesMenuValue) {
+          _openSourceManagement();
+        } else if (selection is SourceGroup) {
+          _changeGroup(selection);
+        }
       },
       itemBuilder: (_) => [
         for (final group in _sourceGroups)
-          PopupMenuItem(
+          PopupMenuItem<Object>(
             value: group,
             child: Row(
               children: [
                 Expanded(child: Text(uiTraditional(group.name))),
                 if (group.id == _group.id)
                   const Icon(Icons.check_rounded, size: 20),
+              ],
+            ),
+          ),
+        if (canManage)
+          const PopupMenuItem<Object>(
+            value: _manageSourcesMenuValue,
+            child: Row(
+              children: [
+                Icon(Icons.tune_rounded, size: 18),
+                SizedBox(width: 10),
+                Text('片源管理'),
               ],
             ),
           ),
@@ -2001,7 +2045,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  if (canSwitch) const Icon(Icons.expand_more_rounded),
+                  if (canSwitch || canManage) const Icon(Icons.expand_more_rounded),
                 ],
               ),
             )
@@ -2038,7 +2082,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  if (canSwitch) ...[
+                  if (canSwitch || canManage) ...[
                     const SizedBox(width: 3),
                     const Icon(Icons.expand_more_rounded, size: 18),
                   ],
@@ -2189,15 +2233,6 @@ class _HomeScreenState extends State<HomeScreen> {
               width: width * .46,
               child: _brandLogo(width: width * .46, height: height * .78),
             ),
-            if (widget.store.sources.isNotEmpty)
-              Positioned(
-                left: width * .50,
-                bottom: height * .14,
-                child: _sourceSwitcher(
-                  keyName: 'home-source-switch-wide',
-                  compact: true,
-                ),
-              ),
             Positioned(
               right: width * .035,
               bottom: height * .12,
