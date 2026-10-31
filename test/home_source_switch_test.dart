@@ -56,7 +56,7 @@ void main() {
       }
     });
   }
-  testWidgets('desktop sidebar buttons keep a consistent width and height', (
+  testWidgets('desktop sidebar is compact, aligned, and pins Settings to bottom', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -90,6 +90,15 @@ void main() {
     }
     expect(rects.first.width, lessThan(180));
     expect(rects.first.width, greaterThan(140));
+    expect(rects.first.height, lessThan(70));
+    for (var index = 1; index < 7; index++) {
+      expect(rects[index].top, greaterThan(rects[index - 1].bottom));
+      expect(rects[index].top - rects[index - 1].bottom, lessThan(20));
+    }
+    expect(rects.last.top, greaterThan(rects[6].bottom));
+    expect(rects.last.bottom, greaterThan(840));
+    expect(find.text('最近觀看'), findsOneWidget);
+    expect(find.text('設定'), findsOneWidget);
   });
 
   testWidgets('desktop source menu opens source management directly', (

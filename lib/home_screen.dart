@@ -2618,7 +2618,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (event is KeyDownEvent || event is KeyRepeatEvent) {
         _cancelStartupFocusRetry();
       }
-      if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+      if (key == LogicalKeyboardKey.arrowUp ||
+          key == LogicalKeyboardKey.arrowDown) {
         final step = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
         final nextIndex = (activeIndex + step).clamp(0, entries.length - 1);
         if (nextIndex != activeIndex) {
@@ -2642,6 +2643,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final screenHeight = MediaQuery.sizeOf(context).height;
     final scale = (screenHeight / 820.0).clamp(0.84, 1.08).toDouble();
+    // Desktop navigation is a compact fixed rail. Window width never changes
+    // the rail or button sizes, preventing a stretched, uneven sidebar.
     final sideWidth = television ? 176.0 : 168.0;
     final sideButtonWidth = sideWidth - 14.0;
 
@@ -2652,66 +2655,101 @@ class _HomeScreenState extends State<HomeScreen> {
       required double labelSize,
       required double verticalPadding,
     }) {
+      final selected = _tab == entry.tab;
       return SizedBox(
         width: sideButtonWidth,
         child: RemoteTarget(
-        key: ValueKey('side-nav-' + entry.tab.toString()),
-        focusNode: _navigationFocusNodes.putIfAbsent(
-          entry.tab,
-          () => FocusNode(debugLabel: 'D TV navigation ' + entry.tab.toString()),
-        ),
-        autofocus: television && _tab == entry.tab,
-        selected: _tab == entry.tab,
-        scrollAlignment: television ? 0.32 : 0,
-        scrollAlignmentPolicy: television
-            ? ScrollPositionAlignmentPolicy.explicit
-            : null,
-        onFocus: () {},
-        onPressed: () {
-          _navigationFocusNodes[entry.tab]?.requestFocus();
-          _selectNavigationDestination(entry.tab);
-        },
-        label: entry.label,
-        padding: EdgeInsets.symmetric(
-          horizontal: television ? 7 : 5,
-          vertical: verticalPadding,
-        ),
-        radius: 12,
-        borderWidth: 2,
-        outlined: true,
-        child: SizedBox(
-          height: itemHeight,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                entry.icon,
-                size: iconSize,
-                color: _tab == entry.tab
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(height: 3),
-              Text(
-                entry.label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: labelSize,
-                  height: 1.12,
-                  fontWeight: _tab == entry.tab
-                      ? FontWeight.w800
-                      : FontWeight.w500,
-                  color: _tab == entry.tab
-                      ? theme.colorScheme.onPrimaryContainer
-                      : theme.colorScheme.onSurface,
-                ),
-              ),
-            ],
+          key: ValueKey('side-nav-${entry.tab}'),
+          focusNode: _navigationFocusNodes.putIfAbsent(
+            entry.tab,
+            () => FocusNode(
+              debugLabel: 'D TV navigation ${entry.tab}',
+            ),
           ),
-        ),
+          autofocus: television && selected,
+          selected: selected,
+          scrollAlignment: television ? 0.32 : 0,
+          scrollAlignmentPolicy: television
+              ? ScrollPositionAlignmentPolicy.explicit
+              : null,
+          onFocus: () {},
+          onPressed: () {
+            _navigationFocusNodes[entry.tab]?.requestFocus();
+            _selectNavigationDestination(entry.tab);
+          },
+          label: entry.label,
+          padding: EdgeInsets.symmetric(
+            horizontal: television ? 7 : 10,
+            vertical: verticalPadding,
+          ),
+          radius: 11,
+          borderWidth: 2,
+          // Desktop uses a clean, borderless list with a filled active item.
+          // TV retains outlined controls for remote-focus visibility.
+          outlined: television,
+          child: SizedBox(
+            height: itemHeight,
+            child: television
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        entry.icon,
+                        size: iconSize,
+                        color: selected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        entry.label,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: labelSize,
+                          height: 1.12,
+                          fontWeight:
+                              selected ? FontWeight.w800 : FontWeight.w500,
+                          color: selected
+                              ? theme.colorScheme.onPrimaryContainer
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      const SizedBox(width: 2),
+                      Icon(
+                        entry.icon,
+                        size: iconSize,
+                        color: selected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          entry.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.left,
+                          style: TextStyle(
+                            fontSize: labelSize,
+                            height: 1.1,
+                            fontWeight:
+                                selected ? FontWeight.w700 : FontWeight.w500,
+                            color: selected
+                                ? theme.colorScheme.onPrimaryContainer
+                                : theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
         ),
       );
     }
@@ -2720,14 +2758,14 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, constraints) {
         final itemHeight = television
             ? 62.0
-            : (56.0 * scale).clamp(46.0, 60.0).toDouble();
+            : (48.0 * scale).clamp(44.0, 54.0).toDouble();
         final iconSize = television
             ? 24.0
-            : (22.0 * scale).clamp(19.0, 24.0).toDouble();
+            : (20.0 * scale).clamp(18.0, 21.0).toDouble();
         final labelSize = television
             ? 16.0
-            : (15.0 * scale).clamp(14.0, 16.5).toDouble();
-        final verticalPadding = television ? 7.0 : 3.0;
+            : (14.5 * scale).clamp(13.5, 15.5).toDouble();
+        final verticalPadding = television ? 7.0 : 2.0;
 
         return Focus(
           canRequestFocus: false,
@@ -2736,9 +2774,9 @@ class _HomeScreenState extends State<HomeScreen> {
           child: SizedBox(
             width: sideWidth,
             child: Padding(
-              padding: EdgeInsets.symmetric(
+              padding: const EdgeInsets.symmetric(
                 horizontal: 7,
-                vertical: 8,
+                vertical: 10,
               ),
               child: television
                   ? SingleChildScrollView(
@@ -2762,35 +2800,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        buildEntry(
-                          entries.first,
-                          itemHeight: itemHeight,
-                          iconSize: iconSize,
-                          labelSize: labelSize,
-                          verticalPadding: verticalPadding,
-                        ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              for (final entry in entries.skip(1).take(entries.length - 2))
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      buildEntry(
-                                        entry,
-                                        itemHeight: itemHeight,
-                                        iconSize: iconSize,
-                                        labelSize: labelSize,
-                                        verticalPadding: verticalPadding,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
+                        for (final entry in entries.take(entries.length - 1))
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 7),
+                            child: buildEntry(
+                              entry,
+                              itemHeight: itemHeight,
+                              iconSize: iconSize,
+                              labelSize: labelSize,
+                              verticalPadding: verticalPadding,
+                            ),
                           ),
+                        const Spacer(),
+                        Divider(
+                          height: 18,
+                          thickness: 1,
+                          color: theme.colorScheme.outlineVariant
+                              .withValues(alpha: 0.65),
                         ),
                         buildEntry(
                           entries.last,
