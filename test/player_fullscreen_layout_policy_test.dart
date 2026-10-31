@@ -68,7 +68,7 @@ void main() {
     test('adds slight overscan only to iOS landscape fullscreen', () {
       expect(
         playerVideoOverscan(ios: true, fullscreen: true, aspectRatio: 16 / 9),
-        1.06,
+        1.08,
       );
     });
 
