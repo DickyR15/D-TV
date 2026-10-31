@@ -112,7 +112,7 @@ elif options.platform == "windows":
     missing = [name for name in required if not (bundle / name).is_file()]
     if missing:
         raise SystemExit("Windows 免安裝版缺少檔案：" + ", ".join(missing))
-    target = output / f"DTV-{version}-Windows-免安裝.zip"
+    target = output / f"DTV-{version}-Windows-Portable.zip"
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
         for source in sorted(bundle.rglob("*")):
             if source.is_file():
