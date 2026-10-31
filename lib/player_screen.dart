@@ -1054,9 +1054,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _scheduleSystemUi() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          _closed ||
-          (!_mobile && _formFactor != FormFactor.pad && !_television)) {
+      if (!mounted || _closed || (!_mobile && !_television && !Platform.isIOS)) {
         return;
       }
       final fullscreen = _showFullscreen;
