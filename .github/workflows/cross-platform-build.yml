@@ -22,13 +22,16 @@ on:
       - "pubspec.yaml"
       - "pubspec.lock"
   workflow_dispatch:
+  release:
+    types:
+      - published
 
 concurrency:
   group: dtv-cross-platform-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   FLUTTER_VERSION: "3.47.4"
@@ -118,6 +121,14 @@ jobs:
           path: build/windows/x64/runner/Release/
           if-no-files-found: error
           retention-days: 14
+      - name: Attach Windows update ZIP to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/windows/DTV-${{ steps.windows-version.outputs.app_version }}-Windows-Portable.zip
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   android-universal:
     name: Android Universal APK (3 ABIs)
@@ -214,6 +225,14 @@ jobs:
           path: dist/android/DTV-*.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Attach Android Universal APK to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/android/DTV-${{ steps.build-universal.outputs.app_version }}-Android-Universal.apk
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   ios-ipa:
     name: iOS device IPA and simulator build
@@ -265,6 +284,14 @@ jobs:
           path: dist/ios/DTV-*.ipa
           if-no-files-found: error
           retention-days: 14
+      - name: Attach iOS IPA to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ios/DTV-*-iOS.ipa
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   macos-universal:
     name: macOS Universal DMG (arm64 + x86_64)
@@ -300,6 +327,14 @@ jobs:
           path: dist/macos/DTV-*.dmg
           if-no-files-found: error
           retention-days: 14
+      - name: Attach macOS Universal DMG to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/macos/DTV-*-macOS.dmg
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
 # validation-retrigger-1
