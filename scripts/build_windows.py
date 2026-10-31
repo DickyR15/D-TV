@@ -18,6 +18,12 @@ env.setdefault('GOSUMDB', 'off')
 flutter = shutil.which('flutter')
 if not flutter:
     raise SystemExit('請先將 Flutter SDK 的 bin 目錄加入 PATH。')
+
+# Ensure the executable embeds the same D TV vector artwork used by Android.
+subprocess.run(
+    [sys.executable, str(root / 'scripts' / 'generate_brand_assets.py')],
+    cwd=root, env=env, check=True,
+)
 subprocess.run([sys.executable, str(root / 'scripts' / 'build_native.py'), '--platform', 'windows', *variant.arguments],
                cwd=root, env=env, check=True)
 subprocess.run([flutter, 'pub', 'get'], cwd=root, env=env, check=True)
