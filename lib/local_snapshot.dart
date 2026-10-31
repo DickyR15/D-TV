@@ -36,6 +36,7 @@ class LocalSnapshot {
     'sourceSwitches',
     'forceLogin',
     'ignoredUpdateVersion',
+    'checkForUpdatesOnStartup',
   };
   static const _retiredKeys = {
     'sourceGateEnabled',
@@ -87,6 +88,7 @@ class LocalSnapshot {
       final boolean = {
         'hideVip',
         'forceLogin',
+        'checkForUpdatesOnStartup',
         'tvDecoderSafePresetV1',
         'portraitBlurLandscapeDefaultV1',
       }.contains(entry.key.split('.').last);

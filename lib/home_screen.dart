@@ -1550,7 +1550,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-    unawaited(progressDialog);
+    unawaited(progressDialog.then<void>((_) {}));
     try {
       await Future<void>.delayed(Duration.zero);
       final file = await service.downloadAsset(asset);

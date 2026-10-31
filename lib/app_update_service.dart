@@ -113,7 +113,7 @@ class AppUpdateService {
       throw const FormatException('更新檔名稱無效');
     }
 
-    final Directory baseDirectory;
+    Directory baseDirectory;
     if (Platform.isAndroid) {
       baseDirectory = await getTemporaryDirectory();
     } else {
