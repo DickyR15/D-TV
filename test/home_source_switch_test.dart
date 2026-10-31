@@ -19,6 +19,7 @@ void main() {
   for (final factor in [
     FormFactor.phone,
     FormFactor.window,
+    FormFactor.pad,
     FormFactor.television,
   ]) {
     testWidgets('home source selector is visible in ${factor.name} layout', (
@@ -45,9 +46,9 @@ void main() {
 
       final key = switch (factor) {
         FormFactor.phone => const ValueKey('home-source-switch-mobile'),
-        FormFactor.window => const ValueKey('home-source-switch-desktop'),
+        FormFactor.window || FormFactor.pad =>
+          const ValueKey('home-source-switch-desktop'),
         FormFactor.television => const ValueKey('home-source-switch-tv'),
-        FormFactor.pad => const ValueKey('unused'),
       };
       expect(find.byKey(key), findsOneWidget);
       if (factor == FormFactor.window) {

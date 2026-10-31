@@ -1623,13 +1623,15 @@ class _HomeScreenState extends State<HomeScreen> {
             actions: [
                 // Desktop source selection belongs in the AppBar action row,
                 // not floating in the middle of the brand banner.
-                if (desktop && !compactBrandBar && widget.store.sources.isNotEmpty)
+                if ((desktop || television) && widget.store.sources.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: _sourceSwitcher(
-                      keyName: 'home-source-switch-desktop',
-                      compact: true,
-                      iconOnly: true,
+                      keyName: television
+                          ? 'home-source-switch-tv'
+                          : 'home-source-switch-desktop',
+                      compact: desktop,
+                      iconOnly: desktop && !compactBrandBar,
                     ),
                   ),
                 if (wideControls && (_isCatalogTab || _isRankingTab)) ...[
@@ -2198,8 +2200,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          _sourceSwitcher(keyName: 'home-source-switch-tv', compact: true),
         ],
       ),
     );
@@ -2414,20 +2414,40 @@ class _HomeScreenState extends State<HomeScreen> {
       return KeyEventResult.ignored;
     }
 
-    return Focus(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : 760.0;
+        final scale = television
+            ? 1.0
+            : (availableHeight / 760.0).clamp(0.9, 1.15).toDouble();
+        final itemHeight = television
+            ? 62.0
+            : (64.0 * scale).clamp(58.0, 74.0).toDouble();
+        final iconSize = television
+            ? 24.0
+            : (24.0 * scale).clamp(22.0, 28.0).toDouble();
+        final labelSize = television
+            ? 16.0
+            : (14.0 * scale).clamp(12.5, 16.0).toDouble();
+        return Focus(
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: handleNavigationKey,
       child: SizedBox(
-        width: television ? 176 : 148,
+        width: television ? 176 : 160,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: 7,
+            vertical: television ? 8 : 4,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (final entry in entries)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 5),
+                  padding: EdgeInsets.only(bottom: television ? 5 : 2),
                   child: RemoteTarget(
                     key: ValueKey('side-nav-${entry.tab}'),
                     focusNode: _navigationFocusNodes.putIfAbsent(
@@ -2454,20 +2474,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     label: entry.label,
                     padding: EdgeInsets.symmetric(
                       horizontal: television ? 7 : 5,
-                      vertical: 7,
+                      vertical: television ? 7 : 4,
                     ),
                     radius: 12,
                     borderWidth: 2,
                     outlined: true,
                     child: SizedBox(
-                      height: television ? 62 : 55,
+                      height: itemHeight,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             entry.icon,
-                            size: television ? 24 : 21,
+                            size: iconSize,
                             color: _tab == entry.tab
                                 ? theme.colorScheme.primary
                                 : theme.colorScheme.onSurfaceVariant,
@@ -2479,7 +2499,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: television ? 16 : 11.5,
+                              fontSize: labelSize,
                               height: 1.12,
                               fontWeight: _tab == entry.tab
                                   ? FontWeight.w800
@@ -2497,7 +2517,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-      ),
+        ),
+        );
+      },
     );
   }
 

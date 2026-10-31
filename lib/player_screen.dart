@@ -134,7 +134,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _localFailure = false;
   // iOS opens poster playback directly in the fullscreen video surface.
   // The orientation controller is synchronized once layout dependencies exist.
-  bool _fullscreen = Platform.isIOS;
+  bool _fullscreen = true;
+  bool _initialFullscreenApplied = false;
   bool _automaticFullscreenSuppressed = false;
   bool _panelOpen = false;
   DateTime? _lastNestedRoutePopAt;
@@ -429,7 +430,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           });
           // Re-lock iOS orientation to match the actual video after metadata
           // arrives (portrait dramas stay portrait; landscape video rotates).
-          _syncInitialIosFullscreenOrientation();
+          _syncFullscreenOrientationForVideo();
           _scheduleSystemUi();
         }
         unawaited(_logVideoOutput(parameters));
@@ -972,9 +973,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     final formFactor = AppLayout.formFactorOf(context);
     final television = formFactor == FormFactor.television;
     if (_formFactor != formFactor) {
-      // Preserve iOS's initial fullscreen playback when the window metrics
-      // settle (including iPad form-factor changes).
-      if (!Platform.isIOS) _fullscreen = false;
+      // Opening a player is an explicit fullscreen action on every platform.
+      // Keep that state when device metrics settle or the layout family changes.
       _automaticFullscreenSuppressed = false;
       _interactions.cancel();
     }
@@ -1014,7 +1014,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _tvDecoderPolicyMigrated = true;
     }
     _orientationController = AppOrientationScope.maybeOf(context);
-    _syncInitialIosFullscreenOrientation();
+    _syncInitialPlaybackFullscreen();
     final orientation = MediaQuery.orientationOf(context);
     if ((Platform.isWindows ||
             (Platform.isAndroid && _androidPlayerEngine != 'exo')) &&
@@ -1033,29 +1033,84 @@ class _PlayerScreenState extends State<PlayerScreen>
     _scheduleSystemUi();
   }
 
-  void _syncInitialIosFullscreenOrientation() {
-    if (!Platform.isIOS || !_fullscreen) return;
-    final controller = _orientationController;
-    if (controller == null) return;
-    unawaited(
-      controller
-          .setPlayback(
+  void _syncInitialPlaybackFullscreen() {
+    if (!_fullscreen || _initialFullscreenApplied) return;
+    _initialFullscreenApplied = true;
+    if (_television) {
+      _scheduleSystemUi();
+      return;
+    }
+    if (Platform.isWindows || Platform.isMacOS) {
+      unawaited(
+        windowManager.setFullScreen(true).catchError((Object error) {
+          DiaryService.add(
+            '[Player] initial desktop fullscreen failed: ${playbackDiagnosticError(error)}',
+          );
+        }),
+      );
+      return;
+    }
+    if (_mobile || _formFactor == FormFactor.pad || Platform.isIOS) {
+      final future = _orientationController?.setPlayback(
             this,
             fullscreen: true,
             aspectRatio: _aspectRatio,
-          )
-          .catchError((Object error) {
-            DiaryService.add(
-              '[Player] iOS initial fullscreen orientation failed: '
-              '${playbackDiagnosticError(error)}',
-            );
-          }),
+          ) ??
+          SystemChrome.setPreferredOrientations(
+            AppOrientationController.orientations(
+              television: false,
+              phone: _mobile,
+              fullscreen: true,
+              aspectRatio: _aspectRatio,
+            ),
+          );
+      unawaited(
+        future.catchError((Object error) {
+          DiaryService.add(
+            '[Player] initial mobile fullscreen failed: ${playbackDiagnosticError(error)}',
+          );
+        }),
+      );
+      _scheduleSystemUi();
+    }
+  }
+
+  void _syncFullscreenOrientationForVideo() {
+    if (!_fullscreen ||
+        _television ||
+        !(Platform.isIOS || _mobile || _formFactor == FormFactor.pad)) {
+      return;
+    }
+    final future = _orientationController?.setPlayback(
+          this,
+          fullscreen: true,
+          aspectRatio: _aspectRatio,
+        ) ??
+        SystemChrome.setPreferredOrientations(
+          AppOrientationController.orientations(
+            television: false,
+            phone: _mobile,
+            fullscreen: true,
+            aspectRatio: _aspectRatio,
+          ),
+        );
+    unawaited(
+      future.catchError((Object error) {
+        DiaryService.add(
+          '[Player] fullscreen video orientation sync failed: ${playbackDiagnosticError(error)}',
+        );
+      }),
     );
   }
 
   void _scheduleSystemUi() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _closed || (!_mobile && !_television && !Platform.isIOS)) {
+      if (!mounted ||
+          _closed ||
+          (!_mobile &&
+              !_television &&
+              _formFactor != FormFactor.pad &&
+              !Platform.isIOS)) {
         return;
       }
       final fullscreen = _showFullscreen;
@@ -2509,6 +2564,32 @@ class _PlayerScreenState extends State<PlayerScreen>
       aspectRatio: _aspectRatio,
     );
     if (!portraitBlurActive) {
+      final overscan = playerVideoOverscan(
+        ios: Platform.isIOS,
+        fullscreen: _showFullscreen,
+        aspectRatio: _aspectRatio,
+      );
+      if (overscan > 1) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: ClipRect(
+                child: Transform.scale(
+                  scale: overscan,
+                  child: Video(
+                    controller: _video!,
+                    fit: fit,
+                    fill: Colors.black,
+                    controls: null,
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(child: controls),
+          ],
+        );
+      }
       return Video(
         controller: _video!,
         fit: fit,

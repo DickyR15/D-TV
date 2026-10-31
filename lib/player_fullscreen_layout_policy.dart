@@ -25,3 +25,15 @@ BoxFit playerVideoFit({
   }
   return BoxFit.contain;
 }
+
+
+/// Adds a slight overscan crop to remove thin black edges on iOS landscape
+/// fullscreen streams. Player controls are composited separately.
+double playerVideoOverscan({
+  required bool ios,
+  required bool fullscreen,
+  required double aspectRatio,
+}) {
+  if (ios && fullscreen && aspectRatio >= 1) return 1.06;
+  return 1.0;
+}
