@@ -2125,6 +2125,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     letterSpacing: 0.5,
                   ),
                 ),
+                const SizedBox(height: 3),
+                const Text(
+                  '熱門榜單・收藏追劇・隨選即播',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Color(0xFF70CFFF),
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
+                ),
               ],
             ),
           ),
