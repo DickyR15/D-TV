@@ -180,9 +180,8 @@ class _RemoteTargetState extends State<RemoteTarget> {
       final wasLongPress = _longPressFired;
       _activateHeld = false;
       _longPressFired = false;
-      if (wasLongPress) {
-        widget.onLongPress?.call();
-      } else {
+      if (!wasLongPress) {
+        // Long-press already opened its menu when the hold threshold fired.
         widget.onPressed?.call();
       }
       return KeyEventResult.handled;
