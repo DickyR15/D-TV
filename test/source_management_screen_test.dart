@@ -32,6 +32,9 @@ void main() {
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
     expect(find.text('鬼片'), findsOneWidget);
+    expect(find.text('管理功能已上鎖'), findsOneWidget);
+    expect(find.text('進階片源'), findsNothing);
+    expect(find.textContaining('七個進階片源'), findsNothing);
     expect(find.textContaining('忘記管理員密碼'), findsNothing);
     expect(find.textContaining('shared_preferences'), findsNothing);
     expect(find.text('黃豆'), findsNothing);
@@ -47,6 +50,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.advancedSourcesUnlocked, isTrue);
+    expect(find.text('進階片源'), findsOneWidget);
     for (final name in ['黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版']) {
       final sourceName = find.text(name);
       await tester.scrollUntilVisible(
