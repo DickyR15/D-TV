@@ -1,4 +1,5 @@
 name: D TV Cross-platform Release Build
+# Rebuild latest cross-platform branch head after Taiwan terminology updates.
 
 on:
   push:
