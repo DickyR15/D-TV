@@ -126,6 +126,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          # Cache Gradle dependencies and reusable task outputs between branch builds.
+          cache-provider: basic
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
