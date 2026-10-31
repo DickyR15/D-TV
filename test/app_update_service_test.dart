@@ -145,4 +145,59 @@ void main() {
     );
   });
 
+  test('release assets select the matching Android and Windows packages', () {
+    final update = AppUpdateService.parseRelease(
+      const {
+        'tag_name': 'v1.0.2',
+        'name': 'D TV 1.0.2',
+        'html_url': 'https://github.com/DickyR15/D-TV/releases/tag/v1.0.2',
+        'draft': false,
+        'prerelease': false,
+        'assets': [
+          {
+            'name': 'hongguojian-v1.0.2-armeabi-v7a.apk',
+            'browser_download_url':
+                'https://github.com/DickyR15/D-TV/releases/download/v1.0.2/hongguojian-v1.0.2-armeabi-v7a.apk',
+            'size': 12345,
+            'digest': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          },
+          {
+            'name': 'hongguojian-v1.0.2-windows-x64.zip',
+            'browser_download_url':
+                'https://github.com/DickyR15/D-TV/releases/download/v1.0.2/hongguojian-v1.0.2-windows-x64.zip',
+            'size': 54321,
+          },
+          {
+            'name': 'zhenguojian-v1.0.2-windows-x64.zip',
+            'browser_download_url':
+                'https://github.com/DickyR15/D-TV/releases/download/v1.0.2/zhenguojian-v1.0.2-windows-x64.zip',
+            'size': 54321,
+          },
+          {
+            'name': 'outside.apk',
+            'browser_download_url': 'https://example.com/outside.apk',
+            'size': 100,
+          },
+        ],
+      },
+      currentVersion: '1.0.1',
+    );
+
+    expect(update, isNotNull);
+    expect(
+      update!.assetFor(platform: 'android', variant: 'hongguojian')!.name,
+      'hongguojian-v1.0.2-armeabi-v7a.apk',
+    );
+    expect(
+      update.assetFor(platform: 'windows', variant: 'hongguojian')!.name,
+      'hongguojian-v1.0.2-windows-x64.zip',
+    );
+    expect(
+      update.assetFor(platform: 'windows', variant: 'zhenguojian')!.name,
+      'zhenguojian-v1.0.2-windows-x64.zip',
+    );
+    expect(update.assetFor(platform: 'macos', variant: 'hongguojian'), isNull);
+    expect(update.assets, hasLength(3));
+  });
+
 }
