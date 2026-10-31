@@ -34,6 +34,6 @@ double playerVideoOverscan({
   required bool fullscreen,
   required double aspectRatio,
 }) {
-  if (ios && fullscreen && aspectRatio >= 1) return 1.06;
+  if (ios && fullscreen && aspectRatio >= 1) return 1.08;
   return 1.0;
 }
