@@ -678,7 +678,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            const Text('清晰度', style: TextStyle(fontSize: 18)),
+            const Text('畫質', style: TextStyle(fontSize: 18)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
