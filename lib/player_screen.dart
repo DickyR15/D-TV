@@ -2564,32 +2564,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       aspectRatio: _aspectRatio,
     );
     if (!portraitBlurActive) {
-      final overscan = playerVideoOverscan(
-        ios: Platform.isIOS,
-        fullscreen: _showFullscreen,
-        aspectRatio: _aspectRatio,
-      );
-      if (overscan > 1) {
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            Positioned.fill(
-              child: ClipRect(
-                child: Transform.scale(
-                  scale: overscan,
-                  child: Video(
-                    controller: _video!,
-                    fit: fit,
-                    fill: Colors.black,
-                    controls: null,
-                  ),
-                ),
-              ),
-            ),
-            Positioned.fill(child: controls),
-          ],
-        );
-      }
+      // Do not apply an extra scale to iOS landscape playback. BoxFit.contain
+      // keeps the entire frame visible, including subtitles near the bottom.
       return Video(
         controller: _video!,
         fit: fit,
