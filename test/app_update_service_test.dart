@@ -23,9 +23,9 @@ void main() {
         'prerelease': false,
         'assets': [
           {
-            'name': 'DTV-1.0.1-Android-Universal.apk',
+            'name': 'DTV-1.0.1-Android.apk',
             'browser_download_url':
-                'https://github.com/DickyR15/D-TV/releases/download/v1.0.1/DTV-1.0.1-Android-Universal.apk',
+                'https://github.com/DickyR15/D-TV/releases/download/v1.0.1/DTV-1.0.1-Android.apk',
             'size': 1024,
           },
           {
@@ -51,7 +51,7 @@ void main() {
     expect(info.notes, '修正播放與同步問題');
     expect(info.releaseUrl, contains('/releases/tag/v1.0.1'));
     expect(info.publishedAt, DateTime.utc(2026, 10, 30));
-    expect(info.assetForPlatform('android')?.name, 'DTV-1.0.1-Android-Universal.apk');
+    expect(info.assetForPlatform('android')?.name, 'DTV-1.0.1-Android.apk');
     expect(info.assetForPlatform('windows')?.name, 'DTV-1.0.1-Windows-Portable.zip');
     expect(info.assetForPlatform('macos')?.name, 'DTV-1.0.1-macOS.dmg');
     expect(info.assetForPlatform('ios'), isNull);

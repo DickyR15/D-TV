@@ -181,7 +181,11 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
-            echo "::warning::Release signing secrets are not configured; the Universal APK will use the Gradle debug signing fallback and may not update an existing v7a installation."
+            if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+              echo "::error::Configure the original v7a signing secrets before publishing a Universal APK. A debug-signed APK cannot update a previously installed release."
+              exit 1
+            fi
+            echo "::warning::Release signing secrets are not configured; this branch test APK will use the Gradle debug signing fallback and cannot update a previously installed v7a release."
             exit 0
           fi
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/dtv-release.jks"
@@ -229,7 +233,7 @@ jobs:
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/android/DTV-${{ steps.build-universal.outputs.app_version }}-Android-Universal.apk
+          files: dist/android/DTV-${{ steps.build-universal.outputs.app_version }}-Android.apk
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

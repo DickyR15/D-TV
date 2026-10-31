@@ -35,15 +35,15 @@ class AppUpdateInfo {
   final List<AppUpdateAsset> assets;
 
   AppUpdateAsset? assetForPlatform(String operatingSystem) {
-    final suffix = switch (operatingSystem.toLowerCase()) {
-      'android' => '-android-universal.apk',
-      'windows' => '-windows-portable.zip',
-      'macos' => '-macos.dmg',
-      _ => null,
+    final suffixes = switch (operatingSystem.toLowerCase()) {
+      'android' => const ['-android.apk', '-android-universal.apk'],
+      'windows' => const ['-windows-portable.zip'],
+      'macos' => const ['-macos.dmg'],
+      _ => const <String>[],
     };
-    if (suffix == null) return null;
     for (final asset in assets) {
-      if (asset.name.toLowerCase().endsWith(suffix)) return asset;
+      final name = asset.name.toLowerCase();
+      if (suffixes.any(name.endsWith)) return asset;
     }
     return null;
   }

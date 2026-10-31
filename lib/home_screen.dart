@@ -1443,7 +1443,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ? '有新版本可供下載。'
             : update.notes.trim().characters.take(1500).toString(),
         '',
-        asset == null
+        asset == null && !Platform.isIOS
             ? '目前尚未找到此平台的安裝檔，將開啟版本頁面供手動下載。'
             : platformNote,
       ].join('\n');
