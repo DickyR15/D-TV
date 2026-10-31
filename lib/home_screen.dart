@@ -945,7 +945,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_initialTabResolved) {
       _initialTabResolved = true;
       _lastFormFactor = formFactor;
-      if (formFactor == FormFactor.television) {
+      if (formFactor == FormFactor.television || Platform.isWindows) {
+        // Windows desktop also starts on the Red Fruit Hot ranking.
         _tab = 4;
         _requestDefaultTelevisionFocus();
       }
@@ -983,7 +984,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     void requestDefaultFocus() {
       if (!mounted ||
-          !AppLayout.isTelevision(context) ||
+          (!AppLayout.isTelevision(context) && !Platform.isWindows) ||
           _tab != 4 ||
           !node.canRequestFocus) {
         return;
@@ -1649,6 +1650,44 @@ class _HomeScreenState extends State<HomeScreen> {
                                     : _brandTitle()
                   ),
             actions: [
+                if (Platform.isWindows && widget.store.sources.isNotEmpty)
+                  PopupMenuButton<SourceGroup>(
+                    key: const ValueKey('windows-source-switch'),
+                    tooltip: '切換片源（目前：${uiTraditional(_group.name)}）',
+                    enabled: _sourceGroups.length > 1,
+                    onOpened: _homePopupOpened,
+                    onCanceled: _homePopupCanceled,
+                    onSelected: (group) {
+                      _homePopupSelected();
+                      _changeGroup(group);
+                    },
+                    itemBuilder: (_) => [
+                      for (final group in _sourceGroups)
+                        PopupMenuItem(
+                          value: group,
+                          child: Row(
+                            children: [
+                              Expanded(child: Text(uiTraditional(group.name))),
+                              if (group.id == _group.id)
+                                const Icon(Icons.check_rounded, size: 20),
+                            ],
+                          ),
+                        ),
+                    ],
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.source_outlined),
+                          const SizedBox(width: 6),
+                          Text(uiTraditional(_group.name)),
+                          if (_sourceGroups.length > 1)
+                            const Icon(Icons.expand_more_rounded, size: 18),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (wideControls && (_isCatalogTab || _isRankingTab)) ...[
                   SizedBox(
                     width: constraints.maxWidth >= 1450 ? 340 : 260,
