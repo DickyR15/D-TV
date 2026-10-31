@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'app_layout.dart';
 import 'local_store.dart';
 import 'playback_preferences.dart';
+import 'portrait_blur_policy.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
@@ -35,7 +36,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       widget.store.playbackPreferences.portraitBlurBackground;
   bool get _portraitBlurSupported =>
       widget.portraitBlurSupported ??
-      (Platform.isAndroid && _androidPlayerEngine != 'exo');
+      supportsPortraitBlurBackground(
+        android: Platform.isAndroid,
+        windows: Platform.isWindows,
+        androidMpvConfigured: _androidPlayerEngine != 'exo',
+      );
   late bool _preloadEnabled;
   late bool _autoAdvance;
   late bool _autoPictureInPicture;
@@ -279,8 +284,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               title: const Text('直式影片模糊背景'),
               subtitle: Text(
                 _portraitBlurSupported
-                    ? '橫式畫面播放直式影片時，以同一個播放器影格合成模糊背景與清晰前景，不另開解碼器。'
-                    : '需要 Android MPV 紋理輸出；目前平台或 ExoPlayer 不支援。',
+                    ? '橫式畫面播放直式影片時，以同一個播放器影格合成左右模糊背景與清晰前景，不另開解碼器。'
+                    : 'Android 需使用 MPV 播放引擎；目前平台或 ExoPlayer 不支援。',
               ),
               value: _portraitBlurSupported && _portraitBlurBackground,
               onChanged: _portraitBlurSupported
