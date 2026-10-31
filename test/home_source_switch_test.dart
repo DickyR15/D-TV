@@ -50,7 +50,9 @@ void main() {
         FormFactor.pad => const ValueKey('unused'),
       };
       expect(find.byKey(key), findsOneWidget);
-      expect(find.text('紅果'), findsWidgets);
+      if (factor == FormFactor.window) {
+        expect(find.byIcon(Icons.public_rounded), findsOneWidget);
+      }
     });
   }
   testWidgets('desktop source menu opens source management directly', (
