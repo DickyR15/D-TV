@@ -1593,10 +1593,16 @@ class _HomeScreenState extends State<HomeScreen> {
             television || (Platform.isAndroid && desktop);
         final wide = television || desktop;
         final wideControls = wide && constraints.maxWidth >= 840;
+        final compactTelevisionHeader =
+            television && constraints.maxWidth < 700;
         final brandHeaderWidth = (
           constraints.maxWidth -
-          (desktop && constraints.maxWidth < 840 ? 360.0 : 220.0)
-        ).clamp(300.0, 460.0).toDouble();
+          (compactTelevisionHeader
+              ? 128.0
+              : desktop && constraints.maxWidth < 840
+              ? 360.0
+              : 220.0)
+        ).clamp(compactTelevisionHeader ? 150.0 : 260.0, 460.0).toDouble();
         final bannerHeight = _brandBannerHeight(constraints.maxWidth);
         final fullWidthBrandBar = wide && !compactBrandBar;
         final scaffold = Scaffold(
@@ -1631,7 +1637,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           ? 'home-source-switch-tv'
                           : 'home-source-switch-desktop',
                       compact: desktop,
-                      iconOnly: desktop && !compactBrandBar,
+                      iconOnly:
+                          desktop && !compactBrandBar ||
+                          (television && constraints.maxWidth < 700),
                     ),
                   ),
                 if (wideControls && (_isCatalogTab || _isRankingTab)) ...[
@@ -2146,7 +2154,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _compactBrandHeader({required double width}) {
     final theme = Theme.of(context);
     return SizedBox(
-      width: width.clamp(300.0, 460.0).toDouble(),
+      width: width.clamp(150.0, 460.0).toDouble(),
       height: 72,
       child: Row(
         children: [
@@ -2421,16 +2429,20 @@ class _HomeScreenState extends State<HomeScreen> {
             : 760.0;
         final scale = television
             ? 1.0
-            : (availableHeight / 760.0).clamp(0.9, 1.15).toDouble();
+            : (availableHeight / 760.0).clamp(0.74, 1.12).toDouble();
         final itemHeight = television
             ? 62.0
-            : (64.0 * scale).clamp(58.0, 74.0).toDouble();
+            : (58.0 * scale).clamp(46.0, 64.0).toDouble();
         final iconSize = television
             ? 24.0
-            : (24.0 * scale).clamp(22.0, 28.0).toDouble();
+            : (23.0 * scale).clamp(18.0, 25.0).toDouble();
         final labelSize = television
             ? 16.0
-            : (14.0 * scale).clamp(12.5, 16.0).toDouble();
+            : (16.0 * scale).clamp(14.5, 17.5).toDouble();
+        final navigationVerticalPadding =
+            television ? 7.0 : (3.0 * scale).clamp(1.5, 3.0).toDouble();
+        final navigationItemSpacing =
+            television ? 5.0 : (3.0 * scale).clamp(1.0, 3.0).toDouble();
         return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -2447,7 +2459,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               for (final entry in entries)
                 Padding(
-                  padding: EdgeInsets.only(bottom: television ? 5 : 2),
+                  padding: EdgeInsets.only(bottom: navigationItemSpacing),
                   child: RemoteTarget(
                     key: ValueKey('side-nav-${entry.tab}'),
                     focusNode: _navigationFocusNodes.putIfAbsent(
@@ -2474,7 +2486,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     label: entry.label,
                     padding: EdgeInsets.symmetric(
                       horizontal: television ? 7 : 5,
-                      vertical: television ? 7 : 4,
+                      vertical: navigationVerticalPadding,
                     ),
                     radius: 12,
                     borderWidth: 2,
