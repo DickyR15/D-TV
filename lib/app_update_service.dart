@@ -351,7 +351,7 @@ try {
   $sourceRoot = $exeCandidate.Directory.FullName
   $files = Get-ChildItem -LiteralPath $sourceRoot -File -Recurse -Force
   foreach ($file in $files) {
-    $relative = $file.FullName.Substring($sourceRoot.Length).TrimStart([char]92, [char]47)
+    $relative = $file.FullName.Substring($sourceRoot.Length).TrimStart([char[]]@(92, 47))
     $destination = Join-Path $Target $relative
     $destinationDirectory = Split-Path -Parent $destination
     New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
