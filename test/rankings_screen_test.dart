@@ -66,7 +66,8 @@ class _RankingRepository extends FixtureRepository {
               id: 'hongguo:cache-$board-$rank',
               source: 'hongguo',
               title: '快取$board-$rank',
-              episodes: 1,
+              episodes: 12,
+              episodesVerified: true,
             ),
           ),
       ],
@@ -417,6 +418,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+
+      expect(
+        find.text('共 12 集'),
+        findsWidgets,
+        reason: 'ranking posters should show verified Red Fruit episode totals',
+      );
 
       // All four Red Fruit hot boards should be populated with 100 items,
       // rather than leaving the active board stuck at the first 20.
