@@ -43,13 +43,20 @@ class AppUpdateService {
       final response = await request.close().timeout(
         const Duration(seconds: 8),
       );
-      if (response.statusCode != HttpStatus.ok) return null;
+      if (response.statusCode != HttpStatus.ok) {
+        throw HttpException(
+          'GitHub 更新服務回應 ${response.statusCode}',
+          uri: Uri.parse(latestReleaseApi),
+        );
+      }
       final content = await response
           .transform(utf8.decoder)
           .join()
           .timeout(const Duration(seconds: 8));
       final decoded = jsonDecode(content);
-      if (decoded is! Map) return null;
+      if (decoded is! Map) {
+        throw const FormatException('GitHub 更新資料格式無效');
+      }
       return parseRelease(
         Map<String, dynamic>.from(decoded),
         currentVersion: installedVersion,
@@ -84,6 +91,20 @@ class AppUpdateService {
       notes: release['body'] is String ? release['body'] as String : '',
       publishedAt: published,
     );
+  }
+
+  /// Manual checks must remain available even when startup checks are disabled
+  /// or the current release was previously ignored.
+  static bool shouldShowUpdate(
+    AppUpdateInfo? update, {
+    bool manual = false,
+    bool autoCheckEnabled = true,
+    String? ignoredVersion,
+  }) {
+    if (update == null) return false;
+    if (manual) return true;
+    if (!autoCheckEnabled) return false;
+    return shouldNotify(update, ignoredVersion: ignoredVersion);
   }
 
   static bool shouldNotify(
