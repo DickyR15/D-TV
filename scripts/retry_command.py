@@ -4,6 +4,11 @@ import subprocess
 import sys
 import time
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 TRANSIENT_PATTERNS = [
     r"connection reset",
     r"connection refused",
@@ -48,6 +53,7 @@ def main():
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
             errors="replace",
         )
         output = completed.stdout or ""
