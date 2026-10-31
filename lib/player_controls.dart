@@ -778,7 +778,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         ),
         _toolText(
           key: const ValueKey('player-quality'),
-          tooltip: '清晰度',
+          tooltip: '畫質',
           label: widget.qualityLabel,
           onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
           width: 52,
@@ -839,7 +839,7 @@ class _PlayerControlsState extends State<PlayerControls> {
       ),
       _toolText(
         key: const ValueKey('player-quality'),
-        tooltip: '清晰度',
+        tooltip: '畫質',
         label: widget.qualityLabel,
         onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
         width: 52,
