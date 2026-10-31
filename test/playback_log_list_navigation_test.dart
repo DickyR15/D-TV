@@ -6,6 +6,42 @@ import 'package:hgtv/diary_service.dart';
 void main() {
   tearDown(() => DiaryService.clear());
 
+  testWidgets('clear button clears visible logs and native diagnostics', (
+    tester,
+  ) async {
+    DiaryService.clear();
+    DiaryService.add('old playback entry');
+    var nativeCleared = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () => DiaryService.showDiaryDialog(
+                  context,
+                  clearNativeLogs: () async {
+                    nativeCleared = true;
+                  },
+                ),
+                child: const Text('開啟紀錄'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('開啟紀錄'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('清空紀錄'));
+    await tester.pumpAndSettle();
+
+    expect(nativeCleared, isTrue);
+    expect(DiaryService.entries, isEmpty);
+  });
+
   testWidgets('playback debug log list scrolls with remote up/down keys',
       (tester) async {
     DiaryService.clear();

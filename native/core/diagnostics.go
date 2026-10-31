@@ -104,6 +104,24 @@ func (log *diagnosticLog) rotate() error {
 	return nil
 }
 
+func (log *diagnosticLog) clear() error {
+	if log == nil {
+		return nil
+	}
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	for index := diagnosticLogBackups; index >= 0; index-- {
+		name := log.path
+		if index > 0 {
+			name += "." + strconv.Itoa(index)
+		}
+		if err := os.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}
+
 func redactConfiguredString(cfg *Config, value string) string {
 	for _, secret := range []string{cfg.Token, cfg.AESKeyHex, cfg.InterfaceKey, cfg.ParamKey, cfg.ParamIV} {
 		if secret = strings.TrimSpace(secret); secret != "" {

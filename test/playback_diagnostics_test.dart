@@ -161,6 +161,9 @@ void main() {
       });
       final file = File('${directory.path}/app.log');
       DiaryService.nativeLogPath = file.path;
+      await File('${file.path}.2').writeAsString(
+        '{"event":"stream.oldest_backup","message":"older log"}\n',
+      );
       await file.writeAsString(
         '{"event":"stream.session_cancel","message":"reason=release"}\n',
       );
@@ -174,6 +177,7 @@ void main() {
         '{"event":"stream.incomplete"',
       );
       await DiaryService.refreshNativeLogs();
+      expect(DiaryService.fullText, contains('stream.oldest_backup'));
       expect(DiaryService.fullText, contains('stream.session_cancel'));
       expect(DiaryService.fullText, contains('stream.local_response'));
       expect(DiaryService.fullText, contains('playback.route_probe'));
