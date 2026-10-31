@@ -65,21 +65,22 @@ void main() {
   });
 
   group('playerVideoOverscan', () {
-  test('adds slight overscan only to iOS landscape fullscreen', () {
-    expect(
-      playerVideoOverscan(ios: true, fullscreen: true, aspectRatio: 16 / 9),
-      1.06,
-    );
-  });
+    test('adds slight overscan only to iOS landscape fullscreen', () {
+      expect(
+        playerVideoOverscan(ios: true, fullscreen: true, aspectRatio: 16 / 9),
+        1.06,
+      );
+    });
 
-  test('does not crop portrait video or other platforms', () {
-    expect(
-      playerVideoOverscan(ios: true, fullscreen: true, aspectRatio: 9 / 16),
-      1.0,
-    );
-    expect(
-      playerVideoOverscan(ios: false, fullscreen: true, aspectRatio: 16 / 9),
-      1.0,
-    );
+    test('does not crop portrait video or other platforms', () {
+      expect(
+        playerVideoOverscan(ios: true, fullscreen: true, aspectRatio: 9 / 16),
+        1.0,
+      );
+      expect(
+        playerVideoOverscan(ios: false, fullscreen: true, aspectRatio: 16 / 9),
+        1.0,
+      );
+    });
   });
-});
+}

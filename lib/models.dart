@@ -206,15 +206,11 @@ class Drama {
       title: fresh.title.isEmpty || fresh.title == '短劇' ? title : fresh.title,
       description: fresh.description.isEmpty ? description : fresh.description,
       cover: fresh.cover.isEmpty ? cover : fresh.cover,
-      episodes:
-          fresh.episodesVerified ||
-              (fresh.source != 'hongguo' && fresh.episodes > 0)
-          ? fresh.episodes
-          : episodes,
+      episodes: fresh.episodes > 0 ? fresh.episodes : episodes,
       episodesVerified:
           episodesVerified ||
           fresh.episodesVerified ||
-          (fresh.source != 'hongguo' && fresh.episodes > 0),
+          (fresh.episodes > 0 && fresh.source != 'hongguo'),
       category:
           fresh.category.isEmpty ||
               genericCategories.contains(fresh.category) &&
