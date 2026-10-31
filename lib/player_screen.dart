@@ -1007,8 +1007,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _orientationController = AppOrientationScope.maybeOf(context);
     final orientation = MediaQuery.orientationOf(context);
-    if (Platform.isAndroid &&
-        _androidPlayerEngine != 'exo' &&
+    if ((Platform.isWindows ||
+            (Platform.isAndroid && _androidPlayerEngine != 'exo')) &&
         orientation == Orientation.landscape &&
         !_portraitBlurDefaultMigrationRequested &&
         widget.store.needsPortraitBlurLandscapeDefaultMigration) {
@@ -2462,8 +2462,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
     }
     final textureRendererAvailable =
-        Platform.isAndroid &&
-        _androidPlayerEngine != 'exo' &&
+        (Platform.isWindows ||
+            (Platform.isAndroid && _androidPlayerEngine != 'exo')) &&
         _player.platform is NativePlayer;
     final portraitBlurActive = shouldUsePortraitBlurBackground(
       enabled: _portraitBlurBackground,
