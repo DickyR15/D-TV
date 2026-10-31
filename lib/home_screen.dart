@@ -1416,8 +1416,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     availableUpdate.notes.trim().isEmpty
-                        ? '目前版本：${AppLayout.versionOf(context)}\\n'
-                          '新版本：${availableUpdate.version}\\n\\n'
+                        ? '目前版本：${AppLayout.versionOf(context)}\n'
+                          '新版本：${availableUpdate.version}\n\n'
                           '有新版本可供下載。'
                         : availableUpdate.notes.trim().characters.take(1800).toString(),
                   ),
