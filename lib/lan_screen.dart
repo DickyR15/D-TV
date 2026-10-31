@@ -235,12 +235,23 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
           !_busy && !_cancelling && !link.syncing && !link.store.locked;
       return Scaffold(
         appBar: AppBar(title: const Text('收藏同步')),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: ListView(
-              controller: _screenScrollController,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        // Keep the full interconnect list above Android TV's system
+        // navigation area. The additional scroll clearance lets the last
+        // actions be brought fully into view with the remote.
+        body: SafeArea(
+          top: false,
+          bottom: true,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: ListView(
+                controller: _screenScrollController,
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  max(64.0, MediaQuery.viewPaddingOf(context).bottom + 48),
+                ),
               children: [
                 Card(
                   child: Column(
@@ -381,6 +392,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                       Padding(
                         padding: const EdgeInsets.all(16),
                         child: FilledButton.icon(
+                          key: const ValueKey('lan-sync-now'),
                           icon: Icon(
                             link.syncing
                                 ? Icons.close_rounded
@@ -415,6 +427,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                     ),
                   ),
                 ListTile(
+                  key: const ValueKey('lan-manual-sync'),
                   leading: const Icon(Icons.sync_alt_rounded),
                   title: const Text('手動同步'),
                   subtitle: const Text('雙向合併、覆蓋對方或覆蓋本機'),
@@ -465,6 +478,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                     ],
                   ),
               ],
+              ),
             ),
           ),
         ),

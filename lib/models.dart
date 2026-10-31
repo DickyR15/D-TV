@@ -9,6 +9,7 @@ class SourceSite {
   final String description;
   bool get onlineSearch => id == 'hongguo' || pagedSearch;
   bool get pagedSearch =>
+      id == 'hongguo' ||
       id == 'huangju' ||
       id == 'yeguo' ||
       id == 'dsd' ||

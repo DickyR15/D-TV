@@ -124,3 +124,89 @@ func TestCoverDNSRecoveryAcceptsNewImageHosts(t *testing.T) {
 		}
 	}
 }
+
+func TestHostProtocolFallbackTransportIsScopedToOneHostname(t *testing.T) {
+	var baseCalls, fallbackCalls atomic.Int32
+	base := sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		baseCalls.Add(1)
+		return sourceFixtureResponse(request, http.StatusOK, "base"), nil
+	})
+	fallback := sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		fallbackCalls.Add(1)
+		return sourceFixtureResponse(request, http.StatusOK, "fallback"), nil
+	})
+	transport := &hostProtocolFallbackTransport{
+		base: base, fallback: fallback, host: "djapi.999888456.xyz",
+	}
+
+	for _, address := range []string{
+		"https://djapi.999888456.xyz/api/hongguo/play",
+		"https://example.test/ordinary",
+	} {
+		request, err := http.NewRequest(http.MethodGet, address, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := transport.RoundTrip(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+	}
+	if baseCalls.Load() != 1 || fallbackCalls.Load() != 1 {
+		t.Fatal("protocol fallback escaped its configured hostname", baseCalls.Load(), fallbackCalls.Load())
+	}
+}
+
+func TestHTTP1NoALPNTransportDisablesALPNAndHTTP2(t *testing.T) {
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.TLSClientConfig = &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		NextProtos: []string{"h2", "http/1.1"},
+	}
+	base.ForceAttemptHTTP2 = true
+
+	transport := newHTTP1NoALPNTransport(base)
+	defer transport.CloseIdleConnections()
+	if transport.ForceAttemptHTTP2 || transport.TLSClientConfig == nil ||
+		len(transport.TLSClientConfig.NextProtos) != 0 ||
+		transport.TLSNextProto == nil || len(transport.TLSNextProto) != 0 ||
+		transport.TLSClientConfig.MinVersion < tls.VersionTLS12 {
+		t.Fatal("HTTP/1.1 fallback still advertises ALPN/HTTP2 or weakened TLS")
+	}
+}
+
+
+func TestHTTP1NoALPNTransportCompletesTLSWithoutNegotiatedProtocol(t *testing.T) {
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.TLS == nil {
+			t.Error("fallback request did not use TLS")
+		} else if request.TLS.NegotiatedProtocol != "" {
+			t.Errorf("fallback unexpectedly negotiated ALPN protocol %q", request.TLS.NegotiatedProtocol)
+		}
+		_, _ = io.WriteString(writer, "ok")
+	}))
+	server.EnableHTTP2 = false
+	server.StartTLS()
+	defer server.Close()
+
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.Proxy = nil
+	base.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	fallback := newHTTP1NoALPNTransport(base)
+	defer fallback.CloseIdleConnections()
+
+	response, err := (&http.Client{Transport: fallback}).Get(server.URL)
+	if err != nil {
+		t.Fatalf("HTTP/1.1 fallback failed against a TLS server that does not negotiate ALPN: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || response.ProtoMajor != 1 ||
+		response.TLS == nil || response.TLS.NegotiatedProtocol != "" {
+		t.Fatalf("unexpected fallback response: status=%d proto=%s tls=%+v", response.StatusCode, response.Proto, response.TLS)
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil || string(body) != "ok" {
+		t.Fatalf("unexpected response body %q, err=%v", body, err)
+	}
+}

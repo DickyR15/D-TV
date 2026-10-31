@@ -339,12 +339,35 @@ class LocalStore extends ChangeNotifier {
       _configurationError == null ? _bool(_key('hideVip')) ?? true : true;
   String get displayMode {
     final value = _configurationError == null ? _string('displayMode') : null;
-    return {'auto', 'television', 'standard'}.contains(value) ? value! : 'auto';
+    return {
+      'auto', 'television', 'standard', 'phone', 'pad', 'window',
+    }.contains(value) ? value! : 'auto';
   }
+
+  String get ignoredUpdateVersion {
+    if (_configurationError != null) return '';
+    final value = _string('ignoredUpdateVersion') ?? '';
+    return value.length <= 80 ? value : '';
+  }
+
+  bool get autoCheckUpdates =>
+      _configurationError == null ? _bool('autoCheckUpdates') ?? true : true;
 
   String get themeMode {
     final value = _configurationError == null ? _string('themeMode') : null;
     return {'light', 'dark', 'system'}.contains(value) ? value! : 'system';
+  }
+
+  String get themeAccent {
+    final value = _configurationError == null ? _string('themeAccent') : null;
+    // Migrate the previous selectable "brand" palette to system color without
+    // invalidating older backups or persisted preferences.
+    if (value == 'brand') return 'system';
+    return const {
+      'system', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+    }.contains(value)
+        ? value!
+        : 'system';
   }
 
   String get source {
@@ -422,6 +445,31 @@ class LocalStore extends ChangeNotifier {
       await _commit({
         _key('playback'): jsonEncode(migrated.toJson()),
         _key('tvDecoderSafePresetV1'): true,
+      });
+      _notify();
+    });
+  }
+
+  /// One-time default migration for landscape Android MPV devices.
+  /// Earlier versions serialized the default-off value whenever another
+  /// playback preference was saved, so a missing-key check alone is not enough.
+  bool get needsPortraitBlurLandscapeDefaultMigration =>
+      !locked && _bool(_key('portraitBlurLandscapeDefaultV1')) != true;
+
+  Future<void> migratePortraitBlurLandscapeDefault() {
+    final epoch = _epoch;
+    return _queue(() async {
+      if (locked ||
+          epoch != _epoch ||
+          _bool(_key('portraitBlurLandscapeDefaultV1')) == true) {
+        return;
+      }
+      final migrated = playbackPreferences.copyWith(
+        portraitBlurBackground: true,
+      );
+      await _commit({
+        _key('playback'): jsonEncode(migrated.toJson()),
+        _key('portraitBlurLandscapeDefaultV1'): true,
       });
       _notify();
     });
@@ -556,12 +604,35 @@ class LocalStore extends ChangeNotifier {
   }
 
   Future<void> setDisplayMode(String value) =>
-      {'auto', 'television', 'standard'}.contains(value)
+      {
+        'auto', 'television', 'standard', 'phone', 'pad', 'window',
+      }.contains(value)
       ? _setting('displayMode', value)
       : Future.value();
   Future<void> setThemeMode(String value) =>
       {'light', 'dark', 'system'}.contains(value)
       ? _setting('themeMode', value)
+      : Future.value();
+
+  Future<void> ignoreUpdateVersion(String version) {
+    final normalized = version.trim();
+    if (normalized.isEmpty || normalized.length > 80) {
+      return Future.error(const FormatException('忽略更新版本格式無效'));
+    }
+    return _setting('ignoredUpdateVersion', normalized);
+  }
+
+  Future<void> clearIgnoredUpdateVersion() =>
+      _setting('ignoredUpdateVersion', '');
+
+  Future<void> setAutoCheckUpdates(bool enabled) =>
+      _setting('autoCheckUpdates', enabled);
+
+  Future<void> setThemeAccent(String value) =>
+      const {
+        'system', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+      }.contains(value)
+      ? _setting('themeAccent', value)
       : Future.value();
   Future<void> setPlaybackPreferences(PlaybackPreferences value) {
     PlaybackPreferences.fromJson(value.toJson());
@@ -1037,7 +1108,10 @@ class LocalStore extends ChangeNotifier {
       'profiles': _profiles.map((profile) => profile.toJson()).toList(),
       'displayMode': displayMode,
       'themeMode': themeMode,
+      'themeAccent': themeAccent,
       'forceLogin': forceLogin,
+      'ignoredUpdateVersion': ignoredUpdateVersion,
+      'autoCheckUpdates': autoCheckUpdates,
       'libraries': {
         for (final profile in _profiles)
           profile.id: {
@@ -1059,6 +1133,8 @@ class LocalStore extends ChangeNotifier {
             'playback': jsonDecode(
               _string(_key('playback', profile.id)) ?? '{}',
             ),
+            'portraitBlurLandscapeDefaultV1':
+                _bool(_key('portraitBlurLandscapeDefaultV1', profile.id)) ?? false,
             'downloadPreferences': jsonDecode(
               _string(_key('downloadPreferences', profile.id)) ?? '{}',
             ),
@@ -1091,8 +1167,23 @@ class LocalStore extends ChangeNotifier {
         !{'light', 'dark', 'system'}.contains(data['themeMode'])) {
       throw const FormatException('備份主題設定無效');
     }
+    if (data.containsKey('themeAccent') &&
+        !const {
+          'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+        }.contains(data['themeAccent'])) {
+      throw const FormatException('備份主題配色無效');
+    }
     if (data.containsKey('forceLogin') && data['forceLogin'] is! bool) {
       throw const FormatException('備份登入設定無效');
+    }
+    if (data.containsKey('ignoredUpdateVersion') &&
+        (data['ignoredUpdateVersion'] is! String ||
+            (data['ignoredUpdateVersion'] as String).length > 80)) {
+      throw const FormatException('備份忽略更新版本無效');
+    }
+    if (data.containsKey('autoCheckUpdates') &&
+        data['autoCheckUpdates'] is! bool) {
+      throw const FormatException('備份啟動更新檢查設定無效');
     }
     final libraries = data['libraries'] as Map;
     for (final profile in profiles) {
@@ -1134,6 +1225,10 @@ class LocalStore extends ChangeNotifier {
       PlaybackPreferences.fromJson(
         Map<String, dynamic>.from(library['playback'] as Map? ?? {}),
       );
+      if (library.containsKey('portraitBlurLandscapeDefaultV1') &&
+          library['portraitBlurLandscapeDefaultV1'] is! bool) {
+        throw const FormatException('備份模糊背景預設設定無效');
+      }
       DownloadPreferences.fromJson(
         Map<String, dynamic>.from(library['downloadPreferences'] as Map? ?? {}),
       );
@@ -1159,13 +1254,20 @@ class LocalStore extends ChangeNotifier {
       ),
       'activeProfile': profiles.firstWhere((profile) => profile.admin).id,
       'displayMode':
-          {'auto', 'television', 'standard'}.contains(data['displayMode'])
+          {
+            'auto', 'television', 'standard', 'phone', 'pad', 'window',
+          }.contains(data['displayMode'])
           ? data['displayMode'] as String
           : 'auto',
       'themeMode': data['themeMode'] as String? ?? themeMode,
+      'themeAccent': data['themeAccent'] as String? ?? themeAccent,
       'forceLogin': data['forceLogin'] is bool
           ? data['forceLogin'] as bool
           : profiles.firstWhere((profile) => profile.admin).protected,
+      'ignoredUpdateVersion': data['ignoredUpdateVersion'] as String? ?? '',
+      'autoCheckUpdates': data['autoCheckUpdates'] is bool
+          ? data['autoCheckUpdates'] as bool
+          : true,
     };
     final libraries = data['libraries'] as Map;
     for (final profile in profiles) {
@@ -1187,6 +1289,9 @@ class LocalStore extends ChangeNotifier {
         _key('source', profile.id): library['source'] as String,
         _key('hideVip', profile.id): library['hideVip'] as bool,
         _key('playback', profile.id): jsonEncode(library['playback'] ?? {}),
+        if (library.containsKey('portraitBlurLandscapeDefaultV1'))
+          _key('portraitBlurLandscapeDefaultV1', profile.id):
+              library['portraitBlurLandscapeDefaultV1'] as bool,
         _key('downloadPreferences', profile.id): jsonEncode(
           library['downloadPreferences'] ?? {},
         ),

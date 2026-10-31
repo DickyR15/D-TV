@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,7 +8,24 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 export 'app_build.dart';
 
-const appVersion = '0.2.160+337';
+const appVersion = '1.0.0';
+
+/// Returns the user-facing version name without the internal build number.
+String formatAppVersion(String versionName) {
+  final normalized = versionName.trim();
+  return normalized.isEmpty ? appVersion : normalized;
+}
+
+/// Layout family selected in settings or inferred from the active device.
+enum FormFactor { phone, pad, window, television }
+
+const _displayModeLabels = <String, String>{
+  'auto': '自動識別設備',
+  'television': '電視',
+  'phone': '手機',
+  'pad': '平板',
+  'window': '視窗',
+};
 
 ThemeData televisionTheme(ThemeData theme) {
   final colors = theme.colorScheme;
@@ -48,8 +66,15 @@ ThemeData televisionTheme(ThemeData theme) {
 }
 
 class AppDevice {
-  const AppDevice({this.television = false, this.version = appVersion});
+  const AppDevice({
+    this.television = false,
+    this.emulator = false,
+    this.emulatorIndicators = const [],
+    this.version = appVersion,
+  });
   final bool television;
+  final bool emulator;
+  final List<String> emulatorIndicators;
   final String version;
   static const channel = MethodChannel('duanju/device');
 
@@ -60,9 +85,7 @@ class AppDevice {
       try {
         final info = await PackageInfo.fromPlatform();
         return AppDevice(
-          version: info.buildNumber.isNotEmpty
-              ? '${info.version}+${info.buildNumber}'
-              : info.version,
+          version: formatAppVersion(info.version),
         );
       } catch (_) {
         return fallback;
@@ -74,9 +97,15 @@ class AppDevice {
           .timeout(const Duration(seconds: 2));
       final television = data?['television'];
       if (television is! bool) return fallback;
+      final emulator = data?['emulator'];
+      final emulatorIndicators = data?['emulatorIndicators'];
       final version = data?['version'];
       return AppDevice(
         television: television,
+        emulator: emulator is bool ? emulator : fallback.emulator,
+        emulatorIndicators: emulatorIndicators is List
+            ? emulatorIndicators.whereType<String>().toList(growable: false)
+            : fallback.emulatorIndicators,
         version: version is String && version.isNotEmpty
             ? version
             : fallback.version,
@@ -88,6 +117,47 @@ class AppDevice {
     } on TimeoutException {
       return fallback;
     }
+  }
+
+  static Future<void> openExternalUrl(String value) async {
+    final uri = Uri.tryParse(value);
+    if (uri == null ||
+        (uri.scheme != 'https' && uri.scheme != 'http') ||
+        uri.host.isEmpty) {
+      throw const FormatException('更新網址無效');
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      await channel.invokeMethod<void>('openExternalUrl', {
+        'url': uri.toString(),
+      });
+      return;
+    }
+    if (Platform.isWindows) {
+      await Process.start(
+        'cmd',
+        ['/c', 'start', '', uri.toString()],
+        runInShell: true,
+        mode: ProcessStartMode.detached,
+      );
+      return;
+    }
+    if (Platform.isMacOS) {
+      await Process.start(
+        'open',
+        [uri.toString()],
+        mode: ProcessStartMode.detached,
+      );
+      return;
+    }
+    if (Platform.isLinux) {
+      await Process.start(
+        'xdg-open',
+        [uri.toString()],
+        mode: ProcessStartMode.detached,
+      );
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: uri.toString()));
   }
 
   static Future<double> getBrightness() async {
@@ -116,6 +186,16 @@ class AppDevice {
     } catch (_) {}
   }
 
+  static Future<Color?> systemAccentColor() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return null;
+    try {
+      final value = await channel.invokeMethod<int>('systemAccentColor');
+      return value == null ? null : Color(value & 0xFFFFFFFF);
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<bool> compatibleRendering() async {
     if (defaultTargetPlatform != TargetPlatform.android) return false;
     try {
@@ -142,20 +222,147 @@ class AppLayout extends InheritedWidget {
   const AppLayout({
     super.key,
     required this.television,
+    this.formFactor,
     this.version = appVersion,
     required super.child,
   });
+
+  /// Kept for older call sites and tests. New app entry points should pass
+  /// [formFactor] so all screens use the same explicit layout decision.
   final bool television;
+  final FormFactor? formFactor;
   final String version;
 
+  static bool get isDesktopPlatform => switch (defaultTargetPlatform) {
+    TargetPlatform.windows ||
+    TargetPlatform.macOS ||
+    TargetPlatform.linux => true,
+    _ => false,
+  };
+
+  static Map<String, String> availableDisplayModes({bool? desktopPlatform}) {
+    final desktop = desktopPlatform ?? isDesktopPlatform;
+    return {
+      for (final entry in _displayModeLabels.entries)
+        if (entry.key != 'window' || desktop) entry.key: entry.value,
+    };
+  }
+
+  static FormFactor _inferFromSize(Size size, {required bool desktop}) {
+    if (desktop) return size.width >= 600 ? FormFactor.window : FormFactor.phone;
+    return size.shortestSide >= 600 ? FormFactor.pad : FormFactor.phone;
+  }
+
+  /// Mirrors the upstream app's device mode rules while preserving D-TV's TV
+  /// remote navigation. Legacy "standard" explicitly suppresses TV UI.
+  static FormFactor resolveFormFactor({
+    required String mode,
+    required bool detectedTelevision,
+    required Size screenSize,
+    bool detectedEmulator = false,
+    bool? desktopPlatform,
+  }) {
+    final desktop = desktopPlatform ?? isDesktopPlatform;
+    switch (mode) {
+      case 'television':
+        return FormFactor.television;
+      case 'phone':
+        return FormFactor.phone;
+      case 'pad':
+        return FormFactor.pad;
+      case 'window':
+        return desktop ? FormFactor.window : FormFactor.pad;
+      case 'standard':
+        return _inferFromSize(screenSize, desktop: desktop);
+      case 'auto':
+      default:
+        // Android emulators are also D-TV's remote/TV-layout test targets.
+        // Explicit phone, pad, window and standard modes above still override
+        // this automatic emulator classification.
+        if (detectedTelevision || detectedEmulator) {
+          return FormFactor.television;
+        }
+        return _inferFromSize(screenSize, desktop: desktop);
+    }
+  }
+
+  static FormFactor formFactorOf(BuildContext context) {
+    final layout = context.dependOnInheritedWidgetOfExactType<AppLayout>();
+    if (layout != null) {
+      return layout.formFactor ??
+          (layout.television ? FormFactor.television : FormFactor.phone);
+    }
+    final size = MediaQuery.maybeOf(context)?.size ?? Size.zero;
+    return resolveFormFactor(
+      mode: 'auto',
+      detectedTelevision: false,
+      screenSize: size,
+    );
+  }
+
   static bool isTelevision(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<AppLayout>()?.television ??
-      false;
+      formFactorOf(context) == FormFactor.television;
+  static bool isPhone(BuildContext context) =>
+      formFactorOf(context) == FormFactor.phone;
+  static bool isPad(BuildContext context) =>
+      formFactorOf(context) == FormFactor.pad;
+  static bool isWindow(BuildContext context) =>
+      formFactorOf(context) == FormFactor.window;
+  static bool isWide(BuildContext context) =>
+      formFactorOf(context) == FormFactor.pad ||
+      formFactorOf(context) == FormFactor.window;
+
+  static String displayModeLabel(
+    String mode, {
+    FormFactor? currentFactor,
+  }) {
+    final key = mode == 'standard'
+        ? currentFactor?.name ?? 'auto'
+        : mode == 'window' && !isDesktopPlatform
+        ? 'pad'
+        : mode;
+    return _displayModeLabels[key] ?? _displayModeLabels['auto']!;
+  }
+
+  static Future<String?> chooseDisplayMode(
+    BuildContext context, {
+    required String currentMode,
+  }) {
+    final options = availableDisplayModes();
+    var selected = currentMode;
+    if (selected == 'standard' ||
+        selected == 'window' && !isDesktopPlatform) {
+      selected = formFactorOf(context).name;
+    }
+    if (!options.containsKey(selected)) selected = 'auto';
+
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('介面模式'),
+        children: [
+          for (final entry in options.entries)
+            ListTile(
+              autofocus: entry.key == selected,
+              selected: entry.key == selected,
+              title: Text(entry.value),
+              trailing: entry.key == selected
+                  ? const Icon(Icons.check_rounded)
+                  : null,
+              onTap: () => Navigator.of(dialogContext).pop(entry.key),
+            ),
+        ],
+      ),
+    );
+  }
+
   static String versionOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppLayout>()?.version ??
       appVersion;
 
   @override
   bool updateShouldNotify(AppLayout oldWidget) =>
-      television != oldWidget.television || version != oldWidget.version;
+      television != oldWidget.television ||
+      formFactor != oldWidget.formFactor ||
+      version != oldWidget.version;
 }

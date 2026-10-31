@@ -12,12 +12,18 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	xhtml "golang.org/x/net/html"
 )
 
 func rankingFixture(board rankingBoard, page int, rows []map[string]any) string {
+	return rankingFixtureWithTotalPages(board, page, rows, 2)
+}
+
+func rankingFixtureWithTotalPages(board rankingBoard, page int, rows []map[string]any, totalPages int) string {
 	key := "rank_" + board.path + "/page"
 	loader, _ := json.Marshal(map[string]any{"loaderData": map[string]any{key: map[string]any{"rankKey": board.upstreamKey, "pageNum": page, "updatedText": "9月13日已更新", "content": map[string]any{}}}})
-	args, _ := json.Marshal([]any{key, "content", map[string]any{"isSuccess": true, "rankList": rows, "pagination": map[string]int{"pageNum": page, "totalPages": 2}}})
+	args, _ := json.Marshal([]any{key, "content", map[string]any{"isSuccess": true, "rankList": rows, "pagination": map[string]int{"pageNum": page, "totalPages": totalPages}}})
 	return "<script>window._ROUTER_DATA=" + string(loader) + "</script><script data-script-src='modern-run-router-data-fn' data-fn-name='r' data-fn-args='" + html.EscapeString(string(args)) + "'></script>"
 }
 
@@ -67,6 +73,88 @@ func TestHongguoRankingStreamAndValidation(t *testing.T) {
 	}
 	if _, err := parseHongguoRanking(rankingFixture(board, 1, []map[string]any{}), board, 1); err == nil {
 		t.Fatal("empty page with hasMore must be treated as a failure")
+	}
+}
+
+func TestHongguoRankingRecoversFullPageWhenLoaderIsShort(t *testing.T) {
+	board, ok := findRankingBoard("hongguo-ai")
+	if !ok {
+		t.Fatal("AI hot board not found")
+	}
+
+	fullRows := make([]map[string]any, 0, 20)
+	for rank := 1; rank <= 20; rank++ {
+		id := strconv.FormatInt(7681903520873700000+int64(rank), 10)
+		fullRows = append(fullRows, map[string]any{
+			"id": id, "seriesId": id, "rank": rank, "title": "AI 熱播短劇 " + strconv.Itoa(rank),
+		})
+	}
+
+	// Simulate the official page where both embedded data formats omit one
+	// row, but the visible HTML still contains all twenty ranked cards.
+	body := rankingFixtureWithTotalPages(board, 1, fullRows[:19], 5)
+	jsonLDItems := make([]map[string]any, 0, 19)
+	for _, row := range fullRows[:19] {
+		id := row["id"].(string)
+		jsonLDItems = append(jsonLDItems, map[string]any{
+			"position": row["rank"], "name": row["title"],
+			"url": "https://hongguoduanju.com/detail?series_id=" + id,
+		})
+	}
+	jsonLD, err := json.Marshal(map[string]any{
+		"@type": "ItemList",
+		"url": "https://hongguoduanju.com/rank/hot-ai-drama",
+		"itemListElement": jsonLDItems,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body += "<script type='application/ld+json'>" + string(jsonLD) + "</script>"
+	var pageHTML strings.Builder
+	pageHTML.WriteString(`<nav aria-label="榜单分页"><a href="/rank/hot-ai-drama" aria-current="page">1</a><a href="/rank/hot-ai-drama?page=2" rel="next">2</a></nav><ol aria-label="AI 熱播榜">`)
+	for index, row := range fullRows {
+		id := row["id"].(string)
+		title := row["title"].(string)
+		rank := index + 1
+		pageHTML.WriteString(`<article aria-labelledby="rank-title-` + id + `"><a href="/detail?series_id=` + id + `"><h2 id="rank-title-` + id + `">` + title + `</h2></a><a aria-label="查看第 ` + strconv.Itoa(rank) + ` 部短劇" href="/detail?series_id=` + id + `"><span>` + strconv.Itoa(rank) + `</span></a></article>`)
+	}
+	pageHTML.WriteString("</ol>")
+	body += pageHTML.String()
+
+	document, parseErr := xhtml.Parse(strings.NewReader(body))
+	if parseErr != nil {
+		t.Fatal(parseErr)
+	}
+	lists := providerHTMLNodes(document, func(node *xhtml.Node) bool {
+		return node.Data == "ol" && providerHTMLAttr(node, "aria-label") != ""
+	})
+	if len(lists) != 1 {
+		t.Fatalf("expected one HTML ranking list, found %d", len(lists))
+	}
+	articles := providerHTMLNodes(lists[0], func(node *xhtml.Node) bool {
+		return node.Data == "article" && strings.HasPrefix(providerHTMLAttr(node, "aria-labelledby"), "rank-title-")
+	})
+	if len(articles) != 20 {
+		t.Fatalf("expected 20 visible ranking cards, found %d", len(articles))
+	}
+	for index, article := range articles {
+		if _, valid := parseHongguoRankingArticle(article); !valid {
+			t.Fatalf("visible HTML ranking card %d was not parseable: label=%q",
+				index+1, providerHTMLAttr(article, "aria-labelledby"))
+		}
+	}
+
+	result, err := parseHongguoRanking(body, board, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Items) != 20 {
+		t.Fatalf("incomplete embedded payload should recover all twenty HTML ranks: items=%d hasMore=%t",
+			len(result.Items), result.HasMore)
+	}
+	if result.Items[0].Rank != 1 || result.Items[19].Rank != 20 || !result.HasMore {
+		t.Fatalf("recovered HTML ranks or pagination are incorrect: first=%d last=%d hasMore=%t",
+			result.Items[0].Rank, result.Items[19].Rank, result.HasMore)
 	}
 }
 

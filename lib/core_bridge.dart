@@ -125,6 +125,8 @@ abstract class AppRepository {
     String operation, {
     Drama? drama,
   }) async => throw AppFailure('目前環境不支援片源管理');
+  Future<SourceStatus> startAutomaticSourceCheck(String source) async =>
+      startSourceJob(source, 'check');
   Future<SourceStatus> cancelSourceJob(String source) async =>
       throw AppFailure('目前環境不支援片源管理');
   Future<List<String>> suggestions(String query) async => const [];
@@ -458,6 +460,20 @@ class NativeRepository extends AppRepository {
         'source': source,
         'command': operation,
         if (drama != null) 'drama': drama.toJson(),
+      }),
+    );
+  }
+
+  @override
+  Future<SourceStatus> startAutomaticSourceCheck(String source) async {
+    _authorize(source);
+    // Do not start the foreground download service just to run a lightweight
+    // health probe; the native source task is already asynchronous.
+    return SourceStatus.fromJson(
+      await _call({
+        'action': 'sourceJob',
+        'source': source,
+        'command': 'check',
       }),
     );
   }

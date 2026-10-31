@@ -6,12 +6,15 @@ import android.media.MediaScannerConnection
 import android.app.UiModeManager
 import android.app.ActivityManager
 import android.app.PictureInPictureParams
+import android.app.PendingIntent
+import android.app.RemoteAction
 import android.os.Build
 import android.os.Environment
 import android.os.Bundle
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.os.SystemClock
+import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.ComponentName
 import android.content.Context
@@ -21,6 +24,7 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.graphics.drawable.Icon
 import android.net.ConnectivityManager
 import android.net.Uri
 import android.util.Rational
@@ -33,14 +37,28 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.annotation.ChecksSdkIntAtLeast
+import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterShellArgs
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+private const val PICTURE_IN_PICTURE_ACTION = "com.dickyr15.dtv.PICTURE_IN_PICTURE_ACTION"
+
+private data class PlayerPictureInPicture(
+    val width: Int,
+    val height: Int,
+    val playing: Boolean,
+    val hasPrevious: Boolean,
+    val hasNext: Boolean,
+    val autoEnter: Boolean
+)
+
+open class MainActivity : FlutterActivity() {
     private var headroomReadAt = 0L
     private var thermalHeadroom: Double? = null
     private var deviceChannel: MethodChannel? = null
+    private var pictureInPicture: PlayerPictureInPicture? = null
+    private var pictureInPictureReceiver: BroadcastReceiver? = null
     private var televisionMode = false
     private var pendingExportPlaybackLogText: String? = null
     private var pendingExportPlaybackLogPrefix: String = "D-TV-playback-log"
@@ -84,18 +102,111 @@ class MainActivity : FlutterActivity() {
         return remoteNavigation || packageManager.hasSystemFeature(PackageManager.FEATURE_LIVE_TV)
     }
 
+    private fun readSystemProperty(name: String): String {
+        return runCatching {
+            val properties = Class.forName("android.os.SystemProperties")
+            val getter = properties.getMethod("get", String::class.java)
+            (getter.invoke(null, name) as? String).orEmpty()
+        }.getOrDefault("")
+    }
+
+    private fun emulatorIndicators(): List<String> {
+        val properties = mapOf(
+            "ro.product.model" to readSystemProperty("ro.product.model"),
+            "ro.product.manufacturer" to readSystemProperty("ro.product.manufacturer"),
+            "ro.product.device" to readSystemProperty("ro.product.device"),
+            "ro.product.name" to readSystemProperty("ro.product.name"),
+            "ro.product.board" to readSystemProperty("ro.product.board"),
+            "ro.hardware" to readSystemProperty("ro.hardware"),
+            "ro.build.fingerprint" to readSystemProperty("ro.build.fingerprint")
+        )
+        val buildValues = (
+            listOf(
+                Build.FINGERPRINT,
+                Build.MODEL,
+                Build.MANUFACTURER,
+                Build.HARDWARE,
+                Build.PRODUCT,
+                Build.BRAND,
+                Build.DEVICE,
+                Build.BOARD,
+                Build.HOST
+            ) + properties.values
+        ).joinToString(" ").lowercase(Locale.ROOT)
+
+        val emulatorMarkers = listOf(
+            "generic",
+            "emulator",
+            "google_sdk",
+            "sdk_gphone",
+            "goldfish",
+            "ranchu",
+            "vbox86",
+            "genymotion",
+            "ldplayer",
+            "leidian",
+            "雷電",
+            "雷电",
+            "nox",
+            "bluestacks",
+            "mumu",
+            "nemu",
+            "droid4x",
+            "ttvm",
+            "tiantianvm",
+            "andy"
+        )
+        val matched = emulatorMarkers.filter(buildValues::contains)
+        val indicators = mutableListOf<String>()
+        if (matched.isNotEmpty()) {
+            indicators += "build:${matched.distinct().joinToString(",")}"
+        }
+
+        val qemu = readSystemProperty("ro.kernel.qemu")
+        val bootQemu = readSystemProperty("ro.boot.qemu")
+        val hardwareProperty = properties["ro.hardware"].orEmpty().lowercase(Locale.ROOT)
+        if (qemu == "1") indicators += "ro.kernel.qemu"
+        if (bootQemu == "1") indicators += "ro.boot.qemu"
+        if (hardwareProperty in setOf("goldfish", "ranchu", "vbox86", "vbox86p", "nox", "nemu", "ttvm")) {
+            indicators += "ro.hardware"
+        }
+
+        // LDPlayer versions commonly expose /ldinit even when Build.* values
+        // are configured to imitate a physical Android phone.
+        if (File("/ldinit").exists()) indicators += "/ldinit"
+        if (File("/dev/qemu_pipe").exists()) indicators += "/dev/qemu_pipe"
+        if (File("/dev/socket/qemud").exists()) indicators += "/dev/socket/qemud"
+        return indicators.distinct()
+    }
+
+    private fun isEmulatorDevice(): Boolean = emulatorIndicators().isNotEmpty()
+
     private fun renderingPreferences() =
         getSharedPreferences("duanju_rendering", Context.MODE_PRIVATE)
 
-    private fun compatibleRendering(): Boolean =
-        renderingPreferences().getBoolean("compatibleRendering", false)
+    private fun compatibleRendering(): Boolean {
+        val preferences = renderingPreferences()
+        // Android TV defaults to Skia because some TV GPU/Surface combinations
+        // can show audio without video under Impeller. Phones keep Impeller.
+        // Migrate this default once; a later explicit switch choice is preserved.
+        if (!preferences.getBoolean("compatibleRenderingDefaultMigratedV3", false)) {
+            val migrated = isTelevisionDevice() ||
+                preferences.getBoolean("compatibleRendering", false)
+            preferences.edit()
+                .putBoolean("compatibleRendering", migrated)
+                .putBoolean("compatibleRenderingChoiceV2", true)
+                .putBoolean("compatibleRenderingDefaultMigratedV3", true)
+                .apply()
+            return migrated
+        }
+        return preferences.getBoolean("compatibleRendering", isTelevisionDevice())
+    }
 
     override fun getFlutterShellArgs(): FlutterShellArgs {
         val args = super.getFlutterShellArgs()
-        // Android TV boxes using Mali/Vulkan have shown graphics-buffer allocation
-        // failures under Impeller. Use the compatible Skia renderer on TV by default;
-        // the saved preference continues to enable Skia on phones/tablets as well.
-        if (compatibleRendering() || isTelevisionDevice()) {
+        // compatibleRendering() defaults Android TV to Skia and keeps phones
+        // on Impeller unless the user explicitly enables compatibility rendering.
+        if (compatibleRendering()) {
             args.add("--enable-impeller=false")
         }
         return args
@@ -379,8 +490,13 @@ class MainActivity : FlutterActivity() {
         televisionMode = if (savedInstanceState?.containsKey("duanju.televisionMode") == true) {
             savedInstanceState.getBoolean("duanju.televisionMode")
         } else isTelevisionDevice()
+        // Apply TV orientation before Activity/Flutter creates its first window.
+        // Setting it only after super.onCreate() lets Android briefly show the
+        // default portrait frame on devices that report their orientation late.
+        if (televisionMode) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
         super.onCreate(savedInstanceState)
-        if (televisionMode) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
             window.isStatusBarContrastEnforced = false
@@ -401,24 +517,114 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         deviceChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "duanju/device")
             .also { channel ->
+                registerPictureInPictureReceiver()
                 channel.setMethodCallHandler { call, result ->
                     when (call.method) {
                         "deviceInfo" -> {
                             val packageInfo = packageManager.getPackageInfo(packageName, 0)
                             val versionName = packageInfo.versionName.orEmpty()
-                            val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                packageInfo.longVersionCode
+                            // Keep the user-facing version stable; Android versionCode
+                            // remains an independent, monotonically increasing build identifier.
+                            val displayVersion = versionName.ifBlank { "未知版本" }
+                            val emulatorSignals = emulatorIndicators()
+                            result.success(
+                                mapOf(
+                                    "television" to isTelevisionDevice(),
+                                    "emulator" to emulatorSignals.isNotEmpty(),
+                                    "emulatorIndicators" to emulatorSignals,
+                                    "version" to displayVersion
+                                )
+                            )
+                        }
+                        "openExternalUrl" -> {
+                            val rawUrl = call.argument<String>("url")
+                            val uri = runCatching { Uri.parse(rawUrl.orEmpty()) }.getOrNull()
+                            if (uri == null ||
+                                (uri.scheme?.lowercase() != "http" &&
+                                    uri.scheme?.lowercase() != "https") ||
+                                uri.host.isNullOrBlank()) {
+                                result.error("invalid_url", "更新網址無效", null)
                             } else {
-                                @Suppress("DEPRECATION")
-                                val legacyVersionCode = packageInfo.versionCode.toLong()
-                                legacyVersionCode
+                                runCatching {
+                                    startActivity(
+                                        Intent(Intent.ACTION_VIEW, uri).addFlags(
+                                            Intent.FLAG_ACTIVITY_NEW_TASK
+                                        )
+                                    )
+                                }.onSuccess {
+                                    result.success(null)
+                                }.onFailure { error ->
+                                    result.error(
+                                        "cannot_open_url",
+                                        error.message ?: "無法開啟更新頁面",
+                                        null
+                                    )
+                                }
                             }
-                            // Include the Android build number in About and startup diagnostics,
-                            // so every CI APK can be identified unambiguously.
-                            val displayVersion = if (versionName.isNotBlank()) {
-                                "$versionName+$versionCode"
-                            } else versionCode.toString()
-                            result.success(mapOf("television" to isTelevisionDevice(), "version" to displayVersion))
+                        }
+                        "installApk" -> {
+                            val rawPath = call.argument<String>("path")
+                            val updateDirectory = File(cacheDir, "updates").canonicalFile
+                            val apkFile = runCatching { File(rawPath.orEmpty()).canonicalFile }.getOrNull()
+                            if (apkFile == null ||
+                                !apkFile.path.startsWith(updateDirectory.path + File.separator) ||
+                                !apkFile.isFile ||
+                                !apkFile.name.endsWith(".apk", ignoreCase = true) ||
+                                apkFile.length() <= 0L
+                            ) {
+                                result.error("invalid_update_apk", "更新安裝檔不存在或位置無效", null)
+                            } else if (
+                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                                !packageManager.canRequestPackageInstalls()
+                            ) {
+                                runCatching {
+                                    startActivity(
+                                        Intent(
+                                            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                            Uri.parse("package:$packageName")
+                                        )
+                                    )
+                                }.onSuccess {
+                                    result.error(
+                                        "install_permission_required",
+                                        "請允許 D TV 安裝未知應用，返回後再次按「更新」。",
+                                        null
+                                    )
+                                }.onFailure { error ->
+                                    result.error(
+                                        "install_permission_settings_failed",
+                                        error.message ?: "無法開啟安裝權限設定",
+                                        null
+                                    )
+                                }
+                            } else {
+                                runCatching {
+                                    val apkUri = FileProvider.getUriForFile(
+                                        this,
+                                        "$packageName.fileprovider",
+                                        apkFile
+                                    )
+                                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(
+                                            apkUri,
+                                            "application/vnd.android.package-archive"
+                                        )
+                                        addFlags(
+                                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                                Intent.FLAG_ACTIVITY_NEW_TASK
+                                        )
+                                    }
+                                    startActivity(installIntent)
+                                }.onSuccess {
+                                    result.success(null)
+                                }.onFailure { error ->
+                                    result.error(
+                                        "cannot_start_apk_installer",
+                                        error.message ?: "無法啟動系統安裝程式",
+                                        null
+                                    )
+                                }
+                            }
                         }
                         "setTelevisionMode" -> {
                             val enabled = call.argument<Boolean>("enabled")
@@ -466,13 +672,31 @@ class MainActivity : FlutterActivity() {
                             }
                         }
                         "playbackPower" -> result.success(runCatching { playbackPower() }.getOrNull())
+                        "systemAccentColor" -> {
+                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                                result.success(null)
+                            } else {
+                                val resourceId = resources.getIdentifier(
+                                    "system_accent1_500",
+                                    "color",
+                                    "android"
+                                )
+                                val color = if (resourceId != 0) {
+                                    runCatching { resources.getColor(resourceId) }.getOrNull()
+                                } else null
+                                result.success(color)
+                            }
+                        }
                         "compatibleRendering" -> result.success(compatibleRendering())
                         "setCompatibleRendering" -> {
                             val enabled = call.argument<Boolean>("enabled")
                             if (enabled == null) {
                                 result.error("invalid_rendering_mode", "缺少相容渲染模式狀態", null)
                             } else if (!renderingPreferences().edit()
-                                    .putBoolean("compatibleRendering", enabled).commit()) {
+                                    .putBoolean("compatibleRendering", enabled)
+                                    .putBoolean("compatibleRenderingChoiceV2", true)
+                                    .putBoolean("compatibleRenderingDefaultMigratedV3", true)
+                                    .commit()) {
                                 result.error("rendering_mode_not_saved", "相容渲染模式未能儲存", null)
                             } else {
                                 result.success(null)
@@ -505,6 +729,20 @@ class MainActivity : FlutterActivity() {
                                 call.argument<Int>("right"),
                                 call.argument<Int>("bottom")
                             ))
+                        }
+                        "updatePictureInPicture" -> {
+                            pictureInPicture = if (call.arguments == null) null else PlayerPictureInPicture(
+                                call.argument<Int>("width") ?: 16,
+                                call.argument<Int>("height") ?: 9,
+                                call.argument<Boolean>("playing") ?: false,
+                                call.argument<Boolean>("hasPrevious") ?: false,
+                                call.argument<Boolean>("hasNext") ?: false,
+                                call.argument<Boolean>("autoEnter") ?: false
+                            )
+                            if (pictureInPictureSupported()) {
+                                runCatching { setPictureInPictureParams(pictureInPictureParams()) }
+                            }
+                            result.success(null)
                         }
                         "getBrightness" -> {
                             val lp = window.attributes
@@ -590,19 +828,82 @@ class MainActivity : FlutterActivity() {
         if (!pictureInPictureSupported()) return pictureInPictureStatus()
         val safeWidth = width.coerceIn(1, 10000)
         val safeHeight = height.coerceIn(1, 10000)
+        pictureInPicture = pictureInPicture?.copy(width = safeWidth, height = safeHeight)
+            ?: PlayerPictureInPicture(safeWidth, safeHeight, true, false, false, false)
         return runCatching {
-            val builder = PictureInPictureParams.Builder()
-            builder.setAspectRatio(Rational(safeWidth, safeHeight))
-            if (left != null && top != null && right != null && bottom != null &&
-                right > left && bottom > top) {
-                builder.setSourceRectHint(Rect(left, top, right, bottom))
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                builder.setAutoEnterEnabled(true)
-            }
-            val entered = enterPictureInPictureMode(builder.build())
+            val sourceRect = if (left != null && top != null && right != null && bottom != null &&
+                right > left && bottom > top) Rect(left, top, right, bottom) else null
+            val entered = enterPictureInPictureMode(pictureInPictureParams(sourceRect))
             pictureInPictureStatus() + ("requested" to entered)
         }.getOrElse { pictureInPictureStatus() }
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
+    private fun pictureInPictureParams(sourceRect: Rect? = null): PictureInPictureParams {
+        val state = pictureInPicture
+        val builder = PictureInPictureParams.Builder()
+        if (state != null) {
+            builder.setAspectRatio(Rational(state.width.coerceIn(1, 10000), state.height.coerceIn(1, 10000)))
+            builder.setActions(listOf(
+                pictureInPictureAction(1, "previous", R.drawable.dtv_pip_previous, "上一集", state.hasPrevious),
+                pictureInPictureAction(2, "toggle", if (state.playing) R.drawable.dtv_pip_pause else R.drawable.dtv_pip_play, if (state.playing) "暫停" else "播放", true),
+                pictureInPictureAction(3, "next", R.drawable.dtv_pip_next, "下一集", state.hasNext)
+            ))
+        } else {
+            builder.setActions(emptyList())
+        }
+        if (sourceRect != null) builder.setSourceRectHint(sourceRect)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(state?.autoEnter == true)
+        }
+        return builder.build()
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.O)
+    private fun pictureInPictureAction(
+        requestCode: Int,
+        action: String,
+        iconResource: Int,
+        title: String,
+        enabled: Boolean
+    ): RemoteAction {
+        val intent = Intent(PICTURE_IN_PICTURE_ACTION)
+            .setPackage(packageName)
+            .putExtra("action", action)
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return RemoteAction(Icon.createWithResource(this, iconResource), title, title, pendingIntent)
+            .apply { isEnabled = enabled }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun registerPictureInPictureReceiver() {
+        if (pictureInPictureReceiver != null) return
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                val action = intent?.getStringExtra("action") ?: return
+                deviceChannel?.invokeMethod("pictureInPictureAction", mapOf("action" to action))
+            }
+        }
+        pictureInPictureReceiver = receiver
+        val filter = IntentFilter(PICTURE_IN_PICTURE_ACTION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(receiver, filter)
+        }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val state = pictureInPicture
+        if (state?.autoEnter != true || !pictureInPictureSupported()) return
+        deviceChannel?.invokeMethod("pictureInPicturePending", null)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
+        val entered = runCatching { enterPictureInPictureMode(pictureInPictureParams()) }.getOrDefault(false)
+        if (!entered) deviceChannel?.invokeMethod("pictureInPictureChanged", mapOf("active" to false))
     }
 
     override fun onPictureInPictureModeChanged(
@@ -617,6 +918,9 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        pictureInPictureReceiver?.let { receiver -> runCatching { unregisterReceiver(receiver) } }
+        pictureInPictureReceiver = null
+        pictureInPicture = null
         deviceChannel?.setMethodCallHandler(null)
         deviceChannel = null
         super.cleanUpFlutterEngine(flutterEngine)

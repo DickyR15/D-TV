@@ -1,13 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Pre-Android 12: show only the same dark canvas while Flutter starts.
+         The animated brand mark is rendered by DtvLaunchAnimation. -->
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#080910" />
+            <solid android:color="#0B0D12" />
         </shape>
     </item>
-    <item
-        android:width="320dp"
-        android:height="180dp"
-        android:gravity="center"
-        android:drawable="@drawable/tv_banner" />
 </layer-list>

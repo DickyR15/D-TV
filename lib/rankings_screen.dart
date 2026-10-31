@@ -1156,8 +1156,19 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }
 
   /// Keep ranking poster density in sync with the wide category grid.
-  int _posterColumns(double width) =>
-      width >= 620 ? 5 : width >= 420 ? 3 : 2;
+  int _posterColumns(double width) {
+    switch (AppLayout.formFactorOf(context)) {
+      case FormFactor.phone:
+        return 3;
+      case FormFactor.pad:
+        return (width / 180).floor().clamp(4, 9).toInt();
+      case FormFactor.window:
+        final columns = ((width + 18) / 178).floor();
+        return columns < 2 ? 2 : columns;
+      case FormFactor.television:
+        return width >= 620 ? 5 : width >= 420 ? 3 : 2;
+    }
+  }
 
   Widget _rankingGrid(List<RankingItem> items, double width) {
     final television = AppLayout.isTelevision(context);
@@ -1239,15 +1250,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
     );
   }
 
-  Future<void> _scrollToTop() async {
-    if (!_scroll.hasClients) return;
-    await _scroll.animateTo(
-      0,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
   Widget _wideFooter(int count) {
     final theme = Theme.of(context);
     final status = _isHotBoardPreloading
@@ -1266,27 +1268,16 @@ class _RankingsScreenState extends State<RankingsScreen> {
           color: theme.colorScheme.surface,
           border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
         ),
-        child: Row(
-          children: [
-            FilledButton.tonalIcon(
-              onPressed: _scrollToTop,
-              icon: const Icon(Icons.keyboard_double_arrow_up_rounded),
-              label: const Text('回到頂部'),
+        child: Center(
+          child: Text(
+            '已載入 $count 部短劇 · $status',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            const Spacer(),
-            Text(
-              '已載入 $count 部短劇 · $status',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const Spacer(),
-            FilledButton.tonalIcon(
-              onPressed: _loading || _more ? null : () => _load(force: true),
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('重新整理'),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1294,7 +1285,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = AppLayout.isTelevision(context) || MediaQuery.sizeOf(context).width >= 840;
+    final wide = AppLayout.formFactorOf(context) != FormFactor.phone;
     final groups = SourceGroup.fromSources(
 
       _boards.map((board) => SourceSite.byId(board.source)).toSet(),

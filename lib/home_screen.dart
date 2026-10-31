@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'app_layout.dart';
+import 'app_build.dart';
+import 'app_update_service.dart';
 import 'app_bottom_navigation.dart';
 import 'core_bridge.dart';
 import 'catalog_filters.dart';
@@ -23,14 +26,21 @@ import 'vip_icon.dart';
 import 'settings_screen.dart';
 import 'profiles_screen.dart';
 import 'search_input.dart';
-import 'sources_screen.dart';
 import 'drama_actions.dart';
+import 'diary_service.dart';
 import 'follow_updater.dart';
 import 'library_updater.dart';
 import 'saved_library.dart';
 import 'ui_localization.dart';
 import 'phone_search_dialog.dart';
 import 'app_navigation.dart';
+
+enum _UpdatePromptAction { ignore, ignoreVersion, disableStartup, applyUpdate }
+
+const _androidPlayerEngine = String.fromEnvironment(
+  'DTV_ANDROID_PLAYER',
+  defaultValue: 'mpv_embed',
+);
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.repository, required this.store});
@@ -44,6 +54,9 @@ class _HomeScreenState extends State<HomeScreen> {
   static const _recommendationCategory = 'app:recommendations';
   static const _revealBatch = 60;
   final _search = TextEditingController();
+  final FocusNode _desktopSearchFocus = FocusNode(
+    debugLabel: 'desktop-search',
+  );
   final _scroll = ScrollController();
   final Map<int, FocusNode> _navigationFocusNodes = {};
   final RemoteGridFocusController _savedGridFocus = RemoteGridFocusController();
@@ -59,6 +72,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
   int _tabBeforeSettings = 4;
   bool _initialTabResolved = false;
+  bool _portraitBlurDefaultMigrationRequested = false;
+  FormFactor? _lastFormFactor;
   String _submittedQuery = '';
   final _categorySelections = <String, String>{};
   late final CatalogBrowser _browser;
@@ -94,6 +109,13 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _playbackRouteActive = false;
   bool _exitConfirmationShowing = false;
   bool _homePopupOpen = false;
+  final FocusNode _homePopupUsersFocus =
+      FocusNode(debugLabel: 'home-more-users');
+  final FocusNode _desktopShortcutFocus =
+      FocusNode(debugLabel: 'desktop-shortcuts');
+  Timer? _startupFocusRetry;
+  Timer? _appUpdateCheckTimer;
+  bool _updateDialogOpen = false;
   PhoneSearchServer? _phoneSearchServer;
   StreamSubscription<String>? _phoneSearchSubscription;
   Future<PhoneSearchServer>? _phoneSearchServerStarting;
@@ -187,17 +209,6 @@ class _HomeScreenState extends State<HomeScreen> {
         !_categories.any((entry) => entry.id == _category)) {
       _changeCategory('');
     }
-  }
-
-  Future<void> _refreshCatalog() async {
-    if (widget.repository.supportsSourceManagement) {
-      if (_group.sources.any((source) => _updater.busy(source.id))) return;
-      _pauseCatalog();
-      await _updater.update(_group.sources);
-      return;
-    }
-    await _loadCategories(force: true);
-    if (mounted) await _load(force: true);
   }
 
   void _updateChanged() {
@@ -446,6 +457,88 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!_searchVisible && hadQuery) _searchChanged('');
   }
 
+  void _desktopNavigate(int tab) {
+    if (!AppLayout.isDesktopPlatform || AppLayout.isTelevision(context)) return;
+    _selectNavigationDestination(tab);
+  }
+
+  void _focusDesktopSearch() {
+    if (!AppLayout.isDesktopPlatform ||
+        AppLayout.isTelevision(context) ||
+        widget.store.sources.isEmpty) {
+      return;
+    }
+    if (!_isCatalogTab && !_isRankingTab) _selectCatalogTab(0);
+    if (_showRecommendations) _changeCategory('');
+    setState(() => _searchVisible = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _searchVisible && _desktopSearchFocus.canRequestFocus) {
+        _desktopSearchFocus.requestFocus();
+      }
+    });
+  }
+
+  Future<void> _showDesktopShortcutHelp() async {
+    if (!mounted || !AppLayout.isDesktopPlatform) return;
+    Widget shortcutRow(String shortcut, String action) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 148,
+            child: Text(
+              shortcut,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(child: Text(action)),
+        ],
+      ),
+    );
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('桌面快捷鍵'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('導覽', style: Theme.of(context).textTheme.titleSmall),
+                shortcutRow('Ctrl + 1', '分類'),
+                shortcutRow('Ctrl + 2', '收藏'),
+                shortcutRow('Ctrl + 3', '最近觀看'),
+                shortcutRow('Ctrl + 4', '紅果熱播榜'),
+                shortcutRow('Ctrl + 5', '真人劇熱播榜'),
+                shortcutRow('Ctrl + 6', 'AI 劇熱播榜'),
+                shortcutRow('Ctrl + 7', '漫劇熱播榜'),
+                shortcutRow('Ctrl + 8', '設定'),
+                shortcutRow('Ctrl + F／Ctrl + K', '搜尋'),
+                const Divider(height: 20),
+                Text('播放中', style: Theme.of(context).textTheme.titleSmall),
+                shortcutRow('Space', '播放／暫停'),
+                shortcutRow('←／→', '後退／快進 5 秒'),
+                shortcutRow('按住 →', '暫時 3 倍速'),
+                shortcutRow('↑／↓', '音量增加／降低'),
+                shortcutRow('M', '靜音／取消靜音'),
+                shortcutRow('F／F11', '切換全螢幕'),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('關閉'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<PhoneSearchServer> _ensurePhoneSearchServer() {
     final existing = _phoneSearchServer;
     if (existing != null) return Future.value(existing);
@@ -525,54 +618,10 @@ class _HomeScreenState extends State<HomeScreen> {
     ).whenComplete(() => _resetBackConfirmation(ignoreTrailingBack: true));
   }
 
-  Future<void> _manageSources() async {
-    _resetBackConfirmation();
-    _pauseCatalog();
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SourcesScreen(
-          repository: widget.repository,
-          store: widget.store,
-          initialSource: _source.id,
-        ),
-      ),
-    );
-    _resetBackConfirmation(ignoreTrailingBack: true);
-    if (!mounted) return;
-    await _loadCategories();
-    if (mounted && (!_onlineSearch || _submittedQuery.isEmpty)) {
-      await _load(useCache: true);
-    }
-  }
-
   Future<void> _chooseDisplayMode() async {
-    final selection = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => SimpleDialog(
-        title: const Text('介面模式'),
-        children: [
-          RadioGroup<String>(
-            groupValue: widget.store.displayMode,
-            onChanged: (value) => Navigator.of(dialogContext).pop(value),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final mode in const {
-                  'auto': '自動偵測裝置',
-                  'television': '電視／遙控器',
-                  'standard': '手機／電腦',
-                }.entries)
-                  RadioListTile<String>(
-                    value: mode.key,
-                    autofocus: mode.key == widget.store.displayMode,
-                    title: Text(mode.value),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    final selection = await AppLayout.chooseDisplayMode(
+      context,
+      currentMode: widget.store.displayMode,
     );
     if (selection != null && mounted) {
       await saveUserChange(
@@ -675,6 +724,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void _homePopupOpened() {
     _homePopupOpen = true;
     _resetBackConfirmation();
+    if (!AppLayout.isTelevision(context)) return;
+    // PopupMenuButton opens a route but the remote can remain on the anchor.
+    // Explicitly land on the first useful action so TV users do not need to
+    // press Select again and step down through the menu.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _homePopupOpen && _homePopupUsersFocus.context != null) {
+        _homePopupUsersFocus.requestFocus();
+      }
+    });
   }
 
   void _homePopupSelected() {
@@ -862,24 +920,121 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       _loading = false;
     }
+    // Check only release builds. The request is delayed so the first screen
+    // and ranking data are not held up by the GitHub API.
+    if (kReleaseMode &&
+        (Platform.isAndroid || Platform.isWindows) &&
+        widget.store.autoCheckUpdates) {
+      _appUpdateCheckTimer = Timer(
+        const Duration(seconds: 6),
+        () => unawaited(_checkForAppUpdate()),
+      );
+    }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_initialTabResolved) return;
-    _initialTabResolved = true;
+    final formFactor = AppLayout.formFactorOf(context);
+    final screenSize = MediaQuery.maybeOf(context)?.size ?? Size.zero;
+    if (Platform.isAndroid &&
+        _androidPlayerEngine != 'exo' &&
+        screenSize.width > screenSize.height &&
+        !_portraitBlurDefaultMigrationRequested &&
+        widget.store.needsPortraitBlurLandscapeDefaultMigration) {
+      _portraitBlurDefaultMigrationRequested = true;
+      unawaited(widget.store.migratePortraitBlurLandscapeDefault());
+    }
+    if (!_initialTabResolved) {
+      _initialTabResolved = true;
+      _lastFormFactor = formFactor;
+      if (formFactor == FormFactor.television) {
+        _tab = 4;
+        _requestDefaultTelevisionFocus();
+      }
+      DiaryService.add(
+        '[Focus] home startup formFactor=${formFactor.name} '
+        'displayMode=${widget.store.displayMode} '
+        'screen=${screenSize.width.toStringAsFixed(0)}x'
+        '${screenSize.height.toStringAsFixed(0)} tab=$_tab',
+      );
+      return;
+    }
+    if (_lastFormFactor == formFactor) return;
 
-    // Large-screen layouts open directly on the Redfruit Hot ranking.
-    // Narrow/mobile layouts keep the catalog tab so bottom navigation remains valid.
-    final wideHome = AppLayout.isTelevision(context) ||
-        MediaQuery.sizeOf(context).width >= 840;
-    if (wideHome) _tab = 4;
+    final wasTelevision = _lastFormFactor == FormFactor.television;
+    _lastFormFactor = formFactor;
+    // The TV-only rankings tab is outside the phone bottom-navigation range.
+    // Reset to the catalog when leaving TV mode; entering TV mode starts at
+    // the default hot ranking as it does on a fresh launch.
+    if (formFactor == FormFactor.television) {
+      _tab = 4;
+      _requestDefaultTelevisionFocus();
+    } else if (wasTelevision || _tab >= 3) {
+      _tab = 0;
+    }
+  }
+
+  void _requestDefaultTelevisionFocus() {
+    // Startup is shown through an AnimatedSwitcher splash. A focus request
+    // during the first frame can be overwritten while the splash route fades
+    // out, so keep one guarded retry after that transition has completed.
+    _startupFocusRetry?.cancel();
+    final node = _navigationFocusNodes.putIfAbsent(
+      4,
+      () => FocusNode(debugLabel: 'D TV navigation 4'),
+    );
+    void requestDefaultFocus() {
+      if (!mounted ||
+          !AppLayout.isTelevision(context) ||
+          _tab != 4 ||
+          !node.canRequestFocus) {
+        return;
+      }
+      node.requestFocus();
+      DiaryService.add(
+        '[Focus] requested Red Fruit Hot; '
+        'primary=${FocusManager.instance.primaryFocus?.debugLabel ?? 'unlabelled'}',
+      );
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      requestDefaultFocus();
+    });
+    _startupFocusRetry = Timer(const Duration(milliseconds: 750), () {
+      _startupFocusRetry = null;
+      // Do not steal focus after the user has started navigating. A changed
+      // tab, key event, or pointer action cancels this one-time startup retry.
+      if (!mounted || _tab != 4 || !AppLayout.isTelevision(context)) return;
+      if (!node.hasPrimaryFocus) {
+        DiaryService.add(
+          '[Focus] startup retry; previous='
+          '${FocusManager.instance.primaryFocus?.debugLabel ?? 'unlabelled'}',
+        );
+        requestDefaultFocus();
+      }
+    });
+  }
+
+  void _cancelStartupFocusRetry() {
+    _startupFocusRetry?.cancel();
+    _startupFocusRetry = null;
+  }
+
+  KeyEventResult _handleStartupFocusKey(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      _cancelStartupFocusRetry();
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
   void dispose() {
     appNavigationObserver.changes.removeListener(_onAppNavigationChanged);
+    _cancelStartupFocusRetry();
+    _appUpdateCheckTimer?.cancel();
+    _homePopupUsersFocus.dispose();
+    _desktopShortcutFocus.dispose();
     _updater.removeListener(_updateChanged);
     _updater.dispose();
     _followUpdater.dispose();
@@ -899,6 +1054,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _phoneSearchServer = null;
     if (phoneSearchServer != null) unawaited(phoneSearchServer.close());
     _search.dispose();
+    _desktopSearchFocus.dispose();
     _scroll.removeListener(_onCatalogScroll);
     _scroll.dispose();
     for (final node in _navigationFocusNodes.values) {
@@ -1221,6 +1377,217 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_loadCategories());
   }
 
+
+  Future<void> _checkForAppUpdate({bool manual = false}) async {
+    if (!mounted || _updateDialogOpen) return;
+    if (!manual && !widget.store.autoCheckUpdates) return;
+    try {
+      final update = await const AppUpdateService().checkForUpdate();
+      if (!mounted) return;
+      if (update == null) {
+        if (manual) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('目前已是最新版本')),
+          );
+        }
+        return;
+      }
+      if (!AppUpdateService.shouldShowUpdate(
+            update,
+            manual: manual,
+            autoCheckEnabled: widget.store.autoCheckUpdates,
+            ignoredVersion: widget.store.ignoredUpdateVersion,
+          ) ||
+          (!manual && ModalRoute.of(context)?.isCurrent == false)) {
+        return;
+      }
+
+      final platform = Platform.isAndroid ? 'android' : 'windows';
+      if (update.assetFor(platform: platform, variant: appSlug) == null) {
+        if (manual) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('已找到新版本，但尚未提供此平台可用的更新安裝檔')),
+          );
+        }
+        return;
+      }
+
+      final availableUpdate = update;
+      _updateDialogOpen = true;
+      final action = await showDialog<_UpdatePromptAction>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('發現 D TV 新版本 ${availableUpdate.version}'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    availableUpdate.notes.trim().isEmpty
+                        ? '目前版本：${AppLayout.versionOf(context)}\\n'
+                          '新版本：${availableUpdate.version}\\n\\n'
+                          '有新版本可供下載。'
+                        : availableUpdate.notes.trim().characters.take(1800).toString(),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '「忽略」只關閉本次提示；「忽略此版本」不再提示這個版本；'
+                    '「不再提醒」會關閉啟動時檢查。',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _UpdatePromptAction.ignore,
+              ),
+              child: const Text('忽略'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _UpdatePromptAction.ignoreVersion,
+              ),
+              child: const Text('忽略此版本'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _UpdatePromptAction.disableStartup,
+              ),
+              child: const Text('不再提醒'),
+            ),
+            FilledButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _UpdatePromptAction.applyUpdate,
+              ),
+              child: const Text('更新'),
+            ),
+          ],
+        ),
+      );
+      _updateDialogOpen = false;
+
+      if (action == _UpdatePromptAction.ignoreVersion && mounted) {
+        await widget.store.ignoreUpdateVersion(availableUpdate.version);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('已忽略版本 ${availableUpdate.version}')),
+          );
+        }
+        DiaryService.add('[Update] ignored_version=${availableUpdate.version}');
+        return;
+      }
+      if (action == _UpdatePromptAction.disableStartup && mounted) {
+        await widget.store.setAutoCheckUpdates(false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('已關閉啟動時更新提醒；仍可手動檢查更新')),
+          );
+        }
+        DiaryService.add('[Update] startup_check_disabled');
+        return;
+      }
+      if (action == _UpdatePromptAction.applyUpdate && mounted) {
+        await _downloadAndInstallAppUpdate(availableUpdate);
+      }
+    } catch (error) {
+      _updateDialogOpen = false;
+      DiaryService.add('[Update] check_failed=${error.runtimeType}');
+      if (manual && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('檢查更新失敗，請確認網路連線後再試')),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadAndInstallAppUpdate(AppUpdateInfo update) async {
+    if (!mounted || _updateDialogOpen) return;
+    _updateDialogOpen = true;
+    final progress = ValueNotifier<double?>(null);
+    BuildContext? progressDialogContext;
+    final dialogFuture = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        progressDialogContext = dialogContext;
+        return ValueListenableBuilder<double?>(
+          valueListenable: progress,
+          builder: (context, value, _) => AlertDialog(
+            title: const Text('正在下載 D TV 更新'),
+            content: SizedBox(
+              width: 300,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('下載完成後會自動啟動安裝程序。'),
+                  const SizedBox(height: 16),
+                  LinearProgressIndicator(value: value),
+                  if (value != null) ...[
+                    const SizedBox(height: 8),
+                    Text('${(value * 100).round()}%'),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      await const AppUpdateService().downloadAndApplyUpdate(
+        update,
+        onProgress: (receivedBytes, totalBytes) {
+          if (totalBytes != null && totalBytes > 0) {
+            progress.value = (receivedBytes / totalBytes).clamp(0.0, 1.0);
+          }
+        },
+      );
+      if (Platform.isAndroid && mounted) {
+        if (progressDialogContext != null) {
+          Navigator.of(progressDialogContext!).pop();
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已開啟系統安裝畫面，請按「安裝」完成更新')),
+        );
+      }
+    } catch (error) {
+      if (progressDialogContext != null && mounted) {
+        Navigator.of(progressDialogContext!).pop();
+      }
+      if (mounted) {
+        final message = error is PlatformException &&
+                error.code == 'install_permission_required'
+            ? '已開啟允許安裝未知應用設定。請允許 D TV 後，回到應用再次按「更新」。'
+            : '自動更新失敗：$error';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), duration: const Duration(seconds: 7)),
+        );
+      }
+      DiaryService.add('[Update] apply_failed=${error.runtimeType}');
+    } finally {
+      _updateDialogOpen = false;
+      progress.dispose();
+      if (progressDialogContext != null && mounted) {
+        final navigator = Navigator.of(progressDialogContext!);
+        if (navigator.canPop()) navigator.pop();
+      }
+      await dialogFuture;
+    }
+  }
+
   void _changeTab(int tab) {
     setState(() {
       _tab = tab;
@@ -1251,9 +1618,9 @@ class _HomeScreenState extends State<HomeScreen> {
       onFocus: onFocus,
       onTap: () => _openDrama(drama),
       onMore: () => _dramaActions(drama),
-      badge: following == null
-          ? null
-          : '${following.status.label}${following.hasUpdates ? ' · ${following.updateLabel}' : ''}',
+      badge: following != null && following.hasUpdates
+          ? following.updateLabel
+          : null,
     );
   }
 
@@ -1326,11 +1693,18 @@ class _HomeScreenState extends State<HomeScreen> {
     animation: widget.store,
     builder: (context, _) => LayoutBuilder(
       builder: (context, constraints) {
-        final television = AppLayout.isTelevision(context);
-        final desktop = constraints.maxWidth >= 840;
+        final formFactor = AppLayout.formFactorOf(context);
+        final television = formFactor == FormFactor.television;
+        final desktop =
+            formFactor == FormFactor.pad || formFactor == FormFactor.window;
         final compactBrandBar =
             television || (Platform.isAndroid && desktop);
         final wide = television || desktop;
+        final wideControls = wide && constraints.maxWidth >= 840;
+        final brandHeaderWidth = (
+          constraints.maxWidth -
+          (desktop && constraints.maxWidth < 840 ? 360.0 : 220.0)
+        ).clamp(220.0, 460.0).toDouble();
         final bannerWidth = (constraints.maxWidth -
                 (constraints.maxWidth >= 1450 ? 600.0 : 530.0))
             .clamp(300.0, 980.0)
@@ -1345,7 +1719,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 : null,
             titleSpacing: 12,
             title: compactBrandBar
-                ? _compactBrandHeader(width: constraints.maxWidth - 220)
+                ? _compactBrandHeader(width: brandHeaderWidth)
                 : wide
                 ? _homeBrandBanner(
                     width: bannerWidth,
@@ -1402,7 +1776,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     : _brandTitle()
                   ),
             actions: [
-                if (wide && (_isCatalogTab || _isRankingTab)) ...[
+                if (wideControls && (_isCatalogTab || _isRankingTab)) ...[
                   SizedBox(
                     width: constraints.maxWidth >= 1450 ? 340 : 260,
                     height: 48,
@@ -1501,7 +1875,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.sync_rounded),
                   ),
                 if (_isCatalogTab) ...[
-                  if (!television && !desktop)
+                  if (!television && (!desktop || constraints.maxWidth < 840))
                     IconButton(
                       key: const ValueKey('open-rankings'),
                       tooltip: '熱播榜單',
@@ -1510,7 +1884,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           : _openRankings,
                       icon: const Icon(Icons.leaderboard_outlined),
                     ),
-                  if (!wide)
+                  if (!wideControls)
                     IconButton(
                     key: const ValueKey('toggle-search'),
                     tooltip: _searchVisible ? '收起搜尋' : '搜尋',
@@ -1523,7 +1897,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? null
                         : _toggleSearch,
                   ),
-                  if (television && !wide)
+                  if (television && !wideControls)
                     IconButton(
                       key: const ValueKey('phone-qr-search'),
                       tooltip: '手機掃描 QR Code',
@@ -1533,42 +1907,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           : _openPhoneSearch,
                     ),
                 ],
-                if (_isCatalogTab &&
-                    !_showRecommendations &&
-                    constraints.maxWidth >= 400 &&
-                    !wide)
-                  RefreshAction(
-                    key: const ValueKey('catalog-refresh'),
-                    loading:
-                        _loading ||
-                        _loadingMore ||
-                        _categoriesLoading ||
-                        _group.sources.any(
-                          (source) => _updater.busy(source.id),
-                        ),
-                    tooltip: '更新劇庫',
-                    onPressed: widget.store.sources.isEmpty
-                        ? null
-                        : _refreshCatalog,
-                  ),
                 PopupMenuButton<String>(
+                  key: const ValueKey('home-more-menu'),
                   tooltip: '更多',
-                  // On TV/remotes, opening the menu should land on the action
-                  // users most often need. The matching entry is highlighted,
-                  // and putting it first makes it the initial traversal target.
-                  initialValue: widget.repository.supportsSourceManagement
-                      ? 'sources'
-                      : null,
+                  // Explicitly focus the user-management entry on first open.
+                  initialValue: 'users',
                   requestFocus: true,
                   onOpened: _homePopupOpened,
                   onCanceled: _homePopupCanceled,
                   onSelected: (value) {
                     _homePopupSelected();
-                    if (value == 'update') {
-                      _refreshCatalog();
-                    } else if (value == 'sources') {
-                      _manageSources();
-                    } else if (value == 'settings') {
+                    if (value == 'settings') {
                       Navigator.push<void>(
                         context,
                         MaterialPageRoute<void>(
@@ -1600,47 +1949,46 @@ class _HomeScreenState extends State<HomeScreen> {
                         applicationName: appName,
                         applicationVersion: AppLayout.versionOf(context),
                         applicationIcon: const _DtvBrandMark(size: 56),
-                        children: [Text('作者：$appAuthor')],
+                        children: [
+                          Text('作者：$appAuthor'),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              key: const ValueKey('about-check-updates'),
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                                unawaited(_checkForAppUpdate(manual: true));
+                              },
+                              icon: const Icon(Icons.system_update_alt_rounded),
+                              label: const Text('檢查更新'),
+                            ),
+                          ),
+                        ],
                       );
                     }
                   },
                   itemBuilder: (_) => [
-                    if (widget.repository.supportsSourceManagement)
-                      PopupMenuItem<String>(
-                        value: 'sources',
-                        child: Focus(
-                          autofocus: television,
-                          onKeyEvent: (node, event) {
-                            if (television &&
-                                event is KeyDownEvent &&
-                                (event.logicalKey == LogicalKeyboardKey.enter ||
-                                    event.logicalKey == LogicalKeyboardKey.select)) {
-                              // Focus must be actionable, not only highlighted
-                              // via PopupMenuButton.initialValue.
-                              Navigator.of(context).pop<String>('sources');
-                              return KeyEventResult.handled;
-                            }
-                            return KeyEventResult.ignored;
-                          },
-                          child: const SizedBox(
-                            width: double.infinity,
-                            child: Text('片源管理'),
-                          ),
-                        ),
+                    PopupMenuItem(
+                      value: 'users',
+                      child: Focus(
+                        key: const ValueKey('home-more-users-focus'),
+                        focusNode: _homePopupUsersFocus,
+                        onKeyEvent: (node, event) {
+                          final key = event.logicalKey;
+                          if (event is KeyDownEvent &&
+                              (key == LogicalKeyboardKey.select ||
+                                  key == LogicalKeyboardKey.enter ||
+                                  key == LogicalKeyboardKey.numpadEnter ||
+                                  key == LogicalKeyboardKey.space)) {
+                            Navigator.of(context).pop('users');
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        child: const Text('使用者管理'),
                       ),
-                    if (_isCatalogTab &&
-                        !_showRecommendations &&
-                        constraints.maxWidth < 400)
-                      PopupMenuItem(
-                        value: 'update',
-                        enabled:
-                            widget.store.sources.isNotEmpty &&
-                            !_group.sources.any(
-                              (source) => _updater.busy(source.id),
-                            ),
-                        child: const Text('更新劇庫'),
-                      ),
-                    const PopupMenuItem(value: 'users', child: Text('使用者管理')),
+                    ),
                     const PopupMenuItem(
                       value: 'settings',
                       child: Text('設定與備份'),
@@ -1672,7 +2020,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ? widget.store.sources.isEmpty
                             ? const StatusPanel(
                                 title: '暫無可用片源',
-                                message: '請到片源管理開啟片源，或請管理員確認使用權限。',
+                                message: '目前沒有可用片源，請確認目前使用者的片源權限。',
                               )
                             : _catalog()
                       : _isRankingTab
@@ -1729,18 +2077,61 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
         );
-        if (!television) return scaffold;
-        return PopScope(
-          canPop: !television,
-          onPopInvokedWithResult: (didPop, result) {
-            if (!didPop) _televisionBack();
-          },
-          child: CallbackShortcuts(
+        if (!television) {
+          if (!AppLayout.isDesktopPlatform) return scaffold;
+          return CallbackShortcuts(
             bindings: {
-              const SingleActivator(LogicalKeyboardKey.escape): _televisionBack,
-              const SingleActivator(LogicalKeyboardKey.goBack): _televisionBack,
+              const SingleActivator(LogicalKeyboardKey.digit1, control: true):
+                  () => _desktopNavigate(0),
+              const SingleActivator(LogicalKeyboardKey.digit2, control: true):
+                  () => _desktopNavigate(1),
+              const SingleActivator(LogicalKeyboardKey.digit3, control: true):
+                  () => _desktopNavigate(2),
+              const SingleActivator(LogicalKeyboardKey.digit4, control: true):
+                  () => _desktopNavigate(4),
+              const SingleActivator(LogicalKeyboardKey.digit5, control: true):
+                  () => _desktopNavigate(5),
+              const SingleActivator(LogicalKeyboardKey.digit6, control: true):
+                  () => _desktopNavigate(6),
+              const SingleActivator(LogicalKeyboardKey.digit7, control: true):
+                  () => _desktopNavigate(7),
+              const SingleActivator(LogicalKeyboardKey.digit8, control: true):
+                  () => _desktopNavigate(9),
+              const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+                  _focusDesktopSearch,
+              const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+                  _focusDesktopSearch,
+              const SingleActivator(LogicalKeyboardKey.f1):
+                  _showDesktopShortcutHelp,
             },
-            child: scaffold,
+            child: Focus(
+              focusNode: _desktopShortcutFocus,
+              autofocus: true,
+              child: scaffold,
+            ),
+          );
+        }
+        return Listener(
+          onPointerDown: (_) => _cancelStartupFocusRetry(),
+          child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onKeyEvent: _handleStartupFocusKey,
+            child: PopScope(
+              canPop: !television,
+              onPopInvokedWithResult: (didPop, result) {
+                if (!didPop) _televisionBack();
+              },
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.escape):
+                      _televisionBack,
+                  const SingleActivator(LogicalKeyboardKey.goBack):
+                      _televisionBack,
+                },
+                child: scaffold,
+              ),
+            ),
           ),
         );
       },
@@ -1765,8 +2156,11 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                 color: theme.colorScheme.onSurface,
                 fontSize: height * .52,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.7,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.0,
+                shadows: const [
+                  Shadow(color: Color(0x5533BFFF), blurRadius: 10),
+                ],
               ),
             ),
           ),
@@ -1800,33 +2194,38 @@ class _HomeScreenState extends State<HomeScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: theme.colorScheme.onSurface,
-                    fontSize: 30,
+                    fontSize: 31,
                     height: 1,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.7,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.15,
+                    shadows: const [
+                      Shadow(color: Color(0x5533BFFF), blurRadius: 10),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 7),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const _DtvBrandMark(size: 14),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        '短劇隨選・精彩立即播放',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontSize: 13,
-                          height: 1,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: .5,
-                        ),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 6),
+                Text(
+                  '短劇・漫劇・AI 劇',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  '熱門榜單・收藏追劇・隨選即播',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Color(0xFF70CFFF),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ],
             ),
@@ -1849,19 +2248,18 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Desktop-only brand banner. Android TV uses a compact top bar so posters
   /// remain visible without a large hero panel.
   Widget _homeBrandBanner({required double width, required double height}) {
-    final sloganSize = (height * .19).clamp(18.0, 34.0).toDouble();
     return Container(
       width: width,
       height: height,
       padding: const EdgeInsets.all(1),
       decoration: BoxDecoration(
-        color: const Color(0xFF080910),
+        color: const Color(0xFF050B14),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0x66FF3658), width: 1),
+        border: Border.all(color: const Color(0x5538C7FF), width: 1),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x22F52245),
-            blurRadius: 12,
+            color: Color(0x222E9BFF),
+            blurRadius: 20,
             spreadRadius: 1,
           ),
         ],
@@ -1871,65 +2269,26 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.asset(
-              'assets/brand/dtv-home-header.webp',
-              fit: BoxFit.fill,
-              filterQuality: FilterQuality.high,
-              errorBuilder: (_, error, stack) => Container(
-                color: const Color(0xFF080910),
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _brandLogo(width: width * .42, height: height * .78),
-              ),
-            ),
-            // Mask the small slogan baked into the image and redraw it larger
-            // for Google TV viewing distance. Keep the DTV logo and portrait.
+            const CustomPaint(painter: _DtvBannerBackdropPainter()),
             Positioned(
-              left: 0,
-              bottom: 0,
-              width: width * .78,
-              height: height * .35,
+              left: width * .035,
+              top: height * .08,
+              bottom: height * .08,
+              width: width * .46,
+              child: _brandLogo(width: width * .46, height: height * .78),
+            ),
+            Positioned(
+              right: width * .035,
+              bottom: height * .12,
               child: Container(
-                alignment: Alignment.bottomLeft,
-                padding: EdgeInsets.only(
-                  left: width * .025,
-                  right: width * .025,
-                  bottom: height * .025,
-                  top: height * .025,
-                ),
+                width: width * .18,
+                height: 2,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
                     colors: [
-                      Color(0xF5080910),
-                      Color(0xE8080910),
-                      Color(0x00080910),
-                    ],
-                    stops: [0, .68, 1],
-                  ),
-                ),
-                child: Text(
-                  '精彩隨時　大屏更過癮',
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.visible,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: sloganSize,
-                    fontWeight: FontWeight.w900,
-                    height: 1,
-                    letterSpacing: .5,
-                    shadows: const [
-                      Shadow(
-                        color: Color(0xFFFF243F),
-                        blurRadius: 10,
-                      ),
-                      Shadow(
-                        color: Color(0xFF000000),
-                        blurRadius: 4,
-                        offset: Offset(1, 2),
-                      ),
+                      Color(0x0039D8FF),
+                      Color(0xCC39D8FF),
+                      Color(0x0039D8FF),
                     ],
                   ),
                 ),
@@ -2055,6 +2414,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       if (activeIndex < 0) return KeyEventResult.ignored;
       final key = event.logicalKey;
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        _cancelStartupFocusRetry();
+      }
       if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
         final step = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
         final nextIndex = (activeIndex + step).clamp(0, entries.length - 1);
@@ -2107,11 +2469,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     scrollAlignmentPolicy: television
                         ? ScrollPositionAlignmentPolicy.explicit
                         : null,
-                    onFocus: () {
-                      if (_tab != entry.tab) {
-                        _selectNavigationDestination(entry.tab);
-                      }
-                    },
+                    // Focus is only a remote-navigation state. It must not
+                    // change the selected page: autofocus can move briefly
+                    // during the splash/route transition. Real user navigation
+                    // selects a page in handleNavigationKey or onPressed.
+                    onFocus: () {},
                     onPressed: () {
                       _navigationFocusNodes[entry.tab]?.requestFocus();
                       _selectNavigationDestination(entry.tab);
@@ -2168,8 +2530,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _catalog() {
     final items = _reveal(_visible);
-    final television = AppLayout.isTelevision(context);
-    final desktopWide = !television && MediaQuery.sizeOf(context).width >= 840;
+    final formFactor = AppLayout.formFactorOf(context);
+    final television = formFactor == FormFactor.television;
+    final desktopWide =
+        formFactor == FormFactor.pad || formFactor == FormFactor.window;
     return Column(
       children: [
         if (_searchVisible && !television)
@@ -2178,6 +2542,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SearchInput(
               key: ValueKey('search-${_group.id}'),
               controller: _search,
+              focusNode: _desktopSearchFocus,
               autofocus: true,
               hint: _searchHint,
               suggestions: _searchSuggestions
@@ -2306,13 +2671,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: '暫時無法載入',
                       message: uiTraditional(_error!),
                       onRetry: () => _load(force: true),
-                      secondaryAction:
-                          widget.repository.supportsSourceManagement
-                          ? TextButton(
-                              onPressed: _manageSources,
-                              child: const Text('片源診斷'),
-                            )
-                          : null,
+                      secondaryAction: null,
                       icon: Icons.wifi_off_rounded,
                     )
                   : items.isEmpty
@@ -2369,9 +2728,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         final tileWidth =
                             (gridWidth - (gridColumns - 1) * gridSpacing) /
                                 gridColumns;
-                        return RefreshIndicator(
-                          onRefresh: _refreshCatalog,
-                          child: CustomScrollView(
+                        return CustomScrollView(
                             controller: _scroll,
                             physics: const AlwaysScrollableScrollPhysics(),
                             slivers: [
@@ -2430,8 +2787,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                             ],
-                          ),
-                        );
+                          );
                       },
                     ),
             ),
@@ -2441,9 +2797,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Wide category and hot-ranking pages use identical column breakpoints.
-  int _posterColumns(double width) =>
-      width >= 620 ? 5 : width >= 420 ? 3 : 2;
+  /// Poster density follows the selected form factor, not only viewport width.
+  int _posterColumns(double width) {
+    switch (AppLayout.formFactorOf(context)) {
+      case FormFactor.phone:
+        return 3;
+      case FormFactor.pad:
+        return (width / 180).floor().clamp(4, 9).toInt();
+      case FormFactor.window:
+        final columns = ((width + 18) / 178).floor();
+        return columns < 2 ? 2 : columns;
+      case FormFactor.television:
+        return width >= 620 ? 5 : width >= 420 ? 3 : 2;
+    }
+  }
 
   Widget _televisionGrid(
     List<Drama> items,
@@ -2469,6 +2836,79 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+
+class _DtvBannerBackdropPainter extends CustomPainter {
+  const _DtvBannerBackdropPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF050A12), Color(0xFF0A1A2D), Color(0xFF06101E)],
+        ).createShader(rect),
+    );
+    final upperGlow = Path()
+      ..moveTo(size.width * .46, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width, size.height * .43)
+      ..cubicTo(size.width * .80, size.height * .28,
+          size.width * .64, size.height * .21, size.width * .46, 0)
+      ..close();
+    canvas.drawPath(upperGlow, Paint()..color = const Color(0x1838A9FF));
+
+    final wave = Path()
+      ..moveTo(size.width * .30, size.height * 1.06)
+      ..cubicTo(size.width * .55, size.height * .98,
+          size.width * .66, size.height * .24,
+          size.width * 1.06, size.height * .12);
+    canvas.drawPath(
+      wave,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.height * .025
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0x8834BEFF),
+    );
+
+    final thinWave = Path()
+      ..moveTo(size.width * .43, size.height * 1.04)
+      ..cubicTo(size.width * .70, size.height * .87,
+          size.width * .77, size.height * .42,
+          size.width * 1.04, size.height * .34);
+    canvas.drawPath(
+      thinWave,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = const Color(0x6647E5FF),
+    );
+
+    final lowerGlow = Path()
+      ..moveTo(size.width * .52, size.height)
+      ..cubicTo(size.width * .72, size.height * .88,
+          size.width * .80, size.height * .62,
+          size.width, size.height * .58)
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(
+      lowerGlow,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [const Color(0x002A9EFF), const Color(0x222A9EFF)],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _DtvBannerBackdropPainter oldDelegate) => false;
+}
 
 /// Reusable D TV mark rendered as vector artwork, so the UI never falls back
 /// to the former HGTV bitmap logo on any theme.
@@ -2496,55 +2936,104 @@ class _DtvMarkPainter extends CustomPainter {
     canvas.save();
     canvas.translate(dx, dy);
     final rect = Offset.zero & Size(side, side);
+
     final outer = Path()
-      ..moveTo(side * .17, side * .10)
-      ..lineTo(side * .52, side * .10)
-      ..cubicTo(side * .86, side * .10, side * .93, side * .32,
-          side * .93, side * .50)
-      ..cubicTo(side * .93, side * .69, side * .86, side * .90,
-          side * .52, side * .90)
-      ..lineTo(side * .17, side * .90)
+      ..moveTo(side * .18, side * .10)
+      ..lineTo(side * .50, side * .10)
+      ..cubicTo(side * .81, side * .10, side * .92, side * .30,
+          side * .92, side * .50)
+      ..cubicTo(side * .92, side * .70, side * .81, side * .90,
+          side * .50, side * .90)
+      ..lineTo(side * .18, side * .90)
+      ..cubicTo(side * .14, side * .90, side * .12, side * .87,
+          side * .12, side * .82)
+      ..lineTo(side * .12, side * .18)
+      ..cubicTo(side * .12, side * .13, side * .14, side * .10,
+          side * .18, side * .10)
       ..close();
 
     canvas.saveLayer(rect, Paint());
     canvas.drawPath(
       outer,
       Paint()
+        ..color = const Color(0xAA127BC9)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, side * .035),
+    );
+    canvas.drawPath(
+      outer,
+      Paint()
         ..shader = const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFFFF343E), Color(0xFFD80729), Color(0xFF8D061B)],
+          colors: [
+            Color(0xFFFFFFFF),
+            Color(0xFFE0EAF2),
+            Color(0xFF718CA4),
+            Color(0xFFB5CDE0),
+            Color(0xFFF8FBFF),
+          ],
+          stops: [0.0, .22, .52, .76, 1.0],
         ).createShader(rect),
     );
-    canvas.save();
-    canvas.clipPath(outer);
-    final gloss = Path()
-      ..moveTo(side * .17, side * .10)
-      ..lineTo(side * .31, side * .10)
-      ..lineTo(side * .63, side * .90)
-      ..lineTo(side * .48, side * .90)
-      ..close();
-    canvas.drawPath(gloss, Paint()..color = const Color(0x2BFFFFFF));
-    canvas.restore();
 
-    final hole = Path()
-      ..moveTo(side * .34, side * .25)
-      ..lineTo(side * .52, side * .25)
-      ..cubicTo(side * .72, side * .25, side * .78, side * .38,
-          side * .78, side * .50)
-      ..cubicTo(side * .78, side * .63, side * .72, side * .75,
-          side * .52, side * .75)
-      ..lineTo(side * .34, side * .75)
+    final inner = Path()
+      ..moveTo(side * .34, side * .27)
+      ..lineTo(side * .49, side * .27)
+      ..cubicTo(side * .65, side * .27, side * .72, side * .38,
+          side * .72, side * .50)
+      ..cubicTo(side * .72, side * .63, side * .65, side * .73,
+          side * .49, side * .73)
+      ..lineTo(side * .34, side * .73)
       ..close();
-    canvas.drawPath(hole, Paint()..blendMode = BlendMode.clear);
-    canvas.restore();
+    canvas.drawPath(inner, Paint()..blendMode = BlendMode.clear);
+
+    final bevel = Path()
+      ..moveTo(side * .19, side * .13)
+      ..lineTo(side * .49, side * .13)
+      ..cubicTo(side * .68, side * .13, side * .79, side * .20,
+          side * .85, side * .33);
+    canvas.drawPath(
+      bevel,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = side * .018
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: .68),
+    );
 
     final play = Path()
-      ..moveTo(side * .45, side * .37)
-      ..lineTo(side * .45, side * .63)
-      ..lineTo(side * .63, side * .50)
+      ..moveTo(side * .42, side * .38)
+      ..lineTo(side * .42, side * .62)
+      ..lineTo(side * .62, side * .50)
       ..close();
-    canvas.drawPath(play, Paint()..color = const Color(0xFFFF4057));
+    canvas.drawPath(
+      play,
+      Paint()
+        ..color = const Color(0xCC087EFF)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, side * .025),
+    );
+    canvas.drawPath(
+      play,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF53F3FF), Color(0xFF00CFFF), Color(0xFF2787FF)],
+        ).createShader(rect),
+    );
+    final playHighlight = Path()
+      ..moveTo(side * .435, side * .395)
+      ..lineTo(side * .435, side * .51)
+      ..lineTo(side * .535, side * .45);
+    canvas.drawPath(
+      playHighlight,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = side * .012
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: .62),
+    );
+    canvas.restore();
     canvas.restore();
   }
 

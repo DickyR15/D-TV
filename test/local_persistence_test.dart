@@ -255,4 +255,33 @@ void main() {
       },
     );
   }
+
+  test('update reminder preferences persist and are included in settings backups', () async {
+    final (store, platform) = await create();
+    expect(store.autoCheckUpdates, isTrue);
+
+    await store.ignoreUpdateVersion('v1.0.1');
+    await store.setAutoCheckUpdates(false);
+    expect(store.ignoredUpdateVersion, 'v1.0.1');
+    expect(store.autoCheckUpdates, isFalse);
+
+    final backup = jsonDecode(await store.exportBackup()) as Map<String, dynamic>;
+    expect(backup['ignoredUpdateVersion'], 'v1.0.1');
+    expect(backup['autoCheckUpdates'], isFalse);
+    backup['ignoredUpdateVersion'] = 'v1.0.2';
+    backup['autoCheckUpdates'] = true;
+    await store.importBackup(jsonEncode(backup));
+    expect(store.ignoredUpdateVersion, 'v1.0.2');
+    expect(store.autoCheckUpdates, isTrue);
+
+    final restored = await restart(platform);
+    expect(restored.ignoredUpdateVersion, 'v1.0.2');
+    expect(restored.autoCheckUpdates, isTrue);
+    await restored.setAutoCheckUpdates(false);
+    await restored.clearIgnoredUpdateVersion();
+    expect(restored.ignoredUpdateVersion, isEmpty);
+    expect(restored.autoCheckUpdates, isFalse);
+  });
+
+
 }

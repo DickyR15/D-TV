@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,6 +15,49 @@ import (
 type cdnRoute struct {
 	address string
 	expires time.Time
+}
+
+// hostProtocolFallbackTransport keeps a single incompatible upstream on a
+// dedicated HTTP/1.1 transport without changing protocol negotiation for
+// other providers.
+type hostProtocolFallbackTransport struct {
+	base     http.RoundTripper
+	fallback http.RoundTripper
+	host     string
+}
+
+func (transport *hostProtocolFallbackTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if strings.EqualFold(request.URL.Hostname(), transport.host) {
+		return transport.fallback.RoundTrip(request)
+	}
+	return transport.base.RoundTrip(request)
+}
+
+func (transport *hostProtocolFallbackTransport) CloseIdleConnections() {
+	if closer, ok := transport.base.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+	if closer, ok := transport.fallback.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
+func newHTTP1NoALPNTransport(base *http.Transport) *http.Transport {
+	transport := base.Clone()
+	config := &tls.Config{MinVersion: tls.VersionTLS12}
+	if base.TLSClientConfig != nil {
+		config = base.TLSClientConfig.Clone()
+		if config.MinVersion < tls.VersionTLS12 {
+			config.MinVersion = tls.VersionTLS12
+		}
+	}
+	// Do not advertise ALPN at all: some older API gateways abort TLS when
+	// the client offers h2/http1.1 but the gateway has no matching protocol.
+	config.NextProtos = nil
+	transport.TLSClientConfig = config
+	transport.ForceAttemptHTTP2 = false
+	transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	return transport
 }
 
 type cdnTransport struct {

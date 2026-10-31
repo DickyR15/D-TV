@@ -281,6 +281,13 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	transport.ResponseHeaderTimeout = 20 * time.Second
 	transport.Proxy = router.proxy
 	cdn := newCDNTransport(transport, newDNSResolver(transport))
+	// The Hongguo backup playback API rejects the default ALPN offer with
+	// "tls: no application protocol". Use a dedicated no-ALPN HTTP/1.1
+	// transport for that hostname only; keep normal negotiation elsewhere.
+	hongguoBackupHTTP1 := newHTTP1NoALPNTransport(transport)
+	providerTransport := &hostProtocolFallbackTransport{
+		base: cdn, fallback: hongguoBackupHTTP1, host: "djapi.999888456.xyz",
+	}
 	checkRedirect := func(request *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return errors.New("站源重定向次数过多")
@@ -291,7 +298,7 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 		return nil
 	}
 	d.client = &http.Client{
-		Transport: newHuangguoBrowserTransport(cdn, d),
+		Transport: newHuangguoBrowserTransport(providerTransport, d),
 		Timeout: 45 * time.Second,
 		CheckRedirect: checkRedirect,
 	}
@@ -548,17 +555,22 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	d := engine.downloader
 	result := nativeCatalogResult{Items: []nativeDrama{}, Page: page}
 	if query != "" && source == sourceHongguo {
-		entry, err := d.searchHongguoDramas(ctx, query)
+		var entry hongguoSearchEntry
+		var err error
+		if page == 1 {
+			entry, err = d.searchHongguoDramas(ctx, query)
+		} else if keyword, keywordErr := hongguoSearchKeyword(query); keywordErr != nil {
+			err = keywordErr
+		} else {
+			entry, err = d.fetchHongguoSearchPage(ctx, keyword, page)
+		}
 		if err != nil {
 			return result, err
 		}
 		for _, drama := range entry.Dramas {
 			result.Items = append(result.Items, nativeNormalize(drama))
 		}
-		result.Warning, result.Page = entry.Warning, 1
-		if entry.Limited && result.Warning == "" {
-			result.Warning = "已显示当前可获取的匹配结果，使用更完整的剧名可继续查找"
-		}
+		result.Warning, result.HasMore = entry.Warning, entry.HasMore
 		return result, nil
 	}
 	if query != "" && source == sourceHuangju {

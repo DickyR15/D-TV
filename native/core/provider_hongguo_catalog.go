@@ -93,9 +93,7 @@ func (downloader *Downloader) fetchHongguoWebsiteCatalogPage(ctx context.Context
 		if cursor.Initialized {
 			page = cursor.Offset + 1
 		}
-		if page > 500 {
-			continue
-		}
+
 		pending = append(pending, pendingRoute{path: route.path, name: route.name, key: key, page: page})
 	}
 	if len(pending) == 0 {
@@ -155,7 +153,7 @@ func (downloader *Downloader) fetchHongguoWebsiteCatalogPage(ctx context.Context
 		if result.total > result.route.page {
 			hasMore = true
 		}
-		if result.route.page >= 500 || len(result.items) == 0 || repeatedPage {
+		if len(result.items) == 0 || repeatedPage {
 			hasMore = false
 		}
 		cursor.Exhausted = !hasMore

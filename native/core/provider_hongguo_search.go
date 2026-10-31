@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -19,14 +20,27 @@ const (
 	hongguoSearchPageTimeout  = 12 * time.Second
 	hongguoSearchPendingLimit = 32
 	hongguoSearchNameCount    = 50
+	hongguoSearchPageSize     = 10
+	hongguoSearchSeriesTab    = "29"
+	hongguoSearchTabPath      = "/reading/bookapi/search/tab/v/"
 )
 
 type hongguoSearchEntry struct {
 	Dramas    []Drama
 	Total     int
-	Limited   bool
+	HasMore   bool
 	Warning   string
 	ExpiresAt time.Time
+}
+
+type hongguoSearchCursor struct {
+	Page       int
+	SearchID   string
+	Passback   string
+	NextOffset string
+	SeenIDs    []string
+	HasMore    bool
+	ExpiresAt  time.Time
 }
 
 type hongguoSearchCall struct {
@@ -151,21 +165,21 @@ func (downloader *Downloader) fetchHongguoSearch(ctx context.Context, keyword st
 	names, namesErr := downloader.fetchHongguoSearchNames(ctx, keyword)
 	if err := ctx.Err(); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) && len(names) > 0 {
-			return hongguoSearchEntry{Dramas: names, Total: len(names), Limited: true, Warning: "搜索已到时限，已保留名称匹配结果，可重试"}, nil
+			return hongguoSearchEntry{Dramas: names, Total: len(names), Warning: "搜索已到时限，已保留名称匹配结果，可重试"}, nil
 		}
 		return hongguoSearchEntry{}, err
 	}
-	reportHongguoSearchProgress(ctx, hongguoSearchEntry{Dramas: mergeHongguoSearchDramas([]Drama{}, names), Limited: true})
+	reportHongguoSearchProgress(ctx, hongguoSearchEntry{Dramas: mergeHongguoSearchDramas([]Drama{}, names)})
 	pageCtx, cancel := context.WithTimeout(ctx, hongguoSearchPageTimeout)
 	defer cancel()
-	page, pageErr := downloader.fetchHongguoSearchPage(pageCtx, keyword)
+	page, pageErr := downloader.fetchHongguoSearchPage(pageCtx, keyword, 1)
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return hongguoSearchEntry{}, ctx.Err()
 	}
 	if pageErr != nil && namesErr != nil || len(page.Dramas)+len(names) == 0 && (pageErr != nil || namesErr != nil) {
 		return hongguoSearchEntry{}, errors.Join(pageErr, namesErr)
 	}
-	entry := hongguoSearchEntry{Dramas: make([]Drama, 0, len(page.Dramas)+len(names)), Total: page.Total, Limited: page.Limited}
+	entry := hongguoSearchEntry{Dramas: make([]Drama, 0, len(page.Dramas)+len(names)), Total: page.Total, HasMore: page.HasMore}
 	for _, batch := range [][]Drama{page.Dramas, names} {
 		entry.Dramas = mergeHongguoSearchDramas(entry.Dramas, batch)
 	}
@@ -200,7 +214,6 @@ func (downloader *Downloader) fetchHongguoSearch(ctx context.Context, keyword st
 		}
 		entry.Warning += "部分季数暂未补齐，已保留当前结果，可重试"
 	}
-	entry.Limited = entry.Limited || pageErr != nil || namesErr != nil || seasonsLimited
 	if entry.Total < len(entry.Dramas) {
 		entry.Total = len(entry.Dramas)
 	}
@@ -258,7 +271,7 @@ func hongguoSearchText(text string) string {
 		if unicode.IsSpace(r) || unicode.IsPunct(r) {
 			return -1
 		}
-		return unicode.ToLower(r)
+		return unicode.ToLower(hongguoSimplifiedRune(r))
 	}, norm.NFKC.String(text))
 	if normalized == "" {
 		return strings.ToLower(strings.TrimSpace(text))
@@ -291,37 +304,125 @@ func hongguoTitleSearchRank(title, query string) int {
 	}
 }
 
-func (downloader *Downloader) fetchHongguoSearchPage(ctx context.Context, keyword string) (hongguoSearchEntry, error) {
-	pageURL := hongguoBaseURL + "/search/" + url.PathEscape(keyword)
-	body, err := downloader.fetchProviderText(ctx, pageURL, hongguoBaseURL+"/")
+func (downloader *Downloader) fetchHongguoSearchPage(ctx context.Context, keyword string, pageNum int) (hongguoSearchEntry, error) {
+	if pageNum < 1 {
+		return hongguoSearchEntry{}, errors.New("红果搜索页码无效")
+	}
+	client := downloader.hongguoClient()
+	offset := strconv.Itoa((pageNum - 1) * hongguoSearchPageSize)
+	query := url.Values{"query": {keyword}, "offset": {offset}, "count": {strconv.Itoa(hongguoSearchPageSize)}, "tab_type": {hongguoSearchSeriesTab}}
+	var previous hongguoSearchCursor
+	if pageNum > 1 {
+		client.mu.Lock()
+		cursor, found := client.searchCursors[keyword]
+		client.mu.Unlock()
+		if !found || !time.Now().Before(cursor.ExpiresAt) {
+			return hongguoSearchEntry{}, errors.New("红果搜索游标已过期，请重新搜索")
+		}
+		if cursor.Page != pageNum-1 {
+			return hongguoSearchEntry{}, errors.New("红果搜索必须按顺序续载，请先载入上一页")
+		}
+		if !cursor.HasMore {
+			return hongguoSearchEntry{}, errors.New("红果搜索已没有更多结果")
+		}
+		previous = cursor
+		if cursor.NextOffset != "" {
+			query.Set("offset", cursor.NextOffset)
+		}
+		if cursor.Passback != "" {
+			query.Set("passback", cursor.Passback)
+		}
+		if cursor.SearchID != "" {
+			query.Set("search_id", cursor.SearchID)
+		}
+	}
+	result, err := downloader.hongguoAppRequest(ctx, http.MethodGet, hongguoSearchTabPath, query, nil)
 	if err != nil {
 		return hongguoSearchEntry{}, err
 	}
-	page := routerLoaderMap(parseRouterData(body), "search_(keyword)/page", "search_")
-	rows, valid := page["searchList"].([]any)
-	if page["isSuccess"] != true || !valid || mapString(page, "query") != keyword {
+	var tab map[string]any
+	for _, item := range anyList(result["search_tabs"]) {
+		if candidate, _ := item.(map[string]any); mapString(candidate, "tab_type") == hongguoSearchSeriesTab {
+			tab = candidate
+		}
+	}
+	if tab == nil {
 		return hongguoSearchEntry{}, errors.New("红果搜索未返回有效结果")
 	}
-	entry := hongguoSearchEntry{Dramas: make([]Drama, 0, len(rows))}
-	seen := make(map[string]bool, len(rows))
-	for _, row := range rows {
-		if len(nestedMap(row, "video_data")) == 0 {
-			continue
+	cells := anyList(tab["data"])
+	entry := hongguoSearchEntry{Dramas: make([]Drama, 0, len(cells)), HasMore: tab["has_more"] == true}
+	seen := make(map[string]bool, len(previous.SeenIDs)+len(cells))
+	seenIDs := append([]string(nil), previous.SeenIDs...)
+	for _, id := range seenIDs {
+		if id != "" {
+			seen[id] = true
 		}
-		drama := hongguoDramaFromAny(row, "短剧")
-		if drama.ID != "" && !seen[drama.ID] {
+	}
+	recognized := 0
+	for _, cell := range cells {
+		row, _ := cell.(map[string]any)
+		for _, video := range anyList(row["video_data"]) {
+			drama := hongguoDramaFromAny(map[string]any{"video_data": video}, "短剧")
+			if drama.ID == "" {
+				continue
+			}
+			recognized++
+			if seen[drama.ID] {
+				continue
+			}
 			seen[drama.ID] = true
+			seenIDs = append(seenIDs, drama.ID)
 			entry.Dramas = append(entry.Dramas, drama)
 		}
 	}
-	if len(rows) > 0 && len(entry.Dramas) == 0 {
+	if len(cells) > 0 && recognized == 0 {
 		return hongguoSearchEntry{}, errors.New("红果搜索结果中没有可识别的剧集")
 	}
-	entry.Total, _ = strconv.Atoi(mapString(page, "totalCount"))
-
-	entry.Limited = entry.Total > len(entry.Dramas)
+	entry.Total, _ = strconv.Atoi(mapString(tab, "total", "total_count"))
 	if entry.Total < len(entry.Dramas) {
 		entry.Total = len(entry.Dramas)
 	}
+	nextOffset := mapString(tab, "next_offset")
+	if nextOffset == "" && entry.HasMore {
+		if len(cells) == 0 {
+			return hongguoSearchEntry{}, errors.New("红果搜索分页游标缺失，已停止续载以避免重复结果")
+		}
+		nextOffset = strconv.Itoa((pageNum-1)*hongguoSearchPageSize + len(cells))
+	}
+	searchID := firstNonEmpty(mapString(tab, "search_id"), previous.SearchID)
+	passback := firstNonEmpty(mapString(tab, "passback", "next_passback"), previous.Passback)
+	if pageNum > 1 && entry.HasMore &&
+		nextOffset == previous.NextOffset && passback == previous.Passback && searchID == previous.SearchID {
+		return hongguoSearchEntry{}, errors.New("红果搜索分页游标未前进，已停止续载以避免重复结果")
+	}
+	downloader.storeHongguoSearchCursor(keyword, hongguoSearchCursor{
+		Page: pageNum, SearchID: searchID, Passback: passback, NextOffset: nextOffset,
+		SeenIDs: seenIDs, HasMore: entry.HasMore, ExpiresAt: time.Now().Add(5 * time.Minute),
+	})
 	return entry, nil
+}
+
+func (downloader *Downloader) storeHongguoSearchCursor(keyword string, cursor hongguoSearchCursor) {
+	client := downloader.hongguoClient()
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	now := time.Now()
+	for key, current := range client.searchCursors {
+		if !now.Before(current.ExpiresAt) {
+			delete(client.searchCursors, key)
+		}
+	}
+	if _, exists := client.searchCursors[keyword]; !exists && len(client.searchCursors) >= 64 {
+		oldestKey := ""
+		var oldest time.Time
+		for key, current := range client.searchCursors {
+			if oldestKey == "" || current.ExpiresAt.Before(oldest) {
+				oldestKey, oldest = key, current.ExpiresAt
+			}
+		}
+		if oldestKey != "" {
+			delete(client.searchCursors, oldestKey)
+		}
+	}
+	client.searchCursors[keyword] = cursor
 }

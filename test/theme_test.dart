@@ -18,6 +18,26 @@ void main() {
     return LocalStore(await SharedPreferences.getInstance());
   }
 
+  test('interface modes persist through restart and settings backup', () async {
+    final store = await localStore();
+    addTearDown(store.dispose);
+
+    expect(store.displayMode, 'auto');
+    await store.setDisplayMode('pad');
+    expect(store.displayMode, 'pad');
+    final backup = await store.exportBackup();
+
+    await store.setDisplayMode('phone');
+    await store.importBackup(backup);
+    expect(store.displayMode, 'pad');
+
+    await store.setDisplayMode('window');
+    expect(store.displayMode, 'window');
+    // Older backups may still contain "standard" from the previous selector.
+    await store.setDisplayMode('standard');
+    expect(store.displayMode, 'standard');
+  });
+
   test(
     'theme survives restart and backup, with compatible old backups',
     () async {
@@ -45,6 +65,34 @@ void main() {
       restored.dispose();
     },
   );
+
+  test('theme accent persists, migrates old brand values, and validates backups', () async {
+    final store = await localStore();
+    addTearDown(store.dispose);
+    expect(store.themeAccent, 'system');
+    await store.setThemeAccent('teal');
+    final backup = await store.exportBackup();
+    await store.setThemeAccent('system');
+    await store.importBackup(backup);
+    expect(store.themeAccent, 'teal');
+
+    final oldBackup = jsonDecode(backup) as Map<String, dynamic>;
+    oldBackup['themeAccent'] = 'brand';
+    await store.importBackup(jsonEncode(oldBackup));
+    expect(store.themeAccent, 'system');
+
+    oldBackup.remove('themeAccent');
+    await store.setThemeAccent('ocean');
+    await store.importBackup(jsonEncode(oldBackup));
+    expect(store.themeAccent, 'ocean');
+
+    oldBackup['themeAccent'] = 'not-a-theme';
+    await expectLater(
+      store.importBackup(jsonEncode(oldBackup)),
+      throwsFormatException,
+    );
+    expect(store.themeAccent, 'ocean');
+  });
 
   testWidgets('settings theme choice immediately updates the running app', (
     tester,
@@ -117,13 +165,17 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+    expect(find.byKey(const ValueKey('theme-accent-setting')), findsOneWidget);
+    expect(find.byKey(const ValueKey('display-mode-setting')), findsOneWidget);
+    expect(find.byKey(const ValueKey('playback-setting')), findsOneWidget);
+    expect(find.text('片源管理'), findsNothing);
     await tester.drag(find.byType(ListView), const Offset(0, -900));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('app-author')), findsOneWidget);
     expect(find.text('DickyR15'), findsOneWidget);
   });
 
-  testWidgets('TV settings keeps author visible in a short viewport', (
+  testWidgets('embedded TV settings pins author footer in a short viewport', (
     tester,
   ) async {
     final store = await localStore();
@@ -134,7 +186,11 @@ void main() {
       AppLayout(
         television: true,
         child: MaterialApp(
-          home: SettingsScreen(repository: NativeRepository(), store: store),
+          home: SettingsScreen(
+          repository: NativeRepository(),
+          store: store,
+          embedded: true,
+        ),
         ),
       ),
     );

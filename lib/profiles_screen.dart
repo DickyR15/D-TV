@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_layout.dart';
 import 'local_profiles.dart';
@@ -25,6 +27,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   final FocusNode _forceLoginFocus = FocusNode(
     debugLabel: 'force-login-setting',
   );
+  final FocusNode _recoveryFocus = FocusNode(
+    debugLabel: 'recovery-settings-focus',
+  );
   bool _initialFocusScheduled = false;
   final Map<String, FocusNode> _profileEntryFocusNodes = {};
   final Map<String, FocusNode> _profileEditFocusNodes = {};
@@ -44,9 +49,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     super.didChangeDependencies();
     if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
     _initialFocusScheduled = true;
+    final initialFocus = widget.store.configurationError != null
+        ? _recoveryFocus
+        : _forceLoginFocus;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _forceLoginFocus.canRequestFocus) {
-        _forceLoginFocus.requestFocus();
+      if (mounted && initialFocus.canRequestFocus) {
+        initialFocus.requestFocus();
       }
     });
   }
@@ -54,6 +62,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   @override
   void dispose() {
     _forceLoginFocus.dispose();
+    _recoveryFocus.dispose();
     for (final node in _profileEntryFocusNodes.values) {
       node.dispose();
     }
@@ -72,13 +81,50 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       if (reload) {
         await widget.store.reload();
       } else if (export) {
-        await FilePicker.saveFile(
-          fileName: '$appSlug-recovery.json',
-          bytes: Uint8List.fromList(
-            utf8.encode(widget.store.exportRecoveryData()),
-          ),
-          mimeType: 'application/json',
-        );
+        final recoveryData = widget.store.exportRecoveryData();
+        if (Platform.isAndroid) {
+          // Android TV images may not include a document-picker activity.
+          // Export directly through MediaStore, matching the normal settings backup.
+          final saved = await const MethodChannel('duanju/device')
+              .invokeMapMethod<String, dynamic>(
+            'exportSettingsBackup',
+            <String, dynamic>{'content': recoveryData},
+          );
+          if (mounted) {
+            final path = saved?['path'] as String? ?? 'Download/D-TV';
+            await showDialog<void>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('原始設定匯出成功'),
+                content: SelectableText(
+                  '已儲存原始設定：\n$path\n\n'
+                  '請從檔案管理器開啟 Download/D-TV 資料夾，'
+                  '將 JSON 檔案複製到電腦保存。',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: path));
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('複製檔案位置'),
+                  ),
+                  FilledButton(
+                    autofocus: true,
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('完成'),
+                  ),
+                ],
+              ),
+            );
+          }
+        } else {
+          await FilePicker.saveFile(
+            fileName: '$appSlug-recovery.json',
+            bytes: Uint8List.fromList(utf8.encode(recoveryData)),
+            mimeType: 'application/json',
+          );
+        }
       } else {
         final file = await FilePicker.pickFile(
           type: FileType.custom,
@@ -197,7 +243,15 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
     builder: (_, _) => Scaffold(
-      appBar: AppBar(title: Text(widget.locked ? '解鎖$appName' : '使用者管理')),
+      appBar: AppBar(
+        title: Text(
+          widget.store.configurationError != null
+              ? '設定復原'
+              : widget.locked
+              ? '解鎖$appName'
+              : '使用者管理',
+        ),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
@@ -210,6 +264,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 Text(uiTraditional(widget.store.configurationError!)),
                 const SizedBox(height: 12),
                 FilledButton.icon(
+                  key: const ValueKey('profiles-recovery-restore'),
+                  focusNode: _recoveryFocus,
                   onPressed: _busy ? null : () => _recover(),
                   icon: const Icon(Icons.restore_rounded),
                   label: const Text('從備份恢復'),

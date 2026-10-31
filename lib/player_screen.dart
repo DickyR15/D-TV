@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -17,13 +18,14 @@ import 'diary_service.dart';
 import 'playback_diagnostics.dart';
 import 'danmaku_controller.dart';
 import 'danmaku_overlay.dart';
-import 'follow_state.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'playback_loader.dart';
 import 'playback_preloader.dart';
 import 'playback_recovery.dart';
+import 'playback_controls_visibility.dart';
 import 'playback_preferences.dart';
+import 'portrait_blur_policy.dart';
 import 'luna_exo_player.dart';
 import 'player_controls.dart';
 import 'player_interactions.dart';
@@ -147,27 +149,28 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _pictureInPictureActive = false;
   bool _pictureInPictureRequested = false;
   bool _pictureInPictureHandlerInstalled = false;
+  String? _pictureInPictureStateSignature;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   String _loadingMessage = '正在準備播放';
   String? _error;
   String? _saveWarning;
   PlaybackPlan? _plan;
   double _speed = 1;
+  bool _portraitBlurBackground = false;
   double _aspectRatio = 9 / 16;
   double _resumePosition = 0;
   bool _rotating = false;
   bool _television = false;
-  TelevisionDecoder _televisionDecoder = TelevisionDecoder.hardware;
+  FormFactor _formFactor = FormFactor.phone;
+  TelevisionDecoder _televisionDecoder = TelevisionDecoder.automatic;
+  late final bool _useMpvEmbedForThisPlayer;
   bool _tvDecoderPolicyMigrated = false;
-  // MPV-specific decoder properties must never be shown or applied when
-  // Android is using the official video_player / ExoPlayer backend.
-  // MPV-specific settings only apply when the active backend actually exposes
-  // MPV's native platform. Android now defaults to the ExoPlayer backend.
-  bool get _mpvEmbedBackend =>
-      Platform.isAndroid &&
-      _androidPlayerEngine == 'mpv_embed' &&
-      widget.playerFactory == null &&
-      widget.videoBuilder == null;
+  bool _portraitBlurDefaultMigrationRequested = false;
+  // Android MPV Embed renders MediaCodec frames into the Flutter Texture
+  // Registry surface. Portrait blur can composite that same texture twice
+  // without switching to mediacodec-copy or creating another decoder.
+  // ExoPlayer does not expose MPV decoder properties.
+  bool get _mpvEmbedBackend => _useMpvEmbedForThisPlayer;
   bool get _televisionDecoderApplies =>
       Platform.isAndroid && _television && _player.platform is NativePlayer;
   bool get _televisionRenderingApplies =>
@@ -179,10 +182,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       !_television &&
       defaultTargetPlatform == TargetPlatform.android &&
       _pictureInPictureSupported;
-  bool get _mobile =>
-      !_television &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+  bool get _mobile => _formFactor == FormFactor.phone;
   VideoEnhancementController? get _enhancementForUi =>
       _enhancement.supported ? _enhancement : null;
   PlaybackPreferences get _preferences => PlaybackPreferences(
@@ -192,7 +192,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     danmaku: _danmakuEnabled,
     preload: _preloadEnabled,
     enhancement: _enhancement.preferences,
+    portraitBlurBackground: _portraitBlurBackground,
     televisionDecoder: _televisionDecoder,
+    autoPictureInPicture: widget.store.playbackPreferences.autoPictureInPicture,
   );
   String get _qualityLabel => _plan?.local == true
       ? '本機原畫'
@@ -219,10 +221,30 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _speed = preferences.speed;
     _requestedQuality = preferences.quality;
-    _autoAdvance = true;
+    _autoAdvance = preferences.autoAdvance;
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
-    _preloadEnabled = true;
+    _preloadEnabled = preferences.preloads(television: false);
     _televisionDecoder = preferences.televisionDecoder;
+    // Android TV uses the previously validated MPV Embed + MediaCodec
+    // surface path for automatic and hardware modes. Software mode stays on
+    // the regular GPU path; phones/tablets use the regular MPV view.
+    final inheritedLayout = context.getInheritedWidgetOfExactType<AppLayout>();
+    final isTelevisionLayout =
+        inheritedLayout?.formFactor == FormFactor.television ||
+        (inheritedLayout?.formFactor == null &&
+            inheritedLayout?.television == true);
+    // Keep MPV Embed + MediaCodec for Android TV even when blur is enabled.
+    // The blur is composed from the same Flutter Texture Registry output;
+    // it must never force the mediacodec-copy path that caused TV A/V drift.
+    _portraitBlurBackground = preferences.portraitBlurBackground;
+    _useMpvEmbedForThisPlayer = shouldUseMpvEmbedForPlayback(
+      android: Platform.isAndroid,
+      television: isTelevisionLayout,
+      mpvEmbedConfigured: _androidPlayerEngine == 'mpv_embed',
+      softwareDecoderSelected:
+          preferences.televisionDecoder == TelevisionDecoder.software,
+      customPlayer: widget.playerFactory != null || widget.videoBuilder != null,
+    );
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
     _danmaku = DanmakuController(widget.repository)
@@ -394,7 +416,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     _subscriptions.add(
       _player.stream.videoParams.listen((parameters) {
         final size = videoDisplaySize(parameters);
-        if (size != null && mounted && !_closed) {
+        if (size != null &&
+            size.width > 0 &&
+            size.height > 0 &&
+            mounted &&
+            !_closed) {
           setState(() {
             _aspectRatio = size.width / size.height;
           });
@@ -491,6 +517,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _accessChanged() {
+    if (!_closed && mounted) {
+      final blurEnabled =
+          widget.store.playbackPreferences.portraitBlurBackground;
+      if (blurEnabled != _portraitBlurBackground) {
+        setState(() => _portraitBlurBackground = blurEnabled);
+      }
+    }
     if (!_closed &&
         (widget.store.profileEpoch != _profileEpoch || widget.store.locked)) {
       _preloader.clear();
@@ -516,9 +549,69 @@ class _PlayerScreenState extends State<PlayerScreen>
         final arguments = call.arguments;
         final active = arguments is Map && arguments['active'] == true;
         _setPictureInPictureStatus(active: active, delayHiddenPause: !active);
+      } else if (call.method == 'pictureInPicturePending') {
+        _handlePictureInPicturePending();
+      } else if (call.method == 'pictureInPictureAction') {
+        final arguments = call.arguments;
+        final action = arguments is Map ? arguments['action'] : null;
+        switch (action) {
+          case 'toggle':
+            _togglePlayback();
+            break;
+          case 'previous':
+            if (_index > 0) unawaited(_play(_index - 1));
+            break;
+          case 'next':
+            if (_index + 1 < widget.detail.episodes.length) {
+              unawaited(_play(_index + 1));
+            }
+            break;
+        }
       }
     });
     unawaited(_refreshPictureInPictureStatus());
+  }
+
+  void _handlePictureInPicturePending() {
+    _setPictureInPictureStatus(requested: true);
+    _pictureInPictureExitTimer?.cancel();
+    _pictureInPictureExitTimer = Timer(const Duration(seconds: 2), () {
+      if (!_closed && _pictureInPictureRequested && !_pictureInPictureActive) {
+        _setPictureInPictureStatus(requested: false, delayHiddenPause: true);
+      }
+    });
+  }
+
+  void _syncPictureInPicture() {
+    if (defaultTargetPlatform != TargetPlatform.android ||
+        !_pictureInPictureSupported) {
+      return;
+    }
+    final ratio = _aspectRatio.isFinite && _aspectRatio > 0
+        ? _aspectRatio.clamp(1 / 2.39, 2.39).toDouble()
+        : 16 / 9;
+    final width = ratio >= 1 ? (1000 * ratio).round() : 1000;
+    final height = ratio >= 1 ? 1000 : (1000 / ratio).round();
+    final playing = !_loading && _error == null && _player.state.playing;
+    final hasPrevious = _index > 0;
+    final hasNext = _index + 1 < widget.detail.episodes.length;
+    final autoEnter = playing && !_television &&
+        widget.store.playbackPreferences.autoPictureInPicture;
+    final signature = '$width:$height:$playing:$hasPrevious:$hasNext:$autoEnter';
+    if (_pictureInPictureStateSignature == signature) return;
+    _pictureInPictureStateSignature = signature;
+    unawaited(
+      AppDevice.channel.invokeMethod<void>('updatePictureInPicture', {
+        'width': width,
+        'height': height,
+        'playing': playing,
+        'hasPrevious': hasPrevious,
+        'hasNext': hasNext,
+        'autoEnter': autoEnter,
+      }).catchError((Object _) {
+        _pictureInPictureStateSignature = null;
+      }),
+    );
   }
 
   Future<void> _refreshPictureInPictureStatus() async {
@@ -532,6 +625,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         supported: status?['supported'] == true,
         active: status?['active'] == true,
       );
+      _syncPictureInPicture();
     } on PlatformException {
       if (mounted && !_closed) {
         _setPictureInPictureStatus(supported: false, active: false);
@@ -619,6 +713,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     _interactions.cancel();
+    _syncPictureInPicture();
     final rawRatio = _aspectRatio.isFinite && _aspectRatio > 0
         ? _aspectRatio
         : 16 / 9;
@@ -809,6 +904,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _syncPreload() {
     if (_closed) return;
+    _syncPictureInPicture();
     if (!_preloadEnabled ||
         !_foreground ||
         widget.localOnly ||
@@ -867,13 +963,20 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final television = AppLayout.isTelevision(context);
-    if (_television != television) {
+    final formFactor = AppLayout.formFactorOf(context);
+    final television = formFactor == FormFactor.television;
+    if (_formFactor != formFactor) {
       _fullscreen = false;
       _automaticFullscreenSuppressed = false;
       _interactions.cancel();
     }
+    _formFactor = formFactor;
     _television = television;
+    if (widget.store.playbackPreferences.preload == null) {
+      _preloadEnabled = widget.store.playbackPreferences.preloads(
+        television: television,
+      );
+    }
     // Migrate the aggressive legacy default once on Android TV while preserving
     // an intentional optimized/software choice made after this migration.
     if (Platform.isAndroid &&
@@ -904,6 +1007,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _orientationController = AppOrientationScope.maybeOf(context);
     final orientation = MediaQuery.orientationOf(context);
+    if (Platform.isAndroid &&
+        _androidPlayerEngine != 'exo' &&
+        orientation == Orientation.landscape &&
+        !_portraitBlurDefaultMigrationRequested &&
+        widget.store.needsPortraitBlurLandscapeDefaultMigration) {
+      _portraitBlurDefaultMigrationRequested = true;
+      _portraitBlurBackground = true;
+      unawaited(widget.store.migratePortraitBlurLandscapeDefault());
+    }
     if (_lastOrientation != null && _lastOrientation != orientation) {
       _automaticFullscreenSuppressed = false;
       _interactions.cancel();
@@ -1427,20 +1539,25 @@ class _PlayerScreenState extends State<PlayerScreen>
         final setupClock = Stopwatch()..start();
         final platform = _player.platform;
         if (platform is NativePlayer) {
+          final hwdec = playbackHwdecFor(
+            decoder: _televisionDecoder,
+            android: Platform.isAndroid,
+            ios: Platform.isIOS,
+            macos: Platform.isMacOS,
+            windows: Platform.isWindows,
+            mpvEmbed: _mpvEmbedBackend,
+          );
+          if (hwdec != null) {
+            await _setPlaybackProperty(platform, 'hwdec', hwdec);
+          }
           if (Platform.isAndroid) {
             if (_television) {
               final optimized =
                   _televisionDecoder == TelevisionDecoder.optimized;
-              await _setPlaybackProperty(
-                platform,
-                'hwdec',
-                _mpvEmbedBackend
-                    ? 'mediacodec'
-                    : _televisionDecoder == TelevisionDecoder.software
-                    ? 'no'
-                    : 'mediacodec-copy',
-              );
               await _setPlaybackProperty(platform, 'hwdec-codecs', 'all');
+              // MPV auto-safe falls back to software when no supported HW
+              // decoder can be initialized; its decoder-failure fallback is
+              // also enabled by default (hwdec-software-fallback=3).
               if (_mpvEmbedBackend) {
                 // Onn. 4K Pro logs repeatedly report "Failed to create file
                 // cache." Keep demuxer cache in RAM instead of creating a
@@ -1500,11 +1617,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 _mpvEmbedBackend ? '8' : '5',
               );
             } else {
-              await _setPlaybackProperty(
-                platform,
-                'hwdec',
-                _mpvEmbedBackend ? 'mediacodec' : 'auto-safe',
-              );
               await _setPlaybackProperty(platform, 'hwdec-codecs', 'all');
               if (!_mpvEmbedBackend) {
                 await _setPlaybackProperty(platform, 'vd-lavc-skiploopfilter', 'nonkey');
@@ -1521,8 +1633,6 @@ class _PlayerScreenState extends State<PlayerScreen>
               'framedrop',
               _television ? 'decoder' : 'vo',
             );
-          } else if (Platform.isWindows) {
-            await _setPlaybackProperty(platform, 'hwdec', 'd3d11va-copy');
           }
           await _setPlaybackProperty(
             platform,
@@ -1774,7 +1884,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     try {
       if (Platform.isWindows) {
         await windowManager.setFullScreen(fullscreen);
-      } else if (_mobile) {
+      } else if (_mobile || _formFactor == FormFactor.pad) {
         await (_orientationController?.setPlayback(
               this,
               fullscreen: fullscreen,
@@ -1783,6 +1893,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             SystemChrome.setPreferredOrientations(
               AppOrientationController.orientations(
                 television: _television,
+                phone: _mobile,
                 fullscreen: fullscreen,
                 aspectRatio: _aspectRatio,
               ),
@@ -1814,10 +1925,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       throw StateError('目前使用者已變更');
     }
     _interactions.cancel();
-    final nextPreferences = preferences.copyWith(
-      autoAdvance: true,
-      preload: true,
-    );
+    final nextPreferences = preferences;
     await widget.store.setPlaybackPreferences(nextPreferences);
     if (!mounted || _closed || widget.store.profileEpoch != _profileEpoch) {
       return;
@@ -1829,9 +1937,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() {
       _speed = nextPreferences.speed;
       _requestedQuality = nextPreferences.quality;
-      _autoAdvance = true;
+      _autoAdvance = nextPreferences.autoAdvance;
       _danmakuEnabled = nextPreferences.danmaku;
-      _preloadEnabled = true;
+      _preloadEnabled = nextPreferences.preload ?? _preloadEnabled;
+      _portraitBlurBackground = nextPreferences.portraitBlurBackground;
       _televisionDecoder = nextPreferences.televisionDecoder;
     });
     _danmaku.setEnabled(_danmakuEnabled);
@@ -1839,6 +1948,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (qualityChanged) _preloader.clear();
     _syncPreload();
     _menuRevision.value++;
+    _syncPictureInPicture();
     await _interactions.applySpeed();
     if (qualityChanged && _plan?.local != true) {
       await _retry(quality: nextPreferences.quality);
@@ -2054,9 +2164,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         _preferences.copyWith(
           speed: selection.speed,
           quality: selection.quality,
-          autoAdvance: true,
+          autoAdvance: selection.autoAdvance ?? _autoAdvance,
           danmaku: selection.danmaku,
-          preload: true,
+          preload: selection.preload ?? _preloadEnabled,
           enhancement: selection.enhancement,
           televisionDecoder: selection.decoder,
         ),
@@ -2157,6 +2267,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
     if (_pictureInPictureHandlerInstalled) {
+      unawaited(
+        AppDevice.channel.invokeMethod<void>('updatePictureInPicture', null)
+            .catchError((Object _) {}),
+      );
       AppDevice.channel.setMethodCallHandler(null);
     }
     _interactions.dispose();
@@ -2177,12 +2291,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     if (Platform.isWindows) {
       unawaited(windowManager.setFullScreen(false));
-    } else if (_mobile || _television && Platform.isAndroid) {
+    } else if (_mobile ||
+        _formFactor == FormFactor.pad ||
+        _television && Platform.isAndroid) {
       unawaited(
         (_orientationController?.releasePlayback(this) ??
                 SystemChrome.setPreferredOrientations(
                   AppOrientationController.orientations(
                     television: _television,
+                    phone: _mobile,
                   ),
                 ))
             .catchError((Object _) {}),
@@ -2275,7 +2392,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                     bottom: !fullscreen,
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final desktop = constraints.maxWidth >= 840;
+                        final desktop =
+                            (_formFactor == FormFactor.pad ||
+                                _formFactor == FormFactor.window) &&
+                            constraints.maxWidth >= 840;
                         if (fullscreen) {
                           return _videoPane(context);
                         }
@@ -2333,6 +2453,75 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  Widget _videoOutput({required BoxFit fit, required Widget controls}) {
+    if (_player is LunaExoPlayer) {
+      return LunaExoVideoView(
+        player: _player as LunaExoPlayer,
+        fit: fit,
+        controls: (_) => controls,
+      );
+    }
+    final textureRendererAvailable =
+        Platform.isAndroid &&
+        _androidPlayerEngine != 'exo' &&
+        _player.platform is NativePlayer;
+    final portraitBlurActive = shouldUsePortraitBlurBackground(
+      enabled: _portraitBlurBackground,
+      textureRendererAvailable: textureRendererAvailable,
+      loading: _loading,
+      hasError: _error != null,
+      aspectRatio: _aspectRatio,
+    );
+    if (!portraitBlurActive) {
+      return Video(
+        controller: _video!,
+        fit: fit,
+        fill: Colors.black,
+        controls: (_) => controls,
+      );
+    }
+
+    // Both Video widgets subscribe to the same VideoController texture ID.
+    // MPV decodes once; Flutter composites that one live texture twice:
+    // cover + blur behind, contain + controls in front.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned.fill(
+          child: ClipRect(
+            child: ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+              child: Transform.scale(
+                scale: 1.08,
+                child: Video(
+                  controller: _video!,
+                  fit: BoxFit.cover,
+                  fill: Colors.black,
+                  controls: null,
+                  subtitleViewConfiguration:
+                      const SubtitleViewConfiguration(visible: false),
+                  wakelock: false,
+                  pauseUponEnteringBackgroundMode: false,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: ColoredBox(color: Colors.black.withValues(alpha: .24)),
+        ),
+        Positioned.fill(
+          child: Video(
+            controller: _video!,
+            fit: fit,
+            fill: Colors.transparent,
+            controls: (_) => controls,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _videoPane(BuildContext context) {
     final videoTheme = _television
         ? televisionTheme(AppTheme.dark)
@@ -2352,7 +2541,12 @@ class _PlayerScreenState extends State<PlayerScreen>
             playbackGeneration: _generation,
             title: title,
             enabled: !_loading && _error == null,
-            showOnPlaybackReady: _showControlsOnPlaybackReady,
+            // On TV, start with a clean video. The user can reveal controls
+            // by pressing OK/Select; loading/playing events must not flash them.
+            showOnPlaybackReady: playbackControlsVisibleOnReady(
+              television: true,
+              requested: _showControlsOnPlaybackReady,
+            ),
             enhancement: _enhancementForUi,
             onTogglePlayback: _togglePlayback,
             onSeek: _seek,
@@ -2431,17 +2625,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             children: [
               if (widget.videoBuilder != null)
                 widget.videoBuilder!(layeredControls)
-              else if (_player is LunaExoPlayer)
-                LunaExoVideoView(
-                  player: _player as LunaExoPlayer,
-                  fit: BoxFit.contain,
-                  controls: (_) => layeredControls,
-                )
               else
-                Video(
-                  controller: _video!,
+                _videoOutput(
                   fit: BoxFit.contain,
-                  controls: (_) => layeredControls,
+                  controls: layeredControls,
                 ),
               if (_loading &&
                   _showLoadingOverlay &&
@@ -2715,63 +2902,23 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _mobileFollowControl(Drama drama) {
-    final state = widget.store.following(drama.id);
-    return PopupMenuButton<String>(
-      key: const ValueKey('player-follow-status'),
-      tooltip: '收藏與觀看狀態',
-      onSelected: (value) async {
+    final following = widget.store.following(drama.id);
+    return FilledButton.tonalIcon(
+      key: const ValueKey('player-favorite-toggle'),
+      onPressed: () async {
         if (_profileEpoch != widget.store.profileEpoch) return;
-        if (value == 'remove') {
-          await saveUserChange(
-            context,
-            () => widget.store.toggleFavorite(drama),
-          );
-        } else {
-          final status = FollowStatus.values.firstWhere(
-            (status) => status.name == value,
-          );
-          await saveUserChange(
-            context,
-            () => widget.store.setFollowStatus(drama, status),
-          );
-        }
+        await saveUserChange(
+          context,
+          () => widget.store.toggleFavorite(drama),
+        );
         if (mounted && !_closed) setState(() {});
       },
-      itemBuilder: (_) => [
-        for (final status in FollowStatus.values)
-          CheckedPopupMenuItem(
-            value: status.name,
-            checked: state?.status == status,
-            child: Text(status.label),
-          ),
-        if (state != null)
-          const PopupMenuItem(value: 'remove', child: Text('取消收藏')),
-      ],
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 36),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: state == null
-              ? Theme.of(context).colorScheme.surfaceContainerHighest
-              : Theme.of(context).colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              state == null
-                  ? Icons.bookmark_add_outlined
-                  : Icons.bookmark_rounded,
-              size: 18,
-            ),
-            const SizedBox(width: 6),
-            Text(state?.label ?? '加入收藏'),
-            const SizedBox(width: 2),
-            const Icon(Icons.expand_more_rounded, size: 16),
-          ],
-        ),
+      icon: Icon(
+        following == null
+            ? Icons.bookmark_add_outlined
+            : Icons.bookmark_remove_outlined,
       ),
+      label: Text(following == null ? '加入收藏' : '取消收藏'),
     );
   }
 

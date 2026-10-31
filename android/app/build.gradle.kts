@@ -44,8 +44,8 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["appLabel"] = "D TV"
-        manifestPlaceholders["appBanner"] = "@drawable/dtv_tv_banner"
+        manifestPlaceholders["appLabel"] = "D-TV"
+        manifestPlaceholders["appBanner"] = "@drawable/tv_banner"
     }
 
     signingConfigs {
@@ -83,6 +83,10 @@ kotlin {
 }
 
 flutter { source = "../.." }
+
+dependencies {
+    implementation("androidx.core:core:1.15.0")
+}
 
 tasks.withType<JavaCompile>().configureEach {
     if (name.contains("Release")) {
