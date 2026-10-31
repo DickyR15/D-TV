@@ -182,9 +182,13 @@ class LocalStore extends ChangeNotifier {
   void _loadSourceSwitches() {
     try {
       final raw = _string('sourceSwitches');
-      _sourceSwitches = raw == null
-          ? {}
+      final stored = raw == null
+          ? <String, bool>{}
           : Map<String, bool>.from(jsonDecode(raw) as Map);
+      _sourceSwitches = {
+        for (final entry in stored.entries)
+          if (SourceSite.isKnown(entry.key)) entry.key: entry.value,
+      };
     } catch (_) {
       _sourceSwitches = {};
     }

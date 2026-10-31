@@ -20,12 +20,23 @@ void main() {
     return store;
   }
 
+  test('removed Sorani source is unavailable and stale settings are ignored', () async {
+    final store = await create({
+      'sourceSwitches': jsonEncode({'sorani': true}),
+    });
+    expect(SourceSite.isKnown('sorani'), isFalse);
+    expect(SourceSite.isAvailable('sorani'), isFalse);
+    expect(store.allowsSource('sorani'), isFalse);
+    expect(store.sources.map((site) => site.id), isNot(contains('sorani')));
+    await expectLater(store.setSourceEnabled('sorani', true), throwsStateError);
+  });
+
   test('restricted sources start switched off', () async {
     final store = await create();
     expect(
       store.sources.map((site) => site.id),
       allSourcesEnabled
-          ? ['hongguo', 'hanxiaoquan', 'guipian', 'sorani']
+          ? ['hongguo', 'hanxiaoquan', 'guipian']
           : ['hongguo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);

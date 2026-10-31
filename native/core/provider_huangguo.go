@@ -28,7 +28,6 @@ const (
 	sourceYeguo         = "yeguo"
 	sourceDSD           = "dsd"
 	sourceCloudFront    = "cloudfront"
-	sourceSorani        = "sorani"
 	sourceGuipian       = "guipian"
 	sourceHanxiaoquan   = "hanxiaoquan"
 
@@ -91,7 +90,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceSorani, sourceGuipian, sourceHanxiaoquan:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceGuipian, sourceHanxiaoquan:
 		return true
 	default:
 		return false
@@ -116,8 +115,6 @@ func canonicalProviderSource(source string) string {
 		return sourceDSD
 	case "cloudfront":
 		return sourceCloudFront
-	case "sorani", "sorani.net", "www.sorani.net", "api.sorani.cc", "sorani.cc":
-		return sourceSorani
 	case "guipian", "guipianwu.com", "www.guipianwu.com":
 		return sourceGuipian
 	case "hanxiaoquan", "jennyhow.com", "www.jennyhow.com":

@@ -13,7 +13,6 @@ class SourceSite {
       id == 'huangju' ||
       id == 'yeguo' ||
       id == 'dsd' ||
-      id == 'sorani' ||
       id == 'guipian' ||
       id == 'hanxiaoquan';
   bool get searchSuggestions => id == 'hongguo';
@@ -38,7 +37,6 @@ class SourceSite {
 
   static const hongguo = SourceSite('hongguo', '紅果', '短劇 · 漫劇 · AI 劇');
   static const dsd = SourceSite('dsd', '帝果', '影片分類 · 線上搜尋');
-  static const sorani = SourceSite('sorani', '青空', '動畫連載 · 劇場版動畫 · 特攝');
   static const guipian = SourceSite('guipian', '鬼片', '恐怖片 · 電視劇 · 動畫');
   static const hanxiaoquan = SourceSite(
     'hanxiaoquan',
@@ -46,8 +44,8 @@ class SourceSite {
     '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
 
-  /// 預設開啟的一般片源：紅果、韓小圈、鬼片、青空。
-  static const primaryValues = [hongguo, hanxiaoquan, guipian, sorani];
+  /// 預設開啟的一般片源：紅果、韓小圈、鬼片。
+  static const primaryValues = [hongguo, hanxiaoquan, guipian];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
