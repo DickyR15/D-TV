@@ -173,4 +173,6 @@ else:
     artifacts.append(target)
 
 for artifact in artifacts:
-    print(artifact)
+    # Windows CI may use a legacy cp1252 console; release filenames include Taiwan
+    # terminology such as「免安裝」. Keep the console output UTF-8 safe.
+    print(str(artifact).encode("utf-8", errors="backslashreplace").decode("ascii", errors="replace"))
