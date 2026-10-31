@@ -2665,7 +2665,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                 _videoOutput(
                   fit: playerVideoFit(
                     ios: Platform.isIOS,
-                    fullscreen: fullscreen,
+                    fullscreen: _showFullscreen,
                     aspectRatio: _aspectRatio,
                   ),
                   controls: layeredControls,
