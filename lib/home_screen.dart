@@ -2432,10 +2432,50 @@ class _HomeScreenState extends State<HomeScreen> {
               left: width * .035,
               top: height * .08,
               bottom: height * .08,
-              width: (width * .46).clamp(160.0, 440.0).toDouble(),
-              child: _brandLogo(
-                width: (width * .46).clamp(160.0, 440.0).toDouble(),
-                height: height * .78,
+              width: (width * .72).clamp(340.0, 920.0).toDouble(),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: (width * .46).clamp(160.0, 440.0).toDouble(),
+                    child: _brandLogo(
+                      width: (width * .46).clamp(160.0, 440.0).toDouble(),
+                      height: height * .78,
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '短劇・漫劇・AI 劇',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: const Color(0xFFD7EAF4),
+                            fontSize: (height * .09).clamp(12.0, 17.0).toDouble(),
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          '熱門榜單・收藏追劇・隨選即播',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: const Color(0xFF70CFFF),
+                            fontSize: (height * .072).clamp(10.0, 13.5).toDouble(),
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
             Positioned(
@@ -2737,14 +2777,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               for (final entry in entries.skip(1).take(entries.length - 2))
                                 Expanded(
-                                  child: Center(
-                                    child: buildEntry(
-                                      entry,
-                                      itemHeight: itemHeight,
-                                      iconSize: iconSize,
-                                      labelSize: labelSize,
-                                      verticalPadding: verticalPadding,
-                                    ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      buildEntry(
+                                        entry,
+                                        itemHeight: itemHeight,
+                                        iconSize: iconSize,
+                                        labelSize: labelSize,
+                                        verticalPadding: verticalPadding,
+                                      ),
+                                    ],
                                   ),
                                 ),
                             ],

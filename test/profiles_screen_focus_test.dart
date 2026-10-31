@@ -27,10 +27,12 @@ void main() {
       );
       final editFinder = find.byKey(const ValueKey('profile-edit-default'));
       final editButton = tester.widget<IconButton>(editFinder);
-      openProfile.focusNode!.requestFocus();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      expect(openProfile.canRequestFocus, isFalse);
+      expect(openProfile.onTap, isNotNull);
+      expect(editButton.focusNode!.canRequestFocus, isTrue);
+      editButton.focusNode!.requestFocus();
       await tester.pumpAndSettle();
-      expect(editButton.focusNode!.hasFocus, isTrue);
+      expect(editButton.focusNode!.hasPrimaryFocus, isTrue);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 

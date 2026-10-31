@@ -184,8 +184,8 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      '四個一般片源預設開啟。關閉片源只會將其隱藏，不會刪除收藏及觀看紀錄。',
+                    Text(
+                      '${general.length} 個一般片源預設開啟。關閉片源只會將其隱藏，不會刪除收藏及觀看紀錄。',
                     ),
                     const SizedBox(height: 8),
                     for (final source in general) _sourceTile(source),

@@ -337,6 +337,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             child: InkWell(
                               key: ValueKey('profile-open-${profile.id}'),
                               focusNode: _profileEntryFocus(profile.id),
+                              canRequestFocus:
+                                  widget.store.locked || !widget.store.profile.admin,
                               borderRadius: BorderRadius.circular(12),
                               onTap: _busy ? null : () => _switch(profile),
                               child: Padding(
