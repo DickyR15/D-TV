@@ -340,7 +340,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 key: const ValueKey('playback-setting'),
                 leading: const Icon(Icons.tune_rounded),
                 title: const Text('播放'),
-                subtitle: const Text('預設倍速、清晰度、解碼方式與相容渲染'),
+                subtitle: const Text('預設播放速度、畫質、解碼方式與相容性設定'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => Navigator.push(
                   context,
