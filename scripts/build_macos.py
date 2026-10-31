@@ -156,7 +156,6 @@ def main():
         raise SystemExit("找不到 Xcode Command Line Tools。")
 
     ensure_macos_project(flutter)
-    run([sys.executable, str(ROOT / "scripts" / "prepare_branding.py")])
     core = build_universal_core(variant)
     run([flutter, "pub", "get"])
     pod = shutil.which("pod")
