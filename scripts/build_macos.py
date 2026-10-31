@@ -1,3 +1,4 @@
+import json
 import os
 import platform
 import plistlib
@@ -11,6 +12,12 @@ from app_build import BuildVariant
 
 ROOT = Path(__file__).resolve().parents[1]
 MINIMUM_MACOS = "10.15"
+APP_BUNDLE_IDENTIFIER = "com.dickyr15.dtv"
+APP_DISPLAY_NAME = "D TV"
+APP_ICON_NAME = "AppIcon"
+MACOS_ICON_SET = (
+    ROOT / "macos" / "Runner" / "Assets.xcassets" / "AppIcon.appiconset"
+)
 
 
 def run(arguments, *, cwd=ROOT, env=None):
@@ -41,7 +48,7 @@ def ensure_macos_project(flutter):
     )
     text = re.sub(
         r"PRODUCT_BUNDLE_IDENTIFIER = [^;]+;",
-        "PRODUCT_BUNDLE_IDENTIFIER = com.dickyr15.dtv;",
+        "PRODUCT_BUNDLE_IDENTIFIER = " + APP_BUNDLE_IDENTIFIER + ";",
         text,
     )
     pbxproj.write_text(text, encoding="utf-8")
@@ -50,9 +57,9 @@ def ensure_macos_project(flutter):
     if info.is_file():
         with info.open("rb") as stream:
             values = plistlib.load(stream)
-        values["CFBundleDisplayName"] = "D TV"
-        values["CFBundleName"] = "D TV"
-        values["CFBundleIconName"] = "AppIcon"
+        values["CFBundleDisplayName"] = APP_DISPLAY_NAME
+        values["CFBundleName"] = APP_DISPLAY_NAME
+        values["CFBundleIconName"] = APP_ICON_NAME
         with info.open("wb") as stream:
             plistlib.dump(values, stream)
 
@@ -67,6 +74,74 @@ def ensure_macos_project(flutter):
         values["com.apple.security.files.user-selected.read-write"] = True
         with entitlements.open("wb") as stream:
             plistlib.dump(values, stream)
+
+
+def validate_macos_icon_assets():
+    """Fail early if the shared D TV artwork was not generated for macOS."""
+    manifest_path = MACOS_ICON_SET / "Contents.json"
+    if not manifest_path.is_file():
+        raise SystemExit("macOS 缺少 D TV AppIcon 資產清單。")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit("macOS AppIcon 資產清單無法讀取：" + str(error)) from error
+
+    expected = {
+        f"AppIcon_{size}x{size}{suffix}.png"
+        for size in (16, 32, 128, 256, 512)
+        for suffix in ("", "@2x")
+    }
+    configured = {
+        entry.get("filename")
+        for entry in manifest.get("images", [])
+        if isinstance(entry, dict)
+    }
+    missing = sorted(expected - configured)
+    if missing:
+        raise SystemExit("macOS D TV AppIcon 清單缺少尺寸：" + ", ".join(missing))
+    for filename in sorted(expected):
+        asset = MACOS_ICON_SET / filename
+        if not asset.is_file() or asset.stat().st_size == 0:
+            raise SystemExit("macOS D TV AppIcon 圖檔缺少或為空：" + filename)
+
+
+def validate_application_identity(application):
+    """Validate the built bundle, not just the pre-build Xcode project."""
+    if application.name != "D TV.app":
+        raise SystemExit("macOS App 外層名稱不是 D TV.app。")
+
+    info_path = application / "Contents" / "Info.plist"
+    if not info_path.is_file():
+        raise SystemExit("macOS App 缺少 Contents/Info.plist。")
+    try:
+        values = plistlib.loads(info_path.read_bytes())
+    except (OSError, plistlib.InvalidFileException) as error:
+        raise SystemExit("macOS App Info.plist 無法讀取：" + str(error)) from error
+
+    expected = {
+        "CFBundleIdentifier": APP_BUNDLE_IDENTIFIER,
+        "CFBundleDisplayName": APP_DISPLAY_NAME,
+        "CFBundleName": APP_DISPLAY_NAME,
+        "CFBundleIconName": APP_ICON_NAME,
+    }
+    for key, wanted in expected.items():
+        actual = values.get(key)
+        if actual != wanted:
+            raise SystemExit(
+                f"macOS App 身分驗證失敗：{key} 應為 {wanted!r}，目前為 {actual!r}"
+            )
+
+    resources = application / "Contents" / "Resources"
+    compiled_catalog = resources / "Assets.car"
+    if not compiled_catalog.is_file() or compiled_catalog.stat().st_size == 0:
+        raise SystemExit("macOS App 缺少已編譯的 AppIcon 資產（Contents/Resources/Assets.car）。")
+
+    executable_name = values.get("CFBundleExecutable")
+    if not isinstance(executable_name, str) or not executable_name.strip():
+        raise SystemExit("macOS App Info.plist 缺少 CFBundleExecutable。")
+    executable = application / "Contents" / "MacOS" / executable_name
+    if not executable.is_file():
+        raise SystemExit("macOS App 找不到主執行檔：" + executable_name)
 
 
 def build_universal_core(variant):
@@ -158,6 +233,7 @@ def main():
 
     ensure_macos_project(flutter)
     run([sys.executable, str(ROOT / "scripts" / "generate_brand_assets.py")])
+    validate_macos_icon_assets()
     core = build_universal_core(variant)
     run([flutter, "pub", "get"])
     pod = shutil.which("pod")
@@ -187,13 +263,12 @@ def main():
             shutil.rmtree(branded_application)
         application.rename(branded_application)
         application = branded_application
+    validate_application_identity(application)
     contents = application / "Contents"
     executable_name = plistlib.loads(
         (contents / "Info.plist").read_bytes()
     ).get("CFBundleExecutable")
     executable = contents / "MacOS" / executable_name
-    if not executable.is_file():
-        raise SystemExit("macOS App 找不到主執行檔。")
 
     app_archs = subprocess.check_output(["lipo", "-archs", str(executable)], text=True).split()
     if not {"arm64", "x86_64"}.issubset(set(app_archs)):
