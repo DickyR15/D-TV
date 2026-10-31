@@ -11,6 +11,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app_layout.dart';
 import 'app_orientation.dart';
+import 'player_fullscreen_layout_policy.dart';
 import 'app_theme.dart';
 import 'back_safe_dialog.dart';
 import 'core_bridge.dart';
@@ -2418,7 +2419,12 @@ class _PlayerScreenState extends State<PlayerScreen>
             body: pictureInPicture
                 ? _videoPane(context)
                 : SafeArea(
-                    top: !_television && (fullscreen || _mobile),
+                    top: playerTopSafeAreaEnabled(
+                      ios: Platform.isIOS,
+                      television: _television,
+                      fullscreen: fullscreen,
+                      mobile: _mobile,
+                    ),
                     bottom: !fullscreen,
                     child: LayoutBuilder(
                       builder: (context, constraints) {
@@ -2657,7 +2663,11 @@ class _PlayerScreenState extends State<PlayerScreen>
                 widget.videoBuilder!(layeredControls)
               else
                 _videoOutput(
-                  fit: BoxFit.contain,
+                  fit: playerVideoFit(
+                    ios: Platform.isIOS,
+                    fullscreen: fullscreen,
+                    aspectRatio: _aspectRatio,
+                  ),
                   controls: layeredControls,
                 ),
               if (_loading &&
