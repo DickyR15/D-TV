@@ -117,7 +117,8 @@ class _RankingRepository extends FixtureRepository {
               title:
                   '合成榜單${_rankingIDFor((page - 1) * pageSize + i)}'
                   '${rankingRevision == 0 ? '' : '-v$rankingRevision'}',
-              episodes: 1,
+              episodes: 12,
+              episodesVerified: true,
             ),
           ),
       ],
