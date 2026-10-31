@@ -52,6 +52,7 @@ def ensure_macos_project(flutter):
             values = plistlib.load(stream)
         values["CFBundleDisplayName"] = "D TV"
         values["CFBundleName"] = "D TV"
+        values["CFBundleIconName"] = "AppIcon"
         with info.open("wb") as stream:
             plistlib.dump(values, stream)
 
@@ -156,6 +157,7 @@ def main():
         raise SystemExit("找不到 Xcode Command Line Tools。")
 
     ensure_macos_project(flutter)
+    run([sys.executable, str(ROOT / "scripts" / "generate_brand_assets.py")])
     core = build_universal_core(variant)
     run([flutter, "pub", "get"])
     pod = shutil.which("pod")
