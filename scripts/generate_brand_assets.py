@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -254,9 +255,14 @@ def main() -> None:
         "iOS": write_ios(master),
         "macOS": write_macos(master),
     }
-    print("D TV 共用圖示已產生：" + "、".join(
+    message = "D TV 共用圖示已產生：" + "、".join(
         f"{platform} {count} 個資產" for platform, count in counts.items()
-    ))
+    )
+    # GitHub Windows runners may default stdout to CP1252. The generator's
+    # diagnostics are Traditional Chinese, so force UTF-8 before writing.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    print(message)
 
 
 if __name__ == "__main__":
