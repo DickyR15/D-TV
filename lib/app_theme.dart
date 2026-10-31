@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -13,14 +14,28 @@ abstract final class AppTheme {
   ];
 
   static String accentLabel(String value) => switch (value) {
-    'system' => '跟隨系統取色',
+    'system' => '跟隨系統色彩',
     'warmOrange' => '暖橙',
     'roseRed' => '玫紅',
     'amber' => '琥珀',
     'teal' => '青綠',
     'ocean' => '海藍',
     'indigo' => '藍紫',
-    _ => '跟隨系統取色',
+    _ => '跟隨系統色彩',
+  };
+
+  static String systemAccentDescription({
+    TargetPlatform? platform,
+  }) => switch (platform ?? defaultTargetPlatform) {
+    TargetPlatform.android =>
+      'Android 12 以上使用系統桌布動態色彩；較舊版本使用 D TV 品牌色。',
+    TargetPlatform.iOS =>
+      '使用 Apple 系統藍色，並依淺色／深色外觀自動調整。',
+    TargetPlatform.windows =>
+      '使用 Windows 個人化設定中的系統強調色。',
+    TargetPlatform.macOS =>
+      '使用 macOS 系統設定中的強調色。',
+    _ => '此平台目前使用 D TV 品牌色。',
   };
 
   static Color? accentFor(String value, {Color? systemAccent}) => switch (value) {

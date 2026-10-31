@@ -66,6 +66,14 @@ void main() {
     },
   );
 
+  test('system accent descriptions explain each native platform source', () {
+    expect(AppTheme.systemAccentDescription(platform: TargetPlatform.android), contains('Android 12'));
+    expect(AppTheme.systemAccentDescription(platform: TargetPlatform.iOS), contains('Apple 系統藍色'));
+    expect(AppTheme.systemAccentDescription(platform: TargetPlatform.windows), contains('Windows 個人化設定'));
+    expect(AppTheme.systemAccentDescription(platform: TargetPlatform.macOS), contains('macOS 系統設定'));
+    expect(AppTheme.systemAccentDescription(platform: TargetPlatform.linux), contains('D TV 品牌色'));
+  });
+
   test('theme accent persists, migrates old brand values, and validates backups', () async {
     final store = await localStore();
     addTearDown(store.dispose);

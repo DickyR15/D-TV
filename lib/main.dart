@@ -64,7 +64,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   final navigator = GlobalKey<NavigatorState>();
   LocalStore? store;
   Object? error;
-  Color? systemAccentColor;
+  SystemAccentColors systemAccentColors = (light: null, dark: null);
   late AppDevice device = widget.device;
 
   @override
@@ -87,8 +87,14 @@ class _AppBootstrapState extends State<AppBootstrap>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && Platform.isAndroid) {
-      unawaited(_refreshDevice());
+    if (state == AppLifecycleState.resumed) {
+      if (Platform.isAndroid) unawaited(_refreshDevice());
+      if (Platform.isAndroid ||
+          Platform.isIOS ||
+          Platform.isWindows ||
+          Platform.isMacOS) {
+        unawaited(_refreshSystemAccentColors());
+      }
     }
     if (!Platform.isIOS) return;
     final library = MediaLibrary.current;
@@ -106,6 +112,12 @@ class _AppBootstrapState extends State<AppBootstrap>
     } else if (state == AppLifecycleState.resumed) {
       if (library != null) library.suspended = false;
     }
+  }
+
+  Future<void> _refreshSystemAccentColors() async {
+    final colors = await AppDevice.systemAccentColors();
+    if (!mounted || colors == systemAccentColors) return;
+    setState(() => systemAccentColors = colors);
   }
 
   Future<void> _refreshDevice() async {
@@ -148,12 +160,12 @@ class _AppBootstrapState extends State<AppBootstrap>
     try {
       final preferences = await SharedPreferences.getInstance();
       await _refreshDevice();
-      final accent = await AppDevice.systemAccentColor();
+      final accents = await AppDevice.systemAccentColors();
       unawaited(_logStartupRendering());
       await repository.initialize();
       if (mounted) {
         setState(() {
-          systemAccentColor = accent;
+          systemAccentColors = accents;
           store = LocalStore(preferences);
           repository.access = store;
           MediaLibrary.attach(repository, store!);
@@ -225,7 +237,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     emulator: device.emulator,
     version: device.version,
     navigatorKey: navigator,
-    systemAccentColor: systemAccentColor,
+    systemAccentColors: systemAccentColors,
   );
 }
 
@@ -240,7 +252,7 @@ class DuanjuApp extends StatelessWidget {
     this.emulator = false,
     this.version = appVersion,
     this.navigatorKey,
-    this.systemAccentColor,
+    this.systemAccentColors = (light: null, dark: null),
   });
   final AppRepository repository;
   final LocalStore? store;
@@ -250,7 +262,7 @@ class DuanjuApp extends StatelessWidget {
   final bool emulator;
   final String version;
   final GlobalKey<NavigatorState>? navigatorKey;
-  final Color? systemAccentColor;
+  final SystemAccentColors systemAccentColors;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -269,13 +281,13 @@ class DuanjuApp extends StatelessWidget {
     theme: AppTheme.lightFor(
       AppTheme.accentFor(
         store?.themeAccent ?? 'system',
-        systemAccent: systemAccentColor,
+        systemAccent: systemAccentColors.light,
       ),
     ),
     darkTheme: AppTheme.darkFor(
       AppTheme.accentFor(
         store?.themeAccent ?? 'system',
-        systemAccent: systemAccentColor,
+        systemAccent: systemAccentColors.dark,
       ),
     ),
     themeMode: store == null ? ThemeMode.dark : AppTheme.mode(store?.themeMode ?? 'system'),

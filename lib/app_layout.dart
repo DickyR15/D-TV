@@ -19,6 +19,8 @@ String formatAppVersion(String versionName) {
 /// Layout family selected in settings or inferred from the active device.
 enum FormFactor { phone, pad, window, television }
 
+typedef SystemAccentColors = ({Color? light, Color? dark});
+
 const _displayModeLabels = <String, String>{
   'auto': '自動識別設備',
   'television': '電視',
@@ -193,13 +195,32 @@ class AppDevice {
     } catch (_) {}
   }
 
-  static Future<Color?> systemAccentColor() async {
-    if (defaultTargetPlatform != TargetPlatform.android) return null;
-    try {
-      final value = await channel.invokeMethod<int>('systemAccentColor');
-      return value == null ? null : Color(value & 0xFFFFFFFF);
-    } catch (_) {
+  static Future<SystemAccentColors> systemAccentColors() async {
+    const supported = {
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+      TargetPlatform.windows,
+      TargetPlatform.macOS,
+    };
+    if (!supported.contains(defaultTargetPlatform)) {
+      return (light: null, dark: null);
+    }
+    Color? decode(Object? value) {
+      if (value is int) return Color(value & 0xFFFFFFFF);
+      if (value is num) return Color(value.toInt() & 0xFFFFFFFF);
       return null;
+    }
+    try {
+      final value = await channel.invokeMethod<Object?>('systemAccentColor');
+      if (value is Map) {
+        final light = decode(value['light']);
+        final dark = decode(value['dark']);
+        return (light: light ?? dark, dark: dark ?? light);
+      }
+      final accent = decode(value);
+      return (light: accent, dark: accent);
+    } catch (_) {
+      return (light: null, dark: null);
     }
   }
 

@@ -128,7 +128,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               title: Text(AppTheme.accentLabel(tone)),
               subtitle: tone == 'system'
-                  ? const Text('Android 12 以上支援系統動態色彩')
+                  ? Text(
+                      AppTheme.systemAccentDescription(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    )
                   : null,
               onTap: () => Navigator.of(dialogContext).pop(tone),
             ),
