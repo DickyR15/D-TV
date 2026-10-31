@@ -76,6 +76,42 @@ def ensure_macos_project(flutter):
             plistlib.dump(values, stream)
 
 
+def ensure_macos_system_accent_channel(project):
+    """Expose the user's macOS accent color to Flutter through duanju/device."""
+    source_path = project / "Runner" / "MainFlutterWindow.swift"
+    if not source_path.is_file():
+        raise SystemExit("macOS 缺少 Runner/MainFlutterWindow.swift。")
+    source = source_path.read_text(encoding="utf-8")
+    if 'name: "duanju/device"' in source:
+        return
+    marker = "    RegisterGeneratedPlugins(registry: flutterViewController)"
+    if marker not in source:
+        raise SystemExit("無法在 macOS Flutter 視窗註冊系統強調色通道。")
+    handler = '''
+    let systemAccentChannel = FlutterMethodChannel(
+      name: "duanju/device",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    systemAccentChannel.setMethodCallHandler { call, result in
+      guard call.method == "systemAccentColor" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let color = NSColor.controlAccentColor.usingColorSpace(.deviceRGB) else {
+        result(nil)
+        return
+      }
+      let alpha = UInt32((color.alphaComponent * 255.0).rounded())
+      let red = UInt32((color.redComponent * 255.0).rounded())
+      let green = UInt32((color.greenComponent * 255.0).rounded())
+      let blue = UInt32((color.blueComponent * 255.0).rounded())
+      let argb = (alpha << 24) | (red << 16) | (green << 8) | blue
+      result(Int64(argb))
+    }
+'''
+    source_path.write_text(source.replace(marker, marker + "\n" + handler), encoding="utf-8")
+
+
 def validate_macos_icon_assets():
     """Fail early if the shared D TV artwork was not generated for macOS."""
     manifest_path = MACOS_ICON_SET / "Contents.json"
@@ -232,6 +268,7 @@ def main():
         raise SystemExit("找不到 Xcode Command Line Tools。")
 
     ensure_macos_project(flutter)
+    ensure_macos_system_accent_channel(ROOT / "macos")
     run([sys.executable, str(ROOT / "scripts" / "generate_brand_assets.py")])
     validate_macos_icon_assets()
     core = build_universal_core(variant)
