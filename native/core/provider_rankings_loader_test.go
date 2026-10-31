@@ -24,6 +24,7 @@ func TestHongguoRankingMergeLoaderFormatsPreserveMetadata(t *testing.T) {
 		}
 		for page := 1; page <= 2; page++ {
 			rows := rankingRows(page)
+			rows[0]["episodeCount"] = 2
 			rows[0]["title"] = `甲 &amp; <乙> "丙" '丁' / 戊`
 			rows[0]["scoreText"] = "评分9.0"
 			rows[0]["tags"] = []string{"剧情", "成长"}
