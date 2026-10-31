@@ -113,15 +113,23 @@ class _RemoteTargetState extends State<RemoteTarget> {
     ].contains(key)) {
       return KeyEventResult.ignored;
     }
-    if (event is KeyDownEvent && !_activateHeld) {
-      _activateHeld = true;
-      _longPressFired = false;
-      _longPressTimer?.cancel();
-      _longPressTimer = Timer(const Duration(milliseconds: 650), () {
-        if (!mounted || !_activateHeld || widget.onLongPress == null) return;
-        _longPressFired = true;
-        widget.onLongPress?.call();
-      });
+    if (event is KeyDownEvent) {
+      if (!_activateHeld) {
+        _activateHeld = true;
+        _longPressFired = false;
+        _longPressTimer?.cancel();
+        _longPressTimer = Timer(const Duration(milliseconds: 650), () {
+          // Only mark the hold as a long press here. Do not open a dialog while
+          // the physical key is still down: some Android TV remotes continue
+          // sending repeat/down events, and changing focus before key-up can
+          // let the same confirmation activate the poster as a short press.
+          if (!mounted || !_activateHeld || widget.onLongPress == null) return;
+          _longPressFired = true;
+        });
+      }
+      // Consume initial and repeated KeyDownEvents while the same key is held.
+      // Some vendor remotes report repeats as KeyDownEvent rather than
+      // KeyRepeatEvent; allowing them to bubble activates ActivateIntent.
       return KeyEventResult.handled;
     }
     if (event is KeyRepeatEvent) {
@@ -129,9 +137,14 @@ class _RemoteTargetState extends State<RemoteTarget> {
     }
     if (event is KeyUpEvent && _activateHeld) {
       _longPressTimer?.cancel();
-      if (!_longPressFired) widget.onPressed?.call();
+      final wasLongPress = _longPressFired;
       _activateHeld = false;
       _longPressFired = false;
+      if (wasLongPress) {
+        widget.onLongPress?.call();
+      } else {
+        widget.onPressed?.call();
+      }
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
