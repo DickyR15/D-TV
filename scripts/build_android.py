@@ -60,6 +60,12 @@ if not flutter:
 
 abi_args = [item for abi in abis for item in ["--abi", abi]]
 subprocess.run(
+    [sys.executable, str(root / "scripts" / "generate_brand_assets.py")],
+    cwd=root,
+    env=env,
+    check=True,
+)
+subprocess.run(
     [
         sys.executable,
         str(root / "scripts" / "build_native.py"),
