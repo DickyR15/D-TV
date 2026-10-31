@@ -210,8 +210,31 @@ jobs:
           echo "app_version=$version" >> "$GITHUB_OUTPUT"
           echo "app_version_code=$build_number" >> "$GITHUB_OUTPUT"
           python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --all-sources --build-name "$version" --build-number "$build_number"
-      - name: Install and launch Universal APK on x86_64 Android emulator
+      - name: Verify Android Universal APK signature, package and ABIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="dist/android/DTV-${{ steps.build-universal.outputs.app_version }}-Android.apk"
+          test -s "$apk"
+          echo "驗證 APK 簽署憑證："
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+          echo "驗證 Android 套件識別："
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.dickyr15.dtv'"
+          echo "驗證 Universal APK 的三種 ABI："
+          entries="$(unzip -Z1 "$apk")"
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            if ! grep -q "^lib/$abi/" <<< "$entries"; then
+              echo "::error::Universal APK 缺少 $abi 原生程式庫。"
+              exit 1
+            fi
+            echo "  - $abi OK"
+          done
+      # Emulator startup is best-effort on GitHub's Linux runners: this runner
+      # has no KVM access and x86_64 cold boots can remain ADB-offline. APK
+      # integrity/signature/package/ABI checks above remain required.
+      - name: Best-effort install and launch on x86_64 Android emulator
         uses: reactivecircus/android-emulator-runner@v2
+        continue-on-error: true
         with:
           api-level: 35
           arch: x86_64
