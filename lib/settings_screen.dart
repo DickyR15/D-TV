@@ -292,9 +292,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             )
           : null,
-      body: Center(
+      body: Align(
+        alignment: Platform.isWindows ? Alignment.topLeft : Alignment.center,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
+          constraints: BoxConstraints(
+            maxWidth: Platform.isWindows ? double.infinity : 720,
+          ),
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
