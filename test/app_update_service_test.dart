@@ -94,4 +94,55 @@ void main() {
     );
   });
 
+  test('manual checks bypass startup disablement and ignored versions', () {
+    const ignored = AppUpdateInfo(
+      version: 'v1.0.1',
+      title: 'D TV 1.0.1',
+      releaseUrl: 'https://github.com/DickyR15/D-TV/releases/tag/v1.0.1',
+    );
+    const newer = AppUpdateInfo(
+      version: 'v1.0.2',
+      title: 'D TV 1.0.2',
+      releaseUrl: 'https://github.com/DickyR15/D-TV/releases/tag/v1.0.2',
+    );
+
+    expect(
+      AppUpdateService.shouldShowUpdate(
+        ignored,
+        autoCheckEnabled: true,
+        ignoredVersion: 'v1.0.1',
+      ),
+      isFalse,
+    );
+    expect(
+      AppUpdateService.shouldShowUpdate(
+        newer,
+        autoCheckEnabled: false,
+        ignoredVersion: 'v1.0.1',
+      ),
+      isFalse,
+    );
+    expect(
+      AppUpdateService.shouldShowUpdate(
+        ignored,
+        manual: true,
+        autoCheckEnabled: false,
+        ignoredVersion: 'v1.0.1',
+      ),
+      isTrue,
+    );
+    expect(
+      AppUpdateService.shouldShowUpdate(
+        newer,
+        autoCheckEnabled: true,
+        ignoredVersion: 'v1.0.1',
+      ),
+      isTrue,
+    );
+    expect(
+      AppUpdateService.shouldShowUpdate(null, manual: true),
+      isFalse,
+    );
+  });
+
 }
