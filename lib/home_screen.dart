@@ -2758,14 +2758,14 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, constraints) {
         final itemHeight = television
             ? 62.0
-            : (48.0 * scale).clamp(44.0, 54.0).toDouble();
+            : (40.0 * scale).clamp(36.0, 44.0).toDouble();
         final iconSize = television
             ? 24.0
-            : (20.0 * scale).clamp(18.0, 21.0).toDouble();
+            : (19.0 * scale).clamp(17.0, 20.0).toDouble();
         final labelSize = television
             ? 16.0
-            : (14.5 * scale).clamp(13.5, 15.5).toDouble();
-        final verticalPadding = television ? 7.0 : 2.0;
+            : (13.5 * scale).clamp(12.5, 14.5).toDouble();
+        final verticalPadding = television ? 7.0 : 1.0;
 
         return Focus(
           canRequestFocus: false,
@@ -2776,7 +2776,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 7,
-                vertical: 10,
+                vertical: 6,
               ),
               child: television
                   ? SingleChildScrollView(
@@ -2802,7 +2802,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         for (final entry in entries.take(entries.length - 1))
                           Padding(
-                            padding: const EdgeInsets.only(bottom: 7),
+                            padding: const EdgeInsets.only(bottom: 5),
                             child: buildEntry(
                               entry,
                               itemHeight: itemHeight,
@@ -2813,7 +2813,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         const Spacer(),
                         Divider(
-                          height: 18,
+                          height: 14,
                           thickness: 1,
                           color: theme.colorScheme.outlineVariant
                               .withValues(alpha: 0.65),

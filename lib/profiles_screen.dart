@@ -340,7 +340,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                               canRequestFocus:
                                   widget.store.locked || !widget.store.profile.admin,
                               borderRadius: BorderRadius.circular(12),
-                              onTap: _busy ? null : () => _switch(profile),
+                              onTap: _busy ||
+                                      (!widget.store.locked &&
+                                          widget.store.profile.admin)
+                                  ? null
+                                  : () => _switch(profile),
                               child: Padding(
                                 padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
                                 child: Row(
