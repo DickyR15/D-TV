@@ -125,7 +125,7 @@ def render_windows_icon() -> None:
     sx, sy = canvas_size / width, canvas_size / height
     image = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
 
-    for path in vector.findall(namespace + "path"):
+    for path in vector.findall("path"):
         points, closed = parse_path_data(path.attrib[namespace + "pathData"])
         if not points:
             continue
