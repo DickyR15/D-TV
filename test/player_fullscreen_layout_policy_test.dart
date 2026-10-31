@@ -63,10 +63,8 @@ void main() {
       );
     });
   });
-}
 
-
-group('playerVideoOverscan', () {
+  group('playerVideoOverscan', () {
   test('adds slight overscan only to iOS landscape fullscreen', () {
     expect(
       playerVideoOverscan(ios: true, fullscreen: true, aspectRatio: 16 / 9),
