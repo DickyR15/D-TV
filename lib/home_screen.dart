@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'app_layout.dart';
+import 'app_build.dart';
 import 'app_update_service.dart';
 import 'app_bottom_navigation.dart';
 import 'core_bridge.dart';
@@ -34,7 +35,7 @@ import 'ui_localization.dart';
 import 'phone_search_dialog.dart';
 import 'app_navigation.dart';
 
-enum _UpdatePromptAction { ignore, ignoreVersion, disableStartup, openRelease }
+enum _UpdatePromptAction { ignore, ignoreVersion, disableStartup, applyUpdate }
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
@@ -1401,6 +1402,16 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
+      final platform = Platform.isAndroid ? 'android' : 'windows';
+      if (update.assetFor(platform: platform, variant: appSlug) == null) {
+        if (manual) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('已找到新版本，但尚未提供此平台可用的更新安裝檔')),
+          );
+        }
+        return;
+      }
+
       final availableUpdate = update;
       _updateDialogOpen = true;
       final action = await showDialog<_UpdatePromptAction>(
@@ -1416,8 +1427,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     availableUpdate.notes.trim().isEmpty
-                        ? '目前版本：${AppLayout.versionOf(context)}\n'
-                          '新版本：${availableUpdate.version}\n\n'
+                        ? '目前版本：${AppLayout.versionOf(context)}\\n'
+                          '新版本：${availableUpdate.version}\\n\\n'
                           '有新版本可供下載。'
                         : availableUpdate.notes.trim().characters.take(1800).toString(),
                   ),
@@ -1456,7 +1467,7 @@ class _HomeScreenState extends State<HomeScreen> {
               autofocus: true,
               onPressed: () => Navigator.pop(
                 dialogContext,
-                _UpdatePromptAction.openRelease,
+                _UpdatePromptAction.applyUpdate,
               ),
               child: const Text('更新'),
             ),
@@ -1485,20 +1496,8 @@ class _HomeScreenState extends State<HomeScreen> {
         DiaryService.add('[Update] startup_check_disabled');
         return;
       }
-      if (action == _UpdatePromptAction.openRelease && mounted) {
-        try {
-          await AppDevice.openExternalUrl(availableUpdate.releaseUrl);
-        } catch (error) {
-          await Clipboard.setData(
-            ClipboardData(text: availableUpdate.releaseUrl),
-          );
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('無法開啟瀏覽器，已複製更新網址')),
-            );
-          }
-          DiaryService.add('[Update] open_release_failed=${error.runtimeType}');
-        }
+      if (action == _UpdatePromptAction.applyUpdate && mounted) {
+        await _downloadAndInstallAppUpdate(availableUpdate);
       }
     } catch (error) {
       _updateDialogOpen = false;
@@ -1508,6 +1507,84 @@ class _HomeScreenState extends State<HomeScreen> {
           const SnackBar(content: Text('檢查更新失敗，請確認網路連線後再試')),
         );
       }
+    }
+  }
+
+  Future<void> _downloadAndInstallAppUpdate(AppUpdateInfo update) async {
+    if (!mounted || _updateDialogOpen) return;
+    _updateDialogOpen = true;
+    final progress = ValueNotifier<double?>(null);
+    BuildContext? progressDialogContext;
+    final dialogFuture = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        progressDialogContext = dialogContext;
+        return ValueListenableBuilder<double?>(
+          valueListenable: progress,
+          builder: (context, value, _) => AlertDialog(
+            title: const Text('正在下載 D TV 更新'),
+            content: SizedBox(
+              width: 300,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('下載完成後會自動啟動安裝程序。'),
+                  const SizedBox(height: 16),
+                  LinearProgressIndicator(value: value),
+                  if (value != null) ...[
+                    const SizedBox(height: 8),
+                    Text('${(value * 100).round()}%'),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      await const AppUpdateService().downloadAndApplyUpdate(
+        update,
+        onProgress: (receivedBytes, totalBytes) {
+          if (totalBytes != null && totalBytes > 0) {
+            progress.value = (receivedBytes / totalBytes).clamp(0.0, 1.0);
+          }
+        },
+      );
+      if (Platform.isAndroid && mounted) {
+        if (progressDialogContext != null) {
+          Navigator.of(progressDialogContext!).pop();
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已開啟系統安裝畫面，請按「安裝」完成更新')),
+        );
+      }
+    } catch (error) {
+      if (progressDialogContext != null && mounted) {
+        Navigator.of(progressDialogContext!).pop();
+      }
+      if (mounted) {
+        final message = error is PlatformException &&
+                error.code == 'install_permission_required'
+            ? '已開啟允許安裝未知應用設定。請允許 D TV 後，回到應用再次按「更新」。'
+            : '自動更新失敗：$error';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), duration: const Duration(seconds: 7)),
+        );
+      }
+      DiaryService.add('[Update] apply_failed=${error.runtimeType}');
+    } finally {
+      _updateDialogOpen = false;
+      progress.dispose();
+      if (progressDialogContext != null && mounted) {
+        final navigator = Navigator.of(progressDialogContext!);
+        if (navigator.canPop()) navigator.pop();
+      }
+      await dialogFuture;
     }
   }
 
