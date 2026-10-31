@@ -1578,7 +1578,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final brandHeaderWidth = (
           constraints.maxWidth -
           (desktop && constraints.maxWidth < 840 ? 360.0 : 220.0)
-        ).clamp(220.0, 460.0).toDouble();
+        ).clamp(300.0, 460.0).toDouble();
         final bannerWidth = (constraints.maxWidth -
                 (constraints.maxWidth >= 1450 ? 600.0 : 530.0))
             .clamp(300.0, 980.0)
@@ -1599,95 +1599,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: bannerWidth,
                     height: bannerHeight,
                   )
-                : (
-                    _tab == 0 && widget.store.sources.isNotEmpty
-                                    ? PopupMenuButton<SourceGroup>(
-                                        key: const ValueKey('source-switch'),
-                                        tooltip: '切換片源',
-                                        enabled: _sourceGroups.length > 1,
-                                        onOpened: _homePopupOpened,
-                                        onCanceled: _homePopupCanceled,
-                                        onSelected: (group) {
-                                          _homePopupSelected();
-                                          _changeGroup(group);
-                                        },
-                                        itemBuilder: (_) => [
-                                          for (final group in _sourceGroups)
-                                            PopupMenuItem(
-                                              value: group,
-                                              child: Row(
-                                                children: [
-                                                  Expanded(child: Text(uiTraditional(group.name))),
-                                                  if (group.id == _group.id)
-                                                    const Icon(Icons.check_rounded, size: 20),
-                                                ],
-                                              ),
-                                            ),
-                                        ],
-                                        child: SizedBox(
-                                          height: 48,
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              _brandLogo(width: 126, height: 46),
-                                              const SizedBox(width: 8),
-                                              Flexible(
-                                                child: Text(
-                                                  uiTraditional(_group.name),
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                              if (_sourceGroups.length > 1)
-                                                const Icon(Icons.expand_more_rounded),
-                                            ],
-                                          ),
-                                        ),
-                                      )
-                                    : _brandTitle()
-                  ),
+                : widget.store.sources.isNotEmpty
+                ? _sourceSwitcher(keyName: 'home-source-switch-mobile', branded: true)
+                : _brandTitle(),
             actions: [
-                if (Platform.isWindows && widget.store.sources.isNotEmpty)
-                  PopupMenuButton<SourceGroup>(
-                    key: const ValueKey('windows-source-switch'),
-                    tooltip: '切換片源（目前：${uiTraditional(_group.name)}）',
-                    enabled: _sourceGroups.length > 1,
-                    onOpened: _homePopupOpened,
-                    onCanceled: _homePopupCanceled,
-                    onSelected: (group) {
-                      _homePopupSelected();
-                      _changeGroup(group);
-                    },
-                    itemBuilder: (_) => [
-                      for (final group in _sourceGroups)
-                        PopupMenuItem(
-                          value: group,
-                          child: Row(
-                            children: [
-                              Expanded(child: Text(uiTraditional(group.name))),
-                              if (group.id == _group.id)
-                                const Icon(Icons.check_rounded, size: 20),
-                            ],
-                          ),
-                        ),
-                    ],
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.source_outlined),
-                          const SizedBox(width: 6),
-                          Text(uiTraditional(_group.name)),
-                          if (_sourceGroups.length > 1)
-                            const Icon(Icons.expand_more_rounded, size: 18),
-                        ],
-                      ),
-                    ),
-                  ),
                 if (wideControls && (_isCatalogTab || _isRankingTab)) ...[
                   SizedBox(
                     width: constraints.maxWidth >= 1450 ? 340 : 260,
@@ -2035,6 +1950,104 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
+  /// Home-level source selector. Keep this separate from source management:
+  /// it changes the active catalog group without opening settings.
+  Widget _sourceSwitcher({
+    required String keyName,
+    bool branded = false,
+    bool compact = false,
+  }) {
+    final canSwitch = _sourceGroups.length > 1;
+    final currentName = uiTraditional(_group.name);
+    return PopupMenuButton<SourceGroup>(
+      key: ValueKey(keyName),
+      tooltip: canSwitch ? '切換片源' : '目前片源：$currentName',
+      enabled: canSwitch,
+      onOpened: _homePopupOpened,
+      onCanceled: _homePopupCanceled,
+      onSelected: (group) {
+        _homePopupSelected();
+        _changeGroup(group);
+      },
+      itemBuilder: (_) => [
+        for (final group in _sourceGroups)
+          PopupMenuItem(
+            value: group,
+            child: Row(
+              children: [
+                Expanded(child: Text(uiTraditional(group.name))),
+                if (group.id == _group.id)
+                  const Icon(Icons.check_rounded, size: 20),
+              ],
+            ),
+          ),
+      ],
+      child: branded
+          ? SizedBox(
+              height: 48,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _brandLogo(width: 126, height: 46),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      currentName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (canSwitch) const Icon(Icons.expand_more_rounded),
+                ],
+              ),
+            )
+          : Container(
+              height: 42,
+              padding: EdgeInsets.symmetric(horizontal: compact ? 9 : 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.source_outlined,
+                    size: compact ? 17 : 19,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: compact ? 112 : 160,
+                    ),
+                    child: Text(
+                      currentName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: compact ? 12 : 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (canSwitch) ...[
+                    const SizedBox(width: 3),
+                    const Icon(Icons.expand_more_rounded, size: 18),
+                  ],
+                ],
+              ),
+            ),
+    );
+  }
+
   Widget _brandLogo({required double width, required double height}) {
     final theme = Theme.of(context);
     return SizedBox(
@@ -2073,13 +2086,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _compactBrandHeader({required double width}) {
     final theme = Theme.of(context);
     return SizedBox(
-      width: width.clamp(220.0, 460.0).toDouble(),
+      width: width.clamp(300.0, 460.0).toDouble(),
       height: 72,
       child: Row(
         children: [
-          const _DtvBrandMark(size: 58),
-          const SizedBox(width: 14),
-          Flexible(
+          const _DtvBrandMark(size: 50),
+          const SizedBox(width: 10),
+          Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2091,10 +2104,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: theme.colorScheme.onSurface,
-                    fontSize: 31,
+                    fontSize: 29,
                     height: 1,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 1.15,
+                    letterSpacing: 1.1,
                     shadows: const [
                       Shadow(color: Color(0x5533BFFF), blurRadius: 10),
                     ],
@@ -2107,26 +2120,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 12.5,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                const Text(
-                  '熱門榜單・收藏追劇・隨選即播',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Color(0xFF70CFFF),
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          _sourceSwitcher(keyName: 'home-source-switch-tv', compact: true),
         ],
       ),
     );
@@ -2174,6 +2177,15 @@ class _HomeScreenState extends State<HomeScreen> {
               width: width * .46,
               child: _brandLogo(width: width * .46, height: height * .78),
             ),
+            if (widget.store.sources.isNotEmpty)
+              Positioned(
+                left: width * .50,
+                bottom: height * .14,
+                child: _sourceSwitcher(
+                  keyName: 'home-source-switch-wide',
+                  compact: true,
+                ),
+              ),
             Positioned(
               right: width * .035,
               bottom: height * .12,
