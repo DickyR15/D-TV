@@ -117,7 +117,7 @@ elif options.platform == "windows":
         for source in sorted(bundle.rglob("*")):
             if source.is_file():
                 relative = source.relative_to(bundle).as_posix()
-                                archive.write(source, relative)
+                archive.write(source, relative)
 
     # Reopen the closed archive for CRC validation. Checking it while the ZIP
     # writer is still open can report false corruption on large Windows AOT
