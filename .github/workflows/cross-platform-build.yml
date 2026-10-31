@@ -86,6 +86,15 @@ jobs:
           msystem: MINGW64
           update: true
           install: mingw-w64-x86_64-gcc
+      - name: Read Windows package version
+        id: windows-version
+        shell: pwsh
+        run: |
+          $line = (Select-String -Path "pubspec.yaml" -Pattern "^version:").Line
+          $version = $line -replace "^version:\s*", ""
+          $version = $version.Trim().Trim('"').Trim("'").Split('+')[0]
+          if (-not $version) { throw "無法讀取 D TV 版本號。" }
+          "app_version=$version" >> $env:GITHUB_OUTPUT
       - name: Build and package Windows x64
         shell: pwsh
         run: python scripts/retry_command.py --attempts 3 -- python scripts/build_windows.py --all-sources
@@ -100,10 +109,13 @@ jobs:
             throw "D TV exited during its Windows portable startup smoke test (exit code $($process.ExitCode))."
           }
           Stop-Process -Id $process.Id -Force
+      # Upload the unpacked portable bundle as the artifact itself. GitHub
+      # creates the downloadable ZIP, so uploading dist/*.zip here would
+      # produce a ZIP containing another ZIP (two extraction steps).
       - uses: actions/upload-artifact@v4
         with:
-          name: DTV-Windows-Portable
-          path: dist/windows/DTV-*.zip
+          name: DTV-${{ steps.windows-version.outputs.app_version }}-Windows-Portable
+          path: build/windows/x64/runner/Release/
           if-no-files-found: error
           retention-days: 14
 

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/home_screen.dart';
+import 'package:hgtv/models.dart';
 
 import 'fixtures.dart';
 

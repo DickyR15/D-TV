@@ -2051,9 +2051,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             )
+          : compact
+          ? SizedBox(
+              width: 40,
+              height: 40,
+              child: Icon(
+                Icons.public_rounded,
+                size: 21,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            )
           : Container(
               height: 42,
-              padding: EdgeInsets.symmetric(horizontal: compact ? 9 : 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(12),

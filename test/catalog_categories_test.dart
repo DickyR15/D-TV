@@ -388,9 +388,7 @@ void main() {
       expect(repository.categoryRequests, isNot(contains('huangguoai||2')));
 
       repository.failLegacy = true;
-      final failedLegacyPage = await browser.load(legacy);
-      expect(failedLegacyPage.items, isEmpty);
-      expect(failedLegacyPage.warning, '合成入口失敗');
+      await expectLater(browser.load(legacy), throwsA(isA<AppFailure>()));
       expect(repository.categoryRequests, contains('cloudfront||1'));
       expect(repository.categoryRequests, isNot(contains('huangguo-video||3')));
       expect(repository.categoryRequests, isNot(contains('huangguoai||3')));
