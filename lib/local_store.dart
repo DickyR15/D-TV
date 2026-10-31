@@ -487,7 +487,7 @@ class LocalStore extends ChangeNotifier {
     });
   }
 
-  /// One-time default migration for landscape Android MPV devices.
+  /// One-time default migration for Windows and landscape Android MPV devices.
   /// Earlier versions serialized the default-off value whenever another
   /// playback preference was saved, so a missing-key check alone is not enough.
   bool get needsPortraitBlurLandscapeDefaultMigration =>
