@@ -91,7 +91,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
 
     expect(find.text('一般片源'), findsOneWidget);
-    expect(find.text('進階片源'), findsOneWidget);
+    expect(find.text('進階片源'), findsNothing);
+    expect(find.textContaining('七個進階片源'), findsNothing);
+    expect(find.textContaining('忘記管理員密碼'), findsNothing);
   });
 
 }
