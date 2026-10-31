@@ -1629,6 +1629,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _sourceSwitcher(
                       keyName: 'home-source-switch-desktop',
                       compact: true,
+                      iconOnly: true,
                     ),
                   ),
                 if (wideControls && (_isCatalogTab || _isRankingTab)) ...[
@@ -1984,6 +1985,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required String keyName,
     bool branded = false,
     bool compact = false,
+    bool iconOnly = false,
   }) {
     final canSwitch = _sourceGroups.length > 1;
     final canManage = widget.store.profile.admin && !widget.store.locked;
@@ -2051,7 +2053,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             )
-          : compact
+          : iconOnly
           ? SizedBox(
               width: 40,
               height: 40,
