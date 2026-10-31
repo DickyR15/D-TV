@@ -103,7 +103,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
             children: [
               const Text('尚未設定管理員密碼'),
               const SizedBox(height: 6),
-              const Text('請先設定管理員密碼，才能解鎖七個進階片源。'),
+              const Text('請先設定管理員密碼，才能繼續管理片源。'),
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 key: const ValueKey('configure-admin-source-password'),
@@ -122,9 +122,9 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('進階片源已上鎖'),
+            const Text('管理功能已上鎖'),
             const SizedBox(height: 6),
-            const Text('輸入管理員密碼後，才會顯示七個進階片源及其開關。'),
+            const Text('請輸入管理員密碼以繼續。'),
             const SizedBox(height: 12),
             TextField(
               key: const ValueKey('advanced-source-password'),
@@ -144,7 +144,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
               key: const ValueKey('unlock-advanced-sources'),
               onPressed: _busy ? null : _unlock,
               icon: const Icon(Icons.lock_open_rounded),
-              label: Text(_busy ? '正在驗證…' : '解鎖進階片源'),
+              label: Text(_busy ? '正在驗證…' : '解鎖'),
             ),
             const SizedBox(height: 8),
 
@@ -189,29 +189,27 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                     ),
                     const SizedBox(height: 8),
                     for (final source in general) _sourceTile(source),
-                    const Divider(height: 28),
-                    Text(
-                      '進階片源',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    if (advanced.isEmpty)
-                      const Text('目前這個版本未包含進階片源，請使用完整片源版 D TV。')
-                    else if (unlocked) ...[
-                      const Text('已解鎖。離開此頁面後，進階片源管理會自動重新上鎖。'),
-                      const SizedBox(height: 8),
-                      for (final source in advanced) _sourceTile(source),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          key: const ValueKey('lock-advanced-sources'),
-                          onPressed: _lock,
-                          icon: const Icon(Icons.lock_outline_rounded),
-                          label: const Text('立即上鎖'),
+                    if (advanced.isNotEmpty) ...[
+                      const Divider(height: 28),
+                      if (unlocked) ...[
+                        Text(
+                          '進階片源',
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                      ),
-                    ] else
-                      _passwordGate(),
+                        const SizedBox(height: 8),
+                        for (final source in advanced) _sourceTile(source),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            key: const ValueKey('lock-advanced-sources'),
+                            onPressed: _lock,
+                            icon: const Icon(Icons.lock_outline_rounded),
+                            label: const Text('立即上鎖'),
+                          ),
+                        ),
+                      ] else
+                        _passwordGate(),
+                    ],
                     if (_error != null) ...[
                       const SizedBox(height: 12),
                       Text(
