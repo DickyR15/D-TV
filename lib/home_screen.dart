@@ -35,7 +35,7 @@ import 'ui_localization.dart';
 import 'phone_search_dialog.dart';
 import 'app_navigation.dart';
 
-enum _UpdatePromptAction { remindLater, ignoreVersion, openRelease }
+enum _UpdatePromptAction { remindLater, ignoreVersion, disableStartupChecks, download }
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
@@ -939,7 +939,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     // Check only release builds. The request is delayed so the first screen
     // and ranking data are not held up by the GitHub API.
-    if (kReleaseMode && (Platform.isAndroid || Platform.isWindows)) {
+    if (kReleaseMode &&
+        (Platform.isAndroid ||
+            Platform.isWindows ||
+            Platform.isMacOS ||
+            Platform.isIOS) &&
+        widget.store.checkForUpdatesOnStartup) {
       _appUpdateCheckTimer = Timer(
         const Duration(seconds: 6),
         () => unawaited(_checkForAppUpdate()),
@@ -1394,35 +1399,71 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
 
-  Future<void> _checkForAppUpdate() async {
+  Future<void> _checkForAppUpdate({bool manual = false}) async {
     if (!mounted || _updateDialogOpen) return;
+    if (!manual && !widget.store.checkForUpdatesOnStartup) return;
+    _updateDialogOpen = true;
     try {
       final update = await const AppUpdateService().checkForUpdate();
-      if (!mounted ||
+      if (!mounted) return;
+      if (update == null) {
+        if (manual && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '目前已是最新版本（' + AppLayout.versionOf(context) + '）',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      if (!manual &&
           !AppUpdateService.shouldNotify(
             update,
             ignoredVersion: widget.store.ignoredUpdateVersion,
-          ) ||
-          (ModalRoute.of(context)?.isCurrent == false)) {
+          )) {
         return;
       }
-      final availableUpdate = update!;
-      _updateDialogOpen = true;
+      if (ModalRoute.of(context)?.isCurrent == false) return;
+
+      final asset = update.assetForPlatform(Platform.operatingSystem);
+      final platformNote = switch (Platform.operatingSystem) {
+        'android' => '將下載 APK，接著由 Android 系統安裝程式確認更新。',
+        'windows' => '將下載免安裝 ZIP，關閉 D TV 後自動替換檔案並重新啟動。',
+        'macos' => '將下載 DMG 並開啟安裝映像檔，請將新版 D TV 拖曳至「應用程式」替換。',
+        'ios' => 'iOS 版需使用 IPA 手動安裝，按下更新後會開啟版本下載頁面。',
+        _ => '將依目前裝置提供可用的更新檔案。',
+      };
+      final contentText = [
+        '目前版本：' + AppLayout.versionOf(context),
+        '新版本：' + update.version,
+        '',
+        update.notes.trim().isEmpty
+            ? '有新版本可供下載。'
+            : update.notes.trim().characters.take(1500).toString(),
+        '',
+        asset == null
+            ? '目前尚未找到此平台的安裝檔，將開啟版本頁面供手動下載。'
+            : platformNote,
+      ].join('\n');
+
       final action = await showDialog<_UpdatePromptAction>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text('發現 D TV 新版本 ${availableUpdate.version}'),
+          title: Text('發現 D TV 新版本 ' + update.version),
           content: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
-            child: SingleChildScrollView(
-              child: Text(
-                availableUpdate.notes.trim().isEmpty
-                    ? '目前版本：${AppLayout.versionOf(context)}\n新版本：${availableUpdate.version}\n\n有新版本可供下載。'
-                    : availableUpdate.notes.trim().characters.take(1800).toString(),
-              ),
-            ),
+            child: SingleChildScrollView(child: Text(contentText)),
           ),
           actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _UpdatePromptAction.disableStartupChecks,
+              ),
+              child: const Text('不再提醒'),
+            ),
             TextButton(
               onPressed: () => Navigator.pop(
                 dialogContext,
@@ -1435,48 +1476,195 @@ class _HomeScreenState extends State<HomeScreen> {
                 dialogContext,
                 _UpdatePromptAction.remindLater,
               ),
-              child: const Text('稍後提醒'),
+              child: const Text('忽略'),
             ),
             FilledButton(
               autofocus: true,
               onPressed: () => Navigator.pop(
                 dialogContext,
-                _UpdatePromptAction.openRelease,
+                _UpdatePromptAction.download,
               ),
-              child: const Text('查看更新'),
+              child: const Text('更新'),
             ),
           ],
         ),
       );
-      _updateDialogOpen = false;
-      if (action == _UpdatePromptAction.ignoreVersion && mounted) {
-        await widget.store.ignoreUpdateVersion(availableUpdate.version);
+
+      if (!mounted) return;
+      if (action == _UpdatePromptAction.ignoreVersion) {
+        await widget.store.ignoreUpdateVersion(update.version);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('已忽略版本 ${availableUpdate.version}')),
+            SnackBar(content: Text('已忽略版本 ' + update.version)),
           );
         }
-        DiaryService.add('[Update] ignored_version=${availableUpdate.version}');
-        return;
-      }
-      if (action == _UpdatePromptAction.openRelease && mounted) {
-        try {
-          await AppDevice.openExternalUrl(availableUpdate.releaseUrl);
-        } catch (error) {
-          await Clipboard.setData(
-            ClipboardData(text: availableUpdate.releaseUrl),
+        DiaryService.add('[Update] ignored_version=' + update.version);
+      } else if (action == _UpdatePromptAction.disableStartupChecks) {
+        await widget.store.setCheckForUpdatesOnStartup(false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('已關閉啟動時自動檢查更新；仍可手動檢查。')),
           );
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('無法開啟瀏覽器，已複製更新網址')),
-            );
-          }
-          DiaryService.add('[Update] open_release_failed=${error.runtimeType}');
         }
+        DiaryService.add('[Update] startup_check_disabled');
+      } else if (action == _UpdatePromptAction.download) {
+        await _downloadAndInstallUpdate(update);
       }
     } catch (error) {
+      DiaryService.add('[Update] check_failed=' + error.runtimeType.toString());
+      if (manual && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('檢查更新失敗，請確認網路連線後再試。')),
+        );
+      }
+    } finally {
       _updateDialogOpen = false;
-      DiaryService.add('[Update] check_failed=${error.runtimeType}');
+    }
+  }
+
+  Future<void> _downloadAndInstallUpdate(AppUpdateInfo update) async {
+    final service = const AppUpdateService();
+    final asset = update.assetForPlatform(Platform.operatingSystem);
+    if (asset == null) {
+      await AppDevice.openExternalUrl(update.releaseUrl);
+      return;
+    }
+
+    var progressDialogOpen = true;
+    final progressDialog = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('正在下載 D TV 更新'),
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
+            const SizedBox(width: 18),
+            Expanded(child: Text(asset.name)),
+          ],
+        ),
+      ),
+    );
+    unawaited(progressDialog);
+    try {
+      await Future<void>.delayed(Duration.zero);
+      final file = await service.downloadAsset(asset);
+      if (!mounted) return;
+      if (progressDialogOpen) {
+        Navigator.of(context, rootNavigator: true).pop();
+        progressDialogOpen = false;
+      }
+
+      if (Platform.isAndroid) {
+        await AppDevice.installApk(file.path);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('更新檔已下載，請依 Android 安裝畫面完成更新。')),
+          );
+        }
+      } else if (Platform.isWindows) {
+        await service.launchWindowsUpdater(file);
+        exit(0);
+      } else if (Platform.isMacOS) {
+        await service.openMacDmg(file);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('DMG 已下載並開啟，請將新版 D TV 拖曳至「應用程式」完成更新。'),
+            ),
+          );
+        }
+      } else {
+        await AppDevice.openExternalUrl(update.releaseUrl);
+      }
+    } catch (error) {
+      if (progressDialogOpen && mounted) {
+        Navigator.of(context, rootNavigator: true).maybePop();
+        progressDialogOpen = false;
+      }
+      DiaryService.add('[Update] download_failed=' + error.runtimeType.toString());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('下載或啟動更新失敗，請稍後重試。')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAboutDtv() async {
+    var checkOnStartup = widget.store.checkForUpdatesOnStartup;
+    final checkNow = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _DtvBrandMark(size: 42),
+              const SizedBox(width: 12),
+              const Text('關於 D TV'),
+            ],
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.info_outline_rounded),
+                    title: const Text('目前版本'),
+                    subtitle: Text(AppLayout.versionOf(context)),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.person_outline_rounded),
+                    title: const Text('作者'),
+                    subtitle: const Text(appAuthor),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: checkOnStartup,
+                    title: const Text('啟動時檢查更新'),
+                    subtitle: const Text('關閉後仍可在這裡手動檢查更新。'),
+                    onChanged: (value) async {
+                      final previous = checkOnStartup;
+                      setDialogState(() => checkOnStartup = value);
+                      try {
+                        await widget.store.setCheckForUpdatesOnStartup(value);
+                      } catch (_) {
+                        if (dialogContext.mounted) {
+                          setDialogState(() => checkOnStartup = previous);
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('關閉'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.system_update_alt_rounded),
+              label: const Text('立即檢查更新'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (checkNow == true && mounted) {
+      await _checkForAppUpdate(manual: true);
     }
   }
 
@@ -1807,16 +1995,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     } else if (value == 'display') {
                       _chooseDisplayMode();
                     } else if (value == 'about') {
-                      // showAboutDialog returns void (not a Future).
-                      // The parent Back handler already ignores the underlying
-                      // home route while this dialog is on top.
-                      showAboutDialog(
-                        context: context,
-                        applicationName: appName,
-                        applicationVersion: AppLayout.versionOf(context),
-                        applicationIcon: const _DtvBrandMark(size: 56),
-                        children: [Text('作者：$appAuthor')],
-                      );
+                      unawaited(_showAboutDtv());
                     }
                   },
                   itemBuilder: (_) => [
@@ -1860,6 +2039,7 @@ class _HomeScreenState extends State<HomeScreen> {
           body: SafeArea(
             top: false,
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (desktop || television) ...[
                   _sideNavigation(),
@@ -2410,8 +2590,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       if (key == LogicalKeyboardKey.arrowRight) {
         if (_tab == 1 || _tab == 2) {
-          // Enter the first poster when the saved list has items. These pages
-          // intentionally no longer show a search row.
           if (_savedGridFocus.hasTarget) _savedGridFocus.focusFirst();
           return KeyEventResult.handled;
         }
@@ -2422,114 +2600,167 @@ class _HomeScreenState extends State<HomeScreen> {
       return KeyEventResult.ignored;
     }
 
+    Widget buildEntry(
+      ({int tab, IconData icon, String label}) entry, {
+      required double itemHeight,
+      required double iconSize,
+      required double labelSize,
+      required double verticalPadding,
+    }) {
+      return RemoteTarget(
+        key: ValueKey('side-nav-' + entry.tab.toString()),
+        focusNode: _navigationFocusNodes.putIfAbsent(
+          entry.tab,
+          () => FocusNode(debugLabel: 'D TV navigation ' + entry.tab.toString()),
+        ),
+        autofocus: television && _tab == entry.tab,
+        selected: _tab == entry.tab,
+        scrollAlignment: television ? 0.32 : 0,
+        scrollAlignmentPolicy: television
+            ? ScrollPositionAlignmentPolicy.explicit
+            : null,
+        onFocus: () {},
+        onPressed: () {
+          _navigationFocusNodes[entry.tab]?.requestFocus();
+          _selectNavigationDestination(entry.tab);
+        },
+        label: entry.label,
+        padding: EdgeInsets.symmetric(
+          horizontal: television ? 7 : 5,
+          vertical: verticalPadding,
+        ),
+        radius: 12,
+        borderWidth: 2,
+        outlined: true,
+        child: SizedBox(
+          height: itemHeight,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                entry.icon,
+                size: iconSize,
+                color: _tab == entry.tab
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                entry.label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: labelSize,
+                  height: 1.12,
+                  fontWeight: _tab == entry.tab
+                      ? FontWeight.w800
+                      : FontWeight.w500,
+                  color: _tab == entry.tab
+                      ? theme.colorScheme.onPrimaryContainer
+                      : theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableHeight = constraints.maxHeight.isFinite
             ? constraints.maxHeight
             : 760.0;
-        final scale = television
-            ? 1.0
-            : (availableHeight / 760.0).clamp(0.74, 1.12).toDouble();
+        final scale = (availableHeight / 760.0)
+            .clamp(0.76, 1.14)
+            .toDouble();
         final itemHeight = television
             ? 62.0
-            : (58.0 * scale).clamp(46.0, 64.0).toDouble();
+            : (58.0 * scale).clamp(48.0, 66.0).toDouble();
         final iconSize = television
             ? 24.0
             : (23.0 * scale).clamp(18.0, 25.0).toDouble();
         final labelSize = television
             ? 16.0
             : (16.0 * scale).clamp(14.5, 17.5).toDouble();
-        final navigationVerticalPadding =
-            television ? 7.0 : (3.0 * scale).clamp(1.5, 3.0).toDouble();
-        final navigationItemSpacing =
-            television ? 5.0 : (3.0 * scale).clamp(1.0, 3.0).toDouble();
+        final verticalPadding = television ? 7.0 : 3.0;
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        final sideWidth = television
+            ? 176.0
+            : (screenWidth * 0.12).clamp(168.0, 224.0).toDouble();
+
         return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: handleNavigationKey,
-      child: SizedBox(
-        width: television ? 176 : 160,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(
-            horizontal: 7,
-            vertical: television ? 8 : 4,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final entry in entries)
-                Padding(
-                  padding: EdgeInsets.only(bottom: navigationItemSpacing),
-                  child: RemoteTarget(
-                    key: ValueKey('side-nav-${entry.tab}'),
-                    focusNode: _navigationFocusNodes.putIfAbsent(
-                      entry.tab,
-                      () => FocusNode(debugLabel: 'D TV navigation ${entry.tab}'),
-                    ),
-                    autofocus: television && _tab == entry.tab,
-                    selected: _tab == entry.tab,
-                    // On real Android TV, keep focused navigation entries away
-                    // from the top brand area when returning from the bottom.
-                    scrollAlignment: television ? 0.32 : 0,
-                    scrollAlignmentPolicy: television
-                        ? ScrollPositionAlignmentPolicy.explicit
-                        : null,
-                    // Focus is only a remote-navigation state. It must not
-                    // change the selected page: autofocus can move briefly
-                    // during the splash/route transition. Real user navigation
-                    // selects a page in handleNavigationKey or onPressed.
-                    onFocus: () {},
-                    onPressed: () {
-                      _navigationFocusNodes[entry.tab]?.requestFocus();
-                      _selectNavigationDestination(entry.tab);
-                    },
-                    label: entry.label,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: television ? 7 : 5,
-                      vertical: navigationVerticalPadding,
-                    ),
-                    radius: 12,
-                    borderWidth: 2,
-                    outlined: true,
-                    child: SizedBox(
-                      height: itemHeight,
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: handleNavigationKey,
+          child: SizedBox(
+            width: sideWidth,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: 7,
+                vertical: 8,
+              ),
+              child: television
+                  ? SingleChildScrollView(
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Icon(
-                            entry.icon,
-                            size: iconSize,
-                            color: _tab == entry.tab
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            entry.label,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: labelSize,
-                              height: 1.12,
-                              fontWeight: _tab == entry.tab
-                                  ? FontWeight.w800
-                                  : FontWeight.w500,
-                              color: _tab == entry.tab
-                                  ? theme.colorScheme.onPrimaryContainer
-                                  : theme.colorScheme.onSurface,
+                          for (final entry in entries)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 5),
+                              child: buildEntry(
+                                entry,
+                                itemHeight: itemHeight,
+                                iconSize: iconSize,
+                                labelSize: labelSize,
+                                verticalPadding: verticalPadding,
+                              ),
                             ),
-                          ),
                         ],
                       ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        buildEntry(
+                          entries.first,
+                          itemHeight: itemHeight,
+                          iconSize: iconSize,
+                          labelSize: labelSize,
+                          verticalPadding: verticalPadding,
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final entry in entries.skip(1).take(entries.length - 2))
+                                Expanded(
+                                  child: Center(
+                                    child: buildEntry(
+                                      entry,
+                                      itemHeight: itemHeight,
+                                      iconSize: iconSize,
+                                      labelSize: labelSize,
+                                      verticalPadding: verticalPadding,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        buildEntry(
+                          entries.last,
+                          itemHeight: itemHeight,
+                          iconSize: iconSize,
+                          labelSize: labelSize,
+                          verticalPadding: verticalPadding,
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-            ],
+            ),
           ),
-        ),
-        ),
         );
       },
     );
