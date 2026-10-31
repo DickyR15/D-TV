@@ -30,6 +30,41 @@ void main() {
     expect(eligible(aspectRatio: double.infinity), isFalse);
   });
 
+  test('Windows and Android MPV support portrait blur but Android ExoPlayer does not', () {
+    expect(
+      supportsPortraitBlurBackground(
+        android: false,
+        windows: true,
+        androidMpvConfigured: false,
+      ),
+      isTrue,
+    );
+    expect(
+      supportsPortraitBlurBackground(
+        android: true,
+        windows: false,
+        androidMpvConfigured: true,
+      ),
+      isTrue,
+    );
+    expect(
+      supportsPortraitBlurBackground(
+        android: true,
+        windows: false,
+        androidMpvConfigured: false,
+      ),
+      isFalse,
+    );
+    expect(
+      supportsPortraitBlurBackground(
+        android: false,
+        windows: false,
+        androidMpvConfigured: true,
+      ),
+      isFalse,
+    );
+  });
+
   test('Android TV keeps MPV Embed while Flutter composites portrait blur', () {
     bool embed({
       bool android = true,
