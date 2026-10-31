@@ -1047,7 +1047,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   repository: widget.repository,
                   radius: 0,
                   showGradient: false,
-                  showEpisodeBadge: false,
                 ),
                 Positioned(
                   top: 8,
