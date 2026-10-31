@@ -37,6 +37,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.annotation.ChecksSdkIntAtLeast
+import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterShellArgs
 import io.flutter.plugin.common.MethodChannel
@@ -556,6 +557,42 @@ open class MainActivity : FlutterActivity() {
                                     result.error(
                                         "cannot_open_url",
                                         error.message ?: "無法開啟更新頁面",
+                                        null
+                                    )
+                                }
+                            }
+                        }
+                        "installApk" -> {
+                            val apkPath = call.argument<String>("path")
+                            val apk = apkPath?.let { File(it) }
+                            if (apk == null || !apk.isFile ||
+                                !apk.extension.equals("apk", ignoreCase = true)
+                            ) {
+                                result.error("invalid_apk", "下載的 APK 檔案無效", null)
+                            } else {
+                                runCatching {
+                                    val uri = FileProvider.getUriForFile(
+                                        this,
+                                        "$packageName.fileprovider",
+                                        apk
+                                    )
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(
+                                            uri,
+                                            "application/vnd.android.package-archive"
+                                        )
+                                        addFlags(
+                                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                        )
+                                    }
+                                    startActivity(intent)
+                                }.onSuccess {
+                                    result.success(null)
+                                }.onFailure { error ->
+                                    result.error(
+                                        "apk_install_failed",
+                                        error.message ?: "無法開啟 Android 安裝程式",
                                         null
                                     )
                                 }

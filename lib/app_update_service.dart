@@ -5,8 +5,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
-import 'app_layout.dart';
-
 class AppUpdateAsset {
   const AppUpdateAsset({
     required this.name,
@@ -115,9 +113,17 @@ class AppUpdateService {
       throw const FormatException('更新檔名稱無效');
     }
 
-    final baseDirectory = Platform.isAndroid
-        ? await getTemporaryDirectory()
-        : await getDownloadsDirectory() ?? await getTemporaryDirectory();
+    final Directory baseDirectory;
+    if (Platform.isAndroid) {
+      baseDirectory = await getTemporaryDirectory();
+    } else {
+      try {
+        baseDirectory =
+            await getDownloadsDirectory() ?? await getTemporaryDirectory();
+      } catch (_) {
+        baseDirectory = await getTemporaryDirectory();
+      }
+    }
     final directory = Directory(path.join(baseDirectory.path, 'D TV Updates'));
     await directory.create(recursive: true);
     final target = File(path.join(directory.path, safeName));

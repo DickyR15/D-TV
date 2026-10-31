@@ -160,6 +160,26 @@ jobs:
         with:
           packages: "platforms;android-36 build-tools;36.0.0 platform-tools ndk;28.2.13676358"
           accept-android-sdk-licenses: true
+      - name: Set up Android signing (same key source as v7a build)
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: dtv-release
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "::warning::Release signing secrets are not configured; the Universal APK will use the Gradle debug signing fallback and may not update an existing v7a installation."
+            exit 0
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/dtv-release.jks"
+          test -s "$RUNNER_TEMP/dtv-release.jks"
+          chmod 600 "$RUNNER_TEMP/dtv-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/dtv-release.jks" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
       - name: Build one APK with ARM64, ARMv7 and x86_64
         id: build-universal
         shell: bash
