@@ -520,4 +520,29 @@ void main() {
     },
   );
 
+  testWidgets('source without its own ranking board shows an empty state', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+
+    final repository = _RankingRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RankingsScreen(
+          repository: repository,
+          store: store,
+          initialGroup: 'cloudfront',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('此片源沒有獨立榜單'), findsOneWidget);
+    expect(find.textContaining('目前片源沒有獨立熱門榜單'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(repository.rankingCalls, 0);
+  });
+
 }

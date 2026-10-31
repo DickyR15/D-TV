@@ -687,7 +687,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
           _hasMore = cached.hasMore;
           _updated = cached.updatedText;
         }
-        _loading = cached == null || cached.items.isEmpty;
+        _loading = selectedBoard != null &&
+            (cached == null || cached.items.isEmpty);
       });
       if (_board != null) {
         if (cached == null || cached.items.isEmpty) {
@@ -1449,10 +1450,18 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     )
                   : items.isEmpty
                   ? StatusPanel(
-                      title: _error == null ? '暫無榜單內容' : '榜單暫時無法載入',
-                      message: uiTraditional(_error ?? '目前片源沒有可顯示的排行榜。'),
+                      title: _board == null
+                          ? '此片源沒有獨立榜單'
+                          : _error == null
+                          ? '暫無榜單內容'
+                          : '榜單暫時無法載入',
+                      message: uiTraditional(
+                        _board == null
+                            ? '目前片源沒有獨立熱門榜單，請切換至有提供榜單的片源。'
+                            : _error ?? '目前片源沒有可顯示的排行榜。',
+                      ),
                       onRetry: _board == null
-                          ? _initialize
+                          ? null
                           : () => _load(force: true),
                     )
                   : LayoutBuilder(
