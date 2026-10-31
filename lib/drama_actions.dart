@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'local_store.dart';
 import 'models.dart';
+import 'remote_widgets.dart';
 import 'widgets.dart';
 import 'ui_localization.dart';
 
@@ -32,28 +33,35 @@ Future<void> showDramaActions(
           ? KeyEventResult.handled
           : KeyEventResult.ignored,
       child: SimpleDialog(
-      title: Text(uiTraditional(drama.title), maxLines: 2, overflow: TextOverflow.ellipsis),
-      children: [
-        for (final entry in choices.indexed)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: TextButton.icon(
-                key: ValueKey('drama-action-${entry.$2.$1}'),
-                autofocus: entry.$2.$1 == 'favorite',
-                onPressed: () => Navigator.pop(context, entry.$2.$1),
-                style: TextButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                  minimumSize: const Size.fromHeight(52),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        title: Text(
+          uiTraditional(drama.title),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        children: [
+          for (final entry in choices.indexed)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  key: ValueKey('drama-action-${entry.$2.$1}'),
+                  autofocus: entry.$2.$1 == 'favorite',
+                  onPressed: () => Navigator.pop(context, entry.$2.$1),
+                  style: TextButton.styleFrom(
+                    alignment: Alignment.centerLeft,
+                    minimumSize: const Size.fromHeight(52),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  icon: Icon(entry.$2.$3, size: 22),
+                  label: Text(entry.$2.$2),
                 ),
-                icon: Icon(entry.$2.$3, size: 22),
-                label: Text(entry.$2.$2),
               ),
             ),
-          ),
-      ],
+        ],
       ),
     ),
   );
