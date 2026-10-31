@@ -49,10 +49,10 @@ void main() {
       );
     });
 
-    test('preserves the full frame for iOS landscape video', () {
+    test('fills iOS fullscreen landscape video to the screen edges', () {
       expect(
         playerVideoFit(ios: true, fullscreen: true, aspectRatio: 16 / 9),
-        BoxFit.contain,
+        BoxFit.cover,
       );
     });
 

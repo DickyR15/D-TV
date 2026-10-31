@@ -32,6 +32,8 @@ void main() {
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
     expect(find.text('鬼片'), findsOneWidget);
+    expect(find.textContaining('忘記管理員密碼'), findsNothing);
+    expect(find.textContaining('shared_preferences'), findsNothing);
     expect(find.text('黃豆'), findsNothing);
 
     await tester.enterText(

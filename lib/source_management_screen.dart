@@ -147,11 +147,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
               label: Text(_busy ? '正在驗證…' : '解鎖進階片源'),
             ),
             const SizedBox(height: 8),
-            Text(
-              Platform.isWindows
-                  ? '忘記管理員密碼無法找回。Windows 免安裝版請先關閉 D TV，再刪除 %APPDATA%\\DickyR15\\D TV\\shared_preferences.json，之後重新下載並解壓安裝。只重新下載 ZIP 不會清除密碼；清除後也會一併刪除收藏、觀看紀錄及偏好設定。'
-                  : '忘記管理員密碼無法找回。必須移除 D TV 的本機設定資料後重新安裝；這會一併清除收藏、觀看紀錄及偏好設定。',
-            ),
+
           ],
         ),
       ),

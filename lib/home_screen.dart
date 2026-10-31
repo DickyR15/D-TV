@@ -1597,11 +1597,8 @@ class _HomeScreenState extends State<HomeScreen> {
           constraints.maxWidth -
           (desktop && constraints.maxWidth < 840 ? 360.0 : 220.0)
         ).clamp(300.0, 460.0).toDouble();
-        final bannerWidth = (constraints.maxWidth -
-                (constraints.maxWidth >= 1450 ? 600.0 : 530.0))
-            .clamp(300.0, 980.0)
-            .toDouble();
         final bannerHeight = _brandBannerHeight(constraints.maxWidth);
+        final fullWidthBrandBar = wide && !compactBrandBar;
         final scaffold = Scaffold(
           appBar: AppBar(
             toolbarHeight: compactBrandBar
@@ -1610,13 +1607,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? _brandBannerHeight(constraints.maxWidth) + 12
                 : null,
             titleSpacing: 12,
-            title: compactBrandBar
-                ? _compactBrandHeader(width: brandHeaderWidth)
-                : wide
+            flexibleSpace: fullWidthBrandBar
                 ? _homeBrandBanner(
-                    width: bannerWidth,
+                    width: constraints.maxWidth,
                     height: bannerHeight,
                   )
+                : null,
+            title: compactBrandBar
+                ? _compactBrandHeader(width: brandHeaderWidth)
+                : fullWidthBrandBar
+                ? const SizedBox.shrink()
                 : widget.store.sources.isNotEmpty
                 ? _sourceSwitcher(keyName: 'home-source-switch-mobile', branded: true)
                 : _brandTitle(),
@@ -2244,8 +2244,11 @@ class _HomeScreenState extends State<HomeScreen> {
               left: width * .035,
               top: height * .08,
               bottom: height * .08,
-              width: width * .46,
-              child: _brandLogo(width: width * .46, height: height * .78),
+              width: (width * .46).clamp(160.0, 440.0).toDouble(),
+              child: _brandLogo(
+                width: (width * .46).clamp(160.0, 440.0).toDouble(),
+                height: height * .78,
+              ),
             ),
             Positioned(
               right: width * .035,

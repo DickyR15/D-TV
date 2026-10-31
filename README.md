@@ -32,3 +32,8 @@
 - **macOS Universal**：`python scripts/build_macos.py`，首次執行會以 Flutter CLI 產生 macOS Runner 專案，之後建立 arm64 + x86_64 Go 核心與 DMG。
 
 暫時性網路／下載故障可透過 `scripts/retry_command.py --attempts 3 -- <command>` 重試；確定性的 Dart、Go、Kotlin、C/C++ 或連結器錯誤會停止重試，應先修正程式碼再重新建置。跨平台 CI 另有失敗工作重跑機制。
+
+
+## 片源管理
+
+進階片源與忘記管理員密碼時的本機設定重設方式，請參閱 [片源管理說明](docs/SOURCE-MANAGEMENT.md)。

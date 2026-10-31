@@ -12,14 +12,15 @@ bool playerTopSafeAreaEnabled({
   return !television && (fullscreen || mobile);
 }
 
-/// Portrait short dramas fill the tall iPhone display in fullscreen.
-/// Other layouts preserve the whole frame instead of cropping it.
+/// iOS fullscreen playback fills the display for both portrait and landscape
+/// streams. When the device and stream aspect ratios differ, a small crop is
+/// intentional so that no black bars remain at the left and right edges.
 BoxFit playerVideoFit({
   required bool ios,
   required bool fullscreen,
   required double aspectRatio,
 }) {
-  if (ios && fullscreen && aspectRatio > 0 && aspectRatio < 1) {
+  if (ios && fullscreen && aspectRatio > 0) {
     return BoxFit.cover;
   }
   return BoxFit.contain;
