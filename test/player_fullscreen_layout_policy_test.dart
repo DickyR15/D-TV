@@ -49,10 +49,10 @@ void main() {
       );
     });
 
-    test('fills iOS fullscreen landscape video to the screen edges', () {
+    test('preserves the complete iOS fullscreen landscape frame and subtitles', () {
       expect(
         playerVideoFit(ios: true, fullscreen: true, aspectRatio: 16 / 9),
-        BoxFit.cover,
+        BoxFit.contain,
       );
     });
 
@@ -64,23 +64,4 @@ void main() {
     });
   });
 
-  group('playerVideoOverscan', () {
-    test('adds slight overscan only to iOS landscape fullscreen', () {
-      expect(
-        playerVideoOverscan(ios: true, fullscreen: true, aspectRatio: 16 / 9),
-        1.08,
-      );
-    });
-
-    test('does not crop portrait video or other platforms', () {
-      expect(
-        playerVideoOverscan(ios: true, fullscreen: true, aspectRatio: 9 / 16),
-        1.0,
-      );
-      expect(
-        playerVideoOverscan(ios: false, fullscreen: true, aspectRatio: 16 / 9),
-        1.0,
-      );
-    });
-  });
 }
