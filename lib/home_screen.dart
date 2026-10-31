@@ -34,7 +34,7 @@ import 'ui_localization.dart';
 import 'phone_search_dialog.dart';
 import 'app_navigation.dart';
 
-enum _UpdatePromptAction { remindLater, ignoreVersion, openRelease }
+enum _UpdatePromptAction { ignore, ignoreVersion, disableStartup, openRelease }
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
@@ -921,7 +921,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     // Check only release builds. The request is delayed so the first screen
     // and ranking data are not held up by the GitHub API.
-    if (kReleaseMode && (Platform.isAndroid || Platform.isWindows)) {
+    if (kReleaseMode &&
+        (Platform.isAndroid || Platform.isWindows) &&
+        widget.store.autoCheckUpdates) {
       _appUpdateCheckTimer = Timer(
         const Duration(seconds: 6),
         () => unawaited(_checkForAppUpdate()),
@@ -1375,19 +1377,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
 
-  Future<void> _checkForAppUpdate() async {
+  Future<void> _checkForAppUpdate({bool manual = false}) async {
     if (!mounted || _updateDialogOpen) return;
+    if (!manual && !widget.store.autoCheckUpdates) return;
     try {
       final update = await const AppUpdateService().checkForUpdate();
-      if (!mounted ||
-          !AppUpdateService.shouldNotify(
-            update,
-            ignoredVersion: widget.store.ignoredUpdateVersion,
-          ) ||
-          (ModalRoute.of(context)?.isCurrent == false)) {
+      if (!mounted) return;
+      if (update == null) {
+        if (manual) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('目前已是最新版本')),
+          );
+        }
         return;
       }
-      final availableUpdate = update!;
+      if (!AppUpdateService.shouldShowUpdate(
+            update,
+            manual: manual,
+            autoCheckEnabled: widget.store.autoCheckUpdates,
+            ignoredVersion: widget.store.ignoredUpdateVersion,
+          ) ||
+          (!manual && ModalRoute.of(context)?.isCurrent == false)) {
+        return;
+      }
+
+      final availableUpdate = update;
       _updateDialogOpen = true;
       final action = await showDialog<_UpdatePromptAction>(
         context: context,
@@ -1396,14 +1410,34 @@ class _HomeScreenState extends State<HomeScreen> {
           content: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: SingleChildScrollView(
-              child: Text(
-                availableUpdate.notes.trim().isEmpty
-                    ? '目前版本：${AppLayout.versionOf(context)}\n新版本：${availableUpdate.version}\n\n有新版本可供下載。'
-                    : availableUpdate.notes.trim().characters.take(1800).toString(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    availableUpdate.notes.trim().isEmpty
+                        ? '目前版本：${AppLayout.versionOf(context)}\\n'
+                          '新版本：${availableUpdate.version}\\n\\n'
+                          '有新版本可供下載。'
+                        : availableUpdate.notes.trim().characters.take(1800).toString(),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '「忽略」只關閉本次提示；「忽略此版本」不再提示這個版本；'
+                    '「不再提醒」會關閉啟動時檢查。',
+                  ),
+                ],
               ),
             ),
           ),
           actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(
+                dialogContext,
+                _UpdatePromptAction.ignore,
+              ),
+              child: const Text('忽略'),
+            ),
             TextButton(
               onPressed: () => Navigator.pop(
                 dialogContext,
@@ -1414,9 +1448,9 @@ class _HomeScreenState extends State<HomeScreen> {
             TextButton(
               onPressed: () => Navigator.pop(
                 dialogContext,
-                _UpdatePromptAction.remindLater,
+                _UpdatePromptAction.disableStartup,
               ),
-              child: const Text('稍後提醒'),
+              child: const Text('不再提醒'),
             ),
             FilledButton(
               autofocus: true,
@@ -1424,12 +1458,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 dialogContext,
                 _UpdatePromptAction.openRelease,
               ),
-              child: const Text('查看更新'),
+              child: const Text('更新'),
             ),
           ],
         ),
       );
       _updateDialogOpen = false;
+
       if (action == _UpdatePromptAction.ignoreVersion && mounted) {
         await widget.store.ignoreUpdateVersion(availableUpdate.version);
         if (mounted) {
@@ -1438,6 +1473,16 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         DiaryService.add('[Update] ignored_version=${availableUpdate.version}');
+        return;
+      }
+      if (action == _UpdatePromptAction.disableStartup && mounted) {
+        await widget.store.setAutoCheckUpdates(false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('已關閉啟動時更新提醒；仍可手動檢查更新')),
+          );
+        }
+        DiaryService.add('[Update] startup_check_disabled');
         return;
       }
       if (action == _UpdatePromptAction.openRelease && mounted) {
@@ -1458,6 +1503,11 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (error) {
       _updateDialogOpen = false;
       DiaryService.add('[Update] check_failed=${error.runtimeType}');
+      if (manual && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('檢查更新失敗，請確認網路連線後再試')),
+        );
+      }
     }
   }
 
@@ -1822,7 +1872,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         applicationName: appName,
                         applicationVersion: AppLayout.versionOf(context),
                         applicationIcon: const _DtvBrandMark(size: 56),
-                        children: [Text('作者：$appAuthor')],
+                        children: [
+                          Text('作者：$appAuthor'),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              key: const ValueKey('about-check-updates'),
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                                unawaited(_checkForAppUpdate(manual: true));
+                              },
+                              icon: const Icon(Icons.system_update_alt_rounded),
+                              label: const Text('檢查更新'),
+                            ),
+                          ),
+                        ],
                       );
                     }
                   },
