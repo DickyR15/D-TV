@@ -1,6 +1,8 @@
 import argparse
+import plistlib
 import re
 import shutil
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -134,15 +136,39 @@ else:
     if not apps:
         raise SystemExit("找不到 macOS Universal .app：" + str(products))
     app = apps[0]
+    if app.name != "D TV.app":
+        raise SystemExit("macOS App 外層名稱不是 D TV.app。")
     contents = app / "Contents"
-    info = __import__("plistlib").loads((contents / "Info.plist").read_bytes())
+    info_path = contents / "Info.plist"
+    if not info_path.is_file():
+        raise SystemExit("macOS App 缺少 Contents/Info.plist。")
+    info = plistlib.loads(info_path.read_bytes())
+    expected_identity = {
+        "CFBundleIdentifier": "com.dickyr15.dtv",
+        "CFBundleDisplayName": "D TV",
+        "CFBundleName": "D TV",
+        "CFBundleIconName": "AppIcon",
+    }
+    for key, expected in expected_identity.items():
+        actual = info.get(key)
+        if actual != expected:
+            raise SystemExit(
+                f"macOS App 身分驗證失敗：{key} 應為 {expected!r}，目前為 {actual!r}"
+            )
+
+    resources = contents / "Resources"
+    for filename in ("AppIcon.icns", "Assets.car"):
+        icon_asset = resources / filename
+        if not icon_asset.is_file() or icon_asset.stat().st_size == 0:
+            raise SystemExit("macOS App 缺少已編譯的 D TV 圖示：" + filename)
+
     executable = contents / "MacOS" / info.get("CFBundleExecutable", "")
     dylib = contents / "Frameworks" / "libduanju_core.dylib"
     if not executable.is_file() or not dylib.is_file():
         raise SystemExit("macOS App 缺少主程式或共用 Go 核心。")
     for binary in [executable, dylib]:
         architectures = set(
-            __import__("subprocess").check_output(
+            subprocess.check_output(
                 ["lipo", "-archs", str(binary)], text=True
             ).split()
         )
