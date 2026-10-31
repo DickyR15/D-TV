@@ -111,6 +111,7 @@ class Drama {
     this.description = '',
     this.cover = '',
     this.episodes = 0,
+    this.episodesVerified = false,
     this.category = '',
     bool? vip,
     this.heat = '',
@@ -126,6 +127,9 @@ class Drama {
   final String description;
   final String cover;
   final int episodes;
+  final bool episodesVerified;
+  bool get canShowEpisodeCount =>
+      episodes > 0 && (source != 'hongguo' || episodesVerified);
   final String category;
   final bool? vipStatus;
   bool get vip => vipStatus == true;
@@ -148,6 +152,7 @@ class Drama {
     description: json['description'] as String? ?? '',
     cover: json['cover'] as String? ?? '',
     episodes: intValue(json['episodes']),
+    episodesVerified: json['episodesVerified'] == true,
     category: json['category'] as String? ?? '',
     vip: json['vip'] == true
         ? true
@@ -171,6 +176,7 @@ class Drama {
     'description': description,
     'cover': cover,
     'episodes': episodes,
+    'episodesVerified': episodesVerified,
     'category': category,
     'vip': vipStatus,
     'heat': heat,
@@ -200,7 +206,15 @@ class Drama {
       title: fresh.title.isEmpty || fresh.title == '短劇' ? title : fresh.title,
       description: fresh.description.isEmpty ? description : fresh.description,
       cover: fresh.cover.isEmpty ? cover : fresh.cover,
-      episodes: fresh.episodes > 0 ? fresh.episodes : episodes,
+      episodes:
+          fresh.episodesVerified ||
+              (fresh.source != 'hongguo' && fresh.episodes > 0)
+          ? fresh.episodes
+          : episodes,
+      episodesVerified:
+          episodesVerified ||
+          fresh.episodesVerified ||
+          (fresh.source != 'hongguo' && fresh.episodes > 0),
       category:
           fresh.category.isEmpty ||
               genericCategories.contains(fresh.category) &&

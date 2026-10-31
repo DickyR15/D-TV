@@ -82,8 +82,9 @@ type nativeDrama struct {
 	Title          string   `json:"title"`
 	Description    string   `json:"description"`
 	Cover          string   `json:"cover"`
-	Episodes       int      `json:"episodes"`
-	Category       string   `json:"category"`
+	Episodes         int      `json:"episodes"`
+	EpisodesVerified bool     `json:"episodesVerified,omitempty"`
+	Category         string   `json:"category"`
 	VIP            *bool    `json:"vip"`
 	Heat           string   `json:"heat,omitempty"`
 	Views          string   `json:"views,omitempty"`
@@ -242,6 +243,7 @@ func nativeNormalize(drama Drama) nativeDrama {
 	source, sourceID, _ := splitProviderDramaID(drama.ID)
 	return nativeDrama{MetadataSchema: 1, ID: drama.ID, Source: source, SourceID: sourceID, Title: drama.DisplayTitle(),
 		Description: firstNonEmpty(drama.Desc, drama.Intro), Cover: cover, Episodes: episodes,
+		EpisodesVerified: drama.EpisodesVerified || episodes > 0,
 		Category: nativeDramaCategory(drama), VIP: drama.VIP,
 		Heat: drama.Heat, Views: drama.Views, OnlineDate: providerReleaseDate(drama.OnlineDate),
 		Tags: append([]string(nil), drama.Tags...), ReleaseStatus: drama.ReleaseStatus}

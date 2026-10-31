@@ -158,7 +158,7 @@ class DramaCover extends StatelessWidget {
               ),
             ),
           ),
-          if (showEpisodeBadge && drama.episodes > 0)
+          if (showEpisodeBadge && drama.canShowEpisodeCount)
             Positioned(
               left: 9,
               bottom: 9,

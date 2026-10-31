@@ -46,6 +46,9 @@ func TestHongguoRankingStreamAndValidation(t *testing.T) {
 	if result.Items[0].Drama.Views != "" || result.Items[0].Drama.Heat != "1.2亿热度" || result.Items[0].Drama.Cover != nil {
 		t.Fatal("heat must stay separate from views, and ranking metadata must have no images")
 	}
+	if result.Items[0].Drama.TotalEpisode != nil || result.Items[0].Drama.EpisodesVerified {
+		t.Fatal("episodeVids preview IDs must never be treated as the total episode count")
+	}
 	for _, test := range []struct {
 		name   string
 		change func([]map[string]any)
@@ -73,6 +76,23 @@ func TestHongguoRankingStreamAndValidation(t *testing.T) {
 	}
 	if _, err := parseHongguoRanking(rankingFixture(board, 1, []map[string]any{}), board, 1); err == nil {
 		t.Fatal("empty page with hasMore must be treated as a failure")
+	}
+}
+
+func TestHongguoRankingUsesOnlyExplicitTotalEpisodeMetadata(t *testing.T) {
+	board, _ := findRankingBoard("hongguo-hot")
+	rows := rankingRows(1)
+	rows[0]["episodeCount"] = 88
+	result, err := parseHongguoRanking(rankingFixture(board, 1, rows), board, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Items) == 0 {
+		t.Fatal("expected ranking rows")
+	}
+	drama := nativeNormalize(result.Items[0].Drama)
+	if drama.Episodes != 88 || !drama.EpisodesVerified {
+		t.Fatalf("explicit total episode count was not verified: %+v", drama)
 	}
 }
 

@@ -164,10 +164,17 @@ jobs:
         id: build-universal
         shell: bash
         run: |
-          version=$(sed -n "s/^version: *['\"]\?\([^'\"]*\)['\"]\?$/\1/p" pubspec.yaml | head -n1)
-          version="${version%%+*}"
+          full_version=$(sed -n "s/^version: *['\"]\?\([^'\"]*\)['\"]\?$/\1/p" pubspec.yaml | head -n1)
+          version="${full_version%%+*}"
+          pubspec_build_number="${full_version##*+}"
+          if [[ "$full_version" != *"+"* || ! "$pubspec_build_number" =~ ^[0-9]+$ ]]; then
+            echo "pubspec.yaml must include a numeric Android build number (version+build)." >&2
+            exit 1
+          fi
+          build_number=$((pubspec_build_number + GITHUB_RUN_NUMBER - 1))
           echo "app_version=$version" >> "$GITHUB_OUTPUT"
-          python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --all-sources --build-name "$version" --build-number "$GITHUB_RUN_NUMBER"
+          echo "app_version_code=$build_number" >> "$GITHUB_OUTPUT"
+          python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --all-sources --build-name "$version" --build-number "$build_number"
       - name: Install and launch Universal APK on x86_64 Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
