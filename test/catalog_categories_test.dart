@@ -357,30 +357,49 @@ void main() {
   );
 
   test(
-    'group pagination retries failed member without skipping or reloading exhausted members',
+    'Huangguo video, AI and legacy catalogs load and paginate independently',
     () async {
-      final repository = CategoryRepository()
-        ..failLegacy = true
-        ..paginate = true;
+      final repository = CategoryRepository()..paginate = true;
       final browser = CatalogBrowser(repository);
-      final group = SourceGroup.fromSources(
-        SourceSite.knownValues,
-      ).firstWhere((group) => group.id == 'huangguo');
-      final first = await browser.load(group);
-      expect(first.items.length, 2);
-      expect(first.warning, '合成入口失敗');
-      repository.failLegacy = false;
-      final next = await browser.load(group, more: true);
-      expect(
-        repository.categoryRequests
-            .where((request) => request == 'cloudfront||1')
-            .length,
-        2,
-      );
+      final groups = SourceGroup.fromSources(SourceSite.knownValues);
+      final video = groups.firstWhere((group) => group.id == 'huangguo-video');
+      final ai = groups.firstWhere((group) => group.id == 'huangguoai');
+      final legacy = groups.firstWhere((group) => group.id == 'cloudfront');
+
+      expect(video.sources.map((source) => source.id), ['huangguo-video']);
+      expect(ai.sources.map((source) => source.id), ['huangguoai']);
+      expect(legacy.sources.map((source) => source.id), ['cloudfront']);
+
+      final firstVideoPage = await browser.load(video);
+      expect(firstVideoPage.items.length, 1);
+      expect(firstVideoPage.items.single.source, 'huangguo-video');
+      expect(firstVideoPage.hasMore, isTrue);
+      expect(repository.categoryRequests, ['huangguo-video||1']);
+
+      final secondVideoPage = await browser.load(video, more: true);
+      expect(secondVideoPage.items.length, 2);
+      expect(secondVideoPage.items.every((item) => item.source == 'huangguo-video'), isTrue);
       expect(repository.categoryRequests, contains('huangguo-video||2'));
       expect(repository.categoryRequests, isNot(contains('huangguoai||2')));
-      expect(next.items.length, 4);
-      expect(next.warning, isEmpty);
+      expect(repository.categoryRequests, isNot(contains('cloudfront||2')));
+
+      await browser.load(ai);
+      expect(repository.categoryRequests, contains('huangguoai||1'));
+      expect(repository.categoryRequests, isNot(contains('huangguoai||2')));
+
+      repository.failLegacy = true;
+      final failedLegacyPage = await browser.load(legacy);
+      expect(failedLegacyPage.items, isEmpty);
+      expect(failedLegacyPage.warning, '合成入口失敗');
+      expect(repository.categoryRequests, contains('cloudfront||1'));
+      expect(repository.categoryRequests, isNot(contains('huangguo-video||3')));
+      expect(repository.categoryRequests, isNot(contains('huangguoai||3')));
+
+      repository.failLegacy = false;
+      final retriedLegacyPage = await browser.load(legacy, force: true);
+      expect(retriedLegacyPage.items.single.source, 'cloudfront');
+      expect(retriedLegacyPage.warning, isEmpty);
+      expect(repository.categoryRequests.where((r) => r == 'cloudfront||1').length, 2);
     },
   );
 

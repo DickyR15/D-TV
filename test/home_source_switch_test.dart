@@ -7,6 +7,11 @@ import 'package:hgtv/home_screen.dart';
 
 import 'fixtures.dart';
 
+class _HomeSourceSwitchRepository extends FixtureRepository {
+  @override
+  Future<String> cover(Drama drama, {bool force = false}) async => '';
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -28,7 +33,7 @@ void main() {
             television: factor == FormFactor.television,
             formFactor: factor,
             child: HomeScreen(
-              repository: FixtureRepository(),
+              repository: _HomeSourceSwitchRepository(),
               store: store,
             ),
           ),
@@ -60,7 +65,7 @@ void main() {
           television: false,
           formFactor: FormFactor.window,
           child: HomeScreen(
-            repository: FixtureRepository(),
+            repository: _HomeSourceSwitchRepository(),
             store: store,
           ),
         ),
