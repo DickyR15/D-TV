@@ -43,8 +43,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install Windows icon renderer
-        run: python -m pip install --disable-pip-version-check "Pillow>=10.4,<13"
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
@@ -72,6 +70,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install Pillow for platform icons
+        run: python -m pip install --disable-pip-version-check "Pillow>=10.4,<13"
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
@@ -124,6 +124,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install Pillow for platform icons
+        run: python -m pip install --disable-pip-version-check "Pillow>=10.4,<13"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -184,6 +186,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install Pillow for platform icons
+        run: python -m pip install --disable-pip-version-check "Pillow>=10.4,<13"
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
@@ -233,6 +237,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install Pillow for platform icons
+        run: python -m pip install --disable-pip-version-check "Pillow>=10.4,<13"
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/go.mod
