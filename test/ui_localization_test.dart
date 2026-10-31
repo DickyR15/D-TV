@@ -90,9 +90,8 @@ void main() {
   test('source names and descriptions use Taiwan Traditional Chinese', () {
     expect(
       SourceSite.allValues.map((source) => source.name).toList(),
-      ['紅果', '韓小圈', '鬼片', '青空', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版'],
+      ['紅果', '韓小圈', '鬼片', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版'],
     );
-    expect(SourceSite.sorani.description, '動畫連載 · 劇場版動畫 · 特攝');
     expect(SourceSite.guipian.description, '恐怖片 · 電視劇 · 動畫');
     expect(SourceSite.hanxiaoquan.description, '韓劇 · 韓國電影 · 綜藝節目 · 動畫');
   });

@@ -32,7 +32,6 @@ void main() {
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
     expect(find.text('鬼片'), findsOneWidget);
-    expect(find.text('青空'), findsOneWidget);
     expect(find.text('黃豆'), findsNothing);
 
     await tester.enterText(
