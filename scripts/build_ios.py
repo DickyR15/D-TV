@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+import plistlib
 from pathlib import Path
 
 from app_build import BuildVariant, add_variant_argument
@@ -33,12 +34,26 @@ def validate_unsigned_application(application):
 
 def validate_package(package, prefix):
     with zipfile.ZipFile(package) as archive:
-        for name in [prefix + '/Runner', prefix + '/Info.plist']:
+        executable = prefix + '/Runner'
+        info_path = prefix + '/Info.plist'
+        for name in [executable, info_path]:
             if name not in archive.namelist() or archive.getinfo(name).file_size == 0:
                 raise SystemExit('iOS 壓縮包缺少必要檔案：' + name)
         corrupt = archive.testzip()
         if corrupt:
             raise SystemExit('iOS 壓縮包損壞：' + corrupt)
+        metadata = plistlib.loads(archive.read(info_path))
+        expected = {
+            'CFBundleIdentifier': 'com.dickyr15.dtv',
+            'CFBundleDisplayName': 'D TV',
+            'CFBundleName': 'D TV',
+        }
+        for key, value in expected.items():
+            actual = metadata.get(key)
+            if actual != value:
+                raise SystemExit(
+                    f'iOS App 身分驗證失敗：{key} 應為 {value!r}，目前為 {actual!r}'
+                )
 
 
 def build_core(simulator=False, variant=BuildVariant()):
@@ -119,6 +134,7 @@ def main():
         for package in (root / 'build' / 'ios' / 'ipa').glob('*.ipa'):
             destination = output / f'DTV-{version}-iOS.ipa'
             shutil.copy2(package, destination)
+            validate_package(destination, 'Payload/Runner.app')
             artifacts.append(destination)
     else:
         run([flutter, 'build', 'ios', '--release', '--no-codesign', '--no-pub', *variant.flutter_arguments])
