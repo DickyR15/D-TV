@@ -37,6 +37,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.annotation.ChecksSdkIntAtLeast
+import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterShellArgs
 import io.flutter.plugin.common.MethodChannel
@@ -556,6 +557,70 @@ open class MainActivity : FlutterActivity() {
                                     result.error(
                                         "cannot_open_url",
                                         error.message ?: "無法開啟更新頁面",
+                                        null
+                                    )
+                                }
+                            }
+                        }
+                        "installApk" -> {
+                            val rawPath = call.argument<String>("path")
+                            val updateDirectory = File(cacheDir, "updates").canonicalFile
+                            val apkFile = runCatching { File(rawPath.orEmpty()).canonicalFile }.getOrNull()
+                            if (apkFile == null ||
+                                !apkFile.path.startsWith(updateDirectory.path + File.separator) ||
+                                !apkFile.isFile ||
+                                !apkFile.name.endsWith(".apk", ignoreCase = true) ||
+                                apkFile.length() <= 0L
+                            ) {
+                                result.error("invalid_update_apk", "更新安裝檔不存在或位置無效", null)
+                            } else if (
+                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                                !packageManager.canRequestPackageInstalls()
+                            ) {
+                                runCatching {
+                                    startActivity(
+                                        Intent(
+                                            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                            Uri.parse("package:$packageName")
+                                        )
+                                    )
+                                }.onSuccess {
+                                    result.error(
+                                        "install_permission_required",
+                                        "請允許 D TV 安裝未知應用，返回後再次按「更新」。",
+                                        null
+                                    )
+                                }.onFailure { error ->
+                                    result.error(
+                                        "install_permission_settings_failed",
+                                        error.message ?: "無法開啟安裝權限設定",
+                                        null
+                                    )
+                                }
+                            } else {
+                                runCatching {
+                                    val apkUri = FileProvider.getUriForFile(
+                                        this,
+                                        "$packageName.fileprovider",
+                                        apkFile
+                                    )
+                                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(
+                                            apkUri,
+                                            "application/vnd.android.package-archive"
+                                        )
+                                        addFlags(
+                                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                                Intent.FLAG_ACTIVITY_NEW_TASK
+                                        )
+                                    }
+                                    startActivity(installIntent)
+                                }.onSuccess {
+                                    result.success(null)
+                                }.onFailure { error ->
+                                    result.error(
+                                        "cannot_start_apk_installer",
+                                        error.message ?: "無法啟動系統安裝程式",
                                         null
                                     )
                                 }
