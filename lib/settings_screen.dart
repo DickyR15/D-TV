@@ -357,7 +357,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   key: const ValueKey('source-management-setting'),
                   leading: const Icon(Icons.source_outlined),
                   title: const Text('片源管理'),
-                  subtitle: const Text('管理一般片源；進階片源需輸入管理員密碼解鎖'),
+                  subtitle: const Text('管理可用片源及其顯示狀態'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.push(
                     context,
