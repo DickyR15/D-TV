@@ -83,6 +83,10 @@ void main() {
     );
   });
 
+  test('uses Taiwan wording for playback quality labels', () {
+    expect(uiTraditional('清晰度、其他清晰度、高清'), '畫質、其他畫質選項、高畫質');
+  });
+
   test('source names and descriptions use Taiwan Traditional Chinese', () {
     expect(
       SourceSite.allValues.map((source) => source.name).toList(),
