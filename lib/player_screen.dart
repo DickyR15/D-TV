@@ -1229,7 +1229,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               ? widget.allowOnlineFallback
                     ? '本機影片讀取失敗，請重試；也可以手動改為線上播放。'
                     : '本機影片讀取失敗，請重試或改為線上播放。'
-              : '自動恢復未成功，請檢查網路後重試，也可換一集或選擇其他清晰度。';
+              : '自動恢復未成功，請檢查網路後重試，也可換一集或選擇其他畫質選項。';
         });
       }
       return;
