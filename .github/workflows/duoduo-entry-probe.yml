@@ -14,9 +14,9 @@ permissions:
 jobs:
   probe-public-entry-pages:
     runs-on: ubuntu-latest
-    timeout-minutes: 7
+    timeout-minutes: 8
     steps:
-      - name: Probe public entry pages and static client metadata
+      - name: Probe public entry pages, frontend routes, and read-only API
         shell: bash
         run: |
           python - <<'PY'
@@ -24,6 +24,7 @@ jobs:
           from urllib.parse import urljoin, urlsplit
           from urllib.request import Request, urlopen
           import hashlib
+          import json
           import re
           import ssl
 
@@ -34,8 +35,20 @@ jobs:
               "duoduosdf12223234334.top",
               "dduotv01.top",
           ]
-          USER_AGENT = "DTV-Duoduo-PublicEntryProbe/1.1"
+          USER_AGENT = "DTV-Duoduo-PublicEntryProbe/1.2"
           CONTEXT = ssl.create_default_context()
+          READ_ROUTES = [
+              "/api.php/web/index/home",
+              "/api.php/web/search/index",
+              "/api.php/web/search/suggest",
+              "/api.php/web/external_search/search",
+              "/api.php/web/vod/get_detail",
+              "/api.php/web/internal/search_aggregate",
+              "/api.php/web/decode/url",
+              "/api.php/web/ranking/list",
+              "/api.php/web/filter/vod",
+              "/api.php/web/feature",
+          ]
 
           class PageParser(HTMLParser):
               def __init__(self):
@@ -71,6 +84,13 @@ jobs:
                   body = response.read(limit)
                   return response.status, response.geturl(), response.headers.get("Content-Type", ""), body
 
+          def safe_response_text(body):
+              value = body.decode("utf-8", errors="replace")
+              value = re.sub(r"(?i)(token|signature|secret|authorization|cookie|password|app.?key|device.?fingerprint)(\s*[""']?\s*[:=]\s*)[""'][^""']*[""']", r"\1\2<redacted>", value)
+              value = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._-]+", r"\1<redacted>", value)
+              value = re.sub(r"\s+", " ", value)
+              return value[:240]
+
           for host in HOSTS:
               url = "https://" + host + "/"
               print(f"\n=== ENTRY {host} ===")
@@ -99,8 +119,6 @@ jobs:
               except Exception as exc:
                   print("ERROR=" + type(exc).__name__ + ": " + str(exc)[:240])
 
-          # Read, but never execute, public page configuration and frontend bundles.
-          # Secret-like fragments are excluded from the diagnostic output.
           static_urls = {
               "https://duoduozhuiju.com/js/config.js",
               "https://duoduozhuiju.com/js/speedtest.js",
@@ -124,6 +142,7 @@ jobs:
 
           print("\n=== STATIC PUBLIC CLIENT FILES ===")
           seen_hashes = {}
+          js_bundles = []
           for url in sorted(static_urls):
               print(f"\n--- {urlsplit(url).hostname}{urlsplit(url).path} ---")
               try:
@@ -137,6 +156,9 @@ jobs:
                       print(f"IDENTICAL_CONTENT_AS={prior}")
                   else:
                       seen_hashes[digest] = urlsplit(url).hostname + urlsplit(url).path
+
+                  if url.endswith(".js") and "assets/index-" in url:
+                      js_bundles.append(text)
 
                   hosts = sorted({item.lower() for item in host_pattern.findall(text)})
                   if hosts:
@@ -161,4 +183,49 @@ jobs:
                       print("UI_TEXT=" + snippet[:150])
               except Exception as exc:
                   print("ERROR=" + type(exc).__name__ + ": " + str(exc)[:240])
+
+          if js_bundles:
+              js = js_bundles[0]
+              print("\n=== PUBLIC ROUTE CALL-SITE CONTEXT (SANITIZED) ===")
+              for route in READ_ROUTES:
+                  index = js.find(route)
+                  if index < 0:
+                      continue
+                  start = max(0, index - 360)
+                  end = min(len(js), index + len(route) + 360)
+                  snippet = js[start:end]
+                  snippet = re.sub(
+                      r"""(?i)(["']?(?:token|signature|secret|authorization|cookie|password|appKey|deviceToken|fingerprint)["']?\s*:\s*)(["'])[^"']*\2""",
+                      r"\1<redacted>",
+                      snippet,
+                  )
+                  snippet = re.sub(r"\s+", " ", snippet)
+                  print(route + " => " + snippet[:760])
+
+          print("\n=== READ-ONLY API SMOKE TESTS ===")
+          base = "https://323433ssdfd.top"
+          for route in READ_ROUTES:
+              url = base + route
+              for method in ("GET", "POST"):
+                  try:
+                      headers = {
+                          "User-Agent": USER_AGENT,
+                          "Accept": "application/json,text/plain,*/*",
+                      }
+                      data = None
+                      if method == "POST":
+                          headers["Content-Type"] = "application/json"
+                          data = b"{}"
+                      request = Request(url, headers=headers, data=data, method=method)
+                      with urlopen(request, timeout=12, context=CONTEXT) as response:
+                          body = response.read(2048)
+                          print(f"{method} {route} STATUS={response.status} TYPE={response.headers.get('Content-Type', '')} BODY={safe_response_text(body)}")
+                  except Exception as exc:
+                      code = getattr(exc, "code", "")
+                      body = getattr(exc, "read", lambda: b"")()
+                      if isinstance(body, bytes) and body:
+                          detail = safe_response_text(body)
+                      else:
+                          detail = str(exc)[:160]
+                      print(f"{method} {route} STATUS={code or 'ERROR'} DETAIL={detail}")
           PY
