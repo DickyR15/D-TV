@@ -31,6 +31,38 @@ void main() {
     await expectLater(store.setSourceEnabled('sorani', true), throwsStateError);
   });
 
+  test('retired Guipian source switch migrates to Xigua Movies', () async {
+    final store = await create({
+      'sourceSwitches': jsonEncode({'guipian': false}),
+    });
+    expect(SourceSite.isKnown('guipian'), isFalse);
+    expect(store.sourceEnabled('kanmovie'), isFalse);
+    expect(store.allowsSource('kanmovie'), isFalse);
+  });
+
+  test('retired Guipian profile permission migrates to Xigua Movies', () async {
+    final store = await create({
+      'profiles': jsonEncode([
+        LocalProfile(
+          id: 'default',
+          name: '管理員',
+          admin: true,
+          salt: '0' * 32,
+          pinHash: '1' * 64,
+        ).toJson(),
+        const LocalProfile(
+          id: 'viewer',
+          name: '普通使用者',
+          sources: ['guipian'],
+        ).toJson(),
+      ]),
+      'activeProfile': 'viewer',
+    });
+    expect(store.configurationError, isNull);
+    expect(store.profile.sources, ['kanmovie']);
+    expect(store.profile.allows('kanmovie'), isTrue);
+  });
+
   test('restricted sources start switched off', () async {
     final store = await create();
     expect(
