@@ -391,7 +391,7 @@ func kanmovieDramaFromRecord(backend kanmovieBackend, record map[string]any, cat
 		ID: providerDramaID(sourceKanmMovie, sourceID), Source: sourceKanmMovie, SourceID: sourceID,
 		Title: truncate(title, 512), Name: truncate(title, 512),
 		Desc: truncate(htmlstd.UnescapeString(description), 12000),
-		Intro: truncate(html.UnescapeString(description), 12000),
+		Intro: truncate(htmlstd.UnescapeString(description), 12000),
 		Cover: cover, CoverURL: cover, ChannelName: "西瓜影視", CategoryName: categoryName,
 		Remark: truncate(remark, 64), OnlineDate: year,
 		TotalEpisode: episodeCount, EpisodeCount: episodeCount, Tags: tags,
@@ -532,19 +532,20 @@ func (d *Downloader) fetchKanmMovieDetailRecord(ctx context.Context, sourceID st
 		return kanmovieBackend{}, nil, errors.New("西瓜影視影片來源代碼無效或目前不支援")
 	}
 	values := url.Values{"ac": {"videolist"}, "ids": {upstreamID}, "at": {"json"}}
-	payload, err := d.fetchKanmMovieAPI(ctx, backend, values)
-	if err == nil && len(payload.List) > 0 {
+	payload, firstErr := d.fetchKanmMovieAPI(ctx, backend, values)
+	if firstErr == nil && len(payload.List) > 0 {
 		return backend, payload.List[0], nil
 	}
-	if err == nil {
-		values.Set("ac", "detail")
-		payload, err = d.fetchKanmMovieAPI(ctx, backend, values)
-		if err == nil && len(payload.List) > 0 {
-			return backend, payload.List[0], nil
-		}
+	values.Set("ac", "detail")
+	payload, secondErr := d.fetchKanmMovieAPI(ctx, backend, values)
+	if secondErr == nil && len(payload.List) > 0 {
+		return backend, payload.List[0], nil
 	}
-	if err != nil {
-		return kanmovieBackend{}, nil, err
+	if secondErr != nil {
+		return kanmovieBackend{}, nil, errors.Join(firstErr, secondErr)
+	}
+	if firstErr != nil {
+		return kanmovieBackend{}, nil, firstErr
 	}
 	return kanmovieBackend{}, nil, errors.New("西瓜影視上游目前沒有回傳這部影片")
 }
@@ -606,9 +607,17 @@ func (d *Downloader) resolveKanmMovieMedia(ctx context.Context, task Task) (prov
 		var selected *kanmovieEpisode
 		for index := range group.Episodes {
 			episode := &group.Episodes[index]
-			if episode.Index == episodeIndex || strings.EqualFold(strings.TrimSpace(episode.Title), strings.TrimSpace(task.Chapter.Title)) {
+			if task.Chapter.Title != "" && strings.EqualFold(strings.TrimSpace(episode.Title), strings.TrimSpace(task.Chapter.Title)) {
 				selected = episode
 				break
+			}
+		}
+		if selected == nil {
+			for index := range group.Episodes {
+				if group.Episodes[index].Index == episodeIndex {
+					selected = &group.Episodes[index]
+					break
+				}
 			}
 		}
 		if selected == nil || !isProviderHTTPMediaURL(selected.URL) || seen[selected.URL] {
