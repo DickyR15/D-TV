@@ -25,6 +25,11 @@ var maccmsSources = []maccmsSourceConfig{
 	{id: sourceHuya, name: "虎牙", host: "huyazy.net", apiBase: "https://huyazy.net/api.php/provide/vod/", home: "https://huyazy.net/"},
 }
 
+func isMaccmsSource(source string) bool {
+	_, ok := maccmsSourceByID(source)
+	return ok
+}
+
 func maccmsSourceByID(source string) (maccmsSourceConfig, bool) {
 	source = canonicalProviderSource(source)
 	for _, item := range maccmsSources {
@@ -125,7 +130,11 @@ func (d *Downloader) fetchMaccmsCategories(ctx context.Context, source string) (
 	categories := []nativeCategory{{Name: "全部"}}
 	seen := map[string]bool{}
 	for _, row := range document.Class {
-		id := strings.TrimSpace(string(row.ID))
+		var idValue any
+		if err := json.Unmarshal(row.ID, &idValue); err != nil {
+			continue
+		}
+		id := strings.TrimSpace(nativeText(idValue))
 		name := strings.TrimSpace(row.Name)
 		if id == "" || name == "" || !validMaccmsCategory(id) || seen[id] {
 			continue
