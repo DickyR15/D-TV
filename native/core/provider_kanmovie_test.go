@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
 )
 
 func TestKanmMovieBackendSourceIdentity(t *testing.T) {
