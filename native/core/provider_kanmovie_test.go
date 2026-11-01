@@ -76,7 +76,7 @@ func TestParseKanmMovieCardsAndPagination(t *testing.T) {
 <section class="movie-list">
  <article class="movie-item">
   <a href="/detail/zuidazy.co~132720" title="碟仙怪談在线观看">
-   <img alt="碟仙怪談" data-src="https://images.example/poster.jpg">
+   <img alt="碟仙怪談" data-lazy-srcset="https://images.example/poster-small.jpg 1x, https://images.example/poster.jpg 2x" src="/placeholder.gif">
    <span>恐怖片 · 中国大陆 · 2026 · 更新HD</span>
   </a>
  </article>
@@ -107,6 +107,23 @@ func TestParseKanmMovieCardsAndPagination(t *testing.T) {
 	}
 	if items[1].ID != "kanmovie:jszyapi.com~156039" || items[1].Title != "奪金戰" {
 		t.Fatalf("second card = %#v", items[1])
+	}
+}
+
+
+func TestKanmMovieCoverRefererUsesMatchingProvider(t *testing.T) {
+	tests := []struct {
+		address string
+		want    string
+	}{
+		{address: "https://img.zuidazy.co/poster.jpg", want: "https://zuidazy.co/"},
+		{address: "https://cdn.api.zuidapi.com/poster.jpg", want: "https://zuidazy.co/"},
+		{address: "https://images.example/poster.jpg", want: "https://www.kanmovie.com/"},
+	}
+	for _, testCase := range tests {
+		if got := nativeCoverReferer(nil, sourceKanmMovie, testCase.address); got != testCase.want {
+			t.Errorf("nativeCoverReferer(%q) = %q, want %q", testCase.address, got, testCase.want)
+		}
 	}
 }
 
