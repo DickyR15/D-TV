@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
+	htmlstd "html"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -127,7 +127,7 @@ func kanmovieCategoryPath(category string) (string, bool) {
 }
 
 func kanmovieAbsoluteURL(raw, pageURL string) string {
-	raw = strings.TrimSpace(html.UnescapeString(raw))
+	raw = strings.TrimSpace(htmlstd.UnescapeString(raw))
 	if raw == "" {
 		return ""
 	}
@@ -390,7 +390,7 @@ func kanmovieDramaFromRecord(backend kanmovieBackend, record map[string]any, cat
 	return Drama{
 		ID: providerDramaID(sourceKanmMovie, sourceID), Source: sourceKanmMovie, SourceID: sourceID,
 		Title: truncate(title, 512), Name: truncate(title, 512),
-		Desc: truncate(html.UnescapeString(description), 12000),
+		Desc: truncate(htmlstd.UnescapeString(description), 12000),
 		Intro: truncate(html.UnescapeString(description), 12000),
 		Cover: cover, CoverURL: cover, ChannelName: "西瓜影視", CategoryName: categoryName,
 		Remark: truncate(remark, 64), OnlineDate: year,
