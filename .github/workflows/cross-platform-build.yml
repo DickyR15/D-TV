@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - feat/phase5-cross-platform-universal
+    tags:
+      - "v*"
   pull_request:
     branches:
       - main
@@ -22,9 +24,6 @@ on:
       - "pubspec.yaml"
       - "pubspec.lock"
   workflow_dispatch:
-  release:
-    types:
-      - published
 
 concurrency:
   group: dtv-cross-platform-${{ github.ref }}
@@ -97,6 +96,12 @@ jobs:
           $version = $line -replace "^version:\s*", ""
           $version = $version.Trim().Trim('"').Trim("'").Split('+')[0]
           if (-not $version) { throw "無法讀取 D TV 版本號。" }
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $tagVersion = $env:GITHUB_REF_NAME.Substring(1)
+            if ($tagVersion -ne $version) {
+              throw "版本標籤 v$tagVersion 與 pubspec.yaml 版本 $version 不一致。"
+            }
+          }
           "app_version=$version" >> $env:GITHUB_OUTPUT
           "D TV release version: $version"
       - name: Build and package Windows x64
@@ -122,15 +127,6 @@ jobs:
           path: build/windows/x64/runner/Release/
           if-no-files-found: error
           retention-days: 14
-      - name: Attach Windows update ZIP to GitHub Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/windows/DTV-${{ steps.windows-version.outputs.app_version }}-Windows-Portable.zip
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   android-universal:
     name: Android Universal APK (3 ABIs)
     needs: core-validation
@@ -182,7 +178,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
-            if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
               echo "::error::Configure the original v7a signing secrets before publishing a Universal APK. A debug-signed APK cannot update a previously installed release."
               exit 1
             fi
@@ -206,6 +202,13 @@ jobs:
           if [[ "$full_version" != *"+"* || ! "$pubspec_build_number" =~ ^[0-9]+$ ]]; then
             echo "pubspec.yaml must include a numeric Android build number (version+build)." >&2
             exit 1
+          fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            release_version="${GITHUB_REF_NAME#v}"
+            if [[ "$release_version" != "$version" ]]; then
+              echo "版本標籤 $GITHUB_REF_NAME 與 pubspec.yaml 版本 $version 不一致。" >&2
+              exit 1
+            fi
           fi
           build_number=$((pubspec_build_number + GITHUB_RUN_NUMBER - 1))
           echo "app_version=$version" >> "$GITHUB_OUTPUT"
@@ -253,15 +256,6 @@ jobs:
           path: dist/android/DTV-*.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Attach Android Universal APK to GitHub Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/android/DTV-${{ steps.build-universal.outputs.app_version }}-Android.apk
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   ios-ipa:
     name: iOS device IPA and simulator build
     needs: core-validation
@@ -312,15 +306,6 @@ jobs:
           path: dist/ios/DTV-*.ipa
           if-no-files-found: error
           retention-days: 14
-      - name: Attach iOS IPA to GitHub Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/ios/DTV-*-iOS.ipa
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   macos-universal:
     name: macOS Universal DMG (arm64 + x86_64)
     needs: core-validation
@@ -355,14 +340,92 @@ jobs:
           path: dist/macos/DTV-*.dmg
           if-no-files-found: error
           retention-days: 14
-      - name: Attach macOS Universal DMG to GitHub Release
-        if: github.event_name == 'release'
+
+  draft-release:
+    name: Prepare verified Draft Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - core-validation
+      - windows-x64
+      - android-universal
+      - ios-ipa
+      - macos-universal
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download platform build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Assemble and verify release files
+        id: release-files
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+          if [[ "$tag" != v* || -z "$version" ]]; then
+            echo "只接受 v 開頭的正式版本標籤，例如 v1.0.2。" >&2
+            exit 1
+          fi
+
+          windows_dir="release-artifacts/DTV-${version}-Windows-Portable"
+          android_apk="release-artifacts/DTV-Android-APK/DTV-${version}-Android.apk"
+          macos_dmg="release-artifacts/DTV-macOS-DMG/DTV-${version}-macOS.dmg"
+          ios_ipa="release-artifacts/DTV-iOS-IPA/DTV-${version}-iOS.ipa"
+
+          test -d "$windows_dir"
+          for package in "$android_apk" "$macos_dmg" "$ios_ipa"; do
+            if [[ ! -s "$package" ]]; then
+              echo "缺少正式發布檔案或檔案為空：$package" >&2
+              exit 1
+            fi
+          done
+
+          mkdir -p release-files
+          (
+            cd "$windows_dir"
+            zip -qr "$GITHUB_WORKSPACE/release-files/DTV-${version}-Windows-Portable.zip" .
+          )
+          cp "$android_apk" "$macos_dmg" "$ios_ipa" release-files/
+
+          for package in release-files/*; do
+            if [[ ! -s "$package" ]]; then
+              echo "正式發布檔案為空：$package" >&2
+              exit 1
+            fi
+            ls -lh "$package"
+          done
+          test "$(find release-files -maxdepth 1 -type f | wc -l)" -eq 4
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create Draft Release after successful builds
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/macos/DTV-*-macOS.dmg
+          tag_name: ${{ github.ref_name }}
+          name: D TV ${{ steps.release-files.outputs.version }} 正式版
+          draft: true
+          prerelease: false
           fail_on_unmatched_files: true
+          body: |
+            ## D TV ${{ steps.release-files.outputs.version }} 正式版
+
+            四個平台的正式建置與必要檢查已全部通過。
+
+            ### 下載檔案
+            - Android／Android TV：Universal APK（ARM64、ARMv7、x86_64）
+            - Windows x64：免安裝 ZIP
+            - macOS：Apple Silicon／Intel Universal DMG
+            - iOS：未簽章 IPA，需自行簽署後側載安裝
+
+            請確認附件與版本資訊後，再手動發布此 Draft Release。
+          files: |
+            release-files/DTV-${{ steps.release-files.outputs.version }}-Android.apk
+            release-files/DTV-${{ steps.release-files.outputs.version }}-Windows-Portable.zip
+            release-files/DTV-${{ steps.release-files.outputs.version }}-macOS.dmg
+            release-files/DTV-${{ steps.release-files.outputs.version }}-iOS.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
 # validation-retrigger-1
