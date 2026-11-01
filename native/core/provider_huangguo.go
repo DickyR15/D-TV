@@ -30,6 +30,10 @@ const (
 	sourceCloudFront    = "cloudfront"
 	sourceGuipian       = "guipian"
 	sourceKanmMovie     = "kanmovie"
+	sourceBaofeng       = "baofeng"
+	sourceJisu          = "jisu"
+	source360           = "360"
+	sourceHuya          = "huya"
 	sourceHanxiaoquan   = "hanxiaoquan"
 
 	providerMaxBodyBytes = 20 * 1024 * 1024
@@ -91,7 +95,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceGuipian, sourceKanmMovie, sourceHanxiaoquan:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceGuipian, sourceKanmMovie, sourceBaofeng, sourceJisu, source360, sourceHuya, sourceHanxiaoquan:
 		return true
 	default:
 		return false
@@ -120,6 +124,14 @@ func canonicalProviderSource(source string) string {
 		return sourceGuipian
 	case "kanmovie", "kanmovie.com", "www.kanmovie.com":
 		return sourceKanmMovie
+	case "baofeng", "bfzyapi.com":
+		return sourceBaofeng
+	case "jisu", "jszyapi.com":
+		return sourceJisu
+	case "360", "360zy.com":
+		return source360
+	case "huya", "huyazy.net":
+		return sourceHuya
 	case "hanxiaoquan", "jennyhow.com", "www.jennyhow.com":
 		return sourceHanxiaoquan
 	default:
