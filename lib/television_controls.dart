@@ -192,7 +192,8 @@ class TelevisionControlsState extends State<TelevisionControls> {
   }
 
   void _seek(int seconds) {
-    final current = widget.player.state.position.inMilliseconds / 1000;
+    final current =
+        _seekPreview ?? widget.player.state.position.inMilliseconds / 1000;
     _seekToSeconds(current + seconds);
   }
 
