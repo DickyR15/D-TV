@@ -379,6 +379,68 @@ def probe_source(source: dict) -> dict:
             if ok:
                 result["playback"] = True
                 break
+
+        # A provider catalogue can contain stale records whose media files have
+        # already been removed. Do not classify the whole source as broken from
+        # one such record: try a small bounded set of other catalogue entries.
+        if not result["playback"]:
+            fallback_checked = 0
+            for fallback_row in rows:
+                if fallback_checked >= 7 or not isinstance(fallback_row, dict):
+                    break
+                fallback_id = str(fallback_row.get("vod_id", "")).strip()
+                fallback_title = str(fallback_row.get("vod_name", "")).strip()
+                if not fallback_id or fallback_id == video_id or not movie_like(fallback_row):
+                    continue
+                fallback_checked += 1
+                try:
+                    fallback_payload = request_json(
+                        session, source["api"], source["referer"],
+                        {"ac": "detail", "ids": fallback_id, "at": "json"},
+                    )
+                except Exception as exc:
+                    result["steps"].append({
+                        "step": "playback_fallback",
+                        "ok": False,
+                        "title": fallback_title,
+                        "message": f"替代樣本詳情失敗：{type(exc).__name__}: {exc}",
+                    })
+                    continue
+                fallback_rows = fallback_payload.get("list", [])
+                fallback_detail = fallback_rows[0] if fallback_rows and isinstance(fallback_rows[0], dict) else None
+                if not fallback_detail:
+                    continue
+                fallback_groups = groups_from_detail(fallback_detail)
+                fallback_candidates = []
+                # Try more than one line, but cap the number of requests per title.
+                for fallback_group in fallback_groups:
+                    for fallback_episode in fallback_group["episodes"][:2]:
+                        if urlsplit(fallback_episode["url"]).path.lower().endswith(DIRECT_SUFFIXES):
+                            fallback_candidates.append((fallback_group["name"], fallback_episode))
+                for fallback_group_name, fallback_episode in fallback_candidates[:6]:
+                    ok, message = probe_media(session, fallback_episode["url"], source["referer"])
+                    result["steps"].append({
+                        "step": "playback_fallback",
+                        "ok": ok,
+                        "title": fallback_title,
+                        "line": fallback_group_name,
+                        "episode": fallback_episode["title"],
+                        "url": safe_url(fallback_episode["url"]),
+                        "message": message,
+                    })
+                    if ok:
+                        result["playback"] = True
+                        result["playback_sample_title"] = fallback_title
+                        result["playback_sample_id"] = fallback_id
+                        break
+                if result["playback"]:
+                    break
+            result["steps"].append({
+                "step": "playback_fallback_summary",
+                "ok": result["playback"],
+                "checked_titles": fallback_checked,
+                "message": "已找到其他可讀取的暴風播放樣本" if result["playback"] else "有限替代樣本仍未找到可讀取播放檔；不能據此判定整個來源永久失效",
+            })
     except Exception as exc:
         result["steps"].append({
             "step": "error",
