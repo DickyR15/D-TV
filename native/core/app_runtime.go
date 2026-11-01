@@ -893,8 +893,8 @@ func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput
 	if !valid {
 		return nativePlan{}, errors.New("劇集資訊無效")
 	}
-	if canonicalProviderSource(legacySource) == sourceKanmMovie && canonicalProviderSource(input.Chapter.Source) == sourceKanmMovie {
-		oldPrefix := providerChapterID(sourceKanmMovie, legacySourceID, "")
+	if canonicalProviderSource(legacySource) == legacyKanmMovieSource && canonicalProviderSource(input.Chapter.Source) == legacyKanmMovieSource {
+		oldPrefix := providerChapterID(legacyKanmMovieSource, legacySourceID, "")
 		if strings.HasPrefix(input.Chapter.ID, oldPrefix) {
 			episodeKey := strings.TrimPrefix(input.Chapter.ID, oldPrefix)
 			input.Chapter.ID = providerChapterID(source, sourceID, episodeKey)
