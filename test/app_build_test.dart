@@ -16,8 +16,8 @@ void main() {
     SharedPreferences.setMockInitialValues({'source': 'huangdou'});
     final store = testStore(await SharedPreferences.getInstance());
     expect(appSlug, 'dtv');
-    // 預設開啟紅果、韓小圈、鬼片與西瓜影視，其餘站源需在站源管理中開啟。
-    expect(store.sources.length, allSourcesEnabled ? 4 : 1);
+    // 預設開啟紅果、韓小圈及四個獨立 MacCMS 片源。
+    expect(store.sources.length, allSourcesEnabled ? 6 : 1);
     expect(
       SourceSite.values.any((source) => source.id == 'dsd'),
       allSourcesEnabled,
@@ -37,7 +37,7 @@ void main() {
       );
       await store.unlockAdvancedSources('source-pass-123');
       await store.setSourceEnabled('dsd', true);
-      expect(store.sources.length, 5);
+      expect(store.sources.length, 7);
       expect(store.allowsSource('dsd'), isTrue);
     } else {
       await expectLater(store.setSourceEnabled('dsd', true), throwsStateError);
