@@ -40,11 +40,21 @@ var kanmovieBackends = []kanmovieBackend{
 	{host: "cj.lzcaiji.com", apiBase: "https://cj.lzcaiji.com/api.php/provide/vod", home: "https://cj.lzcaiji.com/"},
 	{host: "360zy.com", apiBase: "https://360zy.com/api.php/provide/vod", home: "https://360zy.com/"},
 	{host: "api.ukuapi88.com", apiBase: "https://api.ukuapi88.com/api.php/provide/vod", home: "https://api.ukuapi88.com/"},
+	// KANMovie IDs use the public site host; each source publishes its MacCMS API
+	// on a separate collection domain.
+	{host: "hongniuzy.com", apiBase: "https://www.hongniuzy2.com/api.php/provide/vod", home: "https://hongniuzy.com/"},
+	{host: "haohuazy.com", apiBase: "https://hhzyapi.com/api.php/provide/vod", home: "https://www.haohuazy.com/"},
+	{host: "huyaapi.com", apiBase: "https://www.huyaapi.com/api.php/provide/vod", home: "https://www.huyaapi.com/"},
+	{host: "mtzy.me", apiBase: "https://caiji.maotai999.vip/api.php/provide/vod", home: "https://mtzy.me/"},
 }
 
 var kanmovieCategories = []nativeCategory{
 	{ID: "movies", Name: "電影"},
 	{ID: "tv-series", Name: "電視劇"},
+	{ID: "american-drama", Name: "美劇"},
+	{ID: "japanese-drama", Name: "日劇"},
+	{ID: "korean-drama", Name: "韓劇"},
+	{ID: "thai-drama", Name: "泰劇"},
 	{ID: "anime", Name: "動漫"},
 	{ID: "variety", Name: "綜藝"},
 	{ID: "today", Name: "最近更新"},
@@ -122,6 +132,14 @@ func kanmovieCategoryPath(category string) (string, bool) {
 		return "/movies", true
 	case "tv-series":
 		return "/tv-series", true
+	case "american-drama":
+		return "/american-drama", true
+	case "japanese-drama":
+		return "/japanese-drama", true
+	case "korean-drama":
+		return "/korean-drama", true
+	case "thai-drama":
+		return "/thai-drama", true
 	case "anime":
 		return "/anime", true
 	case "variety":
@@ -603,7 +621,7 @@ func (d *Downloader) resolveKanmMovieMedia(ctx context.Context, task Task) (prov
 	if err != nil || episodeIndex < 1 || episodeIndex > 100000 {
 		return providerMedia{}, errors.New("西瓜影視播放集數無效")
 	}
-	_, record, err := d.fetchKanmMovieDetailRecord(ctx, sourceID)
+	backend, record, err := d.fetchKanmMovieDetailRecord(ctx, sourceID)
 	if err != nil {
 		return providerMedia{}, err
 	}
@@ -631,7 +649,10 @@ func (d *Downloader) resolveKanmMovieMedia(ctx context.Context, task Task) (prov
 			continue
 		}
 		seen[selected.URL] = true
-		referer := fmt.Sprintf("%s/video/%s?ep=%d&from=0", kanmovieSiteBaseURL, url.PathEscape(sourceID), episodeIndex)
+		// The stream belongs to the upstream provider, not the KANMovie
+		// catalogue page. Use the provider's canonical home as Referer so CDNs
+		// that validate the playback origin do not receive an unrelated host.
+		referer := firstNonEmpty(backend.home, kanmovieSiteBaseURL+"/")
 		options = append(options, providerMedia{URL: selected.URL, Referer: referer})
 	}
 	if len(options) == 0 {
