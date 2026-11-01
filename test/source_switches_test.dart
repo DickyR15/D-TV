@@ -71,6 +71,18 @@ void main() {
     expect(store.profile.allows('guipian'), isFalse);
   });
 
+  test('saved KANMovie favorites migrate to the matching independent source', () {
+    final drama = Drama.fromJson({
+      'id': 'kanmovie:bfzy.tv~12345',
+      'source': 'kanmovie',
+      'sourceId': 'bfzy.tv~12345',
+      'title': '舊收藏影片',
+    });
+    expect(drama.id, 'baofeng:12345');
+    expect(drama.source, 'baofeng');
+    expect(drama.sourceId, '12345');
+  });
+
   test('restricted sources start switched off', () async {
     final store = await create();
     expect(
