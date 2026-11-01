@@ -185,10 +185,18 @@ class LocalStore extends ChangeNotifier {
       final stored = raw == null
           ? <String, bool>{}
           : Map<String, bool>.from(jsonDecode(raw) as Map);
-      _sourceSwitches = {
+      final migrated = <String, bool>{
         for (final entry in stored.entries)
           if (SourceSite.isKnown(entry.key)) entry.key: entry.value,
       };
+      final oldAggregateEnabled = stored['kanmovie'];
+      if (oldAggregateEnabled != null) {
+        for (final source in const ['baofeng', 'jisu', '360', 'huya']) {
+          migrated.putIfAbsent(source, () => oldAggregateEnabled);
+        }
+      }
+      // The retired Guipian switch is intentionally discarded.
+      _sourceSwitches = migrated;
     } catch (_) {
       _sourceSwitches = {};
     }
