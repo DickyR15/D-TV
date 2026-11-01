@@ -38,6 +38,7 @@ type nativeStreamSession struct {
 	mu           sync.Mutex
 	assets       map[string]nativeStreamAsset
 	referer      string
+	standardHTTP bool
 	key          []byte
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -227,9 +228,9 @@ func newNativeStreamTransport(base *http.Transport) *http.Transport {
 	return transport
 }
 
-func (stream *nativeStreamServer) nativeRequest(request *http.Request) (*http.Response, error) {
+func (stream *nativeStreamServer) nativeRequest(request *http.Request, standardHTTP bool) (*http.Response, error) {
 	sourceClient := stream.downloader.streamClient
-	if sourceClient == nil {
+	if standardHTTP || sourceClient == nil {
 		sourceClient = stream.downloader.client
 	}
 	client := *sourceClient
@@ -294,7 +295,7 @@ func (stream *nativeStreamServer) nativeOpen(media providerMedia) (string, strin
 	}
 	token := hex.EncodeToString(tokenBytes)
 	ctx, cancel := context.WithCancel(providerMediaContext(context.Background(), media.credentials))
-	session := &nativeStreamSession{assets: map[string]nativeStreamAsset{}, referer: media.Referer, key: media.HLSKey, ctx: ctx, cancel: cancel, lastUsed: time.Now(), credentials: media.credentials, diagnosticID: nativeStreamID(token), created: time.Now()}
+	session := &nativeStreamSession{assets: map[string]nativeStreamAsset{}, referer: media.Referer, standardHTTP: media.StandardHTTP, key: media.HLSKey, ctx: ctx, cancel: cancel, lastUsed: time.Now(), credentials: media.credentials, diagnosticID: nativeStreamID(token), created: time.Now()}
 	stream.mu.Lock()
 	for id, old := range stream.sessions {
 		if time.Since(old.lastUsed) > 10*time.Minute {
@@ -543,7 +544,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 			upstream.Header.Set(name, value)
 		}
 	}
-	response, err := stream.nativeRequest(upstream)
+	response, err := stream.nativeRequest(upstream, session.standardHTTP)
 	if err != nil {
 		http.Error(writer, "读取媒体失败，请重试", http.StatusBadGateway)
 		return
