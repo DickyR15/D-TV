@@ -20,6 +20,12 @@ import (
 	"time"
 )
 
+type nativeStreamRoundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (roundTrip nativeStreamRoundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
 func streamDiagnosticEvents(t *testing.T, stream *nativeStreamServer) ([]diagnosticEvent, string) {
 	t.Helper()
 	data, err := os.ReadFile(stream.downloader.diagnostics.path)
@@ -425,6 +431,7 @@ func TestNativeStreamResumesMP4AfterIdleTimeout(t *testing.T) {
 		response,
 		nativeStreamIdleTimeoutReader{},
 		nativeStreamDiagnostic{request: 1, session: "idle-resume", asset: "media", method: http.MethodGet, started: time.Now()},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("idle-timeout resume failed after %d bytes: %v", written, err)
@@ -440,6 +447,89 @@ func TestNativeStreamResumesMP4AfterIdleTimeout(t *testing.T) {
 		if !strings.Contains(diagnosticText, marker) {
 			t.Errorf("missing diagnostic event %q", marker)
 		}
+	}
+}
+
+func TestNativeStreamResumePreservesStandardHTTPTransportAndHeaders(t *testing.T) {
+	payload := []byte("abcdef")
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := newNativeStreamServer(engine.downloader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.server.Close()
+
+	var standardCalls, streamCalls atomic.Int32
+	engine.downloader.client = &http.Client{Transport: nativeStreamRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		standardCalls.Add(1)
+		if got := request.Header.Get("User-Agent"); got != guipianUserAgent {
+			return nil, fmt.Errorf("resume User-Agent = %q, want Guipian User-Agent", got)
+		}
+		if got := request.Header.Get("Referer"); got != guipianSiteBaseURL+"/" {
+			return nil, fmt.Errorf("resume Referer = %q, want Guipian site root", got)
+		}
+		if got := request.Header.Get("Range"); got != "bytes=0-5" {
+			return nil, fmt.Errorf("resume Range = %q, want bytes=0-5", got)
+		}
+		header := make(http.Header)
+		header.Set("Content-Type", "video/mp4")
+		header.Set("Accept-Ranges", "bytes")
+		header.Set("Content-Range", "bytes 0-5/6")
+		header.Set("Content-Length", "6")
+		return &http.Response{
+			StatusCode: http.StatusPartialContent,
+			Header: header,
+			Body: io.NopCloser(bytes.NewReader(payload)),
+			ContentLength: int64(len(payload)),
+			Request: request,
+		}, nil
+	})}
+	engine.downloader.streamClient = &http.Client{Transport: nativeStreamRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		streamCalls.Add(1)
+		return nil, errors.New("standard HTTP resume unexpectedly used native stream transport")
+	})}
+
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://cdn.example.test/video.mp4", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("User-Agent", guipianUserAgent)
+	request.Header.Set("Referer", guipianSiteBaseURL+"/")
+	header := make(http.Header)
+	header.Set("Content-Type", "video/mp4")
+	header.Set("Accept-Ranges", "bytes")
+	header.Set("Content-Range", "bytes 0-5/6")
+	header.Set("Content-Length", "6")
+	response := &http.Response{
+		StatusCode: http.StatusPartialContent,
+		Header: header,
+		ContentLength: int64(len(payload)),
+		Body: io.NopCloser(strings.NewReader("")),
+		Request: request,
+	}
+
+	var destination bytes.Buffer
+	written, err := stream.nativeCopyMediaWithResume(
+		context.Background(),
+		&destination,
+		request,
+		request.URL.String(),
+		response,
+		nativeStreamIdleTimeoutReader{},
+		nativeStreamDiagnostic{request: 88, session: "standard-http-resume", asset: "media", method: http.MethodGet, started: time.Now()},
+		true,
+	)
+	if err != nil {
+		t.Fatalf("standard HTTP resume failed after %d bytes: %v", written, err)
+	}
+	if !bytes.Equal(destination.Bytes(), payload) {
+		t.Fatalf("resumed body = %q, want %q", destination.Bytes(), payload)
+	}
+	if standardCalls.Load() != 1 || streamCalls.Load() != 0 {
+		t.Fatalf("resume transport calls: standard=%d native-stream=%d, want 1/0", standardCalls.Load(), streamCalls.Load())
 	}
 }
 
@@ -740,6 +830,7 @@ func TestNativeStreamLogsIncompleteTransferByteRange(t *testing.T) {
 		response,
 		nativeStreamIdleTimeoutReader{},
 		nativeStreamDiagnostic{request: 77, session: "transfer-test", asset: "media", method: http.MethodGet, started: time.Now()},
+		false,
 	)
 	if !errors.Is(err, errNativeStreamIdleTimeout) || written != 0 {
 		t.Fatalf("written=%d error=%v, want zero bytes and idle timeout", written, err)
