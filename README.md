@@ -26,7 +26,7 @@
 
 ## 下載正式版
 
-前往 [GitHub Releases](https://github.com/DickyR15/D-TV/releases/latest)，依照裝置選擇對應檔案：
+前往 [D TV 1.0.1 正式版 Releases](https://github.com/DickyR15/D-TV/releases/tag/v1.0.1)，依照裝置選擇對應檔案：
 
 - **Android／Android TV**：`DTV-1.0.1-Android.apk`
 - **Windows x64**：`DTV-1.0.1-Windows-Portable.zip`

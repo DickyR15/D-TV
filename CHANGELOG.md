@@ -1,16 +1,29 @@
 # 更新日誌
 
-## 1.0.1（正式版）
+## 1.0.1（2026-11-01 正式版）
 
-- 正式提供 Android、Android TV、Windows、macOS 與 iOS 多平台版本。
-- Android 發布單一 Universal APK，支援 ARM64、ARMv7 與 x86_64。
-- Windows 提供 x64 免安裝 ZIP；macOS 提供 Apple Silicon 與 Intel 通用 DMG。
-- iOS 提供未簽章 IPA，使用者需自行簽署後側載安裝。
-- 修正 Android TV 海報長按確認鍵的操作：按住約 0.65 秒立即開啟操作選單；短按確認鍵仍維持播放。
-- 防止長按開啟選單後，原本同一次按鍵的重複事件或放開事件誤觸選單項目或再次播放。
-- 改善跨平台介面、Windows／macOS 桌面操作、系統配色與原生環境整合。
-- 強化 Flutter／Go 共用核心測試及各平台建置驗證。
-- D TV 不提供影片下載功能。
+### 跨平台版本
+- 正式提供 Android／Android TV、Windows x64、macOS 與 iOS 版本。
+- Android 採單一 Universal APK，支援 ARM64（arm64-v8a）、ARMv7（armeabi-v7a）與 x86_64。
+- Windows 提供免安裝 ZIP；macOS 提供 Apple Silicon／Intel 通用 DMG。
+- iOS 提供未簽章 IPA，需自行簽署後側載安裝。
+
+### 操作與介面
+- 修正 Android TV 海報確認鍵操作：短按放開後播放；按住約 0.65 秒即開啟操作選單，不必等到放開。
+- 防止長按選單開啟後，同一次按鍵的重複事件或放開事件誤觸選單項目、加入收藏或再次播放。
+- 改善 Windows／macOS 桌面操作、視窗版面、系統配色及平台原生整合。
+- 統一跨平台繁體中文（台灣用語）介面。
+
+### 穩定性與建置
+- 強化 Flutter／Go 共用核心與回歸測試。
+- Android APK 已驗證正式簽章、套件識別及三種 ABI，並完成 x86_64 模擬器安裝啟動測試。
+- Windows 免安裝程式完成啟動測試；iOS 模擬器完成安裝與啟動測試；macOS Universal DMG 建置成功。
+
+### 使用提醒
+- D TV 為線上串流播放應用，不提供影片下載功能。
+- iOS IPA 未簽章，不能直接安裝；需使用 AltStore、Sideloadly 等工具自行簽署後安裝。
+
+---
 
 ## 第四階段（直式影片即時模糊背景試驗版）
 
