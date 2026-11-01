@@ -164,11 +164,11 @@ class Drama {
         ? sourceId
         : (id.startsWith('kanmovie:') ? id.substring('kanmovie:'.length) : '');
     final separator = raw.indexOf('~');
-    if (separator < 1) return {'id': id, 'source': source, 'sourceId': sourceId};
-    final host = raw.substring(0, separator).toLowerCase().replaceFirst(
-      RegExp(r'^www\\.'),
-      '',
-    );
+    if (separator < 1) {
+      return {'id': id, 'source': source, 'sourceId': sourceId};
+    }
+    var host = raw.substring(0, separator).toLowerCase();
+    if (host.startsWith('www.')) host = host.substring(4);
     final upstreamId = raw.substring(separator + 1);
     final migratedSource = switch (host) {
       'bfzy.tv' || 'bfzyapi.com' => 'baofeng',
@@ -177,7 +177,51 @@ class Drama {
       'huyaapi.com' || 'huyazy.net' => 'huya',
       _ => '',
     };
-    if (migratedSource.isEmpty || !RegExp(r'^\\d+
+    final numericId = int.tryParse(upstreamId);
+    if (migratedSource.isEmpty || numericId == null || numericId < 1) {
+      return {'id': id, 'source': source, 'sourceId': sourceId};
+    }
+    final migratedId = migratedSource + ':' + upstreamId;
+    return {
+      'id': migratedId,
+      'source': migratedSource,
+      'sourceId': upstreamId,
+    };
+  }
+
+  factory Drama.fromJson(Map<String, dynamic> json) {
+    final originalId = json['id'] as String? ?? '';
+    final originalSource = json['source'] as String? ?? 'hongguo';
+    final originalSourceId = json['sourceId'] as String? ?? '';
+    final migrated = _migrateLegacySource(
+      originalId,
+      originalSource,
+      originalSourceId,
+    );
+    return Drama(
+      id: migrated['id']!,
+      source: migrated['source']!,
+      sourceId: migrated['sourceId']!,
+      title: json['title'] as String? ?? '短劇',
+      description: json['description'] as String? ?? '',
+      cover: json['cover'] as String? ?? '',
+      episodes: intValue(json['episodes']),
+      episodesVerified: json['episodesVerified'] == true,
+      category: json['category'] as String? ?? '',
+      vip: json['vip'] == true
+          ? true
+          : json['vip'] == false &&
+                (originalSource != 'huangdou' ||
+                    intValue(json['metadataSchema']) >= 1)
+          ? false
+          : null,
+      heat: json['heat']?.toString() ?? '',
+      views: json['views']?.toString() ?? '',
+      onlineDate: json['onlineDate'] as String? ?? '',
+      tags: (json['tags'] as List? ?? const []).whereType<String>().toList(),
+      releaseStatus: json['releaseStatus'] as String? ?? '',
+    );
+  }
   Map<String, dynamic> toJson() => {
     'metadataSchema': 1,
     'id': id,
