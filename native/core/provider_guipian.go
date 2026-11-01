@@ -501,7 +501,7 @@ func (d *Downloader) resolveGuipianMedia(ctx context.Context, task Task) (provid
 		return providerMedia{}, errors.New("鬼片网播放地址无效")
 	}
 	referer := guipianSiteBaseURL + "/"
-	media := providerMedia{URL: address, Referer: referer}
+	media := providerMedia{URL: address, Referer: referer, StandardHTTP: true}
 	if strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
 		return d.prepareWebProviderMedia(ctx, media, "鬼片网")
 	}
