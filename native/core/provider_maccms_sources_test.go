@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestIndependentMaccmsSourceRegistry(t *testing.T) {
 	expected := map[string]string{
@@ -73,5 +76,30 @@ func TestIndependentMaccmsDramaUsesSourceScopedID(t *testing.T) {
 	}
 	if drama.ChannelName != "虎牙" {
 		t.Fatalf("channel name = %q, want 虎牙", drama.ChannelName)
+	}
+}
+
+func TestIndependentMaccmsURLRoutingAndBaseURLs(t *testing.T) {
+	downloader := &Downloader{cfg: Config{}, providerHosts: map[string]string{}}
+	tests := []struct {
+		source string
+		host   string
+	}{
+		{sourceBaofeng, "bfzyapi.com"},
+		{sourceJisu, "jszyapi.com"},
+		{source360, "360zy.com"},
+		{sourceHuya, "huyazy.net"},
+	}
+	for _, test := range tests {
+		if got := providerSourceForURL("https://" + test.host + "/api.php/provide/vod/"); got != test.source {
+			t.Errorf("providerSourceForURL(%q) = %q, want %q", test.host, got, test.source)
+		}
+		config, ok := maccmsSourceByID(test.source)
+		if !ok {
+			t.Fatalf("source %q is not registered", test.source)
+		}
+		if got := downloader.providerBaseURL(test.source); got != strings.TrimRight(config.home, "/") {
+			t.Errorf("providerBaseURL(%q) = %q, want %q", test.source, got, config.home)
+		}
 	}
 }
