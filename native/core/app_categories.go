@@ -67,6 +67,8 @@ func validNativeCategory(source, category string) bool {
 		return validGuipianCategory(category)
 	case sourceKanmMovie:
 		return validKanmMovieCategory(category)
+	case sourceBaofeng, sourceJisu, source360, sourceHuya:
+		return validMaccmsCategory(category)
 	case sourceHanxiaoquan:
 		return validHanxiaoquanCategory(category)
 	}
@@ -133,6 +135,12 @@ func (engine *nativeEngine) nativeCategories(ctx context.Context, source string,
 		all = append(all, d.fetchGuipianCategories()...)
 	case sourceKanmMovie:
 		all = append(all, kanmovieCategories...)
+	case sourceBaofeng, sourceJisu, source360, sourceHuya:
+		var categories []nativeCategory
+		categories, err = d.fetchMaccmsCategories(ctx, source)
+		if err == nil {
+			all = append(all, categories[1:]...)
+		}
 	case sourceHanxiaoquan:
 		all = append(all, d.fetchHanxiaoquanCategories()...)
 	default:
