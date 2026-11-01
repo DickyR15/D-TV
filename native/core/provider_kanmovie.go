@@ -8,6 +8,7 @@ import (
 	htmlstd "html"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -510,9 +511,67 @@ func categoryNameKanmMovie(category string) string {
 	return "影視"
 }
 
+func splitKanmMovieGroupNames(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	// MacCMS normally separates player groups with $$. Some upstream JSON
+	// catalogues (including Hongniu) serialize vod_play_from as a comma list.
+	// Accept both formats so the player names stay aligned with vod_play_url.
+	if strings.Contains(raw, "$$") {
+		parts := strings.Split(raw, "$$")
+		names := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if name := strings.TrimSpace(part); name != "" {
+				names = append(names, name)
+			}
+		}
+		return names
+	}
+	if strings.Contains(raw, ",") {
+		parts := strings.Split(raw, ",")
+		names := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if name := strings.TrimSpace(part); name != "" {
+				names = append(names, name)
+			}
+		}
+		return names
+	}
+	return []string{raw}
+}
+
+func splitKanmMoviePlayURLGroups(raw string, expected int) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, "$$")
+	if expected > 1 && len(parts) == 1 {
+		// A few providers return one URL block per source separated by commas
+		// when the player names use the same compact JSON representation.
+		parts = strings.Split(raw, ",")
+	}
+	return parts
+}
+
+func kanmoviePlayGroupPriority(name string) int {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if strings.Contains(name, "m3u8") {
+		return 0
+	}
+	if strings.Contains(name, "mp4") {
+		return 1
+	}
+	if strings.Contains(name, "yun") || strings.Contains(name, "cloud") {
+		return 3
+	}
+	return 2
+}
+
 func parseKanmMoviePlayGroups(record map[string]any) []kanmoviePlayGroup {
-	froms := strings.Split(kanmovieRecordString(record, "vod_play_from"), "$$$")
-	playURLs := strings.Split(kanmovieRecordString(record, "vod_play_url"), "$$$")
+	froms := splitKanmMovieGroupNames(kanmovieRecordString(record, "vod_play_from"))
+	playURLs := splitKanmMoviePlayURLGroups(kanmovieRecordString(record, "vod_play_url"), len(froms))
 	count := min(len(froms), len(playURLs))
 	groups := make([]kanmoviePlayGroup, 0, count)
 	for groupIndex := 0; groupIndex < count; groupIndex++ {
@@ -533,6 +592,11 @@ func parseKanmMoviePlayGroups(record map[string]any) []kanmoviePlayGroup {
 			groups = append(groups, kanmoviePlayGroup{Name: name, Episodes: episodes})
 		}
 	}
+	// Prefer explicitly named M3U8/MP4 sources over cloud-player wrappers.
+	// Keep stable ordering among sources of the same type.
+	sort.SliceStable(groups, func(i, j int) bool {
+		return kanmoviePlayGroupPriority(groups[i].Name) < kanmoviePlayGroupPriority(groups[j].Name)
+	})
 	return groups
 }
 
