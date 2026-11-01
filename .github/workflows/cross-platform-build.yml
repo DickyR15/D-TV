@@ -98,6 +98,7 @@ jobs:
           $version = $version.Trim().Trim('"').Trim("'").Split('+')[0]
           if (-not $version) { throw "無法讀取 D TV 版本號。" }
           "app_version=$version" >> $env:GITHUB_OUTPUT
+          "D TV release version: $version"
       - name: Build and package Windows x64
         shell: pwsh
         run: python scripts/retry_command.py --attempts 3 -- python scripts/build_windows.py --all-sources
