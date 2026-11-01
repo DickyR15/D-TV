@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -463,7 +464,35 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (D
 	return drama, chapters, nil
 }
 
+func guipianStandardHTTPForOS(goos string) bool {
+	return strings.EqualFold(strings.TrimSpace(goos), "android")
+}
+
+func guipianResolveMediaURL(pageURL, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || !isProviderHTTPMediaURL(pageURL) {
+		return ""
+	}
+	base, err := url.Parse(pageURL)
+	if err != nil || base.User != nil {
+		return ""
+	}
+	reference, err := url.Parse(raw)
+	if err != nil || reference.User != nil {
+		return ""
+	}
+	resolved := base.ResolveReference(reference)
+	if resolved.User != nil || !isProviderHTTPMediaURL(resolved.String()) {
+		return ""
+	}
+	return resolved.String()
+}
+
 func (d *Downloader) resolveGuipianMedia(ctx context.Context, task Task) (providerMedia, error) {
+	return d.resolveGuipianMediaForPlatform(ctx, task, runtime.GOOS)
+}
+
+func (d *Downloader) resolveGuipianMediaForPlatform(ctx context.Context, task Task, goos string) (providerMedia, error) {
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
 	prefix := providerChapterID(sourceGuipian, sourceID, "")
 	if !valid || source != sourceGuipian || !guipianNumericID(sourceID) || !strings.HasPrefix(task.Chapter.ID, prefix) {
@@ -476,10 +505,26 @@ func (d *Downloader) resolveGuipianMedia(ctx context.Context, task Task) (provid
 	if guipianPlayURL(playURL) == "" {
 		return providerMedia{}, errors.New("鬼片网播放页地址无效")
 	}
-	body, err := d.guipianGet(ctx, playURL)
+
+	pageReferer := firstNonEmpty(task.Chapter.Referer, guipianSiteBaseURL+"/")
+	responses := &playbackResponseURLs{}
+	pageContext := context.WithValue(ctx, playbackResponseURLsKey{}, responses)
+	pageContext = context.WithValue(pageContext, providerTextUserAgentKey{}, guipianUserAgent)
+	body, err := d.fetchProviderText(pageContext, playURL, pageReferer)
 	if err != nil {
 		return providerMedia{}, err
 	}
+	finalPageURL := playURL
+	if actual, found := responses.values.Load(playURL); found {
+		if resolved, ok := actual.(string); ok && resolved != "" {
+			finalPageURL = resolved
+		}
+	}
+	parsedPageURL, err := url.Parse(finalPageURL)
+	if err != nil || parsedPageURL.User != nil || !isProviderHTTPMediaURL(finalPageURL) {
+		return providerMedia{}, errors.New("鬼片网播放页重定向地址无效")
+	}
+
 	address := ""
 	if match := reGuipianNow.FindStringSubmatch(body); len(match) > 1 {
 		address = strings.TrimSpace(match[1])
@@ -490,18 +535,27 @@ func (d *Downloader) resolveGuipianMedia(ctx context.Context, task Task) (provid
 	if address == "" {
 		return providerMedia{}, errors.New("鬼片网该集暂无可用播放地址")
 	}
-	if strings.HasPrefix(address, "//") {
-		address = "https:" + address
-	}
-	if !isProviderHTTPMediaURL(address) {
+	address = guipianResolveMediaURL(finalPageURL, address)
+	if address == "" {
 		return providerMedia{}, errors.New("鬼片网播放地址无效")
 	}
 	parsed, err := url.Parse(address)
-	if err != nil {
+	if err != nil || parsed.User != nil {
 		return providerMedia{}, errors.New("鬼片网播放地址无效")
 	}
-	referer := guipianSiteBaseURL + "/"
-	media := providerMedia{URL: address, Referer: referer, StandardHTTP: true}
+
+	// Keep the historical site-root Referer when there was no redirect.
+	// After a redirect, use the actual page URL that contains the player.
+	referer := pageReferer
+	if finalPageURL != playURL {
+		referer = finalPageURL
+	}
+	standardHTTP := guipianStandardHTTPForOS(goos)
+	var credentials *providerMediaCredentials
+	if standardHTTP {
+		credentials = &providerMediaCredentials{referer: referer, userAgent: userAgent}
+	}
+	media := providerMedia{URL: address, Referer: referer, StandardHTTP: standardHTTP, credentials: credentials}
 	if strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
 		return d.prepareWebProviderMedia(ctx, media, "鬼片网")
 	}

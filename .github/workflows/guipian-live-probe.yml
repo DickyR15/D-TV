@@ -1,0 +1,30 @@
+name: Guipian live playback probe
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "native/core/provider_guipian.go"
+      - "native/core/provider_guipian_test.go"
+      - "native/core/provider_guipian_live_test.go"
+      - "native/core/app_preload.go"
+      - "native/core/app_stream.go"
+      - "native/core/network_media.go"
+      - ".github/workflows/guipian-live-probe.yml"
+
+jobs:
+  live-probe:
+    if: github.event.pull_request.number == 26
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - name: Probe real Guipian category, detail, episodes and playback assets
+        working-directory: native
+        env:
+          DTV_LIVE_GUIPIAN: "1"
+        run: go test ./core -run '^TestGuipianLivePlaybackThroughLocalProxy$' -count=1 -v
