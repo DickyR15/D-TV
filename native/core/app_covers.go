@@ -83,24 +83,6 @@ func newNativeCoverCache(directory string, downloader *Downloader) *nativeCoverC
 }
 
 func nativeCoverReferer(downloader *Downloader, source, address string) string {
-	if source == sourceKanmMovie {
-		if parsed, err := url.Parse(address); err == nil {
-			coverHost := strings.TrimPrefix(strings.ToLower(parsed.Hostname()), "www.")
-			for _, backend := range kanmovieBackends {
-				for _, upstream := range []string{backend.home, backend.apiBase} {
-					upstreamURL, parseErr := url.Parse(upstream)
-					if parseErr != nil {
-						continue
-					}
-					upstreamHost := strings.TrimPrefix(strings.ToLower(upstreamURL.Hostname()), "www.")
-					if coverHost == upstreamHost || strings.HasSuffix(coverHost, "."+upstreamHost) {
-						return backend.home
-					}
-				}
-			}
-		}
-		return kanmovieSiteBaseURL + "/"
-	}
 	if source == sourceCloudFront {
 		if parsed, err := url.Parse(address); err == nil && (strings.HasSuffix(strings.ToLower(parsed.Hostname()), ".zdmhyg.cn") || strings.EqualFold(parsed.Hostname(), "pic.tuafjz.cn")) {
 			return downloader.providerBaseURL(sourceHuangguoAI) + "/"
