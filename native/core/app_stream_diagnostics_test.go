@@ -339,7 +339,16 @@ func TestNativeStreamMP4ResponseDoesNotWaitForLargePeek(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer stream.server.Close()
+	defer func() {
+		// Closing the local response cancels the in-flight upstream read. Wait
+		// for the handler to finish writing its final diagnostics before TempDir
+		// cleanup removes the logs directory.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := stream.server.Shutdown(ctx); err != nil {
+			_ = stream.server.Close()
+		}
+	}()
 	address, token := stream.nativeOpen(providerMedia{URL: upstream.URL + "/video.mp4"})
 	defer stream.nativeRelease(token)
 
