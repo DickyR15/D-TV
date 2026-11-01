@@ -165,6 +165,25 @@ func TestParseKanmMovieCommaSeparatedPlayerGroups(t *testing.T) {
 	}
 }
 
+func TestSplitKanmMoviePlayURLGroupsSupportsTwoDollarDelimiter(t *testing.T) {
+	raw := "正片$https://cdn.example/cloud.m3u8$正片$https://cdn.example/direct.m3u8"
+	groups := splitKanmMoviePlayURLGroups(raw, 2)
+	if len(groups) != 2 {
+		t.Fatalf("split into %d groups, want 2: %#v", len(groups), groups)
+	}
+	if groups[0] != "正片$https://cdn.example/cloud.m3u8" ||
+		groups[1] != "正片$https://cdn.example/direct.m3u8" {
+		t.Fatalf("unexpected groups: %#v", groups)
+	}
+
+	// With only one declared player, '$' must not split a possible URL/episode
+	// payload into artificial groups.
+	single := splitKanmMoviePlayURLGroups(raw, 1)
+	if len(single) != 1 || single[0] != raw {
+		t.Fatalf("single player group changed: %#v", single)
+	}
+}
+
 func TestParseKanmMovieAPIRejectsInvalidPayload(t *testing.T) {
 	if _, err := parseKanmMovieAPI("<html>blocked</html>"); err == nil {
 		t.Fatal("expected malformed API payload error")
