@@ -18,6 +18,7 @@ func TestKanmMovieBackendSourceIdentity(t *testing.T) {
 		ok    bool
 	}{
 		{value: "zuidazy.co~132720", host: "zuidazy.co", id: "132720", ok: true},
+		{value: "bfzy.tv~170584", host: "bfzy.tv", id: "170584", ok: true},
 		{value: "www.subozy.com~160017", host: "subozy.com", id: "160017", ok: true},
 		{value: "ikunzy.com~70727", host: "ikunzy.com", id: "70727", ok: true},
 		{value: "unknown.example~123", ok: false},
