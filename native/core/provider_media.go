@@ -40,10 +40,6 @@ func (d *Downloader) providerBaseURL(source string) string {
 		configured, fallback = d.cfg.YeguoURL, yeguoBaseURL
 	case sourceDSD:
 		configured, fallback = d.cfg.DSDURL, dsdBaseURL
-	case sourceGuipian:
-		configured, fallback = d.cfg.GuipianURL, guipianSiteBaseURL
-	case sourceKanmMovie:
-		configured, fallback = d.cfg.KanMovieURL, kanmovieSiteBaseURL
 	case sourceBaofeng, sourceJisu, source360, sourceHuya:
 		if sourceConfig, ok := maccmsSourceByID(source); ok {
 			fallback = sourceConfig.home
@@ -80,10 +76,6 @@ func providerSourceForURL(raw string) string {
 		return sourceYeguo
 	case host == "dsd.com.se" || host == "www.dsd.com.se":
 		return sourceDSD
-	case host == "guipianwu.com" || host == "www.guipianwu.com":
-		return sourceGuipian
-	case host == "kanmovie.com" || host == "www.kanmovie.com":
-		return sourceKanmMovie
 	case host == "bfzyapi.com":
 		return sourceBaofeng
 	case host == "jszyapi.com":
@@ -142,12 +134,6 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 	}
 	if chapter.Source == sourceDSD {
 		return d.resolveDSDMedia(ctx, task)
-	}
-	if chapter.Source == sourceGuipian {
-		return d.resolveGuipianMedia(ctx, task)
-	}
-	if chapter.Source == sourceKanmMovie {
-		return d.resolveKanmMovieMedia(ctx, task)
 	}
 	if _, ok := maccmsSourceByID(chapter.Source); ok {
 		return d.resolveMaccmsMedia(ctx, task)
