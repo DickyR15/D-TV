@@ -30,11 +30,14 @@ type kanmovieBackend struct {
 // 必須透過對應的上游 MacCMS Provide API 取得，不能把所有影片當成同一個站源。
 var kanmovieBackends = []kanmovieBackend{
 	{host: "zuidazy.co", apiBase: "https://api.zuidapi.com/api.php/provide/vod", home: "https://zuidazy.co/"},
+	{host: "zuida.xyz", apiBase: "https://api.zuidapi.com/api.php/provide/vod", home: "https://zuida.xyz/"},
 	{host: "jszyapi.com", apiBase: "https://jszyapi.com/api.php/provide/vod", home: "https://jszyapi.com/"},
 	{host: "bfzy.tv", apiBase: "https://bfzyapi.com/api.php/provide/vod", home: "https://bfzy.tv/"},
 	{host: "subozy.com", apiBase: "https://subocj.com/api.php/provide/vod", home: "https://www.subozy.com/"},
 	{host: "ryzyw.com", apiBase: "https://cj.rycjapi.com/api.php/provide/vod", home: "https://www.ryzyw.com/"},
 	{host: "ikunzy.com", apiBase: "https://ikunzyapi.com/api.php/provide/vod", home: "https://ikunzy.com/"},
+	{host: "api.guangsuapi.com", apiBase: "https://api.guangsuapi.com/api.php/provide/vod", home: "https://api.guangsuapi.com/"},
+	{host: "cj.lzcaiji.com", apiBase: "https://cj.lzcaiji.com/api.php/provide/vod", home: "https://cj.lzcaiji.com/"},
 }
 
 var kanmovieCategories = []nativeCategory{
