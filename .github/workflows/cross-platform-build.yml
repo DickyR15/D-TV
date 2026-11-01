@@ -141,7 +141,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   android-universal:
-    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'android')
+    if: (github.event_name != 'pull_request' || github.event.pull_request.number == 26) && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'android')
     name: Android Universal APK (3 ABIs)
     needs: core-validation
     runs-on: ubuntu-latest
