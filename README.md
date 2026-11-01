@@ -2,7 +2,7 @@
 
 **D TV 是跨平台短劇播放應用**，採用繁體中文（台灣用語），並針對 Android TV 遙控器操作進行最佳化。
 
-**作者：DickyR15**
+**移植與維護：DickyR15**
 
 ## 支援平台
 
@@ -46,12 +46,21 @@ Android Universal APK 包含 `arm64-v8a`、`armeabi-v7a` 與 `x86_64` 三種 ABI
 
 跨平台 CI 會執行 Flutter／Go 測試、各平台建置及必要的封裝檢查。Android 建置另驗證 APK 簽章、套件識別與三種 ABI，並嘗試在 Android 模擬器安裝啟動。
 
-## 上游來源與授權
+## 上游來源、著作權與授權
 
-本專案參考並移植自 [Xanerix/guoapp](https://github.com/Xanerix/guoapp)。原作者與第三方元件的授權仍以各自原始專案為準。
+D TV 是以 [Xanerix/guoapp](https://github.com/Xanerix/guoapp) 為上游基礎所進行的移植與修改版本。上游程式碼的原始著作權仍歸各自權利人所有。
 
-繁體中文（台灣用語）轉換使用 OpenCC 字典，授權與來源見 [OPENCC-NOTICE.md](OPENCC-NOTICE.md)。其他第三方元件與媒體解碼元件請依各自授權條款使用。
+上游專案採用 **GNU General Public License v3.0（GPL-3.0）**。D TV 的上游衍生程式碼及修改版本依 GPL-3.0 條款提供。請參閱根目錄 [LICENSE](LICENSE) 完整授權條文，以及 [UPSTREAM-NOTICE.md](UPSTREAM-NOTICE.md) 的來源與修改聲明。
+
+D TV 中由 DickyR15 創作的原創修改及新增內容，其著作權由相應創作者依法享有；此聲明不取代或移除上游作者的著作權。
+
+繁體中文（台灣用語）轉換使用 OpenCC 字典，來源與授權見 [OPENCC-NOTICE.md](OPENCC-NOTICE.md)。其他第三方套件、媒體解碼元件及素材仍依各自授權條款使用。
+
+重新散布 D TV 或其修改版本時，請遵守 GPL-3.0，包括保留必要聲明、附上授權全文，並依授權要求提供對應原始碼。D TV 名稱、標誌及品牌識別不因 GPL-3.0 而自動授權他人冒充官方版本或暗示官方背書。
 
 ## 文件
 
-進階片源管理與忘記管理員密碼時的本機設定重設方式，請參閱 [片源管理說明](docs/SOURCE-MANAGEMENT.md)。
+- [著作權與授權說明](COPYRIGHT.md)
+- [上游來源與修改聲明](UPSTREAM-NOTICE.md)
+- [OpenCC 字典來源與授權](OPENCC-NOTICE.md)
+- [片源管理說明](docs/SOURCE-MANAGEMENT.md)
