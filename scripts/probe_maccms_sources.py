@@ -26,11 +26,6 @@ SOURCES = [
         "referer": "https://bfzyapi.com/",
     },
     {
-        "name": "鴨鴨資源",
-        "api": "https://cj.yayazy.net/api.php/provide/vod/",
-        "referer": "https://cj.yayazy.net/",
-    },
-    {
         "name": "極速資源",
         "api": "https://jszyapi.com/api.php/provide/vod/",
         "referer": "https://jszyapi.com/",
