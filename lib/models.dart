@@ -62,6 +62,9 @@ class SourceSite {
   static const values = allSourcesEnabled ? knownValues : [hongguo];
   static bool isAvailable(String id) => values.any((site) => site.id == id);
   static bool isKnown(String id) => allValues.any((site) => site.id == id);
+  // Keep old installations usable when a retired provider is replaced.
+  static String migrateLegacyId(String id) =>
+      id == 'guipian' ? kanmovie.id : id;
   static bool isRestricted(String id) =>
       restrictedValues.any((site) => site.id == id);
   static SourceSite byId(String id) =>
