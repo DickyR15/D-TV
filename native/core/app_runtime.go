@@ -241,8 +241,12 @@ func nativeNormalize(drama Drama) nativeDrama {
 			episodes = count
 		}
 	}
-	source, sourceID, _ := splitProviderDramaID(drama.ID)
-	return nativeDrama{MetadataSchema: 1, ID: drama.ID, Source: source, SourceID: sourceID, Title: drama.DisplayTitle(),
+	source, sourceID, valid := splitProviderDramaID(drama.ID)
+	id := drama.ID
+	if valid {
+		id = providerDramaID(source, sourceID)
+	}
+	return nativeDrama{MetadataSchema: 1, ID: id, Source: source, SourceID: sourceID, Title: drama.DisplayTitle(),
 		Description: firstNonEmpty(drama.Desc, drama.Intro), Cover: cover, Episodes: episodes,
 		EpisodesVerified: drama.EpisodesVerified || episodes > 0,
 		Category: nativeDramaCategory(drama), VIP: drama.VIP,
@@ -775,8 +779,10 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama) (any, error) {
 	source, sourceID, valid := splitProviderDramaID(drama.ID)
 	if !valid {
-		return nil, errors.New("剧集信息无效，请刷新剧库")
+		return nil, errors.New("劇集資訊無效，請重新整理片庫")
 	}
+	drama.ID = providerDramaID(source, sourceID)
+	drama.Source, drama.SourceID = source, sourceID
 
 	now := time.Now()
 	engine.mu.Lock()
