@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/net/html"
 )
@@ -244,7 +245,7 @@ func kanmovieCatalogDrama(sourceID, title, cover, category, cardText string) Dra
 	return drama
 }
 
-func parseKanmMovieCards(document *html.Node, pageURL, category string) ([]Drama, bool, error) {
+func parseKanmMovieCards(document *html.Node, pageURL, category string, page int) ([]Drama, bool, error) {
 	var items []Drama
 	seen := map[string]bool{}
 	hasMore := false
@@ -296,6 +297,18 @@ func (d *Downloader) kanmovieGet(ctx context.Context, path string) (string, erro
 	}
 	pageContext := context.WithValue(ctx, providerTextUserAgentKey{}, kanmovieUserAgent)
 	return d.fetchProviderText(pageContext, address, kanmovieSiteBaseURL+"/")
+}
+
+func kanmovieRawInteger(raw json.RawMessage) int {
+	var number int
+	if json.Unmarshal(raw, &number) == nil {
+		return number
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		number, _ = strconv.Atoi(strings.TrimSpace(text))
+	}
+	return number
 }
 
 func parseKanmMovieAPI(body string) (kanmovieAPIResponse, error) {
@@ -421,7 +434,7 @@ func (d *Downloader) fetchKanmMovieCatalogPage(ctx context.Context, page int, ca
 						results[index].items = append(results[index].items, drama)
 					}
 				}
-				totalPages, _ := strconv.Atoi(nativeText(payload.PageCount))
+				totalPages := kanmovieRawInteger(payload.PageCount)
 				results[index].more = totalPages > page
 			}(index, backend)
 		}
@@ -457,7 +470,7 @@ func (d *Downloader) fetchKanmMovieCatalogPage(ctx context.Context, page int, ca
 	if err != nil {
 		return nil, false, err
 	}
-	return parseKanmMovieCards(document, finalURL, categoryNameKanmMovie(category))
+	return parseKanmMovieCards(document, finalURL, categoryNameKanmMovie(category), page)
 }
 
 func categoryNameKanmMovie(category string) string {
