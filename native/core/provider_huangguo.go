@@ -28,8 +28,7 @@ const (
 	sourceYeguo         = "yeguo"
 	sourceDSD           = "dsd"
 	sourceCloudFront    = "cloudfront"
-	sourceGuipian       = "guipian"
-	sourceKanmMovie     = "kanmovie"
+	legacyKanmMovieSource = "kanmovie"
 	sourceBaofeng       = "baofeng"
 	sourceJisu          = "jisu"
 	source360           = "360"
@@ -93,7 +92,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 	// Migrate legacy KANMovie records to the independent MacCMS source that
 	// originally supplied the video. This is an ID compatibility path only;
 	// KANMovie is no longer registered as a selectable provider.
-	if source == sourceKanmMovie {
+	if source == legacyKanmMovieSource {
 		host, upstreamID, found := strings.Cut(sourceID, "~")
 		if !found || !webProviderNumericID.MatchString(upstreamID) {
 			return "", "", false
@@ -145,10 +144,8 @@ func canonicalProviderSource(source string) string {
 		return sourceDSD
 	case "cloudfront":
 		return sourceCloudFront
-	case "guipian", "guipianwu.com", "www.guipianwu.com":
-		return sourceGuipian
 	case "kanmovie", "kanmovie.com", "www.kanmovie.com":
-		return sourceKanmMovie
+		return legacyKanmMovieSource
 	case "baofeng", "bfzyapi.com":
 		return sourceBaofeng
 	case "jisu", "jszyapi.com":
