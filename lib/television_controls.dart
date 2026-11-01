@@ -334,14 +334,12 @@ class TelevisionControlsState extends State<TelevisionControls> {
     final state = widget.player.state;
     final duration = state.duration.inMilliseconds / 1000;
     final currentPosition = state.position.inMilliseconds / 1000;
-    final position = (_seekPreview ?? currentPosition).clamp(
-      0.0,
-      duration > 0 ? duration : 1.0,
-    );
-    final buffered = (state.buffer.inMilliseconds / 1000).clamp(
-      0.0,
-      duration > 0 ? duration : 1.0,
-    );
+    final position = (_seekPreview ?? currentPosition)
+        .clamp(0.0, duration > 0 ? duration : 1.0)
+        .toDouble();
+    final buffered = (state.buffer.inMilliseconds / 1000)
+        .clamp(0.0, duration > 0 ? duration : 1.0)
+        .toDouble();
     return ExcludeFocus(
       excluding: !widget.enabled,
       child: Focus(
