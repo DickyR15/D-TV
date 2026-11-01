@@ -1,0 +1,116 @@
+name: Duoduo public entry probe
+
+on:
+  push:
+    branches:
+      - feat/kanmovie-source-replace-guipian
+    paths:
+      - ".github/workflows/duoduo-entry-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe-public-entry-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe public entry pages
+        shell: bash
+        run: |
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin, urlsplit
+          from urllib.request import Request, urlopen
+          import re
+          import ssl
+
+          HOSTS = [
+              "duoduozhuiju.com",
+              "323433ssdfd.top",
+              "xds2435u23422342342u.top",
+              "duoduosdf12223234334.top",
+              "dduotv01.top",
+              "umm.dduotv01.top",
+          ]
+
+          class PageParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title = False
+                  self.title_parts = []
+                  self.links = []
+                  self.scripts = []
+                  self.in_title = False
+
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag.lower() == "title":
+                      self.in_title = True
+                  if tag.lower() == "a" and attrs.get("href"):
+                      self.links.append((attrs.get("href", ""), attrs.get("title", "")))
+                  if tag.lower() == "script" and attrs.get("src"):
+                      self.scripts.append(attrs["src"])
+
+              def handle_endtag(self, tag):
+                  if tag.lower() == "title":
+                      self.in_title = False
+
+              def handle_data(self, data):
+                  if self.in_title:
+                      self.title_parts.append(data.strip())
+
+          def safe_host(value):
+              try:
+                  return urlsplit(value).hostname or ""
+              except Exception:
+                  return ""
+
+          for host in HOSTS:
+              url = "https://" + host + "/"
+              print(f"\n=== ENTRY {host} ===")
+              request = Request(url, headers={
+                  "User-Agent": "DTV-Duoduo-PublicEntryProbe/1.0",
+                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              })
+              try:
+                  context = ssl.create_default_context()
+                  with urlopen(request, timeout=18, context=context) as response:
+                      status = response.status
+                      final_url = response.geturl()
+                      content_type = response.headers.get("Content-Type", "")
+                      body = response.read(1024 * 1024)
+                  charset_match = re.search(r"charset=([\\w-]+)", content_type, re.I)
+                  charset = charset_match.group(1) if charset_match else "utf-8"
+                  text = body.decode(charset, errors="replace")
+                  parser = PageParser()
+                  parser.feed(text)
+                  title = " ".join(" ".join(parser.title_parts).split())
+                  print(f"HTTP_STATUS={status}")
+                  print(f"FINAL_URL={final_url}")
+                  print(f"CONTENT_TYPE={content_type}")
+                  print(f"BODY_BYTES_READ={len(body)}")
+                  print(f"TITLE={title[:240]}")
+                  found_hosts = sorted(set(
+                      match.lower() for match in re.findall(
+                          r"(?:https?:)?//([a-z0-9.-]+\\.(?:top|com|net|xyz|vip|app))(?:[/?:#]|$)",
+                          text, re.I
+                      )
+                  ))
+                  if found_hosts:
+                      print("HOSTS_IN_PAGE=" + ", ".join(found_hosts[:40]))
+                  for href, label in parser.links[:40]:
+                      resolved = urljoin(final_url, href)
+                      parsed = urlsplit(resolved)
+                      if parsed.scheme in ("http", "https"):
+                          print("LINK=" + parsed.scheme + "://" + parsed.netloc + parsed.path[:160]
+                                + " | " + " ".join(label.split())[:100])
+                  for src in parser.scripts[:20]:
+                      resolved = urljoin(final_url, src)
+                      parsed = urlsplit(resolved)
+                      if parsed.scheme in ("http", "https"):
+                          print("SCRIPT=" + parsed.scheme + "://" + parsed.netloc + parsed.path[:160])
+              except Exception as exc:
+                  print("ERROR=" + type(exc).__name__ + ": " + str(exc)[:300])
+          PY
