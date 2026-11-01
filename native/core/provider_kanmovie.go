@@ -220,10 +220,49 @@ func kanmovieCardContainer(anchor *html.Node) *html.Node {
 	return best
 }
 
+func kanmovieSrcsetCover(value, pageURL string) string {
+	bestAddress := ""
+	bestScore := -1.0
+	for _, candidate := range strings.Split(value, ",") {
+		fields := strings.Fields(strings.TrimSpace(candidate))
+		if len(fields) == 0 {
+			continue
+		}
+		score := 1.0
+		if len(fields) > 1 {
+			descriptor := strings.TrimSpace(fields[1])
+			if strings.HasSuffix(descriptor, "w") || strings.HasSuffix(descriptor, "x") {
+				if parsed, err := strconv.ParseFloat(descriptor[:len(descriptor)-1], 64); err == nil {
+					score = parsed
+				}
+			}
+		}
+		address := providerCoverAddress(fields[0], pageURL)
+		if address != "" && score >= bestScore {
+			bestAddress, bestScore = address, score
+		}
+	}
+	return bestAddress
+}
+
 func kanmovieImage(card *html.Node, pageURL string) string {
 	for _, image := range providerHTMLNodes(card, func(node *html.Node) bool { return node.Data == "img" }) {
-		for _, key := range []string{"data-src", "data-original", "data-lazy-src", "src"} {
-			if address := providerCoverAddress(providerHTMLAttr(image, key), pageURL); address != "" {
+		for _, key := range []string{
+			"data-src", "data-original", "data-lazy-src", "data-original-src",
+			"data-url", "data-echo", "data-lazy", "data-ks-lazyload",
+			"data-srcset", "data-lazy-srcset", "srcset", "src",
+		} {
+			raw := providerHTMLAttr(image, key)
+			if raw == "" {
+				continue
+			}
+			if strings.Contains(key, "srcset") {
+				if address := kanmovieSrcsetCover(raw, pageURL); address != "" {
+					return address
+				}
+				continue
+			}
+			if address := providerCoverAddress(raw, pageURL); address != "" {
 				return address
 			}
 		}
