@@ -231,13 +231,17 @@ class LocalStore extends ChangeNotifier {
     for (final row in readJsonList(_string(_key('history')))) {
       try {
         final entry = WatchEntry.fromJson(row);
-        _history[entry.drama.id] = entry;
+        if (SourceSite.isKnown(entry.drama.source)) {
+          _history[entry.drama.id] = entry;
+        }
       } catch (_) {}
     }
     for (final row in readJsonList(_string(_key('favorites')))) {
       try {
         final drama = Drama.fromJson(row);
-        _favorites[drama.id] = drama;
+        if (SourceSite.isKnown(drama.source)) {
+          _favorites[drama.id] = drama;
+        }
       } catch (_) {}
     }
     Map<String, dynamic> states = {};
