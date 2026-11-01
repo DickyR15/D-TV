@@ -558,7 +558,7 @@ func (d *Downloader) fetchKanmMovieDetailRecord(ctx context.Context, sourceID st
 }
 
 func (d *Downloader) fetchKanmMovieDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
-	backend, record, err := d.fetchKanmMovieDetailRecord(ctx, sourceID)
+	_, record, err := d.fetchKanmMovieDetailRecord(ctx, sourceID)
 	if err != nil {
 		return Drama{}, nil, err
 	}
