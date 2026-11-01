@@ -145,6 +145,26 @@ func TestParseKanmMovieAPIAndMultiplePlayLines(t *testing.T) {
 	}
 }
 
+func TestParseKanmMovieCommaSeparatedPlayerGroups(t *testing.T) {
+	record := map[string]any{
+		"vod_play_from": "hnyun,hnm3u8",
+		"vod_play_url": "正片$https://cdn.example/cloud.m3u8$$正片$https://cdn.example/direct.m3u8",
+	}
+	groups := parseKanmMoviePlayGroups(record)
+	if len(groups) != 2 {
+		t.Fatalf("parsed %d player groups, want 2: %#v", len(groups), groups)
+	}
+	if groups[0].Name != "hnm3u8" || groups[1].Name != "hnyun" {
+		t.Fatalf("player groups were not retained and prioritized: %#v", groups)
+	}
+	if groups[0].Episodes[0].URL != "https://cdn.example/direct.m3u8" {
+		t.Fatalf("preferred M3U8 line URL = %q", groups[0].Episodes[0].URL)
+	}
+	if groups[1].Episodes[0].URL != "https://cdn.example/cloud.m3u8" {
+		t.Fatalf("cloud line URL = %q", groups[1].Episodes[0].URL)
+	}
+}
+
 func TestParseKanmMovieAPIRejectsInvalidPayload(t *testing.T) {
 	if _, err := parseKanmMovieAPI("<html>blocked</html>"); err == nil {
 		t.Fatal("expected malformed API payload error")
