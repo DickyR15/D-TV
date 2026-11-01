@@ -40,7 +40,7 @@ func (d *Downloader) providerBaseURL(source string) string {
 	case sourceDSD:
 		configured, fallback = d.cfg.DSDURL, dsdBaseURL
 	case sourceKanmMovie:
-		configured, fallback = d.cfg.KanmoviURL, kanmovieSiteBaseURL
+		configured, fallback = d.cfg.KanMovieURL, kanmovieSiteBaseURL
 	case sourceHanxiaoquan:
 		configured, fallback = d.cfg.HanxiaoquanURL, hanxiaoquanSiteBaseURL
 	default:
@@ -102,12 +102,9 @@ func (d *Downloader) providerURLCandidates(raw string) []string {
 	add(rehostProviderURL(parsed, preferred))
 	configured := d.providerBaseURL(source)
 	add(rehostProviderURL(parsed, configured))
-	if providerSourceForURL(configured) == "" {
-		return candidates
-	}
-	for _, candidate := range providerURLCandidates(raw) {
-		add(candidate)
-	}
+	// Candidate generation is intentionally non-recursive: this function is
+	// already resolving a source URL, and re-entering it for the same URL would
+	// recurse forever whenever the configured host is recognized as that source.
 	return candidates
 }
 
