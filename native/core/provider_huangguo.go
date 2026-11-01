@@ -87,7 +87,32 @@ func providerChapterID(source, sourceID, chapterKey string) string {
 func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 	source, sourceID, ok = strings.Cut(strings.TrimSpace(id), ":")
 	source = canonicalProviderSource(source)
-	if !ok || strings.TrimSpace(sourceID) == "" || !isHuangguoProviderSource(source) {
+	if !ok || strings.TrimSpace(sourceID) == "" {
+		return "", "", false
+	}
+	// Migrate legacy KANMovie records to the independent MacCMS source that
+	// originally supplied the video. This is an ID compatibility path only;
+	// KANMovie is no longer registered as a selectable provider.
+	if source == sourceKanmMovie {
+		host, upstreamID, found := strings.Cut(sourceID, "~")
+		if !found || !webProviderNumericID.MatchString(upstreamID) {
+			return "", "", false
+		}
+		switch strings.TrimPrefix(strings.ToLower(strings.TrimSpace(host)), "www.") {
+		case "bfzy.tv", "bfzyapi.com":
+			source = sourceBaofeng
+		case "jszyapi.com":
+			source = sourceJisu
+		case "360zy.com":
+			source = source360
+		case "huyaapi.com", "huyazy.net":
+			source = sourceHuya
+		default:
+			return "", "", false
+		}
+		sourceID = upstreamID
+	}
+	if !isHuangguoProviderSource(source) {
 		return "", "", false
 	}
 	return source, strings.TrimSpace(sourceID), true
@@ -95,7 +120,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceGuipian, sourceKanmMovie, sourceBaofeng, sourceJisu, source360, sourceHuya, sourceHanxiaoquan:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceBaofeng, sourceJisu, source360, sourceHuya, sourceHanxiaoquan:
 		return true
 	default:
 		return false
