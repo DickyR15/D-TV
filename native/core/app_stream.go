@@ -628,6 +628,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 				response,
 				reader,
 				info,
+				session.standardHTTP,
 			)
 			if err != nil {
 				stream.nativeLog(info, "transfer_error", finalURL.String(),
@@ -696,6 +697,7 @@ func (stream *nativeStreamServer) nativeCopyMediaWithResume(
 	response *http.Response,
 	firstReader io.Reader,
 	info nativeStreamDiagnostic,
+	standardHTTP bool,
 ) (int64, error) {
 	if response == nil || response.Body == nil {
 		return 0, errors.New("media response body is unavailable")
@@ -775,7 +777,7 @@ func (stream *nativeStreamServer) nativeCopyMediaWithResume(
 		if validator != "" {
 			retryRequest.Header.Set("If-Range", validator)
 		}
-		retryResponse, err := stream.nativeRequest(retryRequest, false)
+		retryResponse, err := stream.nativeRequest(retryRequest, standardHTTP)
 		if err != nil {
 			stream.nativeLog(info, "resume_failed", address,
 				"attempt="+strconv.Itoa(attempt+1)+" error="+nativeStreamError(err)+" "+nativeStreamErrorDetail(err),
