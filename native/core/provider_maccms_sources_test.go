@@ -103,3 +103,28 @@ func TestIndependentMaccmsURLRoutingAndBaseURLs(t *testing.T) {
 		}
 	}
 }
+
+func TestLegacyKanmMovieIDsMigrateToIndependentSources(t *testing.T) {
+	tests := []struct {
+		legacy string
+		source string
+		id     string
+	}{
+		{"kanmovie:bfzy.tv~123", sourceBaofeng, "123"},
+		{"kanmovie:jszyapi.com~456", sourceJisu, "456"},
+		{"kanmovie:360zy.com~789", source360, "789"},
+		{"kanmovie:huyaapi.com~321", sourceHuya, "321"},
+	}
+	for _, test := range tests {
+		source, id, ok := splitProviderDramaID(test.legacy)
+		if !ok || source != test.source || id != test.id {
+			t.Errorf("splitProviderDramaID(%q) = %q/%q/%v, want %q/%q", test.legacy, source, id, ok, test.source, test.id)
+		}
+	}
+	if _, _, ok := splitProviderDramaID("kanmovie:unknown.example~123"); ok {
+		t.Fatal("unsupported legacy aggregate source unexpectedly migrated")
+	}
+	if _, _, ok := splitProviderDramaID("guipian:123"); ok {
+		t.Fatal("retired Guipian ID unexpectedly remains a provider")
+	}
+}
