@@ -13,7 +13,7 @@ class SourceSite {
       id == 'huangju' ||
       id == 'yeguo' ||
       id == 'dsd' ||
-      id == 'guipian' ||
+      id == 'kanmovie' ||
       id == 'hanxiaoquan';
   bool get searchSuggestions => id == 'hongguo';
   // These are three independent providers and must remain separate in
@@ -37,15 +37,15 @@ class SourceSite {
 
   static const hongguo = SourceSite('hongguo', '紅果', '短劇 · 漫劇 · AI 劇');
   static const dsd = SourceSite('dsd', '帝果', '影片分類 · 線上搜尋');
-  static const guipian = SourceSite('guipian', '鬼片', '恐怖片 · 電視劇 · 動畫');
+  static const kanmovie = SourceSite('kanmovie', '西瓜影視', '電影 · 電視劇 · 動漫 · 綜藝');
   static const hanxiaoquan = SourceSite(
     'hanxiaoquan',
     '韓小圈',
     '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
 
-  /// 預設開啟的一般片源：紅果、韓小圈、鬼片。
-  static const primaryValues = [hongguo, hanxiaoquan, guipian];
+  /// 預設開啟的一般片源：紅果、韓小圈、西瓜影視。
+  static const primaryValues = [hongguo, hanxiaoquan, kanmovie];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
