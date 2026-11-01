@@ -249,6 +249,9 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 	case sourceKanmMovie:
 		drama, chapters, err := d.fetchKanmMovieDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
+	case sourceBaofeng, sourceJisu, source360, sourceHuya:
+		drama, chapters, err := d.fetchMaccmsDetail(ctx, canonicalProviderSource(source), sourceID)
+		return drama.DisplayTitle(), chapters, err
 	case sourceHanxiaoquan:
 		drama, chapters, err := d.fetchHanxiaoquanDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
