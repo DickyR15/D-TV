@@ -143,7 +143,7 @@ func TestNativeStreamDoesNotClearHostCooldownAtHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := stream.nativeRequest(request)
+	response, err := stream.nativeRequest(request, false)
 	if err != nil {
 		t.Fatal(err)
 	}
