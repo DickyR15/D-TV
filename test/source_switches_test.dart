@@ -36,7 +36,7 @@ void main() {
     expect(
       store.sources.map((site) => site.id),
       allSourcesEnabled
-          ? ['hongguo', 'hanxiaoquan', 'guipian']
+          ? ['hongguo', 'hanxiaoquan', 'kanmovie']
           : ['hongguo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);
