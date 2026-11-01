@@ -189,14 +189,6 @@ class LocalStore extends ChangeNotifier {
         for (final entry in stored.entries)
           if (SourceSite.isKnown(entry.key)) entry.key: entry.value,
       };
-      final retiredSwitch = stored['guipian'];
-      if (retiredSwitch != null && !stored.containsKey(SourceSite.kanmovie.id)) {
-        _sourceSwitches[SourceSite.kanmovie.id] = retiredSwitch;
-      }
-      if (retiredSwitch != null) {
-        final migrated = jsonEncode(_sourceSwitches);
-        _queue(() => _commit({'sourceSwitches': migrated}));
-      }
     } catch (_) {
       _sourceSwitches = {};
     }

@@ -31,16 +31,19 @@ void main() {
     await expectLater(store.setSourceEnabled('sorani', true), throwsStateError);
   });
 
-  test('retired Guipian source switch migrates to Xigua Movies', () async {
+  test('Guipian and Xigua Movies remain independent sources', () async {
     final store = await create({
-      'sourceSwitches': jsonEncode({'guipian': false}),
+      'sourceSwitches': jsonEncode({'guipian': false, 'kanmovie': true}),
     });
-    expect(SourceSite.isKnown('guipian'), isFalse);
-    expect(store.sourceEnabled('kanmovie'), isFalse);
-    expect(store.allowsSource('kanmovie'), isFalse);
+    expect(SourceSite.isKnown('guipian'), isTrue);
+    expect(SourceSite.isKnown('kanmovie'), isTrue);
+    expect(store.sourceEnabled('guipian'), isFalse);
+    expect(store.sourceEnabled('kanmovie'), isTrue);
+    expect(store.allowsSource('guipian'), isFalse);
+    expect(store.allowsSource('kanmovie'), isTrue);
   });
 
-  test('retired Guipian profile permission migrates to Xigua Movies', () async {
+  test('profile permissions retain Guipian and Xigua Movies separately', () async {
     final store = await create({
       'profiles': jsonEncode([
         LocalProfile(
@@ -53,13 +56,14 @@ void main() {
         const LocalProfile(
           id: 'viewer',
           name: '普通使用者',
-          sources: ['guipian'],
+          sources: ['guipian', 'kanmovie'],
         ).toJson(),
       ]),
       'activeProfile': 'viewer',
     });
     expect(store.configurationError, isNull);
-    expect(store.profile.sources, ['kanmovie']);
+    expect(store.profile.sources, ['guipian', 'kanmovie']);
+    expect(store.profile.allows('guipian'), isTrue);
     expect(store.profile.allows('kanmovie'), isTrue);
   });
 
@@ -68,7 +72,7 @@ void main() {
     expect(
       store.sources.map((site) => site.id),
       allSourcesEnabled
-          ? ['hongguo', 'hanxiaoquan', 'kanmovie']
+          ? ['hongguo', 'hanxiaoquan', 'guipian', 'kanmovie']
           : ['hongguo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);

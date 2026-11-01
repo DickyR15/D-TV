@@ -39,6 +39,8 @@ func (d *Downloader) providerBaseURL(source string) string {
 		configured, fallback = d.cfg.YeguoURL, yeguoBaseURL
 	case sourceDSD:
 		configured, fallback = d.cfg.DSDURL, dsdBaseURL
+	case sourceGuipian:
+		configured, fallback = d.cfg.GuipianURL, guipianSiteBaseURL
 	case sourceKanmMovie:
 		configured, fallback = d.cfg.KanMovieURL, kanmovieSiteBaseURL
 	case sourceHanxiaoquan:
@@ -73,6 +75,8 @@ func providerSourceForURL(raw string) string {
 		return sourceYeguo
 	case host == "dsd.com.se" || host == "www.dsd.com.se":
 		return sourceDSD
+	case host == "guipianwu.com" || host == "www.guipianwu.com":
+		return sourceGuipian
 	case host == "kanmovie.com" || host == "www.kanmovie.com":
 		return sourceKanmMovie
 	case host == "jennyhow.com" || host == "www.jennyhow.com":
@@ -125,6 +129,9 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 	}
 	if chapter.Source == sourceDSD {
 		return d.resolveDSDMedia(ctx, task)
+	}
+	if chapter.Source == sourceGuipian {
+		return d.resolveGuipianMedia(ctx, task)
 	}
 	if chapter.Source == sourceKanmMovie {
 		return d.resolveKanmMovieMedia(ctx, task)

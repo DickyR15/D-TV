@@ -31,10 +31,11 @@ void main() {
     );
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
+    expect(find.text('鬼片'), findsOneWidget);
     expect(find.text('西瓜影視'), findsOneWidget);
     expect(find.text('管理功能已上鎖'), findsOneWidget);
     expect(find.text('進階片源'), findsNothing);
-    expect(find.textContaining('3 個一般片源預設開啟'), findsOneWidget);
+    expect(find.textContaining('4 個一般片源預設開啟'), findsOneWidget);
     expect(find.textContaining('七個進階片源'), findsNothing);
     expect(find.textContaining('忘記管理員密碼'), findsNothing);
     expect(find.textContaining('shared_preferences'), findsNothing);
