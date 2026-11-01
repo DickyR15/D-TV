@@ -553,8 +553,9 @@ func splitKanmMoviePlayURLGroups(raw string, expected int) []string {
 		// Some providers use a compact two-dollar delimiter for player groups
 		// while keeping comma-separated names in vod_play_from. Episode title
 		// and URL still use a single dollar, and multiple episodes use '#'.
-		if strings.Contains(raw, "$") {
-			parts = strings.Split(raw, "$")
+		twoDollarSeparator := strings.Repeat("$", 2)
+		if strings.Contains(raw, twoDollarSeparator) {
+			parts = strings.Split(raw, twoDollarSeparator)
 		} else if strings.Contains(raw, ",") {
 			// A few providers return one URL block per source separated by commas
 			// when the player names use the same compact JSON representation.
