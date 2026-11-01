@@ -31,7 +31,7 @@ type Config struct {
 	YeguoURL         string
 	YeguoAPIURL      string
 	DSDURL           string
-	KanmoviURL       string
+	KanMovieURL      string
 	HanxiaoquanURL   string
 	Token            string
 	AESKeyHex        string
