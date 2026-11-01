@@ -516,11 +516,12 @@ func splitKanmMovieGroupNames(raw string) []string {
 	if raw == "" {
 		return nil
 	}
-	// MacCMS normally separates player groups with $$. Some upstream JSON
-	// catalogues (including Hongniu) serialize vod_play_from as a comma list.
-	// Accept both formats so the player names stay aligned with vod_play_url.
-	if strings.Contains(raw, "$$") {
-		parts := strings.Split(raw, "$$")
+	// MacCMS normally separates player groups with three dollar signs.
+	// Some upstream JSON catalogues (including Hongniu) serialize
+	// vod_play_from as a comma list. Accept both formats.
+	separator := strings.Repeat("$", 3)
+	if strings.Contains(raw, separator) {
+		parts := strings.Split(raw, separator)
 		names := make([]string, 0, len(parts))
 		for _, part := range parts {
 			if name := strings.TrimSpace(part); name != "" {
@@ -546,7 +547,8 @@ func splitKanmMoviePlayURLGroups(raw string, expected int) []string {
 	if strings.TrimSpace(raw) == "" {
 		return nil
 	}
-	parts := strings.Split(raw, "$$")
+	separator := strings.Repeat("$", 3)
+	parts := strings.Split(raw, separator)
 	if expected > 1 && len(parts) == 1 {
 		// A few providers return one URL block per source separated by commas
 		// when the player names use the same compact JSON representation.
