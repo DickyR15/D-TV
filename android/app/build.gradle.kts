@@ -45,7 +45,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["appLabel"] = "D TV"
-        manifestPlaceholders["appBanner"] = "@drawable/dtv_tv_banner"
+        manifestPlaceholders["appBanner"] = "@drawable/tv_banner"
     }
 
     signingConfigs {
@@ -98,4 +98,9 @@ tasks.withType<JavaCompile>().configureEach {
             }
         }
     }
+}
+
+
+dependencies {
+    implementation("androidx.core:core:1.15.0")
 }

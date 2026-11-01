@@ -1,7 +1,9 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <cstdint>
 #include <flutter/standard_method_codec.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -33,6 +35,25 @@ bool FlutterWindow::OnCreate() {
   device_channel_->SetMethodCallHandler(
       [](const flutter::MethodCall<flutter::EncodableValue>& call,
          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+        if (call.method_name() == "systemAccentColor") {
+          try {
+            winrt::init_apartment(winrt::apartment_type::single_threaded);
+            const auto settings =
+                winrt::Windows::UI::ViewManagement::UISettings();
+            const auto color = settings.GetColorValue(
+                winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+            const std::uint32_t argb =
+                (static_cast<std::uint32_t>(color.A) << 24) |
+                (static_cast<std::uint32_t>(color.R) << 16) |
+                (static_cast<std::uint32_t>(color.G) << 8) |
+                static_cast<std::uint32_t>(color.B);
+            result->Success(flutter::EncodableValue(
+                static_cast<std::int64_t>(argb)));
+          } catch (...) {
+            result->Success(flutter::EncodableValue());
+          }
+          return;
+        }
         if (call.method_name() != "playbackPower") {
           result->NotImplemented();
           return;

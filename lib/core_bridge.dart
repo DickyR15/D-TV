@@ -36,8 +36,18 @@ String _nativeRequest(String body) {
     );
   } else if (Platform.isIOS) {
     library = DynamicLibrary.process();
+  } else if (Platform.isMacOS) {
+    final frameworkLibrary = path.normalize(
+      path.join(
+        path.dirname(Platform.resolvedExecutable),
+        '..',
+        'Frameworks',
+        'libduanju_core.dylib',
+      ),
+    );
+    library = DynamicLibrary.open(frameworkLibrary);
   } else {
-    throw UnsupportedError('目前版本支援 Android 電視與手機');
+    throw UnsupportedError('目前平台尚未載入本機共用核心');
   }
   final request = library.lookupFunction<_NativeRequest, _DartRequest>(
     'DuanjuRequest',
@@ -125,6 +135,8 @@ abstract class AppRepository {
     String operation, {
     Drama? drama,
   }) async => throw AppFailure('目前環境不支援片源管理');
+  Future<SourceStatus> startAutomaticSourceCheck(String source) async =>
+      startSourceJob(source, 'check');
   Future<SourceStatus> cancelSourceJob(String source) async =>
       throw AppFailure('目前環境不支援片源管理');
   Future<List<String>> suggestions(String query) async => const [];
@@ -458,6 +470,20 @@ class NativeRepository extends AppRepository {
         'source': source,
         'command': operation,
         if (drama != null) 'drama': drama.toJson(),
+      }),
+    );
+  }
+
+  @override
+  Future<SourceStatus> startAutomaticSourceCheck(String source) async {
+    _authorize(source);
+    // Do not start the foreground download service just to run a lightweight
+    // health probe; the native source task is already asynchronous.
+    return SourceStatus.fromJson(
+      await _call({
+        'action': 'sourceJob',
+        'source': source,
+        'command': 'check',
       }),
     );
   }

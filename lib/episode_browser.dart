@@ -217,7 +217,8 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
     _page = _page.clamp(0, max(0, (widget.episodes.length - 1) ~/ pageSize));
     final start = _page * pageSize;
     final visible = widget.episodes.skip(start).take(pageSize).toList();
-    final television = AppLayout.isTelevision(context);
+    final formFactor = AppLayout.formFactorOf(context);
+    final television = formFactor == FormFactor.television;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -241,6 +242,12 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                     max(value, episode.number.toString().length),
               );
               final scale = MediaQuery.textScalerOf(context);
+              final maxColumns = switch (formFactor) {
+                FormFactor.phone => 6,
+                FormFactor.pad => 12,
+                FormFactor.window => 24,
+                FormFactor.television => 12,
+              };
               final columns =
                   ((constraints.maxWidth - (widget.compact ? 8 : 36)) /
                           max(
@@ -255,7 +262,12 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                                 (widget.compact ? 28 : 40),
                           ))
                       .floor()
-                      .clamp(widget.compact ? 4 : 1, 12);
+                      .clamp(
+                        widget.compact ? 4 : 1,
+                        widget.compact && formFactor == FormFactor.phone
+                            ? 6
+                            : maxColumns,
+                      );
               final extent = max(
                 widget.compact ? 46.0 : 56.0,
                 scale.scale(widget.compact ? 18 : 20) +
@@ -368,16 +380,23 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
 
   Widget _continuousGrid(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final television = AppLayout.isTelevision(context);
+      final formFactor = AppLayout.formFactorOf(context);
+      final television = formFactor == FormFactor.television;
       final scale = MediaQuery.textScalerOf(context);
       final digits = widget.episodes.fold<int>(
         1,
         (value, episode) => max(value, episode.number.toString().length),
       );
       final minimum = max(40.0, scale.scale(14) * digits * .62 + 22);
+      final maxColumns = switch (formFactor) {
+        FormFactor.phone => 6,
+        FormFactor.pad => 12,
+        FormFactor.window => 24,
+        FormFactor.television => 12,
+      };
       final columns = ((constraints.maxWidth - 12) / minimum).floor().clamp(
-        5,
-        television ? 12 : 10,
+        formFactor == FormFactor.phone ? 3 : 5,
+        maxColumns,
       );
       final extent = max(34.0, scale.scale(14) + 18);
       final target = max(

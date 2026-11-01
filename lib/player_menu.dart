@@ -84,7 +84,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
     final title = switch (widget.section) {
       PlayerMenuSection.episodes => '選集 · 共 ${widget.episodes.length} 集',
       PlayerMenuSection.speed => '播放倍速',
-      PlayerMenuSection.quality => '清晰度',
+      PlayerMenuSection.quality => '畫質',
       PlayerMenuSection.settings => '播放設定',
     };
     return Dialog(
@@ -187,7 +187,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
           const SizedBox(height: 20),
         ],
         if (all || widget.section == PlayerMenuSection.quality) ...[
-          const Text('清晰度'),
+          const Text('畫質'),
           const SizedBox(height: 8),
           Text(
             widget.local
@@ -269,7 +269,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             contentPadding: EdgeInsets.zero,
             title: const Text('下一集預載入'),
             subtitle: Text(widget.local ? '本地播放不預取網路影片' : widget.preloadStatus),
-            value: preferences.preload,
+            value: preferences.preload ?? true,
             onChanged: _busy
                 ? null
                 : (value) => _run(

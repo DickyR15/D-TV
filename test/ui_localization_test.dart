@@ -72,11 +72,35 @@ void main() {
     expect(sorted.map((drama) => drama.id), ['heat-12', 'heat-2']);
   });
 
+  test('uses Taiwan wording throughout source management terminology', () {
+    expect(
+      uiTraditional('番剧、动漫、缓存、文件夹、文件、密码、登录、账号、信息、连接、安装包'),
+      '動畫連載、動畫、快取、資料夾、檔案、密碼、登入、帳號、資訊、連線、安裝檔',
+    );
+    expect(
+      uiTraditional('番劇、動漫、緩存、文件夾、登錄、賬號、連接、安裝包'),
+      '動畫連載、動畫、快取、資料夾、登入、帳號、連線、安裝檔',
+    );
+  });
+
+  test('uses Taiwan wording for playback quality labels', () {
+    expect(uiTraditional('清晰度、其他清晰度、高清'), '畫質、其他畫質選項、高畫質');
+  });
+
+  test('source names and descriptions use Taiwan Traditional Chinese', () {
+    expect(
+      SourceSite.allValues.map((source) => source.name).toList(),
+      ['紅果', '韓小圈', '鬼片', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版'],
+    );
+    expect(SourceSite.guipian.description, '恐怖片 · 電視劇 · 動畫');
+    expect(SourceSite.hanxiaoquan.description, '韓劇 · 韓國電影 · 綜藝節目 · 動畫');
+  });
+
   test('uses Taiwan wording for QR code terminology', () {
     expect(uiTraditional('二維碼、掃碼、手機'), 'QR Code、掃描、手機');
   });
 
   test('keeps source identifiers and Latin labels untouched', () {
-    expect(uiTraditional('hongguo-hot / HGTV / AI'), 'hongguo-hot / HGTV / AI');
+    expect(uiTraditional('hongguo-hot / D TV / AI'), 'hongguo-hot / D TV / AI');
   });
 }

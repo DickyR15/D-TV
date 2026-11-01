@@ -20,12 +20,23 @@ void main() {
     return store;
   }
 
+  test('removed Sorani source is unavailable and stale settings are ignored', () async {
+    final store = await create({
+      'sourceSwitches': jsonEncode({'sorani': true}),
+    });
+    expect(SourceSite.isKnown('sorani'), isFalse);
+    expect(SourceSite.isAvailable('sorani'), isFalse);
+    expect(store.allowsSource('sorani'), isFalse);
+    expect(store.sources.map((site) => site.id), isNot(contains('sorani')));
+    await expectLater(store.setSourceEnabled('sorani', true), throwsStateError);
+  });
+
   test('restricted sources start switched off', () async {
     final store = await create();
     expect(
       store.sources.map((site) => site.id),
       allSourcesEnabled
-          ? ['hongguo', 'hanxiaoquan', 'guipian', 'sorani']
+          ? ['hongguo', 'hanxiaoquan', 'guipian']
           : ['hongguo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);
@@ -39,13 +50,58 @@ void main() {
     await store.setSourceEnabled('hongguo', false);
     expect(store.allowsSource('hongguo'), isFalse);
     if (allSourcesEnabled) {
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'source-pass-123',
+      );
+      await store.unlockAdvancedSources('source-pass-123');
       await store.setSourceEnabled('huangdou', true);
       expect(store.allowsSource('huangdou'), isTrue);
+      store.lockAdvancedSources();
+      await store.setForceLogin(false);
     }
     final restarted = testStore(store.preferences);
     addTearDown(restarted.dispose);
     expect(restarted.sourceEnabled('hongguo'), isFalse);
     expect(restarted.allowsSource('huangdou'), allSourcesEnabled);
+  });
+
+  test('advanced source switches require an unlocked administrator password', () async {
+    if (!allSourcesEnabled) return;
+    final store = await create();
+    await expectLater(
+      store.setSourceEnabled('huangdou', true),
+      throwsStateError,
+    );
+    await expectLater(
+      store.unlockAdvancedSources('source-pass-123'),
+      throwsStateError,
+    );
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+    await expectLater(
+      store.unlockAdvancedSources('incorrect-password'),
+      throwsStateError,
+    );
+    expect(store.advancedSourcesUnlocked, isFalse);
+    await store.unlockAdvancedSources('source-pass-123');
+    expect(store.advancedSourcesUnlocked, isTrue);
+    await store.setSourceEnabled('huangdou', true);
+    expect(store.sourceEnabled('huangdou'), isTrue);
+    store.lockAdvancedSources();
+    expect(store.advancedSourcesUnlocked, isFalse);
+    await expectLater(
+      store.setSourceEnabled('huangdou', false),
+      throwsStateError,
+    );
   });
 
   test('only the administrator can switch sources', () async {
@@ -109,4 +165,29 @@ void main() {
     expect(store.sourceEnabled('hongguo'), isTrue);
     expect(store.sourceEnabled('huangdou'), isFalse);
   });
+  test('Huangguo providers remain independent source groups', () {
+    const sources = [
+      SourceSite('huangguo-video', '黃果影片', '影片與劇集'),
+      SourceSite('huangguoai', '黃果 AI', 'AI 短劇'),
+      SourceSite('cloudfront', '黃果舊版', '舊版 API 片庫'),
+    ];
+
+    final groups = SourceGroup.fromSources(sources);
+    expect(groups.map((group) => group.id).toList(), [
+      'huangguo-video',
+      'huangguoai',
+      'cloudfront',
+    ]);
+    expect(groups.map((group) => group.name).toList(), [
+      '黃果影片',
+      '黃果 AI',
+      '黃果舊版',
+    ]);
+    expect(sources.map((source) => source.hasRankings).toList(), [
+      false,
+      true,
+      false,
+    ]);
+  });
+
 }

@@ -163,7 +163,12 @@ func parseHongguoRankingDocument(body string, board rankingBoard, page int, load
 		}
 		result.TotalPages = page
 	}
-	if items, found := parseHongguoRankingJSONLD(body, board, page); found {
+	items, foundJSONLD := parseHongguoRankingJSONLD(body, board, page)
+	// JSON-LD is sometimes emitted with fewer entries than the visible ranking
+	// cards. Prefer it only when it is complete for a page that must have 20
+	// rows; otherwise fall back to the page's actual article cards.
+	fullPageRequired := result.HasMore || page == 5
+	if foundJSONLD && (!fullPageRequired || len(items) == 20) {
 		result.Items = items
 	} else {
 		for _, list := range providerHTMLNodes(document, func(node *html.Node) bool {
@@ -197,7 +202,7 @@ func parseHongguoRankingDocument(body string, board rankingBoard, page int, load
 		}
 		seen[item.Drama.SourceID], previous = true, item.Rank
 	}
-	if result.HasMore && len(result.Items) != 20 {
+	if (result.HasMore || page == 5) && len(result.Items) != 20 {
 		return rankingPage{}, errHongguoRankingIncomplete
 	}
 	return result, nil

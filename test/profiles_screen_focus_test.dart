@@ -8,6 +8,43 @@ import 'package:hgtv/profiles_screen.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  for (final platform in [
+    TargetPlatform.android,
+    TargetPlatform.iOS,
+    TargetPlatform.windows,
+    TargetPlatform.macOS,
+  ]) {
+    testWidgets(
+      'admin profile information row is inert on ${platform.name}',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final store = LocalStore(await SharedPreferences.getInstance());
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(platform: platform),
+            home: ProfilesScreen(store: store),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final rowFinder = find.byKey(const ValueKey('profile-open-default'));
+        final row = tester.widget<InkWell>(rowFinder);
+        expect(row.canRequestFocus, isFalse);
+        expect(row.onTap, isNull);
+
+        await tester.tap(rowFinder);
+        await tester.pumpAndSettle();
+
+        expect(find.text('使用者管理'), findsOneWidget);
+        expect(find.byKey(const ValueKey('profile-edit-default')), findsOneWidget);
+        expect(store.profile.id, 'default');
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        store.dispose();
+      },
+    );
+  }
+
 
   testWidgets(
     'admin profile editor exposes editable fields and a focused save action',
@@ -27,10 +64,12 @@ void main() {
       );
       final editFinder = find.byKey(const ValueKey('profile-edit-default'));
       final editButton = tester.widget<IconButton>(editFinder);
-      openProfile.focusNode!.requestFocus();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      expect(openProfile.canRequestFocus, isFalse);
+      expect(openProfile.onTap, isNull);
+      expect(editButton.focusNode!.canRequestFocus, isTrue);
+      editButton.focusNode!.requestFocus();
       await tester.pumpAndSettle();
-      expect(editButton.focusNode!.hasFocus, isTrue);
+      expect(editButton.focusNode!.hasPrimaryFocus, isTrue);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 

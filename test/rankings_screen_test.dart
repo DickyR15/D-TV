@@ -66,7 +66,8 @@ class _RankingRepository extends FixtureRepository {
               id: 'hongguo:cache-$board-$rank',
               source: 'hongguo',
               title: '快取$board-$rank',
-              episodes: 1,
+              episodes: 12,
+              episodesVerified: true,
             ),
           ),
       ],
@@ -116,7 +117,8 @@ class _RankingRepository extends FixtureRepository {
               title:
                   '合成榜單${_rankingIDFor((page - 1) * pageSize + i)}'
                   '${rankingRevision == 0 ? '' : '-v$rankingRevision'}',
-              episodes: 1,
+              episodes: 12,
+              episodesVerified: true,
             ),
           ),
       ],
@@ -418,6 +420,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(
+        find.text('共 12 集'),
+        findsWidgets,
+        reason: 'ranking posters should show verified Red Fruit episode totals',
+      );
+
       // All four Red Fruit hot boards should be populated with 100 items,
       // rather than leaving the active board stuck at the first 20.
       await tester.pump(const Duration(milliseconds: 50));
@@ -519,5 +527,30 @@ void main() {
       }
     },
   );
+
+  testWidgets('source without its own ranking board shows an empty state', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+
+    final repository = _RankingRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RankingsScreen(
+          repository: repository,
+          store: store,
+          initialGroup: 'cloudfront',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('此片源沒有獨立榜單'), findsOneWidget);
+    expect(find.textContaining('目前片源沒有獨立熱門榜單'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(repository.rankingCalls, 0);
+  });
 
 }

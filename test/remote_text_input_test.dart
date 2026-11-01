@@ -68,7 +68,7 @@ void main() {
   });
 
   testWidgets(
-    'playback log D-pad reaches export, copy, close and the header icons',
+    'playback log D-pad reaches export, copy, close and the clear action',
     (tester) async {
       DiaryService.clear();
       DiaryService.add('remote focus test row');
@@ -118,14 +118,9 @@ void main() {
       await press(LogicalKeyboardKey.arrowLeft);
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
-        'playback-log-copy-all',
-      );
-      await press(LogicalKeyboardKey.arrowRight);
-      expect(
-        FocusManager.instance.primaryFocus?.debugLabel,
         'playback-log-clear',
       );
-      await press(LogicalKeyboardKey.arrowDown);
+      await press(LogicalKeyboardKey.arrowRight);
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
         'playback-debug-log-list',

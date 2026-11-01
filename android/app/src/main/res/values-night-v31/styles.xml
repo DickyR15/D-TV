@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="LaunchTheme" parent="AppSystemBarTheme">
+        <item name="android:windowSplashScreenBackground">#0B0D12</item>
+        <!-- Keep the Android 12+ system splash blank in dark mode too, so
+             the animated D-TV mark is rendered only by Flutter. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/dtv_splash_transparent_icon</item>
+    </style>
+    <style name="NormalTheme" parent="AppSystemBarTheme" />
+</resources>

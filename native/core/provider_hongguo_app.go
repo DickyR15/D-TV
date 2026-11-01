@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const hongguoAppBaseURL = "https://api5-normal-sinfonlineb.fqnovel.com"
+const hongguoAppBaseURL = "https://api5-normal-sinfonlinea.fqnovel.com"
 
 const hongguoAppUserAgent = "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 
@@ -48,6 +48,7 @@ type hongguoAppClient struct {
 	pending             map[string]*hongguoDetailCall
 	searches            map[string]hongguoSearchEntry
 	searchPending       map[string]*hongguoSearchCall
+	searchCursors       map[string]hongguoSearchCursor
 	suggestions         map[string]hongguoSuggestionEntry
 	suggestPending      map[string]*hongguoSuggestionCall
 	danmaku             map[string]hongguoDanmakuCacheEntry
@@ -60,7 +61,7 @@ func (downloader *Downloader) hongguoClient() *hongguoAppClient {
 			baseURL: hongguoAppBaseURL,
 			state:   hongguoCatalogState{Version: 1, DeviceID: newHongguoDeviceID(), InstallID: newHongguoDeviceID(), Feeds: map[string]hongguoCatalogCursor{}},
 			details: map[string]hongguoDetailEntry{}, pending: map[string]*hongguoDetailCall{},
-			searches: map[string]hongguoSearchEntry{}, searchPending: map[string]*hongguoSearchCall{},
+			searches: map[string]hongguoSearchEntry{}, searchPending: map[string]*hongguoSearchCall{}, searchCursors: map[string]hongguoSearchCursor{},
 			suggestions: map[string]hongguoSuggestionEntry{}, suggestPending: map[string]*hongguoSuggestionCall{},
 		}
 	})
@@ -93,11 +94,7 @@ func (downloader *Downloader) restoreHongguoCatalog(state *hongguoCatalogState) 
 		for _, route := range hongguoWebCatalogRoutes {
 			isWebsiteFeed = isWebsiteFeed || name == "web:"+route.path
 		}
-		maxOffset := 1_000_000
-		if isWebsiteFeed {
-			maxOffset = 500
-		}
-		if (!known && !isWebsiteFeed) || !cursor.Initialized || cursor.Offset < 0 || cursor.Offset > maxOffset || len(cursor.SessionID) > 4096 || len(cursor.LastID) > 256 || len(cursor.PageSignature) > 64 {
+		if (!known && !isWebsiteFeed) || !cursor.Initialized || cursor.Offset < 0 || cursor.Offset > 1_000_000 || len(cursor.SessionID) > 4096 || len(cursor.LastID) > 256 || len(cursor.PageSignature) > 64 {
 			delete(cloned.Feeds, name)
 		}
 	}
@@ -163,10 +160,21 @@ func hongguoAppQuery(deviceID, installID string) url.Values {
 	}
 }
 
+func clientDeviceIDs(client *hongguoAppClient) (string, string, bool) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.state.DeviceID, client.state.InstallID, client.state.Registered
+}
+
 func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
 	client := downloader.hongguoClient()
 	comment, _ := ctx.Value(hongguoCommentKey{}).(bool)
 	signed := !comment && path != hongguoBookmallTabPath
+	if signed {
+		// Registration is best-effort: if the registration service is temporarily
+		// unavailable, preserve the existing IDs and still try the signed request.
+		_ = downloader.ensureHongguoDevice(ctx, "")
+	}
 	client.mu.Lock()
 	base, deviceID, installID := client.baseURL, client.state.DeviceID, client.state.InstallID
 	client.mu.Unlock()
@@ -190,6 +198,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		attempts = 3
 	}
 	var lastErr error
+	rotations := 0
 	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
 			select {
@@ -244,6 +253,28 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		}
 		if response.StatusCode != http.StatusOK {
 			lastErr = fmt.Errorf("红果 App 接口 HTTP %d", response.StatusCode)
+			// Some rejected device identities are reported as HTTP 401/403
+			// instead of an empty 200 response. Rotate only signed requests and
+			// keep the retry count bounded; unrelated 4xx responses remain fatal.
+			if signed &&
+				(response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) &&
+				catalogResponseBlockReason(response, content) == "" &&
+				rotations < hongguoDeviceRotations &&
+				downloader.ensureHongguoDevice(ctx, deviceID) == nil {
+				rotations++
+				deviceID, installID, _ = clientDeviceIDs(client)
+				query.Set("device_id", deviceID)
+				query.Set("iid", installID)
+				// The shared limiter observes every 403 and places a host cooldown.
+				// Once a rejected device has been replaced, clear only that 403
+				// cooldown so the bounded retry can validate the new identity.
+				// Challenge/Cloudflare responses are excluded above and remain blocked.
+				if response.StatusCode == http.StatusForbidden && downloader.limiter != nil {
+					downloader.limiter.clearDeviceRejectionBackoff(request.URL.Hostname())
+				}
+				attempt--
+				continue
+			}
 			if response.StatusCode >= 400 && response.StatusCode < 500 {
 				return nil, lastErr
 			}
@@ -251,6 +282,16 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		}
 		if len(content) == 0 {
 			lastErr = errors.New("红果 App 接口未返回有效数据")
+			// An empty successful response is a known sign that the current
+			// device identity may have been rejected. Rotate only signed requests,
+			// bound rotations, and retry with the newly registered IDs.
+			if signed && rotations < hongguoDeviceRotations && downloader.ensureHongguoDevice(ctx, deviceID) == nil {
+				rotations++
+				deviceID, installID, _ = clientDeviceIDs(client)
+				query.Set("device_id", deviceID)
+				query.Set("iid", installID)
+				attempt--
+			}
 			continue
 		}
 		if len(content) > providerMaxBodyBytes {

@@ -218,6 +218,26 @@ func (limiter *requestLimiter) observeBlock(request *http.Request, response *htt
 	limiter.mu.Unlock()
 }
 
+// clearDeviceRejectionBackoff releases only an HTTP 403 cooldown after a signed
+// provider request has registered a replacement device identity. The caller
+// must first rule out browser/challenge blocks; other status codes remain
+// rate-limited.
+func (limiter *requestLimiter) clearDeviceRejectionBackoff(host string) {
+	if limiter == nil {
+		return
+	}
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return
+	}
+	limiter.mu.Lock()
+	if backoff := limiter.backoffs[host]; backoff != nil && backoff.status == http.StatusForbidden && backoff.reason == "" {
+		delete(limiter.backoffs, host)
+		limiter.notifyLocked()
+	}
+	limiter.mu.Unlock()
+}
+
 type limitedResponseBody struct {
 	io.ReadCloser
 	release func()

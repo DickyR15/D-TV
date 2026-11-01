@@ -11,13 +11,14 @@ import 'app_theme.dart';
 import 'app_layout.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
+import 'source_management_screen.dart';
 import 'app_build.dart';
-import 'sources_screen.dart';
 import 'ui_localization.dart';
 import 'widgets.dart';
 import 'resource_settings_screen.dart';
 import 'lan_screen.dart';
 import 'diary_service.dart';
+import 'playback_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -57,6 +58,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _deviceInterconnectFocus.dispose();
     super.dispose();
   }
+  Future<void> _chooseDisplayMode() async {
+    final selection = await AppLayout.chooseDisplayMode(
+      context,
+      currentMode: widget.store.displayMode,
+    );
+    if (selection == null || !mounted) return;
+    await saveUserChange(
+      context,
+      () => widget.store.setDisplayMode(selection),
+    );
+    if (mounted) setState(() => _message = null);
+  }
+
 
   Future<void> _chooseTheme() async {
     final current = widget.store.themeMode;
@@ -94,6 +108,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _chooseThemeAccent() async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('介面配色'),
+        children: [
+          for (final tone in AppTheme.accentOptions)
+            ListTile(
+              autofocus: tone == widget.store.themeAccent &&
+                  AppLayout.isTelevision(context),
+              selected: tone == widget.store.themeAccent,
+              leading: CircleAvatar(
+                radius: 13,
+                backgroundColor: AppTheme.accentPreview(tone),
+                child: tone == widget.store.themeAccent
+                    ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                    : null,
+              ),
+              title: Text(AppTheme.accentLabel(tone)),
+              subtitle: tone == 'system'
+                  ? Text(
+                      AppTheme.systemAccentDescription(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : null,
+              onTap: () => Navigator.of(dialogContext).pop(tone),
+            ),
+        ],
+      ),
+    );
+    if (selected == null || !mounted || selected == widget.store.themeAccent) {
+      return;
+    }
+    try {
+      await widget.store.setThemeAccent(selected);
+      if (mounted) setState(() => _message = null);
+    } catch (error) {
+      if (mounted) setState(() => _message = '介面配色切換失敗：$error');
+    }
+  }
+
   Future<void> _backup(bool restore) async {
     setState(() {
       _busy = true;
@@ -104,14 +160,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final content = await widget.store.exportBackup();
         if (Platform.isAndroid) {
           // Android TV images may not include a document-picker activity.
-          // Save directly to Download/D-TV through the native MediaStore API.
+          // Save directly to Download/D TV through the native MediaStore API.
           final saved = await const MethodChannel('duanju/device')
               .invokeMapMethod<String, dynamic>(
             'exportSettingsBackup',
             <String, dynamic>{'content': content},
           );
           if (mounted) {
-            final path = saved?['path'] as String? ?? 'Download/D-TV';
+            final path = saved?['path'] as String? ?? 'Download/D TV';
             setState(() => _message = '備份已儲存：$path');
             await showDialog<void>(
               context: context,
@@ -119,7 +175,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('設定備份匯出成功'),
                 content: SelectableText(
                   '已儲存設定備份：\n$path\n\n'
-                  '請從檔案管理器開啟 Download/D-TV 資料夾，'
+                  '請從檔案管理器開啟 Download/D TV 資料夾，'
                   '將 JSON 備份檔複製到電腦保存。',
                 ),
                 actions: [
@@ -166,7 +222,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (context) => AlertDialog(
             title: const Text('還原備份？'),
             content: Text(
-              '包含 ${(data['profiles'] as List).length} 個使用者。還原會取代本機使用者、收藏清單、觀看紀錄與偏好設定；其他影片檔案不會一併處理。完成後請使用備份內的管理員密碼登入。',
+              '包含 ${(data['profiles'] as List).length} 個使用者。還原會取代本機使用者、收藏清單、觀看紀錄與偏好設定。完成後請使用備份內的管理員密碼登入。',
             ),
             actions: [
               TextButton(
@@ -175,7 +231,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('恢復'),
+                child: const Text('還原'),
               ),
             ],
           ),
@@ -209,7 +265,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pinAuthor = !widget.embedded && AppLayout.isTelevision(context);
+    // Pin the author row to the bottom in TV mode even when SettingsScreen is
+    // embedded inside the home shell. In the embedded TV route, an inert row
+    // at the end of ListView cannot reliably receive D-pad focus to scroll into
+    // view, so it must not depend on list navigation.
+    final pinAuthor = AppLayout.isTelevision(context);
     final settings = AnimatedBuilder(
     animation: widget.store,
     builder: (_, _) => Scaffold(
@@ -236,9 +296,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             )
           : null,
-      body: Center(
+      body: Align(
+        alignment: Platform.isWindows ? Alignment.topLeft : Alignment.center,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
+          constraints: BoxConstraints(
+            maxWidth: Platform.isWindows ? double.infinity : 720,
+          ),
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -247,26 +310,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 focusNode: _deviceInterconnectFocus,
                 leading: const Icon(Icons.devices_rounded),
                 title: const Text('裝置互聯'),
-                subtitle: const Text('區域網自動同步收藏與推送播放'),
+                subtitle: const Text('區域網路自動同步收藏與推送播放'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => openLanSync(context),
               ),
-              if (widget.repository.supportsSourceManagement)
-                ListTile(
-                  leading: const Icon(Icons.dns_outlined),
-                  title: const Text('片源管理'),
-                  subtitle: const Text('獨立更新、連線與播放檢測'),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => SourcesScreen(
-                        repository: widget.repository,
-                        store: widget.store,
-                      ),
-                    ),
-                  ),
-                ),
               ListTile(
                 key: const ValueKey('theme-setting'),
                 leading: const Icon(Icons.palette_outlined),
@@ -275,6 +322,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: _chooseTheme,
               ),
+              ListTile(
+                key: const ValueKey('theme-accent-setting'),
+                leading: const Icon(Icons.color_lens_outlined),
+                title: const Text('介面配色'),
+                subtitle: Text(AppTheme.accentLabel(widget.store.themeAccent)),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _chooseThemeAccent,
+              ),
+              ListTile(
+                key: const ValueKey('display-mode-setting'),
+                leading: const Icon(Icons.devices_rounded),
+                title: const Text('介面模式'),
+                subtitle: Text(
+                  AppLayout.displayModeLabel(
+                    widget.store.displayMode,
+                    currentFactor: AppLayout.formFactorOf(context),
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _chooseDisplayMode,
+              ),
+              ListTile(
+                key: const ValueKey('playback-setting'),
+                leading: const Icon(Icons.tune_rounded),
+                title: const Text('播放'),
+                subtitle: const Text('預設播放速度、畫質、解碼方式與相容性設定'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => PlaybackSettingsScreen(store: widget.store),
+                  ),
+                ),
+              ),
+              if (widget.store.profile.admin)
+                ListTile(
+                  key: const ValueKey('source-management-setting'),
+                  leading: const Icon(Icons.source_outlined),
+                  title: const Text('片源管理'),
+                  subtitle: const Text('管理可用片源及其顯示狀態'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => SourceManagementScreen(store: widget.store),
+                    ),
+                  ),
+                ),
               ListTile(
                 leading: const Icon(Icons.people_outline),
                 title: const Text('使用者管理'),
@@ -313,12 +408,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.backup_outlined),
                   title: const Text('匯出設定備份'),
-                  subtitle: const Text('包含本機使用者、收藏清單、觀看紀錄與設定，不含影片檔案'),
+                  subtitle: const Text('包含本機使用者、收藏清單、觀看紀錄與設定'),
                   onTap: _busy ? null : () => _backup(false),
                 ),
                 ListTile(
+                  key: const ValueKey('restore-settings-backup'),
                   leading: const Icon(Icons.restore),
                   title: const Text('還原設定備份'),
+                  subtitle: const Text(
+                    '取代本機使用者、收藏清單、觀看紀錄與偏好設定',
+                  ),
                   onTap: _busy ? null : () => _backup(true),
                 ),
               ],

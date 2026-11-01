@@ -10,13 +10,13 @@ import 'app_layout.dart';
 import 'core_bridge.dart';
 import 'local_store.dart';
 import 'models.dart';
+import 'follow_state.dart';
 import 'player_screen.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
 import 'ui_localization.dart';
 import 'sources_screen.dart';
 import 'episode_browser.dart';
-import 'follow_state.dart';
 import 'hongguo_series.dart';
 
 class DetailScreen extends StatefulWidget {
@@ -282,7 +282,8 @@ class _DetailScreenState extends State<DetailScreen> {
     final resumeEpisodeNumber = episodes.isEmpty
         ? null
         : episodes[resumeIndex].number;
-    final television = AppLayout.isTelevision(context);
+    final formFactor = AppLayout.formFactorOf(context);
+    final television = formFactor == FormFactor.television;
     final playAutofocus = _shouldAutofocusPlay(context);
     final allowed =
         widget.store.profileEpoch == _profileEpoch &&
@@ -320,7 +321,9 @@ class _DetailScreenState extends State<DetailScreen> {
                       message: '請返回劇庫後重新選擇。',
                     );
                   }
-                  if (television || constraints.maxWidth >= 960) {
+                  if (television ||
+                      (formFactor != FormFactor.phone &&
+                          constraints.maxWidth >= 840)) {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -485,8 +488,7 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   bool _shouldAutofocusPlay(BuildContext context) {
-    return AppLayout.isTelevision(context) ||
-        (Platform.isAndroid && MediaQuery.sizeOf(context).width >= 840);
+    return AppLayout.formFactorOf(context) == FormFactor.television;
   }
 
   Widget _episodeStatus() {
@@ -794,73 +796,31 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Widget _followingControls(Drama drama) {
-    final state = widget.store.following(drama.id);
+    final following = widget.store.following(drama.id);
     return Wrap(
       spacing: 8,
       runSpacing: 4,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        PopupMenuButton<String>(
-          key: const ValueKey('follow-status'),
-          tooltip: '收藏與觀看狀態',
-          onSelected: (value) async {
+        FilledButton.tonalIcon(
+          key: const ValueKey('favorite-toggle'),
+          onPressed: () async {
             if (_profileEpoch != widget.store.profileEpoch) return;
-            if (value == 'remove') {
-              await saveUserChange(
-                context,
-                () => widget.store.toggleFavorite(drama),
-              );
-            } else {
-              final status = FollowStatus.values.firstWhere(
-                (status) => status.name == value,
-              );
-              await saveUserChange(
-                context,
-                () => widget.store.setFollowStatus(drama, status),
-              );
-            }
+            await saveUserChange(
+              context,
+              () => widget.store.toggleFavorite(drama),
+            );
           },
-          itemBuilder: (_) => [
-            for (final status in FollowStatus.values)
-              CheckedPopupMenuItem(
-                value: status.name,
-                checked: state?.status == status,
-                child: Text(status.label),
-              ),
-            if (state != null)
-              const PopupMenuItem(value: 'remove', child: Text('取消收藏')),
-          ],
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 48),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: state == null
-                  ? Theme.of(context).colorScheme.surfaceContainerHighest
-                  : Theme.of(context).colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  state?.status == FollowStatus.watched
-                      ? Icons.check_circle_outline
-                      : state == null
-                      ? Icons.bookmark_add_outlined
-                      : Icons.bookmark_rounded,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(state?.label ?? '加入收藏'),
-                const SizedBox(width: 4),
-                const Icon(Icons.expand_more_rounded, size: 18),
-              ],
-            ),
+          icon: Icon(
+            following == null
+                ? Icons.bookmark_add_outlined
+                : Icons.bookmark_remove_outlined,
           ),
+          label: Text(following == null ? '加入收藏' : '取消收藏'),
         ),
-        if (state != null && state.hasUpdates)
+        if (following != null && following.hasUpdates)
           ActionChip(
-            label: Text('${state.updateLabel} · 標為已讀'),
+            label: Text('${following.updateLabel} · 標為已讀'),
             onPressed: () => saveUserChange(
               context,
               () => widget.store.markUpdatesRead(drama.id),

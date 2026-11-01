@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
@@ -28,8 +30,9 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   ResourceSettings? _settings;
   String _mode = 'auto';
   bool _busy = false;
+  bool _savePending = false;
+  Timer? _saveDebounce;
   bool _showProxy = false;
-  int _catalog = 3;
   int _interval = 250;
 
   String? _error;
@@ -46,6 +49,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
 
   @override
   void dispose() {
+    _saveDebounce?.cancel();
     _proxy.dispose();
     _connectionModeFocus.dispose();
     super.dispose();
@@ -69,7 +73,6 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
         _settings = settings;
         _mode = settings.proxyMode;
         _proxy.text = settings.proxyUrl;
-        _catalog = settings.catalogConcurrency;
         _interval = settings.catalogIntervalMs;
         _error = null;
       });
@@ -79,59 +82,53 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
     }
   }
 
+  void _scheduleSave({Duration delay = const Duration(milliseconds: 450)}) {
+    if (!_allowed || _settings == null) return;
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(delay, () {
+      _saveDebounce = null;
+      _save();
+    });
+  }
+
   Future<void> _save() async {
-    if (_busy || !_allowed) return;
+    if (!_allowed || _settings == null) return;
+    if (_busy) {
+      _savePending = true;
+      return;
+    }
+    _savePending = false;
+    final requested = ResourceSettings(
+      proxyMode: _mode,
+      proxyUrl: _proxy.text.trim(),
+      // Keep the engine's existing/default value; this is not a user-facing setting.
+      catalogConcurrency: _settings!.catalogConcurrency,
+      catalogIntervalMs: _interval,
+    );
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final settings = await widget.repository.saveResourceSettings(
-        ResourceSettings(
-          proxyMode: _mode,
-          proxyUrl: _proxy.text.trim(),
-          catalogConcurrency: _catalog,
-          catalogIntervalMs: _interval,
-        ),
-      );
+      final settings = await widget.repository.saveResourceSettings(requested);
       if (!mounted || !_allowed) return;
       setState(() => _settings = settings);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('設定已儲存，將套用於後續連線與目錄請求')));
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        if (_savePending) {
+          _savePending = false;
+          _scheduleSave(delay: Duration.zero);
+        }
+      }
     }
   }
 
-  Widget _count(String title, int value, ValueChanged<int> change) =>
-      DropdownButtonFormField<int>(
-        initialValue: value,
-        decoration: InputDecoration(labelText: title),
-        items: [
-          for (var i = 1; i <= 6; i++)
-            DropdownMenuItem(value: i, child: Text('$i')),
-        ],
-        onChanged: _busy
-            ? null
-            : (value) {
-                if (value != null) setState(() => change(value));
-              },
-      );
-
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('網路與資源'),
-      actions: [
-        TextButton(
-          onPressed: _busy || _settings == null || !_allowed ? null : _save,
-          child: const Text('儲存'),
-        ),
-      ],
-    ),
+    appBar: AppBar(title: const Text('網路與資源')),
     body: !_allowed
         ? const StatusPanel(title: '需要管理員權限', message: '請返回並切換至管理員帳號。')
         : _settings == null
@@ -162,7 +159,10 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                     ],
                     onChanged: _busy
                         ? null
-                        : (value) => setState(() => _mode = value ?? 'auto'),
+                        : (value) {
+                            setState(() => _mode = value ?? 'auto');
+                            _scheduleSave();
+                          },
                   ),
                   if (_mode == 'auto')
                     Padding(
@@ -181,6 +181,8 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                         obscureText: !_showProxy,
                         enableSuggestions: false,
                         autocorrect: false,
+                        onChanged: (_) => _scheduleSave(),
+                        onEditingComplete: () => _scheduleSave(delay: Duration.zero),
                         decoration: InputDecoration(
                           labelText: '代理地址',
                           hintText: 'http://127.0.0.1:7890',
@@ -200,8 +202,6 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                       ),
                     ),
                   const SizedBox(height: 28),
-                  _count('目錄請求併發', _catalog, (value) => _catalog = value),
-                  const SizedBox(height: 16),
                   Text('目錄請求間隔 · $_interval 毫秒'),
                   Slider(
                     value: _interval.toDouble(),
@@ -211,7 +211,10 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                     label: '$_interval 毫秒',
                     onChanged: _busy
                         ? null
-                        : (value) => setState(() => _interval = value.round()),
+                        : (value) {
+                            setState(() => _interval = value.round());
+                            _scheduleSave();
+                          },
                   ),
                   const SizedBox(height: 16),
                   if (_error != null)

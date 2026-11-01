@@ -69,7 +69,9 @@ void main() {
     store.dispose();
   });
 
-  testWidgets('source management starts focus on Update', (tester) async {
+  testWidgets('source diagnostics has no manual update or check actions', (
+    tester,
+  ) async {
     final store = await makeStore();
     await pumpTv(
       tester,
@@ -78,11 +80,10 @@ void main() {
         store: store,
       ),
     );
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'source-update-default',
-    );
-    expect(find.byKey(const ValueKey('update-hongguo')), findsOneWidget);
+    expect(find.text('片源診斷'), findsOneWidget);
+    expect(find.byKey(const ValueKey('update-hongguo')), findsNothing);
+    expect(find.text('更新'), findsNothing);
+    expect(find.text('檢測連線與播放'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     store.dispose();
   });

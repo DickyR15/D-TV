@@ -1,3 +1,10 @@
+/// TV video surfaces stay clean on entry even if a caller requests controls
+/// on readiness. Touch-first surfaces may retain their existing behavior.
+bool playbackControlsVisibleOnReady({
+  required bool television,
+  required bool requested,
+}) => !television && requested;
+
 /// What Back should do based on the current playback-control visibility.
 enum PlaybackControlsBackAction { exitPlayback, hideControls }
 

@@ -6,11 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 )
 
 const nativeCatalogTTL = 15 * time.Minute
+
+// Expired category snapshots are eviction candidates only when disk pressure requires it.
+// Active catalogs, failed/partial snapshots, base aggregates and deep pagination are retained.
+const nativeCatalogRetention = 30 * 24 * time.Hour
 
 type nativeCatalogState struct {
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -276,7 +281,7 @@ func (engine *nativeEngine) saveCatalogCache(source string, result *nativeCatalo
 	if base, _, categorized := strings.Cut(source, "|"); categorized {
 		engine.catalogs[base] = mergeNativeCatalog(engine.catalogs[base], items)
 	}
-	err := engine.writeCatalogDiskLocked()
+	err := engine.writeCatalogDiskLocked(source)
 	result.saveError = err
 	if err != nil {
 		result.Warning = joinNativeWarnings(result.Warning, err.Error())
@@ -285,13 +290,66 @@ func (engine *nativeEngine) saveCatalogCache(source string, result *nativeCatalo
 	return err
 }
 
-func (engine *nativeEngine) writeCatalogDiskLocked() error {
-	body, err := json.Marshal(nativeCatalogDisk{Version: 3, Catalogs: engine.catalogs, States: engine.catalogStates, Categories: engine.categoryOptions, HongguoApp: engine.hongguoCatalog, Recommendations: engine.recommendations})
+func (engine *nativeEngine) writeCatalogDiskLocked(protectedSources ...string) error {
+	// Work against shallow map copies so a failed disk write never evicts data
+	// from the live in-memory catalog. Catalog item slices are read-only here.
+	catalogs := make(map[string][]nativeDrama, len(engine.catalogs))
+	for source, items := range engine.catalogs {
+		catalogs[source] = items
+	}
+	states := make(map[string]nativeCatalogState, len(engine.catalogStates))
+	for source, state := range engine.catalogStates {
+		states[source] = state
+	}
+	disk := nativeCatalogDisk{
+		Version: 3, Catalogs: catalogs, States: states,
+		Categories: engine.categoryOptions, HongguoApp: engine.hongguoCatalog,
+		Recommendations: engine.recommendations,
+	}
+	body, err := json.Marshal(disk)
+	pruned := false
 	if err == nil && len(body) > nativeCatalogMaxBytes {
-		err = errNativeCatalogLimit
+		protected := make(map[string]bool, len(protectedSources))
+		for _, source := range protectedSources {
+			protected[source] = true
+		}
+		cutoff := time.Now().Add(-nativeCatalogRetention)
+		var candidates []string
+		for source := range catalogs {
+			// Base aggregates are the durable combined library. Only evict a
+			// category-specific snapshot when it is known to be old and complete.
+			if protected[source] || !strings.Contains(source, "|") {
+				continue
+			}
+			state, found := states[source]
+			if !found || state.UpdatedAt.IsZero() || !state.UpdatedAt.Before(cutoff) ||
+				state.Warning != "" || state.Page > 500 {
+				continue
+			}
+			candidates = append(candidates, source)
+		}
+		sort.Slice(candidates, func(i, j int) bool {
+			return states[candidates[i]].UpdatedAt.Before(states[candidates[j]].UpdatedAt)
+		})
+		for _, source := range candidates {
+			delete(catalogs, source)
+			delete(states, source)
+			pruned = true
+			body, err = json.Marshal(disk)
+			if err != nil || len(body) <= nativeCatalogMaxBytes {
+				break
+			}
+		}
+		if err == nil && len(body) > nativeCatalogMaxBytes {
+			err = errNativeCatalogLimit
+		}
 	}
 	if err == nil {
 		err = writeNativeCacheFile(filepath.Join(engine.directory, "catalogs.json"), body)
+	}
+	if err == nil && pruned {
+		// Publish the eviction only after the replacement file is durable.
+		engine.catalogs, engine.catalogStates = catalogs, states
 	}
 	engine.catalogSaveError = nativeSaveError("剧库", err)
 	if err == nil {

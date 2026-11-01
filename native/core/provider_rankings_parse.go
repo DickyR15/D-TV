@@ -27,13 +27,31 @@ type hongguoRankingContent struct {
 		Score       string   `json:"scoreText"`
 		Tags        []string `json:"tags"`
 		Description string   `json:"description"`
-		EpisodeIDs  []string `json:"episodeVids"`
-		Cover       any      `json:"cover"`
+		EpisodeIDs        []string `json:"episodeVids"`
+		EpisodeCount      any      `json:"episodeCount"`
+		EpisodeCountSnake any      `json:"episode_count"`
+		TotalEpisode      any      `json:"totalEpisode"`
+		TotalEpisodeSnake any      `json:"total_episode"`
+		ChapterCount      any      `json:"chapterCount"`
+		ChapterCountSnake any      `json:"chapter_count"`
+		Episodes          any      `json:"episodes"`
+		Total             any      `json:"total"`
+		Cover             any      `json:"cover"`
 	} `json:"rankList"`
 	Pagination struct {
 		Page       int `json:"pageNum"`
 		TotalPages int `json:"totalPages"`
 	} `json:"pagination"`
+}
+
+func rankingExplicitEpisodeCount(values ...any) int {
+	for _, value := range values {
+		count, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(value)))
+		if err == nil && count > 0 && count <= 100000 {
+			return count
+		}
+	}
+	return 0
 }
 
 func parseHongguoRanking(body string, board rankingBoard, page int) (rankingPage, error) {
@@ -76,6 +94,15 @@ func parseHongguoRanking(body string, board rankingBoard, page int) (rankingPage
 	if content.Pagination.Page != page || content.Pagination.TotalPages < page || content.Pagination.TotalPages > 500 {
 		return rankingPage{}, failure
 	}
+	// The four Red Fruit hot boards expose 20 ranked items per page. A short
+	// payload can still be syntactically valid but silently produce 99 items
+	// after the five-page preload. In that case, parse the actual page cards
+	// before accepting an incomplete API/loader payload. Keep this check scoped
+	// to the five-page top-100 window; smaller or single-page boards are valid.
+	expectsTwentyRows := page <= 5 && content.Pagination.TotalPages >= 5
+	if expectsTwentyRows && len(content.Rows) != 20 {
+		return parseHongguoRankingDocument(body, board, page, loader)
+	}
 	result := rankingPage{Items: make([]rankingItem, 0, len(content.Rows)), TotalPages: content.Pagination.TotalPages, HasMore: page < content.Pagination.TotalPages, UpdatedText: mapString(loader, "updatedText")}
 	seen := map[string]bool{}
 	previous := (page - 1) * 20
@@ -92,8 +119,18 @@ func parseHongguoRanking(body string, board rankingBoard, page int) (rankingPage
 		if len(row.Tags) > 0 {
 			drama.CategoryName = row.Tags[0]
 		}
-		if len(row.EpisodeIDs) > 0 {
-			drama.TotalEpisode = len(row.EpisodeIDs)
+		if count := rankingExplicitEpisodeCount(
+			row.EpisodeCount,
+			row.EpisodeCountSnake,
+			row.TotalEpisode,
+			row.TotalEpisodeSnake,
+			row.ChapterCount,
+			row.ChapterCountSnake,
+			row.Episodes,
+			row.Total,
+		); count > 0 {
+			drama.TotalEpisode = count
+			drama.EpisodesVerified = true
 		}
 		result.Items = append(result.Items, rankingItem{Rank: row.Rank, Drama: drama, Metric: row.Heat})
 	}

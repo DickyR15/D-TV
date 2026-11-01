@@ -15,9 +15,9 @@ void main() {
   test('edition sources include DSD only in the all-source build', () async {
     SharedPreferences.setMockInitialValues({'source': 'huangdou'});
     final store = testStore(await SharedPreferences.getInstance());
-    expect(appSlug, allSourcesEnabled ? 'zhenguojian' : 'hongguojian');
-    // 預設只開啟紅果、韓小圈、鬼片網與青空次元，其餘站源需在站源管理中開啟。
-    expect(store.sources.length, allSourcesEnabled ? 4 : 1);
+    expect(appSlug, 'dtv');
+    // 預設只開啟紅果、韓小圈與鬼片，其餘站源需在站源管理中開啟。
+    expect(store.sources.length, allSourcesEnabled ? 3 : 1);
     expect(
       SourceSite.values.any((source) => source.id == 'dsd'),
       allSourcesEnabled,
@@ -28,8 +28,16 @@ void main() {
     expect(store.allowsSource('dsd'), isFalse);
     expect(store.source, 'hongguo');
     if (allSourcesEnabled) {
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'source-pass-123',
+      );
+      await store.unlockAdvancedSources('source-pass-123');
       await store.setSourceEnabled('dsd', true);
-      expect(store.sources.length, 5);
+      expect(store.sources.length, 4);
       expect(store.allowsSource('dsd'), isTrue);
     } else {
       await expectLater(store.setSourceEnabled('dsd', true), throwsStateError);

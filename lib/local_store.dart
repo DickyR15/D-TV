@@ -45,6 +45,8 @@ class LocalStore extends ChangeNotifier {
   int _epoch = 0;
   int _failures = 0;
   Map<String, bool> _sourceSwitches = {};
+  bool _advancedSourcesUnlocked = false;
+  int _sourceAccessEpoch = 0;
   DateTime _retryAfter = DateTime(2000);
 
   void _initialize() {
@@ -95,6 +97,8 @@ class LocalStore extends ChangeNotifier {
   }
 
   void _block(String message) {
+    _sourceAccessEpoch++;
+    _advancedSourcesUnlocked = false;
     _configurationError = message;
     _locked = true;
     _profiles = [
@@ -120,6 +124,9 @@ class LocalStore extends ChangeNotifier {
   List<LocalProfile> get profiles => List.unmodifiable(_profiles);
   LocalProfile get profile =>
       _profiles.firstWhere((profile) => profile.id == _current);
+  bool get administratorPasswordConfigured =>
+      _profiles.any((candidate) => candidate.admin && candidate.protected);
+  bool get advancedSourcesUnlocked => _advancedSourcesUnlocked;
   bool get locked => _locked || _configurationError != null;
   int get profileEpoch => _epoch;
   bool get forceLogin {
@@ -144,12 +151,44 @@ class LocalStore extends ChangeNotifier {
   bool sourceEnabled(String source) =>
       _sourceSwitches[source] ?? !SourceSite.isRestricted(source);
 
+  /// Validates the existing administrator password for advanced source settings.
+  Future<void> unlockAdvancedSources(String pin) {
+    final requestEpoch = _sourceAccessEpoch;
+    final profileEpoch = _epoch;
+    return _queue(() async {
+      _requireAdmin();
+      final admin = _profiles.firstWhere((candidate) => candidate.admin);
+      if (!admin.protected) throw StateError('請先為管理員設定密碼');
+      await _checkPin(admin, pin);
+      if (requestEpoch != _sourceAccessEpoch ||
+          profileEpoch != _epoch ||
+          locked ||
+          !profile.admin) {
+        throw StateError('管理員身分已變更，請重新驗證');
+      }
+      _advancedSourcesUnlocked = true;
+      _notify();
+    });
+  }
+
+  /// Revokes advanced source access when the management screen is closed.
+  void lockAdvancedSources() {
+    _sourceAccessEpoch++;
+    if (!_advancedSourcesUnlocked) return;
+    _advancedSourcesUnlocked = false;
+    _notify();
+  }
+
   void _loadSourceSwitches() {
     try {
       final raw = _string('sourceSwitches');
-      _sourceSwitches = raw == null
-          ? {}
+      final stored = raw == null
+          ? <String, bool>{}
           : Map<String, bool>.from(jsonDecode(raw) as Map);
+      _sourceSwitches = {
+        for (final entry in stored.entries)
+          if (SourceSite.isKnown(entry.key)) entry.key: entry.value,
+      };
     } catch (_) {
       _sourceSwitches = {};
     }
@@ -160,9 +199,14 @@ class LocalStore extends ChangeNotifier {
       return Future.error(StateError('片源設定無效'));
     }
     final epoch = _epoch;
+    final sourceAccessEpoch = _sourceAccessEpoch;
     return _queue(() async {
       _requireAdmin();
       if (epoch != _epoch) throw StateError('目前使用者已變更，請重試');
+      if (SourceSite.isRestricted(source) &&
+          (!_advancedSourcesUnlocked || sourceAccessEpoch != _sourceAccessEpoch)) {
+        throw StateError('請先輸入管理員密碼解鎖進階片源');
+      }
       final switches = {..._sourceSwitches, source: enabled};
       await _commit({'sourceSwitches': jsonEncode(switches)});
       _sourceSwitches = switches;
@@ -339,12 +383,37 @@ class LocalStore extends ChangeNotifier {
       _configurationError == null ? _bool(_key('hideVip')) ?? true : true;
   String get displayMode {
     final value = _configurationError == null ? _string('displayMode') : null;
-    return {'auto', 'television', 'standard'}.contains(value) ? value! : 'auto';
+    return {
+      'auto', 'television', 'standard', 'phone', 'pad', 'window',
+    }.contains(value) ? value! : 'auto';
+  }
+
+  String get ignoredUpdateVersion {
+    if (_configurationError != null) return '';
+    final value = _string('ignoredUpdateVersion') ?? '';
+    return value.length <= 80 ? value : '';
+  }
+
+  bool get checkForUpdatesOnStartup {
+    if (_configurationError != null) return true;
+    return _bool('checkForUpdatesOnStartup') ?? true;
   }
 
   String get themeMode {
     final value = _configurationError == null ? _string('themeMode') : null;
     return {'light', 'dark', 'system'}.contains(value) ? value! : 'system';
+  }
+
+  String get themeAccent {
+    final value = _configurationError == null ? _string('themeAccent') : null;
+    // Migrate the previous selectable "brand" palette to system color without
+    // invalidating older backups or persisted preferences.
+    if (value == 'brand') return 'system';
+    return const {
+      'system', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+    }.contains(value)
+        ? value!
+        : 'system';
   }
 
   String get source {
@@ -422,6 +491,31 @@ class LocalStore extends ChangeNotifier {
       await _commit({
         _key('playback'): jsonEncode(migrated.toJson()),
         _key('tvDecoderSafePresetV1'): true,
+      });
+      _notify();
+    });
+  }
+
+  /// One-time default migration for Windows and landscape Android MPV devices.
+  /// Earlier versions serialized the default-off value whenever another
+  /// playback preference was saved, so a missing-key check alone is not enough.
+  bool get needsPortraitBlurLandscapeDefaultMigration =>
+      !locked && _bool(_key('portraitBlurLandscapeDefaultV1')) != true;
+
+  Future<void> migratePortraitBlurLandscapeDefault() {
+    final epoch = _epoch;
+    return _queue(() async {
+      if (locked ||
+          epoch != _epoch ||
+          _bool(_key('portraitBlurLandscapeDefaultV1')) == true) {
+        return;
+      }
+      final migrated = playbackPreferences.copyWith(
+        portraitBlurBackground: true,
+      );
+      await _commit({
+        _key('playback'): jsonEncode(migrated.toJson()),
+        _key('portraitBlurLandscapeDefaultV1'): true,
       });
       _notify();
     });
@@ -556,12 +650,35 @@ class LocalStore extends ChangeNotifier {
   }
 
   Future<void> setDisplayMode(String value) =>
-      {'auto', 'television', 'standard'}.contains(value)
+      {
+        'auto', 'television', 'standard', 'phone', 'pad', 'window',
+      }.contains(value)
       ? _setting('displayMode', value)
       : Future.value();
   Future<void> setThemeMode(String value) =>
       {'light', 'dark', 'system'}.contains(value)
       ? _setting('themeMode', value)
+      : Future.value();
+
+  Future<void> ignoreUpdateVersion(String version) {
+    final normalized = version.trim();
+    if (normalized.isEmpty || normalized.length > 80) {
+      return Future.error(const FormatException('忽略更新版本格式無效'));
+    }
+    return _setting('ignoredUpdateVersion', normalized);
+  }
+
+  Future<void> clearIgnoredUpdateVersion() =>
+      _setting('ignoredUpdateVersion', '');
+
+  Future<void> setCheckForUpdatesOnStartup(bool value) =>
+      _setting('checkForUpdatesOnStartup', value);
+
+  Future<void> setThemeAccent(String value) =>
+      const {
+        'system', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+      }.contains(value)
+      ? _setting('themeAccent', value)
       : Future.value();
   Future<void> setPlaybackPreferences(PlaybackPreferences value) {
     PlaybackPreferences.fromJson(value.toJson());
@@ -909,10 +1026,17 @@ class LocalStore extends ChangeNotifier {
   }
 
   Future<void> _checkPin(LocalProfile target, String pin) async {
+    if (!target.protected) return;
     if (DateTime.now().isBefore(_retryAfter)) {
       throw StateError('密碼輸入過於頻繁，請稍後再試');
     }
-    if (!await checkProfilePin(target, pin)) {
+    final actual = await _pinHasher(pin, target.salt);
+    final expected = target.pinHash;
+    var difference = actual.length ^ expected.length;
+    for (var index = 0; index < actual.length && index < expected.length; index++) {
+      difference |= actual.codeUnitAt(index) ^ expected.codeUnitAt(index);
+    }
+    if (difference != 0) {
       _failures++;
       if (_failures >= 3) {
         _retryAfter = DateTime.now().add(
@@ -931,13 +1055,21 @@ class LocalStore extends ChangeNotifier {
     await _commit({'activeProfile': id});
     _current = id;
     _locked = false;
+    _sourceAccessEpoch++;
+    _advancedSourcesUnlocked = false;
     _loadLibrary();
     _loadSeriesCandidates();
     _epoch++;
     _notify();
   });
   void lock() {
-    if (!profile.protected) return;
+    final wasAdvancedUnlocked = _advancedSourcesUnlocked;
+    _sourceAccessEpoch++;
+    _advancedSourcesUnlocked = false;
+    if (!profile.protected) {
+      if (wasAdvancedUnlocked) _notify();
+      return;
+    }
     _locked = true;
     _epoch++;
     _notify();
@@ -949,6 +1081,7 @@ class LocalStore extends ChangeNotifier {
     required List<String> sources,
     required bool download,
     String? pin,
+    String? currentPin,
   }) => _queue(() async {
     _requireAdmin();
     final old = _profiles.where((profile) => profile.id == id).firstOrNull;
@@ -969,6 +1102,9 @@ class LocalStore extends ChangeNotifier {
     }
     var salt = old?.salt ?? '', hash = old?.pinHash ?? '';
     if (pin != null) {
+      if (targetId == 'default' && old?.protected == true) {
+        await _checkPin(old!, currentPin ?? '');
+      }
       if (pin.isEmpty) {
         if (targetId == 'default' && _profiles.length > 1) {
           throw StateError('存在其他使用者時不能取消管理員密碼');
@@ -1011,6 +1147,10 @@ class LocalStore extends ChangeNotifier {
       ),
     });
     _profiles = profiles;
+    if (targetId == 'default' && pin != null) {
+      _sourceAccessEpoch++;
+      _advancedSourcesUnlocked = false;
+    }
     _notify();
   });
   Future<void> deleteProfile(String id) => _queue(() async {
@@ -1033,11 +1173,14 @@ class LocalStore extends ChangeNotifier {
     _requireAdmin();
     final content = jsonEncode({
       'schema': 1,
-      'app': 'zhenguojian',
+      'app': 'dtv',
       'profiles': _profiles.map((profile) => profile.toJson()).toList(),
       'displayMode': displayMode,
       'themeMode': themeMode,
+      'themeAccent': themeAccent,
       'forceLogin': forceLogin,
+      'ignoredUpdateVersion': ignoredUpdateVersion,
+      'checkForUpdatesOnStartup': checkForUpdatesOnStartup,
       'libraries': {
         for (final profile in _profiles)
           profile.id: {
@@ -1059,6 +1202,8 @@ class LocalStore extends ChangeNotifier {
             'playback': jsonDecode(
               _string(_key('playback', profile.id)) ?? '{}',
             ),
+            'portraitBlurLandscapeDefaultV1':
+                _bool(_key('portraitBlurLandscapeDefaultV1', profile.id)) ?? false,
             'downloadPreferences': jsonDecode(
               _string(_key('downloadPreferences', profile.id)) ?? '{}',
             ),
@@ -1083,7 +1228,8 @@ class LocalStore extends ChangeNotifier {
       throw const FormatException('備份檔案過大');
     }
     final data = jsonDecode(content) as Map<String, dynamic>;
-    if (data['schema'] != 1 || data['app'] != 'zhenguojian') {
+    if (data['schema'] != 1 ||
+        !{'dtv', 'zhenguojian', 'hongguojian'}.contains(data['app'])) {
       throw const FormatException('不支援的備份格式');
     }
     final profiles = _readProfiles(data['profiles']);
@@ -1091,8 +1237,23 @@ class LocalStore extends ChangeNotifier {
         !{'light', 'dark', 'system'}.contains(data['themeMode'])) {
       throw const FormatException('備份主題設定無效');
     }
+    if (data.containsKey('themeAccent') &&
+        !const {
+          'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+        }.contains(data['themeAccent'])) {
+      throw const FormatException('備份主題配色無效');
+    }
     if (data.containsKey('forceLogin') && data['forceLogin'] is! bool) {
       throw const FormatException('備份登入設定無效');
+    }
+    if (data.containsKey('ignoredUpdateVersion') &&
+        (data['ignoredUpdateVersion'] is! String ||
+            (data['ignoredUpdateVersion'] as String).length > 80)) {
+      throw const FormatException('備份忽略更新版本無效');
+    }
+    if (data.containsKey('checkForUpdatesOnStartup') &&
+        data['checkForUpdatesOnStartup'] is! bool) {
+      throw const FormatException('備份啟動更新檢查設定無效');
     }
     final libraries = data['libraries'] as Map;
     for (final profile in profiles) {
@@ -1134,6 +1295,10 @@ class LocalStore extends ChangeNotifier {
       PlaybackPreferences.fromJson(
         Map<String, dynamic>.from(library['playback'] as Map? ?? {}),
       );
+      if (library.containsKey('portraitBlurLandscapeDefaultV1') &&
+          library['portraitBlurLandscapeDefaultV1'] is! bool) {
+        throw const FormatException('備份模糊背景預設設定無效');
+      }
       DownloadPreferences.fromJson(
         Map<String, dynamic>.from(library['downloadPreferences'] as Map? ?? {}),
       );
@@ -1159,13 +1324,19 @@ class LocalStore extends ChangeNotifier {
       ),
       'activeProfile': profiles.firstWhere((profile) => profile.admin).id,
       'displayMode':
-          {'auto', 'television', 'standard'}.contains(data['displayMode'])
+          {
+            'auto', 'television', 'standard', 'phone', 'pad', 'window',
+          }.contains(data['displayMode'])
           ? data['displayMode'] as String
           : 'auto',
       'themeMode': data['themeMode'] as String? ?? themeMode,
+      'themeAccent': data['themeAccent'] as String? ?? themeAccent,
       'forceLogin': data['forceLogin'] is bool
           ? data['forceLogin'] as bool
           : profiles.firstWhere((profile) => profile.admin).protected,
+      'ignoredUpdateVersion': data['ignoredUpdateVersion'] as String? ?? '',
+      'checkForUpdatesOnStartup':
+          data['checkForUpdatesOnStartup'] as bool? ?? true,
     };
     final libraries = data['libraries'] as Map;
     for (final profile in profiles) {
@@ -1187,6 +1358,9 @@ class LocalStore extends ChangeNotifier {
         _key('source', profile.id): library['source'] as String,
         _key('hideVip', profile.id): library['hideVip'] as bool,
         _key('playback', profile.id): jsonEncode(library['playback'] ?? {}),
+        if (library.containsKey('portraitBlurLandscapeDefaultV1'))
+          _key('portraitBlurLandscapeDefaultV1', profile.id):
+              library['portraitBlurLandscapeDefaultV1'] as bool,
         _key('downloadPreferences', profile.id): jsonEncode(
           library['downloadPreferences'] ?? {},
         ),

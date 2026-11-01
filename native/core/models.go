@@ -35,6 +35,7 @@ type Drama struct {
 	EpisodeCountSnake any                `json:"episode_count"`
 	Total             any                `json:"total"`
 	Episodes          any                `json:"episodes"`
+	EpisodesVerified  bool               `json:"episodesVerified,omitempty"`
 	Duration          any                `json:"duration"`
 	ChannelName       string             `json:"channelName"`
 	Category          string             `json:"category"`

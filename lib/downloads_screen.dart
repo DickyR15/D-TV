@@ -615,7 +615,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   @override
   Widget build(BuildContext context) {
     if (!_allowed) {
-      return const StatusPanel(title: '當前使用者無權訪問下載', message: '請返回後重新操作。');
+      return const StatusPanel(title: '目前使用者沒有下載權限', message: '請返回後重新操作。');
     }
     final collections = _collections;
     final rows = <Object>[
@@ -653,7 +653,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
               controller: _search,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                hintText: '搜尋劇名、站源或分類',
+                hintText: '搜尋劇名、片源或分類',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: _search.text.isEmpty
                     ? null

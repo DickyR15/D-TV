@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>红果鉴</string>
+	<string>D TV</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>duanju_app</string>
+	<string>D TV</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -36,7 +36,7 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>用于发现局域网设备、同步追剧进度和推送播放，以及读取设备内播放服务。</string>
+	<string>用於尋找區域網路中的裝置、同步追劇進度與傳送播放指令，並存取裝置上的播放服務。</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_zgj-link._tcp</string>

@@ -9,18 +9,25 @@ class SourceSite {
   final String description;
   bool get onlineSearch => id == 'hongguo' || pagedSearch;
   bool get pagedSearch =>
+      id == 'hongguo' ||
       id == 'huangju' ||
       id == 'yeguo' ||
       id == 'dsd' ||
-      id == 'sorani' ||
       id == 'guipian' ||
       id == 'hanxiaoquan';
   bool get searchSuggestions => id == 'hongguo';
-  String get groupId => switch (id) {
-    'huangguo-video' || 'huangguoai' || 'cloudfront' => 'huangguo',
-    _ => id,
-  };
-  String get groupName => groupId == 'huangguo' ? '黃果' : name;
+  // These are three independent providers and must remain separate in
+  // source switching and ranking filters.
+  String get groupId => id;
+  String get groupName => name;
+  bool get hasRankings => const {
+    'hongguo',
+    'huangdou',
+    'huangguoai',
+    'huangju',
+    'yeguo',
+    'dsd',
+  }.contains(id);
   String get entryName => switch (id) {
     'huangguo-video' => '影片',
     'huangguoai' => 'AI',
@@ -29,27 +36,26 @@ class SourceSite {
   };
 
   static const hongguo = SourceSite('hongguo', '紅果', '短劇 · 漫劇 · AI 劇');
-  static const dsd = SourceSite('dsd', '帝果', '分類影片 · 線上搜尋');
-  static const sorani = SourceSite('sorani', '青空', '番劇 · 劇場動畫 · 特攝');
-  static const guipian = SourceSite('guipian', '鬼片', '鬼片 · 電視劇 · 動漫');
+  static const dsd = SourceSite('dsd', '帝果', '影片分類 · 線上搜尋');
+  static const guipian = SourceSite('guipian', '鬼片', '恐怖片 · 電視劇 · 動畫');
   static const hanxiaoquan = SourceSite(
     'hanxiaoquan',
     '韓小圈',
-    '韓劇 · 韓國電影 · 綜藝動漫',
+    '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
 
-  /// 預設開啟的站源：紅果、韓小圈、鬼片網、青空次元。
-  static const primaryValues = [hongguo, hanxiaoquan, guipian, sorani];
+  /// 預設開啟的一般片源：紅果、韓小圈、鬼片。
+  static const primaryValues = [hongguo, hanxiaoquan, guipian];
 
-  /// 敏感站源：預設關閉，可在站源管理中開啟。
+  /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
     SourceSite('huangdou', '黃豆', '精選短劇'),
-    SourceSite('huangju', '劇果', '熱門 · 最新 · 分類短劇'),
-    SourceSite('yeguo', '野果', '分類短劇 · 線上搜尋'),
+    SourceSite('huangju', '劇果', '熱門 · 最新 · 短劇分類'),
+    SourceSite('yeguo', '野果', '短劇分類 · 線上搜尋'),
     dsd,
-    SourceSite('huangguo-video', '黃果影片', '影片劇集'),
+    SourceSite('huangguo-video', '黃果影片', '影片與劇集'),
     SourceSite('huangguoai', '黃果 AI', 'AI 短劇'),
-    SourceSite('cloudfront', '黃果舊版', '舊 API 劇庫'),
+    SourceSite('cloudfront', '黃果舊版', '舊版 API 片庫'),
   ];
   static const knownValues = [...primaryValues, ...restrictedValues];
   static const allValues = [...primaryValues, ...restrictedValues];
@@ -105,6 +111,7 @@ class Drama {
     this.description = '',
     this.cover = '',
     this.episodes = 0,
+    this.episodesVerified = false,
     this.category = '',
     bool? vip,
     this.heat = '',
@@ -120,6 +127,9 @@ class Drama {
   final String description;
   final String cover;
   final int episodes;
+  final bool episodesVerified;
+  bool get canShowEpisodeCount =>
+      episodes > 0 && (source != 'hongguo' || episodesVerified);
   final String category;
   final bool? vipStatus;
   bool get vip => vipStatus == true;
@@ -142,6 +152,7 @@ class Drama {
     description: json['description'] as String? ?? '',
     cover: json['cover'] as String? ?? '',
     episodes: intValue(json['episodes']),
+    episodesVerified: json['episodesVerified'] == true,
     category: json['category'] as String? ?? '',
     vip: json['vip'] == true
         ? true
@@ -165,6 +176,7 @@ class Drama {
     'description': description,
     'cover': cover,
     'episodes': episodes,
+    'episodesVerified': episodesVerified,
     'category': category,
     'vip': vipStatus,
     'heat': heat,
@@ -195,6 +207,10 @@ class Drama {
       description: fresh.description.isEmpty ? description : fresh.description,
       cover: fresh.cover.isEmpty ? cover : fresh.cover,
       episodes: fresh.episodes > 0 ? fresh.episodes : episodes,
+      episodesVerified:
+          episodesVerified ||
+          fresh.episodesVerified ||
+          (fresh.episodes > 0 && fresh.source != 'hongguo'),
       category:
           fresh.category.isEmpty ||
               genericCategories.contains(fresh.category) &&

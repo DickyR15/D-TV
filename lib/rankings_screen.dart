@@ -670,10 +670,11 @@ class _RankingsScreenState extends State<RankingsScreen> {
       await _restoreCachedHotBoards(boards);
       if (!mounted || generation != _generation) return;
 
+      // Never fall back to an unrelated provider's first board. A source
+      // without a registered ranking board should show the empty-state message.
       final selectedBoard =
           boards.where((board) => board.id == widget.initialBoardId).firstOrNull ??
-          boards.where((board) => board.groupId == widget.initialGroup).firstOrNull ??
-          boards.firstOrNull;
+          boards.where((board) => board.groupId == widget.initialGroup).firstOrNull;
       final cached = selectedBoard == null
           ? null
           : _memory.pages[selectedBoard.id];
@@ -686,7 +687,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
           _hasMore = cached.hasMore;
           _updated = cached.updatedText;
         }
-        _loading = cached == null || cached.items.isEmpty;
+        _loading = selectedBoard != null &&
+            (cached == null || cached.items.isEmpty);
       });
       if (_board != null) {
         if (cached == null || cached.items.isEmpty) {
@@ -1045,7 +1047,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   repository: widget.repository,
                   radius: 0,
                   showGradient: false,
-                  showEpisodeBadge: false,
                 ),
                 Positioned(
                   top: 8,
@@ -1156,8 +1157,19 @@ class _RankingsScreenState extends State<RankingsScreen> {
   }
 
   /// Keep ranking poster density in sync with the wide category grid.
-  int _posterColumns(double width) =>
-      width >= 620 ? 5 : width >= 420 ? 3 : 2;
+  int _posterColumns(double width) {
+    switch (AppLayout.formFactorOf(context)) {
+      case FormFactor.phone:
+        return 3;
+      case FormFactor.pad:
+        return (width / 180).floor().clamp(4, 9).toInt();
+      case FormFactor.window:
+        final columns = ((width + 18) / 178).floor();
+        return columns < 2 ? 2 : columns;
+      case FormFactor.television:
+        return width >= 620 ? 5 : width >= 420 ? 3 : 2;
+    }
+  }
 
   Widget _rankingGrid(List<RankingItem> items, double width) {
     final television = AppLayout.isTelevision(context);
@@ -1239,15 +1251,6 @@ class _RankingsScreenState extends State<RankingsScreen> {
     );
   }
 
-  Future<void> _scrollToTop() async {
-    if (!_scroll.hasClients) return;
-    await _scroll.animateTo(
-      0,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
   Widget _wideFooter(int count) {
     final theme = Theme.of(context);
     final status = _isHotBoardPreloading
@@ -1266,27 +1269,16 @@ class _RankingsScreenState extends State<RankingsScreen> {
           color: theme.colorScheme.surface,
           border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant)),
         ),
-        child: Row(
-          children: [
-            FilledButton.tonalIcon(
-              onPressed: _scrollToTop,
-              icon: const Icon(Icons.keyboard_double_arrow_up_rounded),
-              label: const Text('回到頂部'),
+        child: Center(
+          child: Text(
+            '已載入 $count 部短劇 · $status',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            const Spacer(),
-            Text(
-              '已載入 $count 部短劇 · $status',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const Spacer(),
-            FilledButton.tonalIcon(
-              onPressed: _loading || _more ? null : () => _load(force: true),
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('重新整理'),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1294,7 +1286,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = AppLayout.isTelevision(context) || MediaQuery.sizeOf(context).width >= 840;
+    final wide = AppLayout.formFactorOf(context) != FormFactor.phone;
     final groups = SourceGroup.fromSources(
 
       _boards.map((board) => SourceSite.byId(board.source)).toSet(),
@@ -1321,7 +1313,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
     return Scaffold(
       appBar: widget.embedded ? null : AppBar(
         title: PopupMenuButton<SourceGroup>(
-          tooltip: '切換榜單站源',
+          tooltip: '切換榜單片源',
           enabled: groups.length > 1,
           onSelected: (group) =>
               _select(_boards.firstWhere((board) => board.groupId == group.id)),
@@ -1457,10 +1449,18 @@ class _RankingsScreenState extends State<RankingsScreen> {
                     )
                   : items.isEmpty
                   ? StatusPanel(
-                      title: _error == null ? '暫無榜單內容' : '榜單暫時無法載入',
-                      message: uiTraditional(_error ?? '目前站源暫無可顯示的榜單。'),
+                      title: _board == null
+                          ? '此片源沒有獨立榜單'
+                          : _error == null
+                          ? '暫無榜單內容'
+                          : '榜單暫時無法載入',
+                      message: uiTraditional(
+                        _board == null
+                            ? '目前片源沒有獨立熱門榜單，請切換至有提供榜單的片源。'
+                            : _error ?? '目前片源沒有可顯示的排行榜。',
+                      ),
                       onRetry: _board == null
-                          ? _initialize
+                          ? null
                           : () => _load(force: true),
                     )
                   : LayoutBuilder(

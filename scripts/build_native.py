@@ -1,4 +1,5 @@
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import os
 import platform
 import shutil
@@ -30,16 +31,19 @@ toolchain_root = subprocess.check_output([go, 'env', 'GOROOT'], cwd=root / 'nati
     env=bootstrap_env, text=True).strip()
 go = str(Path(toolchain_root) / 'bin' / ('go.exe' if platform.system() == 'Windows' else 'go'))
 
-def build(goos, architecture, compiler, output, extra=None):
+def build(goos, architecture, compiler, output, extra=None, parallelism=None):
     output.parent.mkdir(parents=True, exist_ok=True)
     build_env = environment.copy()
     build_env.update(GOOS=goos, GOARCH=architecture, CC=str(compiler))
     if extra:
         build_env.update(extra)
+    command = [go, 'build']
+    if parallelism:
+        command += ['-p', str(parallelism)]
+    command += ['-trimpath', '-buildmode=c-shared',
+                '-ldflags=' + variant.linker_flags, '-o', str(output), './bridge']
     print('Building ' + str(output.relative_to(root)), flush=True)
-    subprocess.run([go, 'build', '-trimpath', '-buildmode=c-shared',
-                    '-ldflags=' + variant.linker_flags, '-o', str(output), './bridge'],
-                   cwd=root / 'native', env=build_env, check=True)
+    subprocess.run(command, cwd=root / 'native', env=build_env, check=True)
 
 if options.platform == 'android':
     sdk = os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT')
@@ -53,7 +57,14 @@ if options.platform == 'android':
         'armeabi-v7a': ('arm', 'armv7a-linux-androideabi24-clang'),
         'x86_64': ('amd64', 'x86_64-linux-android24-clang'),
     }
-    for abi in options.abi or list(mappings):
+    selected_abis = options.abi or list(mappings)
+    cpu_count = max(1, os.cpu_count() or 2)
+    # Build independent ABI libraries concurrently, while limiting each Go
+    # build's own package parallelism to avoid oversubscribing the runner.
+    workers = min(len(selected_abis), max(1, cpu_count // 2))
+    go_parallelism = max(1, cpu_count // workers)
+
+    def build_android_abi(abi):
         architecture, name = mappings[abi]
         compiler = compilers / (name + ('.cmd' if platform.system() == 'Windows' else ''))
         if not compiler.exists():
@@ -62,7 +73,17 @@ if options.platform == 'android':
         extra = {'CGO_LDFLAGS': '-Wl,-z,max-page-size=16384'}
         if architecture == 'arm':
             extra['GOARM'] = '7'
-        build('android', architecture, compiler, output, extra)
+        build('android', architecture, compiler, output, extra, go_parallelism)
+
+    print(
+        f'Building {len(selected_abis)} Android ABI libraries with '
+        f'{workers} parallel worker(s).',
+        flush=True,
+    )
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(build_android_abi, abi) for abi in selected_abis]
+        for future in futures:
+            future.result()
 elif options.platform == 'windows':
     compiler = shutil.which('x86_64-w64-mingw32-gcc') or (shutil.which('gcc') if platform.system() == 'Windows' else None)
     if not compiler:

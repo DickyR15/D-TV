@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+import plistlib
 from pathlib import Path
 
 from app_build import BuildVariant, add_variant_argument
@@ -33,12 +34,26 @@ def validate_unsigned_application(application):
 
 def validate_package(package, prefix):
     with zipfile.ZipFile(package) as archive:
-        for name in [prefix + '/Runner', prefix + '/Info.plist']:
+        executable = prefix + '/Runner'
+        info_path = prefix + '/Info.plist'
+        for name in [executable, info_path]:
             if name not in archive.namelist() or archive.getinfo(name).file_size == 0:
                 raise SystemExit('iOS 壓縮包缺少必要檔案：' + name)
         corrupt = archive.testzip()
         if corrupt:
             raise SystemExit('iOS 壓縮包損壞：' + corrupt)
+        metadata = plistlib.loads(archive.read(info_path))
+        expected = {
+            'CFBundleIdentifier': 'com.dickyr15.dtv',
+            'CFBundleDisplayName': 'D TV',
+            'CFBundleName': 'D TV',
+        }
+        for key, value in expected.items():
+            actual = metadata.get(key)
+            if actual != value:
+                raise SystemExit(
+                    f'iOS App 身分驗證失敗：{key} 應為 {value!r}，目前為 {actual!r}'
+                )
 
 
 def build_core(simulator=False, variant=BuildVariant()):
@@ -91,24 +106,25 @@ def build_core(simulator=False, variant=BuildVariant()):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='構建HGTV / HGTV iOS 核心和應用')
+    parser = argparse.ArgumentParser(description='建置 D TV iOS 核心和應用')
     parser.add_argument('--core-only', action='store_true')
     parser.add_argument('--simulator', action='store_true', help='額外生成模擬器核心；不啟動模擬器')
     parser.add_argument('--export-options', type=Path, help='使用自己的 Xcode 簽名配置匯出 IPA')
     add_variant_argument(parser)
     options = parser.parse_args()
     variant = BuildVariant(options.all_sources)
+    run([sys.executable, str(root / 'scripts' / 'generate_brand_assets.py')])
     build_core(options.simulator, variant)
     if options.core_only:
         return
     flutter = shutil.which('flutter')
     if not flutter or not shutil.which('pod'):
         raise SystemExit('請安裝 Flutter 和 CocoaPods。')
-    run([flutter, 'pub', 'get', '--enforce-lockfile'])
+    run([flutter, 'pub', 'get'])
     run(['pod', 'install'], cwd=root / 'ios')
     output = root / 'dist' / 'ios'
     output.mkdir(parents=True, exist_ok=True)
-    version = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.MULTILINE).group(1)
+    version = re.search(r'^version:\s*(\S+)', (root / 'pubspec.yaml').read_text(), re.MULTILINE).group(1).split('+', 1)[0]
     artifacts = []
     if options.export_options:
         config = options.export_options.expanduser().resolve()
@@ -116,8 +132,9 @@ def main():
             raise SystemExit('ExportOptions.plist 不存在。')
         run([flutter, 'build', 'ipa', '--release', '--no-pub', '--export-options-plist', str(config), *variant.flutter_arguments])
         for package in (root / 'build' / 'ios' / 'ipa').glob('*.ipa'):
-            destination = output / f'{variant.slug}-{version}-ios.ipa'
+            destination = output / f'DTV-{version}-iOS.ipa'
             shutil.copy2(package, destination)
+            validate_package(destination, 'Payload/Runner.app')
             artifacts.append(destination)
     else:
         run([flutter, 'build', 'ios', '--release', '--no-codesign', '--no-pub', *variant.flutter_arguments])
@@ -133,7 +150,7 @@ def main():
             shutil.rmtree(payload)
         payload.mkdir(parents=True)
         shutil.copytree(application, payload / application.name, symlinks=True)
-        ipa = output / f'{variant.slug}-{version}-ios-unsigned.ipa'
+        ipa = output / f'DTV-{version}-iOS.ipa'
         if ipa.exists():
             ipa.unlink()
         run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(payload), str(ipa)])

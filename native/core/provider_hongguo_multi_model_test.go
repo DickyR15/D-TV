@@ -1,7 +1,10 @@
 package core
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/json"
+	"net/http"
 	"reflect"
 	"testing"
 )
@@ -68,4 +71,97 @@ func TestHongguoFallbackResponseSelectsPlayableMedia(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("fallback candidate order changed: got %#v, want %#v", got, want)
 	}
+}
+
+func TestResolveHongguoMultiModelMediaUsesDocumentedV1Endpoint(t *testing.T) {
+	const videoID = "123456"
+	var calls []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		calls = append(calls, request.URL.Path)
+		if request.URL.Path != "/novel/player/multi_video_model/v1/" {
+			t.Errorf("unexpected playback endpoint: %s", request.URL.Path)
+			return sourceFixtureResponse(request, http.StatusNotFound, "{}"), nil
+		}
+		if request.Method != http.MethodPost {
+			t.Errorf("playback method = %s, want POST", request.Method)
+		}
+		var payload map[string]any
+		decoder := json.NewDecoder(request.Body)
+		decoder.UseNumber()
+		if err := decoder.Decode(&payload); err != nil {
+			t.Fatalf("decode playback request: %v", err)
+		}
+		mixed := nestedMap(payload, "mixed_video_id_map")
+		ids := anyList(mixed["1"])
+		if len(ids) != 1 || ids[0] != videoID {
+			t.Errorf("mixed_video_id_map = %#v, want key 1 with video ID %s", mixed, videoID)
+		}
+		if mapString(nestedMap(payload, "biz_param"), "video_platform") != "1024" {
+			t.Errorf("unexpected video platform in payload: %#v", payload["biz_param"])
+		}
+		model := `{"video_list":[{"main_url":"https://media.test/1080.mp4","video_meta":{"codec_type":"h264","definition":"1080p"}}]}`
+		body := `{"code":0,"data":{"123456":{"video_model":` + mustJSONTestString(t, model) + `}}}`
+		return sourceFixtureResponse(request, http.StatusOK, body), nil
+	})
+	d.cfg.Retries = 1
+
+	media, err := d.resolveHongguoMultiModelMedia(context.Background(), videoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if media.URL != "https://media.test/1080.mp4" {
+		t.Fatalf("media URL = %q, want documented video_model URL", media.URL)
+	}
+	if !reflect.DeepEqual(calls, []string{"/novel/player/multi_video_model/v1/"}) {
+		t.Fatalf("unexpected fallback requests after successful v1 response: %#v", calls)
+	}
+}
+
+func TestResolveHongguoMultiModelMediaKeepsPreloadFallback(t *testing.T) {
+	const videoID = "123456"
+	var calls []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		calls = append(calls, request.URL.Path)
+		if request.URL.Path == "/novel/player/multi_video_model/v1/" {
+			return sourceFixtureResponse(request, http.StatusOK, `{"code":1001}`), nil
+		}
+		if request.URL.Path != "/novel/player/multi_video_model/preload/v1" {
+			t.Errorf("unexpected playback endpoint: %s", request.URL.Path)
+			return sourceFixtureResponse(request, http.StatusNotFound, "{}"), nil
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode preload request: %v", err)
+		}
+		if mapString(payload, "dr_scene") != "preload" {
+			t.Errorf("preload marker missing: %#v", payload)
+		}
+		model := `{"video_list":[{"main_url":"https://media.test/preload.mp4","video_meta":{"codec_type":"h264","definition":"720p"}}]}`
+		body := `{"code":0,"data":{"123456":{"video_model":` + mustJSONTestString(t, model) + `}}}`
+		return sourceFixtureResponse(request, http.StatusOK, body), nil
+	})
+	d.cfg.Retries = 1
+
+	media, err := d.resolveHongguoMultiModelMedia(context.Background(), videoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if media.URL != "https://media.test/preload.mp4" {
+		t.Fatalf("media URL = %q, want preload fallback URL", media.URL)
+	}
+	if !reflect.DeepEqual(calls, []string{
+		"/novel/player/multi_video_model/v1/",
+		"/novel/player/multi_video_model/preload/v1",
+	}) {
+		t.Fatalf("unexpected endpoint fallback order: %#v", calls)
+	}
+}
+
+func mustJSONTestString(t *testing.T, value string) string {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(encoded)
 }

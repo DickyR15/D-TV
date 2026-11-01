@@ -75,6 +75,56 @@ void main() {
     },
   );
 
+  test('administrator password change requires the current password', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = LocalStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'old-admin-pass',
+    );
+
+    await expectLater(
+      store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'new-admin-pass',
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        currentPin: 'incorrect',
+        pin: 'new-admin-pass',
+      ),
+      throwsStateError,
+    );
+
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      currentPin: 'old-admin-pass',
+      pin: 'new-admin-pass',
+    );
+    await expectLater(
+      store.switchProfile('default', pin: 'old-admin-pass'),
+      throwsStateError,
+    );
+    await store.switchProfile('default', pin: 'new-admin-pass');
+  });
+
   test('backup roundtrip validates before replacing account data', () async {
     SharedPreferences.setMockInitialValues({
       'plugin_secret': 'must-stay-local',

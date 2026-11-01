@@ -54,6 +54,35 @@ class RemoteTextInput extends StatelessWidget {
       : child;
 }
 
+/// Prevents the key that opened a TV long-press menu from activating
+/// the newly focused menu item before the user releases the physical key.
+class RemoteActivationKeyGuard {
+  static LogicalKeyboardKey? _blockedKey;
+  static VoidCallback? _onReleased;
+
+  static bool get isBlocking => _blockedKey != null;
+
+  static void blockUntilKeyUp(
+    LogicalKeyboardKey key, {
+    VoidCallback? onReleased,
+  }) {
+    _blockedKey = key;
+    _onReleased = onReleased;
+  }
+
+  static bool handle(KeyEvent event) {
+    final blockedKey = _blockedKey;
+    if (blockedKey == null || event.logicalKey != blockedKey) return false;
+    if (event is KeyUpEvent) {
+      final callback = _onReleased;
+      _blockedKey = null;
+      _onReleased = null;
+      callback?.call();
+    }
+    return true;
+  }
+}
+
 class RemoteTarget extends StatefulWidget {
   const RemoteTarget({
     super.key,
@@ -103,6 +132,9 @@ class _RemoteTargetState extends State<RemoteTarget> {
   Timer? _longPressTimer;
 
   KeyEventResult _handleActivationKey(FocusNode node, KeyEvent event) {
+    // If the long-press callback opened a dialog and moved focus into it,
+    // that dialog's ancestor Focus will consume repeats and the matching key-up.
+    if (RemoteActivationKeyGuard.handle(event)) return KeyEventResult.handled;
     if (widget.onLongPress == null) return KeyEventResult.ignored;
     final key = event.logicalKey;
     if (![
@@ -113,15 +145,31 @@ class _RemoteTargetState extends State<RemoteTarget> {
     ].contains(key)) {
       return KeyEventResult.ignored;
     }
-    if (event is KeyDownEvent && !_activateHeld) {
-      _activateHeld = true;
-      _longPressFired = false;
-      _longPressTimer?.cancel();
-      _longPressTimer = Timer(const Duration(milliseconds: 650), () {
-        if (!mounted || !_activateHeld || widget.onLongPress == null) return;
-        _longPressFired = true;
-        widget.onLongPress?.call();
-      });
+    if (event is KeyDownEvent) {
+      if (!_activateHeld) {
+        _activateHeld = true;
+        _longPressFired = false;
+        _longPressTimer?.cancel();
+        _longPressTimer = Timer(const Duration(milliseconds: 650), () {
+          // Open the menu as soon as the hold threshold is reached. Once the
+          // dialog takes focus, swallow repeats and the matching key-up there
+          // so this same physical confirmation cannot activate a menu item
+          // or fall through and play the poster.
+          if (!mounted || !_activateHeld || widget.onLongPress == null) return;
+          _longPressFired = true;
+          RemoteActivationKeyGuard.blockUntilKeyUp(
+            key,
+            onReleased: () {
+              _activateHeld = false;
+              _longPressFired = false;
+            },
+          );
+          widget.onLongPress?.call();
+        });
+      }
+      // Consume initial and repeated KeyDownEvents while the same key is held.
+      // Some vendor remotes report repeats as KeyDownEvent rather than
+      // KeyRepeatEvent; allowing them to bubble activates ActivateIntent.
       return KeyEventResult.handled;
     }
     if (event is KeyRepeatEvent) {
@@ -129,9 +177,13 @@ class _RemoteTargetState extends State<RemoteTarget> {
     }
     if (event is KeyUpEvent && _activateHeld) {
       _longPressTimer?.cancel();
-      if (!_longPressFired) widget.onPressed?.call();
+      final wasLongPress = _longPressFired;
       _activateHeld = false;
       _longPressFired = false;
+      if (!wasLongPress) {
+        // Long-press already opened its menu when the hold threshold fired.
+        widget.onPressed?.call();
+      }
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -157,8 +209,12 @@ class _RemoteTargetState extends State<RemoteTarget> {
     onFocusChange: (focused) {
       if (!focused) {
         _longPressTimer?.cancel();
-        _activateHeld = false;
-        _longPressFired = false;
+        // Keep the held-key state after opening a menu: focus moves into the
+        // dialog before the physical key is released. The key guard clears it
+        // when that matching key-up is received by the dialog.
+        if (!_longPressFired) {
+          _activateHeld = false;
+        }
       }
       if (mounted) {
         setState(() => _focused = focused);

@@ -1,7 +1,7 @@
 name: hgtv
 description: D TV 短劇播放器（繁體中文台灣版）
 publish_to: none
-version: 0.2.160+337
+version: 1.0.1+1667
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
@@ -45,4 +45,5 @@ flutter:
   assets:
     - assets/video_enhancement/
     - assets/opencc/
-    - assets/brand/
+    - assets/brand/dtv-home-header.webp
+    - assets/brand/dtv-tv-banner.webp
