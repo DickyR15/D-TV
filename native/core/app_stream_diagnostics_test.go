@@ -475,10 +475,10 @@ func TestNativeStreamResumePreservesStandardHTTPTransportAndHeaders(t *testing.T
 	engine.downloader.client = &http.Client{Transport: nativeStreamRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
 		standardCalls.Add(1)
 		if got := request.Header.Get("User-Agent"); got != userAgent {
-			return nil, fmt.Errorf("resume User-Agent = %q, want Guipian User-Agent", got)
+			return nil, fmt.Errorf("resume User-Agent = %q, want the configured User-Agent", got)
 		}
-		if got := request.Header.Get("Referer"); got != guipianSiteBaseURL+"/" {
-			return nil, fmt.Errorf("resume Referer = %q, want Guipian site root", got)
+		if got := request.Header.Get("Referer"); got != "https://cdn.example.test/" {
+			return nil, fmt.Errorf("resume Referer = %q, want the configured Referer", got)
 		}
 		if got := request.Header.Get("Range"); got != "bytes=0-5" {
 			return nil, fmt.Errorf("resume Range = %q, want bytes=0-5", got)
@@ -506,7 +506,7 @@ func TestNativeStreamResumePreservesStandardHTTPTransportAndHeaders(t *testing.T
 		t.Fatal(err)
 	}
 	request.Header.Set("User-Agent", userAgent)
-	request.Header.Set("Referer", guipianSiteBaseURL+"/")
+	request.Header.Set("Referer", "https://cdn.example.test/")
 	header := make(http.Header)
 	header.Set("Content-Type", "video/mp4")
 	header.Set("Accept-Ranges", "bytes")
