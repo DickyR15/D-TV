@@ -920,9 +920,21 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 }
 
 func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput) (nativePlan, error) {
-	if _, _, valid := splitProviderDramaID(input.Drama.ID); !valid {
-		return nativePlan{}, errors.New("剧集信息无效")
+	legacySource, legacySourceID, _ := strings.Cut(strings.TrimSpace(input.Drama.ID), ":")
+	source, sourceID, valid := splitProviderDramaID(input.Drama.ID)
+	if !valid {
+		return nativePlan{}, errors.New("劇集資訊無效")
 	}
+	if canonicalProviderSource(legacySource) == sourceKanmMovie && canonicalProviderSource(input.Chapter.Source) == sourceKanmMovie {
+		oldPrefix := providerChapterID(sourceKanmMovie, legacySourceID, "")
+		if strings.HasPrefix(input.Chapter.ID, oldPrefix) {
+			episodeKey := strings.TrimPrefix(input.Chapter.ID, oldPrefix)
+			input.Chapter.ID = providerChapterID(source, sourceID, episodeKey)
+			input.Chapter.Source = source
+		}
+	}
+	input.Drama.ID = providerDramaID(source, sourceID)
+	input.Drama.Source, input.Drama.SourceID = source, sourceID
 	if !input.Force && engine.downloads != nil {
 		if plan, found, err := engine.downloads.localPlan(input.Drama.ID, input.Index); found || err != nil {
 			if input.Action != "prepareHandoff" || !errors.Is(err, errNativeLocalFile) {
