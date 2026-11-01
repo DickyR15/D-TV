@@ -13,8 +13,10 @@ class SourceSite {
       id == 'huangju' ||
       id == 'yeguo' ||
       id == 'dsd' ||
-      id == 'guipian' ||
-      id == 'kanmovie' ||
+      id == 'baofeng' ||
+      id == 'jisu' ||
+      id == '360' ||
+      id == 'huya' ||
       id == 'hanxiaoquan';
   bool get searchSuggestions => id == 'hongguo';
   // These providers must remain independent in
@@ -38,16 +40,20 @@ class SourceSite {
 
   static const hongguo = SourceSite('hongguo', '紅果', '短劇 · 漫劇 · AI 劇');
   static const dsd = SourceSite('dsd', '帝果', '影片分類 · 線上搜尋');
-  static const guipian = SourceSite('guipian', '鬼片', '恐怖片 · 電視劇 · 動畫');
-  static const kanmovie = SourceSite('kanmovie', '西瓜影視', '電影 · 電視劇 · 動漫 · 綜藝');
+  static const baofeng = SourceSite('baofeng', '暴風', '電影 · 電視劇 · 綜藝');
+  static const jisu = SourceSite('jisu', '極速', '電影 · 電視劇 · 動漫');
+  static const source360 = SourceSite('360', '360', '電影 · 電視劇 · 動漫');
+  static const huya = SourceSite('huya', '虎牙', '電影 · 電視劇 · 綜藝');
   static const hanxiaoquan = SourceSite(
     'hanxiaoquan',
     '韓小圈',
     '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
 
-  /// 預設開啟的一般片源：紅果、韓小圈、鬼片、西瓜影視。
-  static const primaryValues = [hongguo, hanxiaoquan, guipian, kanmovie];
+  /// 預設開啟的一般片源：紅果、韓小圈，以及四個獨立 MacCMS 片源。
+  static const primaryValues = [
+    hongguo, hanxiaoquan, baofeng, jisu, source360, huya,
+  ];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
