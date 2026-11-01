@@ -31,8 +31,6 @@ type Config struct {
 	YeguoURL         string
 	YeguoAPIURL      string
 	DSDURL           string
-	GuipianURL       string
-	KanMovieURL      string
 	HanxiaoquanURL   string
 	Token            string
 	AESKeyHex        string
@@ -587,28 +585,6 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
-	if query != "" && source == sourceGuipian {
-		items, more, err := d.fetchGuipianCatalogPage(ctx, page, "", query)
-		if err != nil {
-			return result, err
-		}
-		for _, drama := range items {
-			result.Items = append(result.Items, nativeNormalize(drama))
-		}
-		result.HasMore = more
-		return result, nil
-	}
-	if query != "" && source == sourceKanmMovie {
-		items, more, err := d.fetchKanmMovieCatalogPage(ctx, page, "", query)
-		if err != nil {
-			return result, err
-		}
-		for _, drama := range items {
-			result.Items = append(result.Items, nativeNormalize(drama))
-		}
-		result.HasMore = more
-		return result, nil
-	}
 	if query != "" && isMaccmsSource(source) {
 		items, more, err := d.fetchMaccmsCatalogPage(ctx, source, page, "", query)
 		if err != nil {
@@ -730,10 +706,6 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		items, result.HasMore, err = d.fetchYeguoCatalogPage(ctx, page, category, "")
 	case sourceDSD:
 		items, result.HasMore, err = d.fetchDSDCatalogPage(ctx, page, category, "")
-	case sourceGuipian:
-		items, result.HasMore, err = d.fetchGuipianCatalogPage(ctx, page, category, "")
-	case sourceKanmMovie:
-		items, result.HasMore, err = d.fetchKanmMovieCatalogPage(ctx, page, category, "")
 	case sourceBaofeng, sourceJisu, source360, sourceHuya:
 		items, result.HasMore, err = d.fetchMaccmsCatalogPage(ctx, source, page, category, "")
 	case sourceHanxiaoquan:
@@ -755,7 +727,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	if err != nil && len(items) == 0 {
 		return result, err
 	}
-	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && source != sourceGuipian && source != sourceKanmMovie && !isMaccmsSource(source) && source != sourceHanxiaoquan {
+	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && !isMaccmsSource(source) && source != sourceHanxiaoquan {
 		return result, errors.New("站源暂未返回剧集，请稍后刷新")
 	}
 	if err != nil {
@@ -817,10 +789,6 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		raw, chapters, err = engine.downloader.fetchYeguoDetail(ctx, sourceID)
 	case sourceDSD:
 		raw, chapters, err = engine.downloader.fetchDSDDetail(ctx, sourceID)
-	case sourceGuipian:
-		raw, chapters, err = engine.downloader.fetchGuipianDetail(ctx, sourceID)
-	case sourceKanmMovie:
-		raw, chapters, err = engine.downloader.fetchKanmMovieDetail(ctx, sourceID)
 	case sourceBaofeng, sourceJisu, source360, sourceHuya:
 		raw, chapters, err = engine.downloader.fetchMaccmsDetail(ctx, source, sourceID)
 	case sourceHanxiaoquan:
