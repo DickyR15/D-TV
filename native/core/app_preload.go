@@ -215,7 +215,7 @@ func (stream *nativeStreamServer) nativeServePrefix(ctx context.Context, writer 
 		upstream.Header.Set("Referer", session.referer)
 		upstream.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", len(asset.data), end))
 		upstream.Header.Set("If-Range", validator)
-		response, err = stream.nativeRequest(upstream)
+		response, err = stream.nativeRequest(upstream, false)
 		if err != nil {
 			return false
 		}
