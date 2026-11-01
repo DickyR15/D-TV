@@ -68,7 +68,7 @@ class LocalProfile {
       id: id,
       name: name,
       admin: admin,
-      sources: sources,
+      sources: sources.toList(),
       download: value['download'] != false,
       salt: salt,
       pinHash: hash,
