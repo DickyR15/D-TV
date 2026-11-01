@@ -829,10 +829,21 @@ class LocalStore extends ChangeNotifier {
     if (!canDownload) return null;
     try {
       final data = jsonDecode(_string(_key('mediaHistory')) ?? '{}') as Map;
-      final entry = data[id] == null
+      final direct = data[id] == null
           ? null
           : WatchEntry.fromJson(Map<String, dynamic>.from(data[id] as Map));
-      return entry != null && allowsSource(entry.drama.source) ? entry : null;
+      if (direct != null && allowsSource(direct.drama.source)) return direct;
+      // Older aggregate-source keys are migrated by Drama.fromJson. Search
+      // legacy entries once by their migrated ID so resume state is retained.
+      for (final value in data.values) {
+        final candidate = WatchEntry.fromJson(
+          Map<String, dynamic>.from(value as Map),
+        );
+        if (candidate.drama.id == id && allowsSource(candidate.drama.source)) {
+          return candidate;
+        }
+      }
+      return null;
     } catch (_) {
       return null;
     }
