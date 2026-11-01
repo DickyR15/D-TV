@@ -480,11 +480,11 @@ func TestNativeStreamResumePreservesStandardHTTPTransportAndHeaders(t *testing.T
 		header.Set("Content-Range", "bytes 0-5/6")
 		header.Set("Content-Length", "6")
 		return &http.Response{
-			StatusCode: http.StatusPartialContent,
-			Header: header,
-			Body: io.NopCloser(bytes.NewReader(payload)),
+			StatusCode:    http.StatusPartialContent,
+			Header:        header,
+			Body:          io.NopCloser(bytes.NewReader(payload)),
 			ContentLength: int64(len(payload)),
-			Request: request,
+			Request:       request,
 		}, nil
 	})}
 	engine.downloader.streamClient = &http.Client{Transport: nativeStreamRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
@@ -504,11 +504,11 @@ func TestNativeStreamResumePreservesStandardHTTPTransportAndHeaders(t *testing.T
 	header.Set("Content-Range", "bytes 0-5/6")
 	header.Set("Content-Length", "6")
 	response := &http.Response{
-		StatusCode: http.StatusPartialContent,
-		Header: header,
+		StatusCode:    http.StatusPartialContent,
+		Header:        header,
 		ContentLength: int64(len(payload)),
-		Body: io.NopCloser(strings.NewReader("")),
-		Request: request,
+		Body:          io.NopCloser(strings.NewReader("")),
+		Request:       request,
 	}
 
 	var destination bytes.Buffer
