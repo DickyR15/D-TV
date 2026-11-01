@@ -31,19 +31,21 @@ void main() {
     await expectLater(store.setSourceEnabled('sorani', true), throwsStateError);
   });
 
-  test('Guipian and Xigua Movies remain independent sources', () async {
+  test('retired sources are unavailable and old aggregate switches migrate', () async {
     final store = await create({
       'sourceSwitches': jsonEncode({'guipian': false, 'kanmovie': true}),
     });
-    expect(SourceSite.isKnown('guipian'), isTrue);
-    expect(SourceSite.isKnown('kanmovie'), isTrue);
-    expect(store.sourceEnabled('guipian'), isFalse);
-    expect(store.sourceEnabled('kanmovie'), isTrue);
+    expect(SourceSite.isKnown('guipian'), isFalse);
+    expect(SourceSite.isKnown('kanmovie'), isFalse);
+    expect(store.sourceEnabled('baofeng'), isTrue);
+    expect(store.sourceEnabled('jisu'), isTrue);
+    expect(store.sourceEnabled('360'), isTrue);
+    expect(store.sourceEnabled('huya'), isTrue);
     expect(store.allowsSource('guipian'), isFalse);
-    expect(store.allowsSource('kanmovie'), isTrue);
+    expect(store.allowsSource('kanmovie'), isFalse);
   });
 
-  test('profile permissions retain Guipian and Xigua Movies separately', () async {
+  test('old aggregate profile permissions expand to the four independent sources', () async {
     final store = await create({
       'profiles': jsonEncode([
         LocalProfile(
@@ -62,9 +64,11 @@ void main() {
       'activeProfile': 'viewer',
     });
     expect(store.configurationError, isNull);
-    expect(store.profile.sources, ['guipian', 'kanmovie']);
-    expect(store.profile.allows('guipian'), isTrue);
-    expect(store.profile.allows('kanmovie'), isTrue);
+    expect(store.profile.sources, ['baofeng', 'jisu', '360', 'huya']);
+    for (final source in ['baofeng', 'jisu', '360', 'huya']) {
+      expect(store.profile.allows(source), isTrue);
+    }
+    expect(store.profile.allows('guipian'), isFalse);
   });
 
   test('restricted sources start switched off', () async {
@@ -72,7 +76,7 @@ void main() {
     expect(
       store.sources.map((site) => site.id),
       allSourcesEnabled
-          ? ['hongguo', 'hanxiaoquan', 'guipian', 'kanmovie']
+          ? ['hongguo', 'hanxiaoquan', 'baofeng', 'jisu', '360', 'huya']
           : ['hongguo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);
