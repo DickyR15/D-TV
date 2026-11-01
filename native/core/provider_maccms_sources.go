@@ -58,26 +58,13 @@ func validMaccmsCategory(category string) bool {
 	return err == nil && id > 0 && id <= 1000000
 }
 
-func (d *Downloader) fetchMaccmsAPI(ctx context.Context, source string, values url.Values) (kanmovieAPIResponse, error) {
+func (d *Downloader) fetchMaccmsAPI(ctx context.Context, source string, values url.Values) (maccmsAPIResponse, error) {
 	config, ok := maccmsSourceByID(source)
 	if !ok {
-		return kanmovieAPIResponse{}, errors.New("不支援的 MacCMS 片源")
+		return maccmsAPIResponse{}, errors.New("不支援的 MacCMS 片源")
 	}
-	backend := kanmovieBackend{host: config.host, apiBase: config.apiBase, home: config.home}
-	return d.fetchKanmMovieAPI(ctx, backend, values)
-}
-
-func maccmsDramaFromRecord(config maccmsSourceConfig, record map[string]any, category string) Drama {
-	backend := kanmovieBackend{host: config.host, apiBase: config.apiBase, home: config.home}
-	drama := kanmovieDramaFromRecord(backend, record, category)
-	if drama.ID == "" {
-		return Drama{}
-	}
-	drama.Source = config.id
-	drama.SourceID = kanmovieRecordString(record, "vod_id")
-	drama.ID = providerDramaID(config.id, drama.SourceID)
-	drama.ChannelName = config.name
-	return drama
+	backend := maccmsBackend{host: config.host, apiBase: config.apiBase, home: config.home}
+	return d.fetchMaccmsAPIWithBackend(ctx, backend, values)
 }
 
 func (d *Downloader) fetchMaccmsCatalogPage(ctx context.Context, source string, page int, category, query string) ([]Drama, bool, error) {
@@ -102,7 +89,7 @@ func (d *Downloader) fetchMaccmsCatalogPage(ctx context.Context, source string, 
 			items = append(items, drama)
 		}
 	}
-	return items, kanmovieRawInteger(payload.PageCount) > page, nil
+	return items, maccmsRawInteger(payload.PageCount) > page, nil
 }
 
 func (d *Downloader) fetchMaccmsCategories(ctx context.Context, source string) ([]nativeCategory, error) {
@@ -178,7 +165,7 @@ func (d *Downloader) fetchMaccmsDetail(ctx context.Context, source, sourceID str
 	if drama.ID == "" {
 		return Drama{}, nil, errors.New("片源詳情缺少影片名稱或 ID")
 	}
-	groups := parseKanmMoviePlayGroups(record)
+	groups := parseMaccmsPlayGroups(record)
 	if len(groups) == 0 {
 		return Drama{}, nil, errors.New("這部影片目前沒有可用的分集或播放線路")
 	}
@@ -193,7 +180,7 @@ func (d *Downloader) fetchMaccmsDetail(ctx context.Context, source, sourceID str
 		key := strconv.Itoa(episode.Index)
 		chapters = append(chapters, Chapter{
 			ID: providerChapterID(source, sourceID, key), Source: source,
-			Title: episode.Title, CurrentEpisode: rawEpisode(kanmovieEpisodeOrder(episode.Title, episode.Index)),
+			Title: episode.Title, CurrentEpisode: rawEpisode(maccmsEpisodeOrder(episode.Title, episode.Index)),
 			VideoURL: fmt.Sprintf("maccms-play://%s/%s", source, key),
 			Referer: config.home,
 		})
@@ -219,11 +206,11 @@ func (d *Downloader) resolveMaccmsMedia(ctx context.Context, task Task) (provide
 	if err != nil {
 		return providerMedia{}, err
 	}
-	groups := parseKanmMoviePlayGroups(record)
+	groups := parseMaccmsPlayGroups(record)
 	var options []providerMedia
 	seen := map[string]bool{}
 	for _, group := range groups {
-		var selected *kanmovieEpisode
+		var selected *maccmsEpisode
 		for index := range group.Episodes {
 			episode := &group.Episodes[index]
 			if task.Chapter.Title != "" && strings.EqualFold(strings.TrimSpace(episode.Title), strings.TrimSpace(task.Chapter.Title)) {
