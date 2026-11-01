@@ -394,6 +394,17 @@ jobs:
           )
           cp "$android_apk" "$macos_dmg" "$ios_ipa" release-files/
 
+          # Generate SHA-256 checksums for every distributable platform package.
+          (
+            cd release-files
+            sha256sum \
+              "DTV-${version}-Android.apk" \
+              "DTV-${version}-Windows-Portable.zip" \
+              "DTV-${version}-macOS.dmg" \
+              "DTV-${version}-iOS.ipa" \
+              > SHA256SUMS.txt
+          )
+
           for package in release-files/*; do
             if [[ ! -s "$package" ]]; then
               echo "正式發布檔案為空：$package" >&2
@@ -401,7 +412,14 @@ jobs:
             fi
             ls -lh "$package"
           done
-          test "$(find release-files -maxdepth 1 -type f | wc -l)" -eq 4
+          test "$(find release-files -maxdepth 1 -type f | wc -l)" -eq 5
+          checksums="$(cat release-files/SHA256SUMS.txt)"
+          delimiter="DTV_SHA256_$(date +%s)"
+          {
+            echo "checksums<<$delimiter"
+            printf '%s\n' "$checksums"
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Create Draft Release after successful builds
@@ -423,12 +441,21 @@ jobs:
             - macOS：Apple Silicon／Intel Universal DMG
             - iOS：未簽章 IPA，需自行簽署後側載安裝
 
-            請確認附件與版本資訊後，再手動發布此 Draft Release。
+            ### SHA-256 檔案完整性驗證
+
+            以下為四個正式發布附件的 SHA-256 校驗碼。下載後可使用 SHA256SUMS.txt 進行比對。
+
+            ```text
+            ${{ steps.release-files.outputs.checksums }}
+            ```
+
+            請確認附件、校驗碼與版本資訊後，再手動發布此 Draft Release。
           files: |
             release-files/DTV-${{ steps.release-files.outputs.version }}-Android.apk
             release-files/DTV-${{ steps.release-files.outputs.version }}-Windows-Portable.zip
             release-files/DTV-${{ steps.release-files.outputs.version }}-macOS.dmg
             release-files/DTV-${{ steps.release-files.outputs.version }}-iOS.ipa
+            release-files/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
