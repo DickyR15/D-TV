@@ -24,6 +24,18 @@ on:
       - "pubspec.yaml"
       - "pubspec.lock"
   workflow_dispatch:
+    inputs:
+      platform:
+        description: "選擇要建置的平台"
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - ios
+          - android
+          - windows
+          - macos
 
 concurrency:
   group: dtv-cross-platform-${{ github.ref }}
@@ -63,7 +75,7 @@ jobs:
         run: python ../scripts/retry_command.py --attempts 3 -- go test ./...
 
   windows-x64:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'windows')
     name: Windows x64 portable ZIP
     needs: core-validation
     runs-on: windows-2022
@@ -129,7 +141,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   android-universal:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'android')
     name: Android Universal APK (3 ABIs)
     needs: core-validation
     runs-on: ubuntu-latest
@@ -259,7 +271,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   ios-ipa:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ios')
     name: iOS device IPA and simulator build
     needs: core-validation
     runs-on: macos-26
@@ -310,7 +322,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   macos-universal:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'macos')
     name: macOS Universal DMG (arm64 + x86_64)
     needs: core-validation
     runs-on: macos-26
