@@ -36,7 +36,7 @@ class TelevisionControls extends StatefulWidget {
   final bool enabled;
   final bool showOnPlaybackReady;
   final VoidCallback onTogglePlayback;
-  final ValueChanged<int> onSeek;
+  final Future<void> Function(Duration) onSeek;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final Future<void> Function() onEpisodes;
@@ -63,6 +63,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
   bool _visible = true;
   bool _panelOpen = false;
   bool _seekHint = false;
+  double? _seekPreview;
   final PlaybackControlsVisibility _controlsVisibility = PlaybackControlsVisibility();
 
   @override
@@ -191,11 +192,27 @@ class TelevisionControlsState extends State<TelevisionControls> {
   }
 
   void _seek(int seconds) {
-    widget.onSeek(seconds);
-    setState(() => _seekHint = true);
+    final current = widget.player.state.position.inMilliseconds / 1000;
+    _seekToSeconds(current + seconds);
+  }
+
+  void _seekToSeconds(double seconds) {
+    final duration = widget.player.state.duration.inMilliseconds / 1000;
+    if (duration <= 0) return;
+    final target = seconds.clamp(0.0, duration).toDouble();
+    setState(() {
+      _seekPreview = target;
+      _seekHint = true;
+    });
+    unawaited(widget.onSeek(Duration(milliseconds: (target * 1000).round())));
     _seekTimer?.cancel();
     _seekTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _seekHint = false);
+      if (mounted) {
+        setState(() {
+          _seekHint = false;
+          _seekPreview = null;
+        });
+      }
     });
     _scheduleHide();
   }
@@ -230,19 +247,22 @@ class TelevisionControlsState extends State<TelevisionControls> {
     }
     final key = event.logicalKey;
     _scheduleHide();
-    // The exit action sits in the top-left corner; make it reachable from
-    // any focused playback control with one Up press.
-    if (_visible &&
-        key == LogicalKeyboardKey.arrowUp &&
-        !_exit.hasFocus) {
-      _focus(_exit);
+    // Keep the progress row reachable with a remote: bottom controls ↕
+    // progress ↕ exit. Left/right on the focused progress row performs a
+    // ten-second seek.
+    if (_visible && key == LogicalKeyboardKey.arrowUp) {
+      _focus(_progress.hasFocus ? _exit : _progress);
       return KeyEventResult.handled;
     }
-    if (_visible &&
-        key == LogicalKeyboardKey.arrowDown &&
-        _exit.hasFocus) {
-      _focus(_play);
-      return KeyEventResult.handled;
+    if (_visible && key == LogicalKeyboardKey.arrowDown) {
+      if (_exit.hasFocus) {
+        _focus(_progress);
+        return KeyEventResult.handled;
+      }
+      if (_progress.hasFocus) {
+        _focus(_play);
+        return KeyEventResult.handled;
+      }
     }
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
       if (event is KeyDownEvent) {
@@ -313,7 +333,15 @@ class TelevisionControlsState extends State<TelevisionControls> {
   Widget build(BuildContext context) {
     final state = widget.player.state;
     final duration = state.duration.inMilliseconds / 1000;
-    final position = state.position.inMilliseconds / 1000;
+    final currentPosition = state.position.inMilliseconds / 1000;
+    final position = (_seekPreview ?? currentPosition).clamp(
+      0.0,
+      duration > 0 ? duration : 1.0,
+    );
+    final buffered = (state.buffer.inMilliseconds / 1000).clamp(
+      0.0,
+      duration > 0 ? duration : 1.0,
+    );
     return ExcludeFocus(
       excluding: !widget.enabled,
       child: Focus(
@@ -400,27 +428,35 @@ class TelevisionControlsState extends State<TelevisionControls> {
                         onPressed: widget.onTogglePlayback,
                         child: Column(
                           children: [
-                            Stack(
-                              children: [
-                                LinearProgressIndicator(
-                                  value: duration > 0
-                                      ? (state.buffer.inMilliseconds /
-                                                1000 /
-                                                duration)
-                                            .clamp(0, 1)
-                                      : 0,
-                                  minHeight: 5,
-                                  color: Colors.white38,
-                                  backgroundColor: Colors.white24,
+                            SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 5,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 8,
                                 ),
-                                LinearProgressIndicator(
-                                  value: duration > 0
-                                      ? (position / duration).clamp(0, 1)
-                                      : 0,
-                                  minHeight: 5,
-                                  backgroundColor: Colors.transparent,
+                                overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 18,
                                 ),
-                              ],
+                                secondaryActiveTrackColor: Colors.white38,
+                              ),
+                              child: Slider(
+                                key: const ValueKey('tv-player-seek-slider'),
+                                value: position,
+                                max: duration > 0 ? duration : 1,
+                                secondaryTrackValue: buffered,
+                                semanticFormatterCallback: formatPosition,
+                                onChangeStart: widget.enabled && duration > 0
+                                    ? (_) => _hideTimer?.cancel()
+                                    : null,
+                                onChanged: widget.enabled && duration > 0
+                                    ? (value) {
+                                        setState(() => _seekPreview = value);
+                                      }
+                                    : null,
+                                onChangeEnd: widget.enabled && duration > 0
+                                    ? _seekToSeconds
+                                    : null,
+                              ),
                             ),
                             Row(
                               children: [
