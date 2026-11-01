@@ -28,3 +28,17 @@ jobs:
         env:
           DTV_LIVE_GUIPIAN: "1"
         run: go test ./core -run '^TestGuipianLivePlaybackThroughLocalProxy$' -count=1 -v
+
+  windows-core:
+    if: github.event.pull_request.number == 26
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+      - name: Test shared Go core on Windows
+        working-directory: native
+        run: go test ./...
