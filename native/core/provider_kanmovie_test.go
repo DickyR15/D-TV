@@ -21,6 +21,10 @@ func TestKanmMovieBackendSourceIdentity(t *testing.T) {
 		{value: "bfzy.tv~170584", host: "bfzy.tv", id: "170584", ok: true},
 		{value: "www.subozy.com~160017", host: "subozy.com", id: "160017", ok: true},
 		{value: "ikunzy.com~70727", host: "ikunzy.com", id: "70727", ok: true},
+		{value: "www.hongniuzy.com~198671", host: "hongniuzy.com", id: "198671", ok: true},
+		{value: "www.haohuazy.com~182710", host: "haohuazy.com", id: "182710", ok: true},
+		{value: "www.huyaapi.com~158124", host: "huyaapi.com", id: "158124", ok: true},
+		{value: "mtzy.me~491", host: "mtzy.me", id: "491", ok: true},
 		{value: "unknown.example~123", ok: false},
 		{value: "zuidazy.co~0", ok: false},
 		{value: "zuidazy.co~abc", ok: false},
@@ -53,6 +57,16 @@ func TestKanmMovieCategoriesAndRoutes(t *testing.T) {
 	}
 	if path, ok := kanmovieCategoryPath(""); !ok || path != "/today" {
 		t.Fatalf("empty category path = %q (%v), want /today", path, ok)
+	}
+	for category, want := range map[string]string{
+		"american-drama": "/american-drama",
+		"japanese-drama": "/japanese-drama",
+		"korean-drama":   "/korean-drama",
+		"thai-drama":     "/thai-drama",
+	} {
+		if got, ok := kanmovieCategoryPath(category); !ok || got != want {
+			t.Fatalf("%s path = %q (%v), want %q", category, got, ok, want)
+		}
 	}
 }
 
@@ -190,6 +204,9 @@ func TestKanmMovieDetailAndPlaybackPreserveMultipleLines(t *testing.T) {
 	}
 	if media.URL != "https://cdn.example/main.m3u8" {
 		t.Fatalf("primary media URL = %q", media.URL)
+	}
+	if media.Referer != "https://zuidazy.co/" {
+		t.Fatalf("primary media Referer = %q, want upstream provider home", media.Referer)
 	}
 	if len(media.Variants) != 1 || media.Variants[0].URL != "https://cdn.example/backup.m3u8" {
 		t.Fatalf("expected backup line variant, got %#v", media.Variants)
