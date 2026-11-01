@@ -2157,17 +2157,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  void _seek(int seconds) {
-    final desired = _player.state.position + Duration(seconds: seconds);
-    final maxDuration = _player.state.duration;
-    final target = desired < Duration.zero
-        ? Duration.zero
-        : maxDuration > Duration.zero && desired > maxDuration
-        ? maxDuration
-        : desired;
-    unawaited(_seekTo(target));
-  }
-
   Future<void> _televisionEpisodes(BuildContext context) async {
     if (_panelOpen || _closed) return;
     setState(() => _panelOpen = true);
@@ -2642,7 +2631,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             ),
             enhancement: _enhancementForUi,
             onTogglePlayback: _togglePlayback,
-            onSeek: _seek,
+            onSeek: _seekTo,
             onPrevious: _index > 0 ? () => _play(_index - 1) : null,
             onNext: _index + 1 < widget.detail.episodes.length
                 ? () => _play(_index + 1)
