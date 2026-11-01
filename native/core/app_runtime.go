@@ -605,6 +605,17 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
+	if query != "" && isMaccmsSource(source) {
+		items, more, err := d.fetchMaccmsCatalogPage(ctx, source, page, "", query)
+		if err != nil {
+			return result, err
+		}
+		for _, drama := range items {
+			result.Items = append(result.Items, nativeNormalize(drama))
+		}
+		result.HasMore = more
+		return result, nil
+	}
 	if query != "" && source == sourceHanxiaoquan {
 		items, more, err := d.fetchHanxiaoquanCatalogPage(ctx, page, "", query)
 		if err != nil {
@@ -719,6 +730,8 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		items, result.HasMore, err = d.fetchGuipianCatalogPage(ctx, page, category, "")
 	case sourceKanmMovie:
 		items, result.HasMore, err = d.fetchKanmMovieCatalogPage(ctx, page, category, "")
+	case sourceBaofeng, sourceJisu, source360, sourceHuya:
+		items, result.HasMore, err = d.fetchMaccmsCatalogPage(ctx, source, page, category, "")
 	case sourceHanxiaoquan:
 		items, result.HasMore, err = d.fetchHanxiaoquanCatalogPage(ctx, page, category, "")
 	case sourceHuangguoVideo:
@@ -738,7 +751,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	if err != nil && len(items) == 0 {
 		return result, err
 	}
-	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && source != sourceGuipian && source != sourceKanmMovie && source != sourceHanxiaoquan {
+	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && source != sourceGuipian && source != sourceKanmMovie && !isMaccmsSource(source) && source != sourceHanxiaoquan {
 		return result, errors.New("站源暂未返回剧集，请稍后刷新")
 	}
 	if err != nil {
@@ -802,6 +815,8 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		raw, chapters, err = engine.downloader.fetchGuipianDetail(ctx, sourceID)
 	case sourceKanmMovie:
 		raw, chapters, err = engine.downloader.fetchKanmMovieDetail(ctx, sourceID)
+	case sourceBaofeng, sourceJisu, source360, sourceHuya:
+		raw, chapters, err = engine.downloader.fetchMaccmsDetail(ctx, source, sourceID)
 	case sourceHanxiaoquan:
 		raw, chapters, err = engine.downloader.fetchHanxiaoquanDetail(ctx, sourceID)
 	default:
