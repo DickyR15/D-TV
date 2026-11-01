@@ -40,12 +40,6 @@ class SourceSite {
 
   static const hongguo = SourceSite('hongguo', '紅果', '短劇 · 漫劇 · AI 劇');
   static const dsd = SourceSite('dsd', '帝果', '影片分類 · 線上搜尋');
-  // Retained only so older saved records can still be recognized during migration.
-  @Deprecated('Removed; use the independent MacCMS source IDs instead.')
-  static const guipian = SourceSite('guipian', '鬼片', '已移除');
-  @Deprecated('Removed; use the independent MacCMS source IDs instead.')
-  static const kanmovie = SourceSite('kanmovie', '西瓜影視', '已移除');
-
   static const baofeng = SourceSite('baofeng', '暴風', '電影 · 電視劇 · 綜藝');
   static const jisu = SourceSite('jisu', '極速', '電影 · 電視劇 · 動漫');
   static const source360 = SourceSite('360', '360', '電影 · 電視劇 · 動漫');
