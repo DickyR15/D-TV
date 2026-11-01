@@ -558,7 +558,7 @@ func (d *Downloader) fetchKanmMovieDetailRecord(ctx context.Context, sourceID st
 }
 
 func (d *Downloader) fetchKanmMovieDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
-	_, record, err := d.fetchKanmMovieDetailRecord(ctx, sourceID)
+	backend, record, err := d.fetchKanmMovieDetailRecord(ctx, sourceID)
 	if err != nil {
 		return Drama{}, nil, err
 	}
@@ -603,7 +603,7 @@ func (d *Downloader) resolveKanmMovieMedia(ctx context.Context, task Task) (prov
 	if err != nil || episodeIndex < 1 || episodeIndex > 100000 {
 		return providerMedia{}, errors.New("西瓜影視播放集數無效")
 	}
-	backend, record, err := d.fetchKanmMovieDetailRecord(ctx, sourceID)
+	_, record, err := d.fetchKanmMovieDetailRecord(ctx, sourceID)
 	if err != nil {
 		return providerMedia{}, err
 	}
