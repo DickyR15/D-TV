@@ -38,6 +38,8 @@ var kanmovieBackends = []kanmovieBackend{
 	{host: "ikunzy.com", apiBase: "https://ikunzyapi.com/api.php/provide/vod", home: "https://ikunzy.com/"},
 	{host: "api.guangsuapi.com", apiBase: "https://api.guangsuapi.com/api.php/provide/vod", home: "https://api.guangsuapi.com/"},
 	{host: "cj.lzcaiji.com", apiBase: "https://cj.lzcaiji.com/api.php/provide/vod", home: "https://cj.lzcaiji.com/"},
+	{host: "360zy.com", apiBase: "https://360zy.com/api.php/provide/vod", home: "https://360zy.com/"},
+	{host: "api.ukuapi88.com", apiBase: "https://api.ukuapi88.com/api.php/provide/vod", home: "https://api.ukuapi88.com/"},
 }
 
 var kanmovieCategories = []nativeCategory{
