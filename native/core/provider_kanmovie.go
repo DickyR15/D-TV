@@ -631,7 +631,8 @@ func (d *Downloader) resolveKanmMovieMedia(ctx context.Context, task Task) (prov
 			continue
 		}
 		seen[selected.URL] = true
-		options = append(options, providerMedia{URL: selected.URL, Referer: backend.home})
+		referer := fmt.Sprintf("%s/video/%s?ep=%d&from=0", kanmovieSiteBaseURL, url.PathEscape(sourceID), episodeIndex)
+		options = append(options, providerMedia{URL: selected.URL, Referer: referer})
 	}
 	if len(options) == 0 {
 		return providerMedia{}, errors.New("西瓜影視目前找不到這一集的有效播放網址")
