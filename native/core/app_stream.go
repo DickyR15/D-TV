@@ -775,7 +775,7 @@ func (stream *nativeStreamServer) nativeCopyMediaWithResume(
 		if validator != "" {
 			retryRequest.Header.Set("If-Range", validator)
 		}
-		retryResponse, err := stream.nativeRequest(retryRequest)
+		retryResponse, err := stream.nativeRequest(retryRequest, false)
 		if err != nil {
 			stream.nativeLog(info, "resume_failed", address,
 				"attempt="+strconv.Itoa(attempt+1)+" error="+nativeStreamError(err)+" "+nativeStreamErrorDetail(err),
