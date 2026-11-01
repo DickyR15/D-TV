@@ -14,14 +14,14 @@ permissions:
 jobs:
   probe-public-entry-pages:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 6
     steps:
-      - name: Probe public entry pages, frontend routes, and read-only API
+      - name: Check public mirror pages and read-only homepage API
         shell: bash
         run: |
           python - <<'PY'
           from html.parser import HTMLParser
-          from urllib.parse import urljoin, urlsplit
+          from urllib.parse import urlsplit
           from urllib.request import Request, urlopen
           import hashlib
           import json
@@ -29,32 +29,18 @@ jobs:
           import ssl
 
           HOSTS = [
-              "duoduozhuiju.com",
               "323433ssdfd.top",
-              "xds2435u23422342342u.top",
               "duoduosdf12223234334.top",
+              "xds2435u23422342342u.top",
               "dduotv01.top",
           ]
-          USER_AGENT = "DTV-Duoduo-PublicEntryProbe/1.2"
           CONTEXT = ssl.create_default_context()
-          READ_ROUTES = [
-              "/api.php/web/index/home",
-              "/api.php/web/search/index",
-              "/api.php/web/search/suggest",
-              "/api.php/web/external_search/search",
-              "/api.php/web/vod/get_detail",
-              "/api.php/web/internal/search_aggregate",
-              "/api.php/web/decode/url",
-              "/api.php/web/ranking/list",
-              "/api.php/web/filter/vod",
-              "/api.php/web/feature",
-          ]
+          UA = "DTV-Duoduo-PublicEntryProbe/1.3"
 
-          class PageParser(HTMLParser):
+          class Parser(HTMLParser):
               def __init__(self):
                   super().__init__()
                   self.title_parts = []
-                  self.links = []
                   self.scripts = []
                   self.in_title = False
 
@@ -62,8 +48,6 @@ jobs:
                   attrs = dict(attrs)
                   if tag.lower() == "title":
                       self.in_title = True
-                  if tag.lower() == "a" and attrs.get("href"):
-                      self.links.append((attrs.get("href", ""), attrs.get("title", "")))
                   if tag.lower() == "script" and attrs.get("src"):
                       self.scripts.append(attrs["src"])
 
@@ -75,157 +59,73 @@ jobs:
                   if self.in_title:
                       self.title_parts.append(data.strip())
 
-          def get(url, limit=4 * 1024 * 1024):
-              request = Request(url, headers={
-                  "User-Agent": USER_AGENT,
-                  "Accept": "text/html,application/javascript,text/javascript,*/*;q=0.8",
+          def request(url, timeout=15, limit=1024 * 1024):
+              req = Request(url, headers={
+                  "User-Agent": UA,
+                  "Accept": "text/html,application/javascript,application/json,*/*",
               })
-              with urlopen(request, timeout=18, context=CONTEXT) as response:
-                  body = response.read(limit)
-                  return response.status, response.geturl(), response.headers.get("Content-Type", ""), body
+              with urlopen(req, timeout=timeout, context=CONTEXT) as response:
+                  return response.status, response.geturl(), response.headers.get("Content-Type", ""), response.read(limit)
 
-          def safe_response_text(body):
-              value = body.decode("utf-8", errors="replace")
-              value = re.sub(r"(?i)(token|signature|secret|authorization|cookie|password|app.?key|device.?fingerprint)(\s*[""']?\s*[:=]\s*)[""'][^""']*[""']", r"\1\2<redacted>", value)
-              value = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._-]+", r"\1<redacted>", value)
-              value = re.sub(r"\s+", " ", value)
-              return value[:240]
-
+          print("=== MIRROR HOMEPAGES ===")
           for host in HOSTS:
-              url = "https://" + host + "/"
-              print(f"\n=== ENTRY {host} ===")
               try:
-                  status, final_url, content_type, body = get(url, 1024 * 1024)
-                  text = body.decode("utf-8", errors="replace")
-                  parser = PageParser()
-                  parser.feed(text)
+                  status, final, content_type, body = request(f"https://{host}/")
+                  parser = Parser()
+                  parser.feed(body.decode("utf-8", errors="replace"))
                   title = " ".join(" ".join(parser.title_parts).split())
-                  print(f"HTTP_STATUS={status}")
-                  print(f"FINAL_URL={final_url}")
-                  print(f"CONTENT_TYPE={content_type}")
-                  print(f"BODY_BYTES_READ={len(body)}")
-                  print(f"TITLE={title[:240]}")
-                  for href, label in parser.links[:35]:
-                      resolved = urljoin(final_url, href)
-                      parsed = urlsplit(resolved)
-                      if parsed.scheme in ("http", "https"):
-                          print("LINK=" + parsed.scheme + "://" + parsed.netloc + parsed.path[:140]
-                                + " | " + " ".join(label.split())[:80])
-                  for src in parser.scripts[:20]:
-                      resolved = urljoin(final_url, src)
-                      parsed = urlsplit(resolved)
-                      if parsed.scheme in ("http", "https"):
-                          print("SCRIPT=" + parsed.scheme + "://" + parsed.netloc + parsed.path[:160])
+                  asset = next((src for src in parser.scripts if "assets/index-" in src), "")
+                  print(f"{host} STATUS={status} FINAL_HOST={urlsplit(final).hostname} TITLE={title!r} ASSET={asset}")
               except Exception as exc:
-                  print("ERROR=" + type(exc).__name__ + ": " + str(exc)[:240])
+                  print(f"{host} ERROR={type(exc).__name__}: {str(exc)[:180]}")
 
-          static_urls = {
-              "https://duoduozhuiju.com/js/config.js",
-              "https://duoduozhuiju.com/js/speedtest.js",
-              "https://duoduozhuiju.com/js/app.js",
-          }
-          for host in HOSTS[1:]:
-              static_urls.add(f"https://{host}/assets/index-CyTZheoy.js")
-
-          sensitive = re.compile(
-              r"(secret|token|signature|signing|private.?key|app.?key|device.?fingerprint|password|authorization|cookie|decrypt|encrypt)",
-              re.I,
-          )
-          api_pattern = re.compile(
-              r"""["']((?:https?://[^"'\s]+)?/(?:api|ajax|graphql|v\d+)[^"'\s<>]{0,180})["']""",
-              re.I,
-          )
-          host_pattern = re.compile(
-              r"""(?:https?:)?//([a-z0-9.-]+\.(?:top|com|net|xyz|vip|app|org))(?:[/?:#]|$)""",
-              re.I,
-          )
-
-          print("\n=== STATIC PUBLIC CLIENT FILES ===")
-          seen_hashes = {}
-          js_bundles = []
-          for url in sorted(static_urls):
-              print(f"\n--- {urlsplit(url).hostname}{urlsplit(url).path} ---")
+          print("\n=== FRONTEND ASSET PARITY ===")
+          hashes = {}
+          for host in HOSTS:
               try:
-                  status, final_url, content_type, body = get(url)
-                  text = body.decode("utf-8", errors="replace")
-                  digest = hashlib.sha256(body).hexdigest()
-                  print(f"HTTP_STATUS={status} FINAL_URL={final_url}")
-                  print(f"CONTENT_TYPE={content_type} BYTES={len(body)} SHA256={digest}")
-                  prior = seen_hashes.get(digest)
-                  if prior:
-                      print(f"IDENTICAL_CONTENT_AS={prior}")
-                  else:
-                      seen_hashes[digest] = urlsplit(url).hostname + urlsplit(url).path
-
-                  if url.endswith(".js") and "assets/index-" in url:
-                      js_bundles.append(text)
-
-                  hosts = sorted({item.lower() for item in host_pattern.findall(text)})
-                  if hosts:
-                      print("REFERENCED_HOSTS=" + ", ".join(hosts[:45]))
-
-                  api_paths = []
-                  for match in api_pattern.findall(text):
-                      value = match.split("?", 1)[0]
-                      if not sensitive.search(value) and value not in api_paths:
-                          api_paths.append(value)
-                  if api_paths:
-                      print("PUBLIC_API_ROUTE_CANDIDATES:")
-                      for value in api_paths[:60]:
-                          print("  " + value)
-
-                  line_phrases = []
-                  for match in re.finditer(r".{0,55}(?:线路|测速|入口|备用|推荐|切换).{0,70}", text):
-                      snippet = " ".join(match.group(0).split())
-                      if not sensitive.search(snippet) and snippet not in line_phrases:
-                          line_phrases.append(snippet)
-                  for snippet in line_phrases[:18]:
-                      print("UI_TEXT=" + snippet[:150])
-              except Exception as exc:
-                  print("ERROR=" + type(exc).__name__ + ": " + str(exc)[:240])
-
-          if js_bundles:
-              js = js_bundles[0]
-              print("\n=== PUBLIC ROUTE CALL-SITE CONTEXT (SANITIZED) ===")
-              for route in READ_ROUTES:
-                  index = js.find(route)
-                  if index < 0:
+                  _, _, _, html = request(f"https://{host}/")
+                  parser = Parser()
+                  parser.feed(html.decode("utf-8", errors="replace"))
+                  asset = next((src for src in parser.scripts if "assets/index-" in src), "")
+                  if not asset:
+                      print(f"{host} ASSET=missing")
                       continue
-                  start = max(0, index - 360)
-                  end = min(len(js), index + len(route) + 360)
-                  snippet = js[start:end]
-                  snippet = re.sub(
-                      r"""(?i)(["']?(?:token|signature|secret|authorization|cookie|password|appKey|deviceToken|fingerprint)["']?\s*:\s*)(["'])[^"']*\2""",
-                      r"\1<redacted>",
-                      snippet,
-                  )
-                  snippet = re.sub(r"\s+", " ", snippet)
-                  print(route + " => " + snippet[:760])
+                  url = asset if asset.startswith("http") else f"https://{host}/{asset.lstrip('/')}"
+                  status, final, content_type, body = request(url, limit=2 * 1024 * 1024)
+                  digest = hashlib.sha256(body).hexdigest()
+                  prior = hashes.get(digest, "")
+                  hashes[digest] = prior or host
+                  print(f"{host} STATUS={status} TYPE={content_type} BYTES={len(body)} SHA256={digest} SAME_AS={prior or '-'}")
+                  source = body.decode("utf-8", errors="replace")
+                  routes = sorted(set(re.findall(r"""["'](/api\.php/web/[a-zA-Z0-9_/-]+)["']""", source)))
+                  print("  WEB_ROUTES=" + ", ".join(routes[:30]))
+              except Exception as exc:
+                  print(f"{host} ASSET_ERROR={type(exc).__name__}: {str(exc)[:180]}")
 
-          print("\n=== READ-ONLY API SMOKE TESTS ===")
-          base = "https://323433ssdfd.top"
-          for route in READ_ROUTES:
-              url = base + route
-              for method in ("GET", "POST"):
+          print("\n=== ANONYMOUS READ-ONLY HOMEPAGE API ===")
+          for host in HOSTS:
+              url = f"https://{host}/api.php/web/index/home"
+              try:
+                  status, final, content_type, body = request(url, timeout=12, limit=4096)
                   try:
-                      headers = {
-                          "User-Agent": USER_AGENT,
-                          "Accept": "application/json,text/plain,*/*",
-                      }
-                      data = None
-                      if method == "POST":
-                          headers["Content-Type"] = "application/json"
-                          data = b"{}"
-                      request = Request(url, headers=headers, data=data, method=method)
-                      with urlopen(request, timeout=12, context=CONTEXT) as response:
-                          body = response.read(2048)
-                          print(f"{method} {route} STATUS={response.status} TYPE={response.headers.get('Content-Type', '')} BODY={safe_response_text(body)}")
-                  except Exception as exc:
-                      code = getattr(exc, "code", "")
-                      body = getattr(exc, "read", lambda: b"")()
-                      if isinstance(body, bytes) and body:
-                          detail = safe_response_text(body)
-                      else:
-                          detail = str(exc)[:160]
-                      print(f"{method} {route} STATUS={code or 'ERROR'} DETAIL={detail}")
+                      payload = json.loads(body.decode("utf-8", errors="replace"))
+                  except Exception:
+                      payload = {}
+                  message = str(payload.get("msg", ""))[:80]
+                  print(
+                      f"{host} HTTP={status} API_CODE={payload.get('code', '-')} "
+                      f"ERROR_CODE={payload.get('error_code', '-')} MSG={message!r}"
+                  )
+              except Exception as exc:
+                  code = getattr(exc, "code", "")
+                  body = getattr(exc, "read", lambda: b"")()
+                  try:
+                      payload = json.loads(body.decode("utf-8", errors="replace")) if body else {}
+                  except Exception:
+                      payload = {}
+                  message = str(payload.get("msg", ""))[:80]
+                  print(
+                      f"{host} HTTP={code or 'ERROR'} API_CODE={payload.get('code', '-')} "
+                      f"ERROR_CODE={payload.get('error_code', '-')} MSG={message!r}"
+                  )
           PY
