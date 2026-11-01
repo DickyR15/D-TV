@@ -465,7 +465,7 @@ func TestNativeStreamResumePreservesStandardHTTPTransportAndHeaders(t *testing.T
 	var standardCalls, streamCalls atomic.Int32
 	engine.downloader.client = &http.Client{Transport: nativeStreamRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
 		standardCalls.Add(1)
-		if got := request.Header.Get("User-Agent"); got != guipianUserAgent {
+		if got := request.Header.Get("User-Agent"); got != userAgent {
 			return nil, fmt.Errorf("resume User-Agent = %q, want Guipian User-Agent", got)
 		}
 		if got := request.Header.Get("Referer"); got != guipianSiteBaseURL+"/" {
@@ -496,7 +496,7 @@ func TestNativeStreamResumePreservesStandardHTTPTransportAndHeaders(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.Header.Set("User-Agent", guipianUserAgent)
+	request.Header.Set("User-Agent", userAgent)
 	request.Header.Set("Referer", guipianSiteBaseURL+"/")
 	header := make(http.Header)
 	header.Set("Content-Type", "video/mp4")
