@@ -381,13 +381,13 @@ func parseKanmMovieAPI(body string) (kanmovieAPIResponse, error) {
 	decoder := json.NewDecoder(strings.NewReader(body))
 	decoder.UseNumber()
 	if err := decoder.Decode(&payload); err != nil {
-		return payload, fmt.Errorf("西瓜影視上游 API 回應格式錯誤：%w", err)
+		return payload, fmt.Errorf("MacCMS API 回應格式錯誤：%w", err)
 	}
 	if payload.Code != 1 {
-		return payload, fmt.Errorf("西瓜影視上游 API 回應失敗：%s", firstNonEmpty(payload.Message, "未知錯誤"))
+		return payload, fmt.Errorf("MacCMS API 回應失敗：%s", firstNonEmpty(payload.Message, "未知錯誤"))
 	}
 	if payload.List == nil {
-		return payload, errors.New("西瓜影視上游 API 未回傳影片清單")
+		return payload, errors.New("MacCMS API 未回傳影片清單")
 	}
 	return payload, nil
 }
@@ -404,7 +404,7 @@ func kanmovieAPIAddress(backend kanmovieBackend, values url.Values) string {
 func (d *Downloader) fetchKanmMovieAPI(ctx context.Context, backend kanmovieBackend, values url.Values) (kanmovieAPIResponse, error) {
 	address := kanmovieAPIAddress(backend, values)
 	if address == "" {
-		return kanmovieAPIResponse{}, errors.New("西瓜影視上游 API 位址無效")
+		return kanmovieAPIResponse{}, errors.New("MacCMS API 位址無效")
 	}
 	body, err := d.fetchProviderText(ctx, address, backend.home)
 	if err != nil {
