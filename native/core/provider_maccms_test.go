@@ -13,7 +13,8 @@ func TestMacCMSProviderRegistry(t *testing.T) {
 		sourceMacCMSLzi:    "量子資源",
 		sourceMacCMSFfzy:   "非凡資源",
 		sourceMacCMSDouban: "豆瓣資源",
-		sourceMacCMSZuida:  "最大資源",
+		sourceMacCMSZuida:   "最大資源",
+		sourceMacCMSCreator: "創享影視",
 	}
 	if len(macCMSProviders) != len(want) {
 		t.Fatalf("expected %d MacCMS providers, got %d", len(want), len(macCMSProviders))
@@ -137,6 +138,10 @@ func TestMacCMSProviderEndpointPriorities(t *testing.T) {
 			t.Fatalf("最大點播 endpoint must not be mixed into 最大資源: %s", endpoint)
 		}
 	}
+	creator := macCMSProviders[sourceMacCMSCreator]
+	if creator.CatalogAction != "detail" || len(creator.APIs) != 1 || creator.APIs[0] != "https://ys.cxkjg.cn/api/provide/vod" {
+		t.Fatalf("創享影視 must use its aggregate MacCMS v10 endpoint and detail catalog action, got %+v", creator)
+	}
 }
 
 func TestMacCMSPayloadUsableRequiresRowsForCatalogAndDetail(t *testing.T) {
@@ -153,6 +158,9 @@ func TestMacCMSPayloadUsableRequiresRowsForCatalogAndDetail(t *testing.T) {
 	}
 	if !macCMSPayloadUsable(url.Values{"ac": []string{"class"}}, map[string]any{"class": []any{}}) {
 		t.Fatal("non-catalog JSON responses should remain usable")
+	}
+	if !macCMSPayloadUsable(url.Values{"ac": []string{"list"}}, map[string]any{"class": []any{map[string]any{"type_id": "1"}}}) {
+		t.Fatal("category-only MacCMS list responses should be accepted")
 	}
 }
 
@@ -179,5 +187,27 @@ func TestMacCMSChapterParserMapsCommaSeparatedSourceNames(t *testing.T) {
 	}
 	if chapters[0].Title != "第1集" || chapters[0].VideoURL != "https://cdn.example/episode.m3u8" {
 		t.Fatalf("second play group was not parsed as a direct episode: %+v", chapters[0])
+	}
+}
+
+func TestMacCMSCreatorPlayLinesArePreserved(t *testing.T) {
+	row := map[string]any{
+		"vod_play_from": "金鹰$$$非凡$$$量子",
+		"vod_play_url": strings.Join([]string{
+			"第1集$https://cdn.example/jinying.m3u8#第2集$https://cdn.example/jinying-2.m3u8",
+			"第1集$https://cdn.example/feifan.m3u8",
+			"第1集$https://cdn.example/liangzi.m3u8",
+		}, "$$$"),
+	}
+	downloader := &Downloader{providerHosts: map[string]string{}}
+	chapters := downloader.macCMSParseChapters(sourceMacCMSCreator, "1042", row)
+	if len(chapters) != 4 {
+		t.Fatalf("expected all four direct episodes across three lines, got %d: %+v", len(chapters), chapters)
+	}
+	wantLines := []string{"金鹰", "金鹰", "非凡", "量子"}
+	for i, want := range wantLines {
+		if chapters[i].PlayLine != want {
+			t.Errorf("chapter %d playLine = %q, want %q", i, chapters[i].PlayLine, want)
+		}
 	}
 }
