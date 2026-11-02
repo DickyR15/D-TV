@@ -237,7 +237,7 @@ jobs:
                               address = poster_address(row.get(field))
                               if address and address not in poster_seen:
                                   poster_seen.add(address)
-                                  poster_candidates.append((address, title, category_name, field))
+                                  poster_candidates.append((address, title, category_name, field, row_id(row)))
                                   row_candidate_count += 1
                                   if row_candidate_count >= 2:
                                       break
@@ -302,7 +302,7 @@ jobs:
 
           print("\n=== POSTER PROBE ===")
           poster_ok = 0
-          for address, title, category_name, poster_field in poster_candidates:
+          for address, title, category_name, poster_field, vod_id in poster_candidates:
               status = 0
               content_type = ""
               body = b""
@@ -340,7 +340,7 @@ jobs:
                   except Exception as exc:
                       proxy_error = f"{type(exc).__name__}: {str(exc)[:80]}"
               print(
-                  f"poster={title!r} category={category_name!r} field={poster_field} "
+                  f"poster={title!r} id={vod_id} category={category_name!r} field={poster_field} "
                   f"host={urlsplit(address).hostname} http={status} "
                   f"type={content_type or 'unknown'} proxy={proxy_status}/{proxy_type or 'unknown'} "
                   f"ok={ok} error={error_text} {proxy_error} "
@@ -348,6 +348,51 @@ jobs:
               )
               if ok:
                   poster_ok += 1
+              elif vod_id.isdigit():
+                  try:
+                      _, detail_payload = api("/api.php/web/vod/get_detail", {"vod_id": vod_id})
+                      detail_rows = response_rows(detail_payload.get("data"))
+                      if not detail_rows:
+                          print(f"poster detail fallback id={vod_id}: no detail row")
+                      else:
+                          detail_row = detail_rows[0]
+                          alternatives = []
+                          for field in (
+                              "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                              "vod_pic_slide", "vod_pic_screenshot",
+                              "cover", "cover_url", "poster", "image", "thumbnail",
+                          ):
+                              alternative = poster_address(detail_row.get(field))
+                              if alternative and alternative != address and alternative not in alternatives:
+                                  alternatives.append(alternative)
+                          print(
+                              f"poster detail fallback id={vod_id}: "
+                              f"{[(urlsplit(value).hostname, value) for value in alternatives]}"
+                          )
+                          for alternative in alternatives[:3]:
+                              alt_ok = False
+                              try:
+                                  alt_status, _, alt_type, alt_body = request(
+                                      alternative, home_base + "/", limit=2048,
+                                      timeout=8, byte_range="bytes=0-2047"
+                                  )
+                                  alt_ok = alt_status in (200, 206) and bool(alt_body) and (
+                                      alt_type.lower().startswith("image/") or image_signature(alt_body)
+                                  )
+                                  print(
+                                      f"poster detail alternative id={vod_id} host={urlsplit(alternative).hostname} "
+                                      f"http={alt_status} type={alt_type} ok={alt_ok}"
+                                  )
+                              except Exception as exc:
+                                  print(
+                                      f"poster detail alternative id={vod_id} "
+                                      f"host={urlsplit(alternative).hostname} error={type(exc).__name__}: {str(exc)[:100]}"
+                                  )
+                              if alt_ok:
+                                  poster_ok += 1
+                                  break
+                  except Exception as exc:
+                      print(f"poster detail fallback id={vod_id}: {type(exc).__name__}: {str(exc)[:120]}")
           print(f"poster direct/proxy sample={poster_ok}/{len(poster_candidates)}")
           print("\n=== SEARCH ===")
           movies = {}
