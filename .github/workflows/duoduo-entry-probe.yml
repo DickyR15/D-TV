@@ -138,51 +138,169 @@ jobs:
           data = home.get("data") or {}
           categories = data.get("categories") or []
           print(f"API={home_base} categories={[(x.get('type_id'), x.get('type_name')) for x in categories]}")
+
+          def response_rows(value):
+              if isinstance(value, list):
+                  return [row for row in value if isinstance(row, dict)]
+              if isinstance(value, dict):
+                  for key in ("list", "items", "results", "videos", "vod"):
+                      nested = response_rows(value.get(key))
+                      if nested:
+                          return nested
+              return []
+
+          def row_id(row):
+              return str(row.get("vod_id") or row.get("id") or "").strip()
+
+          def row_title(row):
+              return str(row.get("vod_name") or row.get("title") or row.get("name") or "").strip()
+
+          def poster_address(value):
+              if isinstance(value, dict):
+                  for key in ("url", "contentUrl", "thumbnailUrl"):
+                      address = poster_address(value.get(key))
+                      if address:
+                          return address
+                  return ""
+              if isinstance(value, list):
+                  for entry in value:
+                      address = poster_address(entry)
+                      if address:
+                          return address
+                  return ""
+              if not isinstance(value, str) or not value.strip():
+                  return ""
+              address = urljoin(home_base + "/", value.strip())
+              parsed = urlsplit(address)
+              return address if parsed.scheme in ("http", "https") and parsed.netloc else ""
+
+          MAX_AUDIT_PAGES = 40
+          PAGE_SIZE = 24
+          CONTINUATION_THRESHOLD = 18
+          category_specs = [{"type_id": 0, "type_name": "全部"}] + categories
+          category_rows = []
+          second_rows = []
+          poster_candidates = []
+          poster_seen = set()
+          early_stops = []
+          repeated_pages = []
+          capped_categories = []
+          category_summaries = []
+
+          print("\n=== FULL CATALOG PAGINATION AUDIT ===")
+          for category in category_specs:
+              category_id = str(category.get("type_id") or "0")
+              category_name = str(category.get("type_name") or "").strip()
+              if not category_name:
+                  continue
+              seen_ids = set()
+              page_counts = []
+              previous_count = None
+              raw_total = 0
+              invalid_rows = 0
+              stopped_on_repeat = False
+              for page in range(1, MAX_AUDIT_PAGES + 1):
+                  params = {"page": page, "sort": "hits", "pageSize": PAGE_SIZE}
+                  if category_id != "0":
+                      params["type_name"] = category_name
+                  _, response = api("/api.php/web/filter/vod", params)
+                  rows = response_rows(response.get("data"))
+                  count = len(rows)
+                  page_counts.append(count)
+                  raw_total += count
+                  ids = [row_id(row) for row in rows]
+                  valid_ids = [value for value in ids if value.isdigit()]
+                  new_ids = [value for value in valid_ids if value not in seen_ids]
+                  bad_rows = [
+                      row for row in rows
+                      if not row_id(row).isdigit() or not row_title(row)
+                  ]
+                  invalid_rows += len(bad_rows)
+                  print(
+                      f"catalog category={category_name!r} page={page} rows={count} "
+                      f"valid_ids={len(valid_ids)} new_ids={len(set(new_ids))} "
+                      f"bad_rows={len(bad_rows)}"
+                  )
+                  if category_id == "1" and page == 1:
+                      category_rows = rows
+                  if category_id == "1" and page == 2:
+                      second_rows = rows
+                  for row in rows[:2]:
+                      title = row_title(row) or "(無標題)"
+                      row_candidate_count = 0
+                      for field in (
+                          "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                          "vod_pic_slide", "vod_pic_screenshot",
+                          "cover", "cover_url", "poster", "image", "thumbnail",
+                      ):
+                          address = poster_address(row.get(field))
+                          if address and address not in poster_seen:
+                              poster_seen.add(address)
+                              poster_candidates.append((address, title, category_name, field))
+                              row_candidate_count += 1
+                              if row_candidate_count >= 2:
+                                  break
+                  if not rows:
+                      break
+                  if page > 1 and valid_ids and not new_ids:
+                      repeated_pages.append((category_name, page, count))
+                      stopped_on_repeat = True
+                      print(f"catalog warning: {category_name!r} page {page} contains no new IDs")
+                      break
+                  seen_ids.update(valid_ids)
+                  if previous_count is not None and previous_count < CONTINUATION_THRESHOLD and count > 0:
+                      early_stops.append((category_name, page - 1, previous_count, page, count))
+                  previous_count = count
+                  if page == MAX_AUDIT_PAGES and count >= CONTINUATION_THRESHOLD:
+                      capped_categories.append(category_name)
+              unique_count = len(seen_ids)
+              category_summaries.append((category_name, raw_total, unique_count, page_counts))
+              print(
+                  f"catalog summary category={category_name!r} pages={len(page_counts)} "
+                  f"raw_rows={raw_total} unique_ids={unique_count} "
+                  f"invalid_rows={invalid_rows} repeated={stopped_on_repeat} "
+                  f"page_counts={page_counts}"
+              )
+
           movie_category = next(
               (item for item in categories
                if str(item.get("type_id")) == "1" and item.get("type_name") == "电影"),
               None,
           )
-          if not movie_category:
+          if not movie_category or not category_rows:
               raise RuntimeError("movie category was not returned")
-
-          print("\n=== MOVIE CATEGORY ===")
-          _, filtered = api("/api.php/web/filter/vod", {
-              "page": 1, "sort": "hits", "pageSize": 24,
-              "type_name": movie_category["type_name"],
-          })
-          category_rows = filtered.get("data") or []
-          print(f"movie category rows={len(category_rows)}")
-          if not category_rows:
-              raise RuntimeError("movie category returned no rows")
-          _, second_page = api("/api.php/web/filter/vod", {
-              "page": 2, "sort": "hits", "pageSize": 24,
-              "type_name": movie_category["type_name"],
-          })
-          second_rows = second_page.get("data") or []
-          print(f"movie category page2 rows={len(second_rows)}")
-          if len(category_rows) >= 18 and not second_rows:
+          if not second_rows and len(category_rows) >= CONTINUATION_THRESHOLD:
               raise RuntimeError("movie category signals more pages but page 2 is empty")
+          if early_stops:
+              raise RuntimeError(
+                  "Duoduo pagination truncation detected: a page below the app's "
+                  f"{CONTINUATION_THRESHOLD}-row continuation threshold was followed by more rows: {early_stops[:5]}"
+              )
+          if repeated_pages:
+              raise RuntimeError(f"Duoduo returned repeated pages with no new video IDs: {repeated_pages[:5]}")
+          if capped_categories:
+              raise RuntimeError(
+                  f"Catalog audit reached the {MAX_AUDIT_PAGES}-page safety cap without reaching the end: {capped_categories}"
+              )
+          print(
+              f"catalog audit complete: categories={len(category_summaries)} "
+              f"total_unique_ids={sum(item[2] for item in category_summaries)} "
+              f"poster_candidates={len(poster_candidates)}"
+          )
+
           def image_signature(body):
               return (
                   body.startswith(bytes.fromhex("ffd8ff"))
                   or body.startswith(bytes.fromhex("89504e470d0a1a0a"))
                   or body.startswith((b"GIF87a", b"GIF89a", b"BM"))
-                  or len(body) >= 12 and body[:4] == b"RIFF" and body[8:12] == b"WEBP"
-                  or len(body) >= 12 and body[4:8] == b"ftyp"
-                     and body[8:12] in (b"avif", b"avis", b"heic", b"heix", b"hevc", b"hevx", b"mif1")
+                  or len(body) >= 12 and body[:4] == "RIFF" and body[8:12] == "WEBP"
+                  or len(body) >= 12 and body[4:8] == "ftyp"
+                     and body[8:12] in ("avif", "avis", "heic", "heix", "hevc", "hevx", "mif1")
               )
 
-          poster_candidates = [
-              (str(row.get("vod_pic") or ""), row.get("vod_name") or "")
-              for row in category_rows[:8] if row.get("vod_pic")
-          ]
+          print("\n=== POSTER PROBE ===")
           poster_ok = 0
-          for address, title in poster_candidates:
-              if address.startswith("//"):
-                  address = "https:" + address
-              if not address.startswith(("http://", "https://")):
-                  continue
+          for address, title, category_name, poster_field in poster_candidates:
               status = 0
               content_type = ""
               body = b""
@@ -197,8 +315,6 @@ jobs:
               ok = status in (200, 206) and bool(body) and (
                   content_type.lower().startswith("image/") or image_signature(body)
               )
-              # Probe the image proxy on every failed sample for diagnosis.
-              # Production code retries only the known problematic CDN hosts.
               proxy_status = 0
               proxy_type = ""
               proxy_error = ""
@@ -218,20 +334,19 @@ jobs:
                       )
                       if proxy_ok:
                           ok = True
-                          status, content_type = proxy_status, "proxy:" + proxy_type
+                          status, content_type, body = proxy_status, "proxy:" + proxy_type, proxy_body
                   except Exception as exc:
                       proxy_error = f"{type(exc).__name__}: {str(exc)[:80]}"
               print(
-                  f"poster={title!r} host={urlsplit(address).hostname} "
-                  f"http={status} type={content_type or 'unknown'} "
-                  f"proxy={proxy_status}/{proxy_type or 'unknown'} "
+                  f"poster={title!r} category={category_name!r} field={poster_field} "
+                  f"host={urlsplit(address).hostname} http={status} "
+                  f"type={content_type or 'unknown'} proxy={proxy_status}/{proxy_type or 'unknown'} "
                   f"ok={ok} error={error_text} {proxy_error} "
                   f"magic={body[:20].hex() if body else 'none'}"
               )
               if ok:
                   poster_ok += 1
           print(f"poster direct/proxy sample={poster_ok}/{len(poster_candidates)}")
-
           print("\n=== SEARCH ===")
           movies = {}
           for term in ("流浪地球", "阿凡達", "復仇者聯盟"):
