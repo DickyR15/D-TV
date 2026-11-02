@@ -483,9 +483,13 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 		return Drama{}, nil, errors.New("多多追劇詳情與查詢影片不符")
 	}
 	playerRows := duoduoRows(payload["vodplayer"])
-	lines, aggregateErr := d.fetchDuoduoAggregate(ctx, sourceID)
+	// Prefer direct media URLs already included in the detail response. The
+	// aggregate endpoint is only needed when the detail payload has no usable
+	// direct line, which avoids an unnecessary dependency and extra latency.
+	lines := duoduoParseDetailLines(rows[0], playerRows)
+	var aggregateErr error
 	if len(lines) == 0 {
-		lines = duoduoParseDetailLines(rows[0], playerRows)
+		lines, aggregateErr = d.fetchDuoduoAggregate(ctx, sourceID)
 	}
 	if len(lines) == 0 {
 		if aggregateErr != nil {
