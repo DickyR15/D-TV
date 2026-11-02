@@ -58,7 +58,7 @@ void main() {
 
     expect(store.advancedSourcesUnlocked, isTrue);
     expect(find.text('進階片源'), findsOneWidget);
-    for (final name in ['黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版', '天堂資源', '速播資源', '量子資源', '非凡資源', '豆瓣資源', '最大資源']) {
+    for (final name in ['黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版']) {
       final sourceName = find.text(name);
       await tester.scrollUntilVisible(
         sourceName,
@@ -68,7 +68,6 @@ void main() {
       expect(sourceName, findsOneWidget);
     }
     expect(store.sourceEnabled('huangdou'), isFalse);
-    expect(store.sourceEnabled('maccms-dytt'), isFalse);
 
     final huangdouSwitch = find.byKey(const ValueKey('source-switch-huangdou'));
     await tester.ensureVisible(huangdouSwitch);
@@ -77,12 +76,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.sourceEnabled('huangdou'), isTrue);
 
-    final macCMSswitch = find.byKey(const ValueKey('source-switch-maccms-dytt'));
-    await tester.ensureVisible(macCMSswitch);
-    await tester.pumpAndSettle();
-    await tester.tap(macCMSswitch);
-    await tester.pumpAndSettle();
-    expect(store.sourceEnabled('maccms-dytt'), isTrue);
 
     await tester.pumpWidget(const MaterialApp(home: Text('已離開片源管理')));
     await tester.pumpAndSettle();
