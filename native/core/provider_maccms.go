@@ -327,10 +327,19 @@ func macCMSDirectMediaURL(raw string) bool {
 }
 
 func macCMSPlayLineNames(raw string) []string {
-	parts := strings.Split(raw, "$$$")
+	// Most MacCMS APIs use "$$" between source groups. Some providers
+	// (including the LZI and FFZY JSON feeds) publish the same group names as
+	// a comma-separated list, while vod_play_url still stores groups in "$$"
+	// blocks. Normalize both forms so each playback block keeps its real label.
+	raw = strings.ReplaceAll(raw, "$$", ",")
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == '，' || r == '|'
+	})
 	names := make([]string, 0, len(parts))
 	for _, part := range parts {
-		names = append(names, strings.TrimSpace(part))
+		if name := strings.TrimSpace(part); name != "" {
+			names = append(names, name)
+		}
 	}
 	return names
 }
