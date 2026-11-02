@@ -600,36 +600,63 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 		}
 		return Drama{}, nil, errors.New("多多追劇目前沒有可直接播放的影片線路")
 	}
-	maxEpisodes := 0
-	var chapters []Chapter
-	for lineIndex, line := range lines {
-		maxEpisodes = max(maxEpisodes, len(line.Episodes))
+	// Merge every direct playback line into one canonical chapter per episode.
+	// The first available line is the preferred URL; other lines for the same
+	// episode are retained as automatic fallbacks and are never displayed as
+	// duplicate episode buttons.
+	type episodeChoice struct {
+		episode  duoduoPlayEpisode
+		number   int
+		variants []string
+		seen     map[string]bool
+	}
+	choices := make(map[int]*episodeChoice)
+	for _, line := range lines {
 		for _, episode := range line.Episodes {
-			key := fmt.Sprintf("%d-%d", lineIndex+1, episode.Index)
-			episodeNumber := duoduoEpisodeNumber(episode.Title, episode.Index)
-			var variants []string
-			for _, alternativeLine := range lines {
-				for _, alternative := range alternativeLine.Episodes {
-					if alternative.URL == episode.URL ||
-						duoduoEpisodeNumber(alternative.Title, alternative.Index) != episodeNumber {
-						continue
-					}
-					variants = append(variants, alternative.URL)
-				}
+			number := duoduoEpisodeNumber(episode.Title, episode.Index)
+			if number < 1 || number > 100000 || !duoduoDirectMediaURL(episode.URL) {
+				continue
 			}
-			chapters = append(chapters, Chapter{
-				ID: providerChapterID(sourceDuoduo, sourceID, key),
-				Source: sourceDuoduo,
-				Title: truncate(episode.Title, 128),
-				CurrentEpisode: rawEpisode(episodeNumber),
-				VideoURL: episode.URL,
-				Referer: base + "/",
-				PlayLine: truncate(line.Name, 96),
-				PlaybackVariants: duoduoUniqueStrings(variants),
-			})
+			choice := choices[number]
+			if choice == nil {
+				choices[number] = &episodeChoice{
+					episode: episode,
+					number: number,
+					seen: map[string]bool{episode.URL: true},
+				}
+				continue
+			}
+			if !choice.seen[episode.URL] {
+				choice.seen[episode.URL] = true
+				choice.variants = append(choice.variants, episode.URL)
+			}
 		}
 	}
-	maxEpisodes = max(maxEpisodes, duoduoChapterEpisodeCount(chapters))
+	if len(choices) == 0 {
+		return Drama{}, nil, errors.New("多多追劇目前沒有可用的直接播放集數")
+	}
+	numbers := make([]int, 0, len(choices))
+	maxEpisodes := 0
+	for number := range choices {
+		numbers = append(numbers, number)
+		maxEpisodes = max(maxEpisodes, number)
+	}
+	sort.Ints(numbers)
+	chapters := make([]Chapter, 0, len(numbers))
+	for _, number := range numbers {
+		choice := choices[number]
+		chapters = append(chapters, Chapter{
+			ID: providerChapterID(sourceDuoduo, sourceID, strconv.Itoa(number)),
+			Source: sourceDuoduo,
+			Title: truncate(choice.episode.Title, 128),
+			CurrentEpisode: rawEpisode(number),
+			VideoURL: choice.episode.URL,
+			Referer: base + "/",
+			// PlayLine intentionally stays empty. The source is selected
+			// internally by playback failover, not by duplicating episode rows.
+			PlaybackVariants: duoduoUniqueStrings(choice.variants),
+		})
+	}
 	drama.TotalEpisode, drama.EpisodeCount, drama.Episodes = maxEpisodes, maxEpisodes, maxEpisodes
 	drama.EpisodesVerified = maxEpisodes > 0
 	return drama, chapters, nil
