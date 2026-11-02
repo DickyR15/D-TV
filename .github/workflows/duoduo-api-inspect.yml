@@ -1,0 +1,149 @@
+name: Duoduo API inspection
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/duoduo-api-inspect.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Inspect public entry page, frontend routes, and anonymous API responses
+        shell: bash
+        run: |
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.error import HTTPError, URLError
+          from urllib.parse import urljoin, urlsplit
+          from urllib.request import Request, urlopen
+          import json
+          import re
+          import ssl
+          from pathlib import Path
+
+          HOSTS = [
+              "duoduozhuiju.com",
+              "323433ssdfd.top",
+              "duoduosdf12223234334.top",
+              "xds2435u23422342342u.top",
+              "dduotv01.top",
+          ]
+          SAFE_ROUTES = [
+              "/api.php/web/index/home",
+              "/api.php/web/feature",
+              "/api.php/web/ranking/list",
+              "/api.php/web/filter/vod",
+              "/api.php/web/search/index",
+              "/api.php/web/search/suggest",
+              "/api.php/web/internal/search_aggregate",
+              "/api.php/web/external_search/search",
+              "/api.php/web/vod/get_detail",
+          ]
+          CTX = ssl.create_default_context()
+          UA = "DTV-Duoduo-ReadOnly-Inspector/1.0"
+          assets = {}
+          pages = []
+
+          class Parser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title = []
+                  self.scripts = []
+                  self.links = []
+                  self.in_title = False
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag.lower() == "title":
+                      self.in_title = True
+                  if tag.lower() == "script" and attrs.get("src"):
+                      self.scripts.append(attrs["src"])
+                  if tag.lower() == "a" and attrs.get("href"):
+                      self.links.append(attrs["href"])
+              def handle_endtag(self, tag):
+                  if tag.lower() == "title":
+                      self.in_title = False
+              def handle_data(self, data):
+                  if self.in_title:
+                      self.title.append(data.strip())
+
+          def request(url, timeout=12, limit=2 * 1024 * 1024):
+              req = Request(url, headers={
+                  "User-Agent": UA,
+                  "Accept": "text/html,application/javascript,application/json,*/*",
+              })
+              try:
+                  response = urlopen(req, timeout=timeout, context=CTX)
+              except HTTPError as exc:
+                  response = exc
+              with response:
+                  return response.status, response.geturl(), response.headers.get("Content-Type", ""), response.read(limit)
+
+          for host in HOSTS:
+              base = f"https://{host}/"
+              try:
+                  status, final, ctype, body = request(base)
+                  parser = Parser()
+                  parser.feed(body.decode("utf-8", errors="replace"))
+                  title = " ".join(" ".join(parser.title).split())
+                  scripts = [urljoin(final, src) for src in parser.scripts]
+                  asset_url = next((url for url in scripts if "assets/index-" in url), "")
+                  row = {
+                      "host": host, "status": status, "final_url": final,
+                      "title": title, "content_type": ctype,
+                      "asset_url": asset_url,
+                      "links": [urljoin(final, x) for x in parser.links[:30]],
+                  }
+                  pages.append(row)
+                  print(f"PAGE {host}: HTTP={status} FINAL={final} TITLE={title!r} ASSET={asset_url or '-'}")
+                  if asset_url:
+                      astatus, afinal, atype, abody = request(asset_url)
+                      key = re.sub(r"[^A-Za-z0-9_.-]", "_", host)
+                      Path(f"duoduo-{key}.js").write_bytes(abody)
+                      source = abody.decode("utf-8", errors="replace")
+                      routes = sorted(set(re.findall(r"""["'](/api\\.php/web/[A-Za-z0-9_/-]+)["']""", source)))
+                      print(f"  ASSET HTTP={astatus} TYPE={atype} BYTES={len(abody)} FINAL={afinal}")
+                      print("  ROUTES=" + ", ".join(routes))
+                      for term in ["LOGIN_USERNAME_EMPTY", "username", "Authorization", "token", "localStorage", "sessionStorage", "login"]:
+                          print(f"  TERM {term!r} COUNT={source.lower().count(term.lower())}")
+                      assets[host] = {"path": f"duoduo-{key}.js", "sha256_bytes": len(abody)}
+              except Exception as exc:
+                  print(f"PAGE {host}: ERROR={type(exc).__name__}: {str(exc)[:160]}")
+
+          print("\n=== ANONYMOUS READ-ONLY API TESTS ===")
+          for host in HOSTS[1:]:
+              print(f"API HOST {host}")
+              for route in SAFE_ROUTES:
+                  try:
+                      status, final, ctype, body = request(f"https://{host}{route}", timeout=8, limit=4096)
+                      try:
+                          payload = json.loads(body.decode("utf-8", errors="replace"))
+                      except Exception:
+                          payload = {}
+                      message = str(payload.get("msg", payload.get("message", "")))[:100]
+                      code = payload.get("code", payload.get("error_code", "-"))
+                      print(f"  {route}: HTTP={status} CODE={code} MSG={message!r} TYPE={ctype}")
+                  except Exception as exc:
+                      print(f"  {route}: ERROR={type(exc).__name__}: {str(exc)[:120]}")
+
+          Path("duoduo-page-report.json").write_text(
+              json.dumps({"pages": pages, "assets": assets}, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+          )
+          PY
+      - name: Upload public frontend inspection artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duoduo-public-inspection
+          path: |
+            duoduo-*.js
+            duoduo-page-report.json
+          if-no-files-found: warn
+          retention-days: 7
