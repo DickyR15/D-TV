@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -425,6 +426,22 @@ func nativeCoverResponseComplete(response *http.Response) bool {
 func nativeDecodeCover(data []byte) []byte {
 	if nativeIsCoverImage(data) {
 		return data
+	}
+	// Some poster CDNs return a gzip-wrapped image body while still labelling
+	// it as image/jpeg or image/png. Go only transparently decompresses HTTP
+	// responses when Content-Encoding is set; unwrap a raw gzip body as a
+	// bounded fallback, then validate the actual image signature.
+	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
+		reader, err := gzip.NewReader(bytes.NewReader(data))
+		if err == nil {
+			decoded, readErr := io.ReadAll(io.LimitReader(reader, nativeCoverMaxBytes+1))
+			closeErr := reader.Close()
+			if readErr == nil && closeErr == nil &&
+				len(decoded) > 0 && len(decoded) <= nativeCoverMaxBytes &&
+				nativeIsCoverImage(decoded) {
+				return decoded
+			}
+		}
 	}
 	encrypted := data
 	if bytes.HasPrefix(encrypted, []byte("Salted__")) && len(encrypted) > 16 {
