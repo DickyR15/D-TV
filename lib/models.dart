@@ -14,8 +14,7 @@ class SourceSite {
       id == 'yeguo' ||
       id == 'dsd' ||
       id == 'duoduo' ||
-      id == 'hanxiaoquan' ||
-      id.startsWith('maccms-');
+      id == 'hanxiaoquan';
   bool get searchSuggestions => id == 'hongguo';
   // These providers must remain independent in
   // source switching and ranking filters.
@@ -61,13 +60,6 @@ class SourceSite {
     SourceSite('huangguo-video', '黃果影片', '影片與劇集'),
     SourceSite('huangguoai', '黃果 AI', 'AI 短劇'),
     SourceSite('cloudfront', '黃果舊版', '舊版 API 片庫'),
-    SourceSite('maccms-dytt', '天堂資源', '電影 · 劇集 · 動漫 · 綜藝'),
-    SourceSite('maccms-subo', '速播資源', '電影 · 劇集 · 動漫 · 綜藝'),
-    SourceSite('maccms-lzi', '量子資源', '電影 · 劇集 · 動漫 · 綜藝'),
-    SourceSite('maccms-ffzy', '非凡資源', '電影 · 劇集 · 動漫 · 綜藝'),
-    SourceSite('maccms-douban', '豆瓣資源', '電影 · 劇集 · 動漫 · 綜藝'),
-    SourceSite('maccms-zuida', '最大資源', '電影 · 劇集 · 動漫 · 綜藝'),
-    SourceSite('maccms-creator', '創享影視', '電影 · 劇集 · 動漫 · 綜藝'),
   ];
   static const knownValues = [...primaryValues, ...restrictedValues];
   static const allValues = [...primaryValues, ...restrictedValues];
