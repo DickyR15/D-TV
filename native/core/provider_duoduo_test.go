@@ -266,3 +266,107 @@ func TestDuoduoDetailDirectURLSkipsAggregateEndpoint(t *testing.T) {
 		t.Fatalf("stored direct URL should resolve without aggregate API: media=%+v err=%v", media, err)
 	}
 }
+
+
+func TestDuoduoHomeFeaturedVideosAreIncludedOnFirstPage(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/index/home":
+			return sourceFixtureResponse(request, http.StatusOK,
+				`{"code":200,"data":{"categories":[{"type_id":1,"type_name":"电影","videos":[{"vod_id":100,"vod_name":"首頁電影A"},{"vod_id":101,"vod_name":"首頁電影B"}]},{"type_id":2,"type_name":"剧集","videos":[{"vod_id":200,"vod_name":"首頁劇集"}]}],"recommend":[{"vod_id":300,"vod_name":"首頁推薦"}]}}`), nil
+		case "/api.php/web/filter/vod":
+			if request.URL.Query().Get("page") != "1" ||
+				request.URL.Query().Get("pageSize") != "24" {
+				t.Fatalf("unexpected Duoduo catalog query: %s", request.URL.RawQuery)
+			}
+			return sourceFixtureResponse(request, http.StatusOK,
+				`{"code":200,"data":[{"vod_id":100,"vod_name":"首頁電影A"},{"vod_id":400,"vod_name":"一般片庫影片"}]}`), nil
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+
+	items, more, err := d.fetchDuoduoCatalogPage(context.Background(), 1, "", "")
+	if err != nil || more {
+		t.Fatalf("Duoduo first page failed: items=%+v more=%v err=%v", items, more, err)
+	}
+	ids := make(map[string]bool, len(items))
+	for _, item := range items {
+		ids[item.SourceID] = true
+	}
+	for _, id := range []string{"100", "101", "200", "300", "400"} {
+		if !ids[id] {
+			t.Errorf("homepage/catalog title %s was not included", id)
+		}
+	}
+	if len(items) != 5 {
+		t.Fatalf("duplicate featured titles were not de-duplicated: got %d items (%+v)", len(items), items)
+	}
+}
+
+func TestDuoduoCategoryHomeSupplementOnlyIncludesSelectedCategory(t *testing.T) {
+	data := map[string]any{
+		"categories": []any{
+			map[string]any{
+				"type_id": 1, "videos": []any{
+					map[string]any{"vod_id": 101, "vod_name": "電影"},
+				},
+			},
+			map[string]any{
+				"type_id": 2, "videos": []any{
+					map[string]any{"vod_id": 201, "vod_name": "劇集"},
+				},
+			},
+		},
+		"recommend": []any{
+			map[string]any{"vod_id": 301, "vod_name": "首頁推薦"},
+		},
+	}
+	items := duoduoHomeSupplement(data, "1")
+	if len(items) != 1 || items[0].SourceID != "101" {
+		t.Fatalf("category supplement mixed categories or recommendations: %+v", items)
+	}
+	all := duoduoHomeSupplement(data, "")
+	if len(all) != 3 {
+		t.Fatalf("all-category home supplement = %d, want 3", len(all))
+	}
+}
+
+func TestDuoduoPosterMetadataDoesNotRequirePlayableLines(t *testing.T) {
+	const cover = "https://images.example.test/poster.jpg"
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path != "/api.php/web/vod/get_detail" {
+			t.Fatalf("poster lookup called an unexpected endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+		return sourceFixtureResponse(request, http.StatusOK,
+			`{"code":200,"data":[{"vod_id":78296,"vod_name":"沒有直連線路的影片","vod_pic":"https://images.example.test/poster.jpg","vod_play_from":"player","vod_play_url":"正片$https://player.example.test/watch/1"}]}`), nil
+	})
+	address, err := d.nativeCoverAddress(context.Background(), nativeDrama{
+		ID: "duoduo:78296", Source: sourceDuoduo, SourceID: "78296",
+	})
+	if err != nil || address != cover {
+		t.Fatalf("poster metadata should be available without playable lines: address=%q err=%v", address, err)
+	}
+}
+
+func TestDuoduoPosterProxyOnlyTargetsKnownProblemCDNs(t *testing.T) {
+	proxy := duoduoPosterProxyURL("https://img.ffzy888.com/poster/1.jpg?token=a%2Fb")
+	if !strings.HasPrefix(proxy, "https://images.weserv.nl/?url=") ||
+		!strings.Contains(proxy, "img.ffzy888.com") {
+		t.Fatalf("known failing poster CDN was not routed through the image proxy: %q", proxy)
+	}
+	if got := duoduoPosterProxyURL("https://images.example.test/poster.jpg"); got != "" {
+		t.Fatalf("normal poster host should not be proxied: %q", got)
+	}
+}
+
+func TestDuoduoProviderBaseURLRemembersWorkingMirror(t *testing.T) {
+	d := &Downloader{providerHosts: map[string]string{
+		sourceDuoduo: "https://duoduosdf12223234334.top",
+	}}
+	if got := d.providerBaseURL(sourceDuoduo); got != "https://duoduosdf12223234334.top" {
+		t.Fatalf("Duoduo referer base did not follow the active mirror: %q", got)
+	}
+}
