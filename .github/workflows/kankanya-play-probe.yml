@@ -117,7 +117,7 @@ jobs:
                   pos=low.find(marker.lower())
                   if pos>=0:
                       excerpt=html[max(0,pos-220):pos+600]
-                      excerpt=re.sub(r'(?i)(token|sign|key|auth|signature)(["\\']?\\s*[:=]\\s*["\\']?)[^"\\'&\\s,}]+',r'\\1\\2[REDACTED]',excerpt)
+                      excerpt=re.sub(r"(?i)(token|sign|key|auth|signature)=([^&\\s]+)", r"\\1=[REDACTED]", excerpt)
                       snippets.append({"marker":marker,"excerpt":excerpt[:850]})
               report["html_marker_snippets"]=snippets
           except Exception as e:
