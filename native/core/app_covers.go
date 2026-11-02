@@ -103,6 +103,35 @@ func nativeCoverReferer(downloader *Downloader, source, address string) string {
 	return downloader.providerBaseURL(source) + "/"
 }
 
+var duoduoPosterProxyHosts = map[string]bool{
+	"img.ffzy888.com": true,
+	"pps.vodfeiss.com": true,
+	"lain.bgm.tv": true,
+	"ps.ryzypics.com": true,
+	"img.gejiba.com": true,
+	"4k.jdyx.pro": true,
+	"y.gtimg.cn": true,
+	"cfimg.cnyuncdn.com": true,
+	"img.bwcgee.cn": true,
+	"api.zxki.cn": true,
+	"img1.doubanio.com": true,
+	"img2.doubanio.com": true,
+	"img3.doubanio.com": true,
+	"img9.doubanio.com": true,
+	"xyslzy-vip-1-10.xysl.it.com": true,
+}
+
+func duoduoPosterProxyURL(address string) string {
+	parsed, err := url.Parse(strings.TrimSpace(address))
+	if err != nil || !validNativeCoverURL(parsed) || !duoduoPosterProxyHosts[strings.ToLower(parsed.Hostname())] {
+		return ""
+	}
+	// Keep the complete path and query (some image URLs are signed), while
+	// letting the public image proxy fetch only known problematic poster CDNs.
+	target := strings.TrimPrefix(parsed.String(), parsed.Scheme+"://")
+	return "https://images.weserv.nl/?url=" + url.QueryEscape(target)
+}
+
 func validNativeCoverURL(address *url.URL) bool {
 	return address != nil && (address.Scheme == "https" || address.Scheme == "http") && address.Hostname() != "" && address.User == nil
 }
@@ -167,6 +196,13 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 	select {
 	case cache.slots <- struct{}{}:
 		data, err = cache.download(ctx, drama.Cover, referer)
+		if err != nil && canonicalProviderSource(drama.Source) == sourceDuoduo {
+			if proxyURL := duoduoPosterProxyURL(drama.Cover); proxyURL != "" {
+				// Retry only known failing poster CDNs through the proxy. Normal
+				// poster hosts stay direct and do not incur a third-party hop.
+				data, err = cache.download(ctx, proxyURL, "https://images.weserv.nl/")
+			}
+		}
 		<-cache.slots
 	case <-ctx.Done():
 		err = ctx.Err()
