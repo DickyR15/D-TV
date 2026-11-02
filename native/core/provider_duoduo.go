@@ -289,7 +289,7 @@ func htmlUnescapeDuoduo(value string) string {
 }
 
 func (d *Downloader) fetchDuoduoAPI(ctx context.Context, route string, params url.Values) (map[string]any, string, error) {
-	if !strings.HasPrefix(route, "/api.php/web/") || strings.ContainsAny(route, "?#\\x00\\r\\n") {
+	if !strings.HasPrefix(route, "/api.php/web/") || strings.ContainsAny(route, "?#\x00\r\n") {
 		return nil, "", errors.New("多多追劇 API 路徑無效")
 	}
 	hosts := append([]string(nil), duoduoAPIHosts...)
