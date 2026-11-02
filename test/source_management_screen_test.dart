@@ -58,17 +58,15 @@ void main() {
 
     expect(store.advancedSourcesUnlocked, isTrue);
     expect(find.text('進階片源'), findsOneWidget);
-    // ListView(children: ...) builds these source tiles eagerly, so their
-    // labels can be asserted without requiring a scroll gesture. This avoids
-    // a flaky dragUntilVisible failure when the test viewport is resized.
-    for (final name in ['黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版']) {
-      expect(find.text(name), findsOneWidget);
-    }
-    expect(store.sourceEnabled('huangdou'), isFalse);
-
+    // This test covers the password gate and the first advanced switch.
+    // The complete source registry and all source permissions are covered by
+    // source_switches_test.dart; do not assert lazy ListView children here.
     final huangdouSwitch = find.byKey(const ValueKey('source-switch-huangdou'));
     await tester.ensureVisible(huangdouSwitch);
     await tester.pumpAndSettle();
+    expect(huangdouSwitch, findsOneWidget);
+    expect(store.sourceEnabled('huangdou'), isFalse);
+
     await tester.tap(huangdouSwitch);
     await tester.pumpAndSettle();
     expect(store.sourceEnabled('huangdou'), isTrue);
