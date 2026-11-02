@@ -15,15 +15,15 @@ import (
 type nativeCoverNetworkKey struct{}
 
 type nativeCoverRepair struct {
-	done    chan struct{}
-	address string
-	err     error
-	retryAt time.Time
+	done            chan struct{}
+	providerAddress string
+	address         string
+	err             error
+	retryAt         time.Time
 }
 
-// load always gives the source-provided poster first refusal. A verified
-// fallback is consulted only after the original URL and provider-native
-// alternatives have failed, and is stored separately from Drama.Cover.
+// load keeps a strict source-preference order:
+// catalogue poster -> provider detail poster -> external poster.
 func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, force bool) (string, error) {
 	primaryAddress := strings.TrimSpace(drama.Cover)
 	primaryErr := errors.New("站源尚未提供原始海報網址")
@@ -38,17 +38,15 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		return "", ctx.Err()
 	}
 
-	fallbackAddress := strings.TrimSpace(drama.FallbackCover)
-	if fallbackAddress == "" {
-		cache.mu.Lock()
-		if repair := cache.repairs[drama.ID]; repair != nil {
-			fallbackAddress = repair.address
-		}
-		cache.mu.Unlock()
+	var cachedProvider, cachedExternal string
+	if repair := cache.cachedRepair(drama.ID); repair != nil {
+		cachedProvider, cachedExternal = repair.providerAddress, repair.address
 	}
-	if fallbackAddress != "" && fallbackAddress != primaryAddress {
+	providerAddress := firstNonEmpty(strings.TrimSpace(drama.ProviderFallbackCover), cachedProvider)
+	if providerAddress != "" && providerAddress != primaryAddress {
 		path, err := cache.loadAlternativeAddress(
-			ctx, drama, fallbackAddress, nativeCoverFallbackReferer(cache.downloader, drama, fallbackAddress),
+			ctx, drama, providerAddress,
+			nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
 		)
 		if err == nil {
 			return path, nil
@@ -56,18 +54,58 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		// A previously verified image may have expired or disappeared. Bypass
-		// the negative/positive repair cooldown and search for a new candidate.
+		force = true
+	}
+	externalAddress := firstNonEmpty(strings.TrimSpace(drama.FallbackCover), cachedExternal)
+	if externalAddress != "" && externalAddress != primaryAddress && externalAddress != providerAddress {
+		path, err := cache.loadAlternativeAddress(
+			ctx, drama, externalAddress,
+			nativeCoverFallbackReferer(cache.downloader, drama, externalAddress), "external",
+		)
+		if err == nil {
+			return path, nil
+		}
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		force = true
 	}
 
-	address, repairErr := cache.repair(ctx, drama, force)
-	if repairErr != nil || address == "" || address == primaryAddress || address == fallbackAddress {
-		return "", primaryErr
+	providerAddress, externalAddress, repairErr := cache.repair(ctx, drama, force)
+	if providerAddress != "" && providerAddress != primaryAddress {
+		path, err := cache.loadAlternativeAddress(
+			ctx, drama, providerAddress,
+			nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
+		)
+		if err == nil {
+			return path, nil
+		}
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 	}
-	return cache.loadAlternativeAddress(
-		ctx, drama, address, nativeCoverFallbackReferer(cache.downloader, drama, address),
-	)
+	if externalAddress != "" && externalAddress != primaryAddress && externalAddress != providerAddress {
+		path, err := cache.loadAlternativeAddress(
+			ctx, drama, externalAddress,
+			nativeCoverFallbackReferer(cache.downloader, drama, externalAddress), "external",
+		)
+		if err == nil {
+			return path, nil
+		}
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+	}
+	if repairErr != nil {
+		return "", errors.Join(primaryErr, repairErr)
+	}
+	return "", primaryErr
+}
+
+func (cache *nativeCoverCache) cachedRepair(id string) *nativeCoverRepair {
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	return cache.repairs[id]
 }
 
 func nativeCoverFallbackReferer(downloader *Downloader, drama nativeDrama, address string) string {
@@ -85,14 +123,15 @@ func nativeCoverFallbackReferer(downloader *Downloader, drama nativeDrama, addre
 	return nativeCoverReferer(downloader, source, address)
 }
 
-// loadAlternativeAddress downloads and validates a candidate without invoking
-// the source-detail retry path again. It uses a separate cache key so an
-// externally sourced image can never replace the source's original cache.
+// loadAlternativeAddress validates and caches a non-catalogue poster using a
+// cache namespace derived from its origin. Provider and external images cannot
+// overwrite each other or the original catalogue poster cache.
 func (cache *nativeCoverCache) loadAlternativeAddress(
 	ctx context.Context,
 	drama nativeDrama,
 	address string,
 	referer string,
+	cacheClass string,
 ) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(address))
 	if err != nil || !validNativeCoverURL(parsed) {
@@ -105,7 +144,7 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 	if referer == "" {
 		referer = nativeCoverReferer(cache.downloader, source, address)
 	}
-	digest := sha256.Sum256([]byte(source + "\x00fallback\x00" + address + "\x00" + referer))
+	digest := sha256.Sum256([]byte(source + "\x00" + cacheClass + "\x00" + address + "\x00" + referer))
 	key := hex.EncodeToString(digest[:])
 	path := filepathJoinCover(cache.directory, key+".img")
 
@@ -176,21 +215,21 @@ func filepathJoinCover(directory, name string) string {
 	return strings.TrimRight(directory, string(os.PathSeparator)) + string(os.PathSeparator) + name
 }
 
-func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, force bool) (string, error) {
+func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, force bool) (string, string, error) {
 	cache.mu.Lock()
 	if previous := cache.repairs[drama.ID]; previous != nil {
 		if previous.retryAt.IsZero() {
 			cache.mu.Unlock()
 			select {
 			case <-ctx.Done():
-				return "", ctx.Err()
+				return "", "", ctx.Err()
 			case <-previous.done:
-				return previous.address, previous.err
+				return previous.providerAddress, previous.address, previous.err
 			}
 		}
 		if !force && time.Now().Before(previous.retryAt) {
 			cache.mu.Unlock()
-			return previous.address, previous.err
+			return previous.providerAddress, previous.address, previous.err
 		}
 	}
 	if len(cache.repairs) >= 512 {
@@ -202,7 +241,7 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 		}
 		if len(cache.repairs) >= 512 {
 			cache.mu.Unlock()
-			return "", errors.New("海報正在載入，請稍後重試")
+			return "", "", errors.New("海報正在載入，請稍後重試")
 		}
 	}
 	call := &nativeCoverRepair{done: make(chan struct{})}
@@ -211,50 +250,55 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 
 	work, cancel := context.WithTimeout(ctx, 22*time.Second)
 	defer cancel()
-	var address string
-	var err error
+	var providerAddress, externalAddress string
+	var providerErr, externalErr error
 	select {
 	case cache.repairSlots <- struct{}{}:
 		nativeAddress, nativeErr := cache.downloader.nativeCoverAddress(work, drama)
 		if nativeErr == nil && nativeAddress != "" && nativeAddress != drama.Cover {
 			_, candidateErr := cache.loadAlternativeAddress(
-				work, drama, nativeAddress, nativeCoverReferer(cache.downloader, canonicalProviderSource(drama.Source), nativeAddress),
+				work, drama, nativeAddress,
+				nativeCoverFallbackReferer(cache.downloader, drama, nativeAddress), "provider",
 			)
 			if candidateErr == nil {
-				address = nativeAddress
+				providerAddress = nativeAddress
 			} else {
-				nativeErr = candidateErr
+				providerErr = candidateErr
 			}
+		} else {
+			providerErr = nativeErr
 		}
-		if address == "" && work.Err() == nil {
-			externalAddress, externalErr := cache.downloader.bangumiPosterAddress(work, drama)
+		// An official/provider detail poster always outranks external matches.
+		if providerAddress == "" && work.Err() == nil {
+			externalAddress, externalErr = cache.downloader.bangumiPosterAddress(work, drama)
 			if externalErr == nil && externalAddress != "" && externalAddress != drama.Cover {
-				_, candidateErr := cache.loadAlternativeAddress(work, drama, externalAddress, "https://bgm.tv/")
+				_, candidateErr := cache.loadAlternativeAddress(work, drama, externalAddress, "https://bgm.tv/", "external")
 				if candidateErr == nil {
-					address = externalAddress
+					// Validation passed; save and use only as the lowest-priority poster.
 				} else {
 					externalErr = candidateErr
+					externalAddress = ""
 				}
 			}
-			if address == "" {
-				err = errors.Join(nativeErr, externalErr)
-				if err == nil {
-					err = errors.New("沒有找到可驗證的備用海報")
-				}
-			}
-		} else if address == "" {
-			err = nativeErr
 		}
 		<-cache.repairSlots
 	case <-work.Done():
-		err = work.Err()
+		providerErr = work.Err()
 	}
 
+	err := error(nil)
+	if providerAddress == "" && externalAddress == "" {
+		err = errors.Join(providerErr, externalErr)
+		if err == nil {
+			err = errors.New("沒有找到可驗證的備用海報")
+		}
+	}
 	cache.mu.Lock()
-	call.address, call.err, call.retryAt = address, err, time.Now().Add(5*time.Minute)
+	call.providerAddress, call.address, call.err = providerAddress, externalAddress, err
+	call.retryAt = time.Now().Add(5 * time.Minute)
 	close(call.done)
 	cache.mu.Unlock()
-	return address, err
+	return providerAddress, externalAddress, err
 }
 
 func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, force bool) (map[string]any, error) {
@@ -266,6 +310,9 @@ func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, fo
 		if drama.Cover == "" {
 			drama.Cover = cached.Cover
 		}
+		if drama.ProviderFallbackCover == "" {
+			drama.ProviderFallbackCover = cached.ProviderFallbackCover
+		}
 		if drama.FallbackCover == "" {
 			drama.FallbackCover = cached.FallbackCover
 		}
@@ -274,6 +321,9 @@ func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, fo
 	if cached, ok := engine.detailCache[drama.ID]; ok {
 		if drama.Cover == "" {
 			drama.Cover = cached.Drama.Cover
+		}
+		if drama.ProviderFallbackCover == "" {
+			drama.ProviderFallbackCover = cached.Drama.ProviderFallbackCover
 		}
 		if drama.FallbackCover == "" {
 			drama.FallbackCover = cached.Drama.FallbackCover
@@ -285,14 +335,14 @@ func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, fo
 	if err != nil {
 		return nil, err
 	}
-	engine.covers.mu.Lock()
-	address := ""
-	if entry := engine.covers.repairs[drama.ID]; entry != nil {
-		address = entry.address
-	}
-	engine.covers.mu.Unlock()
-	if address != "" && address != drama.Cover {
-		engine.saveFallbackCover(drama.ID, address)
+	repair := engine.covers.cachedRepair(drama.ID)
+	if repair != nil {
+		if repair.providerAddress != "" && repair.providerAddress != drama.Cover {
+			engine.saveProviderFallbackCover(drama.ID, repair.providerAddress)
+		}
+		if repair.address != "" && repair.address != drama.Cover {
+			engine.saveFallbackCover(drama.ID, repair.address)
+		}
 	}
 	file, err := os.Open(path)
 	if err != nil {
@@ -307,9 +357,36 @@ func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, fo
 	return map[string]any{"path": path, "heic": isHEICImage(header[:count])}, nil
 }
 
-// A repaired image is metadata alongside the upstream cover, never a
-// replacement for it. A future healthy upstream poster therefore regains
-// priority automatically without losing the verified fallback.
+// Provider-native detail artwork is kept separately so it always outranks an
+// external database match while leaving the original catalogue URL untouched.
+func (engine *nativeEngine) saveProviderFallbackCover(id, address string) {
+	if strings.TrimSpace(address) == "" {
+		return
+	}
+	engine.mu.Lock()
+	defer engine.mu.Unlock()
+	changed := false
+	for _, items := range engine.catalogs {
+		for index := range items {
+			if items[index].ID == id && items[index].ProviderFallbackCover != address {
+				items[index].ProviderFallbackCover = address
+				changed = true
+			}
+		}
+	}
+	for key, entry := range engine.detailCache {
+		if entry.Drama.ID == id && entry.Drama.ProviderFallbackCover != address {
+			entry.Drama.ProviderFallbackCover = address
+			engine.detailCache[key] = entry
+		}
+	}
+	if changed {
+		engine.writeCatalogDiskLocked()
+	}
+}
+
+// External matches are cached independently from both catalogue and provider
+// detail artwork. A refreshed upstream poster can therefore regain priority.
 func (engine *nativeEngine) saveFallbackCover(id, address string) {
 	if strings.TrimSpace(address) == "" {
 		return
