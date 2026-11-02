@@ -31,13 +31,6 @@ const (
 	legacyKanmMovieSource = "kanmovie"
 	sourceDuoduo          = "duoduo"
 	sourceHanxiaoquan     = "hanxiaoquan"
-	sourceMacCMSDytt      = "maccms-dytt"
-	sourceMacCMSSubo      = "maccms-subo"
-	sourceMacCMSLzi       = "maccms-lzi"
-	sourceMacCMSFfzy      = "maccms-ffzy"
-	sourceMacCMSDouban    = "maccms-douban"
-	sourceMacCMSZuida     = "maccms-zuida"
-	sourceMacCMSCreator   = "maccms-creator"
 
 	providerMaxBodyBytes = 20 * 1024 * 1024
 	providerTimeout      = 12 * time.Second
@@ -101,7 +94,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida, sourceMacCMSCreator:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan:
 		return true
 	default:
 		return false
@@ -132,20 +125,6 @@ func canonicalProviderSource(source string) string {
 		return sourceDuoduo
 	case "hanxiaoquan", "jennyhow.com", "www.jennyhow.com":
 		return sourceHanxiaoquan
-	case "maccms-dytt", "天堂", "天堂資源", "caiji.dyttzyapi.com":
-		return sourceMacCMSDytt
-	case "maccms-subo", "速播", "速播資源", "subocj.com":
-		return sourceMacCMSSubo
-	case "maccms-lzi", "量子", "量子資源", "cj.lziapi.com":
-		return sourceMacCMSLzi
-	case "maccms-ffzy", "非凡", "非凡資源", "api.ffzyapi.com":
-		return sourceMacCMSFfzy
-	case "maccms-douban", "豆瓣", "豆瓣資源", "caiji.dbzy5.com":
-		return sourceMacCMSDouban
-	case "maccms-zuida", "最大", "最大資源", "zuidazy.co":
-		return sourceMacCMSZuida
-	case "maccms-creator", "創享影視", "ys.cxkjg.cn":
-		return sourceMacCMSCreator
 	default:
 		return strings.TrimSpace(source)
 	}
@@ -260,9 +239,6 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 		return drama.DisplayTitle(), chapters, err
 	case sourceHanxiaoquan:
 		drama, chapters, err := d.fetchHanxiaoquanDetail(ctx, sourceID)
-		return drama.DisplayTitle(), chapters, err
-	case sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida, sourceMacCMSCreator:
-		drama, chapters, err := d.fetchMacCMSDetail(ctx, canonicalProviderSource(source), sourceID)
 		return drama.DisplayTitle(), chapters, err
 	case sourceCloudFront:
 		return d.fetchLegacyChapters(ctx, sourceID)
