@@ -282,3 +282,91 @@ jobs:
           path: web_app_wasm_bg.wasm
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Validate aggregated direct playback lines and first media segments
+        shell: bash
+        run: |
+          python - <<'PY'
+          from urllib.error import HTTPError
+          from urllib.parse import urlencode, urljoin, urlsplit
+          from urllib.request import Request, urlopen
+          import json
+          import re
+
+          HOST = "323433ssdfd.top"
+          BASE = f"https://{HOST}"
+          HEADERS = {
+              "User-Agent": "Mozilla/5.0 DTV-Duoduo-Playback-Probe/1.0",
+              "Accept": "application/json",
+              "X-Client": "8f3d2a1c7b6e5d4c9a0b1f2e3d4c5b6a",
+              "web-sign": "ddtvf65f3a83d6d9ad6f",
+              "Origin": BASE,
+              "Referer": BASE + "/",
+          }
+
+          def get(url, headers=None, limit=512 * 1024):
+              req = Request(url, headers={**HEADERS, **(headers or {})})
+              try:
+                  response = urlopen(req, timeout=15)
+              except HTTPError as exc:
+                  response = exc
+              with response:
+                  return response.status, response.headers.get("Content-Type", ""), response.geturl(), response.read(limit)
+
+          def api(route, params):
+              status, _, _, body = get(BASE + route + "?" + urlencode(params), limit=2 * 1024 * 1024)
+              try:
+                  return status, json.loads(body.decode("utf-8", errors="replace"))
+              except Exception:
+                  return status, {}
+
+          def check_media(address):
+              status, ctype, final, body = get(address, {"Range":"bytes=0-262143", "Referer":BASE+"/"})
+              text = body.decode("utf-8-sig", errors="replace")
+              if status not in (200, 206) or "text/html" in ctype.lower():
+                  return False, f"HTTP={status} TYPE={ctype} BYTES={len(body)}"
+              if text.lstrip().startswith("#EXTM3U"):
+                  child = next((x.strip() for x in text.splitlines() if x.strip() and not x.strip().startswith("#")), "")
+                  if not child:
+                      return False, "M3U8 has no media URI"
+                  child_url = urljoin(final, child)
+                  s2, t2, _, b2 = get(child_url, {"Range":"bytes=0-1023", "Referer":BASE+"/"}, limit=1024)
+                  ok = s2 in (200,206) and bool(b2) and "text/html" not in t2.lower()
+                  return ok, f"M3U8 HTTP={status}; first segment HTTP={s2} TYPE={t2} BYTES={len(b2)}"
+              return True, f"HTTP={status} TYPE={ctype} BYTES={len(body)}"
+
+          queries = ["流浪地球", "庆余年", "甄嬛传"]
+          checked = 0
+          for query in queries:
+              status, search = api("/api.php/web/search/index", {"wd":query, "page":1, "limit":10})
+              rows = search.get("data") if isinstance(search.get("data"), list) else []
+              print(f"SEARCH {query!r}: HTTP={status} CODE={search.get('code')} RESULTS={len(rows)}")
+              selected = next((x for x in rows if str(x.get("vod_id","")).isdigit()), None)
+              if not selected:
+                  continue
+              vod_id = str(selected["vod_id"])
+              print(f"  ITEM id={vod_id} name={selected.get('vod_name')!r} type={selected.get('type_name')!r} year={selected.get('vod_year')!r}")
+              status, aggregate = api("/api.php/web/internal/search_aggregate", {"vod_id":vod_id})
+              items = aggregate.get("data") if isinstance(aggregate.get("data"), list) else []
+              print(f"  AGGREGATE HTTP={status} CODE={aggregate.get('code')} LINES={len(items)} MSG={aggregate.get('msg')!r}")
+              for item in items:
+                  name = str(item.get("site_name") or item.get("site_key") or "")
+                  decode = str(item.get("decode_status",""))
+                  raw = str(item.get("vod_play_url",""))
+                  episodes = []
+                  for group in raw.split("$$$"):
+                      for ep in group.split("#"):
+                          if "$" in ep:
+                              episodes.append(ep.split("$",1)[1].strip())
+                  direct = [u for u in episodes if urlsplit(u).scheme in ("http","https") and urlsplit(u).path.lower().endswith((".m3u8",".mp4"))]
+                  print(f"    LINE {name[:32]!r} decode={decode} episodes={len(episodes)} direct={len(direct)}")
+                  for address in direct[:1]:
+                      parsed=urlsplit(address)
+                      if checked >= 7: break
+                      ok, message=check_media(address)
+                      checked += 1
+                      print(f"      MEDIA {parsed.netloc}{parsed.path[:90]} ok={ok} {message}")
+                  if checked >= 7: break
+              if checked >= 7: break
+          print(f"TOTAL_DIRECT_MEDIA_PROBES={checked}")
+          PY
