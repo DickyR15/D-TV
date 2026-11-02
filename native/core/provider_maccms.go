@@ -31,19 +31,25 @@ var macCMSProviders = map[string]macCMSProvider{
 		Name:    "天堂資源",
 		Referer: "https://dyttzy.tv/",
 		APIs: []string{
+			"https://caiji.dyttzyapi.com/api.php/provide/vod/from/dyttm3u8/at/json/",
+			"https://caiji.dyttzyapi.com/api.php/provide/vod/at/json/",
 			"http://caiji.dyttzyapi.com/api.php/provide/vod/",
-			"https://caiji.dyttzyapi.com/api.php/provide/vod/",
 		},
 	},
 	sourceMacCMSSubo: {
 		Name:    "速播資源",
 		Referer: "https://subocj.com/",
-		APIs:    []string{"https://subocj.com/api.php/provide/vod/"},
+		APIs: []string{
+			"https://subocj.com/api.php/provide/vod/from/subm3u8/at/json/",
+			"https://subocj.com/api.php/provide/vod/at/json/",
+		},
 	},
 	sourceMacCMSLzi: {
 		Name:    "量子資源",
 		Referer: "https://www.lzizy.net/",
 		APIs: []string{
+			"https://cj.lziapi.com/api.php/provide/vod/from/lzm3u8/at/json/",
+			"https://cj.lzcaiji.com/api.php/provide/vod/from/lzm3u8/at/json/",
 			"https://cj.lziapi.com/api.php/provide/vod/",
 			"https://cj.lzcaiji.com/api.php/provide/vod/",
 		},
@@ -52,6 +58,9 @@ var macCMSProviders = map[string]macCMSProvider{
 		Name:    "非凡資源",
 		Referer: "https://cj.ffzyapi.com/",
 		APIs: []string{
+			"https://api.ffzyapi.com/api.php/provide/vod/from/ffm3u8/at/json/",
+			"https://cj2.ffzyapi.com/api.php/provide/vod/from/ffm3u8/at/json/",
+			"https://api.ffzyapi.com/api.php/provide/vod/at/json/",
 			"http://api.ffzyapi.com/api.php/provide/vod/",
 			"http://cj2.ffzyapi.com/api.php/provide/vod/",
 			"https://cj.ffzyapi.com/api.php/provide/vod/",
@@ -61,6 +70,8 @@ var macCMSProviders = map[string]macCMSProvider{
 		Name:    "豆瓣資源",
 		Referer: "https://dbzy.tv/",
 		APIs: []string{
+			"https://caiji.dbzy5.com/api.php/provide/vod/from/dbm3u8/at/josn/",
+			"http://caiji.dbzy5.com/api.php/provide/vod/from/dbm3u8/at/josn/",
 			"https://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
 			"http://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
 			"https://dbzy.tv/api.php/provide/vod/at/josn/",
@@ -68,11 +79,10 @@ var macCMSProviders = map[string]macCMSProvider{
 	},
 	sourceMacCMSZuida: {
 		Name:    "最大資源",
-		Referer: "https://zuidazy.me/",
+		Referer: "https://api.zuidapi.com/",
 		APIs: []string{
-			"https://zuidazy.me/api.php/provide/vod/",
-			"http://zuidazy.me/api.php/provide/vod/",
 			"https://api.zuidapi.com/api.php/provide/vod/",
+			"http://api.zuidapi.com/api.php/provide/vod/",
 		},
 	},
 }
