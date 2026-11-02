@@ -197,39 +197,35 @@ jobs:
               ok = status in (200, 206) and bool(body) and (
                   content_type.lower().startswith("image/") or image_signature(body)
               )
-              # Retry only known poster hosts through the same image proxy used
-              # by D TV. A single unreachable CDN must not abort the full smoke.
+              # Probe the image proxy on every failed sample for diagnosis.
+              # Production code retries only the known problematic CDN hosts.
+              proxy_status = 0
+              proxy_type = ""
+              proxy_error = ""
               if not ok:
-                  host = urlsplit(address).hostname or ""
-                  known_bad = {
-                      "img.ffzy888.com", "pps.vodfeiss.com", "lain.bgm.tv",
-                      "ps.ryzypics.com", "img.gejiba.com", "4k.jdyx.pro",
-                      "y.gtimg.cn", "cfimg.cnyuncdn.com", "img.bwcgee.cn",
-                      "api.zxki.cn", "img1.doubanio.com", "img2.doubanio.com",
-                      "img3.doubanio.com", "img9.doubanio.com",
-                      "xyslzy-vip-1-10.xysl.it.com",
-                  }
-                  if host.lower() in known_bad:
-                      parsed = urlsplit(address)
-                      target = parsed.netloc + parsed.path + (
-                          ("?" + parsed.query) if parsed.query else ""
+                  parsed = urlsplit(address)
+                  target = parsed.netloc + parsed.path + (
+                      ("?" + parsed.query) if parsed.query else ""
+                  )
+                  proxy = "https://images.weserv.nl/?url=" + quote(target, safe="")
+                  try:
+                      proxy_status, _, proxy_type, proxy_body = request(
+                          proxy, "https://images.weserv.nl/", limit=2048,
+                          timeout=8, byte_range="bytes=0-2047"
                       )
-                      proxy = "https://images.weserv.nl/?url=" + quote(target, safe="")
-                      try:
-                          proxy_status, _, proxy_type, proxy_body = request(
-                              proxy, "https://images.weserv.nl/", limit=2048,
-                              timeout=8, byte_range="bytes=0-2047"
-                          )
-                          ok = proxy_status in (200, 206) and bool(proxy_body) and (
-                              proxy_type.lower().startswith("image/") or image_signature(proxy_body)
-                          )
-                          if ok:
-                              status, content_type = proxy_status, "proxy:" + proxy_type
-                      except Exception as exc:
-                          error_text = f"{error_text}; proxy {type(exc).__name__}: {str(exc)[:80]}"
+                      proxy_ok = proxy_status in (200, 206) and bool(proxy_body) and (
+                          proxy_type.lower().startswith("image/") or image_signature(proxy_body)
+                      )
+                      if proxy_ok:
+                          ok = True
+                          status, content_type = proxy_status, "proxy:" + proxy_type
+                  except Exception as exc:
+                      proxy_error = f"{type(exc).__name__}: {str(exc)[:80]}"
               print(
-                  f"poster={title!r} http={status} type={content_type or 'unknown'} "
-                  f"ok={ok} error={error_text}"
+                  f"poster={title!r} host={urlsplit(address).hostname} "
+                  f"http={status} type={content_type or 'unknown'} "
+                  f"proxy={proxy_status}/{proxy_type or 'unknown'} "
+                  f"ok={ok} error={error_text} {proxy_error}"
               )
               if ok:
                   poster_ok += 1
