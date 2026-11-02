@@ -149,17 +149,17 @@ func TestMacCMSPayloadUsableRequiresRowsForCatalogAndDetail(t *testing.T) {
 	rows := map[string]any{"code": 1, "list": []any{map[string]any{"vod_id": 123, "vod_name": "測試"}}}
 	for _, action := range []string{"list", "detail"} {
 		params := url.Values{"ac": []string{action}}
-		if macCMSPayloadUsable(params, empty) {
+		if macCMSPayloadUsable(sourceMacCMSDytt, params, empty) {
 			t.Errorf("%s response without rows should not be treated as a working API", action)
 		}
-		if !macCMSPayloadUsable(params, rows) {
+		if !macCMSPayloadUsable(sourceMacCMSDytt, params, rows) {
 			t.Errorf("%s response with rows should be accepted", action)
 		}
 	}
-	if !macCMSPayloadUsable(url.Values{"ac": []string{"class"}}, map[string]any{"class": []any{}}) {
+	if !macCMSPayloadUsable(sourceMacCMSDytt, url.Values{"ac": []string{"class"}}, map[string]any{"class": []any{}}) {
 		t.Fatal("non-catalog JSON responses should remain usable")
 	}
-	if !macCMSPayloadUsable(url.Values{"ac": []string{"list"}}, map[string]any{"class": []any{map[string]any{"type_id": "1"}}}) {
+	if !macCMSPayloadUsable(sourceMacCMSCreator, url.Values{"ac": []string{"list"}}, map[string]any{"class": []any{map[string]any{"type_id": "1"}}}) {
 		t.Fatal("category-only MacCMS list responses should be accepted")
 	}
 }
