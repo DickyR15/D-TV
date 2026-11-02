@@ -38,10 +38,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		return "", ctx.Err()
 	}
 
-	var cachedProvider, cachedExternal string
-	if repair := cache.cachedRepair(drama.ID); repair != nil {
-		cachedProvider, cachedExternal = repair.providerAddress, repair.address
-	}
+	cachedProvider, cachedExternal := cache.cachedRepair(drama.ID)
 	providerAddress := firstNonEmpty(strings.TrimSpace(drama.ProviderFallbackCover), cachedProvider)
 	if providerAddress != "" && providerAddress != primaryAddress {
 		path, err := cache.loadAlternativeAddress(
@@ -102,10 +99,14 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	return "", primaryErr
 }
 
-func (cache *nativeCoverCache) cachedRepair(id string) *nativeCoverRepair {
+func (cache *nativeCoverCache) cachedRepair(id string) (string, string) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	return cache.repairs[id]
+	repair := cache.repairs[id]
+	if repair == nil || repair.retryAt.IsZero() {
+		return "", ""
+	}
+	return repair.providerAddress, repair.address
 }
 
 func nativeCoverFallbackReferer(downloader *Downloader, drama nativeDrama, address string) string {
@@ -335,14 +336,12 @@ func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, fo
 	if err != nil {
 		return nil, err
 	}
-	repair := engine.covers.cachedRepair(drama.ID)
-	if repair != nil {
-		if repair.providerAddress != "" && repair.providerAddress != drama.Cover {
-			engine.saveProviderFallbackCover(drama.ID, repair.providerAddress)
-		}
-		if repair.address != "" && repair.address != drama.Cover {
-			engine.saveFallbackCover(drama.ID, repair.address)
-		}
+	providerAddress, externalAddress := engine.covers.cachedRepair(drama.ID)
+	if providerAddress != "" && providerAddress != drama.Cover {
+		engine.saveProviderFallbackCover(drama.ID, providerAddress)
+	}
+	if externalAddress != "" && externalAddress != drama.Cover {
+		engine.saveFallbackCover(drama.ID, externalAddress)
 	}
 	file, err := os.Open(path)
 	if err != nil {
