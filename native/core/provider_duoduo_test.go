@@ -221,6 +221,11 @@ func TestDuoduoDetailAndPlaybackKeepsLinesSeparate(t *testing.T) {
 	if chapters[0].ID == chapters[1].ID || chapters[1].ID == chapters[2].ID {
 		t.Fatalf("chapter IDs must remain unique across playback lines: %+v", chapters)
 	}
+	if len(chapters[0].PlaybackVariants) != 1 || chapters[0].PlaybackVariants[0] != directB ||
+		len(chapters[1].PlaybackVariants) != 1 || chapters[1].PlaybackVariants[0] != directA ||
+		len(chapters[2].PlaybackVariants) != 0 {
+		t.Fatalf("same-episode playback variants were not attached safely: %+v", chapters)
+	}
 
 	for index, want := range []string{directA, directB} {
 		media, resolveErr := d.resolveDuoduoMedia(context.Background(), Task{
@@ -229,6 +234,9 @@ func TestDuoduoDetailAndPlaybackKeepsLinesSeparate(t *testing.T) {
 		})
 		if resolveErr != nil || media.URL != want || !media.StandardHTTP {
 			t.Fatalf("line %q did not resolve to its own direct URL: media=%+v err=%v", chapters[index].PlayLine, media, resolveErr)
+		}
+		if len(media.Variants) != 1 || media.Variants[0].URL == want {
+			t.Fatalf("line %q did not retain another line as a safe fallback: %+v", chapters[index].PlayLine, media)
 		}
 	}
 	if aggregateCalls != 1 {
