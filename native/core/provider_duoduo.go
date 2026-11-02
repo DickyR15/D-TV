@@ -560,32 +560,28 @@ func (d *Downloader) fetchDuoduoAggregate(ctx context.Context, sourceID string) 
 	return duoduoParseAggregateLines(duoduoRows(payload["data"])), nil
 }
 
-func (d *Downloader) fetchDuoduoDetailRow(ctx context.Context, sourceID string) (Drama, map[string]any, string, error) {
+func (d *Downloader) fetchDuoduoDetailRow(ctx context.Context, sourceID string) (Drama, map[string]any, map[string]any, string, error) {
 	if !webProviderNumericID.MatchString(sourceID) {
-		return Drama{}, nil, "", errors.New("多多追劇影片 ID 無效")
+		return Drama{}, nil, nil, "", errors.New("多多追劇影片 ID 無效")
 	}
 	payload, base, err := d.fetchDuoduoAPI(ctx, "/api.php/web/vod/get_detail", url.Values{"vod_id": {sourceID}})
 	if err != nil {
-		return Drama{}, nil, "", err
+		return Drama{}, nil, nil, "", err
 	}
 	rows := duoduoRows(payload["data"])
 	if len(rows) == 0 {
-		return Drama{}, nil, "", errors.New("多多追劇目前沒有回傳這部影片的詳情")
+		return Drama{}, nil, nil, "", errors.New("多多追劇目前沒有回傳這部影片的詳情")
 	}
 	row := rows[0]
 	drama := duoduoDramaFromRow(row)
 	if drama.ID == "" || drama.SourceID != sourceID {
-		return Drama{}, nil, "", errors.New("多多追劇詳情與查詢影片不符")
+		return Drama{}, nil, nil, "", errors.New("多多追劇詳情與查詢影片不符")
 	}
-	return drama, row, base, nil
+	return drama, row, payload, base, nil
 }
 
 func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
-	drama, detailRow, base, err := d.fetchDuoduoDetailRow(ctx, sourceID)
-	if err != nil {
-		return Drama{}, nil, err
-	}
-	payload, _, err := d.fetchDuoduoAPI(ctx, "/api.php/web/vod/get_detail", url.Values{"vod_id": {sourceID}})
+	drama, detailRow, payload, base, err := d.fetchDuoduoDetailRow(ctx, sourceID)
 	if err != nil {
 		return Drama{}, nil, err
 	}
