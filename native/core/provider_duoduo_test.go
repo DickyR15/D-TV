@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -369,4 +370,64 @@ func TestDuoduoProviderBaseURLRemembersWorkingMirror(t *testing.T) {
 	if got := d.providerBaseURL(sourceDuoduo); got != "https://duoduosdf12223234334.top" {
 		t.Fatalf("Duoduo referer base did not follow the active mirror: %q", got)
 	}
+}
+
+
+func TestDuoduoCatalogPaginationUsesTypeNameAndStopsOnShortPage(t *testing.T) {
+	homeCalls := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/index/home":
+			homeCalls++
+			return sourceFixtureResponse(request, http.StatusOK,
+				`{"code":200,"data":{"categories":[{"type_id":1,"type_name":"电影","videos":[]}]}}`), nil
+		case "/api.php/web/filter/vod":
+			query := request.URL.Query()
+			if query.Get("type_id") != "" || query.Get("type_name") != "电影" ||
+				query.Get("pageSize") != "24" || query.Get("sort") != "hits" {
+				t.Fatalf("unexpected Duoduo category filters: %s", request.URL.RawQuery)
+			}
+			count := 5
+			if query.Get("page") == "1" {
+				count = 18
+			} else if query.Get("page") != "2" {
+				t.Fatalf("unexpected Duoduo page number: %s", query.Get("page"))
+			}
+			rows := make([]map[string]any, 0, count)
+			for index := 0; index < count; index++ {
+				id := 1000 + (queryPageNumber(query.Get("page"))-1)*100 + index
+				rows = append(rows, map[string]any{
+					"vod_id": id, "vod_name": fmt.Sprintf("測試影片%d", id),
+					"type_name": "电影",
+				})
+			}
+			body, err := json.Marshal(map[string]any{"code": 200, "data": rows})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return sourceFixtureResponse(request, http.StatusOK, string(body)), nil
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+	first, more, err := d.fetchDuoduoCatalogPage(context.Background(), 1, "1", "")
+	if err != nil || len(first) != 18 || !more {
+		t.Fatalf("first Duoduo page = %d items, more=%v err=%v", len(first), more, err)
+	}
+	second, more, err := d.fetchDuoduoCatalogPage(context.Background(), 2, "1", "")
+	if err != nil || len(second) != 5 || more {
+		t.Fatalf("second Duoduo page = %d items, more=%v err=%v", len(second), more, err)
+	}
+	if homeCalls != 1 {
+		t.Fatalf("homepage metadata was fetched %d times for two pages; want once", homeCalls)
+	}
+}
+
+func queryPageNumber(value string) int {
+	page, err := strconv.Atoi(value)
+	if err != nil || page < 1 {
+		return 1
+	}
+	return page
 }
