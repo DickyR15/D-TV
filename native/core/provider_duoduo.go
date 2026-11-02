@@ -514,9 +514,21 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 			})
 		}
 	}
-	drama.TotalEpisode, drama.EpisodeCount = maxEpisodes, maxEpisodes
+	maxEpisodes = max(maxEpisodes, duoduoChapterEpisodeCount(chapters))
+	drama.TotalEpisode, drama.EpisodeCount, drama.Episodes = maxEpisodes, maxEpisodes, maxEpisodes
 	drama.EpisodesVerified = maxEpisodes > 0
 	return drama, chapters, nil
+}
+
+func duoduoChapterEpisodeCount(chapters []Chapter) int {
+	maxEpisode := 0
+	for index, chapter := range chapters {
+		number, err := strconv.Atoi(chapter.EpisodeString(index + 1))
+		if err == nil && number > maxEpisode {
+			maxEpisode = number
+		}
+	}
+	return maxEpisode
 }
 
 func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (providerMedia, error) {
