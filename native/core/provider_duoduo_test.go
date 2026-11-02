@@ -184,19 +184,19 @@ func TestDuoduoMirrorFailoverAndPreferredHost(t *testing.T) {
 	}
 }
 
-func TestDuoduoDetailAndPlaybackKeepsLinesSeparate(t *testing.T) {
+func TestDuoduoDetailAndPlaybackMergesLinesIntoOneEpisodeList(t *testing.T) {
 	directA := "https://media.example.test/movie/index.m3u8"
 	directB := "https://backup.example.test/movie/index.mp4"
-	nextEpisode := "https://media.example.test/movie/episode-2.m3u8"
+	episode201 := "https://media.example.test/movie/episode-201.m3u8"
 	aggregateCalls := 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/api.php/web/vod/get_detail":
 			return sourceFixtureResponse(request, http.StatusOK,
-				`{"code":200,"data":[{"vod_id":78296,"vod_name":"流浪地球","type_name":"电影","vod_year":"2019","vod_pic":"https://images.example.test/poster.jpg"}],"vodplayer":[{"from":"direct","decode_status":0,"show":"直連","sort":1}]}`), nil
+				`{"code":200,"data":[{"vod_id":78296,"vod_name":"測試長篇劇集","type_name":"劇集","vod_year":"2026","vod_pic":"https://images.example.test/poster.jpg"}],"vodplayer":[{"from":"direct","decode_status":0,"show":"直連","sort":1}]}`), nil
 		case "/api.php/web/internal/search_aggregate":
 			aggregateCalls++
-			body := fmt.Sprintf(`{"code":200,"data":[{"site_key":"direct","site_name":"直連","decode_status":0,"sort":1,"vod_play_url":"第1集$%s"},{"site_key":"backup","site_name":"備援","decode_status":0,"sort":2,"vod_play_url":"第1集$%s"},{"site_key":"next-episode","site_name":"下一集","decode_status":0,"sort":3,"vod_play_url":"第2集$%s"}]}`, directA, directB, nextEpisode)
+			body := fmt.Sprintf(`{"code":200,"data":[{"site_key":"direct","site_name":"直連","decode_status":0,"sort":1,"vod_play_url":"第1集$%s"},{"site_key":"backup","site_name":"備援","decode_status":0,"sort":2,"vod_play_url":"第1集$%s"},{"site_key":"long-line","site_name":"長集數線路","decode_status":0,"sort":3,"vod_play_url":"第201集$%s"}]}`, directA, directB, episode201)
 			return sourceFixtureResponse(request, http.StatusOK, body), nil
 		default:
 			t.Fatalf("unexpected Duoduo detail/playback endpoint: %s", request.URL.String())
@@ -204,40 +204,41 @@ func TestDuoduoDetailAndPlaybackKeepsLinesSeparate(t *testing.T) {
 		}
 	})
 	drama, chapters, err := d.fetchDuoduoDetail(context.Background(), "78296")
-	if err != nil || len(chapters) != 3 || drama.ID != "duoduo:78296" {
-		t.Fatalf("Duoduo detail failed: drama=%+v chapters=%+v err=%v", drama, chapters, err)
+	if err != nil || len(chapters) != 2 || drama.ID != "duoduo:78296" {
+		t.Fatalf("Duoduo detail did not merge duplicate lines: drama=%+v chapters=%+v err=%v", drama, chapters, err)
 	}
-	if drama.TotalEpisode != 2 || drama.EpisodeCount != 2 || drama.Episodes != 2 || !drama.EpisodesVerified {
-		t.Fatalf("line duplicates inflated episode count: %+v", drama)
+	if drama.TotalEpisode != 201 || drama.EpisodeCount != 201 || drama.Episodes != 201 || !drama.EpisodesVerified {
+		t.Fatalf("episode total must use the highest episode number across all lines: %+v", drama)
 	}
-	if count := duoduoChapterEpisodeCount(chapters); count != 2 {
-		t.Fatalf("unique episode count = %d, want 2 for duplicate lines", count)
+	if chapters[0].EpisodeString(1) != "1" || chapters[0].VideoURL != directA ||
+		chapters[1].EpisodeString(2) != "201" || chapters[1].VideoURL != episode201 {
+		t.Fatalf("canonical episodes are not in numeric order: %+v", chapters)
 	}
-	if chapters[0].PlayLine != "直連" || chapters[0].VideoURL != directA ||
-		chapters[1].PlayLine != "備援" || chapters[1].VideoURL != directB ||
-		chapters[2].PlayLine != "下一集" || chapters[2].VideoURL != nextEpisode {
-		t.Fatalf("Duoduo playback lines were mixed or reordered: %+v", chapters)
+	if chapters[0].PlayLine != "" || chapters[1].PlayLine != "" {
+		t.Fatalf("automatic playback should not expose duplicate per-line episode selectors: %+v", chapters)
 	}
-	if chapters[0].ID == chapters[1].ID || chapters[1].ID == chapters[2].ID {
-		t.Fatalf("chapter IDs must remain unique across playback lines: %+v", chapters)
+	if chapters[0].ID == chapters[1].ID {
+		t.Fatalf("canonical chapter IDs must be unique: %+v", chapters)
 	}
 	if len(chapters[0].PlaybackVariants) != 1 || chapters[0].PlaybackVariants[0] != directB ||
-		len(chapters[1].PlaybackVariants) != 1 || chapters[1].PlaybackVariants[0] != directA ||
-		len(chapters[2].PlaybackVariants) != 0 {
-		t.Fatalf("same-episode playback variants were not attached safely: %+v", chapters)
+		len(chapters[1].PlaybackVariants) != 0 {
+		t.Fatalf("same-episode alternatives were not attached to the canonical episode: %+v", chapters)
+	}
+	if count := duoduoChapterEpisodeCount(chapters); count != 201 {
+		t.Fatalf("canonical episode count = %d, want highest available number 201", count)
 	}
 
-	for index, want := range []string{directA, directB} {
-		media, resolveErr := d.resolveDuoduoMedia(context.Background(), Task{
-			DramaID: drama.ID,
-			Chapter: chapters[index],
-		})
-		if resolveErr != nil || media.URL != want || !media.StandardHTTP {
-			t.Fatalf("line %q did not resolve to its own direct URL: media=%+v err=%v", chapters[index].PlayLine, media, resolveErr)
-		}
-		if len(media.Variants) != 1 || media.Variants[0].URL == want {
-			t.Fatalf("line %q did not retain another line as a safe fallback: %+v", chapters[index].PlayLine, media)
-		}
+	media, resolveErr := d.resolveDuoduoMedia(context.Background(), Task{
+		DramaID: drama.ID,
+		Chapter: chapters[0],
+	})
+	if resolveErr != nil || media.URL != directA || !media.StandardHTTP ||
+		len(media.Variants) != 1 || media.Variants[0].URL != directB {
+		t.Fatalf("episode 1 did not retain its automatic cross-line fallback: media=%+v err=%v", media, resolveErr)
+	}
+	choice := nativePlaybackChoices(media, 0)
+	if len(choice.media) != 2 || choice.media[0].URL != directA || choice.media[1].URL != directB {
+		t.Fatalf("automatic player routes do not contain both same-episode lines: %+v", choice.media)
 	}
 	if aggregateCalls != 1 {
 		t.Fatalf("direct URL playback re-fetched aggregate API %d times; want only the detail-time request", aggregateCalls)
