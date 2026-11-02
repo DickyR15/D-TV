@@ -244,7 +244,7 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 	if !webProviderNumericID.MatchString(id) || title == "" {
 		return Drama{}
 	}
-	// MacCMS-compatible feeds may expose more than one poster field.
+	// Compatible catalogue feeds may expose more than one poster field.
 	// Prefer the primary poster, then use thumbnail/slide/screenshot variants
 	// when the primary field is empty or malformed.
 	cover := firstNonEmpty(
