@@ -41,6 +41,9 @@ func (d *Downloader) providerBaseURL(source string) string {
 	case sourceDSD:
 		configured, fallback = d.cfg.DSDURL, dsdBaseURL
 	case sourceDuoduo:
+		d.providerMu.Lock()
+		configured = strings.TrimRight(d.providerHosts[sourceDuoduo], "/")
+		d.providerMu.Unlock()
 		fallback = "https://323433ssdfd.top"
 	case sourceHanxiaoquan:
 		configured, fallback = d.cfg.HanxiaoquanURL, hanxiaoquanSiteBaseURL
