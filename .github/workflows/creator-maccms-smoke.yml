@@ -1,0 +1,229 @@
+name: Creator MacCMS public playback smoke test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "native/core/provider_maccms.go"
+      - "native/core/provider_maccms_test.go"
+      - ".github/workflows/creator-maccms-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  creator-vod-smoke:
+    name: Creator catalogue, search, detail and HLS probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate Creator public VOD API and one direct playback line
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import re
+          import sys
+          from urllib.error import HTTPError, URLError
+          from urllib.parse import urlencode, urljoin, urlsplit
+          from urllib.request import Request, urlopen
+
+          API = "https://ys.cxkjg.cn/api/provide/vod"
+          REFERER = "https://ys.cxkjg.cn/"
+          UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36 DTV-Creator-Smoke/1.0"
+          TIMEOUT = 15
+
+          def request(url, referer=REFERER, limit=2 * 1024 * 1024, byte_range=None):
+              headers = {
+                  "User-Agent": UA,
+                  "Accept": "application/json,application/vnd.apple.mpegurl,*/*",
+                  "Referer": referer,
+              }
+              if byte_range:
+                  headers["Range"] = byte_range
+              req = Request(url, headers=headers)
+              try:
+                  response = urlopen(req, timeout=TIMEOUT)
+              except HTTPError as exc:
+                  response = exc
+              with response:
+                  body = response.read(limit + 1)
+                  if len(body) > limit:
+                      raise RuntimeError("回應超過大小限制")
+                  return response.status, response.geturl(), response.headers.get("Content-Type", ""), body
+
+          def api(params):
+              address = API + "?" + urlencode(params)
+              status, final_url, content_type, body = request(address)
+              if status != 200:
+                  raise RuntimeError(f"API HTTP {status} ({content_type})")
+              try:
+                  payload = json.loads(body.decode("utf-8-sig"))
+              except Exception as exc:
+                  sample = body[:180].decode("utf-8", "replace").replace("\\n", " ")
+                  raise RuntimeError(f"API 回應不是 JSON：{sample!r}") from exc
+              if not isinstance(payload, dict):
+                  raise RuntimeError("API JSON 根節點不是物件")
+              return payload
+
+          def containers(payload):
+              data = payload.get("data")
+              return [payload, data] if isinstance(data, dict) else [payload]
+
+          def rows(payload):
+              for container in containers(payload):
+                  for key in ("list", "vod_list", "items"):
+                      values = container.get(key)
+                      if isinstance(values, list):
+                          result = [item for item in values if isinstance(item, dict)]
+                          if result:
+                              return result
+                  vod = container.get("vod")
+                  if isinstance(vod, dict):
+                      return [vod]
+              return []
+
+          def classes(payload):
+              for container in containers(payload):
+                  for key in ("class", "classes", "type_list"):
+                      values = container.get(key)
+                      if isinstance(values, list):
+                          result = [item for item in values if isinstance(item, dict)]
+                          if result:
+                              return result
+              return []
+
+          def probe_hls(address):
+              current = address
+              for depth in range(4):
+                  status, final_url, content_type, body = request(
+                      current, referer=REFERER, limit=512 * 1024, byte_range="bytes=0-524287"
+                  )
+                  if status not in (200, 206) or not body or "text/html" in content_type.lower():
+                      return False, f"播放清單 HTTP {status} ({content_type})"
+                  text = body.decode("utf-8-sig", "replace")
+                  if not text.lstrip().startswith("#EXTM3U"):
+                      return False, "回應不是有效的 M3U8 播放清單"
+                  key_match = re.search(r'#EXT-X-KEY:[^\\r\\n]*URI="([^"]+)"', text)
+                  if key_match:
+                      key_url = urljoin(final_url, key_match.group(1))
+                      key_status, _, key_type, key_body = request(
+                          key_url, referer=final_url, limit=256, byte_range="bytes=0-15"
+                      )
+                      if key_status not in (200, 206) or not key_body:
+                          return False, f"HLS 加密金鑰 HTTP {key_status} ({key_type})"
+                  if "#EXT-X-STREAM-INF" in text:
+                      lines = [line.strip() for line in text.splitlines()]
+                      variant = None
+                      for index, line in enumerate(lines):
+                          if line.startswith("#EXT-X-STREAM-INF"):
+                              variant = next((item for item in lines[index + 1:] if item and not item.startswith("#")), None)
+                              break
+                      if not variant:
+                          return False, "主播放清單沒有畫質變體"
+                      current = urljoin(final_url, variant)
+                      continue
+                  segment = next(
+                      (line.strip() for line in text.splitlines()
+                       if line.strip() and not line.lstrip().startswith("#")),
+                      None,
+                  )
+                  if not segment:
+                      return False, "播放清單沒有影片分段"
+                  segment_url = urljoin(final_url, segment)
+                  segment_status, _, segment_type, segment_body = request(
+                      segment_url, referer=final_url, limit=4096, byte_range="bytes=0-4095"
+                  )
+                  ok = (
+                      segment_status in (200, 206) and bool(segment_body)
+                      and "text/html" not in segment_type.lower()
+                      and not segment_body.lstrip().startswith(b"#EXTM3U")
+                  )
+                  return ok, f"播放清單 HTTP {status}；首個影片分段 HTTP {segment_status} ({segment_type})"
+              return False, "HLS 主播放清單巢狀層數超過限制"
+
+          print("=== CATEGORIES ===")
+          category_payload = api({"ac": "list", "pg": 1})
+          category_rows = classes(category_payload)
+          if not category_rows:
+              raise RuntimeError("ac=list 沒有回傳分類")
+          category = next(
+              (item for item in category_rows
+               if str(item.get("type_name", "")).strip() in ("電影", "电影")),
+              category_rows[0],
+          )
+          category_id = str(category.get("type_id", "")).strip()
+          if not category_id.isdigit():
+              raise RuntimeError(f"分類 ID 無效：{category!r}")
+          print(f"分類數={len(category_rows)}；測試分類={category.get('type_name')} ({category_id})")
+
+          print("\\n=== CATALOG ===")
+          catalog_payload = api({"ac": "detail", "t": category_id, "pg": 1})
+          catalog = rows(catalog_payload)
+          if not catalog:
+              raise RuntimeError("ac=detail&t=分類ID 沒有回傳影片")
+          sample = catalog[0]
+          vod_id = str(sample.get("vod_id", "")).strip()
+          title = str(sample.get("vod_name", "")).strip()
+          if not vod_id.isdigit() or not title:
+              raise RuntimeError(f"目錄影片缺少 vod_id／vod_name：{sample!r}")
+          print(f"目錄筆數={len(catalog)}；樣本={title}；ID={vod_id}")
+
+          print("\\n=== SEARCH ===")
+          search_payload = api({"ac": "detail", "wd": title[:48], "pg": 1})
+          search_rows = rows(search_payload)
+          if not search_rows:
+              raise RuntimeError("以目錄樣本名稱搜尋時沒有回傳結果")
+          print(f"搜尋結果={len(search_rows)}")
+
+          print("\\n=== DETAIL / PLAY LINES ===")
+          detail_payload = api({"ac": "detail", "ids": vod_id})
+          details = rows(detail_payload)
+          if not details:
+              raise RuntimeError("ac=detail&ids=影片ID 沒有回傳詳情")
+          detail = details[0]
+          line_names = [part.strip() for part in str(detail.get("vod_play_from", "")).split("$$$")]
+          line_blocks = str(detail.get("vod_play_url", "")).split("$$$")
+          if not line_blocks or not str(detail.get("vod_play_url", "")).strip():
+              raise RuntimeError("詳情沒有 vod_play_url 分集資料")
+          if line_names and len(line_names) != len(line_blocks):
+              raise RuntimeError(f"播放線路數量不一致：名稱={len(line_names)}，網址組={len(line_blocks)}")
+          candidates = []
+          for line_index, block in enumerate(line_blocks):
+              line_name = line_names[line_index] if line_index < len(line_names) and line_names[line_index] else f"線路 {line_index + 1}"
+              for episode in block.split("#"):
+                  if "$" not in episode:
+                      continue
+                  _, address = episode.split("$", 1)
+                  address = address.strip()
+                  path = urlsplit(address).path.lower()
+                  if urlsplit(address).scheme in ("http", "https") and path.endswith((".m3u8", ".mp4", ".m4v")):
+                      candidates.append((line_name, address))
+                      break
+          if not candidates:
+              raise RuntimeError("詳情沒有可直接播放的 M3U8／MP4 分集")
+          print(f"片名={detail.get('vod_name') or title}；線路數={len(line_blocks)}；可直接測試線路={len(candidates)}")
+
+          print("\\n=== DIRECT MEDIA ===")
+          passed = False
+          failures = []
+          for line_name, address in candidates[:8]:
+              path = urlsplit(address).path.lower()
+              if path.endswith(".m3u8"):
+                  ok, message = probe_hls(address)
+              else:
+                  status, _, content_type, body = request(
+                      address, referer=REFERER, limit=4096, byte_range="bytes=0-4095"
+                  )
+                  ok = status in (200, 206) and bool(body) and "text/html" not in content_type.lower()
+                  message = f"MP4 HTTP {status} ({content_type})；讀取 {len(body)} bytes"
+              print(f"{line_name}: {'PASS' if ok else 'FAIL'} — {message}")
+              if ok:
+                  passed = True
+                  break
+              failures.append(line_name + ": " + message)
+          if not passed:
+              raise RuntimeError("沒有任何直接播放線路通過串流測試；" + "；".join(failures))
+          print("\\nPASS：創享影視分類、片庫、搜尋、詳情、多線路解析及至少一條直接影片串流均通過。")
+          PY
