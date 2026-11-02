@@ -575,7 +575,10 @@ class _DetailScreenState extends State<DetailScreen> {
                   for (final line in lines)
                     DropdownMenuItem<String>(
                       value: line,
-                      child: Text(line, overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        uiTraditional(line),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                 ],
                 onChanged: _loading ? null : _selectPlayLine,
