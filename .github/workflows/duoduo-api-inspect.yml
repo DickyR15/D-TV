@@ -370,3 +370,50 @@ jobs:
               if checked >= 7: break
           print(f"TOTAL_DIRECT_MEDIA_PROBES={checked}")
           PY
+
+      - name: Inspect Duoduo home taxonomy and filter parameters
+        shell: bash
+        run: |
+          python - <<'PY'
+          from urllib.error import HTTPError
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+          import json
+
+          HOST = "323433ssdfd.top"
+          BASE = f"https://{HOST}"
+          HEADERS = {
+              "User-Agent": "Mozilla/5.0 DTV-Duoduo-Taxonomy-Probe/1.0",
+              "Accept": "application/json",
+              "X-Client": "8f3d2a1c7b6e5d4c9a0b1f2e3d4c5b6a",
+              "web-sign": "ddtvf65f3a83d6d9ad6f",
+              "Origin": BASE,
+              "Referer": BASE + "/",
+          }
+
+          def api(route, params=None):
+              url = BASE + route + (("?" + urlencode(params)) if params else "")
+              req = Request(url, headers=HEADERS)
+              try:
+                  response = urlopen(req, timeout=15)
+              except HTTPError as exc:
+                  response = exc
+              with response:
+                  body = response.read(1_000_000)
+                  try: data = json.loads(body.decode("utf-8", errors="replace"))
+                  except Exception: data = {"raw": body[:500].decode("utf-8", errors="replace")}
+                  print(f"\n{route} {params or {}} HTTP={response.status}")
+                  print(json.dumps(data, ensure_ascii=False)[:5000])
+                  return data
+
+          home=api("/api.php/web/index/home")
+          api("/api.php/web/ranking/list")
+          categories=(home.get("data") or {}).get("categories", [])
+          for category in categories[:8] if isinstance(categories,list) else []:
+              type_name=category.get("type_name") or category.get("name")
+              type_id=category.get("type_id") or category.get("id")
+              params={"page":1,"sort":"hits"}
+              if type_name: params["type_name"]=type_name
+              if type_id: params["type_id"]=type_id
+              api("/api.php/web/filter/vod",params)
+          PY
