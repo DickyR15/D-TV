@@ -177,7 +177,7 @@ func TestNativeCoverLoadPrefersHealthyOriginalBeforeFallback(t *testing.T) {
 }
 
 func TestNativeCoverLoadPrefersProviderPosterOverExternalPoster(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\\r', '\\n', 0x1a, '\\n', 0, 0, 0, 0}
+	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
 	var requests []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		requests = append(requests, request.URL.Host)
