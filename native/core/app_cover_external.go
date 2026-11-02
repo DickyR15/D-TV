@@ -120,16 +120,25 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 	}
 
 	// A source release year can disambiguate same-title seasons or versions.
-	// Never guess between multiple exact-title entries when the year is absent.
-	if year := bangumiPosterYear(drama.OnlineDate); year != "" && len(matches) > 1 {
-		var yearMatches []bangumiPosterSubject
+	// When both sides expose a year, a mismatch is never accepted.
+	if year := bangumiPosterYear(drama.OnlineDate); year != "" {
+		var yearMatches, unknownYearMatches []bangumiPosterSubject
 		for _, candidate := range matches {
-			if bangumiPosterYear(candidate.Date) == year {
+			candidateYear := bangumiPosterYear(candidate.Date)
+			switch candidateYear {
+			case year:
 				yearMatches = append(yearMatches, candidate)
+			case "":
+				unknownYearMatches = append(unknownYearMatches, candidate)
 			}
 		}
-		if len(yearMatches) > 0 {
+		switch {
+		case len(yearMatches) > 0:
 			matches = yearMatches
+		case len(unknownYearMatches) > 0:
+			matches = unknownYearMatches
+		default:
+			return "", errors.New("外部作品年份與原片資料不符")
 		}
 	}
 	if len(matches) != 1 {
