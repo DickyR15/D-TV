@@ -142,7 +142,12 @@ func TestNativeCoverLoadPrefersHealthyOriginalBeforeFallback(t *testing.T) {
 		case "fallback.example":
 			fallbackCalls++
 		default:
-			t.Fatalf("unexpected poster request: %s", request.URL)
+			// The provider-native metadata lookup is expected before an
+			// already-saved external fallback; simulate an unavailable detail API.
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable, Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader("unavailable")), Request: request,
+			}, nil
 		}
 		return &http.Response{
 			StatusCode: http.StatusOK, Header: make(http.Header),
@@ -168,6 +173,57 @@ func TestNativeCoverLoadPrefersHealthyOriginalBeforeFallback(t *testing.T) {
 	}
 	if fallbackCalls != 0 {
 		t.Fatalf("fallback was requested before original succeeded: calls=%d", fallbackCalls)
+	}
+}
+
+func TestNativeCoverLoadPrefersProviderPosterOverExternalPoster(t *testing.T) {
+	image := []byte{0x89, 'P', 'N', 'G', '\\r', '\\n', 0x1a, '\\n', 0, 0, 0, 0}
+	var requests []string
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.URL.Host)
+		switch request.URL.Host {
+		case "original.example":
+			return &http.Response{
+				StatusCode: http.StatusNotFound, Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader("not found")), Request: request,
+			}, nil
+		case "provider.example":
+			return &http.Response{
+				StatusCode: http.StatusOK, Header: make(http.Header),
+				Body: io.NopCloser(bytes.NewReader(image)), ContentLength: int64(len(image)), Request: request,
+			}, nil
+		case "external.example":
+			return &http.Response{
+				StatusCode: http.StatusOK, Header: make(http.Header),
+				Body: io.NopCloser(bytes.NewReader(image)), ContentLength: int64(len(image)), Request: request,
+			}, nil
+		default:
+			t.Fatalf("unexpected poster request: %s", request.URL)
+			return nil, nil
+		}
+	})}
+	directory := t.TempDir()
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	cache := newNativeCoverCache(directory, downloader)
+	if err := os.MkdirAll(cache.directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path, err := cache.load(context.Background(), nativeDrama{
+		ID: "hongguo:125", Source: sourceHongguo, Title: "測試作品",
+		Cover: "https://original.example/poster.jpg",
+		ProviderFallbackCover: "https://provider.example/poster.jpg",
+		FallbackCover: "https://external.example/poster.jpg",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path == "" || len(requests) < 2 || requests[0] != "original.example" || requests[1] != "provider.example" {
+		t.Fatalf("provider poster must be tried before external poster: path=%q requests=%v", path, requests)
+	}
+	for _, host := range requests {
+		if host == "external.example" {
+			t.Fatalf("external poster was requested before provider poster succeeded: %v", requests)
+		}
 	}
 }
 
