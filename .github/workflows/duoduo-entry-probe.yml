@@ -165,12 +165,12 @@ jobs:
               raise RuntimeError("movie category signals more pages but page 2 is empty")
           def image_signature(body):
               return (
-                  body.startswith(b"\\xff\\xd8\\xff")
-                  or body.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+                  body.startswith(bytes.fromhex("ffd8ff"))
+                  or body.startswith(bytes.fromhex("89504e470d0a1a0a"))
                   or body.startswith((b"GIF87a", b"GIF89a", b"BM"))
                   or len(body) >= 12 and body[:4] == b"RIFF" and body[8:12] == b"WEBP"
                   or len(body) >= 12 and body[4:8] == b"ftyp"
-                     and body[8:12] in (b"avif", b"avis", b"heic", b"heix", b"mif1")
+                     and body[8:12] in (b"avif", b"avis", b"heic", b"heix", b"hevc", b"hevx", b"mif1")
               )
 
           poster_candidates = [
