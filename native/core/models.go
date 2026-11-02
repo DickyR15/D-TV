@@ -75,6 +75,7 @@ type Chapter struct {
 	MediaSize      int64           `json:"mediaSize"`
 	PageURL        string          `json:"pageUrl,omitempty"`
 	Referer        string          `json:"referer,omitempty"`
+	PlayLine       string          `json:"playLine,omitempty"`
 	Vertical       *bool           `json:"vertical,omitempty"`
 }
 
