@@ -11,15 +11,6 @@ import (
 	"strings"
 )
 
-const (
-	sourceMacCMSDytt  = "maccms-dytt"
-	sourceMacCMSSubo  = "maccms-subo"
-	sourceMacCMSLzi   = "maccms-lzi"
-	sourceMacCMSFfzy  = "maccms-ffzy"
-	sourceMacCMSDouban = "maccms-douban"
-	sourceMacCMSZuida = "maccms-zuida"
-)
-
 type macCMSProvider struct {
 	Name    string
 	APIs    []string
