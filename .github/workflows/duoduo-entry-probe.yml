@@ -421,41 +421,81 @@ jobs:
               vod_id = str(summary["vod_id"])
               try:
                   base, detail = api("/api.php/web/vod/get_detail", {"vod_id": vod_id})
-                  rows = detail.get("data") or []
+                  rows = response_rows(detail.get("data"))
                   if not rows:
                       errors.append(f"{vod_id}: no detail row")
                       continue
                   row = rows[0]
-                  agg_base, aggregate = api("/api.php/web/internal/search_aggregate", {"vod_id": vod_id})
-                  lines = aggregate.get("data") or []
-                  direct = []
-                  for line in lines:
+                  detail_lines = []
+                  names = str(row.get("vod_play_from") or "").split("$$")
+                  blocks = str(row.get("vod_play_url") or "").split("$$")
+                  player_rows = response_rows(detail.get("vodplayer"))
+                  player_by_from = {
+                      str(player.get("from") or "").strip(): player
+                      for player in player_rows if str(player.get("from") or "").strip()
+                  }
+                  for index, name in enumerate(names[:len(blocks)]):
+                      player = player_by_from.get(name.strip(), {})
+                      if str(player.get("decode_status") or "0") != "0":
+                          continue
+                      for episode in blocks[index].split("#"):
+                          if "$" not in episode:
+                              continue
+                          episode_title, address = episode.split("$", 1)
+                          address = address.strip()
+                          media_path = urlsplit(address).path.lower()
+                          if address and (media_path.endswith(".m3u8") or media_path.endswith(".mp4")):
+                              detail_lines.append((str(player.get("show") or name), episode_title.strip(), address))
+                  _, aggregate = api("/api.php/web/internal/search_aggregate", {"vod_id": vod_id})
+                  aggregate_rows = response_rows(aggregate.get("data"))
+                  aggregate_direct = []
+                  for line in aggregate_rows:
                       if str(line.get("decode_status")) != "0":
                           continue
                       raw = str(line.get("vod_play_url") or "")
                       for episode in raw.split("#"):
                           if "$" not in episode:
                               continue
-                          address = episode.split("$", 1)[1].strip()
-                          path = urlsplit(address).path.lower()
-                          if path.endswith(".m3u8") or path.endswith(".mp4"):
-                              direct.append((line.get("site_name") or line.get("site_key") or "direct", address))
-                  print(f"movie={row.get('vod_name')!r} id={vod_id} lines={len(lines)} direct_urls={len(direct)}")
-                  for line_name, address in direct[:5]:
+                          episode_title, address = episode.split("$", 1)
+                          address = address.strip()
+                          media_path = urlsplit(address).path.lower()
+                          if address and (media_path.endswith(".m3u8") or media_path.endswith(".mp4")):
+                              aggregate_direct.append((str(line.get("site_name") or line.get("site_key") or "direct"), episode_title.strip(), address))
+                  seen_urls = set()
+                  direct = []
+                  for item in detail_lines + aggregate_direct:
+                      if item[2] not in seen_urls:
+                          seen_urls.add(item[2])
+                          direct.append(item)
+                  print(
+                      f"movie={row.get('vod_name')!r} id={vod_id} "
+                      f"detail_player_rows={len(player_rows)} detail_direct_urls={len(detail_lines)} "
+                      f"aggregate_lines={len(aggregate_rows)} aggregate_direct_urls={len(aggregate_direct)} "
+                      f"unique_direct_urls={len(direct)}"
+                  )
+                  for line_name, episode_title, address in direct[:3]:
                       checked += 1
                       ok, message = probe_media(address, base + "/")
+                      referer_used = "active-api-mirror"
+                      if not ok:
+                          retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                          if retry_ok:
+                              ok, message = retry_ok, retry_message
+                              referer_used = "public-entry"
+                          else:
+                              message += f"; public-entry retry failed: {retry_message}"
                       host = urlsplit(address).netloc
-                      print(f"  {line_name}: {host} ok={ok} {message}")
+                      print(
+                          f"  line={line_name!r} episode={episode_title!r} host={host} "
+                          f"referer={referer_used} ok={ok} {message}"
+                      )
                       if ok:
                           playable += 1
-                          break
-                  if playable:
-                      break
               except Exception as exc:
                   errors.append(f"{vod_id}: {type(exc).__name__}: {str(exc)[:160]}")
 
           print(f"\nDIRECT MEDIA PROBES={checked}; successful source samples={playable}")
           if playable == 0:
               raise RuntimeError("no public direct line passed the bounded media probe; " + "; ".join(errors[:5]))
-          print("PASS: Duoduo public movie catalogue, search, detail, aggregate and at least one direct media segment are reachable.")
+          print("PASS: Duoduo catalogue candidates, detail and aggregate direct lines, and media segments were probed.")
           PY
