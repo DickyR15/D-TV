@@ -125,9 +125,10 @@ func TestDuoduoCatalogAndSearchUseNativeAPI(t *testing.T) {
 			return sourceFixtureResponse(request, http.StatusOK,
 				`{"code":200,"data":{"categories":[{"type_id":1,"type_name":"电影"},{"type_id":2,"type_name":"剧集"}]}}`), nil
 		case "/api.php/web/filter/vod":
-			if request.URL.Query().Get("type_id") != "1" ||
+			if request.URL.Query().Get("type_id") != "" ||
 				request.URL.Query().Get("type_name") != "电影" ||
-				request.URL.Query().Get("sort") != "hits" {
+				request.URL.Query().Get("sort") != "hits" ||
+				request.URL.Query().Get("pageSize") != "24" {
 				t.Fatalf("unexpected Duoduo filter parameters: %s", request.URL.RawQuery)
 			}
 			return sourceFixtureResponse(request, http.StatusOK,
