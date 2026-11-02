@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'app_layout.dart';
 import 'app_update_service.dart';
@@ -633,6 +634,32 @@ class _HomeScreenState extends State<HomeScreen> {
         .whenComplete(
           () => _resetBackConfirmation(ignoreTrailingBack: true),
         );
+  }
+
+  Future<void> _openJianyunWebsite() async {
+    const website = 'https://jianyunys.com/';
+    try {
+      final opened = await launchUrl(
+        Uri.parse(website),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened) throw StateError('No external browser accepted the URL');
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: const Text('無法開啟簡雲影視，請確認裝置已安裝瀏覽器。'),
+            action: SnackBarAction(
+              label: '複製網址',
+              onPressed: () {
+                unawaited(Clipboard.setData(const ClipboardData(text: website)));
+              },
+            ),
+          ),
+        );
+    }
   }
 
   Future<void> _chooseDisplayMode() async {
@@ -1994,6 +2021,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     } else if (value == 'display') {
                       _chooseDisplayMode();
+                    } else if (value == 'jianyun') {
+                      unawaited(_openJianyunWebsite());
                     } else if (value == 'about') {
                       unawaited(_showAboutDtv());
                     }
@@ -2026,6 +2055,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     const PopupMenuItem(
                       value: 'display',
                       child: Text('介面模式'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'jianyun',
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.open_in_new_rounded, size: 18),
+                          SizedBox(width: 10),
+                          Text('簡雲影視'),
+                        ],
+                      ),
                     ),
                     const PopupMenuItem(
                       value: 'about',
