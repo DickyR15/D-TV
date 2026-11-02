@@ -244,8 +244,12 @@ func TestNativeCoverLoadUsesFallbackOnlyAfterOriginalFails(t *testing.T) {
 				Body: io.NopCloser(bytes.NewReader(image)), ContentLength: int64(len(image)), Request: request,
 			}, nil
 		}
-		t.Fatalf("unexpected poster request: %s", request.URL)
-		return nil, nil
+		// Provider metadata is checked before the external fallback.
+		// Return a clean miss so this fixture tests the final fallback path.
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable, Header: make(http.Header),
+			Body: io.NopCloser(strings.NewReader("unavailable")), Request: request,
+		}, nil
 	})}
 	directory := t.TempDir()
 	downloader := &Downloader{client: client, cfg: defaultConfig()}
