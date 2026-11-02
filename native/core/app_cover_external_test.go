@@ -50,7 +50,7 @@ func TestBangumiPosterAddressUsesExactTitleAndCategoryType(t *testing.T) {
 			]
 		}`), nil
 	})}
-	downloader := &Downloader{client: client}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
 	address, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
 		Title: "凡人修仙传", Category: "動漫", OnlineDate: "2024-07-20",
 	})
@@ -89,7 +89,7 @@ func TestBangumiPosterAddressRejectsAmbiguousAndNonExactTitles(t *testing.T) {
 			client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 				return posterLookupJSONResponse(request, test.body), nil
 			})}
-			downloader := &Downloader{client: client}
+			downloader := &Downloader{client: client, cfg: defaultConfig()}
 			_, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
 				Title: "凡人修仙传", Category: "動漫",
 			})
@@ -106,7 +106,7 @@ func TestBangumiPosterAddressRejectsMismatchedReleaseYear(t *testing.T) {
 			{"id":301,"type":6,"name_cn":"測試電影","date":"2024-01-01","images":{"large":"https://lain.bgm.tv/301.jpg"}}
 		]}`), nil
 	})}
-	downloader := &Downloader{client: client}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
 	_, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
 		Title: "測試電影", Category: "電影", OnlineDate: "2025-08-01",
 	})
@@ -150,7 +150,7 @@ func TestNativeCoverLoadPrefersHealthyOriginalBeforeFallback(t *testing.T) {
 		}, nil
 	})}
 	directory := t.TempDir()
-	downloader := &Downloader{client: client}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
 	cache := newNativeCoverCache(directory, downloader)
 	if err := os.MkdirAll(cache.directory, 0700); err != nil {
 		t.Fatal(err)
@@ -192,7 +192,7 @@ func TestNativeCoverLoadUsesFallbackOnlyAfterOriginalFails(t *testing.T) {
 		return nil, nil
 	})}
 	directory := t.TempDir()
-	downloader := &Downloader{client: client}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
 	cache := newNativeCoverCache(directory, downloader)
 	if err := os.MkdirAll(cache.directory, 0700); err != nil {
 		t.Fatal(err)
