@@ -196,7 +196,11 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 	select {
 	case cache.slots <- struct{}{}:
 		data, err = cache.download(ctx, drama.Cover, referer)
-		if err != nil && canonicalProviderSource(drama.Source) == sourceDuoduo {
+		coverSource := canonicalProviderSource(drama.Source)
+		if coverSource == "" {
+			coverSource = sourceFromDramaID(drama.ID)
+		}
+		if err != nil && coverSource == sourceDuoduo {
 			if proxyURL := duoduoPosterProxyURL(drama.Cover); proxyURL != "" {
 				// Retry only known failing poster CDNs through the proxy. Normal
 				// poster hosts stay direct and do not incur a third-party hop.
