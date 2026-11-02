@@ -90,14 +90,10 @@ void main() {
   test('source names and descriptions use Taiwan Traditional Chinese', () {
     expect(
       SourceSite.allValues.map((source) => source.name).toList(),
-      ['紅果', '韓小圈', '多多追劇', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版', '天堂資源', '速播資源', '量子資源', '非凡資源', '豆瓣資源', '最大資源', '創享影視'],
+      ['紅果', '韓小圈', '多多追劇', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版'],
     );
     expect(SourceSite.duoduo.description, '電影 · 電視劇 · 動畫 · 綜藝');
     expect(SourceSite.hanxiaoquan.description, '韓劇 · 韓國電影 · 綜藝節目 · 動畫');
-    expect(
-      SourceSite.byId('maccms-creator').description,
-      '電影 · 劇集 · 動漫 · 綜藝',
-    );
   });
 
   test('uses Taiwan wording for QR code terminology', () {
