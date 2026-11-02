@@ -840,6 +840,11 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		}
 	}
 	drama.Source, drama.SourceID, drama.Episodes = source, sourceID, len(chapters)
+	if source == sourceDuoduo {
+		if episodeCount := duoduoChapterEpisodeCount(chapters); episodeCount > 0 {
+			drama.Episodes = episodeCount
+		}
+	}
 	if source == sourceHuangju || source == sourceYeguo {
 		drama.Episodes = max(drama.Episodes, nativeNormalize(raw).Episodes)
 	}
