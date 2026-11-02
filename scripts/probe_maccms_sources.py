@@ -254,19 +254,32 @@ def probe_source(source: dict) -> dict:
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
     try:
+        # Prefer recently updated entries: the provider's first catalogue
+        # page can contain old records whose CDN objects have since expired.
+        # The official API documents h=<hours> for recent updates.
         catalog = request_json(
             session, source["api"], source["referer"],
-            {"ac": "list", "pg": "1", "at": "json"},
+            {"ac": "list", "pg": "1", "at": "json", "h": "168", "pagesize": "50", "sort_direction": "desc"},
         )
         rows = catalog["list"]
+        catalog_window = "last_168_hours"
+        if not any(isinstance(row, dict) and movie_like(row) for row in rows):
+            catalog = request_json(
+                session, source["api"], source["referer"],
+                {"ac": "list", "pg": "1", "at": "json", "pagesize": "50", "sort_direction": "desc"},
+            )
+            rows = catalog["list"]
+            catalog_window = "latest_catalog_page"
         result["catalog"] = len(rows) > 0
+        result["catalog_window"] = catalog_window
         result["steps"].append({
             "step": "catalog",
             "ok": result["catalog"],
             "total": catalog.get("total"),
             "rows": len(rows),
             "classes": len(catalog.get("class", [])) if isinstance(catalog.get("class"), list) else 0,
-            "message": "取得影片列表" if rows else "列表為空",
+            "window": catalog_window,
+            "message": "取得近期更新影片列表" if rows else "列表為空",
         })
         sample = next((row for row in rows if isinstance(row, dict) and movie_like(row)), None)
         if sample is None:
