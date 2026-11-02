@@ -1,6 +1,8 @@
 package core
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -129,6 +131,34 @@ func TestDuoduoKeepsAlternatePosterFieldsForRetry(t *testing.T) {
 		addresses[1] != "https://working.example.test/thumb.jpg" ||
 		addresses[2] != "https://working.example.test/slide.jpg" {
 		t.Fatalf("alternate poster URLs were lost or reordered: %+v", addresses)
+	}
+}
+
+func TestNativeDecodeCoverUnwrapsGzipImageBodies(t *testing.T) {
+	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(image); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	decoded := nativeDecodeCover(compressed.Bytes())
+	if !bytes.Equal(decoded, image) || !nativeIsCoverImage(decoded) {
+		t.Fatalf("gzip-wrapped PNG was not restored: %x", decoded)
+	}
+
+	var htmlCompressed bytes.Buffer
+	htmlWriter := gzip.NewWriter(&htmlCompressed)
+	if _, err := htmlWriter.Write([]byte("<html>403 Forbidden</html>")); err != nil {
+		t.Fatal(err)
+	}
+	if err := htmlWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if nativeIsCoverImage(nativeDecodeCover(htmlCompressed.Bytes())) {
+		t.Fatal("gzip-wrapped HTML response must not be accepted as a poster image")
 	}
 }
 
