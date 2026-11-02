@@ -18,7 +18,7 @@ func TestMacCMSProviderRegistry(t *testing.T) {
 	}
 	for id, name := range want {
 		provider, ok := macCMSProviders[id]
-		if !ok || provider.Name != name || provider.API == "" {
+		if !ok || provider.Name != name || len(provider.APIs) == 0 || provider.Referer == "" {
 			t.Errorf("invalid provider config for %s: %+v", id, provider)
 		}
 		if !isHuangguoProviderSource(id) || !isMacCMSSource(id) {
