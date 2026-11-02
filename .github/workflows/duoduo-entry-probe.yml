@@ -293,7 +293,7 @@ jobs:
                   body.startswith(bytes.fromhex("ffd8ff"))
                   or body.startswith(bytes.fromhex("89504e470d0a1a0a"))
                   or body.startswith((b"GIF87a", b"GIF89a", b"BM"))
-                  or len(body) >= 12 and body[:4] == "RIFF" and body[8:12] == "WEBP"
+                  or len(body) >= 12 and body[:4] == b"RIFF" and body[8:12] == b"WEBP"
                   or len(body) >= 12 and body[4:8] == "ftyp"
                      and body[8:12] in ("avif", "avis", "heic", "heix", "hevc", "hevx", "mif1")
               )
