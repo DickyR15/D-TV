@@ -271,6 +271,14 @@ def probe_source(source: dict) -> dict:
             rows = catalog["list"]
             catalog_window = "latest_catalog_page"
         result["catalog"] = len(rows) > 0
+        # Query the unrestricted catalogue separately from the 7-day
+        # freshness sample so cross-provider inventory counts are comparable.
+        full_catalog = request_json(
+            session, source["api"], source["referer"],
+            {"ac": "list", "pg": "1", "at": "json", "pagesize": "1"},
+        )
+        result["catalog_total_all"] = full_catalog.get("total")
+        result["catalog_page_count_all"] = full_catalog.get("pagecount")
         result["catalog_window"] = catalog_window
         result["steps"].append({
             "step": "catalog",
