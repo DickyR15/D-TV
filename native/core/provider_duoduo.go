@@ -606,14 +606,26 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 		maxEpisodes = max(maxEpisodes, len(line.Episodes))
 		for _, episode := range line.Episodes {
 			key := fmt.Sprintf("%d-%d", lineIndex+1, episode.Index)
+			episodeNumber := duoduoEpisodeNumber(episode.Title, episode.Index)
+			var variants []string
+			for _, alternativeLine := range lines {
+				for _, alternative := range alternativeLine.Episodes {
+					if alternative.URL == episode.URL ||
+						duoduoEpisodeNumber(alternative.Title, alternative.Index) != episodeNumber {
+						continue
+					}
+					variants = append(variants, alternative.URL)
+				}
+			}
 			chapters = append(chapters, Chapter{
 				ID: providerChapterID(sourceDuoduo, sourceID, key),
 				Source: sourceDuoduo,
 				Title: truncate(episode.Title, 128),
-				CurrentEpisode: rawEpisode(duoduoEpisodeNumber(episode.Title, episode.Index)),
+				CurrentEpisode: rawEpisode(episodeNumber),
 				VideoURL: episode.URL,
 				Referer: base + "/",
 				PlayLine: truncate(line.Name, 96),
+				PlaybackVariants: duoduoUniqueStrings(variants),
 			})
 		}
 	}
@@ -660,9 +672,23 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 	// this keeps playback working when the API mirror becomes temporarily busy.
 	if duoduoDirectMediaURL(task.Chapter.VideoURL) {
 		referer := firstNonEmpty(task.Chapter.Referer, d.providerBaseURL(sourceDuoduo)+"/")
-		return providerMedia{
+		primary := providerMedia{
 			URL: task.Chapter.VideoURL, Referer: referer, StandardHTTP: true,
-		}, nil
+		}
+		seen := map[string]bool{primary.URL: true}
+		for _, address := range task.Chapter.PlaybackVariants {
+			if !duoduoDirectMediaURL(address) || seen[address] {
+				continue
+			}
+			seen[address] = true
+			primary.Variants = append(primary.Variants, providerMedia{
+				URL: address, Referer: referer, StandardHTTP: true,
+			})
+			if len(primary.Variants) >= 11 {
+				break
+			}
+		}
+		return primary, nil
 	}
 	lines, err := d.fetchDuoduoAggregate(ctx, sourceID)
 	if err != nil {
