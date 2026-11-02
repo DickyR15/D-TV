@@ -53,8 +53,34 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		}
 		force = true
 	}
-	externalAddress := firstNonEmpty(strings.TrimSpace(drama.FallbackCover), cachedExternal)
-	if externalAddress != "" && externalAddress != primaryAddress && externalAddress != providerAddress {
+
+	// Refresh/check provider-native detail metadata before consulting an
+	// external match. This protects provider priority even after a restart
+	// when only an external fallback was persisted.
+	providerAddress, repairedExternal, repairErr := cache.repair(ctx, drama, force)
+	if providerAddress != "" && providerAddress != primaryAddress {
+		path, err := cache.loadAlternativeAddress(
+			ctx, drama, providerAddress,
+			nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
+		)
+		if err == nil {
+			return path, nil
+		}
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		force = true
+	}
+
+	externalCandidates := duoduoUniqueStrings([]string{
+		strings.TrimSpace(drama.FallbackCover),
+		cachedExternal,
+		repairedExternal,
+	})
+	for _, externalAddress := range externalCandidates {
+		if externalAddress == "" || externalAddress == primaryAddress || externalAddress == providerAddress {
+			continue
+		}
 		path, err := cache.loadAlternativeAddress(
 			ctx, drama, externalAddress,
 			nativeCoverFallbackReferer(cache.downloader, drama, externalAddress), "external",
@@ -68,29 +94,31 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		force = true
 	}
 
-	providerAddress, externalAddress, repairErr := cache.repair(ctx, drama, force)
-	if providerAddress != "" && providerAddress != primaryAddress {
-		path, err := cache.loadAlternativeAddress(
-			ctx, drama, providerAddress,
-			nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
-		)
-		if err == nil {
-			return path, nil
+	if force && repairErr == nil {
+		providerAddress, repairedExternal, repairErr = cache.repair(ctx, drama, true)
+		if providerAddress != "" && providerAddress != primaryAddress {
+			path, err := cache.loadAlternativeAddress(
+				ctx, drama, providerAddress,
+				nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
+			)
+			if err == nil {
+				return path, nil
+			}
+			if ctx.Err() != nil {
+				return "", ctx.Err()
+			}
 		}
-		if ctx.Err() != nil {
-			return "", ctx.Err()
-		}
-	}
-	if externalAddress != "" && externalAddress != primaryAddress && externalAddress != providerAddress {
-		path, err := cache.loadAlternativeAddress(
-			ctx, drama, externalAddress,
-			nativeCoverFallbackReferer(cache.downloader, drama, externalAddress), "external",
-		)
-		if err == nil {
-			return path, nil
-		}
-		if ctx.Err() != nil {
-			return "", ctx.Err()
+		if repairedExternal != "" && repairedExternal != primaryAddress && repairedExternal != providerAddress {
+			path, err := cache.loadAlternativeAddress(
+				ctx, drama, repairedExternal,
+				nativeCoverFallbackReferer(cache.downloader, drama, repairedExternal), "external",
+			)
+			if err == nil {
+				return path, nil
+			}
+			if ctx.Err() != nil {
+				return "", ctx.Err()
+			}
 		}
 	}
 	if repairErr != nil {
