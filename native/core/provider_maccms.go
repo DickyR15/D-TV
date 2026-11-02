@@ -99,14 +99,14 @@ func macCMSProviderBaseURL(source string) string {
 
 func (d *Downloader) macCMSReferer(source string) string {
 	source = canonicalProviderSource(source)
+	if provider, ok := macCMSProviders[source]; ok && provider.Referer != "" {
+		return provider.Referer
+	}
 	d.providerMu.Lock()
 	preferred := d.providerHosts[source]
 	d.providerMu.Unlock()
 	if preferred != "" {
 		return strings.TrimRight(preferred, "/") + "/"
-	}
-	if provider, ok := macCMSProviders[source]; ok && provider.Referer != "" {
-		return provider.Referer
 	}
 	if base := macCMSProviderBaseURL(source); base != "" {
 		return base + "/"
