@@ -33,6 +33,56 @@ func TestDuoduoParsesOnlyPublicDirectPlaybackLines(t *testing.T) {
 	}
 }
 
+func TestDuoduoPosterFallbackFields(t *testing.T) {
+	cases := []struct {
+		name string
+		row  map[string]any
+		want string
+	}{
+		{
+			name: "primary poster wins",
+			row: map[string]any{
+				"vod_pic": "https://img.example.test/main.jpg",
+				"vod_pic_thumb": "https://img.example.test/thumb.jpg",
+			},
+			want: "https://img.example.test/main.jpg",
+		},
+		{
+			name: "thumbnail fills missing primary poster",
+			row: map[string]any{
+				"vod_pic": "",
+				"vod_pic_thumb": "https://img.example.test/thumb.jpg",
+			},
+			want: "https://img.example.test/thumb.jpg",
+		},
+		{
+			name: "relative slide image fills missing poster",
+			row: map[string]any{
+				"vod_pic": "javascript:bad",
+				"vod_pic_slide": "/images/slide.jpg",
+			},
+			want: "https://duoduozhuiju.com/images/slide.jpg",
+		},
+		{
+			name: "poster object url is accepted",
+			row: map[string]any{
+				"vod_pic": map[string]any{"url": "https://img.example.test/object.jpg"},
+			},
+			want: "https://img.example.test/object.jpg",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.row["vod_id"] = 78296
+			tc.row["vod_name"] = "測試影片"
+			drama := duoduoDramaFromRow(tc.row)
+			if drama.Cover != tc.want || drama.CoverURL != tc.want {
+				t.Fatalf("poster fallback = %v / %v, want %q", drama.Cover, drama.CoverURL, tc.want)
+			}
+		})
+	}
+}
+
 func TestDuoduoMapsMovieMetadataAndCategories(t *testing.T) {
 	drama := duoduoDramaFromRow(map[string]any{
 		"vod_id": 78296, "vod_name": "流浪地球（特別版）",
