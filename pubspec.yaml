@@ -27,7 +27,6 @@ dependencies:
   nsd: 5.0.1
   package_info_plus: ^10.2.1
   qr_flutter: ^4.1.0
-  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
