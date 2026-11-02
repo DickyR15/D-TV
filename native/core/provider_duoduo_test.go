@@ -270,7 +270,7 @@ func TestDuoduoDetailAndPlaybackMergesLinesIntoOneEpisodeList(t *testing.T) {
 		switch request.URL.Path {
 		case "/api.php/web/vod/get_detail":
 			return sourceFixtureResponse(request, http.StatusOK,
-				`{"code":200,"data":[{"vod_id":78296,"vod_name":"測試長篇劇集","type_name":"劇集","vod_year":"2026","vod_pic":"https://images.example.test/poster.jpg"}],"vodplayer":[{"from":"direct","decode_status":0,"show":"直連","sort":1}]}`), nil
+				`{"code":200,"data":[{"vod_id":78296,"vod_name":"測試長篇劇集","type_name":"劇集","vod_year":"2026","vod_pic":"https://images.example.test/poster.jpg","vod_play_from":"direct","vod_play_url":"第1集$https://media.example.test/movie/index.m3u8"}],"vodplayer":[{"from":"direct","decode_status":0,"show":"直連","sort":1}]}`), nil
 		case "/api.php/web/internal/search_aggregate":
 			aggregateCalls++
 			body := fmt.Sprintf(`{"code":200,"data":[{"site_key":"direct","site_name":"直連","decode_status":0,"sort":1,"vod_play_url":"第1集$%s"},{"site_key":"backup","site_name":"備援","decode_status":0,"sort":2,"vod_play_url":"第1集$%s"},{"site_key":"long-line","site_name":"長集數線路","decode_status":0,"sort":3,"vod_play_url":"第201集$%s"}]}`, directA, directB, episode201)
@@ -322,16 +322,17 @@ func TestDuoduoDetailAndPlaybackMergesLinesIntoOneEpisodeList(t *testing.T) {
 	}
 }
 
-func TestDuoduoDetailDirectURLSkipsAggregateEndpoint(t *testing.T) {
+func TestDuoduoDetailDirectURLSurvivesAggregateEndpointFailure(t *testing.T) {
 	const direct = "https://media.example.test/movie/direct.m3u8"
+	aggregateCalls := 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/api.php/web/vod/get_detail":
 			return sourceFixtureResponse(request, http.StatusOK,
 				`{"code":200,"data":[{"vod_id":78296,"vod_name":"測試電影","type_name":"电影","vod_play_from":"direct","vod_play_url":"第1集$https://media.example.test/movie/direct.m3u8"}],"vodplayer":[{"from":"direct","decode_status":0,"show":"直連","sort":1}]}`), nil
 		case "/api.php/web/internal/search_aggregate":
-			t.Fatal("aggregate endpoint should not be called when detail already has direct media URLs")
-			return nil, nil
+			aggregateCalls++
+			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "aggregate temporarily unavailable"), nil
 		default:
 			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
 			return nil, nil
@@ -344,6 +345,9 @@ func TestDuoduoDetailDirectURLSkipsAggregateEndpoint(t *testing.T) {
 	}
 	if chapters[0].VideoURL != direct || chapters[0].PlayLine != "直連" {
 		t.Fatalf("detail API direct URL was not retained: %+v", chapters[0])
+	}
+	if aggregateCalls == 0 {
+		t.Fatal("full aggregate list should be queried to discover additional playback sources")
 	}
 
 	media, err := d.resolveDuoduoMedia(context.Background(), Task{
