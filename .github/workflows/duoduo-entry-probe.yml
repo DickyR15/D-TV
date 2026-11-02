@@ -225,7 +225,8 @@ jobs:
                   f"poster={title!r} host={urlsplit(address).hostname} "
                   f"http={status} type={content_type or 'unknown'} "
                   f"proxy={proxy_status}/{proxy_type or 'unknown'} "
-                  f"ok={ok} error={error_text} {proxy_error}"
+                  f"ok={ok} error={error_text} {proxy_error} "
+                  f"magic={body[:20].hex() if body else 'none'}"
               )
               if ok:
                   poster_ok += 1
