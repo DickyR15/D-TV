@@ -140,16 +140,16 @@ func TestMacCMSPlayLineNamesSupportsCommaSeparatedGroups(t *testing.T) {
 	if len(got) != 2 || got[0] != "liangzi" || got[1] != "lzm3u8" {
 		t.Fatalf("comma-separated play groups were not parsed: %#v", got)
 	}
-	got = macCMSPlayLineNames("liangzi$$lzm3u8")
+	got = macCMSPlayLineNames("liangzi" + strings.Repeat("$", 3) + "lzm3u8")
 	if len(got) != 2 || got[0] != "liangzi" || got[1] != "lzm3u8" {
-		t.Fatalf("MacCMS $$ play groups were not parsed: %#v", got)
+		t.Fatalf("MacCMS three-dollar play groups were not parsed: %#v", got)
 	}
 }
 
 func TestMacCMSChapterParserMapsCommaSeparatedSourceNames(t *testing.T) {
 	row := map[string]any{
 		"vod_play_from": "liangzi,lzm3u8",
-		"vod_play_url": "第1集$https://cdn.example/cloud.html$$第1集$https://cdn.example/episode.m3u8",
+		"vod_play_url": "第1集$https://cdn.example/cloud.html" + strings.Repeat("$", 3) + "第1集$https://cdn.example/episode.m3u8",
 	}
 	downloader := &Downloader{providerHosts: map[string]string{}}
 	chapters := downloader.macCMSParseChapters(sourceMacCMSLzi, "164761", row)
