@@ -225,21 +225,22 @@ jobs:
                       category_rows = rows
                   if category_id == "1" and page == 2:
                       second_rows = rows
-                  for row in rows[:2]:
-                      title = row_title(row) or "(無標題)"
-                      row_candidate_count = 0
-                      for field in (
-                          "vod_pic", "vod_pic_thumb", "vod_pic_url",
-                          "vod_pic_slide", "vod_pic_screenshot",
-                          "cover", "cover_url", "poster", "image", "thumbnail",
-                      ):
-                          address = poster_address(row.get(field))
-                          if address and address not in poster_seen:
-                              poster_seen.add(address)
-                              poster_candidates.append((address, title, category_name, field))
-                              row_candidate_count += 1
-                              if row_candidate_count >= 2:
-                                  break
+                  if page <= 2:
+                      for row in rows[:2]:
+                          title = row_title(row) or "(無標題)"
+                          row_candidate_count = 0
+                          for field in (
+                              "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                              "vod_pic_slide", "vod_pic_screenshot",
+                              "cover", "cover_url", "poster", "image", "thumbnail",
+                          ):
+                              address = poster_address(row.get(field))
+                              if address and address not in poster_seen:
+                                  poster_seen.add(address)
+                                  poster_candidates.append((address, title, category_name, field))
+                                  row_candidate_count += 1
+                                  if row_candidate_count >= 2:
+                                      break
                   if not rows:
                       break
                   if page > 1 and valid_ids and not new_ids:
