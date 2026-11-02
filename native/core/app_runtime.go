@@ -607,6 +607,17 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
+	if query != "" && isMacCMSSource(source) {
+		items, more, err := d.fetchMacCMSCatalogPage(ctx, source, page, "", query)
+		if err != nil {
+			return result, err
+		}
+		for _, drama := range items {
+			result.Items = append(result.Items, nativeNormalize(drama))
+		}
+		result.HasMore = more
+		return result, nil
+	}
 	if query != "" && (source == sourceYeguo || source == sourceDSD) {
 		var items []Drama
 		var more bool
@@ -710,6 +721,8 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		items, result.HasMore, err = d.fetchDuoduoCatalogPage(ctx, page, category, "")
 	case sourceHanxiaoquan:
 		items, result.HasMore, err = d.fetchHanxiaoquanCatalogPage(ctx, page, category, "")
+	case sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida:
+		items, result.HasMore, err = d.fetchMacCMSCatalogPage(ctx, source, page, category, "")
 	case sourceHuangguoVideo:
 		address := fmt.Sprintf("%s/videos?page=%d", d.providerBaseURL(source), page)
 		if category != "" {
@@ -793,6 +806,8 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		raw, chapters, err = engine.downloader.fetchDuoduoDetail(ctx, sourceID)
 	case sourceHanxiaoquan:
 		raw, chapters, err = engine.downloader.fetchHanxiaoquanDetail(ctx, sourceID)
+	case sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida:
+		raw, chapters, err = engine.downloader.fetchMacCMSDetail(ctx, source, sourceID)
 	default:
 		title, chapters, err = engine.downloader.GetHuangguoChapters(ctx, source, sourceID)
 	}
