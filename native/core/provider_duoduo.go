@@ -585,20 +585,69 @@ func (d *Downloader) fetchDuoduoDetailRow(ctx context.Context, sourceID string) 
 	return drama, row, payload, base, nil
 }
 
+func duoduoMergePlayLines(primary, supplemental []duoduoPlayLine) []duoduoPlayLine {
+	merged := append([]duoduoPlayLine(nil), primary...)
+	indexes := make(map[string]int, len(merged)*2)
+	addAliases := func(line duoduoPlayLine, index int) {
+		for _, alias := range []string{line.Key, line.Name} {
+			alias = strings.ToLower(strings.TrimSpace(alias))
+			if alias != "" {
+				indexes[alias] = index
+			}
+		}
+	}
+	for index, line := range merged {
+		addAliases(line, index)
+	}
+	for _, candidate := range supplemental {
+		index, found := -1, false
+		for _, alias := range []string{candidate.Key, candidate.Name} {
+			alias = strings.ToLower(strings.TrimSpace(alias))
+			if existing, ok := indexes[alias]; alias != "" && ok {
+				index, found = existing, true
+				break
+			}
+		}
+		if !found {
+			index = len(merged)
+			merged = append(merged, candidate)
+			addAliases(candidate, index)
+			continue
+		}
+		existing := &merged[index]
+		seenEpisodes := make(map[string]bool, len(existing.Episodes)+len(candidate.Episodes))
+		for _, episode := range existing.Episodes {
+			key := fmt.Sprintf("%d|%s", duoduoEpisodeNumber(episode.Title, episode.Index), episode.URL)
+			seenEpisodes[key] = true
+		}
+		for _, episode := range candidate.Episodes {
+			key := fmt.Sprintf("%d|%s", duoduoEpisodeNumber(episode.Title, episode.Index), episode.URL)
+			if !seenEpisodes[key] {
+				seenEpisodes[key] = true
+				existing.Episodes = append(existing.Episodes, episode)
+			}
+		}
+		if existing.Name == "" {
+			existing.Name = candidate.Name
+		}
+		addAliases(*existing, index)
+	}
+	return merged
+}
+
 func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
 	drama, detailRow, payload, base, err := d.fetchDuoduoDetailRow(ctx, sourceID)
 	if err != nil {
 		return Drama{}, nil, err
 	}
 	playerRows := duoduoRows(payload["vodplayer"])
-	// Prefer direct media URLs already included in the detail response. The
-	// aggregate endpoint is only needed when the detail payload has no usable
-	// direct line, which avoids an unnecessary dependency and extra latency.
-	lines := duoduoParseDetailLines(detailRow, playerRows)
-	var aggregateErr error
-	if len(lines) == 0 {
-		lines, aggregateErr = d.fetchDuoduoAggregate(ctx, sourceID)
-	}
+	// Keep detail-page direct URLs first, then supplement them with the full
+	// aggregate list. A detail response can expose one working line while
+	// omitting other public lines; fetching the aggregate is what lets the
+	// canonical episode retain all same-episode fallbacks.
+	detailLines := duoduoParseDetailLines(detailRow, playerRows)
+	aggregateLines, aggregateErr := d.fetchDuoduoAggregate(ctx, sourceID)
+	lines := duoduoMergePlayLines(detailLines, aggregateLines)
 	if len(lines) == 0 {
 		if aggregateErr != nil {
 			return Drama{}, nil, fmt.Errorf("多多追劇已取得影片資料，但目前沒有可直接播放的線路：%w", aggregateErr)
