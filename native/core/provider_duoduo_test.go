@@ -132,6 +132,36 @@ func TestDuoduoKeepsAlternatePosterFieldsForRetry(t *testing.T) {
 	}
 }
 
+func TestNativeCoverPartialResponseMustContainWholeImage(t *testing.T) {
+	cases := []struct {
+		name       string
+		statusCode int
+		contentRange string
+		want       bool
+	}{
+		{name: "ordinary success", statusCode: http.StatusOK, want: true},
+		{name: "complete partial response", statusCode: http.StatusPartialContent, contentRange: "bytes 0-99/100", want: true},
+		{name: "truncated partial response", statusCode: http.StatusPartialContent, contentRange: "bytes 0-49/100", want: false},
+		{name: "nonzero range start", statusCode: http.StatusPartialContent, contentRange: "bytes 50-99/100", want: false},
+		{name: "unknown total", statusCode: http.StatusPartialContent, contentRange: "bytes 0-99/*", want: false},
+		{name: "not found", statusCode: http.StatusNotFound, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			response := &http.Response{
+				StatusCode: tc.statusCode,
+				Header: http.Header{},
+			}
+			if tc.contentRange != "" {
+				response.Header.Set("Content-Range", tc.contentRange)
+			}
+			if got := nativeCoverResponseComplete(response); got != tc.want {
+				t.Fatalf("nativeCoverResponseComplete() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDuoduoMapsMovieMetadataAndCategories(t *testing.T) {
 	drama := duoduoDramaFromRow(map[string]any{
 		"vod_id": 78296, "vod_name": "流浪地球（特別版）",
