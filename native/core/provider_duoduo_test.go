@@ -85,6 +85,53 @@ func TestDuoduoPosterFallbackFields(t *testing.T) {
 	}
 }
 
+func TestDuoduoPosterRecoveryHandlesBaiduWrappersAndUnknownCDNs(t *testing.T) {
+	const wrapped = "https://gimg0.baidu.com/gimg/app=2001&n=0&g=0n&fmt=jpeg&src=https%3A%2F%2Fi0.hdslb.com%2Fbfs%2Fbangumi%2Fimage%2F0af10a0c3258186e96fde4406b384c13dd643d8f.png"
+	const source = "https://i0.hdslb.com/bfs/bangumi/image/0af10a0c3258186e96fde4406b384c13dd643d8f.png"
+	if got := duoduoBaiduPosterSourceURL(wrapped); got != source {
+		t.Fatalf("Baidu poster wrapper source = %q, want %q", got, source)
+	}
+	proxy := duoduoPosterProxyURL("https://poster-cdn.example.test/images/cover.jpg?token=a&size=large")
+	if proxy == "" ||
+		!strings.Contains(proxy, "poster-cdn.example.test") ||
+		!strings.Contains(proxy, "token%3Da%26size%3Dlarge") {
+		t.Fatalf("unknown public CDN did not retain its full URL in proxy fallback: %q", proxy)
+	}
+	if duoduoPosterProxyURL("http://127.0.0.1/private.png") != "" ||
+		duoduoPosterProxyURL("http://localhost/private.png") != "" {
+		t.Fatal("poster proxy must reject localhost and literal private addresses")
+	}
+	attempts := duoduoPosterAttempts(wrapped, "https://323433ssdfd.top/")
+	seenSource := false
+	seenBaiduReferer := false
+	seenBilibiliReferer := false
+	for _, attempt := range attempts {
+		seenSource = seenSource || attempt.address == source
+		seenBaiduReferer = seenBaiduReferer || attempt.address == wrapped && attempt.referer == "https://www.baidu.com/"
+		seenBilibiliReferer = seenBilibiliReferer || attempt.address == source && attempt.referer == "https://www.bilibili.com/"
+	}
+	if !seenSource || !seenBaiduReferer || !seenBilibiliReferer {
+		t.Fatalf("Baidu poster recovery lacks wrapper/source/referrer attempts: %+v", attempts)
+	}
+}
+
+func TestDuoduoKeepsAlternatePosterFieldsForRetry(t *testing.T) {
+	row := map[string]any{
+		"vod_id": 78296,
+		"vod_name": "測試影片",
+		"vod_pic": "https://broken.example.test/main.jpg",
+		"vod_pic_thumb": "https://working.example.test/thumb.jpg",
+		"vod_pic_slide": "https://working.example.test/slide.jpg",
+	}
+	addresses := duoduoPosterAddressesFromRow(row)
+	if len(addresses) != 3 ||
+		addresses[0] != "https://broken.example.test/main.jpg" ||
+		addresses[1] != "https://working.example.test/thumb.jpg" ||
+		addresses[2] != "https://working.example.test/slide.jpg" {
+		t.Fatalf("alternate poster URLs were lost or reordered: %+v", addresses)
+	}
+}
+
 func TestDuoduoMapsMovieMetadataAndCategories(t *testing.T) {
 	drama := duoduoDramaFromRow(map[string]any{
 		"vod_id": 78296, "vod_name": "流浪地球（特別版）",
