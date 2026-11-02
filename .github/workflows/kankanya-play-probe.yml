@@ -1,0 +1,126 @@
+name: Kankanya play page inspection
+
+on:
+  push:
+    branches:
+      - feat/independent-maccms-sources-ci
+    paths:
+      - ".github/workflows/kankanya-play-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    name: Inspect supplied public play page
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Fetch public play page and linked frontend assets
+        shell: bash
+        run: |
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.error import HTTPError
+          from urllib.parse import urljoin, urlsplit
+          from urllib.request import Request, urlopen
+          import json, re, ssl
+
+          TARGET = "https://www.kankanya.me/play/bLmhhk-2-1.html"
+          UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+          TLS = ssl.create_default_context()
+          CHALLENGE = ("人机验证", "正在进行人机识别", "checking your browser", "just a moment", "cf-chl-", "challenge-platform")
+
+          class Parser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title=[]; self.in_title=False; self.scripts=[]; self.links=[]
+                  self.frames=[]; self.videos=[]; self.sources=[]; self.meta={}; self.text=[]
+              def handle_starttag(self, tag, attrs):
+                  a=dict(attrs); t=tag.lower()
+                  if t=="title": self.in_title=True
+                  if t=="script" and a.get("src"): self.scripts.append(a["src"])
+                  if t=="link" and a.get("href"): self.links.append({"rel":a.get("rel"),"href":a["href"]})
+                  if t=="iframe": self.frames.append({k:a.get(k) for k in ("src","title","name") if a.get(k)})
+                  if t=="video": self.videos.append({k:a.get(k) for k in ("src","poster") if a.get(k)})
+                  if t=="source" and a.get("src"): self.sources.append(a["src"])
+                  if t=="meta" and a.get("content"): self.meta[a.get("property") or a.get("name") or "meta"]=a["content"]
+              def handle_endtag(self, tag):
+                  if tag.lower()=="title": self.in_title=False
+              def handle_data(self,data):
+                  if self.in_title and data.strip(): self.title.append(data.strip())
+                  if data.strip() and len(self.text)<80: self.text.append(data.strip()[:160])
+
+          def get(url, referer=None, limit=2_000_000, timeout=18):
+              h={"User-Agent":UA,"Accept":"text/html,application/xhtml+xml,application/javascript,application/json,*/*","Accept-Language":"zh-TW,zh;q=0.9,en;q=0.8"}
+              if referer: h["Referer"]=referer
+              req=Request(url,headers=h)
+              try: resp=urlopen(req,timeout=timeout,context=TLS)
+              except HTTPError as e: resp=e
+              with resp:
+                  body=resp.read(limit)
+                  return resp.status,resp.geturl(),resp.headers.get("Content-Type",""),body
+
+          def safe_url(raw):
+              p=urlsplit(raw)
+              return p.scheme+"://"+p.netloc+p.path if p.scheme else p.path
+
+          report={"target":TARGET}
+          try:
+              status,final,ctype,body=get(TARGET)
+              html=body.decode("utf-8",errors="replace")
+              p=Parser(); p.feed(html)
+              challenge=any(m.lower() in html.lower() for m in CHALLENGE)
+              report.update({
+                  "status":status,"final_url":safe_url(final),"content_type":ctype,"bytes":len(body),
+                  "title":" ".join(p.title)[:240],"challenge_detected":challenge,
+                  "meta":{k:v[:300] for k,v in list(p.meta.items())[:20]},
+                  "scripts":[safe_url(urljoin(final,x)) for x in p.scripts[:20]],
+                  "stylesheets":[safe_url(urljoin(final,x.get("href",""))) for x in p.links[:20] if "stylesheet" in (x.get("rel") or "")],
+                  "iframes":[{**x,"src":safe_url(urljoin(final,x.get("src","")))} for x in p.frames[:20]],
+                  "video_elements":p.videos[:10],"source_elements":[safe_url(urljoin(final,x)) for x in p.sources[:10]],
+                  "visible_text_sample":p.text[:40],
+              })
+              if not challenge:
+                  js_reports=[]
+                  route_hits=set()
+                  for src in p.scripts[:15]:
+                      u=urljoin(final,src)
+                      if urlsplit(u).hostname != urlsplit(final).hostname: continue
+                      try:
+                          js_status,js_final,js_type,js_body=get(u,referer=final,limit=2_500_000)
+                          js=js_body.decode("utf-8",errors="replace")
+                          patterns=[
+                              r"""["']([^"']{0,180}(?:api|ajax|search|detail|play|player|vod|video|parse)[^"']{0,180})["']""",
+                              r"""https?://[^"'\\s<>]{1,240}""",
+                              r"""(?:var|let|const)\\s+(?:player|play|video|url|api)[A-Za-z0-9_]*\\s*=.{0,240}""",
+                          ]
+                          found=[]
+                          for pat in patterns:
+                              found.extend(re.findall(pat,js,re.I))
+                          for hit in found:
+                              if re.search(r"api|ajax|search|detail|play|player|vod|video|parse",hit,re.I):
+                                  route_hits.add(hit[:220])
+                          js_reports.append({"url":safe_url(js_final),"status":js_status,"bytes":len(js_body),"relevant_string_hits":len(found),"sample":[x[:200] for x in found[:18]]})
+                      except Exception as e:
+                          js_reports.append({"url":safe_url(u),"error":type(e).__name__+": "+str(e)[:140]})
+                  report["script_inspection"]=js_reports
+                  report["route_candidates"]=sorted(route_hits)[:100]
+              else:
+                  report["note"]="人機驗證頁面；未嘗試繞過驗證。"
+              # Keep a small sanitized excerpt around likely player markers for diagnostics.
+              markers=("player","iframe","video","m3u8","mp4","vod_name","episode","playlist","player_data")
+              snippets=[]
+              low=html.lower()
+              for marker in markers:
+                  pos=low.find(marker.lower())
+                  if pos>=0:
+                      excerpt=html[max(0,pos-220):pos+600]
+                      excerpt=re.sub(r'(?i)(token|sign|key|auth|signature)(["\\']?\\s*[:=]\\s*["\\']?)[^"\\'&\\s,}]+',r'\\1\\2[REDACTED]',excerpt)
+                      snippets.append({"marker":marker,"excerpt":excerpt[:850]})
+              report["html_marker_snippets"]=snippets
+          except Exception as e:
+              report["request_error"]=type(e).__name__+": "+str(e)[:220]
+          print(json.dumps(report,ensure_ascii=False,indent=2))
+          PY
