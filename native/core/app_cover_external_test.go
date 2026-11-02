@@ -244,18 +244,24 @@ func TestNativeCoverLoadUsesFallbackOnlyAfterOriginalFails(t *testing.T) {
 				Body: io.NopCloser(bytes.NewReader(image)), ContentLength: int64(len(image)), Request: request,
 			}, nil
 		}
-		// Provider metadata is checked before the external fallback.
-		// Return a clean miss so this fixture tests the final fallback path.
-		return &http.Response{
-			StatusCode: http.StatusServiceUnavailable, Header: make(http.Header),
-			Body: io.NopCloser(strings.NewReader("unavailable")), Request: request,
-		}, nil
+		t.Fatalf("unexpected provider metadata request in fallback fixture: %s", request.URL)
+		return nil, nil
 	})}
-	directory := t.TempDir()
 	downloader := &Downloader{client: client, cfg: defaultConfig()}
-	cache := newNativeCoverCache(directory, downloader)
+	cache := newNativeCoverCache(t.TempDir(), downloader)
 	if err := os.MkdirAll(cache.directory, 0700); err != nil {
 		t.Fatal(err)
+	}
+	// Seed the completed repair cache with an explicit provider miss. This
+	// isolates the test to persisted fallback ordering and avoids invoking
+	// a real provider API or device registration.
+	done := make(chan struct{})
+	close(done)
+	cache.repairs["hongguo:124"] = &nativeCoverRepair{
+		providerAddress: "",
+		address:         "https://fallback.example/poster.jpg",
+		retryAt:         time.Now().Add(time.Minute),
+		done:            done,
 	}
 	path, err := cache.load(context.Background(), nativeDrama{
 		ID: "hongguo:124", Source: sourceHongguo, Title: "測試作品",
