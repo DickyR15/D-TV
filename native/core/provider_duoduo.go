@@ -529,14 +529,24 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 	seen := map[string]bool{}
 	for _, line := range lines {
 		var selected *duoduoPlayEpisode
+		targetTitle := strings.TrimSpace(task.Chapter.Title)
+		targetEpisodeNumber := duoduoEpisodeNumber(targetTitle, 0)
 		for index := range line.Episodes {
 			episode := &line.Episodes[index]
-			if task.Chapter.Title != "" && strings.EqualFold(strings.TrimSpace(episode.Title), strings.TrimSpace(task.Chapter.Title)) {
+			candidateTitle := strings.TrimSpace(episode.Title)
+			if targetTitle != "" && strings.EqualFold(candidateTitle, targetTitle) {
+				selected = episode
+				break
+			}
+			if targetEpisodeNumber > 0 && duoduoEpisodeNumber(candidateTitle, 0) == targetEpisodeNumber {
 				selected = episode
 				break
 			}
 		}
-		if selected == nil {
+		// Only use the episode's position when the saved chapter has no title.
+		// Falling back by position when a title exists can turn episode 2 into
+		// a playback variant for episode 1 on another source line.
+		if selected == nil && targetTitle == "" {
 			for index := range line.Episodes {
 				if line.Episodes[index].Index == episodeIndex {
 					selected = &line.Episodes[index]
