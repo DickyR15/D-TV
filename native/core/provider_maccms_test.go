@@ -134,3 +134,29 @@ func TestMacCMSPrefersDedicatedM3U8APIs(t *testing.T) {
 		}
 	}
 }
+
+func TestMacCMSPlayLineNamesSupportsCommaSeparatedGroups(t *testing.T) {
+	got := macCMSPlayLineNames("liangzi,lzm3u8")
+	if len(got) != 2 || got[0] != "liangzi" || got[1] != "lzm3u8" {
+		t.Fatalf("comma-separated play groups were not parsed: %#v", got)
+	}
+	got = macCMSPlayLineNames("liangzi$$lzm3u8")
+	if len(got) != 2 || got[0] != "liangzi" || got[1] != "lzm3u8" {
+		t.Fatalf("MacCMS $$ play groups were not parsed: %#v", got)
+	}
+}
+
+func TestMacCMSChapterParserMapsCommaSeparatedSourceNames(t *testing.T) {
+	row := map[string]any{
+		"vod_play_from": "liangzi,lzm3u8",
+		"vod_play_url": "第1集$https://cdn.example/cloud.html$$第1集$https://cdn.example/episode.m3u8",
+	}
+	downloader := &Downloader{providerHosts: map[string]string{}}
+	chapters := downloader.macCMSParseChapters(sourceMacCMSLzi, "164761", row)
+	if len(chapters) != 1 {
+		t.Fatalf("expected one direct M3U8 episode, got %d: %+v", len(chapters), chapters)
+	}
+	if chapters[0].Title != "第1集" || chapters[0].VideoURL != "https://cdn.example/episode.m3u8" {
+		t.Fatalf("second play group was not parsed as a direct episode: %+v", chapters[0])
+	}
+}
