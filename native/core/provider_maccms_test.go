@@ -110,7 +110,6 @@ func TestMacCMSPrefersDedicatedM3U8APIs(t *testing.T) {
 	wantPaths := map[string]string{
 		sourceMacCMSDytt:  "/from/dyttm3u8/at/json/",
 		sourceMacCMSSubo:  "/from/subm3u8/at/json/",
-		sourceMacCMSLzi:   "/from/lzm3u8/at/json/",
 		sourceMacCMSFfzy:  "/from/ffm3u8/at/json/",
 		sourceMacCMSDouban: "/from/dbm3u8/at/josn/",
 	}
@@ -119,6 +118,11 @@ func TestMacCMSPrefersDedicatedM3U8APIs(t *testing.T) {
 		if len(provider.APIs) == 0 || !strings.Contains(provider.APIs[0], path) {
 			t.Errorf("%s should prefer its dedicated M3U8 API %q; got %+v", source, path, provider.APIs)
 		}
+	}
+
+	lziProvider := macCMSProviders[sourceMacCMSLzi]
+	if len(lziProvider.APIs) == 0 || lziProvider.APIs[0] != "https://cj.lziapi.com/api.php/provide/vod/" {
+		t.Fatalf("量子 should use its documented generic JSON API, got %+v", lziProvider.APIs)
 	}
 	maxProvider := macCMSProviders[sourceMacCMSZuida]
 	if len(maxProvider.APIs) == 0 || !strings.Contains(maxProvider.APIs[0], "api.zuidapi.com") {
