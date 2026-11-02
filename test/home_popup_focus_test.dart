@@ -87,6 +87,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
+      expect(find.text('簡雲影視'), findsOneWidget);
       expect(find.text('片源管理'), findsNothing);
       expect(find.text('更新劇庫'), findsNothing);
       expect(find.text('檢測連線與播放'), findsNothing);
