@@ -100,6 +100,21 @@ func TestBangumiPosterAddressRejectsAmbiguousAndNonExactTitles(t *testing.T) {
 	}
 }
 
+func TestBangumiPosterAddressRejectsMismatchedReleaseYear(t *testing.T) {
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		return posterLookupJSONResponse(request, `{"data":[
+			{"id":301,"type":6,"name_cn":"測試電影","date":"2024-01-01","images":{"large":"https://lain.bgm.tv/301.jpg"}}
+		]}`), nil
+	})}
+	downloader := &Downloader{client: client}
+	_, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
+		Title: "測試電影", Category: "電影", OnlineDate: "2025-08-01",
+	})
+	if err == nil || !strings.Contains(err.Error(), "年份") {
+		t.Fatalf("expected release-year mismatch to be rejected, got %v", err)
+	}
+}
+
 func TestMergeNativeDramaKeepsOriginalAndFallbackCoversSeparate(t *testing.T) {
 	previous := nativeDrama{
 		ID: "duoduo:554", Cover: "https://original.example/old.jpg",
