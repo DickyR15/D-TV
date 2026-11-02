@@ -177,10 +177,14 @@ func duoduoPosterAttempts(address, referer string) []duoduoPosterAttempt {
 	seen := map[string]bool{}
 	add := func(candidate, candidateReferer string) {
 		candidate = strings.TrimSpace(candidate)
-		if candidate == "" || seen[candidate] {
+		if candidate == "" {
 			return
 		}
-		seen[candidate] = true
+		identity := candidate + "\x00" + candidateReferer
+		if seen[identity] {
+			return
+		}
+		seen[identity] = true
 		attempts = append(attempts, duoduoPosterAttempt{
 			address: candidate,
 			referer: firstNonEmpty(candidateReferer, referer),
