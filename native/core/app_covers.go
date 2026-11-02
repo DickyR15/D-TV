@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -371,8 +372,8 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 		return nil, err
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusPartialContent {
-		return nil, fmt.Errorf("海報請求失敗：HTTP %d", response.StatusCode)
+	if !nativeCoverResponseComplete(response) {
+		return nil, fmt.Errorf("海報請求未取得完整圖片：HTTP %d", response.StatusCode)
 	}
 	if response.ContentLength > nativeCoverMaxBytes {
 		return nil, errors.New("海报文件过大")
@@ -389,6 +390,36 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 		return nil, errors.New("站源未返回有效海报")
 	}
 	return data, nil
+}
+
+func nativeCoverResponseComplete(response *http.Response) bool {
+	if response == nil {
+		return false
+	}
+	if response.StatusCode == http.StatusOK {
+		return true
+	}
+	if response.StatusCode != http.StatusPartialContent {
+		return false
+	}
+	value := strings.TrimSpace(response.Header.Get("Content-Range"))
+	if !strings.HasPrefix(strings.ToLower(value), "bytes ") {
+		return false
+	}
+	rangeAndTotal := strings.TrimSpace(value[len("bytes "):])
+	byteRange, totalValue, found := strings.Cut(rangeAndTotal, "/")
+	if !found {
+		return false
+	}
+	startValue, endValue, found := strings.Cut(strings.TrimSpace(byteRange), "-")
+	if !found {
+		return false
+	}
+	start, startErr := strconv.ParseInt(strings.TrimSpace(startValue), 10, 64)
+	end, endErr := strconv.ParseInt(strings.TrimSpace(endValue), 10, 64)
+	total, totalErr := strconv.ParseInt(strings.TrimSpace(totalValue), 10, 64)
+	return startErr == nil && endErr == nil && totalErr == nil &&
+		start == 0 && total > 0 && end >= 0 && end+1 == total
 }
 
 func nativeDecodeCover(data []byte) []byte {
