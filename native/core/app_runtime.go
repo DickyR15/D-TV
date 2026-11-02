@@ -82,6 +82,7 @@ type nativeDrama struct {
 	Description    string   `json:"description"`
 	Cover          string   `json:"cover"`
 	FallbackCover  string   `json:"fallbackCover,omitempty"`
+	ProviderFallbackCover string `json:"providerFallbackCover,omitempty"`
 	Episodes         int      `json:"episodes"`
 	EpisodesVerified bool     `json:"episodesVerified,omitempty"`
 	Category         string   `json:"category"`
