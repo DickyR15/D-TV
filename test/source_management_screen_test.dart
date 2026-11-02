@@ -67,14 +67,22 @@ void main() {
       );
       expect(sourceName, findsOneWidget);
     }
-    expect(store.sourceEnabled('huangdou'), isFalse);\n    expect(store.sourceEnabled('maccms-dytt'), isFalse);
+    expect(store.sourceEnabled('huangdou'), isFalse);
+    expect(store.sourceEnabled('maccms-dytt'), isFalse);
 
     final huangdouSwitch = find.byKey(const ValueKey('source-switch-huangdou'));
     await tester.ensureVisible(huangdouSwitch);
     await tester.pumpAndSettle();
     await tester.tap(huangdouSwitch);
     await tester.pumpAndSettle();
-    expect(store.sourceEnabled('huangdou'), isTrue);\n\n    final macCMSswitch = find.byKey(const ValueKey('source-switch-maccms-dytt'));\n    await tester.ensureVisible(macCMSswitch);\n    await tester.pumpAndSettle();\n    await tester.tap(macCMSswitch);\n    await tester.pumpAndSettle();\n    expect(store.sourceEnabled('maccms-dytt'), isTrue);
+    expect(store.sourceEnabled('huangdou'), isTrue);
+
+    final macCMSswitch = find.byKey(const ValueKey('source-switch-maccms-dytt'));
+    await tester.ensureVisible(macCMSswitch);
+    await tester.pumpAndSettle();
+    await tester.tap(macCMSswitch);
+    await tester.pumpAndSettle();
+    expect(store.sourceEnabled('maccms-dytt'), isTrue);
 
     await tester.pumpWidget(const MaterialApp(home: Text('已離開片源管理')));
     await tester.pumpAndSettle();
