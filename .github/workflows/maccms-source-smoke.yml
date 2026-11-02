@@ -28,7 +28,9 @@ jobs:
           SOURCES = {
               "天堂": [
                   "https://caiji.dyttzyapi.com/api.php/provide/vod/from/dyttm3u8/at/json/",
+                  "https://beiyong.dyttzyapi.com/api.php/provide/vod/from/dyttm3u8/at/json/",
                   "https://caiji.dyttzyapi.com/api.php/provide/vod/at/json/",
+                  "https://beiyong.dyttzyapi.com/api.php/provide/vod/at/json/",
                   "http://caiji.dyttzyapi.com/api.php/provide/vod/",
               ],
               "速播": [
@@ -36,8 +38,6 @@ jobs:
                   "https://subocj.com/api.php/provide/vod/at/json/",
               ],
               "量子": [
-                  "https://cj.lziapi.com/api.php/provide/vod/from/lzm3u8/at/json/",
-                  "https://cj.lzcaiji.com/api.php/provide/vod/from/lzm3u8/at/json/",
                   "https://cj.lziapi.com/api.php/provide/vod/",
                   "https://cj.lzcaiji.com/api.php/provide/vod/",
               ],
@@ -64,11 +64,12 @@ jobs:
           REFERERS = {
               "天堂": "https://dyttzy.tv/",
               "速播": "https://subocj.com/",
-              "量子": "https://www.lzizy.net/",
-              "非凡": "https://cj.ffzyapi.com/",
+              "量子": "https://www.lzizy.com/",
+              "非凡": "https://ffzy.tv/",
               "豆瓣": "https://dbzy.tv/",
-              "最大": "https://api.zuidapi.com/",
+              "最大": "https://zuida.xyz/",
           }
+          SEARCH_DISABLED = {"豆瓣"}  # 豆瓣官方 FAQ 明確表示已關閉遠端搜尋
           UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
 
           def request(url, referer="", byte_range=None, limit=6 * 1024 * 1024):
@@ -103,7 +104,7 @@ jobs:
                       return [x for x in values if isinstance(x, dict)]
               return []
 
-          def test_api(base, referer):
+          def test_api(base, referer, search_supported=True):
               listing = fetch_json(base, {"ac": "list", "pg": 1}, referer)
               catalog = rows(listing)
               if not catalog:
@@ -113,9 +114,13 @@ jobs:
               title = str(sample.get("vod_name", "")).strip()
               if not source_id or not title:
                   raise RuntimeError("catalog item has no vod_id/vod_name")
-              search = fetch_json(base, {"ac": "detail", "wd": title[:48], "pg": 1}, referer)
-              if not rows(search):
-                  raise RuntimeError("search returned no items for its own catalog title")
+              search_result = "ok"
+              if search_supported:
+                  search = fetch_json(base, {"ac": "detail", "wd": title[:48], "pg": 1}, referer)
+                  if not rows(search):
+                      raise RuntimeError("search returned no items for its own catalog title")
+              else:
+                  search_result = "disabled upstream"
               detail = fetch_json(base, {"ac": "detail", "ids": source_id}, referer)
               detail_rows = rows(detail)
               if not detail_rows:
@@ -178,7 +183,7 @@ jobs:
                   if final_segment_status is None or "mpegurl" in final_segment_type.lower():
                       raise RuntimeError("could not reach a media segment within four HLS playlist levels")
                   media_result = "playlist HTTP %s; media segment HTTP %s (%s)" % (media_status, final_segment_status, final_segment_type or content_type)
-              return len(catalog), title, media_result
+              return len(catalog), title, media_result, search_result
 
           failures = []
           for name, endpoints in SOURCES.items():
@@ -186,8 +191,8 @@ jobs:
               errors = []
               for endpoint in endpoints:
                   try:
-                      count, title, result = test_api(endpoint, REFERERS[name])
-                      print("PASS %s: endpoint=%s, list=%d, search=ok, detail=%s, %s" % (name, endpoint, count, title[:36], result))
+                      count, title, result, search_result = test_api(endpoint, REFERERS[name], name not in SEARCH_DISABLED)
+                      print("PASS %s: endpoint=%s, list=%d, search=%s, detail=%s, %s" % (name, endpoint, count, search_result, title[:36], result))
                       passed = True
                       break
                   except Exception as exc:
