@@ -194,6 +194,9 @@ func mergeNativeDrama(previous, fresh nativeDrama) nativeDrama {
 	if fresh.FallbackCover == "" {
 		fresh.FallbackCover = previous.FallbackCover
 	}
+	if fresh.ProviderFallbackCover == "" {
+		fresh.ProviderFallbackCover = previous.ProviderFallbackCover
+	}
 	if fresh.Category == "" || nativeGenericCategory(fresh.Category) && previous.Category != "" && !nativeGenericCategory(previous.Category) {
 		fresh.Category = previous.Category
 	}
