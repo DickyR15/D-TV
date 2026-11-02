@@ -47,12 +47,21 @@ jobs:
               "豆瓣": [
                   "https://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
                   "http://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
+                  "https://dbzy.tv/api.php/provide/vod/at/josn/",
               ],
               "最大": [
                   "https://zuidazy.me/api.php/provide/vod/",
                   "http://zuidazy.me/api.php/provide/vod/",
                   "https://api.zuidapi.com/api.php/provide/vod/",
               ],
+          }
+          REFERERS = {
+              "天堂": "https://dyttzy.tv/",
+              "速播": "https://subocj.com/",
+              "量子": "https://www.lzizy.net/",
+              "非凡": "https://cj.ffzyapi.com/",
+              "豆瓣": "https://dbzy.tv/",
+              "最大": "https://zuidazy.me/",
           }
           UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
 
@@ -90,9 +99,7 @@ jobs:
                       return [x for x in values if isinstance(x, dict)]
               return []
 
-          def test_api(base):
-              parsed_base = urllib.parse.urlsplit(base)
-              referer = parsed_base.scheme + "://" + parsed_base.netloc + "/"
+          def test_api(base, referer):
               listing = fetch_json(base, {"ac": "list", "pg": 1})
               catalog = rows(listing)
               if not catalog:
@@ -147,7 +154,7 @@ jobs:
               errors = []
               for endpoint in endpoints:
                   try:
-                      count, title, result = test_api(endpoint)
+                      count, title, result = test_api(endpoint, REFERERS[name])
                       print("PASS %s: endpoint=%s, list=%d, search=ok, detail=%s, %s" % (name, endpoint, count, title[:36], result))
                       passed = True
                       break
