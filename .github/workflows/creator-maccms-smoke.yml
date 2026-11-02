@@ -105,7 +105,7 @@ jobs:
                   text = body.decode("utf-8-sig", "replace")
                   if not text.lstrip().startswith("#EXTM3U"):
                       return False, "回應不是有效的 M3U8 播放清單"
-                  key_match = re.search(r'#EXT-X-KEY:[^\\r\\n]*URI="([^"]+)"', text)
+                  key_match = re.search(r'#EXT-X-KEY:[^\r\n]*URI="([^"]+)"', text)
                   if key_match:
                       key_url = urljoin(final_url, key_match.group(1))
                       key_status, _, key_type, key_body = request(
@@ -158,7 +158,7 @@ jobs:
               raise RuntimeError(f"分類 ID 無效：{category!r}")
           print(f"分類數={len(category_rows)}；測試分類={category.get('type_name')} ({category_id})")
 
-          print("\\n=== CATALOG ===")
+          print("\n=== CATALOG ===")
           catalog_payload = api({"ac": "detail", "t": category_id, "pg": 1})
           catalog = rows(catalog_payload)
           if not catalog:
@@ -170,14 +170,14 @@ jobs:
               raise RuntimeError(f"目錄影片缺少 vod_id／vod_name：{sample!r}")
           print(f"目錄筆數={len(catalog)}；樣本={title}；ID={vod_id}")
 
-          print("\\n=== SEARCH ===")
+          print("\n=== SEARCH ===")
           search_payload = api({"ac": "detail", "wd": title[:48], "pg": 1})
           search_rows = rows(search_payload)
           if not search_rows:
               raise RuntimeError("以目錄樣本名稱搜尋時沒有回傳結果")
           print(f"搜尋結果={len(search_rows)}")
 
-          print("\\n=== DETAIL / PLAY LINES ===")
+          print("\n=== DETAIL / PLAY LINES ===")
           detail_payload = api({"ac": "detail", "ids": vod_id})
           details = rows(detail_payload)
           if not details:
@@ -205,7 +205,7 @@ jobs:
               raise RuntimeError("詳情沒有可直接播放的 M3U8／MP4 分集")
           print(f"片名={detail.get('vod_name') or title}；線路數={len(line_blocks)}；可直接測試線路={len(candidates)}")
 
-          print("\\n=== DIRECT MEDIA ===")
+          print("\n=== DIRECT MEDIA ===")
           passed = False
           failures = []
           for line_name, address in candidates[:8]:
@@ -225,5 +225,5 @@ jobs:
               failures.append(line_name + ": " + message)
           if not passed:
               raise RuntimeError("沒有任何直接播放線路通過串流測試；" + "；".join(failures))
-          print("\\nPASS：創享影視分類、片庫、搜尋、詳情、多線路解析及至少一條直接影片串流均通過。")
+          print("\nPASS：創享影視分類、片庫、搜尋、詳情、多線路解析及至少一條直接影片串流均通過。")
           PY
