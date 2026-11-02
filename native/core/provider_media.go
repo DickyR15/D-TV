@@ -44,11 +44,6 @@ func (d *Downloader) providerBaseURL(source string) string {
 		fallback = "https://323433ssdfd.top"
 	case sourceHanxiaoquan:
 		configured, fallback = d.cfg.HanxiaoquanURL, hanxiaoquanSiteBaseURL
-	case sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida:
-		d.providerMu.Lock()
-		configured = strings.TrimRight(d.providerHosts[source], "/")
-		d.providerMu.Unlock()
-		fallback = macCMSProviderBaseURL(source)
 	default:
 		fallback = "https://d2pypzndaqisk.cloudfront.net"
 	}
