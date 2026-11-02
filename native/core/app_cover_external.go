@@ -160,11 +160,11 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 func bangumiPosterSubjectTypes(drama nativeDrama) []int {
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
 	switch {
-	case containsAny(category, "綜藝", "综艺", "脫口秀", "脱口秀", "variety"):
+	case bangumiPosterContainsAny(category, "綜藝", "综艺", "脫口秀", "脱口秀", "variety"):
 		return nil
-	case containsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime"):
+	case bangumiPosterContainsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime"):
 		return []int{2}
-	case containsAny(category, "電影", "电影", "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "短劇", "短剧", "movie", "tv"):
+	case bangumiPosterContainsAny(category, "電影", "电影", "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "短劇", "短剧", "movie", "tv"):
 		return []int{6}
 	default:
 		return []int{2, 6}
@@ -192,4 +192,13 @@ func bangumiPosterYear(value string) string {
 		}
 	}
 	return ""
+}
+
+func bangumiPosterContainsAny(value string, candidates ...string) bool {
+	for _, candidate := range candidates {
+		if strings.Contains(value, candidate) {
+			return true
+		}
+	}
+	return false
 }
