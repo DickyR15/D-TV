@@ -22,33 +22,50 @@ const (
 
 type macCMSProvider struct {
 	Name string
-	API  string
+	APIs []string
 }
 
 var macCMSProviders = map[string]macCMSProvider{
 	sourceMacCMSDytt: {
 		Name: "天堂資源",
-		API:  "https://caiji.dyttzyapi.com/api.php/provide/vod/",
+		APIs: []string{
+			"http://caiji.dyttzyapi.com/api.php/provide/vod/",
+			"https://caiji.dyttzyapi.com/api.php/provide/vod/",
+		},
 	},
 	sourceMacCMSSubo: {
 		Name: "速播資源",
-		API:  "https://subocj.com/api.php/provide/vod/",
+		APIs: []string{"https://subocj.com/api.php/provide/vod/"},
 	},
 	sourceMacCMSLzi: {
 		Name: "量子資源",
-		API:  "https://cj.lziapi.com/api.php/provide/vod/from/lzm3u8/",
+		APIs: []string{
+			"https://cj.lziapi.com/api.php/provide/vod/",
+			"https://cj.lzcaiji.com/api.php/provide/vod/",
+		},
 	},
 	sourceMacCMSFfzy: {
 		Name: "非凡資源",
-		API:  "https://api.ffzyapi.com/api.php/provide/vod/from/ffm3u8/",
+		APIs: []string{
+			"http://api.ffzyapi.com/api.php/provide/vod/",
+			"http://cj2.ffzyapi.com/api.php/provide/vod/",
+			"https://cj.ffzyapi.com/api.php/provide/vod/",
+		},
 	},
 	sourceMacCMSDouban: {
 		Name: "豆瓣資源",
-		API:  "https://caiji.dbzy5.com/api.php/provide/vod/from/dbm3u8/at/josn/",
+		APIs: []string{
+			"https://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
+			"http://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
+		},
 	},
 	sourceMacCMSZuida: {
 		Name: "最大資源",
-		API:  "https://zuidazy.co/api.php/provide/vod/from/zuidam3u8/",
+		APIs: []string{
+			"https://zuidazy.me/api.php/provide/vod/",
+			"http://zuidazy.me/api.php/provide/vod/",
+			"https://api.zuidapi.com/api.php/provide/vod/",
+		},
 	},
 }
 
@@ -62,7 +79,10 @@ func macCMSProviderBaseURL(source string) string {
 	if !ok {
 		return ""
 	}
-	parsed, err := url.Parse(provider.API)
+	if len(provider.APIs) == 0 {
+		return ""
+	}
+	parsed, err := url.Parse(provider.APIs[0])
 	if err != nil {
 		return ""
 	}
@@ -161,39 +181,59 @@ func macCMSInteger(payload map[string]any, keys ...string) int {
 }
 
 func (d *Downloader) fetchMacCMSJSON(ctx context.Context, source string, params url.Values) (map[string]any, error) {
-	provider, ok := macCMSProviders[canonicalProviderSource(source)]
-	if !ok {
+	source = canonicalProviderSource(source)
+	provider, ok := macCMSProviders[source]
+	if !ok || len(provider.APIs) == 0 {
 		return nil, errors.New("未知的 MacCMS 片源")
 	}
-	endpoint, err := url.Parse(provider.API)
-	if err != nil {
-		return nil, errors.New("MacCMS API 位址無效")
-	}
-	query := endpoint.Query()
-	for key, values := range params {
-		query.Del(key)
-		for _, value := range values {
-			query.Add(key, value)
+	var lastErr error
+	for _, api := range provider.APIs {
+		endpoint, err := url.Parse(api)
+		if err != nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") {
+			lastErr = errors.New("MacCMS API 位址無效")
+			continue
 		}
+		query := endpoint.Query()
+		for key, values := range params {
+			query.Del(key)
+			for _, value := range values {
+				query.Add(key, value)
+			}
+		}
+		endpoint.RawQuery = query.Encode()
+		base := endpoint.Scheme + "://" + endpoint.Host + "/"
+		body, requestErr := d.fetchProviderText(ctx, endpoint.String(), base)
+		if requestErr != nil {
+			lastErr = requestErr
+			continue
+		}
+		if len(body) > providerMaxBodyBytes {
+			return nil, errors.New("MacCMS API 回應過大")
+		}
+		decoder := json.NewDecoder(strings.NewReader(body))
+		decoder.UseNumber()
+		var payload map[string]any
+		if decodeErr := decoder.Decode(&payload); decodeErr != nil {
+			lastErr = decodeErr
+			continue
+		}
+		if payload == nil {
+			lastErr = errors.New("API 沒有回傳 JSON 物件")
+			continue
+		}
+		// Cache the working API host for subsequent URL/Referer handling.
+		d.providerMu.Lock()
+		if d.providerHosts == nil {
+			d.providerHosts = map[string]string{}
+		}
+		d.providerHosts[source] = base
+		d.providerMu.Unlock()
+		return payload, nil
 	}
-	endpoint.RawQuery = query.Encode()
-	body, err := d.fetchProviderText(ctx, endpoint.String(), macCMSReferer(source))
-	if err != nil {
-		return nil, fmt.Errorf("%s API 請求失敗：%w", provider.Name, err)
+	if lastErr == nil {
+		lastErr = errors.New("沒有可用的 API 位址")
 	}
-	if len(body) > providerMaxBodyBytes {
-		return nil, errors.New("MacCMS API 回應過大")
-	}
-	decoder := json.NewDecoder(strings.NewReader(body))
-	decoder.UseNumber()
-	var payload map[string]any
-	if err := decoder.Decode(&payload); err != nil {
-		return nil, fmt.Errorf("%s API 回應不是有效 JSON：%w", provider.Name, err)
-	}
-	if payload == nil {
-		return nil, fmt.Errorf("%s API 沒有回傳資料", provider.Name)
-	}
-	return payload, nil
+	return nil, fmt.Errorf("%s API 請求失敗：%w", provider.Name, lastErr)
 }
 
 func macCMSDramaFromRow(source string, row map[string]any) Drama {
