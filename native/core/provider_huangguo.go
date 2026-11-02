@@ -37,6 +37,7 @@ const (
 	sourceMacCMSFfzy      = "maccms-ffzy"
 	sourceMacCMSDouban    = "maccms-douban"
 	sourceMacCMSZuida     = "maccms-zuida"
+	sourceMacCMSCreator   = "maccms-creator"
 
 	providerMaxBodyBytes = 20 * 1024 * 1024
 	providerTimeout      = 12 * time.Second
@@ -100,7 +101,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida, sourceMacCMSCreator:
 		return true
 	default:
 		return false
@@ -143,6 +144,8 @@ func canonicalProviderSource(source string) string {
 		return sourceMacCMSDouban
 	case "maccms-zuida", "最大", "最大資源", "zuidazy.co":
 		return sourceMacCMSZuida
+	case "maccms-creator", "創享影視", "ys.cxkjg.cn":
+		return sourceMacCMSCreator
 	default:
 		return strings.TrimSpace(source)
 	}
@@ -258,7 +261,7 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 	case sourceHanxiaoquan:
 		drama, chapters, err := d.fetchHanxiaoquanDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
-	case sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida:
+	case sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida, sourceMacCMSCreator:
 		drama, chapters, err := d.fetchMacCMSDetail(ctx, canonicalProviderSource(source), sourceID)
 		return drama.DisplayTitle(), chapters, err
 	case sourceCloudFront:
