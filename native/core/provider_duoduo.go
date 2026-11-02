@@ -560,27 +560,40 @@ func (d *Downloader) fetchDuoduoAggregate(ctx context.Context, sourceID string) 
 	return duoduoParseAggregateLines(duoduoRows(payload["data"])), nil
 }
 
-func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
+func (d *Downloader) fetchDuoduoDetailRow(ctx context.Context, sourceID string) (Drama, map[string]any, string, error) {
 	if !webProviderNumericID.MatchString(sourceID) {
-		return Drama{}, nil, errors.New("多多追劇影片 ID 無效")
+		return Drama{}, nil, "", errors.New("多多追劇影片 ID 無效")
 	}
 	payload, base, err := d.fetchDuoduoAPI(ctx, "/api.php/web/vod/get_detail", url.Values{"vod_id": {sourceID}})
 	if err != nil {
-		return Drama{}, nil, err
+		return Drama{}, nil, "", err
 	}
 	rows := duoduoRows(payload["data"])
 	if len(rows) == 0 {
-		return Drama{}, nil, errors.New("多多追劇目前沒有回傳這部影片的詳情")
+		return Drama{}, nil, "", errors.New("多多追劇目前沒有回傳這部影片的詳情")
 	}
-	drama := duoduoDramaFromRow(rows[0])
+	row := rows[0]
+	drama := duoduoDramaFromRow(row)
 	if drama.ID == "" || drama.SourceID != sourceID {
-		return Drama{}, nil, errors.New("多多追劇詳情與查詢影片不符")
+		return Drama{}, nil, "", errors.New("多多追劇詳情與查詢影片不符")
+	}
+	return drama, row, base, nil
+}
+
+func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
+	drama, detailRow, base, err := d.fetchDuoduoDetailRow(ctx, sourceID)
+	if err != nil {
+		return Drama{}, nil, err
+	}
+	payload, _, err := d.fetchDuoduoAPI(ctx, "/api.php/web/vod/get_detail", url.Values{"vod_id": {sourceID}})
+	if err != nil {
+		return Drama{}, nil, err
 	}
 	playerRows := duoduoRows(payload["vodplayer"])
 	// Prefer direct media URLs already included in the detail response. The
 	// aggregate endpoint is only needed when the detail payload has no usable
 	// direct line, which avoids an unnecessary dependency and extra latency.
-	lines := duoduoParseDetailLines(rows[0], playerRows)
+	lines := duoduoParseDetailLines(detailRow, playerRows)
 	var aggregateErr error
 	if len(lines) == 0 {
 		lines, aggregateErr = d.fetchDuoduoAggregate(ctx, sourceID)
