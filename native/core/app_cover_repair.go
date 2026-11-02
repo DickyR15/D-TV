@@ -57,7 +57,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	// Refresh/check provider-native detail metadata before consulting an
 	// external match. This protects provider priority even after a restart
 	// when only an external fallback was persisted.
-	providerAddress, repairedExternal, repairErr := cache.repair(ctx, drama, force)
+	providerAddress, repairedExternal, repairErr := cache.repair(ctx, drama, force, strings.TrimSpace(drama.FallbackCover) == "" && cachedExternal == "")
 	if providerAddress != "" && providerAddress != primaryAddress {
 		path, err := cache.loadAlternativeAddress(
 			ctx, drama, providerAddress,
@@ -95,7 +95,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	}
 
 	if force && repairErr == nil {
-		providerAddress, repairedExternal, repairErr = cache.repair(ctx, drama, true)
+		providerAddress, repairedExternal, repairErr = cache.repair(ctx, drama, true, true)
 		if providerAddress != "" && providerAddress != primaryAddress {
 			path, err := cache.loadAlternativeAddress(
 				ctx, drama, providerAddress,
@@ -244,7 +244,7 @@ func filepathJoinCover(directory, name string) string {
 	return strings.TrimRight(directory, string(os.PathSeparator)) + string(os.PathSeparator) + name
 }
 
-func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, force bool) (string, string, error) {
+func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, force bool, searchExternal bool) (string, string, error) {
 	cache.mu.Lock()
 	if previous := cache.repairs[drama.ID]; previous != nil {
 		if previous.retryAt.IsZero() {
@@ -298,7 +298,7 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 			providerErr = nativeErr
 		}
 		// An official/provider detail poster always outranks external matches.
-		if providerAddress == "" && work.Err() == nil {
+		if providerAddress == "" && work.Err() == nil && searchExternal {
 			externalAddress, externalErr = cache.downloader.bangumiPosterAddress(work, drama)
 			if externalErr == nil && externalAddress != "" && externalAddress != drama.Cover {
 				_, candidateErr := cache.loadAlternativeAddress(work, drama, externalAddress, "https://bgm.tv/", "external")
