@@ -27,32 +27,38 @@ jobs:
 
           SOURCES = {
               "天堂": [
+                  "https://caiji.dyttzyapi.com/api.php/provide/vod/from/dyttm3u8/at/json/",
+                  "https://caiji.dyttzyapi.com/api.php/provide/vod/at/json/",
                   "http://caiji.dyttzyapi.com/api.php/provide/vod/",
-                  "https://caiji.dyttzyapi.com/api.php/provide/vod/",
               ],
               "速播": [
-                  "https://subocj.com/api.php/provide/vod/",
+                  "https://subocj.com/api.php/provide/vod/from/subm3u8/at/json/",
+                  "https://subocj.com/api.php/provide/vod/at/json/",
               ],
               "量子": [
+                  "https://cj.lziapi.com/api.php/provide/vod/from/lzm3u8/at/json/",
+                  "https://cj.lzcaiji.com/api.php/provide/vod/from/lzm3u8/at/json/",
                   "https://cj.lziapi.com/api.php/provide/vod/",
                   "https://cj.lzcaiji.com/api.php/provide/vod/",
               ],
               "非凡": [
-                  "https://api.ffzyapi.com/api.php/provide/vod/",
+                  "https://api.ffzyapi.com/api.php/provide/vod/from/ffm3u8/at/json/",
+                  "https://cj2.ffzyapi.com/api.php/provide/vod/from/ffm3u8/at/json/",
+                  "https://api.ffzyapi.com/api.php/provide/vod/at/json/",
                   "http://api.ffzyapi.com/api.php/provide/vod/",
-                  "https://cj2.ffzyapi.com/api.php/provide/vod/",
                   "http://cj2.ffzyapi.com/api.php/provide/vod/",
                   "https://cj.ffzyapi.com/api.php/provide/vod/",
               ],
               "豆瓣": [
+                  "https://caiji.dbzy5.com/api.php/provide/vod/from/dbm3u8/at/josn/",
+                  "http://caiji.dbzy5.com/api.php/provide/vod/from/dbm3u8/at/josn/",
                   "https://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
                   "http://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
                   "https://dbzy.tv/api.php/provide/vod/at/josn/",
               ],
               "最大": [
-                  "https://zuidazy.me/api.php/provide/vod/",
-                  "http://zuidazy.me/api.php/provide/vod/",
                   "https://api.zuidapi.com/api.php/provide/vod/",
+                  "http://api.zuidapi.com/api.php/provide/vod/",
               ],
           }
           REFERERS = {
@@ -61,7 +67,7 @@ jobs:
               "量子": "https://www.lzizy.net/",
               "非凡": "https://cj.ffzyapi.com/",
               "豆瓣": "https://dbzy.tv/",
-              "最大": "https://zuidazy.me/",
+              "最大": "https://api.zuidapi.com/",
           }
           UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
 
