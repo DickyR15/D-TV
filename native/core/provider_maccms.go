@@ -298,11 +298,16 @@ func macCMSDramaFromRow(source string, row map[string]any) Drama {
 	}
 }
 
-func macCMSDirectMediaURL(raw string) bool {
+func macCMSNormalizeMediaURL(raw string) string {
 	raw = strings.TrimSpace(html.UnescapeString(raw))
 	if decoded, err := url.QueryUnescape(raw); err == nil && strings.HasPrefix(decoded, "http") {
-		raw = decoded
+		return decoded
 	}
+	return raw
+}
+
+func macCMSDirectMediaURL(raw string) bool {
+	raw = macCMSNormalizeMediaURL(raw)
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil {
 		return false
@@ -335,7 +340,7 @@ func (d *Downloader) macCMSParseChapters(source, sourceID string, row map[string
 				continue
 			}
 			title = strings.TrimSpace(title)
-			rawURL = strings.TrimSpace(rawURL)
+			rawURL = macCMSNormalizeMediaURL(rawURL)
 			if !macCMSDirectMediaURL(rawURL) {
 				continue
 			}
@@ -345,7 +350,7 @@ func (d *Downloader) macCMSParseChapters(source, sourceID string, row map[string
 			chapters = append(chapters, Chapter{
 				ID: providerChapterID(source, sourceID, fmt.Sprintf("%d-%d", lineIndex+1, episodeIndex+1)),
 				Source: source, Title: truncate(title, 256),
-				VideoURL: html.UnescapeString(rawURL), Referer: d.macCMSReferer(source),
+				VideoURL: rawURL, Referer: d.macCMSReferer(source),
 				CurrentEpisode: json.RawMessage(strconv.Itoa(episodeIndex + 1)),
 			})
 		}
