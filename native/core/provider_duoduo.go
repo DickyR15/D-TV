@@ -525,10 +525,11 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 	lineOrdinal := 0
 	episodeKey := key
 	if lineKey, episodeValue, found := strings.Cut(key, "-"); found {
-		lineOrdinal, err = strconv.Atoi(lineKey)
-		if err != nil || lineOrdinal < 1 || lineOrdinal > 1000 {
+		parsedLine, parseErr := strconv.Atoi(lineKey)
+		if parseErr != nil || parsedLine < 1 || parsedLine > 1000 {
 			return providerMedia{}, errors.New("多多追劇播放線路編號無效")
 		}
+		lineOrdinal = parsedLine
 		episodeKey = episodeValue
 	}
 	episodeIndex, err := strconv.Atoi(episodeKey)
