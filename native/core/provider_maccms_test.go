@@ -138,6 +138,23 @@ func TestMacCMSProviderEndpointPriorities(t *testing.T) {
 	}
 }
 
+func TestMacCMSPayloadUsableRequiresRowsForCatalogAndDetail(t *testing.T) {
+	empty := map[string]any{"code": 1, "list": []any{}}
+	rows := map[string]any{"code": 1, "list": []any{map[string]any{"vod_id": 123, "vod_name": "測試"}}}
+	for _, action := range []string{"list", "detail"} {
+		params := url.Values{"ac": []string{action}}
+		if macCMSPayloadUsable(params, empty) {
+			t.Errorf("%s response without rows should not be treated as a working API", action)
+		}
+		if !macCMSPayloadUsable(params, rows) {
+			t.Errorf("%s response with rows should be accepted", action)
+		}
+	}
+	if !macCMSPayloadUsable(url.Values{"ac": []string{"class"}}, map[string]any{"class": []any{}}) {
+		t.Fatal("non-catalog JSON responses should remain usable")
+	}
+}
+
 func TestMacCMSPlayLineNamesSupportsCommaSeparatedGroups(t *testing.T) {
 	got := macCMSPlayLineNames("liangzi,lzm3u8")
 	if len(got) != 2 || got[0] != "liangzi" || got[1] != "lzm3u8" {
