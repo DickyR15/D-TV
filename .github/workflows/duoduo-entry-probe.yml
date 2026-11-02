@@ -199,6 +199,7 @@ jobs:
               raw_total = 0
               invalid_rows = 0
               stopped_on_repeat = False
+              category_poster_count = 0
               for page in range(1, MAX_AUDIT_PAGES + 1):
                   params = {"page": page, "sort": "hits", "pageSize": PAGE_SIZE}
                   if category_id != "0":
@@ -225,8 +226,10 @@ jobs:
                       category_rows = rows
                   if category_id == "1" and page == 2:
                       second_rows = rows
-                  if page <= 2:
-                      for row in rows[:2]:
+                  # Probe a wider cross-section of each content category. Cap
+                  # each category at ten distinct poster URLs to keep CI bounded.
+                  if page <= 5 and category_poster_count < 10:
+                      for row in rows[:4]:
                           title = row_title(row) or "(無標題)"
                           row_candidate_count = 0
                           for field in (
@@ -234,11 +237,14 @@ jobs:
                               "vod_pic_slide", "vod_pic_screenshot",
                               "cover", "cover_url", "poster", "image", "thumbnail",
                           ):
+                              if category_poster_count >= 10:
+                                  break
                               address = poster_address(row.get(field))
                               if address and address not in poster_seen:
                                   poster_seen.add(address)
                                   poster_candidates.append((address, title, category_name, field, row_id(row)))
                                   row_candidate_count += 1
+                                  category_poster_count += 1
                                   if row_candidate_count >= 2:
                                       break
                   if not rows:
