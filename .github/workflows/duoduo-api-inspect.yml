@@ -156,3 +156,129 @@ jobs:
             duoduo-page-report.json
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Probe public home, movie search, detail and media formats
+        shell: bash
+        run: |
+          python - <<'PY'
+          from urllib.error import HTTPError
+          from urllib.parse import urlencode, urlsplit
+          from urllib.request import Request, urlopen
+          import json
+          import re
+          from pathlib import Path
+
+          HOST = "323433ssdfd.top"
+          BASE = f"https://{HOST}"
+          HEADERS = {
+              "User-Agent": "Mozilla/5.0 DTV-Duoduo-ReadOnly-Probe/1.0",
+              "Accept": "application/json",
+              "X-Client": "8f3d2a1c7b6e5d4c9a0b1f2e3d4c5b6a",
+              "web-sign": "ddtvf65f3a83d6d9ad6f",
+              "Origin": f"https://{HOST}",
+              "Referer": f"https://{HOST}/",
+          }
+
+          def get_json(route, params=None):
+              url = BASE + route
+              if params:
+                  url += "?" + urlencode(params)
+              req = Request(url, headers=HEADERS)
+              try:
+                  response = urlopen(req, timeout=15)
+              except HTTPError as exc:
+                  response = exc
+              with response:
+                  body = response.read(2 * 1024 * 1024)
+                  try:
+                      payload = json.loads(body.decode("utf-8", errors="replace"))
+                  except Exception:
+                      payload = {}
+                  return response.status, payload
+
+          def summarize_play_groups(row):
+              names = str(row.get("vod_play_from", "")).split("$$$")
+              blocks = str(row.get("vod_play_url", "")).split("$$$")
+              for i, name in enumerate(names[:len(blocks)]):
+                  episodes = [x for x in blocks[i].split("#") if "$" in x]
+                  first = episodes[0].split("$", 1)[1] if episodes else ""
+                  parsed = urlsplit(first)
+                  print(f"  LINE name={name[:50]!r} episodes={len(episodes)} first={parsed.scheme}://{parsed.netloc}{parsed.path[:100]}")
+              for item in row.get("vodplayer", []) if isinstance(row.get("vodplayer"), list) else []:
+                  print("  PLAYER_CONFIG=" + json.dumps(item, ensure_ascii=False)[:500])
+
+          print("=== HOME ===")
+          status, home = get_json("/api.php/web/index/home")
+          print(f"HTTP={status} CODE={home.get('code')} MSG={home.get('msg')!r}")
+          data = home.get("data")
+          if isinstance(data, dict):
+              print("DATA_KEYS=" + ",".join(data.keys()))
+              for key, value in data.items():
+                  if isinstance(value, list):
+                      print(f"  {key}: count={len(value)} sample=" + json.dumps(value[:2], ensure_ascii=False)[:900])
+          elif isinstance(data, list):
+              print(f"DATA_LIST={len(data)} sample=" + json.dumps(data[:2], ensure_ascii=False)[:900])
+
+          print("\n=== RANKINGS ===")
+          status, ranking = get_json("/api.php/web/ranking/list")
+          ranking_data = ranking.get("data")
+          rankings = ranking_data.get("rankings", []) if isinstance(ranking_data, dict) else []
+          print(f"HTTP={status} CODE={ranking.get('code')} rankings={len(rankings)}")
+          for item in rankings[:8]:
+              print("  " + json.dumps(item, ensure_ascii=False)[:500])
+
+          print("\n=== SEARCHES ===")
+          queries = ["流浪地球", "阿凡達", "復仇者聯盟"]
+          chosen = None
+          for query in queries:
+              status, result = get_json("/api.php/web/search/index", {"wd": query, "page": 1, "limit": 10})
+              rows = result.get("data") if isinstance(result.get("data"), list) else []
+              print(f"QUERY={query!r} HTTP={status} CODE={result.get('code')} COUNT={len(rows)} MSG={result.get('msg')!r}")
+              for row in rows[:3]:
+                  print("  " + json.dumps({k: row.get(k) for k in ["vod_id","vod_name","type_name","vod_year","vod_remarks","vod_pic"]}, ensure_ascii=False)[:700])
+              if rows and chosen is None:
+                  chosen = (query, rows[0])
+
+          if chosen:
+              query, sample = chosen
+              vod_id = str(sample.get("vod_id", "")).strip()
+              print(f"\n=== DETAIL {query!r} ID={vod_id!r} ===")
+              status, detail = get_json("/api.php/web/vod/get_detail", {"vod_id": vod_id})
+              rows = detail.get("data") if isinstance(detail.get("data"), list) else []
+              print(f"HTTP={status} CODE={detail.get('code')} MSG={detail.get('msg')!r} ROWS={len(rows)}")
+              if rows:
+                  row = rows[0]
+                  print("METADATA=" + json.dumps({k: row.get(k) for k in ["vod_id","vod_name","type_name","vod_year","vod_remarks","vod_play_from"]}, ensure_ascii=False)[:1500])
+                  summarize_play_groups({**row, "vodplayer": detail.get("vodplayer")})
+                  for source in str(row.get("vod_play_url","")).split("$$$")[:3]:
+                      first = next((e for e in source.split("#") if "$" in e), "")
+                      if first:
+                          address = first.split("$",1)[1]
+                          parsed = urlsplit(address)
+                          print(f"  RAW_FIRST_EP={parsed.scheme}://{parsed.netloc}{parsed.path} DIRECT_SUFFIX={parsed.path.lower().endswith(('.m3u8','.mp4'))}")
+
+          print("\n=== INTERNAL SEARCH AGGREGATE ===")
+          status, aggregate = get_json("/api.php/web/internal/search_aggregate", {"name": "流浪地球"})
+          items = aggregate.get("data") if isinstance(aggregate.get("data"), list) else []
+          print(f"HTTP={status} CODE={aggregate.get('code')} MSG={aggregate.get('msg')!r} SOURCES={len(items)}")
+          for item in items[:8]:
+              print("  " + json.dumps({k:item.get(k) for k in ["site_key","site_name","vod_play_from","decode_status","vod_play_url"]}, ensure_ascii=False)[:1200])
+
+          print("\n=== WASM DECODER FILE ===")
+          req = Request(BASE + "/assets/web_app_wasm_bg-Bxwbrgev.wasm", headers={"User-Agent": HEADERS["User-Agent"]})
+          try:
+              with urlopen(req, timeout=15) as response:
+                  blob = response.read(8 * 1024 * 1024)
+                  Path("web_app_wasm_bg.wasm").write_bytes(blob)
+                  print(f"HTTP={response.status} BYTES={len(blob)} TYPE={response.headers.get('Content-Type')}")
+          except Exception as exc:
+              print(f"WASM_ERROR={type(exc).__name__}: {str(exc)[:160]}")
+          PY
+      - name: Upload decoder WASM
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: duoduo-decoder-wasm
+          path: web_app_wasm_bg.wasm
+          if-no-files-found: warn
+          retention-days: 7
