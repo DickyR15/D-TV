@@ -863,3 +863,107 @@ func TestNativeStreamLogsIncompleteTransferByteRange(t *testing.T) {
 		t.Fatal("transfer diagnostics leaked a signed media URL")
 	}
 }
+
+func TestDuoduoDirectHLSPlaybackUsesStandardHTTPAndRewritesSegments(t *testing.T) {
+	const referer = "https://duoduozhuiju.com/"
+	var upstreamRequests atomic.Int32
+	origin := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		upstreamRequests.Add(1)
+		if got := request.Header.Get("Referer"); got != referer {
+			http.Error(writer, "unexpected Referer: "+got, http.StatusForbidden)
+			return
+		}
+		switch request.URL.Path {
+		case "/movie/index.m3u8":
+			writer.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = io.WriteString(writer, "#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:4.0,\nsegment.ts\n#EXT-X-ENDLIST\n")
+		case "/movie/segment.ts":
+			writer.Header().Set("Content-Type", "video/mp2t")
+			_, _ = writer.Write([]byte("duoduo-segment-bytes"))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer origin.Close()
+
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Duoduo direct media opts into the standard HTTP client. Make the
+	// specialized streaming client fail so this test proves that the proxy
+	// honors that transport choice for both playlists and child segments.
+	engine.downloader.client = origin.Client()
+	engine.downloader.streamClient = &http.Client{
+		Transport: nativeStreamRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
+			return nil, errors.New("Duoduo unexpectedly used the specialized stream client")
+		}),
+	}
+	media, err := engine.downloader.resolveDuoduoMedia(context.Background(), Task{
+		DramaID: "duoduo:78296",
+		Chapter: Chapter{
+			ID: providerChapterID(sourceDuoduo, "78296", "1-1"),
+			Source: sourceDuoduo,
+			Title: "第1集",
+			VideoURL: origin.URL + "/movie/index.m3u8",
+			Referer: referer,
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolve Duoduo direct media: %v", err)
+	}
+	if !media.StandardHTTP || media.URL != origin.URL+"/movie/index.m3u8" {
+		t.Fatalf("Duoduo direct media did not retain its standard HTTP URL: %+v", media)
+	}
+
+	stream, err := newNativeStreamServer(engine.downloader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.server.Close()
+	localURL, token := stream.nativeOpen(media)
+	defer stream.nativeRelease(token)
+
+	playlistResponse, err := http.Get(localURL)
+	if err != nil {
+		t.Fatalf("open proxied HLS playlist: %v", err)
+	}
+	playlist, readErr := io.ReadAll(playlistResponse.Body)
+	_ = playlistResponse.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read proxied HLS playlist: %v", readErr)
+	}
+	if playlistResponse.StatusCode != http.StatusOK ||
+		!strings.Contains(playlistResponse.Header.Get("Content-Type"), "mpegurl") {
+		t.Fatalf("proxied playlist response = HTTP %d, type=%q, body=%q",
+			playlistResponse.StatusCode, playlistResponse.Header.Get("Content-Type"), playlist)
+	}
+	var segmentURL string
+	for _, line := range strings.Split(string(playlist), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") {
+			segmentURL = line
+			break
+		}
+	}
+	if segmentURL == "" || !strings.HasPrefix(segmentURL, stream.address+"/") {
+		t.Fatalf("HLS segment was not rewritten to the local proxy: %q", playlist)
+	}
+
+	segmentResponse, err := http.Get(segmentURL)
+	if err != nil {
+		t.Fatalf("open proxied HLS segment: %v", err)
+	}
+	segment, readErr := io.ReadAll(segmentResponse.Body)
+	_ = segmentResponse.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read proxied HLS segment: %v", readErr)
+	}
+	if segmentResponse.StatusCode != http.StatusOK || string(segment) != "duoduo-segment-bytes" {
+		t.Fatalf("proxied segment response = HTTP %d, body=%q", segmentResponse.StatusCode, segment)
+	}
+	if upstreamRequests.Load() != 2 {
+		t.Fatalf("upstream requests = %d, want playlist and one segment", upstreamRequests.Load())
+	}
+}
+
