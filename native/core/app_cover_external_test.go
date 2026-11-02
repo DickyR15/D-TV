@@ -71,8 +71,8 @@ func TestBangumiPosterAddressRejectsAmbiguousAndNonExactTitles(t *testing.T) {
 		{
 			name: "ambiguous exact titles",
 			body: `{"data":[
-				{"id":201,"type":2,"name_cn":"測試作品","date":"2024-01-01","images":{"large":"https://lain.bgm.tv/201.jpg"}},
-				{"id":202,"type":2,"name_cn":"測試作品","date":"2025-01-01","images":{"large":"https://lain.bgm.tv/202.jpg"}}
+				{"id":201,"type":2,"name_cn":"凡人修仙传","date":"2024-01-01","images":{"large":"https://lain.bgm.tv/201.jpg"}},
+				{"id":202,"type":2,"name_cn":"凡人修仙传","date":"2025-01-01","images":{"large":"https://lain.bgm.tv/202.jpg"}}
 			]}`,
 			want: "多個同名候選",
 		},
