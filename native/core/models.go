@@ -76,6 +76,7 @@ type Chapter struct {
 	PageURL        string          `json:"pageUrl,omitempty"`
 	Referer        string          `json:"referer,omitempty"`
 	PlayLine       string          `json:"playLine,omitempty"`
+	PlaybackVariants []string       `json:"playbackVariants,omitempty"`
 	Vertical       *bool           `json:"vertical,omitempty"`
 }
 
