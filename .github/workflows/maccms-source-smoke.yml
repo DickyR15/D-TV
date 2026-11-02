@@ -78,10 +78,8 @@ jobs:
                       raise RuntimeError("response exceeded size limit")
                   return response.status, response.headers.get("Content-Type", ""), body
 
-          def fetch_json(base, params):
+          def fetch_json(base, params, referer):
               url = base + ("&" if "?" in base else "?") + urllib.parse.urlencode(params)
-              parsed = urllib.parse.urlsplit(base)
-              referer = parsed.scheme + "://" + parsed.netloc + "/"
               status, _, body = request(url, referer)
               if status != 200:
                   raise RuntimeError("API HTTP %s" % status)
@@ -100,7 +98,7 @@ jobs:
               return []
 
           def test_api(base, referer):
-              listing = fetch_json(base, {"ac": "list", "pg": 1})
+              listing = fetch_json(base, {"ac": "list", "pg": 1}, referer)
               catalog = rows(listing)
               if not catalog:
                   raise RuntimeError("catalog list is empty")
@@ -109,10 +107,10 @@ jobs:
               title = str(sample.get("vod_name", "")).strip()
               if not source_id or not title:
                   raise RuntimeError("catalog item has no vod_id/vod_name")
-              search = fetch_json(base, {"ac": "detail", "wd": title[:48], "pg": 1})
+              search = fetch_json(base, {"ac": "detail", "wd": title[:48], "pg": 1}, referer)
               if not rows(search):
                   raise RuntimeError("search returned no items for its own catalog title")
-              detail = fetch_json(base, {"ac": "detail", "ids": source_id})
+              detail = fetch_json(base, {"ac": "detail", "ids": source_id}, referer)
               detail_rows = rows(detail)
               if not detail_rows:
                   raise RuntimeError("detail returned no row")
