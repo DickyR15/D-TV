@@ -67,7 +67,7 @@ func validNativeCategory(source, category string) bool {
 		return category == "1" || category == "2" || category == "3" || category == "4"
 	case sourceHanxiaoquan:
 		return validHanxiaoquanCategory(category)
-	case sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida:
+	case sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida, sourceMacCMSCreator:
 		return webProviderNumericID.MatchString(category)
 	}
 	return false
@@ -137,7 +137,7 @@ func (engine *nativeEngine) nativeCategories(ctx context.Context, source string,
 		}
 	case sourceHanxiaoquan:
 		all = append(all, d.fetchHanxiaoquanCategories()...)
-	case sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida:
+	case sourceMacCMSDytt, sourceMacCMSSubo, sourceMacCMSLzi, sourceMacCMSFfzy, sourceMacCMSDouban, sourceMacCMSZuida, sourceMacCMSCreator:
 		var categories []nativeCategory
 		categories, err = d.fetchMacCMSCategories(ctx, source)
 		if err == nil {
