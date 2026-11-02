@@ -148,10 +148,14 @@ func macCMSObject(value any) map[string]any {
 	return object
 }
 
-func macCMSPayloadUsable(params url.Values, payload map[string]any) bool {
+func macCMSPayloadUsable(source string, params url.Values, payload map[string]any) bool {
 	switch params.Get("ac") {
 	case "list":
-		return len(macCMSRows(payload)) > 0 || len(macCMSClasses(payload)) > 0
+		if len(macCMSRows(payload)) > 0 {
+			return true
+		}
+		return canonicalProviderSource(source) == sourceMacCMSCreator &&
+			len(macCMSClasses(payload)) > 0
 	case "detail":
 		return len(macCMSRows(payload)) > 0
 	default:
@@ -265,7 +269,7 @@ func (d *Downloader) fetchMacCMSJSON(ctx context.Context, source string, params 
 			lastErr = errors.New("API 沒有回傳 JSON 物件")
 			continue
 		}
-		if !macCMSPayloadUsable(params, payload) {
+		if !macCMSPayloadUsable(source, params, payload) {
 			lastErr = errors.New("API 沒有回傳影片資料")
 			continue
 		}
