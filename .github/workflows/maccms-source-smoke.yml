@@ -135,15 +135,43 @@ jobs:
               parsed_media = urllib.parse.urlsplit(direct)
               media_result = "media HTTP %s (%s)" % (media_status, content_type)
               if parsed_media.path.lower().endswith(".m3u8"):
-                  playlist = body.decode("utf-8-sig", "replace")
-                  segments = [line.strip() for line in playlist.splitlines() if line.strip() and not line.startswith("#")]
-                  if not segments:
-                      raise RuntimeError("M3U8 has no media entries")
-                  segment = urllib.parse.urljoin(direct, segments[0])
-                  seg_status, seg_type, seg_body = request(segment, direct, "bytes=0-1023", 4096)
-                  if not 200 <= seg_status < 300 or not seg_body:
-                      raise RuntimeError("first HLS segment failed: HTTP %s" % seg_status)
-                  media_result = "playlist HTTP %s; segment HTTP %s (%s)" % (media_status, seg_status, seg_type or content_type)
+                  current_url = direct
+                  current_body = body
+                  final_segment_status = None
+                  final_segment_type = ""
+                  for depth in range(4):
+                      playlist = current_body.decode("utf-8-sig", "replace")
+                      lines = [line.strip() for line in playlist.splitlines() if line.strip()]
+                      if not lines or "#EXTM3U" not in playlist[:512]:
+                          raise RuntimeError("invalid HLS playlist")
+                      if "#EXT-X-STREAM-INF" in playlist:
+                          candidate = None
+                          for index, line in enumerate(lines):
+                              if line.startswith("#EXT-X-STREAM-INF"):
+                                  candidate = next((x for x in lines[index + 1:] if not x.startswith("#")), None)
+                                  break
+                          if candidate is None:
+                              raise RuntimeError("master playlist has no variant")
+                          next_url = urllib.parse.urljoin(current_url, candidate)
+                          next_status, next_type, next_body = request(next_url, current_url, "bytes=0-1023", 1024 * 1024)
+                          if not 200 <= next_status < 300 or not next_body:
+                              raise RuntimeError("HLS variant request failed: HTTP %s" % next_status)
+                          current_url, current_body = next_url, next_body
+                          continue
+                      segment_path = next((x for x in lines if not x.startswith("#")), None)
+                      if segment_path is None:
+                          raise RuntimeError("media playlist has no segments")
+                      segment_url = urllib.parse.urljoin(current_url, segment_path)
+                      final_segment_status, final_segment_type, segment_body = request(segment_url, current_url, "bytes=0-1023", 4096)
+                      if not 200 <= final_segment_status < 300 or not segment_body:
+                          raise RuntimeError("first HLS media segment failed: HTTP %s" % final_segment_status)
+                      if "mpegurl" in final_segment_type.lower() or segment_body.lstrip().startswith(b"#EXTM3U"):
+                          current_url, current_body = segment_url, segment_body
+                          continue
+                      break
+                  if final_segment_status is None or "mpegurl" in final_segment_type.lower():
+                      raise RuntimeError("could not reach a media segment within four HLS playlist levels")
+                  media_result = "playlist HTTP %s; media segment HTTP %s (%s)" % (media_status, final_segment_status, final_segment_type or content_type)
               return len(catalog), title, media_result
 
           failures = []
