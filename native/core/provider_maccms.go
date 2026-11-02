@@ -49,6 +49,8 @@ var macCMSProviders = map[string]macCMSProvider{
 		Name:    "非凡資源",
 		Referer: "https://ffzy.tv/",
 		APIs: []string{
+			"https://api.ffzyapi.com/api.php/provide/vod/",
+			"https://cj2.ffzyapi.com/api.php/provide/vod/",
 			"https://api.ffzyapi.com/api.php/provide/vod/from/ffm3u8/at/json/",
 			"https://cj2.ffzyapi.com/api.php/provide/vod/from/ffm3u8/at/json/",
 			"https://api.ffzyapi.com/api.php/provide/vod/at/json/",
