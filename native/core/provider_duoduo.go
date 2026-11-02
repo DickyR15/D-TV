@@ -70,20 +70,27 @@ func duoduoString(value any) string {
 }
 
 func duoduoRows(value any) []map[string]any {
-	rows, ok := value.([]any)
-	if !ok {
-		if maps, ok := value.([]map[string]any); ok {
-			return maps
+	switch rows := value.(type) {
+	case []map[string]any:
+		return rows
+	case []any:
+		out := make([]map[string]any, 0, len(rows))
+		for _, item := range rows {
+			if row, ok := item.(map[string]any); ok {
+				out = append(out, row)
+			}
 		}
-		return nil
-	}
-	out := make([]map[string]any, 0, len(rows))
-	for _, item := range rows {
-		if row, ok := item.(map[string]any); ok {
-			out = append(out, row)
+		return out
+	case map[string]any:
+		// Some mirrors wrap list data in a named collection rather than
+		// returning the array directly. Accept the common public API shapes.
+		for _, key := range []string{"list", "items", "results", "videos", "vod"} {
+			if nested := duoduoRows(rows[key]); len(nested) > 0 {
+				return nested
+			}
 		}
 	}
-	return out
+	return nil
 }
 
 func duoduoStrings(value any) []string {
@@ -239,8 +246,8 @@ func duoduoEpisodeNumber(title string, fallback int) int {
 }
 
 func duoduoDramaFromRow(row map[string]any) Drama {
-	id := duoduoString(row["vod_id"])
-	title := duoduoString(row["vod_name"])
+	id := firstNonEmpty(duoduoString(row["vod_id"]), duoduoString(row["id"]))
+	title := firstNonEmpty(duoduoString(row["vod_name"]), duoduoString(row["title"]), duoduoString(row["name"]))
 	if !webProviderNumericID.MatchString(id) || title == "" {
 		return Drama{}
 	}
@@ -250,6 +257,7 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 	cover := firstNonEmpty(
 		providerCoverAddress(row["vod_pic"], duoduoPublicEntryURL),
 		providerCoverAddress(row["vod_pic_thumb"], duoduoPublicEntryURL),
+		providerCoverAddress(row["vod_pic_url"], duoduoPublicEntryURL),
 		providerCoverAddress(row["vod_pic_slide"], duoduoPublicEntryURL),
 		providerCoverAddress(row["vod_pic_screenshot"], duoduoPublicEntryURL),
 		providerCoverAddress(row["cover"], duoduoPublicEntryURL),
@@ -384,15 +392,19 @@ func (d *Downloader) fetchDuoduoAPI(ctx context.Context, route string, params ur
 	return nil, "", fmt.Errorf("多多追劇連線失敗：%w", lastErr)
 }
 
-func (d *Downloader) fetchDuoduoCategories(ctx context.Context) ([]nativeCategory, error) {
+func (d *Downloader) fetchDuoduoHomeData(ctx context.Context) (map[string]any, error) {
 	payload, _, err := d.fetchDuoduoAPI(ctx, "/api.php/web/index/home", nil)
 	if err != nil {
 		return nil, err
 	}
 	data, ok := payload["data"].(map[string]any)
 	if !ok {
-		return nil, errors.New("多多追劇首頁沒有回傳分類")
+		return nil, errors.New("多多追劇首頁沒有回傳有效資料")
 	}
+	return data, nil
+}
+
+func duoduoCategoriesFromHome(data map[string]any) []nativeCategory {
 	rows := duoduoRows(data["categories"])
 	categories := make([]nativeCategory, 0, len(rows))
 	seen := map[string]bool{}
@@ -404,10 +416,63 @@ func (d *Downloader) fetchDuoduoCategories(ctx context.Context) ([]nativeCategor
 		seen[id] = true
 		categories = append(categories, nativeCategory{ID: id, Name: truncate(name, 32)})
 	}
+	return categories
+}
+
+func (d *Downloader) fetchDuoduoCategories(ctx context.Context) ([]nativeCategory, error) {
+	data, err := d.fetchDuoduoHomeData(ctx)
+	if err != nil {
+		return nil, err
+	}
+	categories := duoduoCategoriesFromHome(data)
 	if len(categories) == 0 {
 		return nil, errors.New("多多追劇目前沒有可用的影片分類")
 	}
 	return categories, nil
+}
+
+func duoduoCategoryName(category string) string {
+	switch strings.TrimSpace(category) {
+	case "1":
+		return "电影"
+	case "2":
+		return "剧集"
+	case "3":
+		return "动漫"
+	case "4":
+		return "综艺"
+	default:
+		return ""
+	}
+}
+
+// duoduoHomeSupplement returns the curated videos shown by the source website's
+// home page. Those rows are separate from /filter/vod pagination and otherwise
+// never appear in D TV's catalog, even though they are visible on the website.
+func duoduoHomeSupplement(data map[string]any, category string) []Drama {
+	seen := map[string]bool{}
+	var items []Drama
+	addRows := func(rows []map[string]any) {
+		for _, row := range rows {
+			drama := duoduoDramaFromRow(row)
+			if drama.ID == "" || seen[drama.ID] {
+				continue
+			}
+			seen[drama.ID] = true
+			items = append(items, drama)
+		}
+	}
+	for _, group := range duoduoRows(data["categories"]) {
+		if category != "" && duoduoString(group["type_id"]) != category {
+			continue
+		}
+		addRows(duoduoRows(group["videos"]))
+	}
+	if category == "" {
+		addRows(duoduoRows(data["recommend"]))
+		addRows(duoduoRows(data["videos"]))
+	}
+	return items
 }
 
 func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, category, query string) ([]Drama, bool, error) {
@@ -416,6 +481,12 @@ func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, categ
 	}
 	var route string
 	params := url.Values{"page": {strconv.Itoa(page)}}
+	var homeData map[string]any
+	if query == "" && (page == 1 || category != "") {
+		// Keep the site's curated home rows available as part of the first
+		// catalog page, even when its independent category endpoint omits them.
+		homeData, _ = d.fetchDuoduoHomeData(ctx)
+	}
 	if query != "" {
 		route = "/api.php/web/search/index"
 		params.Set("wd", query)
@@ -423,18 +494,23 @@ func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, categ
 	} else {
 		route = "/api.php/web/filter/vod"
 		params.Set("sort", "hits")
+		params.Set("pageSize", "24")
 		if category != "" {
-			params.Set("type_id", category)
-			categories, err := d.fetchDuoduoCategories(ctx)
-			if err != nil {
-				return nil, false, err
-			}
-			for _, item := range categories {
-				if item.ID == category {
-					params.Set("type_name", item.Name)
-					break
+			// The upstream web API filters by type_name; type_id is only the
+			// identifier used by its category menu and is ignored by the filter.
+			name := duoduoCategoryName(category)
+			if homeData != nil {
+				for _, item := range duoduoCategoriesFromHome(homeData) {
+					if item.ID == category {
+						name = item.Name
+						break
+					}
 				}
 			}
+			if name == "" {
+				return nil, false, errors.New("多多追劇分類名稱無效")
+			}
+			params.Set("type_name", name)
 		}
 	}
 	payload, _, err := d.fetchDuoduoAPI(ctx, route, params)
@@ -442,12 +518,30 @@ func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, categ
 		return nil, false, err
 	}
 	rows := duoduoRows(payload["data"])
-	items := make([]Drama, 0, len(rows))
-	for _, row := range rows {
-		if drama := duoduoDramaFromRow(row); drama.ID != "" {
+	items := make([]Drama, 0, len(rows)+24)
+	seen := make(map[string]bool, len(rows)+24)
+	appendRows := func(values []map[string]any) {
+		for _, row := range values {
+			drama := duoduoDramaFromRow(row)
+			if drama.ID == "" || seen[drama.ID] {
+				continue
+			}
+			seen[drama.ID] = true
 			items = append(items, drama)
 		}
 	}
+	appendRows(rows)
+	if query == "" && page == 1 && homeData != nil {
+		supplement := duoduoHomeSupplement(homeData, category)
+		for _, drama := range supplement {
+			if drama.ID != "" && !seen[drama.ID] {
+				seen[drama.ID] = true
+				items = append(items, drama)
+			}
+		}
+	}
+	// The source API's pageCount field is known to be unreliable (often 1).
+	// Its public client uses >=18 results as the continuation signal as well.
 	threshold := 18
 	if query != "" {
 		threshold = duoduoPageSize
