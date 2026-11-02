@@ -50,7 +50,11 @@ func (d *Downloader) nativeCoverAddress(ctx context.Context, drama nativeDrama) 
 		fresh, _, err := d.fetchDSDDetail(ctx, id)
 		return nativeNormalize(fresh).Cover, err
 	case sourceDuoduo:
-		fresh, _, err := d.fetchDuoduoDetail(ctx, id)
+		// Poster repair must not depend on finding a directly playable line.
+		// A valid catalogue/detail poster should still be usable when the
+		// aggregate playback service is unavailable or the title has no
+		// supported direct media URL.
+		fresh, _, _, _, err := d.fetchDuoduoDetailRow(ctx, id)
 		return nativeNormalize(fresh).Cover, err
 	case sourceHanxiaoquan:
 		fresh, _, err := d.fetchHanxiaoquanDetail(ctx, id)
