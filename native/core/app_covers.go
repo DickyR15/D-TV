@@ -122,9 +122,14 @@ func duoduoBaiduPosterSourceURL(address string) string {
 	if !strings.HasPrefix(host, "gimg") || !strings.HasSuffix(host, ".baidu.com") {
 		return ""
 	}
-	var values url.Values
+	values := url.Values{}
 	if parsed.RawQuery != "" {
-		values, _ = url.ParseQuery(parsed.RawQuery)
+		queryValues, _ := url.ParseQuery(parsed.RawQuery)
+		for key, entries := range queryValues {
+			for _, value := range entries {
+				values.Add(key, value)
+			}
+		}
 	}
 	pathValues, pathErr := url.ParseQuery(strings.TrimPrefix(parsed.Path, "/gimg/"))
 	if pathErr == nil {
