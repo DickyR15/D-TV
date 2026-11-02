@@ -493,24 +493,25 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 		}
 		return Drama{}, nil, errors.New("多多追劇目前沒有可直接播放的影片線路")
 	}
-	best := lines[0]
-	for _, line := range lines[1:] {
-		if len(line.Episodes) > len(best.Episodes) {
-			best = line
+	maxEpisodes := 0
+	var chapters []Chapter
+	for lineIndex, line := range lines {
+		maxEpisodes = max(maxEpisodes, len(line.Episodes))
+		for _, episode := range line.Episodes {
+			key := fmt.Sprintf("%d-%d", lineIndex+1, episode.Index)
+			chapters = append(chapters, Chapter{
+				ID: providerChapterID(sourceDuoduo, sourceID, key),
+				Source: sourceDuoduo,
+				Title: truncate(episode.Title, 128),
+				CurrentEpisode: rawEpisode(duoduoEpisodeNumber(episode.Title, episode.Index)),
+				VideoURL: episode.URL,
+				Referer: base + "/",
+				PlayLine: truncate(line.Name, 96),
+			})
 		}
 	}
-	chapters := make([]Chapter, 0, len(best.Episodes))
-	for _, episode := range best.Episodes {
-		key := strconv.Itoa(episode.Index)
-		chapters = append(chapters, Chapter{
-			ID: providerChapterID(sourceDuoduo, sourceID, key), Source: sourceDuoduo,
-			Title: truncate(episode.Title, 128),
-			CurrentEpisode: rawEpisode(duoduoEpisodeNumber(episode.Title, episode.Index)),
-			VideoURL: fmt.Sprintf("duoduo-play://%s/%s", sourceID, key),
-			Referer: base + "/",
-		})
-	}
-	drama.TotalEpisode, drama.EpisodeCount, drama.EpisodesVerified = len(chapters), len(chapters), len(chapters) > 0
+	drama.TotalEpisode, drama.EpisodeCount = maxEpisodes, maxEpisodes
+	drama.EpisodesVerified = maxEpisodes > 0
 	return drama, chapters, nil
 }
 
@@ -521,9 +522,27 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 		return providerMedia{}, errors.New("多多追劇播放分集資訊無效，請重新整理詳情")
 	}
 	key := strings.TrimPrefix(task.Chapter.ID, prefix)
-	episodeIndex, err := strconv.Atoi(key)
+	lineOrdinal := 0
+	episodeKey := key
+	if lineKey, episodeValue, found := strings.Cut(key, "-"); found {
+		lineOrdinal, err = strconv.Atoi(lineKey)
+		if err != nil || lineOrdinal < 1 || lineOrdinal > 1000 {
+			return providerMedia{}, errors.New("多多追劇播放線路編號無效")
+		}
+		episodeKey = episodeValue
+	}
+	episodeIndex, err := strconv.Atoi(episodeKey)
 	if err != nil || episodeIndex < 1 || episodeIndex > 100000 {
 		return providerMedia{}, errors.New("多多追劇播放集數無效")
+	}
+	// New detail responses contain direct public media URLs. Use that validated
+	// URL immediately instead of querying the aggregate API a second time;
+	// this keeps playback working when the API mirror becomes temporarily busy.
+	if duoduoDirectMediaURL(task.Chapter.VideoURL) {
+		referer := firstNonEmpty(task.Chapter.Referer, d.providerBaseURL(sourceDuoduo)+"/")
+		return providerMedia{
+			URL: task.Chapter.VideoURL, Referer: referer, StandardHTTP: true,
+		}, nil
 	}
 	lines, err := d.fetchDuoduoAggregate(ctx, sourceID)
 	if err != nil {
@@ -537,7 +556,12 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 	}
 	var options []providerMedia
 	seen := map[string]bool{}
-	for _, line := range lines {
+	for lineIndex, line := range lines {
+		if lineOrdinal > 0 && lineIndex+1 != lineOrdinal {
+			// Keep the original selected line first for legacy pseudo URLs;
+			// other lines remain eligible only as same-episode fallbacks.
+			continue
+		}
 		var selected *duoduoPlayEpisode
 		targetTitle := strings.TrimSpace(task.Chapter.Title)
 		targetEpisodeNumber := duoduoEpisodeNumber(targetTitle, 0)
