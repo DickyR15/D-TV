@@ -230,17 +230,16 @@ func TestDuoduoDetailAndPlaybackKeepsLinesSeparate(t *testing.T) {
 	}
 }
 
-func TestDuoduoDetailDirectURLSurvivesAggregateFailure(t *testing.T) {
+func TestDuoduoDetailDirectURLSkipsAggregateEndpoint(t *testing.T) {
 	const direct = "https://media.example.test/movie/direct.m3u8"
-	aggregateCalls := 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/api.php/web/vod/get_detail":
 			return sourceFixtureResponse(request, http.StatusOK,
 				`{"code":200,"data":[{"vod_id":78296,"vod_name":"測試電影","type_name":"电影","vod_play_from":"direct","vod_play_url":"第1集$https://media.example.test/movie/direct.m3u8"}],"vodplayer":[{"from":"direct","decode_status":0,"show":"直連","sort":1}]}`), nil
 		case "/api.php/web/internal/search_aggregate":
-			aggregateCalls++
-			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "temporarily unavailable"), nil
+			t.Fatal("aggregate endpoint should not be called when detail already has direct media URLs")
+			return nil, nil
 		default:
 			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
 			return nil, nil
@@ -249,14 +248,10 @@ func TestDuoduoDetailDirectURLSurvivesAggregateFailure(t *testing.T) {
 
 	drama, chapters, err := d.fetchDuoduoDetail(context.Background(), "78296")
 	if err != nil || len(chapters) != 1 {
-		t.Fatalf("detail fallback should retain direct chapter: drama=%+v chapters=%+v err=%v", drama, chapters, err)
+		t.Fatalf("detail payload should provide the direct chapter: drama=%+v chapters=%+v err=%v", drama, chapters, err)
 	}
 	if chapters[0].VideoURL != direct || chapters[0].PlayLine != "直連" {
 		t.Fatalf("detail API direct URL was not retained: %+v", chapters[0])
-	}
-	requestsAfterDetail := aggregateCalls
-	if requestsAfterDetail != len(duoduoAPIHosts) {
-		t.Fatalf("expected one aggregate failover pass (%d requests), got %d", len(duoduoAPIHosts), requestsAfterDetail)
 	}
 
 	media, err := d.resolveDuoduoMedia(context.Background(), Task{
@@ -264,9 +259,6 @@ func TestDuoduoDetailDirectURLSurvivesAggregateFailure(t *testing.T) {
 		Chapter: chapters[0],
 	})
 	if err != nil || media.URL != direct || !media.StandardHTTP {
-		t.Fatalf("stored direct URL should remain playable after aggregate outage: media=%+v err=%v", media, err)
-	}
-	if aggregateCalls != requestsAfterDetail {
-		t.Fatalf("playback retried the failed aggregate API: before=%d after=%d", requestsAfterDetail, aggregateCalls)
+		t.Fatalf("stored direct URL should resolve without aggregate API: media=%+v err=%v", media, err)
 	}
 }
