@@ -106,11 +106,10 @@ func TestMacCMSRowsAndCategories(t *testing.T) {
 	}
 }
 
-func TestMacCMSPrefersDedicatedM3U8APIs(t *testing.T) {
+func TestMacCMSProviderEndpointPriorities(t *testing.T) {
 	wantPaths := map[string]string{
 		sourceMacCMSDytt:  "/from/dyttm3u8/at/json/",
 		sourceMacCMSSubo:  "/from/subm3u8/at/json/",
-		sourceMacCMSFfzy:  "/from/ffm3u8/at/json/",
 		sourceMacCMSDouban: "/from/dbm3u8/at/josn/",
 	}
 	for source, path := range wantPaths {
@@ -120,6 +119,10 @@ func TestMacCMSPrefersDedicatedM3U8APIs(t *testing.T) {
 		}
 	}
 
+	ffzyProvider := macCMSProviders[sourceMacCMSFfzy]
+	if len(ffzyProvider.APIs) == 0 || ffzyProvider.APIs[0] != "https://api.ffzyapi.com/api.php/provide/vod/" {
+		t.Fatalf("非凡資源 should prefer its verified JSON API root, got %+v", ffzyProvider.APIs)
+	}
 	lziProvider := macCMSProviders[sourceMacCMSLzi]
 	if len(lziProvider.APIs) == 0 || lziProvider.APIs[0] != "https://cj.lziapi.com/api.php/provide/vod/" {
 		t.Fatalf("量子 should use its documented generic JSON API, got %+v", lziProvider.APIs)
