@@ -21,31 +21,36 @@ const (
 )
 
 type macCMSProvider struct {
-	Name string
-	APIs []string
+	Name    string
+	APIs    []string
+	Referer string
 }
 
 var macCMSProviders = map[string]macCMSProvider{
 	sourceMacCMSDytt: {
-		Name: "天堂資源",
+		Name:    "天堂資源",
+		Referer: "https://dyttzy.tv/",
 		APIs: []string{
 			"http://caiji.dyttzyapi.com/api.php/provide/vod/",
 			"https://caiji.dyttzyapi.com/api.php/provide/vod/",
 		},
 	},
 	sourceMacCMSSubo: {
-		Name: "速播資源",
-		APIs: []string{"https://subocj.com/api.php/provide/vod/"},
+		Name:    "速播資源",
+		Referer: "https://subocj.com/",
+		APIs:    []string{"https://subocj.com/api.php/provide/vod/"},
 	},
 	sourceMacCMSLzi: {
-		Name: "量子資源",
+		Name:    "量子資源",
+		Referer: "https://www.lzizy.net/",
 		APIs: []string{
 			"https://cj.lziapi.com/api.php/provide/vod/",
 			"https://cj.lzcaiji.com/api.php/provide/vod/",
 		},
 	},
 	sourceMacCMSFfzy: {
-		Name: "非凡資源",
+		Name:    "非凡資源",
+		Referer: "https://cj.ffzyapi.com/",
 		APIs: []string{
 			"http://api.ffzyapi.com/api.php/provide/vod/",
 			"http://cj2.ffzyapi.com/api.php/provide/vod/",
@@ -53,14 +58,17 @@ var macCMSProviders = map[string]macCMSProvider{
 		},
 	},
 	sourceMacCMSDouban: {
-		Name: "豆瓣資源",
+		Name:    "豆瓣資源",
+		Referer: "https://dbzy.tv/",
 		APIs: []string{
 			"https://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
 			"http://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
+			"https://dbzy.tv/api.php/provide/vod/at/josn/",
 		},
 	},
 	sourceMacCMSZuida: {
-		Name: "最大資源",
+		Name:    "最大資源",
+		Referer: "https://zuidazy.me/",
 		APIs: []string{
 			"https://zuidazy.me/api.php/provide/vod/",
 			"http://zuidazy.me/api.php/provide/vod/",
@@ -96,6 +104,9 @@ func (d *Downloader) macCMSReferer(source string) string {
 	d.providerMu.Unlock()
 	if preferred != "" {
 		return strings.TrimRight(preferred, "/") + "/"
+	}
+	if provider, ok := macCMSProviders[source]; ok && provider.Referer != "" {
+		return provider.Referer
 	}
 	if base := macCMSProviderBaseURL(source); base != "" {
 		return base + "/"
@@ -208,8 +219,11 @@ func (d *Downloader) fetchMacCMSJSON(ctx context.Context, source string, params 
 			}
 		}
 		endpoint.RawQuery = query.Encode()
-		base := endpoint.Scheme + "://" + endpoint.Host + "/"
-		body, requestErr := d.fetchProviderText(ctx, endpoint.String(), base)
+		referer := provider.Referer
+		if referer == "" {
+			referer = endpoint.Scheme + "://" + endpoint.Host + "/"
+		}
+		body, requestErr := d.fetchProviderText(ctx, endpoint.String(), referer)
 		if requestErr != nil {
 			lastErr = requestErr
 			continue
@@ -233,7 +247,7 @@ func (d *Downloader) fetchMacCMSJSON(ctx context.Context, source string, params 
 		if d.providerHosts == nil {
 			d.providerHosts = map[string]string{}
 		}
-		d.providerHosts[source] = base
+		d.providerHosts[source] = endpoint.Scheme + "://" + endpoint.Host
 		d.providerMu.Unlock()
 		return payload, nil
 	}
