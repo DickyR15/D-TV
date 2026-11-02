@@ -1,6 +1,7 @@
 package core
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 )
