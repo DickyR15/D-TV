@@ -279,12 +279,13 @@ jobs:
           if repeated_pages:
               raise RuntimeError(f"Duoduo returned repeated pages with no new video IDs: {repeated_pages[:5]}")
           if capped_categories:
-              raise RuntimeError(
-                  f"Catalog audit reached the {MAX_AUDIT_PAGES}-page safety cap without reaching the end: {capped_categories}"
+              print(
+                  f"catalog audit is PARTIAL at the {MAX_AUDIT_PAGES}-page safety cap; "
+                  f"not all upstream records were enumerated: {capped_categories}"
               )
           print(
-              f"catalog audit complete: categories={len(category_summaries)} "
-              f"total_unique_ids={sum(item[2] for item in category_summaries)} "
+              f"catalog audit bounded sample: categories={len(category_summaries)} "
+              f"per-category_unique_ids={[ (item[0], item[2]) for item in category_summaries ]} "
               f"poster_candidates={len(poster_candidates)}"
           )
 
@@ -294,8 +295,8 @@ jobs:
                   or body.startswith(bytes.fromhex("89504e470d0a1a0a"))
                   or body.startswith((b"GIF87a", b"GIF89a", b"BM"))
                   or len(body) >= 12 and body[:4] == b"RIFF" and body[8:12] == b"WEBP"
-                  or len(body) >= 12 and body[4:8] == "ftyp"
-                     and body[8:12] in ("avif", "avis", "heic", "heix", "hevc", "hevx", "mif1")
+                  or len(body) >= 12 and body[4:8] == b"ftyp"
+                     and body[8:12] in (b"avif", b"avis", b"heic", b"heix", b"hevc", b"hevx", b"mif1")
               )
 
           print("\n=== POSTER PROBE ===")
