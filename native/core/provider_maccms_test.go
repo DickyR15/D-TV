@@ -56,7 +56,8 @@ func TestMacCMSChapterParsingOnlyKeepsDirectMedia(t *testing.T) {
 		"vod_play_from": "m3u8$$$player",
 		"vod_play_url": "第1集$https://cdn.example/one.m3u8#第2集$https://cdn.example/two.mp4$$$第1集$https://player.example/watch/123.html",
 	}
-	chapters := macCMSParseChapters(sourceMacCMSDytt, "78296", row)
+	downloader := &Downloader{providerHosts: map[string]string{}}
+	chapters := downloader.macCMSParseChapters(sourceMacCMSDytt, "78296", row)
 	if len(chapters) != 2 {
 		t.Fatalf("expected two direct media episodes, got %d: %+v", len(chapters), chapters)
 	}
