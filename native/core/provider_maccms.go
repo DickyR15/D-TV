@@ -89,7 +89,14 @@ func macCMSProviderBaseURL(source string) string {
 	return parsed.Scheme + "://" + parsed.Host
 }
 
-func macCMSReferer(source string) string {
+func (d *Downloader) macCMSReferer(source string) string {
+	source = canonicalProviderSource(source)
+	d.providerMu.Lock()
+	preferred := d.providerHosts[source]
+	d.providerMu.Unlock()
+	if preferred != "" {
+		return strings.TrimRight(preferred, "/") + "/"
+	}
 	if base := macCMSProviderBaseURL(source); base != "" {
 		return base + "/"
 	}
@@ -299,7 +306,7 @@ func macCMSPlayLineNames(raw string) []string {
 	return names
 }
 
-func macCMSParseChapters(source, sourceID string, row map[string]any) []Chapter {
+func (d *Downloader) macCMSParseChapters(source, sourceID string, row map[string]any) []Chapter {
 	names := macCMSPlayLineNames(macCMSValue(row["vod_play_from"]))
 	blocks := strings.Split(macCMSValue(row["vod_play_url"]), "$$$")
 	var chapters []Chapter
@@ -324,7 +331,7 @@ func macCMSParseChapters(source, sourceID string, row map[string]any) []Chapter 
 			chapters = append(chapters, Chapter{
 				ID: providerChapterID(source, sourceID, fmt.Sprintf("%d-%d", lineIndex+1, episodeIndex+1)),
 				Source: source, Title: truncate(title, 256),
-				VideoURL: html.UnescapeString(rawURL), Referer: macCMSReferer(source),
+				VideoURL: html.UnescapeString(rawURL), Referer: d.macCMSReferer(source),
 				CurrentEpisode: json.RawMessage(strconv.Itoa(episodeIndex + 1)),
 			})
 		}
@@ -402,7 +409,7 @@ func (d *Downloader) fetchMacCMSDetail(ctx context.Context, source, sourceID str
 		return Drama{}, nil, fmt.Errorf("%s 找不到這部影片的詳情", macCMSProviders[source].Name)
 	}
 	drama := macCMSDramaFromRow(source, rows[0])
-	chapters := macCMSParseChapters(source, sourceID, rows[0])
+	chapters := d.macCMSParseChapters(source, sourceID, rows[0])
 	drama.EpisodesVerified = len(chapters) > 0
 	if len(chapters) == 0 {
 		return drama, nil, fmt.Errorf("%s 詳情已取得，但沒有可直接播放的 M3U8／MP4 分集", macCMSProviders[source].Name)
