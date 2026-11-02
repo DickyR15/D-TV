@@ -482,7 +482,7 @@ func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, categ
 	var route string
 	params := url.Values{"page": {strconv.Itoa(page)}}
 	var homeData map[string]any
-	if query == "" && (page == 1 || category != "") {
+	if query == "" && (page == 1 || category != "" && duoduoCategoryName(category) == "") {
 		// Keep the site's curated home rows available as part of the first
 		// catalog page, even when its independent category endpoint omits them.
 		homeData, _ = d.fetchDuoduoHomeData(ctx)
