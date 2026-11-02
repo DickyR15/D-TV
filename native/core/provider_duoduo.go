@@ -642,6 +642,10 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 	}
 	numbers := make([]int, 0, len(choices))
 	maxEpisodes := 0
+	visiblePlayLine := ""
+	if len(lines) == 1 {
+		visiblePlayLine = truncate(lines[0].Name, 96)
+	}
 	for number := range choices {
 		numbers = append(numbers, number)
 		maxEpisodes = max(maxEpisodes, number)
@@ -657,8 +661,10 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 			CurrentEpisode: rawEpisode(number),
 			VideoURL: choice.episode.URL,
 			Referer: base + "/",
-			// PlayLine intentionally stays empty. The source is selected
-			// internally by playback failover, not by duplicating episode rows.
+			// With multiple source lines, playback is automatic and the UI should
+			// not offer a manual per-line selector. Preserve the label for a
+			// single-line title where it remains useful metadata.
+			PlayLine: visiblePlayLine,
 			PlaybackVariants: duoduoUniqueStrings(choice.variants),
 		})
 	}
