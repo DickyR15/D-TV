@@ -204,8 +204,11 @@ func TestDuoduoDetailAndPlaybackKeepsLinesSeparate(t *testing.T) {
 	if err != nil || len(chapters) != 3 || drama.ID != "duoduo:78296" {
 		t.Fatalf("Duoduo detail failed: drama=%+v chapters=%+v err=%v", drama, chapters, err)
 	}
-	if drama.TotalEpisode != 1 || drama.EpisodeCount != 1 || !drama.EpisodesVerified {
+	if drama.TotalEpisode != 2 || drama.EpisodeCount != 2 || drama.Episodes != 2 || !drama.EpisodesVerified {
 		t.Fatalf("line duplicates inflated episode count: %+v", drama)
+	}
+	if count := duoduoChapterEpisodeCount(chapters); count != 2 {
+		t.Fatalf("unique episode count = %d, want 2 for duplicate lines", count)
 	}
 	if chapters[0].PlayLine != "直連" || chapters[0].VideoURL != directA ||
 		chapters[1].PlayLine != "備援" || chapters[1].VideoURL != directB ||
