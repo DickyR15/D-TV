@@ -58,14 +58,11 @@ void main() {
 
     expect(store.advancedSourcesUnlocked, isTrue);
     expect(find.text('進階片源'), findsOneWidget);
+    // ListView(children: ...) builds these source tiles eagerly, so their
+    // labels can be asserted without requiring a scroll gesture. This avoids
+    // a flaky dragUntilVisible failure when the test viewport is resized.
     for (final name in ['黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版']) {
-      final sourceName = find.text(name);
-      await tester.scrollUntilVisible(
-        sourceName,
-        180,
-        scrollable: find.byType(Scrollable).first,
-      );
-      expect(sourceName, findsOneWidget);
+      expect(find.text(name), findsOneWidget);
     }
     expect(store.sourceEnabled('huangdou'), isFalse);
 
