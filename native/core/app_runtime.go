@@ -607,7 +607,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
-	if query != "" && isMacCMSSource(source) {
+	if query != "" && isMacCMSSource(source) && source != sourceMacCMSDouban {
 		items, more, err := d.fetchMacCMSCatalogPage(ctx, source, page, "", query)
 		if err != nil {
 			return result, err
