@@ -38,10 +38,10 @@ void main() {
     expect(SourceSite.isKnown('guipian'), isFalse);
     expect(SourceSite.isKnown('kanmovie'), isFalse);
     expect(store.sourceEnabled('duoduo'), isTrue);
-    expect(store.sourceEnabled('baofeng'), isFalse);
-    expect(store.sourceEnabled('jisu'), isFalse);
-    expect(store.sourceEnabled('360'), isFalse);
-    expect(store.sourceEnabled('huya'), isFalse);
+    expect(store.allowsSource('baofeng'), isFalse);
+    expect(store.allowsSource('jisu'), isFalse);
+    expect(store.allowsSource('360'), isFalse);
+    expect(store.allowsSource('huya'), isFalse);
     expect(store.allowsSource('guipian'), isFalse);
     expect(store.allowsSource('kanmovie'), isFalse);
   });
@@ -70,7 +70,7 @@ void main() {
     expect(store.profile.allows('guipian'), isFalse);
   });
 
-  test('saved KANMovie favorites migrate to the matching independent source', () {
+  test('saved KANMovie records are not remapped to unrelated sources', () {
     final drama = Drama.fromJson({
       'id': 'kanmovie:bfzy.tv~12345',
       'source': 'kanmovie',
