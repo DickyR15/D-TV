@@ -1,6 +1,7 @@
 package core
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -102,5 +103,30 @@ func TestMacCMSRowsAndCategories(t *testing.T) {
 	}
 	if got := len(macCMSClasses(payload)); got != 2 {
 		t.Fatalf("expected two categories, got %d", got)
+	}
+}
+
+func TestMacCMSPrefersDedicatedM3U8APIs(t *testing.T) {
+	wantPaths := map[string]string{
+		sourceMacCMSDytt:  "/from/dyttm3u8/at/json/",
+		sourceMacCMSSubo:  "/from/subm3u8/at/json/",
+		sourceMacCMSLzi:   "/from/lzm3u8/at/json/",
+		sourceMacCMSFfzy:  "/from/ffm3u8/at/json/",
+		sourceMacCMSDouban: "/from/dbm3u8/at/josn/",
+	}
+	for source, path := range wantPaths {
+		provider := macCMSProviders[source]
+		if len(provider.APIs) == 0 || !strings.Contains(provider.APIs[0], path) {
+			t.Errorf("%s should prefer its dedicated M3U8 API %q; got %+v", source, path, provider.APIs)
+		}
+	}
+	maxProvider := macCMSProviders[sourceMacCMSZuida]
+	if len(maxProvider.APIs) == 0 || !strings.Contains(maxProvider.APIs[0], "api.zuidapi.com") {
+		t.Fatalf("最大資源 must use its own API host first, got %+v", maxProvider.APIs)
+	}
+	for _, endpoint := range maxProvider.APIs {
+		if strings.Contains(endpoint, "zuidazy.me") {
+			t.Fatalf("最大點播 endpoint must not be mixed into 最大資源: %s", endpoint)
+		}
 	}
 }
