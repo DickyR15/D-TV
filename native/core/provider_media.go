@@ -40,10 +40,8 @@ func (d *Downloader) providerBaseURL(source string) string {
 		configured, fallback = d.cfg.YeguoURL, yeguoBaseURL
 	case sourceDSD:
 		configured, fallback = d.cfg.DSDURL, dsdBaseURL
-	case sourceBaofeng, sourceJisu, source360, sourceHuya:
-		if sourceConfig, ok := maccmsSourceByID(source); ok {
-			fallback = sourceConfig.home
-		}
+	case sourceDuoduo:
+		fallback = "https://323433ssdfd.top"
 	case sourceHanxiaoquan:
 		configured, fallback = d.cfg.HanxiaoquanURL, hanxiaoquanSiteBaseURL
 	default:
@@ -76,14 +74,6 @@ func providerSourceForURL(raw string) string {
 		return sourceYeguo
 	case host == "dsd.com.se" || host == "www.dsd.com.se":
 		return sourceDSD
-	case host == "bfzyapi.com":
-		return sourceBaofeng
-	case host == "jszyapi.com":
-		return sourceJisu
-	case host == "360zy.com":
-		return source360
-	case host == "huyazy.net":
-		return sourceHuya
 	case host == "jennyhow.com" || host == "www.jennyhow.com":
 		return sourceHanxiaoquan
 	default:
@@ -135,8 +125,8 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 	if chapter.Source == sourceDSD {
 		return d.resolveDSDMedia(ctx, task)
 	}
-	if _, ok := maccmsSourceByID(chapter.Source); ok {
-		return d.resolveMaccmsMedia(ctx, task)
+	if chapter.Source == sourceDuoduo {
+		return d.resolveDuoduoMedia(ctx, task)
 	}
 	if chapter.Source == sourceHanxiaoquan {
 		return d.resolveHanxiaoquanMedia(ctx, task)

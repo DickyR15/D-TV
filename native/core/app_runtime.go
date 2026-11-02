@@ -585,8 +585,8 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
-	if query != "" && isMaccmsSource(source) {
-		items, more, err := d.fetchMaccmsCatalogPage(ctx, source, page, "", query)
+	if query != "" && source == sourceDuoduo {
+		items, more, err := d.fetchDuoduoCatalogPage(ctx, page, "", query)
 		if err != nil {
 			return result, err
 		}
@@ -706,8 +706,8 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		items, result.HasMore, err = d.fetchYeguoCatalogPage(ctx, page, category, "")
 	case sourceDSD:
 		items, result.HasMore, err = d.fetchDSDCatalogPage(ctx, page, category, "")
-	case sourceBaofeng, sourceJisu, source360, sourceHuya:
-		items, result.HasMore, err = d.fetchMaccmsCatalogPage(ctx, source, page, category, "")
+	case sourceDuoduo:
+		items, result.HasMore, err = d.fetchDuoduoCatalogPage(ctx, page, category, "")
 	case sourceHanxiaoquan:
 		items, result.HasMore, err = d.fetchHanxiaoquanCatalogPage(ctx, page, category, "")
 	case sourceHuangguoVideo:
@@ -727,7 +727,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	if err != nil && len(items) == 0 {
 		return result, err
 	}
-	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && !isMaccmsSource(source) && source != sourceHanxiaoquan {
+	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && source != sourceDuoduo && source != sourceHanxiaoquan {
 		return result, errors.New("站源暂未返回剧集，请稍后刷新")
 	}
 	if err != nil {
@@ -789,8 +789,8 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		raw, chapters, err = engine.downloader.fetchYeguoDetail(ctx, sourceID)
 	case sourceDSD:
 		raw, chapters, err = engine.downloader.fetchDSDDetail(ctx, sourceID)
-	case sourceBaofeng, sourceJisu, source360, sourceHuya:
-		raw, chapters, err = engine.downloader.fetchMaccmsDetail(ctx, source, sourceID)
+	case sourceDuoduo:
+		raw, chapters, err = engine.downloader.fetchDuoduoDetail(ctx, sourceID)
 	case sourceHanxiaoquan:
 		raw, chapters, err = engine.downloader.fetchHanxiaoquanDetail(ctx, sourceID)
 	default:

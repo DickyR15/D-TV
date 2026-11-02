@@ -13,10 +13,7 @@ class SourceSite {
       id == 'huangju' ||
       id == 'yeguo' ||
       id == 'dsd' ||
-      id == 'baofeng' ||
-      id == 'jisu' ||
-      id == '360' ||
-      id == 'huya' ||
+      id == 'duoduo' ||
       id == 'hanxiaoquan';
   bool get searchSuggestions => id == 'hongguo';
   // These providers must remain independent in
@@ -40,20 +37,19 @@ class SourceSite {
 
   static const hongguo = SourceSite('hongguo', '紅果', '短劇 · 漫劇 · AI 劇');
   static const dsd = SourceSite('dsd', '帝果', '影片分類 · 線上搜尋');
-  static const baofeng = SourceSite('baofeng', '暴風', '電影 · 電視劇 · 綜藝');
-  static const jisu = SourceSite('jisu', '極速', '電影 · 電視劇 · 動漫');
-  static const source360 = SourceSite('360', '360', '電影 · 電視劇 · 動漫');
-  static const huya = SourceSite('huya', '虎牙', '電影 · 電視劇 · 綜藝');
+  static const duoduo = SourceSite(
+    'duoduo',
+    '多多追劇',
+    '電影 · 電視劇 · 動畫 · 綜藝',
+  );
   static const hanxiaoquan = SourceSite(
     'hanxiaoquan',
     '韓小圈',
     '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
 
-  /// 預設開啟的一般片源：紅果、韓小圈，以及四個獨立 MacCMS 片源。
-  static const primaryValues = [
-    hongguo, hanxiaoquan, baofeng, jisu, source360, huya,
-  ];
+  /// 預設開啟的一般片源：紅果、韓小圈、多多追劇。
+  static const primaryValues = [hongguo, hanxiaoquan, duoduo];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
@@ -152,56 +148,15 @@ class Drama {
     _ => '狀態未知',
   };
 
-  static Map<String, String> _migrateLegacySource(
-    String id,
-    String source,
-    String sourceId,
-  ) {
-    if (source != 'kanmovie' && !id.startsWith('kanmovie:')) {
-      return {'id': id, 'source': source, 'sourceId': sourceId};
-    }
-    final raw = sourceId.isNotEmpty
-        ? sourceId
-        : (id.startsWith('kanmovie:') ? id.substring('kanmovie:'.length) : '');
-    final separator = raw.indexOf('~');
-    if (separator < 1) {
-      return {'id': id, 'source': source, 'sourceId': sourceId};
-    }
-    var host = raw.substring(0, separator).toLowerCase();
-    if (host.startsWith('www.')) host = host.substring(4);
-    final upstreamId = raw.substring(separator + 1);
-    final migratedSource = switch (host) {
-      'bfzy.tv' || 'bfzyapi.com' => 'baofeng',
-      'jszyapi.com' => 'jisu',
-      '360zy.com' => '360',
-      'huyaapi.com' || 'huyazy.net' => 'huya',
-      _ => '',
-    };
-    final numericId = int.tryParse(upstreamId);
-    if (migratedSource.isEmpty || numericId == null || numericId < 1) {
-      return {'id': id, 'source': source, 'sourceId': sourceId};
-    }
-    final migratedId = migratedSource + ':' + upstreamId;
-    return {
-      'id': migratedId,
-      'source': migratedSource,
-      'sourceId': upstreamId,
-    };
-  }
 
   factory Drama.fromJson(Map<String, dynamic> json) {
     final originalId = json['id'] as String? ?? '';
     final originalSource = json['source'] as String? ?? 'hongguo';
     final originalSourceId = json['sourceId'] as String? ?? '';
-    final migrated = _migrateLegacySource(
-      originalId,
-      originalSource,
-      originalSourceId,
-    );
     return Drama(
-      id: migrated['id']!,
-      source: migrated['source']!,
-      sourceId: migrated['sourceId']!,
+      id: originalId,
+      source: originalSource,
+      sourceId: originalSourceId,
       title: json['title'] as String? ?? '短劇',
       description: json['description'] as String? ?? '',
       cover: json['cover'] as String? ?? '',

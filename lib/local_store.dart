@@ -191,9 +191,7 @@ class LocalStore extends ChangeNotifier {
       };
       final oldAggregateEnabled = stored['kanmovie'];
       if (oldAggregateEnabled != null) {
-        for (final source in const ['baofeng', 'jisu', '360', 'huya']) {
-          migrated.putIfAbsent(source, () => oldAggregateEnabled);
-        }
+        migrated.putIfAbsent('duoduo', () => oldAggregateEnabled);
       }
       // The retired Guipian switch is intentionally discarded.
       _sourceSwitches = migrated;

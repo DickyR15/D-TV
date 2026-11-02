@@ -37,15 +37,16 @@ void main() {
     });
     expect(SourceSite.isKnown('guipian'), isFalse);
     expect(SourceSite.isKnown('kanmovie'), isFalse);
-    expect(store.sourceEnabled('baofeng'), isTrue);
-    expect(store.sourceEnabled('jisu'), isTrue);
-    expect(store.sourceEnabled('360'), isTrue);
-    expect(store.sourceEnabled('huya'), isTrue);
+    expect(store.sourceEnabled('duoduo'), isTrue);
+    expect(store.sourceEnabled('baofeng'), isFalse);
+    expect(store.sourceEnabled('jisu'), isFalse);
+    expect(store.sourceEnabled('360'), isFalse);
+    expect(store.sourceEnabled('huya'), isFalse);
     expect(store.allowsSource('guipian'), isFalse);
     expect(store.allowsSource('kanmovie'), isFalse);
   });
 
-  test('old aggregate profile permissions expand to the four independent sources', () async {
+  test('old aggregate profile permissions migrate to Duoduo', () async {
     final store = await create({
       'profiles': jsonEncode([
         LocalProfile(
@@ -64,10 +65,8 @@ void main() {
       'activeProfile': 'viewer',
     });
     expect(store.configurationError, isNull);
-    expect(store.profile.sources, ['baofeng', 'jisu', '360', 'huya']);
-    for (final source in ['baofeng', 'jisu', '360', 'huya']) {
-      expect(store.profile.allows(source), isTrue);
-    }
+    expect(store.profile.sources, ['duoduo']);
+    expect(store.profile.allows('duoduo'), isTrue);
     expect(store.profile.allows('guipian'), isFalse);
   });
 
@@ -78,9 +77,9 @@ void main() {
       'sourceId': 'bfzy.tv~12345',
       'title': '舊收藏影片',
     });
-    expect(drama.id, 'baofeng:12345');
-    expect(drama.source, 'baofeng');
-    expect(drama.sourceId, '12345');
+    expect(drama.id, 'kanmovie:bfzy.tv~12345');
+    expect(drama.source, 'kanmovie');
+    expect(drama.sourceId, 'bfzy.tv~12345');
   });
 
   test('restricted sources start switched off', () async {
@@ -88,7 +87,7 @@ void main() {
     expect(
       store.sources.map((site) => site.id),
       allSourcesEnabled
-          ? ['hongguo', 'hanxiaoquan', 'baofeng', 'jisu', '360', 'huya']
+          ? ['hongguo', 'hanxiaoquan', 'duoduo']
           : ['hongguo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);

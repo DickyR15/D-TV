@@ -44,7 +44,7 @@ class LocalProfile {
     final sources = <String>{};
     for (final source in storedSources) {
       if (source == 'kanmovie') {
-        sources.addAll(const ['baofeng', 'jisu', '360', 'huya']);
+        sources.add('duoduo');
       } else if (source != 'guipian' && SourceSite.isKnown(source)) {
         sources.add(source);
       }

@@ -1,10 +1,11 @@
-name: Duoduo public entry probe
+name: Duoduo source smoke test
 
 on:
-  push:
-    branches:
-      - feat/kanmovie-source-replace-guipian
+  pull_request:
+    branches: [main]
     paths:
+      - "native/core/provider_duoduo.go"
+      - "native/core/provider_duoduo_test.go"
       - ".github/workflows/duoduo-entry-probe.yml"
   workflow_dispatch:
 
@@ -12,20 +13,19 @@ permissions:
   contents: read
 
 jobs:
-  probe-public-entry-pages:
+  public-source-smoke:
+    name: Public catalogue and direct media validation
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 12
     steps:
-      - name: Check public mirror pages and read-only homepage API
+      - name: Validate public API, category, search, detail and direct media
         shell: bash
         run: |
           python - <<'PY'
-          from html.parser import HTMLParser
-          from urllib.parse import urlsplit
+          from urllib.error import HTTPError, URLError
+          from urllib.parse import urlencode, urljoin, urlsplit
           from urllib.request import Request, urlopen
-          import hashlib
           import json
-          import re
           import ssl
 
           HOSTS = [
@@ -34,98 +34,188 @@ jobs:
               "xds2435u23422342342u.top",
               "dduotv01.top",
           ]
-          CONTEXT = ssl.create_default_context()
-          UA = "DTV-Duoduo-PublicEntryProbe/1.3"
+          CLIENT = "8f3d2a1c7b6e5d4c9a0b1f2e3d4c5b6a"
+          SIGN = "ddtvf65f3a83d6d9ad6f"
+          UA = "Mozilla/5.0 DTV-Duoduo-Smoke/1.0"
+          TLS = ssl.create_default_context()
 
-          class Parser(HTMLParser):
-              def __init__(self):
-                  super().__init__()
-                  self.title_parts = []
-                  self.scripts = []
-                  self.in_title = False
-
-              def handle_starttag(self, tag, attrs):
-                  attrs = dict(attrs)
-                  if tag.lower() == "title":
-                      self.in_title = True
-                  if tag.lower() == "script" and attrs.get("src"):
-                      self.scripts.append(attrs["src"])
-
-              def handle_endtag(self, tag):
-                  if tag.lower() == "title":
-                      self.in_title = False
-
-              def handle_data(self, data):
-                  if self.in_title:
-                      self.title_parts.append(data.strip())
-
-          def request(url, timeout=15, limit=1024 * 1024):
-              req = Request(url, headers={
+          def request(url, referer, limit=262144, timeout=12, byte_range=None):
+              headers = {
                   "User-Agent": UA,
-                  "Accept": "text/html,application/javascript,application/json,*/*",
-              })
-              with urlopen(req, timeout=timeout, context=CONTEXT) as response:
-                  return response.status, response.geturl(), response.headers.get("Content-Type", ""), response.read(limit)
-
-          print("=== MIRROR HOMEPAGES ===")
-          for host in HOSTS:
+                  "Accept": "application/json,application/vnd.apple.mpegurl,*/*",
+                  "Referer": referer,
+              }
+              if byte_range:
+                  headers["Range"] = byte_range
+              req = Request(url, headers=headers)
               try:
-                  status, final, content_type, body = request(f"https://{host}/")
-                  parser = Parser()
-                  parser.feed(body.decode("utf-8", errors="replace"))
-                  title = " ".join(" ".join(parser.title_parts).split())
-                  asset = next((src for src in parser.scripts if "assets/index-" in src), "")
-                  print(f"{host} STATUS={status} FINAL_HOST={urlsplit(final).hostname} TITLE={title!r} ASSET={asset}")
-              except Exception as exc:
-                  print(f"{host} ERROR={type(exc).__name__}: {str(exc)[:180]}")
+                  response = urlopen(req, timeout=timeout, context=TLS)
+              except HTTPError as exc:
+                  response = exc
+              with response:
+                  body = response.read(limit)
+                  return response.status, response.geturl(), response.headers.get("Content-Type", ""), body
 
-          print("\n=== FRONTEND ASSET PARITY ===")
-          hashes = {}
-          for host in HOSTS:
-              try:
-                  _, _, _, html = request(f"https://{host}/")
-                  parser = Parser()
-                  parser.feed(html.decode("utf-8", errors="replace"))
-                  asset = next((src for src in parser.scripts if "assets/index-" in src), "")
-                  if not asset:
-                      print(f"{host} ASSET=missing")
+          def api(route, params=None):
+              last_error = None
+              query = ("?" + urlencode(params)) if params else ""
+              for host in HOSTS:
+                  base = "https://" + host
+                  headers = {
+                      "X-Client": CLIENT,
+                      "web-sign": SIGN,
+                      "Origin": base,
+                  }
+                  url = base + route + query
+                  req = Request(url, headers={
+                      "User-Agent": UA,
+                      "Accept": "application/json",
+                      "X-Client": CLIENT,
+                      "web-sign": SIGN,
+                      "Origin": base,
+                      "Referer": base + "/",
+                  })
+                  try:
+                      with urlopen(req, timeout=12, context=TLS) as response:
+                          body = response.read(2 * 1024 * 1024)
+                          payload = json.loads(body.decode("utf-8", errors="replace"))
+                          if response.status == 200 and str(payload.get("code")) == "200":
+                              return base, payload
+                          last_error = f"{host}: HTTP {response.status}, code={payload.get('code')}, msg={payload.get('msg')}"
+                  except Exception as exc:
+                      last_error = f"{host}: {type(exc).__name__}: {str(exc)[:140]}"
+              raise RuntimeError("all public API mirrors failed: " + str(last_error))
+
+          def probe_media(address, referer):
+              parsed = urlsplit(address)
+              if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                  return False, "invalid media URL"
+              if parsed.path.lower().endswith(".mp4"):
+                  status, final, content_type, body = request(
+                      address, referer, limit=2048, byte_range="bytes=0-2047"
+                  )
+                  ok = status in (200, 206) and bool(body) and "text/html" not in content_type.lower()
+                  return ok, f"MP4 HTTP={status} type={content_type} bytes={len(body)}"
+              if not parsed.path.lower().endswith(".m3u8"):
+                  return False, "not a direct HLS/MP4 URL"
+              current = address
+              for depth in range(4):
+                  status, final, content_type, body = request(
+                      current, referer, limit=262144, byte_range="bytes=0-262143"
+                  )
+                  if status not in (200, 206) or "text/html" in content_type.lower():
+                      return False, f"playlist HTTP={status} type={content_type}"
+                  text = body.decode("utf-8-sig", errors="replace")
+                  if not text.lstrip().startswith("#EXTM3U"):
+                      return False, "invalid M3U8 playlist"
+                  child = next(
+                      (line.strip() for line in text.splitlines()
+                       if line.strip() and not line.lstrip().startswith("#")),
+                      "",
+                  )
+                  if not child:
+                      return False, "playlist has no media URI"
+                  current = urljoin(final, child)
+                  child_path = urlsplit(current).path.lower()
+                  if child_path.endswith(".m3u8"):
                       continue
-                  url = asset if asset.startswith("http") else f"https://{host}/{asset.lstrip('/')}"
-                  status, final, content_type, body = request(url, limit=2 * 1024 * 1024)
-                  digest = hashlib.sha256(body).hexdigest()
-                  prior = hashes.get(digest, "")
-                  hashes[digest] = prior or host
-                  print(f"{host} STATUS={status} TYPE={content_type} BYTES={len(body)} SHA256={digest} SAME_AS={prior or '-'}")
-                  source = body.decode("utf-8", errors="replace")
-                  routes = sorted(set(re.findall(r"""["'](/api\.php/web/[a-zA-Z0-9_/-]+)["']""", source)))
-                  print("  WEB_ROUTES=" + ", ".join(routes[:30]))
-              except Exception as exc:
-                  print(f"{host} ASSET_ERROR={type(exc).__name__}: {str(exc)[:180]}")
+                  seg_status, _, seg_type, seg_body = request(
+                      current, referer, limit=1024, byte_range="bytes=0-1023"
+                  )
+                  ok = (
+                      seg_status in (200, 206) and bool(seg_body)
+                      and "text/html" not in seg_type.lower()
+                      and "application/json" not in seg_type.lower()
+                  )
+                  return ok, f"HLS HTTP={status}; first segment HTTP={seg_status} type={seg_type} bytes={len(seg_body)}"
+              return False, "playlist nesting exceeded probe limit"
 
-          print("\n=== ANONYMOUS READ-ONLY HOMEPAGE API ===")
-          for host in HOSTS:
-              url = f"https://{host}/api.php/web/index/home"
+          print("=== HOMEPAGE CATEGORIES ===")
+          home_base, home = api("/api.php/web/index/home")
+          data = home.get("data") or {}
+          categories = data.get("categories") or []
+          print(f"API={home_base} categories={[(x.get('type_id'), x.get('type_name')) for x in categories]}")
+          movie_category = next(
+              (item for item in categories
+               if str(item.get("type_id")) == "1" and item.get("type_name") == "电影"),
+              None,
+          )
+          if not movie_category:
+              raise RuntimeError("movie category was not returned")
+
+          print("\n=== MOVIE CATEGORY ===")
+          _, filtered = api("/api.php/web/filter/vod", {
+              "page": 1, "sort": "hits",
+              "type_id": movie_category["type_id"],
+              "type_name": movie_category["type_name"],
+          })
+          category_rows = filtered.get("data") or []
+          print(f"movie category rows={len(category_rows)}")
+          if not category_rows:
+              raise RuntimeError("movie category returned no rows")
+
+          print("\n=== SEARCH ===")
+          movies = {}
+          for term in ("流浪地球", "阿凡達", "復仇者聯盟"):
+              _, found = api("/api.php/web/search/index", {"wd": term, "page": 1, "limit": 15})
+              rows = found.get("data") or []
+              for row in rows:
+                  if str(row.get("type_id", "")) == "1" or row.get("type_name") == "电影":
+                      movies.setdefault(str(row.get("vod_id", "")), row)
+              print(f"{term}: results={len(rows)}")
+
+          for row in category_rows + list(movies.values()):
+              movies.setdefault(str(row.get("vod_id", "")), row)
+          candidates = [row for key, row in movies.items() if key.isdigit()]
+          if not candidates:
+              candidates = [row for row in category_rows if str(row.get("vod_id", "")).isdigit()]
+          print(f"unique movie detail candidates={len(candidates)}")
+          if not candidates:
+              raise RuntimeError("no movie IDs available for detail probe")
+
+          print("\n=== DETAIL / AGGREGATE / MEDIA ===")
+          checked = 0
+          playable = 0
+          errors = []
+          for summary in candidates[:5]:
+              vod_id = str(summary["vod_id"])
               try:
-                  status, final, content_type, body = request(url, timeout=12, limit=4096)
-                  try:
-                      payload = json.loads(body.decode("utf-8", errors="replace"))
-                  except Exception:
-                      payload = {}
-                  message = str(payload.get("msg", ""))[:80]
-                  print(
-                      f"{host} HTTP={status} API_CODE={payload.get('code', '-')} "
-                      f"ERROR_CODE={payload.get('error_code', '-')} MSG={message!r}"
-                  )
+                  base, detail = api("/api.php/web/vod/get_detail", {"vod_id": vod_id})
+                  rows = detail.get("data") or []
+                  if not rows:
+                      errors.append(f"{vod_id}: no detail row")
+                      continue
+                  row = rows[0]
+                  agg_base, aggregate = api("/api.php/web/internal/search_aggregate", {"vod_id": vod_id})
+                  lines = aggregate.get("data") or []
+                  direct = []
+                  for line in lines:
+                      if str(line.get("decode_status")) != "0":
+                          continue
+                      raw = str(line.get("vod_play_url") or "")
+                      for episode in raw.split("#"):
+                          if "$" not in episode:
+                              continue
+                          address = episode.split("$", 1)[1].strip()
+                          path = urlsplit(address).path.lower()
+                          if path.endswith(".m3u8") or path.endswith(".mp4"):
+                              direct.append((line.get("site_name") or line.get("site_key") or "direct", address))
+                  print(f"movie={row.get('vod_name')!r} id={vod_id} lines={len(lines)} direct_urls={len(direct)}")
+                  for line_name, address in direct[:5]:
+                      checked += 1
+                      ok, message = probe_media(address, base + "/")
+                      host = urlsplit(address).netloc
+                      print(f"  {line_name}: {host} ok={ok} {message}")
+                      if ok:
+                          playable += 1
+                          break
+                  if playable:
+                      break
               except Exception as exc:
-                  code = getattr(exc, "code", "")
-                  body = getattr(exc, "read", lambda: b"")()
-                  try:
-                      payload = json.loads(body.decode("utf-8", errors="replace")) if body else {}
-                  except Exception:
-                      payload = {}
-                  message = str(payload.get("msg", ""))[:80]
-                  print(
-                      f"{host} HTTP={code or 'ERROR'} API_CODE={payload.get('code', '-')} "
-                      f"ERROR_CODE={payload.get('error_code', '-')} MSG={message!r}"
-                  )
+                  errors.append(f"{vod_id}: {type(exc).__name__}: {str(exc)[:160]}")
+
+          print(f"\nDIRECT MEDIA PROBES={checked}; successful source samples={playable}")
+          if playable == 0:
+              raise RuntimeError("no public direct line passed the bounded media probe; " + "; ".join(errors[:5]))
+          print("PASS: Duoduo public movie catalogue, search, detail, aggregate and at least one direct media segment are reachable.")
           PY

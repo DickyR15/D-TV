@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	htmlstd "html"
 	"io"
 	"net/http"
 	"net/url"
@@ -39,6 +40,19 @@ type duoduoPlayLine struct {
 	DecodeStatus string
 	Sort         float64
 	Episodes     []duoduoPlayEpisode
+}
+
+func duoduoUniqueStrings(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" && !seen[value] {
+			seen[value] = true
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func duoduoString(value any) string {
@@ -293,7 +307,7 @@ func (d *Downloader) fetchDuoduoAPI(ctx context.Context, route string, params ur
 		}
 	}
 	var lastErr error
-	for _, host := range uniqueStrings(hosts) {
+	for _, host := range duoduoUniqueStrings(hosts) {
 		if err := ctx.Err(); err != nil {
 			return nil, "", err
 		}
@@ -505,7 +519,12 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 	if err != nil {
 		return providerMedia{}, err
 	}
-	base := d.providerBaseURL(sourceDuoduo)
+	d.providerMu.Lock()
+	base := d.providerHosts[sourceDuoduo]
+	d.providerMu.Unlock()
+	if base == "" {
+		base = d.providerBaseURL(sourceDuoduo)
+	}
 	var options []providerMedia
 	seen := map[string]bool{}
 	for _, line := range lines {

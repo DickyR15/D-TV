@@ -29,11 +29,8 @@ const (
 	sourceDSD           = "dsd"
 	sourceCloudFront    = "cloudfront"
 	legacyKanmMovieSource = "kanmovie"
-	sourceBaofeng       = "baofeng"
-	sourceJisu          = "jisu"
-	source360           = "360"
-	sourceHuya          = "huya"
-	sourceHanxiaoquan   = "hanxiaoquan"
+	sourceDuoduo          = "duoduo"
+	sourceHanxiaoquan     = "hanxiaoquan"
 
 	providerMaxBodyBytes = 20 * 1024 * 1024
 	providerTimeout      = 12 * time.Second
@@ -89,28 +86,6 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 	if !ok || strings.TrimSpace(sourceID) == "" {
 		return "", "", false
 	}
-	// Migrate legacy KANMovie records to the independent MacCMS source that
-	// originally supplied the video. This is an ID compatibility path only;
-	// KANMovie is no longer registered as a selectable provider.
-	if source == legacyKanmMovieSource {
-		host, upstreamID, found := strings.Cut(sourceID, "~")
-		if !found || !webProviderNumericID.MatchString(upstreamID) {
-			return "", "", false
-		}
-		switch strings.TrimPrefix(strings.ToLower(strings.TrimSpace(host)), "www.") {
-		case "bfzy.tv", "bfzyapi.com":
-			source = sourceBaofeng
-		case "jszyapi.com":
-			source = sourceJisu
-		case "360zy.com":
-			source = source360
-		case "huyaapi.com", "huyazy.net":
-			source = sourceHuya
-		default:
-			return "", "", false
-		}
-		sourceID = upstreamID
-	}
 	if !isHuangguoProviderSource(source) {
 		return "", "", false
 	}
@@ -119,7 +94,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceBaofeng, sourceJisu, source360, sourceHuya, sourceHanxiaoquan:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan:
 		return true
 	default:
 		return false
@@ -146,14 +121,8 @@ func canonicalProviderSource(source string) string {
 		return sourceCloudFront
 	case "kanmovie", "kanmovie.com", "www.kanmovie.com":
 		return legacyKanmMovieSource
-	case "baofeng", "bfzyapi.com":
-		return sourceBaofeng
-	case "jisu", "jszyapi.com":
-		return sourceJisu
-	case "360", "360zy.com":
-		return source360
-	case "huya", "huyazy.net":
-		return sourceHuya
+	case "duoduo", "duoduozhuiju.com", "323433ssdfd.top", "duoduosdf12223234334.top", "xds2435u23422342342u.top", "dduotv01.top":
+		return sourceDuoduo
 	case "hanxiaoquan", "jennyhow.com", "www.jennyhow.com":
 		return sourceHanxiaoquan
 	default:
@@ -265,8 +234,8 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 	case sourceDSD:
 		drama, chapters, err := d.fetchDSDDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
-	case sourceBaofeng, sourceJisu, source360, sourceHuya:
-		drama, chapters, err := d.fetchMaccmsDetail(ctx, canonicalProviderSource(source), sourceID)
+	case sourceDuoduo:
+		drama, chapters, err := d.fetchDuoduoDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
 	case sourceHanxiaoquan:
 		drama, chapters, err := d.fetchHanxiaoquanDetail(ctx, sourceID)
