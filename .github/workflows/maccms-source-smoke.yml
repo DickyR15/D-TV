@@ -14,26 +14,45 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Probe public MacCMS APIs and direct media
         shell: bash
         run: |
           python - <<'PY'
           import json
-          import re
           import sys
-          import urllib.error
           import urllib.parse
           import urllib.request
 
           SOURCES = {
-              "天堂": "https://caiji.dyttzyapi.com/api.php/provide/vod/",
-              "速播": "https://subocj.com/api.php/provide/vod/",
-              "量子": "https://cj.lziapi.com/api.php/provide/vod/from/lzm3u8/",
-              "非凡": "https://api.ffzyapi.com/api.php/provide/vod/from/ffm3u8/",
-              "豆瓣": "https://caiji.dbzy5.com/api.php/provide/vod/from/dbm3u8/at/josn/",
-              "最大": "https://zuidazy.co/api.php/provide/vod/from/zuidam3u8/",
+              "天堂": [
+                  "http://caiji.dyttzyapi.com/api.php/provide/vod/",
+                  "https://caiji.dyttzyapi.com/api.php/provide/vod/",
+              ],
+              "速播": [
+                  "https://subocj.com/api.php/provide/vod/",
+              ],
+              "量子": [
+                  "https://cj.lziapi.com/api.php/provide/vod/",
+                  "https://cj.lzcaiji.com/api.php/provide/vod/",
+              ],
+              "非凡": [
+                  "https://api.ffzyapi.com/api.php/provide/vod/",
+                  "http://api.ffzyapi.com/api.php/provide/vod/",
+                  "https://cj2.ffzyapi.com/api.php/provide/vod/",
+                  "http://cj2.ffzyapi.com/api.php/provide/vod/",
+                  "https://cj.ffzyapi.com/api.php/provide/vod/",
+              ],
+              "豆瓣": [
+                  "https://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
+                  "http://caiji.dbzy5.com/api.php/provide/vod/at/josn/",
+              ],
+              "最大": [
+                  "https://zuidazy.me/api.php/provide/vod/",
+                  "http://zuidazy.me/api.php/provide/vod/",
+                  "https://api.zuidapi.com/api.php/provide/vod/",
+              ],
           }
           UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"
 
@@ -44,7 +63,7 @@ jobs:
               if byte_range:
                   headers["Range"] = byte_range
               req = urllib.request.Request(url, headers=headers)
-              with urllib.request.urlopen(req, timeout=18) as response:
+              with urllib.request.urlopen(req, timeout=15) as response:
                   body = response.read(limit + 1)
                   if len(body) > limit:
                       raise RuntimeError("response exceeded size limit")
@@ -52,7 +71,9 @@ jobs:
 
           def fetch_json(base, params):
               url = base + ("&" if "?" in base else "?") + urllib.parse.urlencode(params)
-              status, _, body = request(url, urllib.parse.urlsplit(base).scheme + "://" + urllib.parse.urlsplit(base).netloc + "/")
+              parsed = urllib.parse.urlsplit(base)
+              referer = parsed.scheme + "://" + parsed.netloc + "/"
+              status, _, body = request(url, referer)
               if status != 200:
                   raise RuntimeError("API HTTP %s" % status)
               payload = json.loads(body.decode("utf-8-sig"))
@@ -69,74 +90,79 @@ jobs:
                       return [x for x in values if isinstance(x, dict)]
               return []
 
-          def probe_stream(raw_url, referer):
-              parsed = urllib.parse.urlsplit(raw_url.strip())
-              if parsed.scheme not in ("http", "https") or not parsed.netloc or not parsed.path.lower().endswith((".m3u8", ".mp4", ".m4v")):
-                  raise RuntimeError("detail has no direct M3U8/MP4 URL")
-              status, content_type, body = request(raw_url, referer, "bytes=0-1023", 1024 * 1024)
-              if not 200 <= status < 300:
-                  raise RuntimeError("media HTTP %s" % status)
-              if parsed.path.lower().endswith(".m3u8"):
-                  text = body.decode("utf-8-sig", "replace")
-                  lines = [line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")]
-                  if not lines:
+          def test_api(base):
+              parsed_base = urllib.parse.urlsplit(base)
+              referer = parsed_base.scheme + "://" + parsed_base.netloc + "/"
+              listing = fetch_json(base, {"ac": "list", "pg": 1})
+              catalog = rows(listing)
+              if not catalog:
+                  raise RuntimeError("catalog list is empty")
+              sample = catalog[0]
+              source_id = str(sample.get("vod_id", "")).strip()
+              title = str(sample.get("vod_name", "")).strip()
+              if not source_id or not title:
+                  raise RuntimeError("catalog item has no vod_id/vod_name")
+              search = fetch_json(base, {"ac": "detail", "wd": title[:48], "pg": 1})
+              if not rows(search):
+                  raise RuntimeError("search returned no items for its own catalog title")
+              detail = fetch_json(base, {"ac": "detail", "ids": source_id})
+              detail_rows = rows(detail)
+              if not detail_rows:
+                  raise RuntimeError("detail returned no row")
+              direct = None
+              for block in str(detail_rows[0].get("vod_play_url", "")).split("$$$"):
+                  for item in block.split("#"):
+                      if "$" not in item:
+                          continue
+                      _, address = item.split("$", 1)
+                      address = address.strip()
+                      parsed = urllib.parse.urlsplit(address)
+                      if parsed.scheme in ("http", "https") and parsed.netloc and parsed.path.lower().endswith((".m3u8", ".mp4", ".m4v")):
+                          direct = address
+                          break
+                  if direct:
+                      break
+              if not direct:
+                  raise RuntimeError("detail has no direct M3U8/MP4 episode")
+              media_status, content_type, body = request(direct, referer, "bytes=0-1023", 1024 * 1024)
+              if not 200 <= media_status < 300 or not body:
+                  raise RuntimeError("media request returned HTTP %s" % media_status)
+              parsed_media = urllib.parse.urlsplit(direct)
+              media_result = "media HTTP %s (%s)" % (media_status, content_type)
+              if parsed_media.path.lower().endswith(".m3u8"):
+                  playlist = body.decode("utf-8-sig", "replace")
+                  segments = [line.strip() for line in playlist.splitlines() if line.strip() and not line.startswith("#")]
+                  if not segments:
                       raise RuntimeError("M3U8 has no media entries")
-                  segment = urllib.parse.urljoin(raw_url, lines[0])
-                  seg_status, seg_type, seg_body = request(segment, raw_url, "bytes=0-1023", 4096)
+                  segment = urllib.parse.urljoin(direct, segments[0])
+                  seg_status, seg_type, seg_body = request(segment, direct, "bytes=0-1023", 4096)
                   if not 200 <= seg_status < 300 or not seg_body:
                       raise RuntimeError("first HLS segment failed: HTTP %s" % seg_status)
-                  return "playlist HTTP %s; segment HTTP %s (%s)" % (status, seg_status, seg_type or content_type)
-              if not body:
-                  raise RuntimeError("MP4 response is empty")
-              return "MP4 HTTP %s (%s)" % (status, content_type)
+                  media_result = "playlist HTTP %s; segment HTTP %s (%s)" % (media_status, seg_status, seg_type or content_type)
+              return len(catalog), title, media_result
 
           failures = []
-          for name, base in SOURCES.items():
-              referer = urllib.parse.urlsplit(base).scheme + "://" + urllib.parse.urlsplit(base).netloc + "/"
-              try:
-                  listing = fetch_json(base, {"ac": "list", "pg": 1})
-                  catalog = rows(listing)
-                  if not catalog:
-                      raise RuntimeError("catalog list is empty")
-                  sample = catalog[0]
-                  source_id = str(sample.get("vod_id", "")).strip()
-                  title = str(sample.get("vod_name", "")).strip()
-                  if not source_id or not title:
-                      raise RuntimeError("catalog item has no vod_id/vod_name")
-                  search = fetch_json(base, {"ac": "detail", "wd": title[:48], "pg": 1})
-                  if not rows(search):
-                      raise RuntimeError("search returned no items for its own catalog title")
-                  detail = fetch_json(base, {"ac": "detail", "ids": source_id})
-                  detail_rows = rows(detail)
-                  if not detail_rows:
-                      raise RuntimeError("detail returned no row")
-                  row = detail_rows[0]
-                  blocks = str(row.get("vod_play_url", "")).split("$$$")
-                  direct = None
-                  for block in blocks:
-                      for item in block.split("#"):
-                          if "$" not in item:
-                              continue
-                          _, address = item.split("$", 1)
-                          address = address.strip()
-                          parsed = urllib.parse.urlsplit(address)
-                          if parsed.scheme in ("http", "https") and parsed.netloc and parsed.path.lower().endswith((".m3u8", ".mp4", ".m4v")):
-                              direct = address
-                              break
-                      if direct:
-                          break
-                  if not direct:
-                      raise RuntimeError("detail has no direct M3U8/MP4 episode")
-                  media_result = probe_stream(direct, referer)
-                  print("PASS %s: list=%d, search=ok, detail=%s, %s" % (name, len(catalog), title[:40], media_result))
-              except Exception as exc:
-                  failures.append((name, str(exc)))
-                  print("FAIL %s: %s" % (name, exc))
+          for name, endpoints in SOURCES.items():
+              passed = False
+              errors = []
+              for endpoint in endpoints:
+                  try:
+                      count, title, result = test_api(endpoint)
+                      print("PASS %s: endpoint=%s, list=%d, search=ok, detail=%s, %s" % (name, endpoint, count, title[:36], result))
+                      passed = True
+                      break
+                  except Exception as exc:
+                      errors.append("%s -> %s" % (endpoint, exc))
+              if not passed:
+                  failures.append((name, errors))
+                  print("FAIL %s: all %d configured API endpoint(s) failed" % (name, len(endpoints)))
+                  for error in errors:
+                      print("  " + error)
 
           if failures:
-              print("\nFailed sources:")
-              for name, error in failures:
-                  print("- %s: %s" % (name, error))
+              print("\nSources still needing endpoint investigation:")
+              for name, errors in failures:
+                  print("- " + name)
               sys.exit(1)
-          print("\nPASS: all six MacCMS sources returned catalog, search, detail and at least one direct media segment.")
+          print("\nPASS: all six MacCMS sources returned catalog, search, detail and at least one direct media response.")
           PY
