@@ -12,9 +12,10 @@ import (
 )
 
 type macCMSProvider struct {
-	Name    string
-	APIs    []string
-	Referer string
+	Name          string
+	APIs          []string
+	Referer       string
+	CatalogAction string
 }
 
 var macCMSProviders = map[string]macCMSProvider{
@@ -76,6 +77,14 @@ var macCMSProviders = map[string]macCMSProvider{
 		APIs: []string{
 			"https://api.zuidapi.com/api.php/provide/vod/",
 			"http://api.zuidapi.com/api.php/provide/vod/",
+		},
+	},
+	sourceMacCMSCreator: {
+		Name:          "創享影視",
+		Referer:       "https://ys.cxkjg.cn/",
+		CatalogAction: "detail",
+		APIs: []string{
+			"https://ys.cxkjg.cn/api/provide/vod",
 		},
 	},
 }
@@ -141,7 +150,9 @@ func macCMSObject(value any) map[string]any {
 
 func macCMSPayloadUsable(params url.Values, payload map[string]any) bool {
 	switch params.Get("ac") {
-	case "list", "detail":
+	case "list":
+		return len(macCMSRows(payload)) > 0 || len(macCMSClasses(payload)) > 0
+	case "detail":
 		return len(macCMSRows(payload)) > 0
 	default:
 		return payload != nil
@@ -373,7 +384,7 @@ func (d *Downloader) macCMSParseChapters(source, sourceID string, row map[string
 			}
 			chapters = append(chapters, Chapter{
 				ID: providerChapterID(source, sourceID, fmt.Sprintf("%d-%d", lineIndex+1, episodeIndex+1)),
-				Source: source, Title: truncate(title, 256),
+				Source: source, Title: truncate(title, 256), PlayLine: lineName,
 				VideoURL: rawURL, Referer: d.macCMSReferer(source),
 				CurrentEpisode: json.RawMessage(strconv.Itoa(episodeIndex + 1)),
 			})
@@ -389,7 +400,11 @@ func (d *Downloader) fetchMacCMSCatalogPage(ctx context.Context, source string, 
 		params.Set("ac", "detail")
 		params.Set("wd", query)
 	} else {
-		params.Set("ac", "list")
+		action := strings.TrimSpace(macCMSProviders[canonicalProviderSource(source)].CatalogAction)
+		if action == "" {
+			action = "list"
+		}
+		params.Set("ac", action)
 		if category != "" {
 			params.Set("t", category)
 		}
