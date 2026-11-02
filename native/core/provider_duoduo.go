@@ -244,10 +244,20 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 	if !webProviderNumericID.MatchString(id) || title == "" {
 		return Drama{}
 	}
-	cover := duoduoString(row["vod_pic"])
-	if strings.HasPrefix(cover, "//") {
-		cover = "https:" + cover
-	}
+	// MacCMS-compatible feeds may expose more than one poster field.
+	// Prefer the primary poster, then use thumbnail/slide/screenshot variants
+	// when the primary field is empty or malformed.
+	cover := firstNonEmpty(
+		providerCoverAddress(row["vod_pic"], duoduoPublicEntryURL),
+		providerCoverAddress(row["vod_pic_thumb"], duoduoPublicEntryURL),
+		providerCoverAddress(row["vod_pic_slide"], duoduoPublicEntryURL),
+		providerCoverAddress(row["vod_pic_screenshot"], duoduoPublicEntryURL),
+		providerCoverAddress(row["cover"], duoduoPublicEntryURL),
+		providerCoverAddress(row["cover_url"], duoduoPublicEntryURL),
+		providerCoverAddress(row["poster"], duoduoPublicEntryURL),
+		providerCoverAddress(row["image"], duoduoPublicEntryURL),
+		providerCoverAddress(row["thumbnail"], duoduoPublicEntryURL),
+	)
 	description := htmlUnescapeDuoduo(firstNonEmpty(
 		duoduoString(row["vod_content"]),
 		duoduoString(row["vod_blurb"]),
