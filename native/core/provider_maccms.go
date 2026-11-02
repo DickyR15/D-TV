@@ -139,6 +139,15 @@ func macCMSObject(value any) map[string]any {
 	return object
 }
 
+func macCMSPayloadUsable(params url.Values, payload map[string]any) bool {
+	switch params.Get("ac") {
+	case "list", "detail":
+		return len(macCMSRows(payload)) > 0
+	default:
+		return payload != nil
+	}
+}
+
 func macCMSRows(payload map[string]any) []map[string]any {
 	for _, container := range []map[string]any{payload, macCMSObject(payload["data"])} {
 		if container == nil {
@@ -245,7 +254,11 @@ func (d *Downloader) fetchMacCMSJSON(ctx context.Context, source string, params 
 			lastErr = errors.New("API 沒有回傳 JSON 物件")
 			continue
 		}
-		// Cache the working API host for subsequent URL/Referer handling.
+		if !macCMSPayloadUsable(params, payload) {
+			lastErr = errors.New("API 沒有回傳影片資料")
+			continue
+		}
+		// Cache only a usable API host for subsequent URL/Referer handling.
 		d.providerMu.Lock()
 		if d.providerHosts == nil {
 			d.providerHosts = map[string]string{}
