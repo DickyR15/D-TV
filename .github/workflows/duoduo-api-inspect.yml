@@ -73,11 +73,20 @@ jobs:
                   if self.in_title:
                       self.title.append(data.strip())
 
-          def request(url, timeout=12, limit=2 * 1024 * 1024):
-              req = Request(url, headers={
+          def request(url, timeout=12, limit=2 * 1024 * 1024, api=False):
+              headers = {
                   "User-Agent": UA,
                   "Accept": "text/html,application/javascript,application/json,*/*",
-              })
+              }
+              if api:
+                  headers.update({
+                      "Accept": "application/json",
+                      "X-Client": "8f3d2a1c7b6e5d4c9a0b1f2e3d4c5b6a",
+                      "web-sign": "ddtvf65f3a83d6d9ad6f",
+                      "Origin": "https://323433ssdfd.top",
+                      "Referer": "https://323433ssdfd.top/",
+                  })
+              req = Request(url, headers=headers)
               try:
                   response = urlopen(req, timeout=timeout, context=CTX)
               except HTTPError as exc:
@@ -121,7 +130,7 @@ jobs:
               print(f"API HOST {host}")
               for route in SAFE_ROUTES:
                   try:
-                      status, final, ctype, body = request(f"https://{host}{route}", timeout=8, limit=4096)
+                      status, final, ctype, body = request(f"https://{host}{route}", timeout=8, limit=4096, api=True)
                       try:
                           payload = json.loads(body.decode("utf-8", errors="replace"))
                       except Exception:
