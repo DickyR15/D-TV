@@ -67,6 +67,7 @@ class SourceSite {
     SourceSite('maccms-ffzy', '非凡資源', '電影 · 劇集 · 動漫 · 綜藝'),
     SourceSite('maccms-douban', '豆瓣資源', '電影 · 劇集 · 動漫 · 綜藝'),
     SourceSite('maccms-zuida', '最大資源', '電影 · 劇集 · 動漫 · 綜藝'),
+    SourceSite('maccms-creator', '創享影視', '電影 · 劇集 · 動漫 · 綜藝'),
   ];
   static const knownValues = [...primaryValues, ...restrictedValues];
   static const allValues = [...primaryValues, ...restrictedValues];
@@ -256,13 +257,15 @@ class Episode {
           ? intValue(raw['currentEpisode'])
           : fallback,
       vip = raw['vip'] == true,
-      vertical = raw['vertical'] as bool?;
+      vertical = raw['vertical'] as bool?,
+      playLine = raw['playLine'] as String? ?? '';
   final Map<String, dynamic> raw;
   final String id;
   final String title;
   final int number;
   final bool vip;
   final bool? vertical;
+  final String playLine;
 }
 
 class DramaDetail {
