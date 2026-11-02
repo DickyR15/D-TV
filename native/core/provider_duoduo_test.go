@@ -443,14 +443,26 @@ func TestDuoduoPosterMetadataDoesNotRequirePlayableLines(t *testing.T) {
 	}
 }
 
-func TestDuoduoPosterProxyOnlyTargetsKnownProblemCDNs(t *testing.T) {
-	proxy := duoduoPosterProxyURL("https://img.ffzy888.com/poster/1.jpg?token=a%2Fb")
-	if !strings.HasPrefix(proxy, "https://images.weserv.nl/?url=") ||
-		!strings.Contains(proxy, "img.ffzy888.com") {
-		t.Fatalf("known failing poster CDN was not routed through the image proxy: %q", proxy)
+func TestDuoduoPosterProxySupportsPublicCDNsAndRejectsUnsafeHosts(t *testing.T) {
+	for _, address := range []string{
+		"https://img.ffzy888.com/poster/1.jpg?token=a%2Fb",
+		"https://images.example.test/poster.jpg",
+		"https://gimg0.baidu.com/gimg/app=2001&src=https%3A%2F%2Fi0.hdslb.com%2Fposter.png",
+	} {
+		proxy := duoduoPosterProxyURL(address)
+		if !strings.HasPrefix(proxy, "https://images.weserv.nl/?url=") {
+			t.Fatalf("public poster host was not routed through image proxy: address=%q proxy=%q", address, proxy)
+		}
 	}
-	if got := duoduoPosterProxyURL("https://images.example.test/poster.jpg"); got != "" {
-		t.Fatalf("normal poster host should not be proxied: %q", got)
+	for _, address := range []string{
+		"http://127.0.0.1/private.png",
+		"http://localhost/private.png",
+		"http://poster.example.test:8080/poster.jpg",
+		"http://router.local/private.png",
+	} {
+		if got := duoduoPosterProxyURL(address); got != "" {
+			t.Fatalf("unsafe poster host should not be proxied: address=%q proxy=%q", address, got)
+		}
 	}
 }
 
