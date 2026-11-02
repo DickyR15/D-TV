@@ -181,16 +181,19 @@ func TestDuoduoMirrorFailoverAndPreferredHost(t *testing.T) {
 	}
 }
 
-func TestDuoduoDetailAndPlaybackBuildDirectVariants(t *testing.T) {
+func TestDuoduoDetailAndPlaybackKeepsLinesSeparate(t *testing.T) {
 	directA := "https://media.example.test/movie/index.m3u8"
 	directB := "https://backup.example.test/movie/index.mp4"
+	nextEpisode := "https://media.example.test/movie/episode-2.m3u8"
+	aggregateCalls := 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/api.php/web/vod/get_detail":
 			return sourceFixtureResponse(request, http.StatusOK,
 				`{"code":200,"data":[{"vod_id":78296,"vod_name":"流浪地球","type_name":"电影","vod_year":"2019","vod_pic":"https://images.example.test/poster.jpg"}],"vodplayer":[{"from":"direct","decode_status":0,"show":"直連","sort":1}]}`), nil
 		case "/api.php/web/internal/search_aggregate":
-			body := fmt.Sprintf(`{"code":200,"data":[{"site_key":"direct","site_name":"直連","decode_status":0,"sort":1,"vod_play_url":"第1集$%s"},{"site_key":"backup","site_name":"備援","decode_status":0,"sort":2,"vod_play_url":"第1集$%s"},{"site_key":"next-episode","site_name":"下一集","decode_status":0,"sort":3,"vod_play_url":"第2集$https://wrong.example.test/movie/episode-2.m3u8"}]}`, directA, directB)
+			aggregateCalls++
+			body := fmt.Sprintf(`{"code":200,"data":[{"site_key":"direct","site_name":"直連","decode_status":0,"sort":1,"vod_play_url":"第1集$%s"},{"site_key":"backup","site_name":"備援","decode_status":0,"sort":2,"vod_play_url":"第1集$%s"},{"site_key":"next-episode","site_name":"下一集","decode_status":0,"sort":3,"vod_play_url":"第2集$%s"}]}`, directA, directB, nextEpisode)
 			return sourceFixtureResponse(request, http.StatusOK, body), nil
 		default:
 			t.Fatalf("unexpected Duoduo detail/playback endpoint: %s", request.URL.String())
@@ -198,16 +201,72 @@ func TestDuoduoDetailAndPlaybackBuildDirectVariants(t *testing.T) {
 		}
 	})
 	drama, chapters, err := d.fetchDuoduoDetail(context.Background(), "78296")
-	if err != nil || len(chapters) != 1 || drama.ID != "duoduo:78296" ||
-		chapters[0].Source != sourceDuoduo || !strings.HasPrefix(chapters[0].VideoURL, "duoduo-play://") {
+	if err != nil || len(chapters) != 3 || drama.ID != "duoduo:78296" {
 		t.Fatalf("Duoduo detail failed: drama=%+v chapters=%+v err=%v", drama, chapters, err)
 	}
+	if drama.TotalEpisode != 1 || drama.EpisodeCount != 1 || !drama.EpisodesVerified {
+		t.Fatalf("line duplicates inflated episode count: %+v", drama)
+	}
+	if chapters[0].PlayLine != "直連" || chapters[0].VideoURL != directA ||
+		chapters[1].PlayLine != "備援" || chapters[1].VideoURL != directB ||
+		chapters[2].PlayLine != "下一集" || chapters[2].VideoURL != nextEpisode {
+		t.Fatalf("Duoduo playback lines were mixed or reordered: %+v", chapters)
+	}
+	if chapters[0].ID == chapters[1].ID || chapters[1].ID == chapters[2].ID {
+		t.Fatalf("chapter IDs must remain unique across playback lines: %+v", chapters)
+	}
+
+	for index, want := range []string{directA, directB} {
+		media, resolveErr := d.resolveDuoduoMedia(context.Background(), Task{
+			DramaID: drama.ID,
+			Chapter: chapters[index],
+		})
+		if resolveErr != nil || media.URL != want || !media.StandardHTTP {
+			t.Fatalf("line %q did not resolve to its own direct URL: media=%+v err=%v", chapters[index].PlayLine, media, resolveErr)
+		}
+	}
+	if aggregateCalls != 1 {
+		t.Fatalf("direct URL playback re-fetched aggregate API %d times; want only the detail-time request", aggregateCalls)
+	}
+}
+
+func TestDuoduoDetailDirectURLSurvivesAggregateFailure(t *testing.T) {
+	const direct = "https://media.example.test/movie/direct.m3u8"
+	aggregateCalls := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/vod/get_detail":
+			return sourceFixtureResponse(request, http.StatusOK,
+				`{"code":200,"data":[{"vod_id":78296,"vod_name":"測試電影","type_name":"电影","vod_play_from":"direct","vod_play_url":"第1集$https://media.example.test/movie/direct.m3u8"}],"vodplayer":[{"from":"direct","decode_status":0,"show":"直連","sort":1}]}`), nil
+		case "/api.php/web/internal/search_aggregate":
+			aggregateCalls++
+			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "temporarily unavailable"), nil
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+
+	drama, chapters, err := d.fetchDuoduoDetail(context.Background(), "78296")
+	if err != nil || len(chapters) != 1 {
+		t.Fatalf("detail fallback should retain direct chapter: drama=%+v chapters=%+v err=%v", drama, chapters, err)
+	}
+	if chapters[0].VideoURL != direct || chapters[0].PlayLine != "直連" {
+		t.Fatalf("detail API direct URL was not retained: %+v", chapters[0])
+	}
+	requestsAfterDetail := aggregateCalls
+	if requestsAfterDetail != len(duoduoAPIHosts) {
+		t.Fatalf("expected one aggregate failover pass (%d requests), got %d", len(duoduoAPIHosts), requestsAfterDetail)
+	}
+
 	media, err := d.resolveDuoduoMedia(context.Background(), Task{
 		DramaID: drama.ID,
 		Chapter: chapters[0],
 	})
-	if err != nil || media.URL != directA || len(media.Variants) != 1 ||
-		media.Variants[0].URL != directB || !media.StandardHTTP {
-		t.Fatalf("Duoduo direct playback variants failed: media=%+v err=%v", media, err)
+	if err != nil || media.URL != direct || !media.StandardHTTP {
+		t.Fatalf("stored direct URL should remain playable after aggregate outage: media=%+v err=%v", media, err)
+	}
+	if aggregateCalls != requestsAfterDetail {
+		t.Fatalf("playback retried the failed aggregate API: before=%d after=%d", requestsAfterDetail, aggregateCalls)
 	}
 }
