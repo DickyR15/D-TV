@@ -6,6 +6,9 @@ on:
     paths:
       - "native/core/provider_duoduo.go"
       - "native/core/provider_duoduo_test.go"
+      - "native/core/app_cover_metadata.go"
+      - "native/core/app_covers.go"
+      - "native/core/provider_media.go"
       - ".github/workflows/duoduo-entry-probe.yml"
   workflow_dispatch:
 
@@ -145,14 +148,40 @@ jobs:
 
           print("\n=== MOVIE CATEGORY ===")
           _, filtered = api("/api.php/web/filter/vod", {
-              "page": 1, "sort": "hits",
-              "type_id": movie_category["type_id"],
+              "page": 1, "sort": "hits", "pageSize": 24,
               "type_name": movie_category["type_name"],
           })
           category_rows = filtered.get("data") or []
           print(f"movie category rows={len(category_rows)}")
           if not category_rows:
               raise RuntimeError("movie category returned no rows")
+          _, second_page = api("/api.php/web/filter/vod", {
+              "page": 2, "sort": "hits", "pageSize": 24,
+              "type_name": movie_category["type_name"],
+          })
+          second_rows = second_page.get("data") or []
+          print(f"movie category page2 rows={len(second_rows)}")
+          if len(category_rows) >= 18 and not second_rows:
+              raise RuntimeError("movie category signals more pages but page 2 is empty")
+          poster_candidates = [
+              (str(row.get("vod_pic") or ""), row.get("vod_name") or "")
+              for row in category_rows[:8] if row.get("vod_pic")
+          ]
+          poster_ok = 0
+          for address, title in poster_candidates:
+              if address.startswith("//"):
+                  address = "https:" + address
+              if not address.startswith(("http://", "https://")):
+                  continue
+              status, _, content_type, body = request(
+                  address, home_base + "/", limit=2048,
+                  byte_range="bytes=0-2047"
+              )
+              ok = status in (200, 206) and bool(body) and content_type.lower().startswith("image/")
+              print(f"poster={title!r} http={status} type={content_type} ok={ok}")
+              if ok:
+                  poster_ok += 1
+          print(f"poster direct sample={poster_ok}/{len(poster_candidates)}")
 
           print("\n=== SEARCH ===")
           movies = {}
