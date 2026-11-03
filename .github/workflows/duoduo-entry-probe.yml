@@ -473,37 +473,44 @@ jobs:
                   )
                   resolved = []
                   for resolver_name, dns_endpoint in dns_resolvers:
-                      dns_url = dns_endpoint + "?name=" + quote(parsed.hostname) + "&type=A"
-                      try:
-                          dns_status, _, dns_type, dns_body = request(
-                              dns_url, "https://dns.google/", limit=65536, timeout=8
-                          )
-                          payload = json.loads(dns_body.decode("utf-8", errors="replace"))
-                          answers = payload.get("Answer") or []
-                          answer_values = [
-                              str(answer.get("data") or "")
-                              for answer in answers if answer.get("type") == 1
-                          ]
-                          print(
-                              f"  DoH resolver={resolver_name} http={dns_status} "
-                              f"DNS_STATUS={payload.get('Status')} A={answer_values}"
-                          )
-                          if dns_status == 200 and payload.get("Status") == 0:
-                              for ip in answer_values:
-                                  try:
-                                      if ipaddress.ip_address(ip).is_global and ip not in resolved:
-                                          resolved.append(ip)
-                                  except ValueError:
-                                      pass
-                          if resolved:
-                              break
-                      except Exception as exc:
-                          print(
-                              f"  DoH resolver={resolver_name} "
-                              f"error={type(exc).__name__}: {str(exc)[:100]}"
-                          )
+                      for record_type, wanted_type in (("A", 1), ("AAAA", 28)):
+                          dns_url = dns_endpoint + "?name=" + quote(parsed.hostname) + "&type=" + record_type
+                          try:
+                              dns_req = Request(dns_url, headers={
+                                  "User-Agent": UA,
+                                  "Accept": "application/dns-json",
+                              })
+                              with urlopen(dns_req, timeout=8, context=TLS) as dns_response:
+                                  dns_status = dns_response.status
+                                  dns_body = dns_response.read(65536)
+                              payload = json.loads(dns_body.decode("utf-8", errors="replace"))
+                              answers = payload.get("Answer") or []
+                              answer_values = [
+                                  str(answer.get("data") or "")
+                                  for answer in answers if answer.get("type") == wanted_type
+                              ]
+                              print(
+                                  f"  DoH resolver={resolver_name} type={record_type} "
+                                  f"http={dns_status} DNS_STATUS={payload.get('Status')} records={answer_values}"
+                              )
+                              if dns_status == 200 and payload.get("Status") == 0:
+                                  for ip in answer_values:
+                                      try:
+                                          if ipaddress.ip_address(ip).is_global and ip not in resolved:
+                                              resolved.append(ip)
+                                      except ValueError:
+                                          pass
+                              if resolved:
+                                  break
+                          except Exception as exc:
+                              print(
+                                  f"  DoH resolver={resolver_name} type={record_type} "
+                                  f"error={type(exc).__name__}: {str(exc)[:100]}"
+                              )
+                      if resolved:
+                          break
                   if not resolved:
-                      print(f"  DoH no public IPv4 answer for {parsed.hostname}")
+                      print(f"  DoH no public A/AAAA answer for {parsed.hostname}")
                   for ip in resolved[:4]:
                       connection = None
                       try:
