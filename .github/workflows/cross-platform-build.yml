@@ -466,7 +466,7 @@ jobs:
           body: |
             ## D TV ${{ steps.release-files.outputs.version }} 正式版
 
-            四個平台的正式建置與必要檢查已全部通過。
+            四個平台的正式建置與必要檢查已全部通過，Windows 另提供 ZIP 與單檔 EXE 兩種下載格式。
 
             ### 下載檔案
             - Android／Android TV：Universal APK（ARM64、ARMv7、x86_64）
