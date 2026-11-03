@@ -30,6 +30,9 @@ jobs:
           from urllib.request import Request, urlopen
           import json
           import html
+          import ipaddress
+          import socket
+          import http.client
           from html.parser import HTMLParser
           import ssl
 
@@ -462,6 +465,67 @@ jobs:
                           f"error={type(exc).__name__}: {str(exc)[:120]}"
                       )
               parsed = urlsplit(address)
+              if parsed.scheme == "https" and parsed.hostname:
+                  dns_urls = (
+                      "https://dns.alidns.com/resolve?name=" + quote(parsed.hostname) + "&type=A",
+                      "https://dns.google/resolve?name=" + quote(parsed.hostname) + "&type=A",
+                  )
+                  resolved = []
+                  for dns_url in dns_urls:
+                      try:
+                          dns_status, _, _, dns_body = request(
+                              dns_url, "https://dns.google/", limit=65536, timeout=8
+                          )
+                          payload = json.loads(dns_body.decode("utf-8", errors="replace"))
+                          if dns_status == 200 and payload.get("Status") == 0:
+                              for answer in payload.get("Answer") or []:
+                                  if answer.get("type") == 1:
+                                      ip = str(answer.get("data") or "").strip()
+                                      try:
+                                          if ipaddress.ip_address(ip).is_global and ip not in resolved:
+                                              resolved.append(ip)
+                                      except ValueError:
+                                          pass
+                          if resolved:
+                              break
+                      except Exception as exc:
+                          print(f"  DoH resolver={urlsplit(dns_url).hostname} error={type(exc).__name__}: {str(exc)[:100]}")
+                  for ip in resolved[:4]:
+                      connection = None
+                      try:
+                          port = parsed.port or 443
+                          class PinnedHTTPSConnection(http.client.HTTPSConnection):
+                              def connect(self):
+                                  raw = socket.create_connection((ip, port), self.timeout)
+                                  self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
+                          connection = PinnedHTTPSConnection(parsed.hostname, timeout=10, context=TLS)
+                          path = parsed.path or "/"
+                          if parsed.query:
+                              path += "?" + parsed.query
+                          connection.request("GET", path, headers={
+                              "Host": parsed.netloc,
+                              "User-Agent": UA,
+                              "Accept": "image/webp,image/jpeg,image/png,image/gif,*/*;q=0.5",
+                              "Referer": play_url,
+                              "Range": "bytes=0-4095",
+                          })
+                          response = connection.getresponse()
+                          pinned_body = response.read(4096)
+                          pinned_type = response.getheader("Content-Type", "")
+                          pinned_ok = response.status in (200, 206) and bool(pinned_body) and (
+                              pinned_type.lower().startswith("image/") or image_signature(pinned_body)
+                          )
+                          print(
+                              f"  DoH image ip={ip} host={parsed.hostname} referrer=official-play-page "
+                              f"http={response.status} type={pinned_type} ok={pinned_ok}"
+                          )
+                          if pinned_ok:
+                              return True
+                      except Exception as exc:
+                          print(f"  DoH image ip={ip} host={parsed.hostname} error={type(exc).__name__}: {str(exc)[:120]}")
+                      finally:
+                          if connection is not None:
+                              connection.close()
               proxy_target = parsed.netloc + parsed.path + (("?" + parsed.query) if parsed.query else "")
               proxy = "https://images.weserv.nl/?url=" + quote(proxy_target, safe="")
               try:
