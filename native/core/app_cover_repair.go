@@ -280,10 +280,16 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 			downloadErr = ctx.Err()
 			break
 		}
+		if cache.coverOnCooldown(attempt.address, attempt.referer) {
+			downloadErr = errors.New("海報網址暫時冷卻，略過重複請求")
+			continue
+		}
 		data, downloadErr = cache.download(ctx, attempt.address, attempt.referer)
 		if downloadErr == nil {
+			cache.clearCoverFailure(attempt.address, attempt.referer)
 			break
 		}
+		cache.noteCoverFailure(attempt.address, attempt.referer, downloadErr)
 	}
 	<-cache.slots
 	if downloadErr != nil {

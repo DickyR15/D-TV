@@ -47,6 +47,7 @@ type nativeCoverCache struct {
 	mu          sync.Mutex
 	entries     map[string]nativeCoverEntry
 	pending     map[string]*nativeCoverCall
+	failures    map[string]time.Time
 	slots       chan struct{}
 	repairSlots chan struct{}
 	repairs     map[string]*nativeCoverRepair
@@ -58,7 +59,9 @@ func newNativeCoverCache(directory string, downloader *Downloader) *nativeCoverC
 	cache := &nativeCoverCache{
 		directory: filepath.Join(directory, "covers-v1"), downloader: downloader,
 		entries: map[string]nativeCoverEntry{}, pending: map[string]*nativeCoverCall{},
-		slots: make(chan struct{}, 4), limit: nativeCoverCacheBytes,
+		failures: map[string]time.Time{},
+		// Match the six-request Flutter scheduler for the first visible grid.
+		slots: make(chan struct{}, 6), limit: nativeCoverCacheBytes,
 		repairSlots: make(chan struct{}, nativeCoverRepairConcurrency), repairs: map[string]*nativeCoverRepair{},
 	}
 	files, _ := os.ReadDir(cache.directory)
@@ -354,10 +357,16 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 					err = ctx.Err()
 					return
 				}
+				if cache.coverOnCooldown(attempt.address, attempt.referer) {
+					err = errors.New("海報網址暫時冷卻，略過重複請求")
+					continue
+				}
 				data, err = cache.download(ctx, attempt.address, attempt.referer)
 				if err == nil {
+					cache.clearCoverFailure(attempt.address, attempt.referer)
 					return
 				}
+				cache.noteCoverFailure(attempt.address, attempt.referer, err)
 			}
 		}
 		tryAttempts(attempts)
@@ -399,7 +408,9 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 }
 
 func (cache *nativeCoverCache) download(ctx context.Context, address, referer string) ([]byte, error) {
-	request, err := http.NewRequestWithContext(context.WithValue(ctx, nativeCoverNetworkKey{}, true), http.MethodGet, address, nil)
+	attemptCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(context.WithValue(attemptCtx, nativeCoverNetworkKey{}, true), http.MethodGet, address, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -421,8 +432,11 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 		return nil, err
 	}
 	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusPartialContent {
+		return nil, &nativeCoverHTTPStatusError{StatusCode: response.StatusCode}
+	}
 	if !nativeCoverResponseComplete(response) {
-		return nil, fmt.Errorf("海報請求未取得完整圖片：HTTP %d", response.StatusCode)
+		return nil, &nativeCoverHTTPStatusError{StatusCode: response.StatusCode}
 	}
 	if response.ContentLength > nativeCoverMaxBytes {
 		return nil, errors.New("海报文件过大")
