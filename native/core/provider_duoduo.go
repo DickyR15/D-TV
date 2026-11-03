@@ -300,7 +300,7 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 		Title: truncate(title, 512), Name: truncate(title, 512),
 		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
 		Cover: cover, CoverURL: cover, ChannelName: "多多追劇",
-		CategoryName: firstNonEmpty(category, "影視"),
+		CategoryName: category,
 		Remark: truncate(remarks, 96), Score: duoduoString(row["vod_douban_score"]),
 		Heat: duoduoString(row["vod_hits"]), OnlineDate: year,
 		DoubanID: duoduoString(row["vod_douban_id"]),
