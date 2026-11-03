@@ -28,23 +28,26 @@ func posterLookupJSONResponse(request *http.Request, body string) *http.Response
 	}
 }
 
-func TestDoubanPosterAddressUsesOfficialSubjectIDAndCanonicalURL(t *testing.T) {
+func TestDoubanPosterAddressUsesMobileDetailAndOfficialSubjectID(t *testing.T) {
 	const subjectID = "36524559"
 	const expectedImage = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2920000000.jpg"
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.Method != http.MethodGet ||
-			request.URL.Host != "movie.douban.com" ||
-			request.URL.Path != "/subject/"+subjectID+"/" {
-			t.Fatalf("unexpected Douban request: %s %s", request.Method, request.URL.String())
+			request.URL.Host != "m.douban.com" ||
+			request.URL.Path != "/rexxar/api/v2/movie/"+subjectID {
+			t.Fatalf("unexpected Douban mobile request: %s %s", request.Method, request.URL.String())
 		}
-		if request.Header.Get("Referer") != "https://movie.douban.com/" {
+		if request.Header.Get("User-Agent") != doubanMobileUserAgent {
+			t.Fatalf("mobile User-Agent missing: %q", request.Header.Get("User-Agent"))
+		}
+		if request.Header.Get("Referer") != "https://movie.douban.com/subject/"+subjectID+"/" {
 			t.Fatalf("unexpected Douban Referer: %q", request.Header.Get("Referer"))
 		}
-		return posterLookupJSONResponse(request,
-			`<html><head>
-			<meta property="og:url" content="https://movie.douban.com/subject/36524559/" />
-			<meta property="og:image" content="https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2920000000.jpg" />
-			</head></html>`), nil
+		return posterLookupJSONResponse(request, `{
+			"id":"36524559",
+			"pic":{"normal":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2920000000.jpg"},
+			"cover_url":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2919999999.jpg"
+		}`), nil
 	})}
 	downloader := &Downloader{client: client, cfg: defaultConfig()}
 	address, err := downloader.doubanPosterAddress(context.Background(), nativeDrama{
@@ -58,17 +61,29 @@ func TestDoubanPosterAddressUsesOfficialSubjectIDAndCanonicalURL(t *testing.T) {
 	}
 }
 
-func TestDoubanPosterAddressRejectsCanonicalIDMismatch(t *testing.T) {
+func TestDoubanPosterAddressRejectsSubjectIDMismatch(t *testing.T) {
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
-		return posterLookupJSONResponse(request,
-			`<html><head>
-			<meta property="og:url" content="https://movie.douban.com/subject/12345678/" />
-			<meta property="og:image" content="https://img9.doubanio.com/poster.jpg" />
-			</head></html>`), nil
+		return posterLookupJSONResponse(request, `{
+			"id":"12345678",
+			"pic":{"normal":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2920000000.jpg"}
+		}`), nil
 	})}
 	downloader := &Downloader{client: client, cfg: defaultConfig()}
 	if _, err := downloader.doubanPosterAddress(context.Background(), nativeDrama{DoubanID: "36524559"}); err == nil {
-		t.Fatal("mismatched Douban canonical subject ID was accepted")
+		t.Fatal("mismatched Douban subject ID was accepted")
+	}
+}
+
+func TestDoubanPosterAddressRejectsNonDoubanImageHosts(t *testing.T) {
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		return posterLookupJSONResponse(request, `{
+			"id":"36524559",
+			"pic":{"normal":"https://attacker.example.test/view/photo/p2920000000.jpg"}
+		}`), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	if _, err := downloader.doubanPosterAddress(context.Background(), nativeDrama{DoubanID: "36524559"}); err == nil {
+		t.Fatal("non-Douban poster host was accepted")
 	}
 }
 
@@ -76,12 +91,11 @@ func TestExternalPosterAddressPrefersOfficialDoubanID(t *testing.T) {
 	var bangumiCalls int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Host {
-		case "movie.douban.com":
-			return posterLookupJSONResponse(request,
-				`<html><head>
-				<meta property="og:url" content="https://movie.douban.com/subject/36809864/" />
-				<meta property="og:image" content="https://img9.doubanio.com/poster/nanjing.jpg" />
-				</head></html>`), nil
+		case "m.douban.com":
+			return posterLookupJSONResponse(request, `{
+				"id":"36809864",
+				"pic":{"normal":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/nanjing.jpg"}
+			}`), nil
 		case "api.bgm.tv":
 			bangumiCalls++
 			t.Fatal("Bangumi search should not override an exact official Douban subject ID")
@@ -95,7 +109,7 @@ func TestExternalPosterAddressPrefersOfficialDoubanID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if address != "https://img9.doubanio.com/poster/nanjing.jpg" || bangumiCalls != 0 {
+	if address != "https://img9.doubanio.com/view/photo/s_ratio_poster/public/nanjing.jpg" || bangumiCalls != 0 {
 		t.Fatalf("external poster = %q; Bangumi calls=%d", address, bangumiCalls)
 	}
 }
