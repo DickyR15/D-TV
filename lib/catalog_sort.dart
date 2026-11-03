@@ -172,6 +172,44 @@ int _descending(num? a, num? b) => a == null
     ? -1
     : b.compareTo(a);
 
+
+/// Sort options are offered only when the currently loaded source records
+/// actually contain the metadata required to make that sort meaningful.
+Set<CatalogSort> availableCatalogSorts(Iterable<Drama> rows) {
+  final items = rows.toList(growable: false);
+  return {
+    CatalogSort.source,
+    CatalogSort.name,
+    if (items.any(
+      (drama) => RegExp(
+        r'第[0-9零〇一二兩三四五六七八九十百]+[季部]',
+      ).hasMatch(uiTraditional(drama.title)),
+    ))
+      CatalogSort.season,
+    if (items.any((drama) => catalogYear(drama.onlineDate) != null))
+      CatalogSort.date,
+    if (items.any((drama) => catalogMetric(uiTraditional(drama.heat)) != null))
+      CatalogSort.heat,
+    if (items.any((drama) => catalogMetric(uiTraditional(drama.views)) != null))
+      CatalogSort.views,
+  };
+}
+
+bool hasCatalogReleaseStatus(Iterable<Drama> rows) => rows.any(
+  (drama) => const {'finished', 'completed', 'ongoing', 'unknown'}
+      .contains(drama.releaseStatus),
+);
+
+/// Avoid stale global filters hiding every item after changing providers.
+CatalogView effectiveCatalogView(CatalogView requested, Iterable<Drama> rows) {
+  final items = rows.toList(growable: false);
+  final sorts = availableCatalogSorts(items);
+  return requested.copyWith(
+    sort: sorts.contains(requested.sort) ? requested.sort : CatalogSort.source,
+    release: hasCatalogReleaseStatus(items) ? requested.release : '',
+  );
+}
+
 List<Drama> sortCatalog(Iterable<Drama> rows, CatalogView view) {
   final items = rows.where((drama) {
     if (view.release.isEmpty) return true;
