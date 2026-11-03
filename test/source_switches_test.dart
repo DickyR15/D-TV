@@ -83,16 +83,17 @@ void main() {
     expect(drama.sourceId, 'bfzy.tv~12345');
   });
 
-  test('restricted sources start switched off', () async {
+  test('four primary sources start enabled and restricted sources start switched off', () async {
     final store = await create();
     expect(
       store.sources.map((site) => site.id),
-      allSourcesEnabled
-          ? ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo']
-          : ['hongguo'],
+      ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);
     expect(store.sourceEnabled('hongguo'), isTrue);
+    expect(store.sourceEnabled('hanxiaoquan'), isTrue);
+    expect(store.sourceEnabled('guipian'), isTrue);
+    expect(store.sourceEnabled('duoduo'), isTrue);
     expect(store.sourceEnabled('huangdou'), isFalse);
     expect(store.allowsSource('huangdou'), isFalse);
   });

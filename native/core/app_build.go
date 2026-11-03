@@ -6,9 +6,18 @@ var buildAllSources = "false"
 
 var errNativeBuildSource = errors.New("当前版本不包含此站源")
 
+func nativePrimarySource(source string) bool {
+	switch canonicalProviderSource(source) {
+	case sourceHongguo, sourceHanxiaoquan, sourceGuipian, sourceDuoduo:
+		return true
+	default:
+		return false
+	}
+}
+
 func nativeSourceAvailable(source string) bool {
 	source = canonicalProviderSource(source)
-	return source == sourceHongguo || buildAllSources == "true" && isHuangguoProviderSource(source)
+	return nativePrimarySource(source) || buildAllSources == "true" && isHuangguoProviderSource(source)
 }
 
 func nativeDramaAvailable(drama nativeDrama) bool {

@@ -159,6 +159,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     final general = SourceSite.primaryValues
         .where((source) => SourceSite.isAvailable(source.id))
         .toList();
+    final generalNames = general.map((source) => source.name).join('、');
     final advanced = SourceSite.restrictedValues
         .where((source) => SourceSite.isAvailable(source.id))
         .toList();
@@ -185,7 +186,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${general.length} 個一般片源預設開啟。關閉片源只會將其隱藏，不會刪除收藏及觀看紀錄。',
+                      '預設開啟 ${general.length} 個一般片源：$generalNames。關閉片源只會將其隱藏，不會刪除收藏及觀看紀錄。',
                     ),
                     const SizedBox(height: 8),
                     for (final source in general) _sourceTile(source),

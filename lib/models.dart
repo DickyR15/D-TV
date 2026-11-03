@@ -49,7 +49,7 @@ class SourceSite {
     '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
 
-  /// 預設開啟的一般片源：紅果、韓小圈、多多追劇。
+  /// 預設開啟的四個一般片源：紅果、韓小圈、鬼片、多多追劇。
   static const primaryValues = [hongguo, hanxiaoquan, guipian, duoduo];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
@@ -64,7 +64,7 @@ class SourceSite {
   ];
   static const knownValues = [...primaryValues, ...restrictedValues];
   static const allValues = [...primaryValues, ...restrictedValues];
-  static const values = allSourcesEnabled ? knownValues : [hongguo];
+  static const values = allSourcesEnabled ? knownValues : primaryValues;
   static bool isAvailable(String id) => values.any((site) => site.id == id);
   static bool isKnown(String id) => allValues.any((site) => site.id == id);
   static bool isRestricted(String id) =>
