@@ -76,7 +76,7 @@ func (d *Downloader) doubanPosterAddress(ctx context.Context, drama nativeDrama)
 	}
 	request.Header.Set("User-Agent", doubanMobileUserAgent)
 	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Referer", doubanSubjectPageURL+id+"/")
+	request.Header.Set("Referer", "https://m.douban.com/movie/subject/"+id+"/")
 	request.Header.Set("Origin", "https://m.douban.com")
 
 	client := *d.client
