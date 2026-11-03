@@ -168,6 +168,10 @@ func duoduoBaiduPosterSourceURL(address string) string {
 	candidate := strings.TrimSpace(values.Get("src"))
 	if strings.HasPrefix(candidate, "//") {
 		candidate = "https:" + candidate
+	} else if candidate != "" && !strings.Contains(candidate, "://") {
+		// Baidu's gimg wrapper commonly stores a bare hostname in src,
+		// e.g. src=img.example.com/path/poster.webp.
+		candidate = "https://" + strings.TrimLeft(candidate, "/")
 	}
 	source, err := url.Parse(candidate)
 	if err != nil || !validNativeCoverURL(source) || strings.EqualFold(source.Hostname(), host) {
