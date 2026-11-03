@@ -12,6 +12,7 @@ import 'core_bridge.dart';
 import 'catalog_filters.dart';
 import 'catalog_browser.dart';
 import 'catalog_sort.dart';
+import 'catalog_sort_sheet.dart';
 import 'recommendations_screen.dart';
 import 'rankings_screen.dart';
 import 'playback_launch_screen.dart';
@@ -897,21 +898,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _allSources = widget.store.catalogView.allSources;
     _sourceSignature = widget.store.sources.map((site) => site.id).join(',');
     _observedProfileEpoch = widget.store.profileEpoch;
-    final savedCatalogView = widget.store.catalogView;
-    if (savedCatalogView.sort != CatalogSort.date ||
-        savedCatalogView.release.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        unawaited(
-          saveUserChange(
-            context,
-            () => widget.store.setCatalogView(
-              savedCatalogView.copyWith(sort: CatalogSort.date, release: ''),
-            ),
-          ),
-        );
-      });
-    }
     _browser = CatalogBrowser.shared(widget.repository);
     _updater = LibraryUpdater(
       widget.repository,
@@ -1717,6 +1703,29 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _chooseCatalogView() async {
+    final selected = await chooseCatalogView(
+      context,
+      widget.store.catalogView,
+    );
+    if (!mounted || selected == null) return;
+    if (selected.sort == widget.store.catalogView.sort &&
+        selected.release == widget.store.catalogView.release &&
+        selected.allSources == widget.store.catalogView.allSources) {
+      return;
+    }
+    await saveUserChange(
+      context,
+      () => widget.store.setCatalogView(selected),
+    );
+    if (!mounted) return;
+    setState(() {
+      _visibleCacheItems = null;
+      _visibleCacheKey = null;
+    });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
   bool get _supportsVipFilter =>
       _group.sources.any((source) => source.id == 'huangdou');
   bool get _hideVip => _supportsVipFilter && widget.store.hideVip;
@@ -1737,6 +1746,9 @@ class _HomeScreenState extends State<HomeScreen> {
       query,
       hideVip,
       onlineSearch,
+      widget.store.catalogView.sort,
+      widget.store.catalogView.release,
+      widget.store.catalogView.allSources,
       widget.store.profileEpoch,
     );
     if (identical(_visibleCacheItems, _items) &&
@@ -1744,10 +1756,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return _visibleCache;
     }
 
-    final view = widget.store.catalogView.copyWith(
-      sort: CatalogSort.date,
-      release: '',
-    );
+    final view = widget.store.catalogView;
     final result = sortCatalog(
       _items.where((drama) {
         if (!widget.store.allowsSource(drama.source)) return false;
@@ -2932,6 +2941,12 @@ class _HomeScreenState extends State<HomeScreen> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                IconButton(
+                  key: const ValueKey('catalog-sort-button'),
+                  tooltip: '排序：${widget.store.catalogView.sort.label}',
+                  onPressed: _chooseCatalogView,
+                  icon: const Icon(Icons.sort_rounded),
+                ),
                 if (_supportsVipFilter)
                   IconButton(
                     tooltip: widget.store.hideVip ? 'VIP：隱藏' : 'VIP：顯示',
