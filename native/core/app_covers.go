@@ -27,6 +27,7 @@ const nativeCoverMaxBytes = 20 << 20
 const nativeCoverCacheBytes = 256 << 20
 const nativeCoverCacheEntries = 2000
 const nativeCoverTTL = 30 * 24 * time.Hour
+const nativeCoverRepairConcurrency = 3
 
 type nativeCoverEntry struct {
 	size      int64
@@ -58,7 +59,7 @@ func newNativeCoverCache(directory string, downloader *Downloader) *nativeCoverC
 		directory: filepath.Join(directory, "covers-v1"), downloader: downloader,
 		entries: map[string]nativeCoverEntry{}, pending: map[string]*nativeCoverCall{},
 		slots: make(chan struct{}, 4), limit: nativeCoverCacheBytes,
-		repairSlots: make(chan struct{}, 1), repairs: map[string]*nativeCoverRepair{},
+		repairSlots: make(chan struct{}, nativeCoverRepairConcurrency), repairs: map[string]*nativeCoverRepair{},
 	}
 	files, _ := os.ReadDir(cache.directory)
 	for _, file := range files {

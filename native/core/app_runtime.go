@@ -81,6 +81,7 @@ type nativeDrama struct {
 	Title          string   `json:"title"`
 	Description    string   `json:"description"`
 	Cover          string   `json:"cover"`
+	CoverCandidates []string `json:"coverCandidates,omitempty"`
 	FallbackCover  string   `json:"fallbackCover,omitempty"`
 	ProviderFallbackCover string `json:"providerFallbackCover,omitempty"`
 	Episodes         int      `json:"episodes"`
@@ -223,31 +224,118 @@ func nativeText(value any) string {
 	return ""
 }
 
-func nativeNormalize(drama Drama) nativeDrama {
-	cover := ""
-	for _, value := range []any{drama.Cover, drama.CoverURL, drama.CoverURLSnake, drama.Image, drama.ImageURL, drama.ImageURLSnake, drama.Img, drama.Pic, drama.Picture, drama.Poster, drama.Thumb, drama.Thumbnail} {
-		candidate := nativeText(value)
-		if strings.HasPrefix(candidate, "//") {
-			candidate = "https:" + candidate
+func nativeCoverValueStrings(value any) []string {
+	switch item := value.(type) {
+	case string:
+		if strings.TrimSpace(item) != "" {
+			return []string{strings.TrimSpace(item)}
 		}
-		if isProviderHTTPMediaURL(candidate) {
-			cover = candidate
-			break
+	case []any:
+		var values []string
+		for _, child := range item {
+			values = append(values, nativeCoverValueStrings(child)...)
+		}
+		return values
+	case []string:
+		var values []string
+		for _, child := range item {
+			values = append(values, nativeCoverValueStrings(child)...)
+		}
+		return values
+	case map[string]any:
+		var result []string
+		// Read only known artwork keys; do not treat arbitrary metadata URLs as posters.
+		for _, key := range []string{
+			"url", "src", "cover", "coverUrl", "cover_url",
+			"image", "imageUrl", "image_url", "img", "pic", "picture",
+			"poster", "posterUrl", "poster_url", "thumb", "thumbnail",
+			"thumbnailUrl", "contentUrl", "large", "medium", "small",
+			"original", "origin", "common", "grid",
+		} {
+			if child, ok := item[key]; ok {
+				result = append(result, nativeCoverValueStrings(child)...)
+			}
+		}
+		return result
+	case map[string]string:
+		var values []string
+		for _, key := range []string{
+			"url", "src", "cover", "coverUrl", "cover_url",
+			"image", "imageUrl", "image_url", "img", "pic", "picture",
+			"poster", "posterUrl", "poster_url", "thumb", "thumbnail",
+			"thumbnailUrl", "contentUrl", "large", "medium", "small",
+			"original", "origin", "common", "grid",
+		} {
+			if child, ok := item[key]; ok {
+				values = append(values, nativeCoverValueStrings(child)...)
+			}
+		}
+		return values
+	}
+	return nil
+}
+
+func nativeUniqueCoverAddresses(values ...string) []string {
+	seen := make(map[string]bool, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	return result
+}
+
+func nativeNormalize(drama Drama) nativeDrama {
+	source, sourceID, valid := splitProviderDramaID(drama.ID)
+	id := drama.ID
+	if valid {
+		id = providerDramaID(source, sourceID)
+	}
+
+	var addresses []string
+	for _, value := range []any{
+		drama.Cover, drama.CoverURL, drama.CoverURLSnake,
+		drama.Image, drama.ImageURL, drama.ImageURLSnake,
+		drama.Img, drama.Pic, drama.Picture, drama.Poster,
+		drama.Thumb, drama.Thumbnail,
+	} {
+		for _, raw := range nativeCoverValueStrings(value) {
+			address := ""
+			if source == sourceCloudFront {
+				address = legacyCoverURL(raw)
+			} else {
+				if strings.HasPrefix(raw, "//") {
+					raw = "https:" + raw
+				}
+				if isProviderHTTPMediaURL(raw) {
+					address = raw
+				}
+			}
+			if address != "" {
+				addresses = append(addresses, address)
+			}
 		}
 	}
+	addresses = nativeUniqueCoverAddresses(addresses...)
+	cover := ""
+	var candidates []string
+	if len(addresses) > 0 {
+		cover = addresses[0]
+		candidates = append(candidates, addresses[1:]...)
+	}
+
 	episodes := 0
 	for _, value := range []any{drama.TotalEpisode, drama.TotalEpisodeSnake, drama.EpisodeCount, drama.EpisodeCountSnake, drama.ChapterCount, drama.ChapterCountSnake, drama.Total, drama.Episodes} {
 		if count, _ := strconv.Atoi(nativeText(value)); count > episodes {
 			episodes = count
 		}
 	}
-	source, sourceID, valid := splitProviderDramaID(drama.ID)
-	id := drama.ID
-	if valid {
-		id = providerDramaID(source, sourceID)
-	}
 	return nativeDrama{MetadataSchema: 1, ID: id, Source: source, SourceID: sourceID, Title: drama.DisplayTitle(),
-		Description: firstNonEmpty(drama.Desc, drama.Intro), Cover: cover, Episodes: episodes,
+		Description: firstNonEmpty(drama.Desc, drama.Intro), Cover: cover, CoverCandidates: candidates, Episodes: episodes,
 		EpisodesVerified: drama.EpisodesVerified || episodes > 0,
 		Category: nativeDramaCategory(drama), VIP: drama.VIP,
 		Heat: drama.Heat, Views: drama.Views, OnlineDate: providerReleaseDate(drama.OnlineDate),

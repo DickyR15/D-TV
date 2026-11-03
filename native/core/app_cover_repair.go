@@ -38,6 +38,25 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		return "", ctx.Err()
 	}
 
+	// The catalogue can supply several artwork fields. Keep the original first,
+	// then try every other provider URL before another metadata or external lookup.
+	for _, candidate := range nativeUniqueCoverAddresses(drama.CoverCandidates...) {
+		if candidate == primaryAddress {
+			continue
+		}
+		path, err := cache.loadAlternativeAddress(
+			ctx, drama, candidate,
+			nativeCoverReferer(cache.downloader, drama.Source, candidate), "provider",
+		)
+		if err == nil {
+			return path, nil
+		}
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		force = true
+	}
+
 	cachedProvider, cachedExternal := cache.cachedRepair(drama.ID)
 	providerAddress := firstNonEmpty(strings.TrimSpace(drama.ProviderFallbackCover), cachedProvider)
 	if providerAddress != "" && providerAddress != primaryAddress {
@@ -277,42 +296,56 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 	cache.repairs[drama.ID] = call
 	cache.mu.Unlock()
 
-	work, cancel := context.WithTimeout(ctx, 22*time.Second)
-	defer cancel()
 	var providerAddress, externalAddress string
 	var providerErr, externalErr error
 	select {
 	case cache.repairSlots <- struct{}{}:
-		nativeAddress, nativeErr := cache.downloader.nativeCoverAddress(work, drama)
-		if nativeErr == nil && nativeAddress != "" && nativeAddress != drama.Cover {
-			_, candidateErr := cache.loadAlternativeAddress(
-				work, drama, nativeAddress,
-				nativeCoverFallbackReferer(cache.downloader, drama, nativeAddress), "provider",
-			)
-			if candidateErr == nil {
-				providerAddress = nativeAddress
-			} else {
-				providerErr = candidateErr
+		// Queue time must not consume the per-title repair timeout. Previously,
+		// queued titles could expire before their metadata lookup even began.
+		func() {
+			defer func() { <-cache.repairSlots }()
+			work, cancel := context.WithTimeout(ctx, 22*time.Second)
+			defer cancel()
+
+			nativeAddresses, nativeErr := cache.downloader.nativeCoverAddresses(work, drama)
+			if nativeErr != nil {
+				providerErr = nativeErr
 			}
-		} else {
-			providerErr = nativeErr
-		}
-		// An official/provider detail poster always outranks external matches.
-		if providerAddress == "" && work.Err() == nil && searchExternal {
-			externalAddress, externalErr = cache.downloader.bangumiPosterAddress(work, drama)
-			if externalErr == nil && externalAddress != "" && externalAddress != drama.Cover {
-				_, candidateErr := cache.loadAlternativeAddress(work, drama, externalAddress, "https://bgm.tv/", "external")
+			for _, nativeAddress := range nativeUniqueCoverAddresses(nativeAddresses...) {
+				if nativeAddress == drama.Cover {
+					continue
+				}
+				_, candidateErr := cache.loadAlternativeAddress(
+					work, drama, nativeAddress,
+					nativeCoverFallbackReferer(cache.downloader, drama, nativeAddress), "provider",
+				)
 				if candidateErr == nil {
-					// Validation passed; save and use only as the lowest-priority poster.
-				} else {
-					externalErr = candidateErr
-					externalAddress = ""
+					providerAddress = nativeAddress
+					break
+				}
+				providerErr = candidateErr
+				if work.Err() != nil {
+					break
 				}
 			}
-		}
-		<-cache.repairSlots
-	case <-work.Done():
-		providerErr = work.Err()
+			if providerAddress == "" && providerErr == nil {
+				providerErr = errors.New("站源詳情沒有可用的備用海報")
+			}
+
+			// An official/provider detail poster always outranks external matches.
+			if providerAddress == "" && work.Err() == nil && searchExternal {
+				externalAddress, externalErr = cache.downloader.bangumiPosterAddress(work, drama)
+				if externalErr == nil && externalAddress != "" && externalAddress != drama.Cover {
+					_, candidateErr := cache.loadAlternativeAddress(work, drama, externalAddress, "https://bgm.tv/", "external")
+					if candidateErr != nil {
+						externalErr = candidateErr
+						externalAddress = ""
+					}
+				}
+			}
+		}()
+	case <-ctx.Done():
+		providerErr = ctx.Err()
 	}
 
 	err := error(nil)
@@ -345,6 +378,7 @@ func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, fo
 		if drama.FallbackCover == "" {
 			drama.FallbackCover = cached.FallbackCover
 		}
+		drama.CoverCandidates = nativeUniqueCoverAddresses(append(drama.CoverCandidates, cached.CoverCandidates...)...)
 		break
 	}
 	if cached, ok := engine.detailCache[drama.ID]; ok {
@@ -357,6 +391,7 @@ func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, fo
 		if drama.FallbackCover == "" {
 			drama.FallbackCover = cached.Drama.FallbackCover
 		}
+		drama.CoverCandidates = nativeUniqueCoverAddresses(append(drama.CoverCandidates, cached.Drama.CoverCandidates...)...)
 	}
 	engine.mu.Unlock()
 

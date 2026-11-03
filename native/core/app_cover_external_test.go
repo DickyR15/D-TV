@@ -116,13 +116,83 @@ func TestBangumiPosterAddressRejectsMismatchedReleaseYear(t *testing.T) {
 	}
 }
 
+func TestNativeNormalizeRetainsAlternativePosterFields(t *testing.T) {
+	drama := nativeNormalize(Drama{
+		ID: "duoduo:901",
+		Cover: "https://images.example.test/original.jpg",
+		CoverURL: "https://images.example.test/cover-url.jpg",
+		ImageURL: map[string]any{
+			"large": "https://images.example.test/image-large.jpg",
+			"small": "https://images.example.test/image-small.jpg",
+		},
+		Poster: []any{"https://images.example.test/poster.jpg"},
+	})
+	if drama.Cover != "https://images.example.test/original.jpg" {
+		t.Fatalf("original poster priority changed: %q", drama.Cover)
+	}
+	want := []string{
+		"https://images.example.test/cover-url.jpg",
+		"https://images.example.test/image-large.jpg",
+		"https://images.example.test/image-small.jpg",
+		"https://images.example.test/poster.jpg",
+	}
+	if len(drama.CoverCandidates) != len(want) {
+		t.Fatalf("poster candidates = %#v, want %#v", drama.CoverCandidates, want)
+	}
+	for i := range want {
+		if drama.CoverCandidates[i] != want[i] {
+			t.Fatalf("poster candidate %d = %q, want %q", i, drama.CoverCandidates[i], want[i])
+		}
+	}
+}
+
+func TestNativeCoverLoadTriesCatalogueVariantBeforeMetadataRepair(t *testing.T) {
+	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	var requests []string
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requests = append(requests, request.URL.Host)
+		if request.URL.Host == "original.example" {
+			return &http.Response{
+				StatusCode: http.StatusNotFound, Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader("not found")), Request: request,
+			}, nil
+		}
+		if request.URL.Host == "variant.example" {
+			return &http.Response{
+				StatusCode: http.StatusOK, Header: make(http.Header),
+				Body: io.NopCloser(bytes.NewReader(image)), ContentLength: int64(len(image)), Request: request,
+			}, nil
+		}
+		t.Fatalf("metadata/external lookup should not run after catalogue variant succeeds: %s", request.URL)
+		return nil, nil
+	})}
+	cache := newNativeCoverCache(t.TempDir(), &Downloader{client: client, cfg: defaultConfig()})
+	path, err := cache.load(context.Background(), nativeDrama{
+		ID: "duoduo:901", Source: sourceDuoduo, Title: "測試作品",
+		Cover: "https://original.example/poster.jpg",
+		CoverCandidates: []string{"https://variant.example/poster.jpg"},
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(body, image) {
+		t.Fatalf("catalogue variant was not saved as the cover: %v", err)
+	}
+	if len(requests) < 2 || requests[0] != "original.example" || requests[1] != "variant.example" {
+		t.Fatalf("unexpected poster request order: %#v", requests)
+	}
+}
+
 func TestMergeNativeDramaKeepsOriginalAndFallbackCoversSeparate(t *testing.T) {
 	previous := nativeDrama{
 		ID: "duoduo:554", Cover: "https://original.example/old.jpg",
+		CoverCandidates: []string{"https://original.example/old-alt.jpg"},
 		FallbackCover: "https://lain.bgm.tv/fallback.jpg",
 	}
 	fresh := nativeDrama{
 		ID: "duoduo:554", Cover: "https://original.example/new.jpg",
+		CoverCandidates: []string{"https://original.example/new-alt.jpg"},
 	}
 	merged := mergeNativeDrama(previous, fresh)
 	if merged.Cover != fresh.Cover {
@@ -130,6 +200,12 @@ func TestMergeNativeDramaKeepsOriginalAndFallbackCoversSeparate(t *testing.T) {
 	}
 	if merged.FallbackCover != previous.FallbackCover {
 		t.Fatalf("verified fallback cover was not retained separately: got %q", merged.FallbackCover)
+	}
+	if len(merged.CoverCandidates) != 3 ||
+		merged.CoverCandidates[0] != "https://original.example/new-alt.jpg" ||
+		merged.CoverCandidates[1] != "https://original.example/old.jpg" ||
+		merged.CoverCandidates[2] != "https://original.example/old-alt.jpg" {
+		t.Fatalf("catalogue poster variants were not preserved in priority order: %#v", merged.CoverCandidates)
 	}
 }
 

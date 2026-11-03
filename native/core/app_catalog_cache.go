@@ -191,6 +191,17 @@ func mergeNativeDrama(previous, fresh nativeDrama) nativeDrama {
 	if fresh.Cover == "" {
 		fresh.Cover = previous.Cover
 	}
+	candidateAddresses := append([]string{}, fresh.CoverCandidates...)
+	if previous.Cover != "" && previous.Cover != fresh.Cover {
+		candidateAddresses = append(candidateAddresses, previous.Cover)
+	}
+	candidateAddresses = append(candidateAddresses, previous.CoverCandidates...)
+	fresh.CoverCandidates = nil
+	for _, address := range nativeUniqueCoverAddresses(candidateAddresses...) {
+		if address != fresh.Cover {
+			fresh.CoverCandidates = append(fresh.CoverCandidates, address)
+		}
+	}
 	if fresh.FallbackCover == "" {
 		fresh.FallbackCover = previous.FallbackCover
 	}
