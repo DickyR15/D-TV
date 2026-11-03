@@ -255,8 +255,9 @@ class CatalogBrowser {
     }
     final names = {
       for (final source in group.sources)
-        if (!(_menus[source.id] ?? const <CatalogCategory>[])
-            .any((category) => category.id.isNotEmpty))
+        if ((source.id != 'duoduo' && source.id != 'hanxiaoquan') ||
+            !(_menus[source.id] ?? const <CatalogCategory>[])
+                .any((category) => category.id.isNotEmpty))
           ...?_localCategoryNames[source.id],
     }.toList()..sort();
     for (final name in names) {
