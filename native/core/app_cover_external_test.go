@@ -27,6 +27,78 @@ func posterLookupJSONResponse(request *http.Request, body string) *http.Response
 	}
 }
 
+func TestDoubanPosterAddressUsesOfficialSubjectIDAndCanonicalURL(t *testing.T) {
+	const subjectID = "36524559"
+	const expectedImage = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2920000000.jpg"
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodGet ||
+			request.URL.Host != "movie.douban.com" ||
+			request.URL.Path != "/subject/"+subjectID+"/" {
+			t.Fatalf("unexpected Douban request: %s %s", request.Method, request.URL.String())
+		}
+		if request.Header.Get("Referer") != "https://movie.douban.com/" {
+			t.Fatalf("unexpected Douban Referer: %q", request.Header.Get("Referer"))
+		}
+		return posterLookupJSONResponse(request,
+			`<html><head>
+			<meta property="og:url" content="https://movie.douban.com/subject/36524559/" />
+			<meta property="og:image" content="https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2920000000.jpg" />
+			</head></html>`), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.doubanPosterAddress(context.Background(), nativeDrama{
+		ID: "duoduo:1625", DoubanID: subjectID, Title: "鬼灭之刃 剧场版 无限城篇 第一章 猗窝座再来",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != expectedImage {
+		t.Fatalf("Douban poster = %q, want %q", address, expectedImage)
+	}
+}
+
+func TestDoubanPosterAddressRejectsCanonicalIDMismatch(t *testing.T) {
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		return posterLookupJSONResponse(request,
+			`<html><head>
+			<meta property="og:url" content="https://movie.douban.com/subject/12345678/" />
+			<meta property="og:image" content="https://img9.doubanio.com/poster.jpg" />
+			</head></html>`), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	if _, err := downloader.doubanPosterAddress(context.Background(), nativeDrama{DoubanID: "36524559"}); err == nil {
+		t.Fatal("mismatched Douban canonical subject ID was accepted")
+	}
+}
+
+func TestExternalPosterAddressPrefersOfficialDoubanID(t *testing.T) {
+	var bangumiCalls int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "movie.douban.com":
+			return posterLookupJSONResponse(request,
+				`<html><head>
+				<meta property="og:url" content="https://movie.douban.com/subject/36809864/" />
+				<meta property="og:image" content="https://img9.doubanio.com/poster/nanjing.jpg" />
+				</head></html>`), nil
+		case "api.bgm.tv":
+			bangumiCalls++
+			t.Fatal("Bangumi search should not override an exact official Douban subject ID")
+		}
+		return nil, errors.New("unexpected host")
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.externalPosterAddress(context.Background(), nativeDrama{
+		ID: "duoduo:1206", DoubanID: "36809864", Title: "南京照相馆", Category: "電影",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != "https://img9.doubanio.com/poster/nanjing.jpg" || bangumiCalls != 0 {
+		t.Fatalf("external poster = %q; Bangumi calls=%d", address, bangumiCalls)
+	}
+}
+
 func TestBangumiPosterAddressUsesExactTitleAndCategoryType(t *testing.T) {
 	const expectedImage = "https://lain.bgm.tv/pic/cover/anime.jpg"
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
