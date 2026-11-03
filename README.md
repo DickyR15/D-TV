@@ -26,6 +26,8 @@
 
 ## 下載正式版
 
+目前最新正式版仍為 **1.0.1**。**1.0.2 正在開發與驗收中，尚未發布下載檔案**；請以本節列出的正式版連結為準。
+
 前往 [D TV 1.0.1 正式版 Releases](https://github.com/DickyR15/D-TV/releases/tag/v1.0.1)，依照裝置選擇對應檔案：
 
 - **Android／Android TV**：`DTV-1.0.1-Android.apk`
