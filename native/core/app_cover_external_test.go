@@ -525,3 +525,54 @@ func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
 	}
 }
 
+
+func TestExternalPosterAddressUsesBangumiWhenDoubanIDIsMissing(t *testing.T) {
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host != "api.bgm.tv" {
+			t.Fatalf("expected Bangumi fallback, got %s", request.URL.Host)
+		}
+		return posterLookupJSONResponse(request, `{
+			"data":[{
+				"id":12345,
+				"type":6,
+				"name":"Example Movie",
+				"name_cn":"Example Movie",
+				"date":"2025-01-01",
+				"images":{"large":"https://lain.bgm.tv/pic/cover/l/12345.jpg"}
+			}]
+		}`), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.externalPosterAddress(context.Background(), nativeDrama{
+		ID: "duoduo:999", Title: "Example Movie", Category: "電影",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != "https://lain.bgm.tv/pic/cover/l/12345.jpg" {
+		t.Fatalf("unexpected Bangumi fallback poster: %q", address)
+	}
+}
+
+func TestExternalPosterAddressDoesNotReplaceFailedExactDoubanIDWithTitleSearch(t *testing.T) {
+	var bangumiCalls int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host == "m.douban.com" {
+			return posterLookupJSONResponse(request, `{"id":"12345678","pic":{"normal":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p1.jpg"}}`), nil
+		}
+		if request.URL.Host == "api.bgm.tv" {
+			bangumiCalls++
+		}
+		return posterLookupJSONResponse(request, `{"data":[]}`), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	if _, err := downloader.externalPosterAddress(context.Background(), nativeDrama{
+		ID: "duoduo:999", DoubanID: "87654321", Title: "Example Movie", Category: "電影",
+	}); err == nil {
+		t.Fatal("mismatched Douban ID unexpectedly succeeded")
+	}
+	if bangumiCalls != 0 {
+		t.Fatalf("title-only fallback ran despite an exact but failed Douban ID: %d calls", bangumiCalls)
+	}
+}
+
