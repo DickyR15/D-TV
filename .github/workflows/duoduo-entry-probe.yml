@@ -670,6 +670,79 @@ jobs:
                   )
                   return False
 
+          def bangumi_exact_poster(title, row):
+              category = str(row.get("type_name") or "")
+              tags = row.get("vod_class") or []
+              if isinstance(tags, str):
+                  tags = [part.strip() for part in tags.split(",") if part.strip()]
+              category_text = category + " " + " ".join(str(tag) for tag in tags)
+              lowered = category_text.lower()
+              if any(word in lowered for word in ("綜藝", "综艺", "脫口秀", "脱口秀", "variety")):
+                  return ""
+              if any(word in lowered for word in ("動漫", "动画", "動畫", "番劇", "番剧", "漫劇", "漫剧", "anime")):
+                  allowed_types = [2]
+              elif any(word in lowered for word in ("電影", "电影", "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "短劇", "短剧", "movie", "tv")):
+                  allowed_types = [6]
+              else:
+                  allowed_types = [2, 6]
+
+              def normalize(value):
+                  return "".join(ch for ch in str(value or "").casefold() if ch.isalnum())
+
+              payload = {
+                  "keyword": title,
+                  "sort": "match",
+                  "filter": {"type": allowed_types, "nsfw": False},
+              }
+              req = Request(
+                  "https://api.bgm.tv/v0/search/subjects?limit=20&offset=0",
+                  data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                  headers={
+                      "User-Agent": UA,
+                      "Accept": "application/json",
+                      "Content-Type": "application/json",
+                  },
+                  method="POST",
+              )
+              with urlopen(req, timeout=8, context=TLS) as response:
+                  result = json.loads(response.read(2 * 1024 * 1024).decode("utf-8", errors="replace"))
+              wanted_title = normalize(title)
+              matches = [
+                  item for item in (result.get("data") or [])
+                  if int(item.get("type") or 0) in allowed_types
+                  and wanted_title
+                  and (
+                      normalize(item.get("name_cn")) == wanted_title
+                      or normalize(item.get("name")) == wanted_title
+                  )
+              ]
+              source_year = str(row.get("vod_year") or "").strip()[:4]
+              if len(source_year) == 4 and source_year.isdigit():
+                  exact_year = [
+                      item for item in matches
+                      if str(item.get("date") or "")[:4] == source_year
+                  ]
+                  unknown_year = [
+                      item for item in matches
+                      if not str(item.get("date") or "")[:4]
+                  ]
+                  matches = exact_year if exact_year else unknown_year
+              if len(matches) != 1:
+                  print(
+                      f"  Bangumi exact fallback rejected title={title!r} "
+                      f"matches={len(matches)} source_year={source_year!r}"
+                  )
+                  return ""
+              images = matches[0].get("images") or {}
+              for key in ("large", "common", "medium", "small"):
+                  address = str(images.get(key) or "").strip()
+                  if address.startswith("//"):
+                      address = "https:" + address
+                  parsed = urlsplit(address)
+                  if parsed.scheme == "https" and parsed.hostname and parsed.hostname.endswith(".bgm.tv"):
+                      return address
+              return ""
+
           target_failures = []
           for vod_id in TARGET_POSTER_IDS:
               try:
@@ -796,6 +869,18 @@ jobs:
                       if targeted_image_ok(address, play_url, root_url):
                           poster_ok = True
                           break
+                  if not poster_ok:
+                      try:
+                          bangumi_address = bangumi_exact_poster(title, row)
+                          if bangumi_address:
+                              poster_ok = targeted_image_ok(bangumi_address, play_url, root_url)
+                              if poster_ok:
+                                  print(f"PASS: Bangumi exact-match fallback poster validated for id={vod_id}")
+                      except Exception as exc:
+                          print(
+                              f"  Bangumi exact fallback id={vod_id} "
+                              f"error={type(exc).__name__}: {str(exc)[:140]}"
+                          )
                   if not poster_ok:
                       target_failures.append(vod_id)
                       print(f"FAIL: official poster not validated for id={vod_id}")
