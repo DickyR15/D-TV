@@ -5,7 +5,7 @@ enum CatalogSort {
   source('預設順序'),
   name('名稱'),
   season('自然季號'),
-  date('上線日期'),
+  date('年份（最新）'),
   heat('熱度'),
   views('播放量');
 
@@ -75,6 +75,14 @@ bool matchesDramaQuery(Drama drama, String query) {
       .map(normalizedSearchText)
       .where((word) => word.isNotEmpty);
   return terms.every(fields.contains);
+}
+
+int? catalogYear(String value) {
+  final match = RegExp(r'(?<!\d)(?:19|20)\d{2}(?!\d)').firstMatch(value.trim());
+  if (match == null) return null;
+  final year = int.tryParse(match[0]!);
+  if (year == null || year < 1900 || year > 2099) return null;
+  return year;
 }
 
 double? catalogMetric(String text) {
@@ -179,9 +187,7 @@ List<Drama> sortCatalog(Iterable<Drama> rows, CatalogView view) {
       drama.id: switch (view.sort) {
         CatalogSort.heat => catalogMetric(uiTraditional(drama.heat)),
         CatalogSort.views => catalogMetric(uiTraditional(drama.views)),
-        CatalogSort.date => DateTime.tryParse(
-          drama.onlineDate,
-        )?.millisecondsSinceEpoch,
+        CatalogSort.date => catalogYear(drama.onlineDate),
         _ => null,
       },
   };
@@ -194,9 +200,14 @@ List<Drama> sortCatalog(Iterable<Drama> rows, CatalogView view) {
       CatalogSort.season => naturalTitleCompare(a.title, b.title),
       _ => _descending(metrics[a.id], metrics[b.id]),
     };
-    return comparison != 0
-        ? comparison
-        : positions[a.id]!.compareTo(positions[b.id]!);
+    if (comparison != 0) return comparison;
+    if (view.sort == CatalogSort.date) {
+      final leftDate = DateTime.tryParse(a.onlineDate)?.millisecondsSinceEpoch;
+      final rightDate = DateTime.tryParse(b.onlineDate)?.millisecondsSinceEpoch;
+      final dateComparison = _descending(leftDate, rightDate);
+      if (dateComparison != 0) return dateComparison;
+    }
+    return positions[a.id]!.compareTo(positions[b.id]!);
   });
   return items;
 }
