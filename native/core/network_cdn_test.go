@@ -125,6 +125,70 @@ func TestCoverDNSRecoveryAcceptsNewImageHosts(t *testing.T) {
 	}
 }
 
+func TestCoverDNSRecoverySupportsIPv6OnlyImageHost(t *testing.T) {
+	var direct, ipv6Lookups atomic.Int32
+	const host = "ipv6-cover.example.test"
+	const ipv6 = "2001:4860:4860::8888"
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Host != host || request.TLS.ServerName != host || request.URL.Path != "/poster/synthetic.jpg" {
+			t.Error("IPv6 DNS recovery changed image host, SNI or path", request.Host, request.TLS.ServerName, request.URL)
+		}
+		_, _ = writer.Write([]byte("0123456789abcdef"))
+	}))
+	defer server.Close()
+
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.Proxy = nil
+	base.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	base.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if address == host+":443" {
+			direct.Add(1)
+			return nil, io.EOF
+		}
+		if address != net.JoinHostPort(ipv6, "443") {
+			t.Error("unexpected IPv6 DNS destination", address)
+			return nil, io.EOF
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
+	}
+
+	resolver := newDNSResolver(base)
+	resolver.client.Transport = sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Query().Get("type") {
+		case "A":
+			return sourceFixtureResponse(request, http.StatusOK, `{"Status":0,"Answer":[]}`), nil
+		case "AAAA":
+			ipv6Lookups.Add(1)
+			return sourceFixtureResponse(request, http.StatusOK,
+				`{"Status":0,"Answer":[{"type":28,"TTL":120,"data":"2001:4860:4860::8888"}]}`), nil
+		default:
+			t.Error("unexpected DNS record type", request.URL.Query().Get("type"))
+			return sourceFixtureResponse(request, http.StatusBadRequest, `{}`), nil
+		}
+	})
+	transport := newCDNTransport(base, resolver)
+	defer transport.CloseIdleConnections()
+	request, err := http.NewRequestWithContext(
+		context.WithValue(context.Background(), nativeCoverNetworkKey{}, true),
+		http.MethodGet, "https://"+host+"/poster/synthetic.jpg", nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := (&http.Client{Transport: transport}).Do(request)
+	if err != nil {
+		t.Fatal("IPv6-only cover host did not recover through DNS-over-HTTPS:", err)
+	}
+	body, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	if readErr != nil || string(body) != "0123456789abcdef" {
+		t.Fatalf("unexpected image response body %q, err=%v", body, readErr)
+	}
+	if direct.Load() != 1 || ipv6Lookups.Load() == 0 {
+		t.Fatalf("IPv6 fallback was not used: direct=%d AAAA lookups=%d", direct.Load(), ipv6Lookups.Load())
+	}
+}
+
 func TestHostProtocolFallbackTransportIsScopedToOneHostname(t *testing.T) {
 	var baseCalls, fallbackCalls atomic.Int32
 	base := sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
