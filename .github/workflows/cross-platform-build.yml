@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feat/phase5-cross-platform-universal
+      - feat/independent-maccms-sources-ci
     tags:
       - "v*"
   pull_request:
