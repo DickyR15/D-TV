@@ -1,6 +1,9 @@
 package core
 
 import (
+	"context"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -48,3 +51,35 @@ func TestDuoduoPosterAttemptsIncludeUnwrappedBaiduSource(t *testing.T) {
 	}
 	t.Fatalf("Baidu source URL was not tried; attempts: %#v", attempts)
 }
+
+func TestFailedPrimaryPosterDoesNotRepeatDuoduoDetailLookup(t *testing.T) {
+	detailRequests := 0
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path == "/api.php/web/vod/get_detail" {
+			detailRequests++
+		}
+		return &http.Response{
+			StatusCode: http.StatusNotFound,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    request,
+		}, nil
+	})}
+	downloader := &Downloader{
+		client: client,
+		cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://dduotv01.top"},
+	}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	_, err := cache.loadAddress(context.Background(), nativeDrama{
+		ID: "duoduo:157219", Source: sourceDuoduo, SourceID: "157219",
+		Title: "余红旧事", Cover: "https://broken.example/poster.jpg",
+	}, false)
+	if err == nil {
+		t.Fatal("expected unavailable primary and proxy poster to fail")
+	}
+	if detailRequests != 0 {
+		t.Fatalf("primary image failure made %d duplicate detail requests; repair() owns the single metadata lookup", detailRequests)
+	}
+}
+
