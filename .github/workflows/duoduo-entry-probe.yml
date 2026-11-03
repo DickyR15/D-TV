@@ -462,7 +462,7 @@ jobs:
                       )
 
           print("\n=== USER-REPORTED MISSING POSTERS ===")
-          TARGET_POSTER_IDS = ("54635", "151850", "1625", "49704", "1206")
+          TARGET_POSTER_IDS = ("54635", "151850", "1625", "49704", "1206", "157219")
 
           class DetailPosterParser(HTMLParser):
               def __init__(self):
