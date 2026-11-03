@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"errors"
 	"context"
 	"encoding/json"
 	"io"
