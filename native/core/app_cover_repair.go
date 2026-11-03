@@ -306,7 +306,10 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 			work, cancel := context.WithTimeout(ctx, 22*time.Second)
 			defer cancel()
 
-			nativeAddresses, nativeErr := cache.downloader.nativeCoverAddresses(work, drama)
+			nativeAddresses, doubanID, nativeErr := cache.downloader.nativeCoverRecoveryMetadata(work, drama)
+			if drama.DoubanID == "" {
+				drama.DoubanID = doubanID
+			}
 			if nativeErr != nil {
 				providerErr = nativeErr
 			}
