@@ -76,7 +76,7 @@ jobs:
 
   windows-x64:
     if: (github.event_name == 'pull_request' && github.event.pull_request.number == 29) || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'windows'))
-    name: Windows x64 ZIP and Single EXE
+    name: Windows x64 Portable ZIP
     needs: core-validation
     runs-on: windows-2022
     timeout-minutes: 75
@@ -131,40 +131,6 @@ jobs:
             throw "D TV exited during its Windows portable startup smoke test (exit code $($process.ExitCode))."
           }
           Stop-Process -Id $process.Id -Force
-      - name: Verify and smoke launch the single-file EXE
-        shell: pwsh
-        run: |
-          $exe = (Resolve-Path "dist/windows/DTV-${{ steps.windows-version.outputs.app_version }}-Windows.exe").Path
-          $selfTestLog = Join-Path $env:RUNNER_TEMP "dtv-single-exe-selftest.txt"
-          Remove-Item $selfTestLog -Force -ErrorAction SilentlyContinue
-          $env:DTV_SINGLE_EXE_SELFTEST_LOG = $selfTestLog
-          # Capture the real process exit code for a Windows GUI-subsystem EXE.
-          $probe = Start-Process -FilePath $exe -ArgumentList "--dtv-single-file-self-test" -Wait -PassThru
-          $report = if (Test-Path $selfTestLog) { Get-Content $selfTestLog -Raw } else { "No self-test report was written." }
-          if ($probe.ExitCode -ne 0 -or $report -notmatch "^PASS:") {
-            throw "D TV single-file payload validation failed (exit code $($probe.ExitCode)): $report"
-          }
-          Remove-Item Env:DTV_SINGLE_EXE_SELFTEST_LOG
-          $launcher = Start-Process -FilePath $exe -PassThru
-          $deadline = (Get-Date).AddSeconds(120)
-          $app = $null
-          while ((Get-Date) -lt $deadline -and -not $app) {
-            $app = Get-Process -Name DTV -ErrorAction SilentlyContinue |
-              Where-Object { $_.Path -like "$env:LOCALAPPDATA\DTV\Portable\*" } |
-              Select-Object -First 1
-            if (-not $app) { Start-Sleep -Seconds 2 }
-          }
-          if (-not $app) {
-            $launcher.Refresh()
-            throw "D TV single-file launcher did not start the extracted app within 120 seconds (launcher exit code $($launcher.ExitCode))."
-          }
-          Stop-Process -Id $app.Id -Force
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DTV-Windows-Single-EXE
-          path: dist/windows/DTV-*-Windows.exe
-          if-no-files-found: error
-          retention-days: 14
       # Upload the unpacked portable bundle as the artifact itself. GitHub
       # creates the downloadable ZIP, so uploading dist/*.zip here would
       # produce a ZIP containing another ZIP (two extraction steps).
@@ -421,13 +387,12 @@ jobs:
           fi
 
           windows_dir="release-artifacts/DTV-${version}-Windows-Portable"
-          windows_exe="release-artifacts/DTV-Windows-Single-EXE/DTV-${version}-Windows.exe"
           android_apk="release-artifacts/DTV-Android-APK/DTV-${version}-Android.apk"
           macos_dmg="release-artifacts/DTV-macOS-DMG/DTV-${version}-macOS.dmg"
           ios_ipa="release-artifacts/DTV-iOS-IPA/DTV-${version}-iOS.ipa"
 
           test -d "$windows_dir"
-          for package in "$android_apk" "$windows_exe" "$macos_dmg" "$ios_ipa"; do
+          for package in "$android_apk" "$macos_dmg" "$ios_ipa"; do
             if [[ ! -s "$package" ]]; then
               echo "缺少正式發布檔案或檔案為空：$package" >&2
               exit 1
@@ -439,7 +404,7 @@ jobs:
             cd "$windows_dir"
             zip -qr "$GITHUB_WORKSPACE/release-files/DTV-${version}-Windows-Portable.zip" .
           )
-          cp "$android_apk" "$windows_exe" "$macos_dmg" "$ios_ipa" release-files/
+          cp "$android_apk" "$macos_dmg" "$ios_ipa" release-files/
 
           # Generate SHA-256 checksums for every distributable platform package.
           (
@@ -447,7 +412,6 @@ jobs:
             sha256sum \
               "DTV-${version}-Android.apk" \
               "DTV-${version}-Windows-Portable.zip" \
-              "DTV-${version}-Windows.exe" \
               "DTV-${version}-macOS.dmg" \
               "DTV-${version}-iOS.ipa" \
               > SHA256SUMS.txt
@@ -460,7 +424,7 @@ jobs:
             fi
             ls -lh "$package"
           done
-          test "$(find release-files -maxdepth 1 -type f | wc -l)" -eq 6
+          test "$(find release-files -maxdepth 1 -type f | wc -l)" -eq 5
           checksums="$(cat release-files/SHA256SUMS.txt)"
           delimiter="DTV_SHA256_$(date +%s)"
           {
@@ -481,11 +445,11 @@ jobs:
           body: |
             ## D TV ${{ steps.release-files.outputs.version }} 正式版
 
-            四個平台的正式建置與必要檢查已全部通過，Windows 另提供 ZIP 與單檔 EXE 兩種下載格式。
+            四個平台的正式建置與必要檢查已全部通過；Windows 提供免安裝 ZIP。
 
             ### 下載檔案
             - Android／Android TV：Universal APK（ARM64、ARMv7、x86_64）
-            - Windows x64：免安裝 ZIP；另提供單檔 EXE（首次啟動自動展開，無須手動解壓）
+            - Windows x64：免安裝 ZIP（解壓後即可執行）
             - macOS：Apple Silicon／Intel Universal DMG
             - iOS：未簽章 IPA，需自行簽署後側載安裝
 
@@ -501,7 +465,6 @@ jobs:
           files: |
             release-files/DTV-${{ steps.release-files.outputs.version }}-Android.apk
             release-files/DTV-${{ steps.release-files.outputs.version }}-Windows-Portable.zip
-            release-files/DTV-${{ steps.release-files.outputs.version }}-Windows.exe
             release-files/DTV-${{ steps.release-files.outputs.version }}-macOS.dmg
             release-files/DTV-${{ steps.release-files.outputs.version }}-iOS.ipa
             release-files/SHA256SUMS.txt
