@@ -27,7 +27,7 @@ const nativeCoverMaxBytes = 20 << 20
 const nativeCoverCacheBytes = 256 << 20
 const nativeCoverCacheEntries = 2000
 const nativeCoverTTL = 30 * 24 * time.Hour
-const nativeCoverRepairConcurrency = 3
+const nativeCoverRepairConcurrency = 4
 
 type nativeCoverEntry struct {
 	size      int64
@@ -351,26 +351,11 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 		}
 		tryAttempts(attempts)
 
-		// If the preferred catalogue poster is dead, fetch the detail metadata
-		// once and try every distinct thumbnail/slide/poster field it supplies.
-		// This is a last resort only; normal image loads still use one request.
-		if err != nil && ctx.Err() == nil && coverSource == sourceDuoduo {
-			_, sourceID, valid := splitProviderDramaID(drama.ID)
-			if valid {
-				_, row, _, _, detailErr := cache.downloader.fetchDuoduoDetailRow(ctx, sourceID)
-				if detailErr == nil {
-					for _, alternative := range duoduoPosterAddressesFromRow(row) {
-						if alternative == drama.Cover || ctx.Err() != nil {
-							continue
-						}
-						tryAttempts(duoduoPosterAttemptsForDrama(alternative, cache.downloader, drama))
-						if err == nil {
-							break
-						}
-					}
-				}
-			}
-		}
+		// Provider-detail alternatives are checked once by load() -> repair().
+		// Do not repeat the same detail API request here after the primary
+		// catalogue poster fails; that used to add one full network round trip
+		// before the actual fallback pipeline could even start.
+
 		<-cache.slots
 	case <-ctx.Done():
 		err = ctx.Err()
