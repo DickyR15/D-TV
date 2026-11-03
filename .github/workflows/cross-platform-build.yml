@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - feat/phase5-cross-platform-universal
-      - feat/independent-maccms-sources-ci
     tags:
       - "v*"
   pull_request:
@@ -76,7 +75,7 @@ jobs:
         run: python ../scripts/retry_command.py --attempts 3 -- go test ./...
 
   windows-x64:
-    if: (github.event_name == 'push' && (github.ref == 'refs/heads/feat/phase5-cross-platform-universal' || github.ref == 'refs/heads/feat/independent-maccms-sources-ci')) || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'windows'))
+    if: (github.event_name == 'pull_request' && github.event.pull_request.number == 29) || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'windows'))
     name: Windows x64 portable ZIP
     needs: core-validation
     runs-on: windows-2022
