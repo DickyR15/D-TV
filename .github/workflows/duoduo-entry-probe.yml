@@ -466,30 +466,44 @@ jobs:
                       )
               parsed = urlsplit(address)
               if parsed.scheme == "https" and parsed.hostname:
-                  dns_urls = (
-                      "https://dns.alidns.com/resolve?name=" + quote(parsed.hostname) + "&type=A",
-                      "https://dns.google/resolve?name=" + quote(parsed.hostname) + "&type=A",
+                  dns_resolvers = (
+                      ("AliDNS", "https://dns.alidns.com/resolve"),
+                      ("Google", "https://dns.google/resolve"),
+                      ("Cloudflare", "https://cloudflare-dns.com/dns-query"),
                   )
                   resolved = []
-                  for dns_url in dns_urls:
+                  for resolver_name, dns_endpoint in dns_resolvers:
+                      dns_url = dns_endpoint + "?name=" + quote(parsed.hostname) + "&type=A"
                       try:
-                          dns_status, _, _, dns_body = request(
+                          dns_status, _, dns_type, dns_body = request(
                               dns_url, "https://dns.google/", limit=65536, timeout=8
                           )
                           payload = json.loads(dns_body.decode("utf-8", errors="replace"))
+                          answers = payload.get("Answer") or []
+                          answer_values = [
+                              str(answer.get("data") or "")
+                              for answer in answers if answer.get("type") == 1
+                          ]
+                          print(
+                              f"  DoH resolver={resolver_name} http={dns_status} "
+                              f"DNS_STATUS={payload.get('Status')} A={answer_values}"
+                          )
                           if dns_status == 200 and payload.get("Status") == 0:
-                              for answer in payload.get("Answer") or []:
-                                  if answer.get("type") == 1:
-                                      ip = str(answer.get("data") or "").strip()
-                                      try:
-                                          if ipaddress.ip_address(ip).is_global and ip not in resolved:
-                                              resolved.append(ip)
-                                      except ValueError:
-                                          pass
+                              for ip in answer_values:
+                                  try:
+                                      if ipaddress.ip_address(ip).is_global and ip not in resolved:
+                                          resolved.append(ip)
+                                  except ValueError:
+                                      pass
                           if resolved:
                               break
                       except Exception as exc:
-                          print(f"  DoH resolver={urlsplit(dns_url).hostname} error={type(exc).__name__}: {str(exc)[:100]}")
+                          print(
+                              f"  DoH resolver={resolver_name} "
+                              f"error={type(exc).__name__}: {str(exc)[:100]}"
+                          )
+                  if not resolved:
+                      print(f"  DoH no public IPv4 answer for {parsed.hostname}")
                   for ip in resolved[:4]:
                       connection = None
                       try:
