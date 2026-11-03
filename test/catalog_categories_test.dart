@@ -72,6 +72,19 @@ class CategoryRepository extends FixtureRepository {
       CatalogCategory.all,
       CatalogCategory('old-short', 'AI成人短劇'),
     ],
+    'duoduo' => const [
+      CatalogCategory.all,
+      CatalogCategory('1', '電影'),
+      CatalogCategory('2', '劇集'),
+      CatalogCategory('3', '動漫'),
+      CatalogCategory('4', '綜藝'),
+    ],
+    'hanxiaoquan' => const [
+      CatalogCategory.all,
+      CatalogCategory('1', '最新韓劇'),
+      CatalogCategory('2', '韓國電影'),
+      CatalogCategory('3', '韓國綜藝'),
+    ],
     _ => const [CatalogCategory.all],
     };
   }
@@ -438,5 +451,55 @@ void main() {
       expect(ids, contains('hongguo:ranking-cache-match'));
     },
   );
+
+
+  test('official provider menus do not mix in cached free-form categories', () async {
+    final repository = CategoryRepository();
+    repository.cachedPages['duoduo'] = CatalogPage(const [
+      Drama(
+        id: 'duoduo:1',
+        source: 'duoduo',
+        title: '舊快取資料',
+        category: '影視',
+      ),
+      Drama(
+        id: 'duoduo:2',
+        source: 'duoduo',
+        title: '另一筆舊快取資料',
+        category: '院線',
+      ),
+    ]);
+    repository.cachedPages['hanxiaoquan'] = CatalogPage(const [
+      Drama(
+        id: 'hanxiaoquan:1',
+        source: 'hanxiaoquan',
+        title: '韓劇快取',
+        category: '自訂舊分類',
+      ),
+    ]);
+    final browser = CatalogBrowser(repository);
+    const duoduo = SourceGroup('duoduo', '多多追劇', [SourceSite.duoduo]);
+    const hanxiaoquan = SourceGroup(
+      'hanxiaoquan',
+      '韓小圈',
+      [SourceSite.hanxiaoquan],
+    );
+
+    await browser.loadCategories(duoduo);
+    await browser.loadCategories(hanxiaoquan);
+
+    expect(
+      browser.categories(duoduo).map((category) => category.name),
+      ['全部', '電影', '劇集', '動漫', '綜藝'],
+    );
+    expect(
+      browser.categories(hanxiaoquan).map((category) => category.name),
+      ['全部', '最新韓劇', '韓國電影', '韓國綜藝'],
+    );
+    expect(
+      browser.categories(duoduo).map((category) => category.name),
+      isNot(contains('影視')),
+    );
+  });
 
 }
