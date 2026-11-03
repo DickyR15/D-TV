@@ -139,6 +139,52 @@ jobs:
                   return ok, f"HLS HTTP={status}; first segment HTTP={seg_status} type={seg_type} bytes={len(seg_body)}"
               return False, "playlist nesting exceeded probe limit"
 
+          print("\\n=== USER-REPORTED MOVIE EPISODE DIAGNOSTIC: 161235 ===")
+          target_id = "161235"
+          _, detail_payload = api("/api.php/web/vod/get_detail", {"vod_id": target_id})
+          detail_rows = detail_payload.get("data") or []
+          if isinstance(detail_rows, dict):
+              detail_rows = response_rows(detail_rows)
+          if not detail_rows:
+              raise RuntimeError(f"Duoduo detail returned no row for {target_id}")
+          detail = detail_rows[0]
+          print("detail_metadata=" + json.dumps({
+              key: detail.get(key) for key in (
+                  "vod_id", "vod_name", "type_name", "vod_remarks",
+                  "vod_play_from", "vod_play_url", "vod_total", "vod_serial"
+              )
+          }, ensure_ascii=False))
+          player_rows = detail_payload.get("vodplayer") or []
+          print("detail_players=" + json.dumps([
+              {key: row.get(key) for key in ("from", "show", "decode_status", "sort")}
+              for row in player_rows if isinstance(row, dict)
+          ], ensure_ascii=False))
+          for index, (line_name, block) in enumerate(zip(
+              str(detail.get("vod_play_from") or "").split("$$"),
+              str(detail.get("vod_play_url") or "").split("$$")
+          ), start=1):
+              labels = [part.split("$", 1)[0].strip() for part in block.split("#") if "$" in part]
+              print(f"detail_line[{index}]={line_name.strip()!r} labels={labels!r} parsed_count={len(labels)}")
+          _, aggregate_payload = api("/api.php/web/internal/search_aggregate", {"vod_id": target_id})
+          aggregate_rows = aggregate_payload.get("data") or []
+          if isinstance(aggregate_rows, dict):
+              aggregate_rows = response_rows(aggregate_rows)
+          print("aggregate_lines=" + json.dumps([
+              {
+                  "site_key": row.get("site_key"),
+                  "site_name": row.get("site_name"),
+                  "decode_status": row.get("decode_status"),
+                  "sort": row.get("sort"),
+                  "labels": [
+                      part.split("$", 1)[0].strip()
+                      for part in str(row.get("vod_play_url") or "").split("#")
+                      if "$" in part
+                  ],
+              }
+              for row in aggregate_rows if isinstance(row, dict)
+          ], ensure_ascii=False))
+          print("=== END MOVIE EPISODE DIAGNOSTIC ===")
+          
           print("=== HOMEPAGE CATEGORIES ===")
           home_base, home = api("/api.php/web/index/home")
           data = home.get("data") or {}
