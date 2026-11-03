@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix="dtv-single-exe-") as temporary:
     shutil.copy2(launcher_source, work / "main.go")
     shutil.copy2(portable_zip, work / "payload.zip")
     shutil.copy2(icon_source, work / "dtv.ico")
-    (work / "dtv.rc").write_text('IDI_ICON1 ICON "dtv.ico"\n', encoding="utf-8")
+    (work / "dtv.rc").write_text('101 ICON "dtv.ico"\n', encoding="utf-8")
     subprocess.run([windres, "dtv.rc", "-o", "dtv_windows_amd64.syso"], cwd=work, check=True)
     env = os.environ.copy()
     env.update({"GO111MODULE": "off", "GOOS": "windows", "GOARCH": "amd64", "CGO_ENABLED": "0"})
