@@ -1704,9 +1704,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _chooseCatalogView() async {
+    final items = _items
+        .where((drama) => widget.store.allowsSource(drama.source))
+        .toList();
+    final current = effectiveCatalogView(widget.store.catalogView, items);
     final selected = await chooseCatalogView(
       context,
-      widget.store.catalogView,
+      current,
+      availableSorts: availableCatalogSorts(items),
+      showReleaseFilter: hasCatalogReleaseStatus(items),
+      loadedCount: items.length,
     );
     if (!mounted || selected == null) return;
     if (selected.sort == widget.store.catalogView.sort &&
@@ -1756,9 +1763,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return _visibleCache;
     }
 
-    final view = widget.store.catalogView;
-    final result = sortCatalog(
-      _items.where((drama) {
+    final candidates = _items.where((drama) {
         if (!widget.store.allowsSource(drama.source)) return false;
         if (category.startsWith('local:') &&
             categoryName(drama.category) != category.substring(6)) {
@@ -1768,9 +1773,12 @@ class _HomeScreenState extends State<HomeScreen> {
           return false;
         }
         return onlineSearch || query.isEmpty || matchesDramaQuery(drama, query);
-      }),
-      view,
+      }).toList();
+    final view = effectiveCatalogView(
+      widget.store.catalogView,
+      candidates,
     );
+    final result = sortCatalog(candidates, view);
     _visibleCacheItems = _items;
     _visibleCacheKey = cacheKey;
     _visibleCache = result;
@@ -2943,7 +2951,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 IconButton(
                   key: const ValueKey('catalog-sort-button'),
-                  tooltip: '排序：${widget.store.catalogView.sort.label}',
+                  tooltip: '排序：${effectiveCatalogView(widget.store.catalogView, _items).sort.label}',
                   onPressed: _chooseCatalogView,
                   icon: const Icon(Icons.sort_rounded),
                 ),
