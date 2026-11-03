@@ -76,7 +76,7 @@ jobs:
         run: python ../scripts/retry_command.py --attempts 3 -- go test ./...
 
   windows-x64:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'windows'))
+    if: (github.event_name == 'push' && (github.ref == 'refs/heads/feat/phase5-cross-platform-universal' || github.ref == 'refs/heads/feat/independent-maccms-sources-ci')) || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'windows'))
     name: Windows x64 portable ZIP
     needs: core-validation
     runs-on: windows-2022
@@ -142,7 +142,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   android-universal:
-    if: (github.event_name == 'push' && (github.ref == 'refs/heads/feat/phase5-cross-platform-universal' || github.ref == 'refs/heads/feat/independent-maccms-sources-ci')) || (github.event_name == 'pull_request' && github.event.pull_request.number == 26) || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'pull_request' && github.event.pull_request.number == 26) || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
     name: Android Universal APK (3 ABIs)
     needs: core-validation
     runs-on: ubuntu-latest
