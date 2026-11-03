@@ -182,10 +182,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
       _pictureInPictureActive || _pictureInPictureRequested;
-  bool get _canUsePictureInPicture =>
-      !_television &&
-      defaultTargetPlatform == TargetPlatform.android &&
-      _pictureInPictureSupported;
+  bool get _canUsePictureInPicture => supportsPictureInPicture(
+    android: defaultTargetPlatform == TargetPlatform.android,
+    systemSupported: _pictureInPictureSupported,
+  );
   bool get _mobile => _formFactor == FormFactor.phone;
   VideoEnhancementController? get _enhancementForUi =>
       _enhancement.supported ? _enhancement : null;
@@ -602,8 +602,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     final playing = !_loading && _error == null && _player.state.playing;
     final hasPrevious = _index > 0;
     final hasNext = _index + 1 < widget.detail.episodes.length;
-    final autoEnter = playing && !_television &&
-        widget.store.playbackPreferences.autoPictureInPicture;
+    final autoEnter = shouldAutoEnterPictureInPicture(
+      android: true,
+      systemSupported: _pictureInPictureSupported,
+      playing: playing,
+      enabled: widget.store.playbackPreferences.autoPictureInPicture,
+    );
     final signature = '$width:$height:$playing:$hasPrevious:$hasNext:$autoEnter';
     if (_pictureInPictureStateSignature == signature) return;
     _pictureInPictureStateSignature = signature;
@@ -2638,6 +2642,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                 : null,
             onEpisodes: () => _televisionEpisodes(context),
             onSettings: () => _televisionSettings(context),
+            onPictureInPicture: _canUsePictureInPicture
+                ? _enterPictureInPicture
+                : null,
             onBack: _back,
           )
         : PlayerControls(
