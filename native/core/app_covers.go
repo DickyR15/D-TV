@@ -267,7 +267,18 @@ func duoduoPosterAttempts(address, referer string) []duoduoPosterAttempt {
 }
 
 func validNativeCoverURL(address *url.URL) bool {
-	return address != nil && (address.Scheme == "https" || address.Scheme == "http") && address.Hostname() != "" && address.User == nil
+	if address == nil ||
+		(address.Scheme != "https" && address.Scheme != "http") ||
+		address.Hostname() == "" || address.User != nil {
+		return false
+	}
+	// api.zxki.cn exposes a paid image hotlink-bypass API that requires a
+	// private API key. It is not a public image CDN and must not be treated as
+	// an ordinary poster URL or called without credentials.
+	if strings.EqualFold(address.Hostname(), "api.zxki.cn") {
+		return false
+	}
+	return true
 }
 
 func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDrama, force bool) (string, error) {
