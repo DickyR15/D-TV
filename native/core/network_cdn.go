@@ -146,10 +146,17 @@ func (transport *cdnTransport) roundTripAddress(request *http.Request, proxyURL 
 	if upstream.Host == "" {
 		upstream.Host = request.URL.Host
 	}
-	upstream.URL.Host = address
-	if port := request.URL.Port(); port != "" {
-		upstream.URL.Host = net.JoinHostPort(address, port)
+	port := request.URL.Port()
+	if port == "" {
+		if request.URL.Scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
 	}
+	// Always bracket IPv6 literals and include the destination port. The
+	// original hostname remains in Host and TLS ServerName for virtual hosting.
+	upstream.URL.Host = net.JoinHostPort(address, port)
 	response, err := pinned.RoundTrip(upstream)
 	if response != nil {
 		response.Request = request
