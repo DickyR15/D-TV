@@ -240,6 +240,29 @@ func TestDuoduoMapsMovieMetadataAndCategories(t *testing.T) {
 		validNativeCategory(sourceDuoduo, "999") || validNativeCategory(sourceDuoduo, "../1") {
 		t.Fatal("Duoduo category validation accepted invalid type IDs")
 	}
+
+	uncategorized := duoduoDramaFromRow(map[string]any{
+		"vod_id": 78297, "vod_name": "未提供官方類別的影片",
+	})
+	if uncategorized.CategoryName != "" {
+		t.Fatalf("missing Duoduo type_name must stay uncategorized, got %q", uncategorized.CategoryName)
+	}
+	categories := duoduoCategoriesFromHome(map[string]any{
+		"categories": []any{
+			map[string]any{"type_id": 1, "type_name": "电影"},
+			map[string]any{"type_id": 2, "type_name": "剧集"},
+			map[string]any{"type_id": 3, "type_name": "动漫"},
+			map[string]any{"type_id": 4, "type_name": "综艺"},
+		},
+	})
+	if len(categories) != 4 {
+		t.Fatalf("Duoduo categories should mirror the four official homepage categories, got %+v", categories)
+	}
+	for _, category := range categories {
+		if category.Name == "影視" || category.Name == "影视" {
+			t.Fatalf("D TV invented a Duoduo category not present on the official site: %+v", category)
+		}
+	}
 	if canonicalProviderSource("duoduozhuiju.com") != sourceDuoduo ||
 		canonicalProviderSource("323433ssdfd.top") != sourceDuoduo {
 		t.Fatal("Duoduo entry or mirror host did not resolve to the unified source")
