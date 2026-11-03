@@ -78,4 +78,87 @@ void main() {
       expect(sorted.map((drama) => drama.id), ['a', 'b']);
     });
   });
+
+  group('provider-aware sort and filters', () {
+    test('Hanxiaoquan without metadata uses source order and no release filter', () {
+      const rows = [
+        Drama(id: 'hanxiaoquan:1', source: 'hanxiaoquan', title: '韓劇甲'),
+        Drama(id: 'hanxiaoquan:2', source: 'hanxiaoquan', title: '韓劇乙'),
+      ];
+      final options = availableCatalogSorts(rows);
+      expect(options, {CatalogSort.source, CatalogSort.name});
+      expect(hasCatalogReleaseStatus(rows), isFalse);
+
+      final effective = effectiveCatalogView(
+        const CatalogView(sort: CatalogSort.date, release: 'finished'),
+        rows,
+      );
+      expect(effective.sort, CatalogSort.source);
+      expect(effective.release, isEmpty);
+      expect(
+        sortCatalog(rows, effective).map((drama) => drama.id),
+        ['hanxiaoquan:1', 'hanxiaoquan:2'],
+      );
+    });
+
+    test('Duoduo only offers year and heat sorts when those fields exist', () {
+      const rows = [
+        Drama(
+          id: 'duoduo:1',
+          source: 'duoduo',
+          title: '電影甲',
+          onlineDate: '2025',
+          heat: '1.2萬',
+        ),
+        Drama(
+          id: 'duoduo:2',
+          source: 'duoduo',
+          title: '電影乙',
+          onlineDate: '2024',
+          heat: '8000',
+        ),
+      ];
+      final options = availableCatalogSorts(rows);
+      expect(options, containsAll([
+        CatalogSort.source,
+        CatalogSort.name,
+        CatalogSort.date,
+        CatalogSort.heat,
+      ]));
+      expect(options, isNot(contains(CatalogSort.views)));
+      expect(options, isNot(contains(CatalogSort.season)));
+      expect(hasCatalogReleaseStatus(rows), isFalse);
+
+      final effective = effectiveCatalogView(
+        const CatalogView(sort: CatalogSort.date, release: 'finished'),
+        rows,
+      );
+      expect(effective.sort, CatalogSort.date);
+      expect(effective.release, isEmpty);
+    });
+
+    test('Red Fruit retains season, date, heat, views and episode state filters', () {
+      const rows = [
+        Drama(
+          id: 'hongguo:1',
+          source: 'hongguo',
+          title: '第3季都市短劇',
+          onlineDate: '2026-05-01',
+          heat: '2.1萬',
+          views: '100萬',
+          releaseStatus: 'ongoing',
+        ),
+      ];
+      final options = availableCatalogSorts(rows);
+      expect(options, containsAll(CatalogSort.values));
+      expect(hasCatalogReleaseStatus(rows), isTrue);
+      final effective = effectiveCatalogView(
+        const CatalogView(sort: CatalogSort.season, release: 'ongoing'),
+        rows,
+      );
+      expect(effective.sort, CatalogSort.season);
+      expect(effective.release, 'ongoing');
+    });
+  });
+
 }
