@@ -871,6 +871,7 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 	var title string
 	var raw Drama
 	var chapters []Chapter
+	var duoduoDetailRow map[string]any
 	var err error
 	switch source {
 	case sourceHuangguoAI:
@@ -887,6 +888,7 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		raw, chapters, err = engine.downloader.fetchDSDDetail(ctx, sourceID)
 	case sourceDuoduo:
 		raw, chapters, err = engine.downloader.fetchDuoduoDetail(ctx, sourceID)
+		_, duoduoDetailRow, _, _, _ = engine.downloader.fetchDuoduoDetailRow(ctx, sourceID)
 	case sourceHanxiaoquan:
 		raw, chapters, err = engine.downloader.fetchHanxiaoquanDetail(ctx, sourceID)
 	default:
@@ -914,7 +916,7 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		}
 		return nil, err
 	}
-  if source == sourceDuoduo && duoduoIsMovieCategory(drama.Category) {
+  if source == sourceDuoduo && duoduoShouldCollapseMovie(Drama{CategoryName: drama.Category}, duoduoDetailRow) {
     chapters = duoduoMovieChapter(sourceID, chapters)
   }
 	if len(chapters) == 0 {
