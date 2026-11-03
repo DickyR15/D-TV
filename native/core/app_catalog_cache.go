@@ -182,6 +182,9 @@ func mergeNativeDrama(previous, fresh nativeDrama) nativeDrama {
 	if fresh.SourceID == "" {
 		fresh.SourceID = previous.SourceID
 	}
+	if fresh.DoubanID == "" {
+		fresh.DoubanID = previous.DoubanID
+	}
 	if fresh.Title == "" || fresh.Title == "短剧" {
 		fresh.Title = previous.Title
 	}
