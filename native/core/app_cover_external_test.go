@@ -165,7 +165,8 @@ func TestNativeCoverLoadTriesCatalogueVariantBeforeMetadataRepair(t *testing.T) 
 			Body: io.NopCloser(strings.NewReader("not found")), Request: request,
 		}, nil
 	})}
-	cache := newNativeCoverCache(t.TempDir(), &Downloader{client: client, cfg: defaultConfig()})
+	downloader := &Downloader{client: client, cfg: defaultConfig(), limiter: newRequestLimiter(2, 0)}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
 	path, err := cache.load(context.Background(), nativeDrama{
 		ID: "duoduo:901", Source: sourceDuoduo, Title: "測試作品",
 		Cover: "https://original.example/poster.jpg",
