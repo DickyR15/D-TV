@@ -735,6 +735,32 @@ func duoduoIsMovieCategory(category string) bool {
 // duoduoMovieChapter treats Mandarin/Cantonese/quality labels as versions of
 // the same film, not sequential episodes. Keep the remaining URLs as same-episode
 // fallbacks so a movie always exposes exactly one playable chapter.
+// duoduoShouldCollapseMovie uses the catalog category first, then only
+// explicit film-style remarks when old cache data has no category and the
+// detail endpoint omits type_name.
+func duoduoShouldCollapseMovie(drama Drama, detailRow map[string]any) bool {
+  category := firstNonEmpty(
+    duoduoString(detailRow["type_name"]),
+    drama.CategoryName,
+    drama.Category,
+  )
+  if category != "" {
+    return duoduoIsMovieCategory(category)
+  }
+  remark := strings.ToLower(strings.Join(strings.Fields(
+    firstNonEmpty(duoduoString(detailRow["vod_remarks"]), drama.Remark),
+  ), ""))
+  for _, signal := range []string{
+    "更新至hd", "正片", "hd中字", "hd国语", "hd粵語", "hd粤语",
+    "bd高清", "tc中字", "蓝光高清", "藍光高清",
+  } {
+    if strings.Contains(remark, strings.ToLower(signal)) {
+      return true
+    }
+  }
+  return false
+}
+
 func duoduoMovieChapter(sourceID string, chapters []Chapter) []Chapter {
   if len(chapters) == 0 {
     return nil
