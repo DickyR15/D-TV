@@ -164,7 +164,10 @@ class Drama {
       cover: json['cover'] as String? ?? '',
       episodes: intValue(json['episodes']),
       episodesVerified: json['episodesVerified'] == true,
-      category: json['category'] as String? ?? '',
+      category: originalSource == 'duoduo' &&
+              const {'影視', '影视'}.contains(json['category'])
+          ? ''
+          : json['category'] as String? ?? '',
       doubanId: json['doubanId'] as String? ?? '',
       vip: json['vip'] == true
           ? true
@@ -213,6 +216,10 @@ class Drama {
       'AI漫劇',
       'AI 漫劇',
     };
+    final currentCategory = source == 'duoduo' &&
+            const {'影視', '影视'}.contains(category)
+        ? ''
+        : category;
     return Drama(
       id: id,
       source: fresh.source.isEmpty ? source : fresh.source,
@@ -228,9 +235,9 @@ class Drama {
       category:
           fresh.category.isEmpty ||
               genericCategories.contains(fresh.category) &&
-                  category.isNotEmpty &&
-                  !genericCategories.contains(category)
-          ? category
+                  currentCategory.isNotEmpty &&
+                  !genericCategories.contains(currentCategory)
+          ? currentCategory
           : fresh.category,
       doubanId: fresh.doubanId.isEmpty ? doubanId : fresh.doubanId,
       vip: fresh.vipStatus ?? vipStatus,
