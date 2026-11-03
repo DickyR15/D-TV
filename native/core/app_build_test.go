@@ -78,10 +78,9 @@ func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *tes
 	if err := reopened.control("", "resumeAll"); err != nil {
 		t.Fatal(err)
 	}
-	workers := 1
-	if buildAllSources == "true" {
-		workers = 2
-	}
+	// The native downloader has two workers in both editions. The standard
+	// edition may schedule any two of its four permitted primary sources.
+	workers := 2
 	seen := map[string]bool{}
 	for index := 0; index < workers; index++ {
 		select {
@@ -91,15 +90,28 @@ func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *tes
 			t.Fatal("allowed download did not start")
 		}
 	}
-	if !seen[sourceHongguo] || buildAllSources == "true" && !seen[sourceHuangdou] {
+	expectedSecondSource := sourceHanxiaoquan
+	if buildAllSources == "true" {
+		expectedSecondSource = sourceHuangdou
+	}
+	if !seen[sourceHongguo] || !seen[expectedSecondSource] {
 		t.Fatalf("wrong sources scheduled: %v", seen)
 	}
 	if buildAllSources != "true" {
 		reopened.mu.Lock()
-		active := len(reopened.active)
+		activeIDs := make([]string, 0, len(reopened.active))
+		for id := range reopened.active {
+			activeIDs = append(activeIDs, id)
+		}
 		reopened.mu.Unlock()
-		if active != 1 {
-			t.Fatal("foreign-source task was scheduled")
+		if len(activeIDs) != 2 {
+			t.Fatalf("expected two permitted downloads to be active, got %d", len(activeIDs))
+		}
+		for _, id := range activeIDs {
+			job := reopened.jobs[id]
+			if job == nil || !nativePrimarySource(job.Drama.Source) {
+				t.Fatalf("restricted foreign-source task was scheduled: %s", id)
+			}
 		}
 		for _, record := range records {
 			if nativePrimarySource(record.Drama.Source) {
