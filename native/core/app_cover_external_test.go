@@ -434,3 +434,43 @@ func TestNativeCoverLoadUsesFallbackOnlyAfterOriginalFails(t *testing.T) {
 		t.Fatalf("fallback order was incorrect: path=%q requests=%v", path, requests)
 	}
 }
+func TestNativeMergeCoverRepairMetadataRestoresDoubanID(t *testing.T) {
+	incoming := nativeDrama{
+		ID: "duoduo:54635", Source: sourceDuoduo, SourceID: "54635",
+		Title: "玩物", Cover: "https://dbzy5.com/original.jpg",
+	}
+	cached := nativeDrama{
+		ID: "duoduo:54635", Source: sourceDuoduo, SourceID: "54635",
+		DoubanID: "20502443", Title: "玩物",
+		Category: "电影", OnlineDate: "2025",
+		Tags: []string{"剧情", "悬疑"},
+	}
+	merged := nativeMergeCoverRepairMetadata(incoming, cached)
+	if merged.DoubanID != "20502443" {
+		t.Fatalf("cached Douban ID was lost during poster recovery: %q", merged.DoubanID)
+	}
+	if merged.Category != "电影" || merged.OnlineDate != "2025" ||
+		len(merged.Tags) != 2 || merged.Tags[0] != "剧情" {
+		t.Fatalf("cached matching metadata was not restored: %+v", merged)
+	}
+	if merged.Cover != incoming.Cover {
+		t.Fatalf("cached repair metadata overwrote the original poster: %q", merged.Cover)
+	}
+}
+
+func TestNativeMergeCoverRepairMetadataPrefersFreshIdentifiers(t *testing.T) {
+	incoming := nativeDrama{
+		ID: "duoduo:54635", Source: sourceDuoduo, SourceID: "54635",
+		DoubanID: "99999999", Title: "最新片名", Category: "電影",
+		OnlineDate: "2026",
+	}
+	cached := nativeDrama{
+		ID: "duoduo:54635", DoubanID: "20502443",
+		Title: "舊片名", Category: "剧集", OnlineDate: "2025",
+	}
+	merged := nativeMergeCoverRepairMetadata(incoming, cached)
+	if merged.DoubanID != "99999999" || merged.Title != "最新片名" ||
+		merged.Category != "電影" || merged.OnlineDate != "2026" {
+		t.Fatalf("fresh poster metadata should keep priority: %+v", merged)
+	}
+}
