@@ -63,7 +63,7 @@ Future<CatalogView?> chooseCatalogView(
             ),
             const SizedBox(height: 16),
             Text(
-              '排序和篩選作用於已載入的劇集；缺少排序資料的條目排在最後。',
+              '排序和篩選作用於目前已載入的劇集；年份較新的排前面，同一年再依完整日期排序，缺少年份的條目排最後。',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 20),
