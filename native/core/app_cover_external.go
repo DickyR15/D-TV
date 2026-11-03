@@ -155,6 +155,17 @@ func validDoubanPosterAddress(raw string) string {
 	}
 }
 
+// externalPosterAddress chooses the most reliable exact-match metadata source.
+// Duoduo's official detail API supplies a Douban subject ID for its catalogue;
+// when present, use that exact subject and do not replace it with a title-only
+// search result. Bangumi remains the fallback for titles without a Douban ID.
+func (d *Downloader) externalPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
+	if strings.TrimSpace(drama.DoubanID) != "" {
+		return d.doubanPosterAddress(ctx, drama)
+	}
+	return d.bangumiPosterAddress(ctx, drama)
+}
+
 func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
 	title := strings.TrimSpace(drama.Title)
 	if title == "" {
