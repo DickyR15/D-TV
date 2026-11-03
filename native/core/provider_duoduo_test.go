@@ -226,12 +226,12 @@ func TestDuoduoMapsMovieMetadataAndCategories(t *testing.T) {
 		"type_name": "电影", "vod_year": "2019",
 		"vod_pic": "//images.example.test/poster.jpg",
 		"vod_content": "&lt;p&gt;科幻電影&lt;/p&gt;",
-		"vod_remarks": "正片", "vod_douban_score": "7.5",
+		"vod_remarks": "正片", "vod_douban_score": "7.5", "vod_douban_id": 20502443,
 		"vod_hits": 12345, "vod_class": []any{"科幻", "冒險"},
 		"vod_area": []any{"中國大陸"},
 	})
 	if drama.ID != "duoduo:78296" || drama.Source != sourceDuoduo ||
-		drama.Title != "流浪地球（特別版）" || drama.CategoryName != "电影" ||
+		drama.Title != "流浪地球（特別版）" || drama.CategoryName != "电影" || drama.DoubanID != "20502443" ||
 		drama.Cover != "https://images.example.test/poster.jpg" ||
 		!strings.Contains(drama.Desc, "<p>科幻電影</p>") {
 		t.Fatalf("Duoduo metadata mapping is incomplete: %+v", drama)
