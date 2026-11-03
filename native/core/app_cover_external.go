@@ -47,18 +47,28 @@ const (
 	doubanMobileUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
 )
 
+// validDoubanSubjectID rejects empty, placeholder-zero and malformed IDs.
+// Duoduo uses the string "0" when no Douban subject is linked to a title.
+func validDoubanSubjectID(id string) bool {
+	id = strings.TrimSpace(id)
+	if len(id) < 6 || len(id) > 12 || strings.Trim(id, "0") == "" {
+		return false
+	}
+	for _, character := range id {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // doubanPosterAddress uses the mobile Rexxar detail endpoint for the exact
 // Douban ID supplied by Duoduo. The desktop subject page is a Vue shell and
 // may return an anti-bot page without og:image even when the ID is valid.
 func (d *Downloader) doubanPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
 	id := strings.TrimSpace(drama.DoubanID)
-	if len(id) < 6 || len(id) > 12 {
+	if !validDoubanSubjectID(id) {
 		return "", errors.New("豆瓣作品 ID 無效")
-	}
-	for _, character := range id {
-		if character < '0' || character > '9' {
-			return "", errors.New("豆瓣作品 ID 無效")
-		}
 	}
 	if d == nil || d.client == nil {
 		return "", errors.New("豆瓣海報查詢用戶端尚未初始化")
@@ -160,7 +170,7 @@ func validDoubanPosterAddress(raw string) string {
 // when present, use that exact subject and do not replace it with a title-only
 // search result. Bangumi remains the fallback for titles without a Douban ID.
 func (d *Downloader) externalPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
-	if strings.TrimSpace(drama.DoubanID) != "" {
+	if validDoubanSubjectID(drama.DoubanID) {
 		return d.doubanPosterAddress(ctx, drama)
 	}
 	return d.bangumiPosterAddress(ctx, drama)
