@@ -266,6 +266,30 @@ func filepathJoinCover(directory, name string) string {
 	return strings.TrimRight(directory, string(os.PathSeparator)) + string(os.PathSeparator) + name
 }
 
+type nativeCoverExternalPosterResult struct {
+	address string
+	err     error
+}
+
+// startNativeCoverExternalPosterLookup overlaps the known exact Douban lookup
+// with the provider-detail request. The provider poster is still downloaded
+// and selected first; this only removes a serial metadata round trip.
+func startNativeCoverExternalPosterLookup(
+	ctx context.Context,
+	downloader *Downloader,
+	drama nativeDrama,
+) <-chan nativeCoverExternalPosterResult {
+	if downloader == nil || !validDoubanSubjectID(drama.DoubanID) {
+		return nil
+	}
+	result := make(chan nativeCoverExternalPosterResult, 1)
+	go func() {
+		address, err := downloader.externalPosterAddress(ctx, drama)
+		result <- nativeCoverExternalPosterResult{address: address, err: err}
+	}()
+	return result
+}
+
 func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, force bool, searchExternal bool) (string, string, error) {
 	cache.mu.Lock()
 	if previous := cache.repairs[drama.ID]; previous != nil {
@@ -310,6 +334,14 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 			work, cancel := context.WithTimeout(ctx, 22*time.Second)
 			defer cancel()
 
+			// When the catalogue already contains a valid exact Douban ID,
+			// resolve its poster metadata while the official provider detail
+			// request is in flight. Provider artwork remains higher priority.
+			externalLookup := (<-chan nativeCoverExternalPosterResult)(nil)
+			if searchExternal {
+				externalLookup = startNativeCoverExternalPosterLookup(work, cache.downloader, drama)
+			}
+
 			nativeAddresses, doubanID, nativeErr := cache.downloader.nativeCoverRecoveryMetadata(work, drama)
 			if drama.DoubanID == "" {
 				drama.DoubanID = doubanID
@@ -340,7 +372,18 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 
 			// An official/provider detail poster always outranks external matches.
 			if providerAddress == "" && work.Err() == nil && searchExternal {
-				externalAddress, externalErr = cache.downloader.externalPosterAddress(work, drama)
+				if externalLookup != nil {
+					select {
+					case result := <-externalLookup:
+						externalAddress, externalErr = result.address, result.err
+					case <-work.Done():
+						externalErr = work.Err()
+					}
+				} else {
+					// No exact Douban ID was present in the catalogue. This path
+					// must wait for provider detail metadata, which may supply one.
+					externalAddress, externalErr = cache.downloader.externalPosterAddress(work, drama)
+				}
 				if externalErr == nil && externalAddress != "" && externalAddress != drama.Cover {
 					_, candidateErr := cache.loadAlternativeAddress(work, drama, externalAddress, nativeCoverFallbackReferer(cache.downloader, drama, externalAddress), "external")
 					if candidateErr != nil {
