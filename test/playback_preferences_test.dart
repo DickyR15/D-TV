@@ -113,4 +113,47 @@ void main() {
     expect(hwdec(TelevisionDecoder.automatic, ios: true), isNull);
   });
 
+
+  test('Picture-in-Picture is available on supported Android phones and TVs', () {
+    expect(
+      supportsPictureInPicture(android: true, systemSupported: true),
+      isTrue,
+    );
+    expect(
+      supportsPictureInPicture(android: false, systemSupported: true),
+      isFalse,
+    );
+    expect(
+      supportsPictureInPicture(android: true, systemSupported: false),
+      isFalse,
+    );
+  });
+
+  test('automatic PiP requires a supported Android device, playback and opt-in', () {
+    expect(
+      shouldAutoEnterPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+      ),
+      isTrue,
+    );
+    for (final values in [
+      (android: false, systemSupported: true, playing: true, enabled: true),
+      (android: true, systemSupported: false, playing: true, enabled: true),
+      (android: true, systemSupported: true, playing: false, enabled: true),
+      (android: true, systemSupported: true, playing: true, enabled: false),
+    ]) {
+      expect(
+        shouldAutoEnterPictureInPicture(
+          android: values.android,
+          systemSupported: values.systemSupported,
+          playing: values.playing,
+          enabled: values.enabled,
+        ),
+        isFalse,
+      );
+    }
+  });
 }
