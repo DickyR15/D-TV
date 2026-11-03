@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -54,13 +55,16 @@ func (cache *nativeCoverCache) coverOnCooldown(address, referer string) bool {
 }
 
 func (cache *nativeCoverCache) noteCoverFailure(address, referer string, err error) {
-	if err == nil {
+	if err == nil || errors.Is(err, context.Canceled) {
 		return
 	}
 	key := nativeCoverFailureKey(address, referer)
 	now := time.Now()
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
+	if cache.failures == nil {
+		cache.failures = make(map[string]time.Time)
+	}
 	if len(cache.failures) >= 4096 {
 		for candidate, until := range cache.failures {
 			if !now.Before(until) {
