@@ -476,7 +476,7 @@ jobs:
 
             ### SHA-256 檔案完整性驗證
 
-            以下為四個正式發布附件的 SHA-256 校驗碼。下載後可使用 SHA256SUMS.txt 進行比對。
+            以下為正式發布附件的 SHA-256 校驗碼。下載後可使用 SHA256SUMS.txt 進行比對。
 
             ```text
             ${{ steps.release-files.outputs.checksums }}
