@@ -10,6 +10,39 @@ import 'fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('four primary sources and guidance are visible in every edition', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: SourceManagementScreen(store: store)),
+    );
+    expect(find.text('紅果'), findsOneWidget);
+    expect(find.text('韓小圈'), findsOneWidget);
+    expect(find.text('鬼片'), findsOneWidget);
+    expect(find.text('多多追劇'), findsOneWidget);
+    expect(
+      find.textContaining(
+        '預設開啟 4 個一般片源：紅果、韓小圈、鬼片、多多追劇。',
+      ),
+      findsOneWidget,
+    );
+    expect(store.sourceEnabled('hongguo'), isTrue);
+    expect(store.sourceEnabled('hanxiaoquan'), isTrue);
+    expect(store.sourceEnabled('guipian'), isTrue);
+    expect(store.sourceEnabled('duoduo'), isTrue);
+  });
+
   testWidgets('advanced source toggles are hidden until admin password is verified', (
     tester,
   ) async {

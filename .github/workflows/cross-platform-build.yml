@@ -70,6 +70,12 @@ jobs:
         run: python scripts/retry_command.py --attempts 3 -- flutter pub get
       - name: Test Flutter suite
         run: flutter test --dart-define=ALL_SOURCES=true
+      - name: Test standard edition primary sources
+        run: >-
+          flutter test --dart-define=ALL_SOURCES=false
+          test/source_switches_test.dart
+          test/app_build_test.dart
+          test/source_management_screen_test.dart
       - name: Test shared Go core
         working-directory: native
         run: python ../scripts/retry_command.py --attempts 3 -- go test ./...
