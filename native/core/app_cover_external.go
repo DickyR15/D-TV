@@ -175,6 +175,12 @@ func (d *Downloader) externalPosterAddress(ctx context.Context, drama nativeDram
 		if doubanErr == nil {
 			return address, nil
 		}
+		// A response for a different Douban subject is a hard identity mismatch,
+		// not an availability failure. Never replace that exact ID with a
+		// title-only candidate when the source metadata itself conflicts.
+		if strings.Contains(doubanErr.Error(), "豆瓣詳情 ID 與官網提供的作品 ID 不符") {
+			return "", doubanErr
+		}
 		bangumiAddress, bangumiErr := d.bangumiPosterAddress(ctx, drama)
 		if bangumiErr == nil {
 			return bangumiAddress, nil
