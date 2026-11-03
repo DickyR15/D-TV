@@ -702,3 +702,29 @@ func TestMigrateNativeDramaRemovesObsoleteDuoduoCategory(t *testing.T) {
     t.Fatalf("official Duoduo category was removed: %q", current.Category)
   }
 }
+
+
+func TestDuoduoMovieDetectionUsesExplicitRemarkOnlyWhenCategoryIsMissing(t *testing.T) {
+  if !duoduoShouldCollapseMovie(Drama{}, map[string]any{
+    "vod_remarks": "更新至HD",
+  }) {
+    t.Fatal("legacy cached movie without category was not recognized from explicit movie remark")
+  }
+  if !duoduoShouldCollapseMovie(Drama{}, map[string]any{
+    "type_name": nil,
+    "vod_remarks": "HD中字",
+  }) {
+    t.Fatal("movie quality remark was not recognized")
+  }
+  if duoduoShouldCollapseMovie(Drama{}, map[string]any{
+    "type_name": "剧集",
+    "vod_remarks": "更新至HD",
+  }) {
+    t.Fatal("explicit series category must take precedence over movie-like remark")
+  }
+  if duoduoShouldCollapseMovie(Drama{}, map[string]any{
+    "vod_remarks": "更新至第12集",
+  }) {
+    t.Fatal("ordinary episodic update remark was mistaken for a movie")
+  }
+}
