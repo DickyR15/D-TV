@@ -111,7 +111,7 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 		return nativeCoverAddressesFromDrama(fresh), err
 	case sourceGuipian:
 		fresh, _, err := d.fetchGuipianDetail(ctx, id)
-		return nativeNormalize(fresh).Cover, err
+		return nativeCoverAddressesFromDrama(fresh), err
 	case sourceHanxiaoquan:
 		fresh, _, err := d.fetchHanxiaoquanDetail(ctx, id)
 		return nativeCoverAddressesFromDrama(fresh), err
