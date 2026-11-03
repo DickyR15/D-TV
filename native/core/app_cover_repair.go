@@ -222,7 +222,11 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 	var data []byte
 	var downloadErr error
 	attempts := []duoduoPosterAttempt{{address: address, referer: referer}}
-	if source == sourceDuoduo {
+	// Only provider-hosted artwork needs Duoduo's page Referer and its
+	// provider-specific CDN/Baidu proxy retries. External database images must
+	// retain their own trusted Referer (e.g. Douban's domain) or their CDN may
+	// reject the download even though the poster URL is valid.
+	if source == sourceDuoduo && cacheClass == "provider" {
 		attempts = duoduoPosterAttemptsForDrama(address, cache.downloader, drama)
 	}
 	for _, attempt := range attempts {
