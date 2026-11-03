@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 type posterLookupRoundTripper func(*http.Request) (*http.Response, error)
