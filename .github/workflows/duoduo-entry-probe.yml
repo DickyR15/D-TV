@@ -144,7 +144,7 @@ jobs:
           _, detail_payload = api("/api.php/web/vod/get_detail", {"vod_id": target_id})
           detail_rows = detail_payload.get("data") or []
           if isinstance(detail_rows, dict):
-              detail_rows = response_rows(detail_rows)
+              detail_rows = next((detail_rows.get(key) for key in ("list", "items", "results", "videos", "vod") if isinstance(detail_rows.get(key), list)), [])
           if not detail_rows:
               raise RuntimeError(f"Duoduo detail returned no row for {target_id}")
           detail = detail_rows[0]
@@ -168,7 +168,7 @@ jobs:
           _, aggregate_payload = api("/api.php/web/internal/search_aggregate", {"vod_id": target_id})
           aggregate_rows = aggregate_payload.get("data") or []
           if isinstance(aggregate_rows, dict):
-              aggregate_rows = response_rows(aggregate_rows)
+              aggregate_rows = next((aggregate_rows.get(key) for key in ("list", "items", "results", "videos", "vod") if isinstance(aggregate_rows.get(key), list)), [])
           print("aggregate_lines=" + json.dumps([
               {
                   "site_key": row.get("site_key"),
