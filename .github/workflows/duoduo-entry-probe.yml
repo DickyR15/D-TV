@@ -29,6 +29,8 @@ jobs:
           from urllib.parse import quote, urlencode, urljoin, urlsplit
           from urllib.request import Request, urlopen
           import json
+          import html
+          from html.parser import HTMLParser
           import ssl
 
           HOSTS = [
@@ -157,7 +159,13 @@ jobs:
 
           def poster_address(value):
               if isinstance(value, dict):
-                  for key in ("url", "contentUrl", "thumbnailUrl"):
+                  for key in (
+                      "url", "src", "cover", "coverUrl", "cover_url",
+                      "image", "imageUrl", "image_url", "img", "pic", "picture",
+                      "poster", "posterUrl", "poster_url", "thumb", "thumbnail",
+                      "thumbnailUrl", "contentUrl", "large", "medium", "small",
+                      "original", "origin", "common", "grid",
+                  ):
                       address = poster_address(value.get(key))
                       if address:
                           return address
@@ -400,6 +408,142 @@ jobs:
                   except Exception as exc:
                       print(f"poster detail fallback id={vod_id}: {type(exc).__name__}: {str(exc)[:120]}")
           print(f"poster direct/proxy sample={poster_ok}/{len(poster_candidates)}")
+          print("\n=== USER-REPORTED MISSING POSTERS ===")
+          TARGET_POSTER_IDS = ("54635", "151850", "1625", "49704", "1206")
+
+          class DetailPosterParser(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.candidates = []
+
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag == "meta":
+                      key = (attrs.get("property") or attrs.get("name") or "").lower()
+                      if key in ("og:image", "og:image:url", "twitter:image", "twitter:image:src"):
+                          value = attrs.get("content", "").strip()
+                          if value:
+                              self.candidates.append(("html-meta:" + key, value))
+                  elif tag == "link" and "image_src" in (attrs.get("rel") or "").lower():
+                      value = attrs.get("href", "").strip()
+                      if value:
+                          self.candidates.append(("html-link:image_src", value))
+                  elif tag == "img":
+                      classes = (attrs.get("class") or "").lower()
+                      alt = (attrs.get("alt") or "").lower()
+                      title = (attrs.get("title") or "").lower()
+                      if any(word in classes for word in ("poster", "cover", "vod", "detail", "play")) or alt or title:
+                          for key in ("data-original", "data-src", "data-lazy-src", "data-echo", "src"):
+                              value = attrs.get(key, "").strip()
+                              if value:
+                                  self.candidates.append(("html-img:" + key, value))
+                                  break
+
+          def targeted_image_ok(address, play_url, root_url):
+              attempts = [("official-play-page", play_url), ("site-homepage", root_url)]
+              for referer_name, referer in attempts:
+                  try:
+                      status, final, content_type, body = request(
+                          address, referer, limit=4096, timeout=10, byte_range="bytes=0-4095"
+                      )
+                      ok = status in (200, 206) and bool(body) and (
+                          content_type.lower().startswith("image/") or image_signature(body)
+                      )
+                      print(
+                          f"  image host={urlsplit(address).hostname} referrer={referer_name} "
+                          f"http={status} final={urlsplit(final).hostname} type={content_type} "
+                          f"ok={ok} magic={body[:16].hex() if body else 'none'}"
+                      )
+                      if ok:
+                          return True
+                  except Exception as exc:
+                      print(
+                          f"  image host={urlsplit(address).hostname} referrer={referer_name} "
+                          f"error={type(exc).__name__}: {str(exc)[:120]}"
+                      )
+              parsed = urlsplit(address)
+              proxy_target = parsed.netloc + parsed.path + (("?" + parsed.query) if parsed.query else "")
+              proxy = "https://images.weserv.nl/?url=" + quote(proxy_target, safe="")
+              try:
+                  status, final, content_type, body = request(
+                      proxy, "https://images.weserv.nl/", limit=4096, timeout=10,
+                      byte_range="bytes=0-4095"
+                  )
+                  ok = status in (200, 206) and bool(body) and (
+                      content_type.lower().startswith("image/") or image_signature(body)
+                  )
+                  print(
+                      f"  image host={urlsplit(address).hostname} referrer=weserv-proxy "
+                      f"http={status} type={content_type} ok={ok}"
+                  )
+                  return ok
+              except Exception as exc:
+                  print(
+                      f"  image host={urlsplit(address).hostname} referrer=weserv-proxy "
+                      f"error={type(exc).__name__}: {str(exc)[:120]}"
+                  )
+                  return False
+
+          target_failures = []
+          for vod_id in TARGET_POSTER_IDS:
+              try:
+                  api_base, detail_payload = api("/api.php/web/vod/get_detail", {"vod_id": vod_id})
+                  detail_rows = response_rows(detail_payload.get("data"))
+                  if not detail_rows:
+                      raise RuntimeError("official detail API returned no data row")
+                  row = detail_rows[0]
+                  title = row_title(row) or "(no title)"
+                  play_url = api_base + "/play/" + vod_id
+                  root_url = api_base + "/"
+                  print(f"target id={vod_id} title={title!r} api={api_base} row_keys={sorted(row.keys())}")
+                  candidates = []
+                  seen = set()
+                  for field in (
+                      "vod_pic", "vod_pic_thumb", "vod_pic_url", "vod_pic_slide",
+                      "vod_pic_screenshot", "cover", "cover_url", "poster", "image",
+                      "thumbnail", "thumb", "pic", "img", "picture",
+                  ):
+                      address = poster_address(row.get(field))
+                      if address and address not in seen:
+                          seen.add(address)
+                          candidates.append(("api:" + field, address))
+                  page_status, page_final, page_type, page_body = request(
+                      play_url, root_url, limit=2 * 1024 * 1024, timeout=12
+                  )
+                  print(
+                      f"  official-page http={page_status} type={page_type} "
+                      f"bytes={len(page_body)} final={page_final}"
+                  )
+                  parser = DetailPosterParser()
+                  parser.feed(html.unescape(page_body.decode("utf-8", errors="replace")))
+                  for label, raw in parser.candidates:
+                      address = urljoin(play_url, raw.strip())
+                      parsed = urlsplit(address)
+                      if parsed.scheme in ("http", "https") and parsed.netloc and address not in seen:
+                          seen.add(address)
+                          candidates.append((label, address))
+                  print(
+                      f"  poster candidates api+official-html={len(candidates)} "
+                      f"fields={[label for label, _ in candidates[:16]]}"
+                  )
+                  poster_ok = False
+                  for label, address in candidates[:16]:
+                      print(f"  candidate source={label} url={address[:260]}")
+                      if targeted_image_ok(address, play_url, root_url):
+                          poster_ok = True
+                          break
+                  if not poster_ok:
+                      target_failures.append(vod_id)
+                      print(f"FAIL: official poster not validated for id={vod_id}")
+                  else:
+                      print(f"PASS: official poster validated for id={vod_id}")
+              except Exception as exc:
+                  target_failures.append(vod_id)
+                  print(f"FAIL: target id={vod_id}: {type(exc).__name__}: {str(exc)[:180]}")
+          print(f"TARGETED OFFICIAL POSTERS={len(TARGET_POSTER_IDS)-len(target_failures)}/{len(TARGET_POSTER_IDS)}")
+          if target_failures:
+              raise RuntimeError("user-reported Duoduo poster cases still failing: " + ", ".join(target_failures))
+
           print("\n=== SEARCH ===")
           movies = {}
           for term in ("流浪地球", "阿凡達", "復仇者聯盟"):
