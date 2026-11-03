@@ -496,28 +496,73 @@ jobs:
                                   self.candidates.append(("html-img:" + key, value))
                                   break
 
+          def request_full_image(address, referer, timeout=10):
+              # Match the native downloader: GET the whole image without a
+              # Range header, then reject incomplete 206 responses/truncation.
+              headers = {
+                  "User-Agent": UA,
+                  "Accept": "image/webp,image/jpeg,image/png,image/gif,*/*;q=0.5",
+                  "Referer": referer,
+                  "Sec-Fetch-Mode": "no-cors",
+                  "Sec-Fetch-Dest": "image",
+              }
+              req = Request(address, headers=headers)
+              try:
+                  response = urlopen(req, timeout=timeout, context=TLS)
+              except HTTPError as exc:
+                  response = exc
+              with response:
+                  status = response.status
+                  final = response.geturl()
+                  content_type = response.headers.get("Content-Type", "")
+                  content_length = response.headers.get("Content-Length")
+                  content_range = response.headers.get("Content-Range", "")
+                  body = response.read(20 * 1024 * 1024 + 1)
+                  complete = status == 200
+                  if status == 206:
+                      try:
+                          unit, span = content_range.split(" ", 1)
+                          byte_span, total_text = span.split("/", 1)
+                          start_text, end_text = byte_span.split("-", 1)
+                          start, end, total = int(start_text), int(end_text), int(total_text)
+                          complete = (
+                              unit.lower() == "bytes" and start == 0 and total > 0
+                              and end + 1 == total and len(body) == total
+                          )
+                      except (ValueError, TypeError):
+                          complete = False
+                  elif status == 200 and content_length:
+                      try:
+                          complete = len(body) == int(content_length)
+                      except ValueError:
+                          complete = False
+                  if len(body) > 20 * 1024 * 1024:
+                      complete = False
+                  return status, final, content_type, body, complete
+
           def targeted_image_ok(address, play_url, root_url):
               attempts = [("official-play-page", play_url), ("site-homepage", root_url)]
               if urlsplit(address).hostname and urlsplit(address).hostname.endswith(".doubanio.com"):
                   attempts.insert(0, ("douban-subject", "https://movie.douban.com/"))
               for referer_name, referer in attempts:
                   try:
-                      status, final, content_type, body = request(
-                          address, referer, limit=4096, timeout=10, byte_range="bytes=0-4095"
+                      status, final, content_type, body, complete = request_full_image(
+                          address, referer, timeout=10
                       )
-                      ok = status in (200, 206) and bool(body) and (
+                      ok = complete and bool(body) and (
                           content_type.lower().startswith("image/") or image_signature(body)
                       )
                       print(
-                          f"  image host={urlsplit(address).hostname} referrer={referer_name} "
+                          f"  full-image host={urlsplit(address).hostname} referrer={referer_name} "
                           f"http={status} final={urlsplit(final).hostname} type={content_type} "
-                          f"ok={ok} magic={body[:16].hex() if body else 'none'}"
+                          f"bytes={len(body)} complete={complete} ok={ok} "
+                          f"magic={body[:16].hex() if body else 'none'}"
                       )
                       if ok:
                           return True
                   except Exception as exc:
                       print(
-                          f"  image host={urlsplit(address).hostname} referrer={referer_name} "
+                          f"  full-image host={urlsplit(address).hostname} referrer={referer_name} "
                           f"error={type(exc).__name__}: {str(exc)[:120]}"
                       )
               parsed = urlsplit(address)
