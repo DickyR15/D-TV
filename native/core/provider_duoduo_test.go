@@ -641,3 +641,63 @@ func queryPageNumber(value string) int {
 	}
 	return page
 }
+
+
+func TestDuoduoMovieLanguagesRemainOneEpisode(t *testing.T) {
+  chapters := []Chapter{
+    {
+      ID: "duoduo:161235:1", Source: sourceDuoduo, Title: "普通话版",
+      VideoURL: "https://media.example.test/movie/mandarin.mp4",
+      PlaybackVariants: []string{"https://backup.example.test/movie/mandarin.mp4"},
+      CurrentEpisode: rawEpisode(1),
+    },
+    {
+      ID: "duoduo:161235:2", Source: sourceDuoduo, Title: "粤语版",
+      VideoURL: "https://media.example.test/movie/cantonese.mp4",
+      PlaybackVariants: []string{"https://backup.example.test/movie/cantonese.mp4"},
+      CurrentEpisode: rawEpisode(2),
+    },
+  }
+  got := duoduoMovieChapter("161235", chapters)
+  if len(got) != 1 {
+    t.Fatalf("movie versions produced %d chapters, want exactly one: %+v", len(got), got)
+  }
+  if got[0].Title != "正片" || got[0].EpisodeString(1) != "1" ||
+    got[0].ID != providerChapterID(sourceDuoduo, "161235", "1") {
+    t.Fatalf("movie chapter identity is not canonical: %+v", got[0])
+  }
+  want := []string{
+    "https://backup.example.test/movie/mandarin.mp4",
+    "https://media.example.test/movie/cantonese.mp4",
+    "https://backup.example.test/movie/cantonese.mp4",
+  }
+  if !reflect.DeepEqual(got[0].PlaybackVariants, want) {
+    t.Fatalf("movie versions were not preserved as same-episode fallbacks: got=%v want=%v", got[0].PlaybackVariants, want)
+  }
+}
+
+func TestDuoduoMovieCategoryRecognizesSimplifiedAndTraditionalLabels(t *testing.T) {
+  for _, category := range []string{"电影", "電影", "movie", "影片"} {
+    if !duoduoIsMovieCategory(category) {
+      t.Errorf("movie category %q was not recognized", category)
+    }
+  }
+  if duoduoIsMovieCategory("剧集") || duoduoIsMovieCategory("影視") {
+    t.Fatal("series or obsolete generic media label was treated as a movie category")
+  }
+}
+
+func TestMigrateNativeDramaRemovesObsoleteDuoduoCategory(t *testing.T) {
+  migrated := migrateNativeDrama(nativeDrama{
+    ID: "duoduo:161235", Source: sourceDuoduo, Category: "影視",
+  })
+  if migrated.Category != "" {
+    t.Fatalf("obsolete Duoduo category survived cache migration: %q", migrated.Category)
+  }
+  current := migrateNativeDrama(nativeDrama{
+    ID: "duoduo:161235", Source: sourceDuoduo, Category: "电影",
+  })
+  if current.Category != "电影" {
+    t.Fatalf("official Duoduo category was removed: %q", current.Category)
+  }
+}
