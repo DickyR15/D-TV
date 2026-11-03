@@ -32,6 +32,26 @@ String? playbackHwdecFor({
   return null;
 }
 
+/// Whether the current Android device exposes the system Picture-in-Picture API.
+bool supportsPictureInPicture({
+  required bool android,
+  required bool systemSupported,
+}) => android && systemSupported;
+
+/// PiP auto-entry is only enabled while a supported Android player is running.
+bool shouldAutoEnterPictureInPicture({
+  required bool android,
+  required bool systemSupported,
+  required bool playing,
+  required bool enabled,
+}) =>
+    supportsPictureInPicture(
+      android: android,
+      systemSupported: systemSupported,
+    ) &&
+    playing &&
+    enabled;
+
 class PlaybackPreferences {
   const PlaybackPreferences({
     this.speed = 1,
