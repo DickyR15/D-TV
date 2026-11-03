@@ -488,3 +488,37 @@ func TestNativeMergeCoverRepairMetadataPrefersFreshIdentifiers(t *testing.T) {
 		t.Fatalf("fresh poster metadata should keep priority: %+v", merged)
 	}
 }
+
+func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
+	imageBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
+	var seenReferer string
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host != "img9.doubanio.com" {
+			t.Fatalf("unexpected external poster host: %s", request.URL.Host)
+		}
+		seenReferer = request.Header.Get("Referer")
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+			Body: io.NopCloser(bytes.NewReader(imageBytes)),
+			ContentLength: int64(len(imageBytes)),
+			Request: request,
+		}, nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	_, err := cache.loadAlternativeAddress(
+		context.Background(),
+		nativeDrama{ID: "duoduo:54635", Source: sourceDuoduo, SourceID: "54635"},
+		"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2170193684.jpg",
+		"https://movie.douban.com/",
+		"external",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seenReferer != "https://movie.douban.com/" {
+		t.Fatalf("external Douban poster used wrong Referer: %q", seenReferer)
+	}
+}
+
