@@ -46,7 +46,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		}
 		path, err := cache.loadAlternativeAddress(
 			ctx, drama, candidate,
-			nativeCoverReferer(cache.downloader, drama.Source, candidate), "provider",
+			nativeCoverRefererForDrama(cache.downloader, drama, candidate), "provider",
 		)
 		if err == nil {
 			return path, nil
@@ -168,7 +168,7 @@ func nativeCoverFallbackReferer(downloader *Downloader, drama nativeDrama, addre
 	if source == "" {
 		source = sourceFromDramaID(drama.ID)
 	}
-	return nativeCoverReferer(downloader, source, address)
+	return nativeCoverRefererForDrama(downloader, drama, address)
 }
 
 // loadAlternativeAddress validates and caches a non-catalogue poster using a
@@ -190,7 +190,7 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 		source = sourceFromDramaID(drama.ID)
 	}
 	if referer == "" {
-		referer = nativeCoverReferer(cache.downloader, source, address)
+		referer = nativeCoverRefererForDrama(cache.downloader, drama, address)
 	}
 	digest := sha256.Sum256([]byte(source + "\x00" + cacheClass + "\x00" + address + "\x00" + referer))
 	key := hex.EncodeToString(digest[:])
