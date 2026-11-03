@@ -117,6 +117,7 @@ class Drama {
     this.episodes = 0,
     this.episodesVerified = false,
     this.category = '',
+    this.doubanId = '',
     bool? vip,
     this.heat = '',
     this.views = '',
@@ -135,6 +136,7 @@ class Drama {
   bool get canShowEpisodeCount =>
       episodes > 0 && (source != 'hongguo' || episodesVerified);
   final String category;
+  final String doubanId;
   final bool? vipStatus;
   bool get vip => vipStatus == true;
   final String heat;
@@ -163,6 +165,7 @@ class Drama {
       episodes: intValue(json['episodes']),
       episodesVerified: json['episodesVerified'] == true,
       category: json['category'] as String? ?? '',
+      doubanId: json['doubanId'] as String? ?? '',
       vip: json['vip'] == true
           ? true
           : json['vip'] == false &&
@@ -188,6 +191,7 @@ class Drama {
     'episodes': episodes,
     'episodesVerified': episodesVerified,
     'category': category,
+    'doubanId': doubanId,
     'vip': vipStatus,
     'heat': heat,
     'views': views,
@@ -228,6 +232,7 @@ class Drama {
                   !genericCategories.contains(category)
           ? category
           : fresh.category,
+      doubanId: fresh.doubanId.isEmpty ? doubanId : fresh.doubanId,
       vip: fresh.vipStatus ?? vipStatus,
       heat: fresh.heat.isEmpty ? heat : fresh.heat,
       views: fresh.views.isEmpty ? views : fresh.views,
