@@ -109,6 +109,9 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 		// supported direct media URL.
 		fresh, _, _, _, err := d.fetchDuoduoDetailRow(ctx, id)
 		return nativeCoverAddressesFromDrama(fresh), err
+	case sourceGuipian:
+		fresh, _, err := d.fetchGuipianDetail(ctx, id)
+		return nativeNormalize(fresh).Cover, err
 	case sourceHanxiaoquan:
 		fresh, _, err := d.fetchHanxiaoquanDetail(ctx, id)
 		return nativeCoverAddressesFromDrama(fresh), err

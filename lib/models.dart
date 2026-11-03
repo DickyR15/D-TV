@@ -42,6 +42,7 @@ class SourceSite {
     '多多追劇',
     '電影 · 電視劇 · 動畫 · 綜藝',
   );
+  static const guipian = SourceSite('guipian', '鬼片', '恐怖片 · 電視劇 · 動畫');
   static const hanxiaoquan = SourceSite(
     'hanxiaoquan',
     '韓小圈',
@@ -49,7 +50,7 @@ class SourceSite {
   );
 
   /// 預設開啟的一般片源：紅果、韓小圈、多多追劇。
-  static const primaryValues = [hongguo, hanxiaoquan, duoduo];
+  static const primaryValues = [hongguo, hanxiaoquan, guipian, duoduo];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
