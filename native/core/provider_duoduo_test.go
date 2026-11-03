@@ -37,6 +37,34 @@ func TestDuoduoParsesOnlyPublicDirectPlaybackLines(t *testing.T) {
 	}
 }
 
+func TestDuoduoPosterUsesOfficialPlayPageRefererBeforeHomepage(t *testing.T) {
+	downloader := &Downloader{
+		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
+	}
+	drama := nativeDrama{ID: "duoduo:54635", Source: sourceDuoduo, Title: "測試影片"}
+	const poster = "https://img.example.test/poster.jpg"
+	const wantPage = "https://323433ssdfd.top/play/54635"
+
+	if got := nativeCoverRefererForDrama(downloader, drama, poster); got != wantPage {
+		t.Fatalf("Duoduo poster Referer = %q, want official play page %q", got, wantPage)
+	}
+
+	attempts := duoduoPosterAttemptsForDrama(poster, downloader, drama)
+	if len(attempts) < 2 || attempts[0].address != poster || attempts[0].referer != wantPage {
+		t.Fatalf("official play-page Referer was not the first poster attempt: %+v", attempts)
+	}
+	root := "https://323433ssdfd.top/"
+	foundRootRetry := false
+	for _, attempt := range attempts[1:] {
+		if attempt.address == poster && attempt.referer == root {
+			foundRootRetry = true
+			break
+		}
+	}
+	if !foundRootRetry {
+		t.Fatalf("homepage Referer compatibility retry was lost: %+v", attempts)
+	}
+}
 func TestDuoduoPosterFallbackFields(t *testing.T) {
 	cases := []struct {
 		name string
