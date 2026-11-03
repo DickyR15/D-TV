@@ -28,8 +28,10 @@ jobs:
         with:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
-      - name: Run Guipian provider tests
+      - name: Run Guipian provider tests and live source probe
         working-directory: native
+        env:
+          DTV_LIVE_GUIPIAN: "1"
         run: go test ./core -run '^TestGuipian' -count=1 -v
 
   windows-core:
