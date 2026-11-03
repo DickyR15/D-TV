@@ -163,6 +163,9 @@ func nativeCoverFallbackReferer(downloader *Downloader, drama nativeDrama, addre
 		if host == "bgm.tv" || strings.HasSuffix(host, ".bgm.tv") {
 			return "https://bgm.tv/"
 		}
+		if host == "movie.douban.com" || host == "www.douban.com" || strings.HasSuffix(host, ".doubanio.com") {
+			return "https://movie.douban.com/"
+		}
 	}
 	return nativeCoverRefererForDrama(downloader, drama, address)
 }
@@ -330,9 +333,9 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 
 			// An official/provider detail poster always outranks external matches.
 			if providerAddress == "" && work.Err() == nil && searchExternal {
-				externalAddress, externalErr = cache.downloader.bangumiPosterAddress(work, drama)
+				externalAddress, externalErr = cache.downloader.externalPosterAddress(work, drama)
 				if externalErr == nil && externalAddress != "" && externalAddress != drama.Cover {
-					_, candidateErr := cache.loadAlternativeAddress(work, drama, externalAddress, "https://bgm.tv/", "external")
+					_, candidateErr := cache.loadAlternativeAddress(work, drama, externalAddress, nativeCoverFallbackReferer(cache.downloader, drama, externalAddress), "external")
 					if candidateErr != nil {
 						externalErr = candidateErr
 						externalAddress = ""
