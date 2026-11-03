@@ -26,7 +26,7 @@ jobs:
         run: |
           python - <<'PY'
           from urllib.error import HTTPError, URLError
-          from urllib.parse import quote, urlencode, urljoin, urlsplit
+          from urllib.parse import parse_qs, quote, urlencode, urljoin, urlsplit
           from urllib.request import Request, urlopen
           import json
           import html
@@ -181,7 +181,8 @@ jobs:
                   return ""
               if not isinstance(value, str) or not value.strip():
                   return ""
-              address = urljoin(home_base + "/", value.strip())
+              decoded = html.unescape(value.strip())
+              address = urljoin(home_base + "/", decoded)
               parsed = urlsplit(address)
               return address if parsed.scheme in ("http", "https") and parsed.netloc else ""
 
@@ -647,6 +648,29 @@ jobs:
                       if address and address not in seen:
                           seen.add(address)
                           candidates.append(("api:" + field, address))
+                  # Duoduo may return a Baidu gimg wrapper whose src parameter
+                  # points at the real poster host. Validate both rather than
+                  # treating a broken wrapper as the only available artwork.
+                  for label, address in list(candidates):
+                      parsed = urlsplit(address)
+                      host = (parsed.hostname or "").lower()
+                      if not host.startswith("gimg") or not host.endswith(".baidu.com"):
+                          continue
+                      wrapped = parsed.path.removeprefix("/gimg/")
+                      source_values = parse_qs(wrapped).get("src") or []
+                      if not source_values:
+                          source_values = parse_qs(parsed.query).get("src") or []
+                      if source_values:
+                          source = source_values[0].strip()
+                          if source.startswith("//"):
+                              source = "https:" + source
+                          elif source and "://" not in source:
+                              source = "https://" + source.lstrip("/")
+                          source = urljoin(address, source)
+                          source_parsed = urlsplit(source)
+                          if source_parsed.scheme in ("http", "https") and source_parsed.netloc and source not in seen:
+                              seen.add(source)
+                              candidates.append(("baidu-gimg-src:" + label, source))
                   page_status, page_final, page_type, page_body = request(
                       play_url, root_url, limit=2 * 1024 * 1024, timeout=12
                   )
