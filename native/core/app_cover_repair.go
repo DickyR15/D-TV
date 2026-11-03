@@ -100,10 +100,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		if externalAddress == "" || externalAddress == primaryAddress || externalAddress == providerAddress {
 			continue
 		}
-		path, err := cache.loadAlternativeAddress(
-			ctx, drama, externalAddress,
-			nativeCoverFallbackReferer(cache.downloader, drama, externalAddress), "external",
-		)
+		path, _, err := cache.loadExternalPoster(ctx, drama, externalAddress)
 		if err == nil {
 			return path, nil
 		}
@@ -128,10 +125,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 			}
 		}
 		if repairedExternal != "" && repairedExternal != primaryAddress && repairedExternal != providerAddress {
-			path, err := cache.loadAlternativeAddress(
-				ctx, drama, repairedExternal,
-				nativeCoverFallbackReferer(cache.downloader, drama, repairedExternal), "external",
-			)
+			path, _, err := cache.loadExternalPoster(ctx, drama, repairedExternal)
 			if err == nil {
 				return path, nil
 			}
@@ -144,6 +138,58 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		return "", errors.Join(primaryErr, repairErr)
 	}
 	return "", primaryErr
+}
+
+// loadExternalPoster downloads an external poster and, when that URL fails,
+// retries with a strict Bangumi title/type/year match. This covers stale Douban
+// CDN URLs, hotlink/authorization denials and old cached proxy URLs without
+// accepting a loose title search result.
+func (cache *nativeCoverCache) loadExternalPoster(
+	ctx context.Context,
+	drama nativeDrama,
+	address string,
+) (string, string, error) {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return "", "", errors.New("外部海報網址是空的")
+	}
+	path, primaryErr := cache.loadAlternativeAddress(
+		ctx, drama, address,
+		nativeCoverFallbackReferer(cache.downloader, drama, address), "external",
+	)
+	if primaryErr == nil {
+		return path, address, nil
+	}
+	if ctx.Err() != nil {
+		return "", "", ctx.Err()
+	}
+	// Avoid repeating the same Bangumi request when the preferred URL already
+	// came from Bangumi itself.
+	parsed, parseErr := url.Parse(address)
+	if parseErr == nil {
+		host := strings.ToLower(parsed.Hostname())
+		if host == "bgm.tv" || strings.HasSuffix(host, ".bgm.tv") {
+			return "", "", primaryErr
+		}
+	}
+	if cache.downloader == nil {
+		return "", "", primaryErr
+	}
+	bangumiAddress, bangumiErr := cache.downloader.bangumiPosterAddress(ctx, drama)
+	if bangumiErr != nil {
+		return "", "", errors.Join(primaryErr, bangumiErr)
+	}
+	if bangumiAddress == "" || bangumiAddress == address {
+		return "", "", primaryErr
+	}
+	fallbackPath, fallbackErr := cache.loadAlternativeAddress(
+		ctx, drama, bangumiAddress,
+		nativeCoverFallbackReferer(cache.downloader, drama, bangumiAddress), "external",
+	)
+	if fallbackErr != nil {
+		return "", "", errors.Join(primaryErr, fallbackErr)
+	}
+	return fallbackPath, bangumiAddress, nil
 }
 
 func (cache *nativeCoverCache) cachedRepair(id string) (string, string) {
@@ -385,10 +431,12 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 					externalAddress, externalErr = cache.downloader.externalPosterAddress(work, drama)
 				}
 				if externalErr == nil && externalAddress != "" && externalAddress != drama.Cover {
-					_, candidateErr := cache.loadAlternativeAddress(work, drama, externalAddress, nativeCoverFallbackReferer(cache.downloader, drama, externalAddress), "external")
+					_, resolvedAddress, candidateErr := cache.loadExternalPoster(work, drama, externalAddress)
 					if candidateErr != nil {
 						externalErr = candidateErr
 						externalAddress = ""
+					} else {
+						externalAddress = resolvedAddress
 					}
 				}
 			}
