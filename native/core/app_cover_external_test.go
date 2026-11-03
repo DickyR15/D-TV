@@ -616,3 +616,61 @@ func TestValidDoubanSubjectIDRejectsPlaceholderValues(t *testing.T) {
 	}
 }
 
+
+func TestStartNativeCoverExternalPosterLookupRunsInParallel(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host != "m.douban.com" {
+			t.Fatalf("unexpected external poster host: %s", request.URL.Host)
+		}
+		close(started)
+		<-release
+		return posterLookupJSONResponse(request, `{
+			"id":"20502443",
+			"pic":{"normal":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2170193684.jpg"}
+		}`), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	lookup := startNativeCoverExternalPosterLookup(ctx, downloader, nativeDrama{
+		ID: "duoduo:54635", Source: sourceDuoduo, DoubanID: "20502443",
+		Title: "玩物",
+	})
+	if lookup == nil {
+		t.Fatal("valid exact Douban ID should start a parallel lookup")
+	}
+	select {
+	case <-started:
+		// The request reached the transport without waiting for provider metadata.
+	case <-ctx.Done():
+		t.Fatal("external poster lookup did not start promptly")
+	}
+	close(release)
+
+	select {
+	case result := <-lookup:
+		if result.err != nil {
+			t.Fatal(result.err)
+		}
+		if result.address != "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2170193684.jpg" {
+			t.Fatalf("unexpected poster URL: %q", result.address)
+		}
+	case <-ctx.Done():
+		t.Fatal("parallel external poster lookup did not complete")
+	}
+}
+
+func TestStartNativeCoverExternalPosterLookupSkipsPlaceholderDoubanID(t *testing.T) {
+	lookup := startNativeCoverExternalPosterLookup(
+		context.Background(),
+		&Downloader{client: &http.Client{}},
+		nativeDrama{ID: "duoduo:157219", DoubanID: "0"},
+	)
+	if lookup != nil {
+		t.Fatal("placeholder Douban ID should not start an external lookup")
+	}
+}
+
