@@ -871,7 +871,6 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 	var title string
 	var raw Drama
 	var chapters []Chapter
-	var duoduoDetailRow map[string]any
 	var err error
 	switch source {
 	case sourceHuangguoAI:
@@ -887,8 +886,7 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 	case sourceDSD:
 		raw, chapters, err = engine.downloader.fetchDSDDetail(ctx, sourceID)
 	case sourceDuoduo:
-		raw, chapters, err = engine.downloader.fetchDuoduoDetail(ctx, sourceID)
-		_, duoduoDetailRow, _, _, _ = engine.downloader.fetchDuoduoDetailRow(ctx, sourceID)
+		raw, chapters, err = engine.downloader.fetchDuoduoDetailWithCategory(ctx, sourceID, drama.Category)
 	case sourceHanxiaoquan:
 		raw, chapters, err = engine.downloader.fetchHanxiaoquanDetail(ctx, sourceID)
 	default:
@@ -916,9 +914,6 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		}
 		return nil, err
 	}
-  if source == sourceDuoduo && duoduoShouldCollapseMovie(Drama{CategoryName: drama.Category}, duoduoDetailRow) {
-    chapters = duoduoMovieChapter(sourceID, chapters)
-  }
 	if len(chapters) == 0 {
 		return nil, errors.New("该剧暂时没有可播放的分集")
 	}
