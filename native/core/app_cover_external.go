@@ -40,27 +40,15 @@ type bangumiPosterSearchRequest struct {
 	} `json:"filter"`
 }
 
-const doubanSubjectPageURL = "https://movie.douban.com/subject/"
+const (
+	doubanSubjectPageURL = "https://movie.douban.com/subject/"
+	doubanMobileDetailURL = "https://m.douban.com/rexxar/api/v2/movie/"
+	doubanMobileUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+)
 
-func (d *Downloader) externalPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
-	var doubanErr error
-	if strings.TrimSpace(drama.DoubanID) != "" {
-		address, err := d.doubanPosterAddress(ctx, drama)
-		if err == nil && address != "" {
-			return address, nil
-		}
-		doubanErr = err
-	}
-	address, bangumiErr := d.bangumiPosterAddress(ctx, drama)
-	if bangumiErr == nil && address != "" {
-		return address, nil
-	}
-	return "", errors.Join(doubanErr, bangumiErr)
-}
-
-// doubanPosterAddress follows the Douban subject ID supplied by Duoduo's
-// official detail API. It never searches by title, and verifies the subject
-// page's canonical URL before accepting its og:image poster.
+// doubanPosterAddress uses the mobile Rexxar detail endpoint for the exact
+// Douban ID supplied by Duoduo. The desktop subject page is a Vue shell and
+// may return an anti-bot page without og:image even when the ID is valid.
 func (d *Downloader) doubanPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
 	id := strings.TrimSpace(drama.DoubanID)
 	if len(id) < 6 || len(id) > 12 {
@@ -72,63 +60,87 @@ func (d *Downloader) doubanPosterAddress(ctx context.Context, drama nativeDrama)
 		}
 	}
 	if d == nil || d.client == nil {
-		return "", errors.New("豆瓣海報搜尋用戶端尚未初始化")
+		return "", errors.New("豆瓣海報查詢用戶端尚未初始化")
 	}
 
-	pageURL := doubanSubjectPageURL + id + "/"
 	work, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
+	endpoint := doubanMobileDetailURL + url.PathEscape(id)
 	request, err := http.NewRequestWithContext(
 		context.WithValue(work, nativeCoverNetworkKey{}, true),
-		http.MethodGet, pageURL, nil,
+		http.MethodGet, endpoint, nil,
 	)
 	if err != nil {
 		return "", err
 	}
-	request.Header.Set("User-Agent", userAgent)
-	request.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	request.Header.Set("Referer", "https://movie.douban.com/")
+	request.Header.Set("User-Agent", doubanMobileUserAgent)
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Referer", doubanSubjectPageURL+id+"/")
+	request.Header.Set("Origin", "https://m.douban.com")
 
 	client := *d.client
 	response, err := client.Do(request)
 	if err != nil {
-		return "", fmt.Errorf("讀取豆瓣作品頁失敗：%w", publicError(err))
+		return "", fmt.Errorf("讀取豆瓣行動版詳情失敗：%w", publicError(err))
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("豆瓣作品頁回應 HTTP %d", response.StatusCode)
+		return "", fmt.Errorf("豆瓣行動版詳情回應 HTTP %d", response.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, 2<<20+1))
 	if err != nil {
 		return "", err
 	}
 	if len(body) > 2<<20 {
-		return "", errors.New("豆瓣作品頁超過大小限制")
+		return "", errors.New("豆瓣行動版詳情超過大小限制")
+	}
+	var detail map[string]any
+	decoder := json.NewDecoder(strings.NewReader(string(body)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&detail); err != nil {
+		return "", errors.New("豆瓣行動版詳情不是有效 JSON")
 	}
 
-	canonicalURL := ""
-	posterURL := ""
-	for _, tag := range coverMetaTag.FindAllString(string(body), -1) {
-		property := strings.ToLower(firstNonEmpty(extractAttr(tag, "property"), extractAttr(tag, "name")))
-		switch property {
-		case "og:url":
-			canonicalURL = providerCoverAddress(extractAttr(tag, "content"), pageURL)
-		case "og:image", "og:image:url":
-			if posterURL == "" {
-				posterURL = providerCoverAddress(extractAttr(tag, "content"), pageURL)
-			}
+	// Refuse a response for a different subject before reading any artwork.
+	if returnedID := duoduoString(detail["id"]); returnedID != "" && returnedID != id {
+		return "", errors.New("豆瓣詳情 ID 與官網提供的作品 ID 不符")
+	}
+	pic, _ := detail["pic"].(map[string]any)
+	candidates := []string{
+		duoduoString(pic["normal"]),
+		duoduoString(detail["cover_url"]),
+	}
+	for _, raw := range candidates {
+		address := validDoubanPosterAddress(raw)
+		if address != "" {
+			return address, nil
 		}
 	}
-	canonical, parseErr := url.Parse(canonicalURL)
-	if parseErr != nil || canonical == nil ||
-		(!strings.EqualFold(canonical.Hostname(), "movie.douban.com") && !strings.EqualFold(canonical.Hostname(), "www.douban.com")) ||
-		strings.TrimRight(canonical.Path, "/") != "/subject/"+id {
-		return "", errors.New("豆瓣作品頁 ID 與官方片源提供的 ID 不符")
+	return "", errors.New("豆瓣行動版詳情沒有可用的官方海報")
+}
+
+// Only allow public Douban photo CDN poster paths. The poster URL is later
+// fetched by the native downloader, so accepting arbitrary hosts here would
+// turn metadata parsing into an SSRF vector.
+func validDoubanPosterAddress(raw string) string {
+	raw = strings.TrimSpace(raw)
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed == nil || parsed.Scheme != "https" ||
+		parsed.User != nil || parsed.Port() != "" ||
+		!strings.HasPrefix(parsed.Path, "/view/photo/") {
+		return ""
 	}
-	if posterURL == "" {
-		return "", errors.New("豆瓣作品頁沒有提供海報圖片")
+	host := strings.ToLower(parsed.Hostname())
+	if !strings.HasPrefix(host, "img") || !strings.HasSuffix(host, ".doubanio.com") {
+		return ""
 	}
-	return posterURL, nil
+	ext := strings.ToLower(path.Ext(parsed.Path))
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".webp":
+		return parsed.String()
+	default:
+		return ""
+	}
 }
 
 func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
