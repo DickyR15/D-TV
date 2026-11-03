@@ -339,7 +339,7 @@ func TestDuoduoDetailAndPlaybackMergesLinesIntoOneEpisodeList(t *testing.T) {
 		DramaID: drama.ID,
 		Chapter: chapters[0],
 	})
-	if resolveErr != nil || media.URL != directA || media.StandardHTTP ||
+	if resolveErr != nil || media.URL != directA || !media.StandardHTTP ||
 		len(media.Variants) != 1 || media.Variants[0].URL != directB {
 		t.Fatalf("episode 1 did not retain its automatic cross-line fallback: media=%+v err=%v", media, resolveErr)
 	}
@@ -384,7 +384,7 @@ func TestDuoduoDetailDirectURLSurvivesAggregateEndpointFailure(t *testing.T) {
 		DramaID: drama.ID,
 		Chapter: chapters[0],
 	})
-	if err != nil || media.URL != direct || media.StandardHTTP {
+	if err != nil || media.URL != direct || !media.StandardHTTP {
 		t.Fatalf("stored direct URL should resolve without aggregate API: media=%+v err=%v", media, err)
 	}
 }
