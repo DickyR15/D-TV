@@ -295,6 +295,17 @@ func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDram
 		source = sourceFromDramaID(drama.ID)
 	}
 	referer := nativeCoverRefererForDrama(cache.downloader, drama, drama.Cover)
+	if force {
+		// An explicit retry must bypass a previous failure cooldown. For Duoduo,
+		// clear every equivalent URL/Referer attempt, not just the first URL.
+		attempts := []duoduoPosterAttempt{{address: drama.Cover, referer: referer}}
+		if source == sourceDuoduo {
+			attempts = duoduoPosterAttemptsForDrama(drama.Cover, cache.downloader, drama)
+		}
+		for _, attempt := range attempts {
+			cache.clearCoverFailure(attempt.address, attempt.referer)
+		}
+	}
 	digest := sha256.Sum256([]byte(source + "\x00" + drama.Cover + "\x00" + referer))
 	key := hex.EncodeToString(digest[:])
 	path := filepath.Join(cache.directory, key+".img")
