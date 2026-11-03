@@ -28,6 +28,7 @@ class TelevisionControls extends StatefulWidget {
     required this.onEpisodes,
     required this.onSettings,
     required this.onBack,
+    this.onPictureInPicture,
     this.enhancement,
     this.playbackGeneration = 0,
   });
@@ -42,6 +43,7 @@ class TelevisionControls extends StatefulWidget {
   final Future<void> Function() onEpisodes;
   final Future<void> Function() onSettings;
   final VoidCallback onBack;
+  final Future<void> Function()? onPictureInPicture;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
 
@@ -55,6 +57,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
   final _play = FocusNode(debugLabel: 'tv-player-play');
   final _episodes = FocusNode(debugLabel: 'tv-player-episodes');
   final _diary = FocusNode(debugLabel: 'tv-player-diary');
+  final _pictureInPicture = FocusNode(debugLabel: 'tv-player-picture-in-picture');
   final _settings = FocusNode(debugLabel: 'tv-player-settings');
   final _progress = FocusNode(debugLabel: 'tv-player-progress');
   final _subscriptions = <StreamSubscription<dynamic>>[];
@@ -322,6 +325,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
       _play,
       _episodes,
       _diary,
+      _pictureInPicture,
       _settings,
       _progress,
     ]) {
@@ -552,6 +556,17 @@ class TelevisionControlsState extends State<TelevisionControls> {
                                     },
                                   );
                                 },
+                              ),
+                            if (widget.onPictureInPicture != null)
+                              RemoteButton(
+                                key: const ValueKey('tv-picture-in-picture'),
+                                label: '畫中畫',
+                                icon: Icons.picture_in_picture_alt_rounded,
+                                focusNode: _pictureInPicture,
+                                onPressed: () => _openPanel(
+                                  widget.onPictureInPicture!,
+                                  _pictureInPicture,
+                                ),
                               ),
                             RemoteButton(
                               key: const ValueKey('tv-settings'),
