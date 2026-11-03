@@ -13,6 +13,7 @@ void main() {
       enabledSources: [
         SourceSite.hongguo,
         SourceSite.hanxiaoquan,
+        SourceSite.guipian,
         SourceSite.duoduo,
         SourceSite.dsd,
       ],
@@ -20,7 +21,7 @@ void main() {
     );
     expect(
       visible.map((source) => source.id),
-      ['hongguo', 'hanxiaoquan', 'duoduo'],
+      ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo'],
     );
   });
 
