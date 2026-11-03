@@ -490,7 +490,7 @@ void main() {
 
     expect(
       browser.categories(duoduo).map((category) => category.name),
-      ['全部', '電影', '劇集', '動漫', '綜藝'],
+      ['全部', '電影', '劇集', '動畫', '綜藝'],
     );
     expect(
       browser.categories(hanxiaoquan).map((category) => category.name),
