@@ -483,6 +483,32 @@ func TestDuoduoCategoryHomeSupplementOnlyIncludesSelectedCategory(t *testing.T) 
 	}
 }
 
+func TestDuoduoPosterRecoveryGetsDoubanIDWhenCatalogOmitsIt(t *testing.T) {
+	const cover = "https://images.example.test/poster.jpg"
+	const doubanID = "36524559"
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path != "/api.php/web/vod/get_detail" {
+			t.Fatalf("poster recovery called an unexpected endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+		return sourceFixtureResponse(request, http.StatusOK,
+			`{"code":200,"data":[{"vod_id":1625,"vod_name":"鬼灭之刃 剧场版 无限城篇 第一章 猗窝座再来","vod_pic":"https://dbzy5.com/poster.jpg","vod_douban_id":36524559}]}`), nil
+	})
+	addresses, gotDoubanID, err := d.nativeCoverRecoveryMetadata(context.Background(), nativeDrama{
+		ID: "duoduo:1625", Source: sourceDuoduo, SourceID: "1625",
+		Title: "鬼灭之刃 剧场版 无限城篇 第一章 猗窝座再来",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotDoubanID != doubanID {
+		t.Fatalf("detail Douban ID = %q, want %q", gotDoubanID, doubanID)
+	}
+	if len(addresses) == 0 || addresses[0] != cover {
+		t.Fatalf("detail poster addresses = %v, want original cover %q", addresses, cover)
+	}
+}
+
 func TestDuoduoPosterMetadataDoesNotRequirePlayableLines(t *testing.T) {
 	const cover = "https://images.example.test/poster.jpg"
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
