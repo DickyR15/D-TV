@@ -31,10 +31,26 @@ const (
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--dtv-single-file-self-test" {
-		if _, _, err := inspectBundle(); err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(2) }
+		_, _, err := inspectBundle()
+		report := "PASS: embedded D TV payload is valid"
+		exitCode := 0
+		if err != nil {
+			report = "FAIL: " + err.Error()
+			exitCode = 2
+		}
+		// GUI-subsystem executables may not have console stdout/stderr.
+		if reportPath := os.Getenv("DTV_SINGLE_EXE_SELFTEST_LOG"); reportPath != "" {
+			_ = os.WriteFile(reportPath, []byte(report+"\n"), 0600)
+		}
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
 		return
 	}
-	if err := launch(); err != nil { showError(err.Error()); os.Exit(1) }
+	if err := launch(); err != nil {
+		showError(err.Error())
+		os.Exit(1)
+	}
 }
 
 func showError(message string) {
