@@ -255,7 +255,9 @@ class CatalogBrowser {
     }
     final names = {
       for (final source in group.sources)
-        ...?_localCategoryNames[source.id],
+        if (!(_menus[source.id] ?? const <CatalogCategory>[])
+            .any((category) => category.id.isNotEmpty))
+          ...?_localCategoryNames[source.id],
     }.toList()..sort();
     for (final name in names) {
       choices.putIfAbsent(
