@@ -164,10 +164,6 @@ func nativeCoverFallbackReferer(downloader *Downloader, drama nativeDrama, addre
 			return "https://bgm.tv/"
 		}
 	}
-	source := canonicalProviderSource(drama.Source)
-	if source == "" {
-		source = sourceFromDramaID(drama.ID)
-	}
 	return nativeCoverRefererForDrama(downloader, drama, address)
 }
 
@@ -224,7 +220,7 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 	var downloadErr error
 	attempts := []duoduoPosterAttempt{{address: address, referer: referer}}
 	if source == sourceDuoduo {
-		attempts = duoduoPosterAttempts(address, referer)
+		attempts = duoduoPosterAttemptsForDrama(address, cache.downloader, drama)
 	}
 	for _, attempt := range attempts {
 		if ctx.Err() != nil {
