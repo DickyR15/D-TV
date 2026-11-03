@@ -191,11 +191,13 @@ func TestGuipianLivePlayback(t *testing.T) {
 		}
 		t.Logf("detail OK: %s (%d episodes)", drama.Title, len(chapters))
 
-		if !posterOK && drama.Cover != "" {
-			status, contentType, body, posterErr := guipianLiveFetch(ctx, downloader.client, drama.Cover, guipianSiteBaseURL+"/", "")
+		coverAddresses := nativeCoverAddressesFromDrama(drama)
+		if !posterOK && len(coverAddresses) > 0 {
+			coverURL := coverAddresses[0]
+			status, contentType, body, posterErr := guipianLiveFetch(ctx, downloader.client, coverURL, guipianSiteBaseURL+"/", "")
 			if posterErr == nil && status >= 200 && status < 300 && len(body) > 0 && !strings.Contains(strings.ToLower(contentType), "text/html") {
 				posterOK = true
-				t.Logf("poster OK: %s (HTTP %d, %s, %d bytes)", drama.Cover, status, contentType, len(body))
+				t.Logf("poster OK: %s (HTTP %d, %s, %d bytes)", coverURL, status, contentType, len(body))
 			} else if posterErr != nil {
 				detailErrors = append(detailErrors, item.SourceID+" poster: "+posterErr.Error())
 			} else {
