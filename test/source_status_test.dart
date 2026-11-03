@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/source_status.dart';
+import 'package:hgtv/models.dart';
 
 void main() {
   test('source health labels use Taiwan Traditional Chinese wording', () {
