@@ -576,3 +576,43 @@ func TestExternalPosterAddressDoesNotReplaceFailedExactDoubanIDWithTitleSearch(t
 	}
 }
 
+
+func TestExternalPosterAddressTreatsZeroDoubanIDAsMissing(t *testing.T) {
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host != "api.bgm.tv" {
+			t.Fatalf("placeholder Douban ID should use Bangumi fallback, got %s", request.URL.Host)
+		}
+		return posterLookupJSONResponse(request, `{
+			"data":[{
+				"id":12345,
+				"type":6,
+				"name":"Example Movie",
+				"name_cn":"Example Movie",
+				"date":"2025-01-01",
+				"images":{"large":"https://lain.bgm.tv/pic/cover/l/12345.jpg"}
+			}]
+		}`), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.externalPosterAddress(context.Background(), nativeDrama{
+		ID: "duoduo:999", DoubanID: "0", Title: "Example Movie", Category: "電影",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != "https://lain.bgm.tv/pic/cover/l/12345.jpg" {
+		t.Fatalf("unexpected Bangumi fallback poster: %q", address)
+	}
+}
+
+func TestValidDoubanSubjectIDRejectsPlaceholderValues(t *testing.T) {
+	for _, value := range []string{"", "0", "000000", "abc12345", "12345"} {
+		if validDoubanSubjectID(value) {
+			t.Errorf("placeholder or malformed Douban ID %q was accepted", value)
+		}
+	}
+	if !validDoubanSubjectID("20502443") {
+		t.Fatal("valid Douban subject ID was rejected")
+	}
+}
+
