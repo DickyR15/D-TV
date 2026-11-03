@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 	"unicode"
@@ -131,8 +132,19 @@ func validDoubanPosterAddress(raw string) string {
 		return ""
 	}
 	host := strings.ToLower(parsed.Hostname())
-	if !strings.HasPrefix(host, "img") || !strings.HasSuffix(host, ".doubanio.com") {
+	if !strings.HasSuffix(host, ".doubanio.com") {
 		return ""
+	}
+	cdnLabel := strings.TrimSuffix(host, ".doubanio.com")
+	if cdnLabel != "img" {
+		if !strings.HasPrefix(cdnLabel, "img") {
+			return ""
+		}
+		for _, character := range strings.TrimPrefix(cdnLabel, "img") {
+			if character < '0' || character > '9' {
+				return ""
+			}
+		}
 	}
 	ext := strings.ToLower(path.Ext(parsed.Path))
 	switch ext {
