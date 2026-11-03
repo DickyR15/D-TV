@@ -9,7 +9,7 @@
 | 平台 | 發布格式 | 說明 |
 |---|---|---|
 | Android／Android TV | Universal APK | 單一 APK，包含 ARM64、ARMv7 與 x86_64 |
-| Windows x64 | Portable ZIP／單檔 EXE | ZIP 解壓後可執行；新版單檔 EXE 可雙擊啟動，首次自動展開至使用者資料夾 |
+| Windows x64 | Portable ZIP | 解壓後即可執行，無須安裝 |
 | macOS | Universal DMG | 支援 Apple Silicon 與 Intel |
 | iOS | IPA | 未簽章 IPA，需自行簽署後側載安裝 |
 
@@ -31,7 +31,7 @@
 前往 [D TV 1.0.1 正式版 Releases](https://github.com/DickyR15/D-TV/releases/tag/v1.0.1)，依照裝置選擇對應檔案：
 
 - **Android／Android TV**：`DTV-1.0.1-Android.apk`
-- **Windows x64**：`DTV-1.0.1-Windows-Portable.zip`（1.0.2 預計另提供單檔 EXE，雙擊即可啟動，首次自動展開）
+- **Windows x64**：`DTV-1.0.1-Windows-Portable.zip`
 - **macOS**：`DTV-1.0.1-macOS.dmg`
 - **iOS**：`DTV-1.0.1-iOS.ipa`（未簽章，需使用 AltStore、Sideloadly 等方式自行簽署後安裝）
 
@@ -41,7 +41,7 @@ Android Universal APK 包含 `arm64-v8a`、`armeabi-v7a` 與 `x86_64` 三種 ABI
 
 本專案使用 Flutter 作為跨平台介面，並以 `native/core` 作為共用 Go 核心。
 
-- Windows x64：`python scripts/build_windows.py`（同時產生免安裝 ZIP 與單檔啟動 EXE）
+- Windows x64：`python scripts/build_windows.py`（產生免安裝 ZIP）
 - Android Universal：`python scripts/build_android.py --universal`
 - iOS：`python scripts/build_ios.py --simulator`（需 macOS、Xcode 與 CocoaPods；預設輸出未簽章 IPA）
 - macOS Universal：`python scripts/build_macos.py`
