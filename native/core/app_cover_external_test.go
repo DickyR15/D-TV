@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -674,3 +675,113 @@ func TestStartNativeCoverExternalPosterLookupSkipsPlaceholderDoubanID(t *testing
 	}
 }
 
+
+
+func TestExternalPosterAddressFallsBackToBangumiWhenDoubanIsDenied(t *testing.T) {
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "m.douban.com":
+			return &http.Response{
+				StatusCode: http.StatusForbidden,
+				Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader("unauthorized")),
+				Request: request,
+			}, nil
+		case "api.bgm.tv":
+			var payload bangumiPosterSearchRequest
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Keyword != "奉子成婚" || len(payload.Filter.Type) != 1 || payload.Filter.Type[0] != 6 {
+				t.Fatalf("unexpected guarded Bangumi fallback query: %+v", payload)
+			}
+			return posterLookupJSONResponse(request, `{
+				"data":[
+					{"id":37394760,"type":6,"name_cn":"奉子成婚","date":"2025-01-01",
+					 "images":{"large":"https://lain.bgm.tv/pic/cover/fengzi.jpg"}}
+				]
+			}`), nil
+		default:
+			return nil, errors.New("unexpected poster metadata host: " + request.URL.Host)
+		}
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.externalPosterAddress(context.Background(), nativeDrama{
+		ID: "duoduo:1192", DoubanID: "37394760",
+		Title: "奉子成婚", Category: "短劇",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != "https://lain.bgm.tv/pic/cover/fengzi.jpg" {
+		t.Fatalf("Bangumi fallback poster = %q", address)
+	}
+}
+
+func TestNativeCoverExternalDownloadFailureFallsBackToBangumi(t *testing.T) {
+	image := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0, 1}
+	var bangumiCalls int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "img9.doubanio.com":
+			return &http.Response{
+				StatusCode: http.StatusForbidden,
+				Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader("image unauthorized")),
+				Request: request,
+			}, nil
+		case "api.bgm.tv":
+			bangumiCalls++
+			return posterLookupJSONResponse(request, `{
+				"data":[
+					{"id":37394760,"type":6,"name_cn":"奉子成婚","date":"2025-01-01",
+					 "images":{"large":"https://lain.bgm.tv/pic/cover/fengzi.jpg"}}
+				]
+			}`), nil
+		case "lain.bgm.tv":
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(image)),
+				ContentLength: int64(len(image)),
+				Request: request,
+			}, nil
+		default:
+			return nil, errors.New("unexpected poster host: " + request.URL.Host)
+		}
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	drama := nativeDrama{
+		ID: "duoduo:1192", Source: sourceDuoduo, DoubanID: "37394760",
+		Title: "奉子成婚", Category: "短劇",
+	}
+	path, address, err := cache.loadExternalPoster(
+		context.Background(),
+		drama,
+		"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p1234567890.jpg",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != "https://lain.bgm.tv/pic/cover/fengzi.jpg" {
+		t.Fatalf("fallback address = %q", address)
+	}
+	if bangumiCalls != 1 {
+		t.Fatalf("Bangumi fallback calls = %d, want 1", bangumiCalls)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(body, image) {
+		t.Fatalf("Bangumi fallback image was not cached: %v", err)
+	}
+}
+
+func TestValidNativeCoverURLRejectsZXKIImageAPI(t *testing.T) {
+	address, err := url.Parse("https://api.zxki.cn/api/imgfdl?url=https%3A%2F%2Fexample.com%2Fposter.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if validNativeCoverURL(address) {
+		t.Fatal("paid API gateway must not be treated as a public image CDN")
+	}
+}
