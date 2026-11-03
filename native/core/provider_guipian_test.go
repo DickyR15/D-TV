@@ -173,6 +173,32 @@ func TestGuipianLivePlayback(t *testing.T) {
 	}
 	t.Logf("catalogue OK: %d titles returned", len(items))
 
+	// A separate drama category guards against accidentally treating every
+	// title as a one-episode movie.
+	seriesItems, _, seriesErr := downloader.fetchGuipianCatalogPage(ctx, 1, "12", "")
+	if seriesErr != nil {
+		t.Fatalf("fetch live series catalogue: %v", seriesErr)
+	}
+	seriesOK := false
+	var seriesErrors []string
+	for index, item := range seriesItems {
+		if index >= 8 || ctx.Err() != nil || seriesOK {
+			break
+		}
+		series, episodes, detailErr := downloader.fetchGuipianDetail(ctx, item.SourceID)
+		if detailErr != nil {
+			seriesErrors = append(seriesErrors, item.SourceID+": "+detailErr.Error())
+			continue
+		}
+		if len(episodes) > 1 {
+			seriesOK = true
+			t.Logf("multi-episode detail OK: %s (%d episodes)", series.Title, len(episodes))
+		}
+	}
+	if !seriesOK {
+		t.Fatalf("live series catalogue did not produce a multi-episode detail: %s", strings.Join(seriesErrors, " | "))
+	}
+
 	posterOK := false
 	playbackOK := false
 	var detailErrors []string
