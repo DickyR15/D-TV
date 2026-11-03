@@ -125,9 +125,9 @@ func TestNativeCoverFormatsFailuresAndOfflineFallback(t *testing.T) {
 	if _, err := engine.covers.load(context.Background(), drama, false); err == nil || len(engine.covers.entries) != 0 {
 		t.Fatal("invalid cover was cached")
 	}
-	path, err := engine.covers.load(context.Background(), drama, false)
+	path, err := engine.covers.load(context.Background(), drama, true)
 	if err != nil {
-		t.Fatal("cover failure could not be retried", err)
+		t.Fatal("explicit cover retry did not bypass the previous failure cooldown", err)
 	}
 	old := time.Now().Add(-nativeCoverTTL - time.Hour)
 	if err := os.Chtimes(path, old, old); err != nil {
