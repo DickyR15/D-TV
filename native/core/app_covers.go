@@ -107,6 +107,26 @@ func nativeCoverReferer(downloader *Downloader, source, address string) string {
 	return downloader.providerBaseURL(source) + "/"
 }
 
+// Duoduo's image server can require the exact detail page as its Referer.
+// The website shows posters at /play/{id}; a homepage-only Referer may be
+// rejected even though the same image is visible from the official page.
+func nativeCoverRefererForDrama(downloader *Downloader, drama nativeDrama, address string) string {
+	source := canonicalProviderSource(drama.Source)
+	if source == "" {
+		source = sourceFromDramaID(drama.ID)
+	}
+	if source == sourceDuoduo {
+		if _, sourceID, valid := splitProviderDramaID(drama.ID); valid && webProviderNumericID.MatchString(sourceID) {
+			base := strings.TrimRight(downloader.providerBaseURL(source), "/")
+			if base == "" {
+				base = strings.TrimRight(duoduoPublicEntryURL, "/")
+			}
+			return base + "/play/" + url.PathEscape(sourceID)
+		}
+	}
+	return nativeCoverReferer(downloader, source, address)
+}
+
 type duoduoPosterAttempt struct {
 	address string
 	referer string
@@ -180,6 +200,33 @@ func duoduoPosterProxyURL(address string) string {
 	return "https://images.weserv.nl/?url=" + url.QueryEscape(target)
 }
 
+func duoduoPosterAttemptsForDrama(address string, downloader *Downloader, drama nativeDrama) []duoduoPosterAttempt {
+	referer := nativeCoverRefererForDrama(downloader, drama, address)
+	attempts := duoduoPosterAttempts(address, referer)
+
+	// Keep the former root-page Referer as a compatibility retry for image
+	// mirrors that only allow the site's origin-level hotlink policy.
+	source := canonicalProviderSource(drama.Source)
+	if source == "" {
+		source = sourceFromDramaID(drama.ID)
+	}
+	rootReferer := nativeCoverReferer(downloader, source, address)
+	if rootReferer != "" && rootReferer != referer {
+		attempts = append(attempts, duoduoPosterAttempts(address, rootReferer)... )
+	}
+
+	seen := make(map[string]bool, len(attempts))
+	unique := make([]duoduoPosterAttempt, 0, len(attempts))
+	for _, attempt := range attempts {
+		key := attempt.address + "\x00" + attempt.referer
+		if attempt.address == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		unique = append(unique, attempt)
+	}
+	return unique
+}
 func duoduoPosterAttempts(address, referer string) []duoduoPosterAttempt {
 	var attempts []duoduoPosterAttempt
 	seen := map[string]bool{}
@@ -229,7 +276,7 @@ func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDram
 	if source == "" {
 		source = sourceFromDramaID(drama.ID)
 	}
-	referer := nativeCoverReferer(cache.downloader, source, drama.Cover)
+	referer := nativeCoverRefererForDrama(cache.downloader, drama, drama.Cover)
 	digest := sha256.Sum256([]byte(source + "\x00" + drama.Cover + "\x00" + referer))
 	key := hex.EncodeToString(digest[:])
 	path := filepath.Join(cache.directory, key+".img")
@@ -284,7 +331,7 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 		}
 		attempts := []duoduoPosterAttempt{{address: drama.Cover, referer: referer}}
 		if coverSource == sourceDuoduo {
-			attempts = duoduoPosterAttempts(drama.Cover, referer)
+			attempts = duoduoPosterAttemptsForDrama(drama.Cover, cache.downloader, drama)
 		}
 		tryAttempts := func(candidates []duoduoPosterAttempt) {
 			for _, attempt := range candidates {
@@ -306,13 +353,13 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 		if err != nil && ctx.Err() == nil && coverSource == sourceDuoduo {
 			_, sourceID, valid := splitProviderDramaID(drama.ID)
 			if valid {
-				_, row, _, base, detailErr := cache.downloader.fetchDuoduoDetailRow(ctx, sourceID)
+				_, row, _, _, detailErr := cache.downloader.fetchDuoduoDetailRow(ctx, sourceID)
 				if detailErr == nil {
 					for _, alternative := range duoduoPosterAddressesFromRow(row) {
 						if alternative == drama.Cover || ctx.Err() != nil {
 							continue
 						}
-						tryAttempts(duoduoPosterAttempts(alternative, base+"/"))
+						tryAttempts(duoduoPosterAttemptsForDrama(alternative, cache.downloader, drama))
 						if err == nil {
 							break
 						}
