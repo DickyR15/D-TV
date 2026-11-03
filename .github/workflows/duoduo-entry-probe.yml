@@ -418,13 +418,16 @@ jobs:
               def __init__(self):
                   super().__init__(convert_charrefs=True)
                   self.candidates = []
+                  self.meta = {}
 
               def handle_starttag(self, tag, attrs):
                   attrs = dict(attrs)
                   if tag == "meta":
                       key = (attrs.get("property") or attrs.get("name") or "").lower()
+                      value = attrs.get("content", "").strip()
+                      if key and value:
+                          self.meta[key] = value
                       if key in ("og:image", "og:image:url", "twitter:image", "twitter:image:src"):
-                          value = attrs.get("content", "").strip()
                           if value:
                               self.candidates.append(("html-meta:" + key, value))
                   elif tag == "link" and "image_src" in (attrs.get("rel") or "").lower():
@@ -444,6 +447,8 @@ jobs:
 
           def targeted_image_ok(address, play_url, root_url):
               attempts = [("official-play-page", play_url), ("site-homepage", root_url)]
+              if urlsplit(address).hostname and urlsplit(address).hostname.endswith(".doubanio.com"):
+                  attempts.insert(0, ("douban-subject", "https://movie.douban.com/"))
               for referer_name, referer in attempts:
                   try:
                       status, final, content_type, body = request(
@@ -607,8 +612,34 @@ jobs:
                       if parsed.scheme in ("http", "https") and parsed.netloc and address not in seen:
                           seen.add(address)
                           candidates.append((label, address))
+                  douban_id = str(row.get("vod_douban_id") or "").strip()
+                  if douban_id.isdigit() and 6 <= len(douban_id) <= 12:
+                      douban_url = "https://movie.douban.com/subject/" + douban_id + "/"
+                      try:
+                          db_status, db_final, db_type, db_body = request(
+                              douban_url, "https://movie.douban.com/", limit=2 * 1024 * 1024, timeout=12
+                          )
+                          db_parser = DetailPosterParser()
+                          db_parser.feed(html.unescape(db_body.decode("utf-8", errors="replace")))
+                          canonical = urlsplit(db_parser.meta.get("og:url", ""))
+                          canonical_ok = (
+                              canonical.hostname in ("movie.douban.com", "www.douban.com")
+                              and canonical.path.rstrip("/") == "/subject/" + douban_id
+                          )
+                          image_raw = db_parser.meta.get("og:image") or db_parser.meta.get("og:image:url", "")
+                          print(
+                              f"  Douban subject id={douban_id} http={db_status} "
+                              f"type={db_type} canonical_ok={canonical_ok} og_image={image_raw[:260]!r}"
+                          )
+                          if canonical_ok and image_raw:
+                              address = urljoin(douban_url, image_raw)
+                              if address not in seen:
+                                  seen.add(address)
+                                  candidates.append(("douban:og:image", address))
+                      except Exception as exc:
+                          print(f"  Douban subject id={douban_id} error={type(exc).__name__}: {str(exc)[:140]}")
                   print(
-                      f"  poster candidates api+official-html={len(candidates)} "
+                      f"  poster candidates api+official-html+douban={len(candidates)} "
                       f"fields={[label for label, _ in candidates[:16]]}"
                   )
                   poster_ok = False
