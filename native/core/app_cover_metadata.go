@@ -40,6 +40,29 @@ func nativeLegacyCoverAddresses(values ...any) []string {
 	return nativeUniqueCoverAddresses(addresses...)
 }
 
+// nativeCoverRecoveryMetadata loads provider-native artwork and IDs in one
+// detail request. Catalog pages may omit Douban IDs even when the detail API
+// exposes them, so fallback recovery must use the authoritative detail row.
+func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama nativeDrama) ([]string, string, error) {
+	source, id, valid := splitProviderDramaID(drama.ID)
+	if !valid {
+		return nil, drama.DoubanID, errors.New("無效的劇集 ID")
+	}
+	if source == sourceDuoduo {
+		fresh, _, _, _, err := d.fetchDuoduoDetailRow(ctx, id)
+		if err != nil {
+			return nil, drama.DoubanID, err
+		}
+		doubanID := strings.TrimSpace(fresh.DoubanID)
+		if doubanID == "" {
+			doubanID = strings.TrimSpace(drama.DoubanID)
+		}
+		return nativeCoverAddressesFromDrama(fresh), doubanID, nil
+	}
+	addresses, err := d.nativeCoverAddresses(ctx, drama)
+	return addresses, strings.TrimSpace(drama.DoubanID), err
+}
+
 func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama) ([]string, error) {
 	source, id, valid := splitProviderDramaID(drama.ID)
 	if !valid {
