@@ -580,7 +580,7 @@ jobs:
                   title = row_title(row) or "(no title)"
                   play_url = api_base + "/play/" + vod_id
                   root_url = api_base + "/"
-                  print(f"target id={vod_id} title={title!r} api={api_base} row_keys={sorted(row.keys())}")
+                  print(f"target id={vod_id} title={title!r} api={api_base} douban_id={row.get('vod_douban_id')!r} douban_score={row.get('vod_douban_score')!r} vod_pic={row.get('vod_pic')!r} vod_pic_slide={row.get('vod_pic_slide')!r}")
                   candidates = []
                   seen = set()
                   for field in (
