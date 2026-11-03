@@ -40,6 +40,97 @@ type bangumiPosterSearchRequest struct {
 	} `json:"filter"`
 }
 
+const doubanSubjectPageURL = "https://movie.douban.com/subject/"
+
+func (d *Downloader) externalPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
+	var doubanErr error
+	if strings.TrimSpace(drama.DoubanID) != "" {
+		address, err := d.doubanPosterAddress(ctx, drama)
+		if err == nil && address != "" {
+			return address, nil
+		}
+		doubanErr = err
+	}
+	address, bangumiErr := d.bangumiPosterAddress(ctx, drama)
+	if bangumiErr == nil && address != "" {
+		return address, nil
+	}
+	return "", errors.Join(doubanErr, bangumiErr)
+}
+
+// doubanPosterAddress follows the Douban subject ID supplied by Duoduo's
+// official detail API. It never searches by title, and verifies the subject
+// page's canonical URL before accepting its og:image poster.
+func (d *Downloader) doubanPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
+	id := strings.TrimSpace(drama.DoubanID)
+	if len(id) < 6 || len(id) > 12 {
+		return "", errors.New("豆瓣作品 ID 無效")
+	}
+	for _, character := range id {
+		if character < '0' || character > '9' {
+			return "", errors.New("豆瓣作品 ID 無效")
+		}
+	}
+	if d == nil || d.client == nil {
+		return "", errors.New("豆瓣海報搜尋用戶端尚未初始化")
+	}
+
+	pageURL := doubanSubjectPageURL + id + "/"
+	work, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(
+		context.WithValue(work, nativeCoverNetworkKey{}, true),
+		http.MethodGet, pageURL, nil,
+	)
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("User-Agent", userAgent)
+	request.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	request.Header.Set("Referer", "https://movie.douban.com/")
+
+	client := *d.client
+	response, err := client.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("讀取豆瓣作品頁失敗：%w", publicError(err))
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("豆瓣作品頁回應 HTTP %d", response.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(response.Body, 2<<20+1))
+	if err != nil {
+		return "", err
+	}
+	if len(body) > 2<<20 {
+		return "", errors.New("豆瓣作品頁超過大小限制")
+	}
+
+	canonicalURL := ""
+	posterURL := ""
+	for _, tag := range coverMetaTag.FindAllString(string(body), -1) {
+		property := strings.ToLower(firstNonEmpty(extractAttr(tag, "property"), extractAttr(tag, "name")))
+		switch property {
+		case "og:url":
+			canonicalURL = providerCoverAddress(extractAttr(tag, "content"), pageURL)
+		case "og:image", "og:image:url":
+			if posterURL == "" {
+				posterURL = providerCoverAddress(extractAttr(tag, "content"), pageURL)
+			}
+		}
+	}
+	canonical, parseErr := url.Parse(canonicalURL)
+	if parseErr != nil || canonical == nil ||
+		(!strings.EqualFold(canonical.Hostname(), "movie.douban.com") && !strings.EqualFold(canonical.Hostname(), "www.douban.com")) ||
+		strings.TrimRight(canonical.Path, "/") != "/subject/"+id {
+		return "", errors.New("豆瓣作品頁 ID 與官方片源提供的 ID 不符")
+	}
+	if posterURL == "" {
+		return "", errors.New("豆瓣作品頁沒有提供海報圖片")
+	}
+	return posterURL, nil
+}
+
 func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
 	title := strings.TrimSpace(drama.Title)
 	if title == "" {
