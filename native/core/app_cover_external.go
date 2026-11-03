@@ -165,13 +165,24 @@ func validDoubanPosterAddress(raw string) string {
 	}
 }
 
-// externalPosterAddress chooses the most reliable exact-match metadata source.
-// Duoduo's official detail API supplies a Douban subject ID for its catalogue;
-// when present, use that exact subject and do not replace it with a title-only
-// search result. Bangumi remains the fallback for titles without a Douban ID.
+// externalPosterAddress prefers Duoduo's exact Douban subject ID. If Douban
+// denies the request or has no usable poster, Bangumi is a guarded fallback:
+// its result must still match the exact title, allowed work type and release
+// year, and ambiguous matches are rejected.
 func (d *Downloader) externalPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
 	if validDoubanSubjectID(drama.DoubanID) {
-		return d.doubanPosterAddress(ctx, drama)
+		address, doubanErr := d.doubanPosterAddress(ctx, drama)
+		if doubanErr == nil {
+			return address, nil
+		}
+		bangumiAddress, bangumiErr := d.bangumiPosterAddress(ctx, drama)
+		if bangumiErr == nil {
+			return bangumiAddress, nil
+		}
+		return "", errors.Join(
+			fmt.Errorf("豆瓣精準海報查詢失敗：%w", doubanErr),
+			fmt.Errorf("Bangumi 備援查詢失敗：%w", bangumiErr),
+		)
 	}
 	return d.bangumiPosterAddress(ctx, drama)
 }
