@@ -507,6 +507,9 @@ func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
 	})}
 	downloader := &Downloader{client: client, cfg: defaultConfig()}
 	cache := newNativeCoverCache(t.TempDir(), downloader)
+	if err := os.MkdirAll(cache.directory, 0700); err != nil {
+		t.Fatal(err)
+	}
 	_, err := cache.loadAlternativeAddress(
 		context.Background(),
 		nativeDrama{ID: "duoduo:54635", Source: sourceDuoduo, SourceID: "54635"},
