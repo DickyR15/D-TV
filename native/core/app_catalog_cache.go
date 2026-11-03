@@ -84,6 +84,9 @@ func (engine *nativeEngine) loadCatalogCache() {
 }
 
 func migrateNativeDrama(drama nativeDrama) nativeDrama {
+  if drama.Source == sourceDuoduo && (drama.Category == "影視" || drama.Category == "影视") {
+    drama.Category = ""
+  }
 	if drama.MetadataSchema == 0 && drama.Source == sourceHuangdou && drama.VIP != nil && !*drama.VIP {
 		drama.VIP = nil
 	}
