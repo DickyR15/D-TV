@@ -41,7 +41,7 @@ func TestNativeBuildAuthorization(t *testing.T) {
 func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *testing.T) {
 	manager := downloadTestManager(t)
 	records := []*nativeDownloadRecord{}
-	for index, source := range []string{sourceHongguo, sourceHanxiaoquan, sourceGuipian, sourceDuoduo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD} {
+	for index, source := range []string{sourceHongguo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, sourceHanxiaoquan, sourceGuipian, sourceDuoduo} {
 		drama := nativeDrama{ID: source + ":123", Source: source, Title: "合成下载"}
 		record := &nativeDownloadRecord{nativeDownloadJob: nativeDownloadJob{
 			ID: nativeDownloadID(drama.ID, 1), Drama: drama, Index: 1,
@@ -101,7 +101,10 @@ func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *tes
 		if active != 1 {
 			t.Fatal("foreign-source task was scheduled")
 		}
-		for _, record := range records[4:] {
+		for _, record := range records {
+			if nativePrimarySource(record.Drama.Source) {
+				continue
+			}
 			if err := reopened.control(record.ID, "remove"); !errors.Is(err, errNativeBuildSource) {
 				t.Fatalf("foreign task could be removed: %v", err)
 			}
