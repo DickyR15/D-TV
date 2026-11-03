@@ -365,12 +365,42 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 	return providerAddress, externalAddress, err
 }
 
+// nativeMergeCoverRepairMetadata restores identifiers and matching hints that
+// may be absent from older Flutter models or persisted watch-history entries.
+// These fields are needed to look up a safe external poster when the source CDN
+// has removed its original image.
+func nativeMergeCoverRepairMetadata(drama, cached nativeDrama) nativeDrama {
+	if drama.Source == "" {
+		drama.Source = cached.Source
+	}
+	if drama.SourceID == "" {
+		drama.SourceID = cached.SourceID
+	}
+	if drama.DoubanID == "" {
+		drama.DoubanID = cached.DoubanID
+	}
+	if drama.Title == "" || drama.Title == "短劇" {
+		drama.Title = cached.Title
+	}
+	if drama.Category == "" {
+		drama.Category = cached.Category
+	}
+	if drama.OnlineDate == "" {
+		drama.OnlineDate = cached.OnlineDate
+	}
+	if len(drama.Tags) == 0 {
+		drama.Tags = append([]string(nil), cached.Tags...)
+	}
+	return drama
+}
+
 func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, force bool) (map[string]any, error) {
 	engine.mu.Lock()
 	for _, cached := range engine.catalogs[drama.Source] {
 		if cached.ID != drama.ID {
 			continue
 		}
+		drama = nativeMergeCoverRepairMetadata(drama, cached)
 		if drama.Cover == "" {
 			drama.Cover = cached.Cover
 		}
@@ -384,6 +414,7 @@ func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, fo
 		break
 	}
 	if cached, ok := engine.detailCache[drama.ID]; ok {
+		drama = nativeMergeCoverRepairMetadata(drama, cached.Drama)
 		if drama.Cover == "" {
 			drama.Cover = cached.Drama.Cover
 		}
