@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"os"
@@ -228,8 +229,12 @@ func nativeText(value any) string {
 func nativeCoverValueStrings(value any) []string {
 	switch item := value.(type) {
 	case string:
-		if strings.TrimSpace(item) != "" {
-			return []string{strings.TrimSpace(item)}
+		// Duoduo sometimes HTML-escapes query separators inside image URLs,
+		// even though the value is already inside JSON. Decode entities before
+		// validating or extracting wrapped image CDN source URLs.
+		value := html.UnescapeString(strings.TrimSpace(item))
+		if value != "" {
+			return []string{value}
 		}
 	case []any:
 		var values []string
