@@ -411,6 +411,56 @@ jobs:
                   except Exception as exc:
                       print(f"poster detail fallback id={vod_id}: {type(exc).__name__}: {str(exc)[:120]}")
           print(f"poster direct/proxy sample={poster_ok}/{len(poster_candidates)}")
+          class PageAssetParser(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.assets = []
+
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag == "script" and attrs.get("src"):
+                      self.assets.append(("script", attrs["src"]))
+                  elif tag == "link" and attrs.get("href"):
+                      rel = (attrs.get("rel") or "").lower()
+                      if "stylesheet" in rel or "preload" in rel or "modulepreload" in rel:
+                          self.assets.append(("asset", attrs["href"]))
+
+          INSPECTED_PAGE_ASSETS = set()
+
+          def inspect_page_assets(page_url, page_body):
+              page_text = html.unescape(page_body.decode("utf-8", errors="replace"))
+              print(f"  official-page HTML preview={page_text[:1800]!r}")
+              parser = PageAssetParser()
+              parser.feed(page_text)
+              for kind, raw in parser.assets[:12]:
+                  asset_url = urljoin(page_url, raw.strip())
+                  if asset_url in INSPECTED_PAGE_ASSETS:
+                      continue
+                  INSPECTED_PAGE_ASSETS.add(asset_url)
+                  try:
+                      status, final, content_type, body = request(
+                          asset_url, page_url, limit=2 * 1024 * 1024, timeout=10
+                      )
+                      source = body.decode("utf-8", errors="replace")
+                      print(
+                          f"  page-asset kind={kind} http={status} type={content_type} "
+                          f"bytes={len(body)} url={final}"
+                      )
+                      lowered = source.lower()
+                      for token in (
+                          "api.php", "get_detail", "vod_pic", "vod_pic_slide",
+                          "poster", "cover", "pic_url", "image_url", "background-image",
+                      ):
+                          offset = lowered.find(token)
+                          if offset >= 0:
+                              excerpt = source[max(0, offset - 100):min(len(source), offset + 300)]
+                              print(f"    asset-hit token={token} excerpt={excerpt!r}")
+                  except Exception as exc:
+                      print(
+                          f"  page-asset kind={kind} url={asset_url[:220]} "
+                          f"error={type(exc).__name__}: {str(exc)[:120]}"
+                      )
+
           print("\n=== USER-REPORTED MISSING POSTERS ===")
           TARGET_POSTER_IDS = ("54635", "151850", "1625", "49704", "1206")
 
@@ -606,6 +656,7 @@ jobs:
                   )
                   parser = DetailPosterParser()
                   parser.feed(html.unescape(page_body.decode("utf-8", errors="replace")))
+                  inspect_page_assets(play_url, page_body)
                   for label, raw in parser.candidates:
                       address = urljoin(play_url, raw.strip())
                       parsed = urlsplit(address)
