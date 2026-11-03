@@ -914,6 +914,9 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		}
 		return nil, err
 	}
+  if source == sourceDuoduo && duoduoIsMovieCategory(drama.Category) {
+    chapters = duoduoMovieChapter(sourceID, chapters)
+  }
 	if len(chapters) == 0 {
 		return nil, errors.New("该剧暂时没有可播放的分集")
 	}
