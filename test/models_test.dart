@@ -51,4 +51,27 @@ void main() {
 
     expect(cached.merge(refreshed).doubanId, '99999999');
   });
+
+  test('Drama removes obsolete generic Duoduo category from cached data', () {
+    final old = Drama.fromJson({
+      'id': 'duoduo:161235',
+      'source': 'duoduo',
+      'title': '空槍',
+      'category': '影視',
+    });
+    expect(old.category, isEmpty);
+
+    const cached = Drama(
+      id: 'duoduo:161235',
+      source: 'duoduo',
+      title: '空槍',
+      category: '影視',
+    );
+    const refreshed = Drama(
+      id: 'duoduo:161235',
+      source: 'duoduo',
+      title: '空槍',
+    );
+    expect(cached.merge(refreshed).category, isEmpty);
+  });
 }
