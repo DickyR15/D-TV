@@ -4,13 +4,17 @@ import 'catalog_sort.dart';
 
 Future<CatalogView?> chooseCatalogView(
   BuildContext context,
-  CatalogView current,
-) => showModalBottomSheet<CatalogView>(
+  CatalogView current, {
+  Set<CatalogSort>? availableSorts,
+  bool showReleaseFilter = true,
+  int? loadedCount,
+}) => showModalBottomSheet<CatalogView>(
   context: context,
   showDragHandle: true,
   isScrollControlled: true,
   useSafeArea: true,
   builder: (context) {
+    final sorts = availableSorts ?? CatalogSort.values.toSet();
     var selected = current;
     return StatefulBuilder(
       builder: (context, update) => SingleChildScrollView(
@@ -25,12 +29,19 @@ Future<CatalogView?> chooseCatalogView(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('排序與篩選', style: Theme.of(context).textTheme.titleLarge),
+            if (loadedCount != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                '目前已載入 $loadedCount 部',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final sort in CatalogSort.values)
+                for (final sort in CatalogSort.values.where(sorts.contains))
                   ChoiceChip(
                     label: Text(sort.label),
                     selected: selected.sort == sort,
@@ -39,10 +50,11 @@ Future<CatalogView?> chooseCatalogView(
                   ),
               ],
             ),
-            const SizedBox(height: 24),
-            const Text('劇集狀態'),
-            const SizedBox(height: 8),
-            Wrap(
+            if (showReleaseFilter) ...[
+              const SizedBox(height: 24),
+              const Text('劇集狀態'),
+              const SizedBox(height: 8),
+              Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
@@ -60,10 +72,11 @@ Future<CatalogView?> chooseCatalogView(
                     ),
                   ),
               ],
-            ),
+              ),
+            ],
             const SizedBox(height: 16),
             Text(
-              '排序和篩選作用於目前已載入的劇集；年份較新的排前面，同一年再依完整日期排序，缺少年份的條目排最後。',
+              '排序會套用到目前已載入的內容；向下載入更多後會一併重新排序。沒有對應資料的排序或狀態篩選不會顯示。',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 20),
