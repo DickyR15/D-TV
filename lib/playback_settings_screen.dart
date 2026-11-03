@@ -44,6 +44,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late bool _preloadEnabled;
   late bool _autoAdvance;
   late bool _autoPictureInPicture;
+  bool _pictureInPictureSupported = false;
   bool _playbackValuesInitialized = false;
   bool? _compatibleRendering;
   final FocusNode _speedFocus = FocusNode(debugLabel: 'playback-default-speed');
@@ -52,6 +53,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   void initState() {
     super.initState();
     _loadCompatibleRendering();
+    _loadPictureInPictureSupport();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && AppLayout.isTelevision(context)) {
         _speedFocus.requestFocus();
@@ -84,6 +86,20 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   void dispose() {
     _speedFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPictureInPictureSupport() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final status = await AppDevice.channel.invokeMapMethod<String, dynamic>(
+        'pictureInPictureStatus',
+      );
+      if (mounted) {
+        setState(() => _pictureInPictureSupported = status?['supported'] == true);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _pictureInPictureSupported = false);
+    }
   }
 
   Future<void> _loadCompatibleRendering() async {
@@ -308,12 +324,12 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               value: _autoAdvance,
               onChanged: _updateAutoAdvance,
             ),
-            if (Platform.isAndroid && !AppLayout.isTelevision(context))
+            if (Platform.isAndroid && _pictureInPictureSupported)
               SwitchListTile(
                 key: const ValueKey('playback-auto-picture-in-picture'),
                 contentPadding: EdgeInsets.zero,
                 title: const Text('離開應用時自動小窗'),
-                subtitle: const Text('播放中返回桌面或切換其他應用時進入系統畫中畫'),
+                subtitle: const Text('播放中返回桌面或切換其他應用時進入系統畫中畫；也可在播放控制列手動開啟'),
                 value: _autoPictureInPicture,
                 onChanged: _updateAutoPictureInPicture,
               ),
