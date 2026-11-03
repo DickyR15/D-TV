@@ -25,9 +25,13 @@ func TestNativeCoverValueStringsDecodesEscapedBaiduGimgPoster(t *testing.T) {
 }
 
 func TestDuoduoPosterAttemptsIncludeUnwrappedBaiduSource(t *testing.T) {
+	downloader := &Downloader{
+		cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://dduotv01.top"},
+	}
 	attempts := duoduoPosterAttemptsForDrama(
 		decodedBaiduGimgPoster,
-		nil,
+		downloader,
 		nativeDrama{ID: "duoduo:157219", Source: sourceDuoduo, SourceID: "157219"},
 	)
 	for _, attempt := range attempts {
