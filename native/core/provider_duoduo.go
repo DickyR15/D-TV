@@ -760,7 +760,7 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 	if duoduoDirectMediaURL(task.Chapter.VideoURL) {
 		referer := firstNonEmpty(task.Chapter.Referer, d.providerBaseURL(sourceDuoduo)+"/")
 		primary := providerMedia{
-			URL: task.Chapter.VideoURL, Referer: referer,
+			URL: task.Chapter.VideoURL, Referer: referer, StandardHTTP: true,
 		}
 		seen := map[string]bool{primary.URL: true}
 		for _, address := range task.Chapter.PlaybackVariants {
@@ -769,7 +769,7 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 			}
 			seen[address] = true
 			primary.Variants = append(primary.Variants, providerMedia{
-				URL: address, Referer: referer,
+				URL: address, Referer: referer, StandardHTTP: true,
 			})
 			if len(primary.Variants) >= 11 {
 				break
@@ -826,7 +826,7 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 		}
 		seen[selected.URL] = true
 		options = append(options, providerMedia{
-			URL: selected.URL, Referer: base + "/",
+			URL: selected.URL, Referer: base + "/", StandardHTTP: true,
 		})
 		if len(options) >= 12 {
 			break
