@@ -637,10 +637,17 @@ func duoduoMergePlayLines(primary, supplemental []duoduoPlayLine) []duoduoPlayLi
 }
 
 func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
+  return d.fetchDuoduoDetailWithCategory(ctx, sourceID, "")
+}
+
+func (d *Downloader) fetchDuoduoDetailWithCategory(ctx context.Context, sourceID, catalogCategory string) (Drama, []Chapter, error) {
 	drama, detailRow, payload, base, err := d.fetchDuoduoDetailRow(ctx, sourceID)
 	if err != nil {
 		return Drama{}, nil, err
 	}
+  if drama.CategoryName == "" && catalogCategory != "" {
+    drama.CategoryName = catalogCategory
+  }
 	playerRows := duoduoRows(payload["vodplayer"])
 	// Keep detail-page direct URLs first, then supplement them with the full
 	// aggregate list. A detail response can expose one working line while
@@ -718,6 +725,10 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 			PlaybackVariants: duoduoUniqueStrings(choice.variants),
 		})
 	}
+	if duoduoShouldCollapseMovie(drama, detailRow) {
+    chapters = duoduoMovieChapter(sourceID, chapters)
+    maxEpisodes = len(chapters)
+  }
 	drama.TotalEpisode, drama.EpisodeCount, drama.Episodes = maxEpisodes, maxEpisodes, maxEpisodes
 	drama.EpisodesVerified = maxEpisodes > 0
 	return drama, chapters, nil
