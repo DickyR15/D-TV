@@ -723,6 +723,55 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 	return drama, chapters, nil
 }
 
+func duoduoIsMovieCategory(category string) bool {
+  switch strings.ToLower(strings.TrimSpace(category)) {
+  case "电影", "電影", "movie", "movies", "film", "影片":
+    return true
+  default:
+    return false
+  }
+}
+
+// duoduoMovieChapter treats Mandarin/Cantonese/quality labels as versions of
+// the same film, not sequential episodes. Keep the remaining URLs as same-episode
+// fallbacks so a movie always exposes exactly one playable chapter.
+func duoduoMovieChapter(sourceID string, chapters []Chapter) []Chapter {
+  if len(chapters) == 0 {
+    return nil
+  }
+  primary := chapters[0]
+  primary.ID = providerChapterID(sourceDuoduo, sourceID, "1")
+  primary.Source = sourceDuoduo
+  primary.Title = "正片"
+  primary.CurrentEpisode = rawEpisode(1)
+
+  seen := map[string]bool{}
+  if primary.VideoURL != "" {
+    seen[primary.VideoURL] = true
+  }
+  variants := make([]string, 0, len(chapters)*2)
+  addVariant := func(address string) {
+    address = strings.TrimSpace(address)
+    if address == "" || seen[address] || !duoduoDirectMediaURL(address) {
+      return
+    }
+    seen[address] = true
+    if len(variants) < 11 {
+      variants = append(variants, address)
+    }
+  }
+  for _, chapter := range chapters {
+    if chapter.VideoURL != primary.VideoURL {
+      addVariant(chapter.VideoURL)
+    }
+    for _, address := range chapter.PlaybackVariants {
+      addVariant(address)
+    }
+  }
+  primary.PlaybackVariants = variants
+  return []Chapter{primary}
+}
+
 func duoduoChapterEpisodeCount(chapters []Chapter) int {
 	maxEpisode := 0
 	for index, chapter := range chapters {
