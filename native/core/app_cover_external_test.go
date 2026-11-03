@@ -40,7 +40,7 @@ func TestDoubanPosterAddressUsesMobileDetailAndOfficialSubjectID(t *testing.T) {
 		if request.Header.Get("User-Agent") != doubanMobileUserAgent {
 			t.Fatalf("mobile User-Agent missing: %q", request.Header.Get("User-Agent"))
 		}
-		if request.Header.Get("Referer") != "https://movie.douban.com/subject/"+subjectID+"/" {
+		if request.Header.Get("Referer") != "https://m.douban.com/movie/subject/"+subjectID+"/" {
 			t.Fatalf("unexpected Douban Referer: %q", request.Header.Get("Referer"))
 		}
 		return posterLookupJSONResponse(request, `{
