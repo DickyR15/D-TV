@@ -80,75 +80,90 @@ func (resolver *dnsResolver) lookupEntry(ctx context.Context, host, subnet strin
 }
 
 func (resolver *dnsResolver) query(ctx context.Context, host, subnet string) (dnsCacheEntry, error) {
-	lastErr := errors.New("DoH 未返回公网 IPv4 地址")
+	lastErr := errors.New("DoH 未返回可用的公网 IP 地址")
 	for _, endpoint := range resolver.endpoints {
-		if err := ctx.Err(); err != nil {
-			return dnsCacheEntry{}, err
-		}
-		lookupURL, err := url.Parse(endpoint)
-		if err != nil {
-			return dnsCacheEntry{}, err
-		}
-		query := lookupURL.Query()
-		query.Set("name", host)
-		query.Set("type", "A")
-		if subnet != "" {
-			query.Set("edns_client_subnet", subnet)
-		}
-		lookupURL.RawQuery = query.Encode()
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, lookupURL.String(), nil)
-		if err != nil {
-			return dnsCacheEntry{}, err
-		}
-		request.Header.Set("Accept", "application/dns-json")
-		response, err := resolver.client.Do(request)
-		if err != nil {
-			lastErr = publicError(err)
-			continue
-		}
-		var payload struct {
-			Status int `json:"Status"`
-			Answer []struct {
-				Type int    `json:"type"`
-				TTL  int    `json:"TTL"`
-				Data string `json:"data"`
-			} `json:"Answer"`
-		}
-		err = json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&payload)
-		response.Body.Close()
-		if response.StatusCode != http.StatusOK || err != nil || payload.Status != 0 {
-			lastErr = errors.New("DoH 服务没有返回有效 DNS 记录")
-			continue
-		}
-		entry := dnsCacheEntry{}
-		ttl := 300
-		var addressErr error
-		for _, answer := range payload.Answer {
-			if answer.Type != 1 {
+		for _, recordType := range []string{"A", "AAAA"} {
+			if err := ctx.Err(); err != nil {
+				return dnsCacheEntry{}, err
+			}
+			// EDNS client subnet is IPv4-specific. Query AAAA without it.
+			if recordType == "AAAA" && subnet != "" {
 				continue
 			}
-			address := net.ParseIP(answer.Data)
-			if address == nil || address.To4() == nil {
-				addressErr = errors.New("DoH 返回无效 IPv4 地址")
-				break
+			lookupURL, err := url.Parse(endpoint)
+			if err != nil {
+				return dnsCacheEntry{}, err
 			}
-			entry.addresses = append(entry.addresses, address.String())
-			if answer.TTL < ttl {
-				ttl = answer.TTL
+			query := lookupURL.Query()
+			query.Set("name", host)
+			query.Set("type", recordType)
+			if subnet != "" {
+				query.Set("edns_client_subnet", subnet)
 			}
+			lookupURL.RawQuery = query.Encode()
+			request, err := http.NewRequestWithContext(ctx, http.MethodGet, lookupURL.String(), nil)
+			if err != nil {
+				return dnsCacheEntry{}, err
+			}
+			request.Header.Set("Accept", "application/dns-json")
+			response, err := resolver.client.Do(request)
+			if err != nil {
+				lastErr = publicError(err)
+				continue
+			}
+			var payload struct {
+				Status int `json:"Status"`
+				Answer []struct {
+					Type int    `json:"type"`
+					TTL  int    `json:"TTL"`
+					Data string `json:"data"`
+				} `json:"Answer"`
+			}
+			err = json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&payload)
+			response.Body.Close()
+			if response.StatusCode != http.StatusOK || err != nil || payload.Status != 0 {
+				lastErr = errors.New("DoH 服務沒有返回有效 DNS 記錄")
+				continue
+			}
+			entry := dnsCacheEntry{}
+			ttl := 300
+			wantedType := 1
+			if recordType == "AAAA" {
+				wantedType = 28
+			}
+			var addressErr error
+			for _, answer := range payload.Answer {
+				if answer.Type != wantedType {
+					continue
+				}
+				address := net.ParseIP(answer.Data)
+				if address == nil || (recordType == "A" && address.To4() == nil) ||
+					(recordType == "AAAA" && (address.To4() != nil || address.To16() == nil)) {
+					addressErr = errors.New("DoH 返回無效 IP 地址")
+					break
+				}
+				entry.addresses = append(entry.addresses, address.String())
+				if answer.TTL < ttl {
+					ttl = answer.TTL
+				}
+			}
+			if addressErr == nil && len(entry.addresses) > 0 {
+				addressErr = validateCDNAddresses(entry.addresses)
+			}
+			if addressErr != nil {
+				lastErr = fmt.Errorf("DoH 未返回可用的公网 IP 地址：%w", addressErr)
+				continue
+			}
+			if len(entry.addresses) == 0 {
+				lastErr = fmt.Errorf("DoH 沒有 %s 記錄", recordType)
+				continue
+			}
+			if ttl < 1 {
+				ttl = 1
+			}
+			entry.expires = time.Now().Add(time.Duration(ttl) * time.Second)
+			return entry, nil
 		}
-		if addressErr == nil {
-			addressErr = validateCDNAddresses(entry.addresses)
-		}
-		if addressErr != nil {
-			lastErr = fmt.Errorf("DoH 未返回可用公网 IPv4 地址：%w", addressErr)
-			continue
-		}
-		if ttl < 1 {
-			ttl = 1
-		}
-		entry.expires = time.Now().Add(time.Duration(ttl) * time.Second)
-		return entry, nil
 	}
 	return dnsCacheEntry{}, lastErr
 }
