@@ -78,7 +78,9 @@ bool matchesDramaQuery(Drama drama, String query) {
 }
 
 int? catalogYear(String value) {
-  final match = RegExp(r'(?:^|[^\d])((?:19|20)\d{2})(?!\d)').firstMatch(value.trim());
+  final match = RegExp(
+    r'(?:^|[^\d])((?:19|20)\d{2})(?!\d)',
+  ).firstMatch(value.trim());
   if (match == null) return null;
   final year = int.tryParse(match[1]!);
   if (year == null || year < 1900 || year > 2099) return null;
