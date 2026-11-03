@@ -504,7 +504,7 @@ func TestDuoduoPosterRecoveryGetsDoubanIDWhenCatalogOmitsIt(t *testing.T) {
 	if gotDoubanID != doubanID {
 		t.Fatalf("detail Douban ID = %q, want %q", gotDoubanID, doubanID)
 	}
-	if len(addresses) == 0 || addresses[0] != cover {
+	if len(addresses) == 0 || addresses[0] != "https://dbzy5.com/poster.jpg" {
 		t.Fatalf("detail poster addresses = %v, want original cover %q", addresses, cover)
 	}
 }
