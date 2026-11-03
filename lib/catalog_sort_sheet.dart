@@ -55,9 +55,9 @@ Future<CatalogView?> chooseCatalogView(
               const Text('劇集狀態'),
               const SizedBox(height: 8),
               Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
+                spacing: 8,
+                runSpacing: 8,
+                children: [
                 for (final entry in const {
                   '': '全部',
                   'ongoing': '連載中',
@@ -71,7 +71,7 @@ Future<CatalogView?> chooseCatalogView(
                       () => selected = selected.copyWith(release: entry.key),
                     ),
                   ),
-              ],
+                ],
               ),
             ],
             const SizedBox(height: 16),
