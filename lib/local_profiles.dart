@@ -45,7 +45,7 @@ class LocalProfile {
     for (final source in storedSources) {
       if (source == 'kanmovie') {
         sources.add('duoduo');
-      } else if (source != 'guipian' && SourceSite.isKnown(source)) {
+      } else if (SourceSite.isKnown(source)) {
         sources.add(source);
       }
     }

@@ -31,17 +31,18 @@ void main() {
     await expectLater(store.setSourceEnabled('sorani', true), throwsStateError);
   });
 
-  test('retired sources are unavailable and old aggregate switches migrate', () async {
+  test('Guipian is restored while KANMovie stays retired', () async {
     final store = await create({
       'sourceSwitches': jsonEncode({'guipian': false, 'kanmovie': true}),
     });
-    expect(SourceSite.isKnown('guipian'), isFalse);
+    expect(SourceSite.isKnown('guipian'), isTrue);
     expect(SourceSite.isKnown('kanmovie'), isFalse);
     expect(store.sourceEnabled('duoduo'), isTrue);
     expect(store.allowsSource('baofeng'), isFalse);
     expect(store.allowsSource('jisu'), isFalse);
     expect(store.allowsSource('360'), isFalse);
     expect(store.allowsSource('huya'), isFalse);
+    expect(store.sourceEnabled('guipian'), isFalse);
     expect(store.allowsSource('guipian'), isFalse);
     expect(store.allowsSource('kanmovie'), isFalse);
   });
@@ -65,9 +66,9 @@ void main() {
       'activeProfile': 'viewer',
     });
     expect(store.configurationError, isNull);
-    expect(store.profile.sources, ['duoduo']);
+    expect(store.profile.sources, ['guipian', 'duoduo']);
     expect(store.profile.allows('duoduo'), isTrue);
-    expect(store.profile.allows('guipian'), isFalse);
+    expect(store.profile.allows('guipian'), isTrue);
   });
 
   test('saved KANMovie records are not remapped to unrelated sources', () {
@@ -87,7 +88,7 @@ void main() {
     expect(
       store.sources.map((site) => site.id),
       allSourcesEnabled
-          ? ['hongguo', 'hanxiaoquan', 'duoduo']
+          ? ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo']
           : ['hongguo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);
