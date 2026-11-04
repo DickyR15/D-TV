@@ -51,29 +51,104 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nat
 	if !valid {
 		return nil, drama.DoubanID, errors.New("無效的劇集 ID")
 	}
-	if source == sourceDuoduo {
-		fresh, _, _, _, err := d.fetchDuoduoDetailRow(ctx, id)
-		if err != nil {
-			return nil, drama.DoubanID, err
+
+	// The external matcher needs the same authoritative title, work type,
+	// release year and provider identifiers that are available on each source's
+	// detail page. Previously only Duoduo and Guipian merged those hints; the
+	// other sources discarded the detail row after extracting image URLs, which
+	// caused otherwise searchable titles to be rejected as ambiguous or unknown.
+	var fresh Drama
+	var err error
+	switch source {
+	case sourceHongguo:
+		if !hongguoNumericID.MatchString(id) {
+			return nil, drama.DoubanID, errors.New("無效的紅果劇集 ID")
 		}
-		// The catalogue row can omit Douban ID, release year or the precise
-		// work category. Merge the authoritative detail metadata into the same
-		// drama used by the external matcher before trying Bangumi.
-		addresses := nativeMergeCoverRecoveryMetadata(drama, fresh)
-		return addresses, strings.TrimSpace(drama.DoubanID), nil
-	}
-	if source == sourceGuipian {
+		result, requestErr := d.hongguoAppRequest(
+			ctx, http.MethodPost, "/novel/player/video_detail/v1/", nil,
+			map[string]any{"series_id": id},
+		)
+		if requestErr != nil {
+			return nil, drama.DoubanID, requestErr
+		}
+		row := nestedMap(result, "data", "video_data")
+		if mapString(row, "series_id_str", "series_id") != id {
+			return nil, drama.DoubanID, errors.New("紅果詳情與請求劇集不符")
+		}
+		fresh = hongguoDramaFromAny(row, "短劇")
+	case sourceHuangdou:
+		var row map[string]any
+		row, err = d.huangdouDetail(ctx, id)
+		if err == nil {
+			fresh = huangdouDramaFromMap(row)
+		}
+	case sourceHuangju:
+		fresh, _, err = d.fetchHuangjuDetail(ctx, id)
+	case sourceYeguo:
+		fresh, _, err = d.fetchYeguoDetail(ctx, id)
+	case sourceDSD:
+		fresh, _, err = d.fetchDSDDetail(ctx, id)
+	case sourceHanxiaoquan:
+		fresh, _, err = d.fetchHanxiaoquanDetail(ctx, id)
+	case sourceDuoduo:
+		fresh, _, _, _, err = d.fetchDuoduoDetailRow(ctx, id)
+	case sourceGuipian:
 		// Poster recovery must not depend on playlist/episode parsing. A detail
 		// page can contain a valid poster even when its player markup changes.
-		fresh, err := d.fetchGuipianCoverMetadata(ctx, id, drama.Title)
-		if err != nil {
-			return nil, strings.TrimSpace(drama.DoubanID), err
+		fresh, err = d.fetchGuipianCoverMetadata(ctx, id, drama.Title)
+	case sourceCloudFront:
+		if !rankingSourceID.MatchString(id) {
+			return nil, drama.DoubanID, errors.New("無效的黃果劇集 ID")
 		}
-		addresses := nativeMergeCoverRecoveryMetadata(drama, fresh)
-		return addresses, strings.TrimSpace(drama.DoubanID), nil
+		var raw Drama
+		err = d.fetchAPI(ctx, "/api/app/playlet/detail/"+url.PathEscape(id), nil, &raw)
+		if err == nil {
+			if raw.ID != "" && raw.ID != id && raw.ID != drama.ID {
+				return nil, drama.DoubanID, errors.New("黃果詳情與請求劇集不符")
+			}
+			raw.ID, raw.Source, raw.SourceID = providerDramaID(source, id), source, id
+			fresh = raw
+		}
+	case sourceHuangguoAI, sourceHuangguoVideo:
+		route := "/detail/" + url.PathEscape(id) + "/"
+		if source == sourceHuangguoAI && !rankingSourceID.MatchString(id) {
+			return nil, drama.DoubanID, errors.New("無效的黃果劇集 ID")
+		}
+		if source == sourceHuangguoVideo {
+			parts := strings.Split(id, "/")
+			if len(parts) == 1 {
+				parts = []string{"series", id}
+			}
+			if len(parts) != 2 || (parts[0] != "series" && parts[0] != "video") ||
+				!rankingSourceID.MatchString(parts[1]) {
+				return nil, drama.DoubanID, errors.New("無效的黃果劇集 ID")
+			}
+			route = "/" + parts[0] + "/" + url.PathEscape(parts[1])
+		}
+		pageURL := d.providerBaseURL(source) + route
+		var body string
+		body, err = d.fetchProviderText(ctx, pageURL, d.providerBaseURL(source)+"/")
+		if err == nil {
+			fresh, err = parseHuangguoSortDetail(
+				body, pageURL,
+				Drama{ID: drama.ID, Source: source, SourceID: id},
+			)
+		}
+	default:
+		addresses, fallbackErr := d.nativeCoverAddresses(ctx, *drama)
+		return addresses, strings.TrimSpace(drama.DoubanID), fallbackErr
 	}
-	addresses, err := d.nativeCoverAddresses(ctx, *drama)
-	return addresses, strings.TrimSpace(drama.DoubanID), err
+	if err != nil {
+		return nil, strings.TrimSpace(drama.DoubanID), err
+	}
+	if fresh.ID == "" {
+		fresh.ID, fresh.Source, fresh.SourceID = providerDramaID(source, id), source, id
+	}
+	if normalized := nativeNormalize(fresh); normalized.ID != drama.ID {
+		return nil, strings.TrimSpace(drama.DoubanID), errors.New("站源詳情與請求劇集不符")
+	}
+	addresses := nativeMergeCoverRecoveryMetadata(drama, fresh)
+	return addresses, strings.TrimSpace(drama.DoubanID), nil
 }
 
 // nativeMergeCoverRecoveryMetadata propagates matching hints from a provider
