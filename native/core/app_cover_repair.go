@@ -206,6 +206,12 @@ func nativeCoverFallbackReferer(downloader *Downloader, drama nativeDrama, addre
 	parsed, err := url.Parse(strings.TrimSpace(address))
 	if err == nil {
 		host := strings.ToLower(parsed.Hostname())
+		if host == "live.ykimg.com" || strings.HasSuffix(host, ".ykimg.com") {
+			return "https://www.youku.com/"
+		}
+		if host == "k.sinaimg.cn" || strings.HasSuffix(host, ".sinaimg.cn") {
+			return "https://news.sina.com.cn/"
+		}
 		if host == "bgm.tv" || strings.HasSuffix(host, ".bgm.tv") {
 			return "https://bgm.tv/"
 		}
