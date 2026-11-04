@@ -65,7 +65,7 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nat
 	if source == sourceGuipian {
 		// Poster recovery must not depend on playlist/episode parsing. A detail
 		// page can contain a valid poster even when its player markup changes.
-		fresh, err := d.fetchGuipianCoverMetadata(ctx, id)
+		fresh, err := d.fetchGuipianCoverMetadata(ctx, id, drama.Title)
 		if err != nil {
 			return nil, strings.TrimSpace(drama.DoubanID), err
 		}
