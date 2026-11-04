@@ -125,14 +125,12 @@ class PlaybackHealth {
       routeIndex <= 0 ? startupStallTimeout : alternativeStartupStallTimeout;
 
   Duration? _position;
-  Duration? _duration;
   Duration? _highestBuffer;
   DateTime? _lastProgress;
   bool _durationDiscovered = false;
 
   void reset() {
     _position = null;
-    _duration = null;
     _highestBuffer = null;
     _lastProgress = null;
     _durationDiscovered = false;
@@ -149,7 +147,6 @@ class PlaybackHealth {
   }) {
     if (!intendedToPlay || !foreground) {
       _position = position;
-      _duration = duration;
       _highestBuffer = buffer;
       _durationDiscovered = duration > Duration.zero;
       _lastProgress = now;
@@ -174,7 +171,6 @@ class PlaybackHealth {
       _highestBuffer = buffer;
     }
     _position = position;
-    _duration = duration;
 
     _lastProgress ??= now;
     final waitingForInitialMedia =
