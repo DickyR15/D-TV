@@ -518,10 +518,11 @@ func TestDuoduoPosterRecoveryGetsDoubanIDWhenCatalogOmitsIt(t *testing.T) {
 		return sourceFixtureResponse(request, http.StatusOK,
 			`{"code":200,"data":[{"vod_id":1625,"vod_name":"鬼灭之刃 剧场版 无限城篇 第一章 猗窝座再来","vod_pic":"https://dbzy5.com/poster.jpg","vod_douban_id":36524559}]}`), nil
 	})
-	addresses, gotDoubanID, err := d.nativeCoverRecoveryMetadata(context.Background(), nativeDrama{
+	drama := nativeDrama{
 		ID: "duoduo:1625", Source: sourceDuoduo, SourceID: "1625",
 		Title: "鬼灭之刃 剧场版 无限城篇 第一章 猗窝座再来",
-	})
+	}
+	addresses, gotDoubanID, err := d.nativeCoverRecoveryMetadata(context.Background(), &drama)
 	if err != nil {
 		t.Fatal(err)
 	}
