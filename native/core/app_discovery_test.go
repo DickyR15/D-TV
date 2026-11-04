@@ -50,18 +50,13 @@ func TestNativeNormalizeReconstructsCanonicalProviderIdentity(t *testing.T) {
 		want string
 	}{
 		{
-			name: "missing ID uses source and source ID",
-			drama: Drama{Source: sourceGuipian, SourceID: "77333", Title: "歹路無可退"},
-			want: "guipian:77333",
-		},
-		{
 			name: "raw numeric ID is namespaced by source",
 			drama: Drama{ID: "137937", Source: sourceDuoduo, Title: "撒旦：黑暗"},
 			want: "duoduo:137937",
 		},
 		{
 			name: "canonical ID remains authoritative",
-			drama: Drama{ID: "duoduo:137937", Source: sourceGuipian, SourceID: "999", Title: "撒旦：黑暗"},
+			drama: Drama{ID: "duoduo:137937", Source: "retired-source", SourceID: "999", Title: "撒旦：黑暗"},
 			want: "duoduo:137937",
 		},
 	}
