@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -148,6 +149,57 @@ func TestBangumiPosterAddressUsesExactTitleAndCategoryType(t *testing.T) {
 	}
 	if address != expectedImage {
 		t.Fatalf("Bangumi poster = %q, want %q", address, expectedImage)
+	}
+}
+
+func TestBangumiPosterAddressSupportsVarietyAndSeasonSpecificSeries(t *testing.T) {
+	tests := []struct {
+		name      string
+		title     string
+		category  string
+		year      string
+		candidate string
+		date      string
+		image     string
+	}{
+		{
+			name: "variety show",
+			title: "花兒與少年·同心季", category: "綜藝", year: "2025",
+			candidate: "花儿与少年·同心季", date: "2025-08-16",
+			image: "https://lain.bgm.tv/pic/cover/variety.jpg",
+		},
+		{
+			name: "first season title maps to parent series",
+			title: "怪奇物語 第一季", category: "劇集", year: "2016",
+			candidate: "怪奇物語", date: "2016-07-15",
+			image: "https://lain.bgm.tv/pic/cover/stranger-things-s1.jpg",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+				var payload bangumiPosterSearchRequest
+				if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+					t.Fatal(err)
+				}
+				if len(payload.Filter.Type) != 1 || payload.Filter.Type[0] != 6 {
+					t.Fatalf("real-world subject type 6 was not requested: %+v", payload.Filter.Type)
+				}
+				body := fmt.Sprintf(`{"data":[{"id":501,"type":6,"name_cn":%q,"date":%q,"images":{"large":%q}}]}`,
+					tc.candidate, tc.date, tc.image)
+				return posterLookupJSONResponse(request, body), nil
+			})}
+			downloader := &Downloader{client: client, cfg: defaultConfig()}
+			address, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
+				Title: tc.title, Category: tc.category, OnlineDate: tc.year,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if address != tc.image {
+				t.Fatalf("Bangumi poster = %q, want %q", address, tc.image)
+			}
+		})
 	}
 }
 
