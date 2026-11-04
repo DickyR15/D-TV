@@ -10,8 +10,8 @@ import (
 )
 
 func TestProviderMediaCredentialsPreserveRefererAndUserAgentAcrossRedirect(t *testing.T) {
-	const referer = "https://guipianwu.com/play/123-1-1.html"
-	const agent = "GuipianMediaTest/1.0"
+	const referer = "https://media.example.test/play/123-1-1.html"
+	const agent = "DTVMediaTest/1.0"
 	firstHeaders := make(chan http.Header, 1)
 	finalHeaders := make(chan http.Header, 1)
 
@@ -58,8 +58,8 @@ func TestProviderMediaCredentialsPreserveRefererAndUserAgentAcrossRedirect(t *te
 		if headers.Get("Referer") != referer || headers.Get("User-Agent") != agent {
 			t.Errorf("%s lost playback headers: Referer=%q User-Agent=%q", name, headers.Get("Referer"), headers.Get("User-Agent"))
 		}
-		if headers.Get("Origin") != "https://guipianwu.com" {
-			t.Errorf("%s Origin = %q, want https://guipianwu.com", name, headers.Get("Origin"))
+		if headers.Get("Origin") != "https://media.example.test" {
+			t.Errorf("%s Origin = %q, want https://media.example.test", name, headers.Get("Origin"))
 		}
 	}
 }
