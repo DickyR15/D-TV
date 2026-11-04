@@ -307,6 +307,8 @@ func TestGuipianRequestedPostersLive(t *testing.T) {
 			"Unicorn Academy Secrets Revealed Chapter Two",
 			"Unicorn Academy: Secrets Revealed Part 2",
 		}, false},
+		{"撒旦：黑暗", []string{"撒旦：黑暗", "撒旦:黑暗", "撒旦 黑暗", "Satan: The Dark", "Satan - The Dark", "The Black Bible"}, false},
+		{"預謀獵殺", []string{"預謀獵殺", "预谋猎杀"}, false},
 	}
 	aliases := make([]map[string]bool, len(targets))
 	for index, target := range targets {
@@ -328,7 +330,7 @@ func TestGuipianRequestedPostersLive(t *testing.T) {
 					targets[targetIndex].found = true
 					label := targets[targetIndex].label
 					t.Logf("requested title resolved: %s -> %s category=%s id=%s", label, item.Title, category.ID, item.ID)
-					detail, detailErr := engine.downloader.fetchGuipianCoverMetadata(ctx, item.SourceID)
+					detail, detailErr := engine.downloader.fetchGuipianCoverMetadata(ctx, item.SourceID, item.Title)
 					if detailErr != nil { failures = append(failures, label+": poster-only detail: "+detailErr.Error()); continue }
 					if strings.TrimSpace(detail.Title) == "" { failures = append(failures, label+": detail title is empty"); continue }
 					t.Logf("detail title OK: requested=%s resolved=%s douban=%s year=%s cover=%q", label, detail.Title, detail.DoubanID, detail.OnlineDate, detail.Cover)
