@@ -7,6 +7,9 @@ on:
       - "native/core/provider_duoduo.go"
       - "native/core/provider_duoduo_test.go"
       - "native/core/app_cover_metadata.go"
+      - "native/core/app_cover_external.go"
+      - "native/core/app_cover_external_test.go"
+      - "native/core/app_cover_repair.go"
       - "native/core/app_covers.go"
       - "native/core/provider_media.go"
       - ".github/workflows/duoduo-entry-probe.yml"
@@ -30,6 +33,7 @@ jobs:
           from urllib.request import Request, urlopen
           import json
           import html
+          import re
           import ipaddress
           import socket
           import http.client
@@ -511,6 +515,60 @@ jobs:
 
           print("\n=== USER-REPORTED MISSING POSTERS ===")
           TARGET_POSTER_IDS = ("54635", "151850", "1625", "49704", "1206", "157219", "101901", "1192", "73988")
+          TARGET_POSTER_TITLES = [
+              {
+                  "label": "怪奇物語 第一季",
+                  "queries": ("怪奇物語 第一季", "怪奇物語"),
+                  "aliases": ("怪奇物語 第一季", "怪奇物语 第一季", "怪奇物語", "怪奇物语"),
+              },
+              {
+                  "label": "花兒與少年·同心季",
+                  "queries": ("花兒與少年·同心季", "花儿与少年·同心季", "花兒與少年"),
+                  "aliases": ("花兒與少年·同心季", "花儿与少年·同心季", "花兒與少年．同心季"),
+              },
+              {
+                  "label": "這是我的西遊 第二季",
+                  "queries": ("這是我的西遊 第二季", "這是我的西游 第二季", "這是我的西遊"),
+                  "aliases": ("這是我的西遊 第二季", "這是我的西游 第二季", "這是我的西遊第二季", "這是我的西游第二季", "這是我的西遊2", "這是我的西游2"),
+              },
+          ]
+
+          def normalize_target_title(value):
+              return "".join(character for character in str(value or "").casefold() if character.isalnum())
+
+          target_ids = list(TARGET_POSTER_IDS)
+          target_title_failures = []
+          for target in TARGET_POSTER_TITLES:
+              wanted = {normalize_target_title(alias) for alias in target["aliases"]}
+              matches = {}
+              for term in target["queries"]:
+                  _, search_payload = api(
+                      "/api.php/web/search/index",
+                      {"wd": term, "page": 1, "limit": 15},
+                  )
+                  for row in response_rows(search_payload.get("data")):
+                      title = row_title(row)
+                      source_id = row_id(row)
+                      if source_id.isdigit() and normalize_target_title(title) in wanted:
+                          matches[source_id] = row
+              if len(matches) == 1:
+                  source_id, row = next(iter(matches.items()))
+                  target_ids.append(source_id)
+                  print(
+                      f"RESOLVED requested title={target['label']!r} "
+                      f"to Duoduo id={source_id} source_title={row_title(row)!r} "
+                      f"category={row.get('type_name')!r} year={row.get('vod_year')!r}"
+                  )
+              elif not matches:
+                  target_title_failures.append(target["label"])
+                  print(f"FAIL: requested title not found in Duoduo search: {target['label']!r}")
+              else:
+                  target_title_failures.append(target["label"])
+                  print(
+                      f"FAIL: requested title is ambiguous in Duoduo search: "
+                      f"{target['label']!r} ids={sorted(matches)}"
+                  )
+          TARGET_POSTER_IDS = tuple(dict.fromkeys(target_ids))
 
           class DetailPosterParser(HTMLParser):
               def __init__(self):
@@ -725,9 +783,9 @@ jobs:
                   tags = [part.strip() for part in tags.split(",") if part.strip()]
               category_text = category + " " + " ".join(str(tag) for tag in tags)
               lowered = category_text.lower()
-              if any(word in lowered for word in ("綜藝", "综艺", "脫口秀", "脱口秀", "variety")):
-                  return ""
-              if any(word in lowered for word in ("動漫", "动画", "動畫", "番劇", "番剧", "漫劇", "漫剧", "anime")):
+              if any(word in lowered for word in ("綜藝", "综艺", "綜藝節目", "综艺节目", "脫口秀", "脱口秀", "真人秀", "實境秀", "variety")):
+                  allowed_types = [6]
+              elif any(word in lowered for word in ("動漫", "动画", "動畫", "番劇", "番剧", "漫劇", "漫剧", "anime")):
                   allowed_types = [2]
               elif any(word in lowered for word in ("電影", "电影", "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "短劇", "短剧", "movie", "tv")):
                   allowed_types = [6]
@@ -735,7 +793,13 @@ jobs:
                   allowed_types = [2, 6]
 
               def normalize(value):
-                  return "".join(ch for ch in str(value or "").casefold() if ch.isalnum())
+                  value = re.sub(
+                      r"(?:第[0-9一二三四五六七八九十百零〇两兩]+季|season[\\s._-]*0*[0-9]+|s0*[0-9]+)$",
+                      "",
+                      str(value or "").strip(),
+                      flags=re.IGNORECASE,
+                  )
+                  return "".join(ch for ch in value.casefold() if ch.isalnum())
 
               payload = {
                   "keyword": title,
@@ -959,10 +1023,12 @@ jobs:
           validated_posters = len(TARGET_POSTER_IDS) - len(target_failures) - len(target_upstream_unavailable)
           print(
               f"TARGETED OFFICIAL POSTERS={validated_posters}/{len(TARGET_POSTER_IDS)}; "
+              f"TITLE_RESOLUTION_FAILURES={target_title_failures}; "
               f"UPSTREAM_UNAVAILABLE={target_upstream_unavailable}"
           )
-          if target_failures:
-              raise RuntimeError("user-reported Duoduo poster cases still failing: " + ", ".join(target_failures))
+          if target_failures or target_title_failures:
+              unresolved = target_failures + ["title:" + title for title in target_title_failures]
+              raise RuntimeError("user-reported Duoduo poster cases still failing: " + ", ".join(unresolved))
           if target_upstream_unavailable:
               print(
                   "WARNING: upstream artwork blockers remain unresolved; "
