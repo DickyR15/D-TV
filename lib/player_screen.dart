@@ -1659,6 +1659,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       _playIntent = playWhenReady;
     }
     _resumePosition = position;
+    // The independent mini-player must report an episode change immediately,
+    // even before the new stream emits its first non-zero position.
+    widget.onProgress?.call(index, position);
     _showControlsOnPlaybackReady = showControlsOnReady;
     setState(() {
       _index = index;
