@@ -77,13 +77,8 @@ func TestMigrateNativeDramaReconstructsLegacyPosterIdentity(t *testing.T) {
 			want: "duoduo:137937",
 		},
 		{
-			name: "raw provider ID is namespaced",
-			drama: nativeDrama{ID: "77333", Source: sourceGuipian, Title: "歹路無可退"},
-			want: "guipian:77333",
-		},
-		{
 			name: "canonical composite ID stays authoritative",
-			drama: nativeDrama{ID: "duoduo:137937", Source: sourceGuipian, SourceID: "999"},
+			drama: nativeDrama{ID: "duoduo:137937", Source: "retired-source", SourceID: "999"},
 			want: "duoduo:137937",
 		},
 	}
