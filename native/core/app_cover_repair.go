@@ -34,7 +34,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		if preferredAddress, ok := nativePreferredOfficialPosterAddress(drama); ok {
 			path, err := cache.loadAlternativeAddress(
 				ctx, drama, preferredAddress,
-				nativeCoverFallbackReferer(cache.downloader, drama, preferredAddress), "external",
+				nativeCoverFallbackReferer(cache.downloader, drama, preferredAddress), "external", force,
 			)
 			if err == nil {
 				return path, nil
@@ -62,7 +62,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		}
 		path, err := cache.loadAlternativeAddress(
 			ctx, drama, candidate,
-			nativeCoverRefererForDrama(cache.downloader, drama, candidate), "provider",
+			nativeCoverRefererForDrama(cache.downloader, drama, candidate), "provider", force,
 		)
 		if err == nil {
 			return path, nil
@@ -78,7 +78,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	if providerAddress != "" && providerAddress != primaryAddress {
 		path, err := cache.loadAlternativeAddress(
 			ctx, drama, providerAddress,
-			nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
+			nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider", force,
 		)
 		if err == nil {
 			return path, nil
@@ -99,7 +99,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	if providerAddress != "" && providerAddress != primaryAddress {
 		path, err := cache.loadAlternativeAddress(
 			ctx, drama, providerAddress,
-			nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
+			nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider", force,
 		)
 		if err == nil {
 			return path, nil
@@ -119,7 +119,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		if externalAddress == "" || externalAddress == primaryAddress || externalAddress == providerAddress {
 			continue
 		}
-		path, _, err := cache.loadExternalPoster(ctx, drama, externalAddress)
+		path, _, err := cache.loadExternalPoster(ctx, drama, externalAddress, force)
 		if err == nil {
 			return path, nil
 		}
@@ -134,7 +134,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		if providerAddress != "" && providerAddress != primaryAddress {
 			path, err := cache.loadAlternativeAddress(
 				ctx, drama, providerAddress,
-				nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
+				nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider", force,
 			)
 			if err == nil {
 				return path, nil
@@ -144,7 +144,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 			}
 		}
 		if repairedExternal != "" && repairedExternal != primaryAddress && repairedExternal != providerAddress {
-			path, _, err := cache.loadExternalPoster(ctx, drama, repairedExternal)
+			path, _, err := cache.loadExternalPoster(ctx, drama, repairedExternal, force)
 			if err == nil {
 				return path, nil
 			}
@@ -167,6 +167,7 @@ func (cache *nativeCoverCache) loadExternalPoster(
 	ctx context.Context,
 	drama nativeDrama,
 	address string,
+	force bool,
 ) (string, string, error) {
 	address = strings.TrimSpace(address)
 	if address == "" {
@@ -174,7 +175,7 @@ func (cache *nativeCoverCache) loadExternalPoster(
 	}
 	path, primaryErr := cache.loadAlternativeAddress(
 		ctx, drama, address,
-		nativeCoverFallbackReferer(cache.downloader, drama, address), "external",
+		nativeCoverFallbackReferer(cache.downloader, drama, address), "external", force,
 	)
 	if primaryErr == nil {
 		return path, address, nil
@@ -202,7 +203,7 @@ func (cache *nativeCoverCache) loadExternalPoster(
 	if officialAddress, ok := nativeVerifiedOfficialPosterAddress(drama); ok && officialAddress != address {
 		officialPath, err := cache.loadAlternativeAddress(
 			ctx, drama, officialAddress,
-			nativeCoverFallbackReferer(cache.downloader, drama, officialAddress), "external",
+			nativeCoverFallbackReferer(cache.downloader, drama, officialAddress), "external", force,
 		)
 		if err == nil {
 			return officialPath, officialAddress, nil
@@ -222,7 +223,7 @@ func (cache *nativeCoverCache) loadExternalPoster(
 	}
 	fallbackPath, fallbackErr := cache.loadAlternativeAddress(
 		ctx, drama, bangumiAddress,
-		nativeCoverFallbackReferer(cache.downloader, drama, bangumiAddress), "external",
+		nativeCoverFallbackReferer(cache.downloader, drama, bangumiAddress), "external", force,
 	)
 	if fallbackErr != nil {
 		return "", "", errors.Join(primaryErr, officialErr, fallbackErr)
@@ -286,6 +287,7 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 	address string,
 	referer string,
 	cacheClass string,
+	force bool,
 ) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(address))
 	if err != nil || !validNativeCoverURL(parsed) {
@@ -309,11 +311,13 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 			entry.usedAt = time.Now()
 			cache.entries[key] = entry
 			age := time.Since(entry.updatedAt)
-			if age >= 0 && age < nativeCoverTTL {
+			if !force && age >= 0 && age < nativeCoverTTL {
 				cache.mu.Unlock()
 				return path, nil
 			}
-			stalePath = path
+			if !force {
+				stalePath = path
+			}
 		} else {
 			delete(cache.entries, key)
 			cache.size -= entry.size
@@ -341,7 +345,10 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 			downloadErr = ctx.Err()
 			break
 		}
-		if cache.coverOnCooldown(attempt.address, attempt.referer) {
+		if force {
+			cache.clearCoverFailure(attempt.address, attempt.referer)
+		}
+		if !force && cache.coverOnCooldown(attempt.address, attempt.referer) {
 			downloadErr = errors.New("海報網址暫時冷卻，略過重複請求")
 			continue
 		}
@@ -468,7 +475,7 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 				}
 				_, candidateErr := cache.loadAlternativeAddress(
 					work, drama, nativeAddress,
-					nativeCoverFallbackReferer(cache.downloader, drama, nativeAddress), "provider",
+					nativeCoverFallbackReferer(cache.downloader, drama, nativeAddress), "provider", force,
 				)
 				if candidateErr == nil {
 					providerAddress = nativeAddress
@@ -498,7 +505,7 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 					externalAddress, externalErr = cache.downloader.externalPosterAddress(work, drama)
 				}
 				if externalErr == nil && externalAddress != "" && externalAddress != drama.Cover {
-					_, resolvedAddress, candidateErr := cache.loadExternalPoster(work, drama, externalAddress)
+					_, resolvedAddress, candidateErr := cache.loadExternalPoster(work, drama, externalAddress, force)
 					if candidateErr != nil {
 						externalErr = candidateErr
 						externalAddress = ""
