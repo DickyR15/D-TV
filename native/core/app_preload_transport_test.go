@@ -43,7 +43,7 @@ func TestNativeServePrefixUsesSessionStandardHTTPAndHeaders(t *testing.T) {
 		return nil, errors.New("preload continuation unexpectedly used native stream transport")
 	})}
 
-	referer := "https://guipianwu.com/play/123-1-1.html"
+	referer := "https://media.example.test/play/123-1-1.html"
 	session := &nativeStreamSession{
 		assets:        map[string]nativeStreamAsset{},
 		referer:       referer,
