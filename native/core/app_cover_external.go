@@ -20,9 +20,8 @@ const (
 	bangumiPosterSearchLimit = 20
 )
 
-// Accept explicit season suffixes when comparing a provider title with a
-// database entry that represents the parent series without a season suffix.
-// Release-year and ambiguity checks still decide whether the candidate is safe.
+// Match season-suffixed provider titles to the parent series entry when the
+// candidate has no season suffix; year and ambiguity checks still apply.
 var bangumiPosterSeasonSuffix = regexp.MustCompile(`(?i)(?:第[0-9一二三四五六七八九十百零〇两兩]+季|season[\\s._-]*0*[0-9]+|s0*[0-9]+)package core
 
 import (
