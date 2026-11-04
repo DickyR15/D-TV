@@ -550,6 +550,18 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _accessChanged() {
+    final sessionChanged =
+        widget.store.profileEpoch != _profileEpoch || widget.store.locked;
+    if (sessionChanged && _desktopMiniActive) {
+      // Never let a child engine continue using a profile after its parent
+      // session is locked or switched to another user.
+      _desktopMiniActive = false;
+      _desktopMiniReady = null;
+      _desktopMiniWindow = null;
+      unawaited(
+        _desktopMiniChannel.invokeMethod<void>('close').catchError((Object _) {}),
+      );
+    }
     if (!_closed && mounted) {
       final blurEnabled =
           widget.store.playbackPreferences.portraitBlurBackground;
@@ -800,6 +812,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _loading ||
         _error != null ||
         _panelOpen ||
+        widget.store.locked ||
         widget.detail.episodes.isEmpty) {
       return;
     }
@@ -821,6 +834,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         detail: widget.detail,
         index: _index,
         position: _currentPosition,
+        authorizedSession: !widget.store.locked,
       );
       await ready.future.timeout(const Duration(seconds: 12));
     } catch (error) {
