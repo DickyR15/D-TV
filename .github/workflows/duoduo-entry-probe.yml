@@ -99,6 +99,15 @@ jobs:
                       last_error = f"{host}: {type(exc).__name__}: {str(exc)[:140]}"
               raise RuntimeError("all public API mirrors failed: " + str(last_error))
 
+          def split_source_groups(raw, comma_fallback=False):
+              """Mirror native/core/provider_duoduo.go source-block parsing."""
+              value = str(raw or "").strip()
+              if not value:
+                  return []
+              parts = value.split(chr(36) * 3)
+              if comma_fallback and len(parts) == 1:
+                  parts = value.split(",")
+              return [part.strip() for part in parts if part.strip()]
           def probe_media(address, referer):
               parsed = urlsplit(address)
               if parsed.scheme not in ("http", "https") or not parsed.netloc:
@@ -164,8 +173,8 @@ jobs:
               for row in player_rows if isinstance(row, dict)
           ], ensure_ascii=False))
           for index, (line_name, block) in enumerate(zip(
-              str(detail.get("vod_play_from") or "").split("$$"),
-              str(detail.get("vod_play_url") or "").split("$$")
+              split_source_groups(detail.get("vod_play_from"), comma_fallback=True),
+              split_source_groups(detail.get("vod_play_url"))
           ), start=1):
               labels = [part.split("$", 1)[0].strip() for part in block.split("#") if "$" in part]
               print(f"detail_line[{index}]={line_name.strip()!r} labels={labels!r} parsed_count={len(labels)}")
@@ -1267,8 +1276,8 @@ jobs:
                   raise RuntimeError(
                       f"單身即地獄 第五季 detail title mismatch: id={vod_id} title={title!r}"
                   )
-              names = str(row.get("vod_play_from") or "").split("$$")
-              blocks = str(row.get("vod_play_url") or "").split("$$")
+              names = split_source_groups(row.get("vod_play_from"), comma_fallback=True)
+              blocks = split_source_groups(row.get("vod_play_url"))
               player_rows = response_rows(detail_payload.get("vodplayer"))
               player_by_from = {
                   str(player.get("from") or "").strip(): player
@@ -1308,6 +1317,9 @@ jobs:
                               str(line.get("site_name") or line.get("site_key") or "aggregate"),
                               episode_title.strip(), address
                           ))
+              detail_episode_count = episode_count
+              aggregate_episode_count = len(aggregate_direct)
+              episode_count = detail_episode_count + aggregate_episode_count
               seen = set()
               direct = []
               for item in detail_direct + aggregate_direct:
@@ -1316,6 +1328,7 @@ jobs:
                       direct.append(item)
               print(
                   f"SINGLE_INFERNO id={vod_id} title={title!r} episodes={episode_count} "
+                  f"detail_episodes={detail_episode_count} aggregate_episodes={aggregate_episode_count} "
                   f"player_rows={len(player_rows)} detail_direct={len(detail_direct)} "
                   f"aggregate_rows={len(aggregate_rows)} aggregate_direct={len(aggregate_direct)}"
               )
@@ -1378,8 +1391,8 @@ jobs:
                       continue
                   row = rows[0]
                   detail_lines = []
-                  names = str(row.get("vod_play_from") or "").split("$$")
-                  blocks = str(row.get("vod_play_url") or "").split("$$")
+                  names = split_source_groups(row.get("vod_play_from"), comma_fallback=True)
+                  blocks = split_source_groups(row.get("vod_play_url"))
                   player_rows = response_rows(detail.get("vodplayer"))
                   player_by_from = {
                       str(player.get("from") or "").strip(): player
@@ -2099,8 +2112,8 @@ jobs:
                       continue
                   row = rows[0]
                   detail_lines = []
-                  names = str(row.get("vod_play_from") or "").split("$$")
-                  blocks = str(row.get("vod_play_url") or "").split("$$")
+                  names = split_source_groups(row.get("vod_play_from"), comma_fallback=True)
+                  blocks = split_source_groups(row.get("vod_play_url"))
                   player_rows = response_rows(detail.get("vodplayer"))
                   player_by_from = {
                       str(player.get("from") or "").strip(): player
