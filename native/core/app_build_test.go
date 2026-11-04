@@ -11,8 +11,8 @@ import (
 )
 
 func TestNativeBuildAuthorization(t *testing.T) {
-	for _, source := range []string{sourceHongguo, sourceHanxiaoquan, sourceGuipian, sourceDuoduo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, "unknown"} {
-		allowed := nativePrimarySource(source) || buildAllSources == "true" && source != "unknown"
+	for _, source := range []string{sourceHongguo, sourceHanxiaoquan, "guipian", sourceDuoduo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, "unknown"} {
+		allowed := nativePrimarySource(source) || buildAllSources == "true" && isHuangguoProviderSource(source)
 		for _, action := range []string{"catalog", "cached", "sourceStatus", "sourceJob", "cancelSourceJob", "detail", "followCheck", "cover", "resolve", "enqueueDownloads", "localPlayback"} {
 			input := nativeInput{Action: action, Source: source, Drama: nativeDrama{ID: source + ":123", Source: source}}
 			err := nativeAuthorizeInput(input)
@@ -41,7 +41,7 @@ func TestNativeBuildAuthorization(t *testing.T) {
 func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *testing.T) {
 	manager := downloadTestManager(t)
 	records := []*nativeDownloadRecord{}
-	for index, source := range []string{sourceHongguo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, sourceHanxiaoquan, sourceGuipian, sourceDuoduo} {
+	for index, source := range []string{sourceHongguo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, sourceHanxiaoquan, "guipian", sourceDuoduo} {
 		drama := nativeDrama{ID: source + ":123", Source: source, Title: "合成下载"}
 		record := &nativeDownloadRecord{nativeDownloadJob: nativeDownloadJob{
 			ID: nativeDownloadID(drama.ID, 1), Drama: drama, Index: 1,
@@ -59,9 +59,9 @@ func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *tes
 	reopened := newNativeDownloads(manager.engine)
 	t.Cleanup(reopened.close)
 	jobs, err := reopened.snapshot()
-	expected := 4
+	expected := 3
 	if buildAllSources == "true" {
-		expected = 9
+		expected = 8
 	}
 	if err != nil || len(jobs) != expected {
 		t.Fatalf("wrong visible downloads: %v, %v", jobs, err)
@@ -79,7 +79,7 @@ func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *tes
 		t.Fatal(err)
 	}
 	// The native downloader has two workers in both editions. The standard
-	// edition may schedule any two of its four permitted primary sources.
+	// edition may schedule any two of its three permitted primary sources.
 	workers := 2
 	seen := map[string]bool{}
 	for index := 0; index < workers; index++ {
