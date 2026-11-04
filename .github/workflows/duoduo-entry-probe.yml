@@ -574,6 +574,7 @@ jobs:
 
           target_ids = list(TARGET_POSTER_IDS)
           target_title_failures = []
+          target_detail_expectations = {}
           for target in TARGET_POSTER_TITLES:
               wanted = {normalize_target_title(alias) for alias in target["aliases"]}
               matches = {}
@@ -597,6 +598,7 @@ jobs:
               if len(matches) == 1:
                   source_id, row = next(iter(matches.items()))
                   target_ids.append(source_id)
+                  target_detail_expectations[source_id] = wanted
                   print(
                       f"RESOLVED requested title={target['label']!r} "
                       f"to Duoduo id={source_id} source_title={row_title(row)!r} "
@@ -606,6 +608,7 @@ jobs:
                   # Validate every exact-title duplicate rather than choosing one silently.
                   for source_id in sorted(matches):
                       target_ids.append(source_id)
+                      target_detail_expectations[source_id] = wanted
                       row = matches[source_id]
                       print(
                           f"RESOLVED exact duplicate title={target['label']!r} "
@@ -978,6 +981,14 @@ jobs:
                       raise RuntimeError("official detail API returned no data row")
                   row = detail_rows[0]
                   title = row_title(row) or "(no title)"
+                  expected_titles = target_detail_expectations.get(vod_id)
+                  if expected_titles and normalize_target_title(title) not in expected_titles:
+                      raise RuntimeError(
+                          f"detail title mismatch for requested ID {vod_id}: "
+                          f"expected one of {sorted(expected_titles)!r}, got {title!r}"
+                      )
+                  if expected_titles:
+                      print(f"PASS: detail title resolved id={vod_id} title={title!r}")
                   play_url = api_base + "/play/" + vod_id
                   root_url = api_base + "/"
                   print(f"target id={vod_id} title={title!r} api={api_base} douban_id={row.get('vod_douban_id')!r} douban_score={row.get('vod_douban_score')!r} vod_pic={row.get('vod_pic')!r} vod_pic_slide={row.get('vod_pic_slide')!r}")
