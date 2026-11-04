@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -185,8 +184,16 @@ func TestBangumiPosterAddressSupportsVarietyAndSeasonSpecificSeries(t *testing.T
 				if len(payload.Filter.Type) != 1 || payload.Filter.Type[0] != 6 {
 					t.Fatalf("real-world subject type 6 was not requested: %+v", payload.Filter.Type)
 				}
-				body := fmt.Sprintf(`{"data":[{"id":501,"type":6,"name_cn":%q,"date":%q,"images":{"large":%q}}]}`,
-					tc.candidate, tc.date, tc.image)
+				body, err := json.Marshal(map[string]any{
+					"data": []any{map[string]any{
+						"id": 501, "type": 6, "name_cn": tc.candidate, "date": tc.date,
+						"images": map[string]any{"large": tc.image},
+					}},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return posterLookupJSONResponse(request, string(body)), nil
 				return posterLookupJSONResponse(request, body), nil
 			})}
 			downloader := &Downloader{client: client, cfg: defaultConfig()}
