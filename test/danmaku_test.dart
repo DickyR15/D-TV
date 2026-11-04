@@ -392,6 +392,8 @@ void main() {
       await store.switchProfile('default', pin: 'synthetic-pin');
       expect(store.playbackPreferences.danmaku, isFalse);
       final legacy = jsonDecode(backup) as Map<String, dynamic>;
+      // A simulated older backup predates the SHA-256 envelope.
+      legacy.remove('integrity');
       (((legacy['libraries'] as Map)['default'] as Map)['playback'] as Map)
           .remove('danmaku');
 
