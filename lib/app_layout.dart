@@ -351,10 +351,12 @@ class AppLayout extends InheritedWidget {
   static String displayModeLabel(
     String mode, {
     FormFactor? currentFactor,
+    bool? desktopPlatform,
   }) {
+    final desktop = desktopPlatform ?? isDesktopPlatform;
     final key = mode == 'standard'
         ? currentFactor?.name ?? 'auto'
-        : mode == 'window' && !isDesktopPlatform
+        : mode == 'window' && !desktop
         ? 'pad'
         : mode;
     return _displayModeLabels[key] ?? _displayModeLabels['auto']!;
