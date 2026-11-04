@@ -194,7 +194,7 @@ func TestBangumiPosterAddressSupportsVarietyAndSeasonSpecificSeries(t *testing.T
 					t.Fatal(err)
 				}
 				return posterLookupJSONResponse(request, string(body)), nil
-				return posterLookupJSONResponse(request, body), nil
+				return posterLookupJSONResponse(request, string(body)), nil
 			})}
 			downloader := &Downloader{client: client, cfg: defaultConfig()}
 			address, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
