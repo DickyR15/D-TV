@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -15,6 +16,7 @@ import 'player_fullscreen_layout_policy.dart';
 import 'app_theme.dart';
 import 'back_safe_dialog.dart';
 import 'core_bridge.dart';
+import 'desktop_mini_player.dart';
 import 'diary_service.dart';
 import 'playback_diagnostics.dart';
 import 'danmaku_controller.dart';
@@ -70,6 +72,9 @@ class PlayerScreen extends StatefulWidget {
     this.videoBuilder,
     this.handoff,
     this.recoveryRestarted = false,
+    this.desktopMiniPlayer = false,
+    this.onBackOverride,
+    this.onProgress,
   });
   final DramaDetail detail;
   final int initialIndex;
@@ -80,6 +85,12 @@ class PlayerScreen extends StatefulWidget {
   final AppRepository repository;
   final LocalStore store;
   final LanIncomingPlayback? handoff;
+  /// True when this screen is hosted in the independent desktop mini-player.
+  final bool desktopMiniPlayer;
+  /// Allows the mini-player host to restore the paused main window.
+  final VoidCallback? onBackOverride;
+  /// Reports the current episode and playback position to the paired window.
+  final void Function(int index, double position)? onProgress;
   /// True after the one automatic clean-player restart has already been used.
   final bool recoveryRestarted;
   @visibleForTesting
@@ -182,6 +193,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
       _pictureInPictureActive || _pictureInPictureRequested;
+  bool get _desktopMiniPlayerSupported =>
+      !widget.desktopMiniPlayer && (Platform.isWindows || Platform.isMacOS);
+  final WindowMethodChannel _desktopMiniChannel = desktopMiniPlayerChannel;
+  WindowController? _desktopMiniWindow;
+  Completer<void>? _desktopMiniReady;
+  bool _desktopMiniActive = false;
+  int _desktopMiniEpisodeIndex = 0;
+  double _desktopMiniPosition = 0;
   bool get _canUsePictureInPicture => supportsPictureInPicture(
     android: defaultTargetPlatform == TargetPlatform.android,
     systemSupported: _pictureInPictureSupported,
@@ -217,6 +236,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     WidgetsBinding.instance.addObserver(this);
     _index = widget.initialIndex;
     _profileEpoch = widget.handoff?.profileEpoch ?? widget.store.profileEpoch;
+    if (_desktopMiniPlayerSupported) {
+      unawaited(
+        _desktopMiniChannel.setMethodCallHandler(_handleDesktopMiniMessage)
+            .catchError((Object _) {}),
+      );
+    }
     final preferences = widget.store.playbackPreferences;
     final migrateDanmakuDefault =
         widget.store.needsDanmakuDefaultOffMigration;
@@ -395,6 +420,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _player.stream.position.listen((position) {
         if (!_closed && _openedIndex == _index && position > Duration.zero) {
           _resumePosition = position.inMilliseconds / 1000;
+          widget.onProgress?.call(_index, _resumePosition);
         }
         _syncDanmaku();
         _syncPreload();
@@ -712,6 +738,104 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     if (visible && _pendingError) {
       _queueRecovery(reason: 'foreground_pending_error');
+    }
+  }
+
+  Future<dynamic> _handleDesktopMiniMessage(MethodCall call) async {
+    switch (call.method) {
+      case 'mini_ready':
+        final ready = _desktopMiniReady;
+        if (ready != null && !ready.isCompleted) ready.complete();
+        return true;
+      case 'mini_progress':
+        final values = call.arguments;
+        if (values is Map) {
+          _desktopMiniEpisodeIndex = intValue(values['index']);
+          final position = (values['position'] as num?)?.toDouble();
+          if (position != null && position.isFinite && position >= 0) {
+            _desktopMiniPosition = position;
+          }
+        }
+        return true;
+      case 'mini_error':
+        final message = call.arguments is Map
+            ? (call.arguments['message']?.toString() ?? '小窗播放器初始化失敗')
+            : '小窗播放器初始化失敗';
+        final ready = _desktopMiniReady;
+        if (ready != null && !ready.isCompleted) {
+          ready.completeError(StateError(message));
+        }
+        return true;
+      case 'mini_closed':
+        final values = call.arguments;
+        var index = _desktopMiniEpisodeIndex;
+        var position = _desktopMiniPosition;
+        if (values is Map) {
+          index = intValue(values['index']);
+          final reported = (values['position'] as num?)?.toDouble();
+          if (reported != null && reported.isFinite && reported >= 0) {
+            position = reported;
+          }
+        }
+        final wasActive = _desktopMiniActive;
+        _desktopMiniActive = false;
+        _desktopMiniWindow = null;
+        _desktopMiniReady = null;
+        if (wasActive && mounted && !_closed) {
+          await _play(
+            index.clamp(0, widget.detail.episodes.length - 1),
+            position: position,
+          );
+        }
+        return true;
+      default:
+        return null;
+    }
+  }
+
+  Future<void> _openDesktopMiniPlayer() async {
+    if (!_desktopMiniPlayerSupported ||
+        _desktopMiniActive ||
+        _closed ||
+        _loading ||
+        _error != null ||
+        _panelOpen ||
+        widget.detail.episodes.isEmpty) {
+      return;
+    }
+
+    _desktopMiniEpisodeIndex = _index;
+    _desktopMiniPosition = _currentPosition;
+    final ready = Completer<void>();
+    _desktopMiniReady = ready;
+    _desktopMiniActive = true;
+
+    try {
+      // Save the last checkpoint before pausing the main-window engine.
+      await _saveProgress(flush: true);
+      await _player.pause();
+      _desktopMiniWindow = await createDesktopMiniPlayerWindow(
+        detail: widget.detail,
+        index: _index,
+        position: _currentPosition,
+      );
+      await ready.future.timeout(const Duration(seconds: 12));
+    } catch (error) {
+      _desktopMiniActive = false;
+      _desktopMiniReady = null;
+      final controller = _desktopMiniWindow;
+      _desktopMiniWindow = null;
+      if (controller != null) {
+        try {
+          await _desktopMiniChannel.invokeMethod<void>('close');
+        } catch (_) {}
+      }
+      if (!_closed && mounted) {
+        try {
+          await _player.play();
+        } catch (_) {}
+        _notice('無法開啟桌面小窗：$error');
+      }
     }
   }
 
@@ -1409,6 +1533,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _saveProgress({bool flush = false}) async {
+    // The main engine is paused while the independent desktop window owns
+    // playback. The mini engine writes the newer watch position itself.
+    if (_desktopMiniActive) return;
     if (_openedIndex < 0 || widget.store.profileEpoch != _profileEpoch) {
       return;
     }
@@ -2301,6 +2428,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _back() {
+    final override = widget.onBackOverride;
+    if (override != null) {
+      override();
+      return;
+    }
     final now = DateTime.now();
     final lastNestedPop = _lastNestedRoutePopAt;
     if (lastNestedPop != null &&
@@ -2331,6 +2463,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void dispose() {
     _closed = true;
+    if (_desktopMiniPlayerSupported) {
+      if (_desktopMiniActive) {
+        unawaited(
+          _desktopMiniChannel.invokeMethod<void>('close').catchError((Object _) {}),
+        );
+      }
+      unawaited(_desktopMiniChannel.setMethodCallHandler(null));
+    }
     final enhancementClosed = _enhancement.close();
     LanController.current?.detachPlayback(_lanIdentity);
     widget.handoff?.fail('接收端已退出播放');
@@ -2644,7 +2784,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             onSettings: () => _televisionSettings(context),
             onPictureInPicture: _canUsePictureInPicture
                 ? _enterPictureInPicture
+                : _desktopMiniPlayerSupported
+                ? _openDesktopMiniPlayer
                 : null,
+            pictureInPictureTooltip: _desktopMiniPlayerSupported ? '小窗' : '畫中畫',
             onBack: _back,
           )
         : PlayerControls(
@@ -2677,10 +2820,15 @@ class _PlayerScreenState extends State<PlayerScreen>
             onRetryDanmaku: _danmaku.canRetry
                 ? _retryDanmakuFromControls
                 : null,
-            onPush: widget.mediaId == null ? _pushToDevice : null,
+            onPush: widget.mediaId == null && !widget.desktopMiniPlayer
+                ? _pushToDevice
+                : null,
             onPictureInPicture: _canUsePictureInPicture
                 ? _enterPictureInPicture
+                : _desktopMiniPlayerSupported
+                ? _openDesktopMiniPlayer
                 : null,
+            pictureInPictureTooltip: _desktopMiniPlayerSupported ? '小窗' : '畫中畫',
             onPrevious: _index > 0 ? () => _play(_index - 1) : null,
             onNext: _index + 1 < widget.detail.episodes.length
                 ? () => _play(_index + 1)
