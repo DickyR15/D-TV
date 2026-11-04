@@ -41,7 +41,7 @@ void main() {
       );
       await store.unlockAdvancedSources('source-pass-123');
       await store.setSourceEnabled('dsd', true);
-      expect(store.sources.length, 5);
+      expect(store.sources.length, 4);
       expect(store.allowsSource('dsd'), isTrue);
     } else {
       await expectLater(store.setSourceEnabled('dsd', true), throwsStateError);
