@@ -114,10 +114,18 @@ void main() {
   });
 
 
-  test('Picture-in-Picture is available on supported Android phones and TVs', () {
+  test('Picture-in-Picture is available on supported Android phones but not TVs', () {
     expect(
       supportsPictureInPicture(android: true, systemSupported: true),
       isTrue,
+    );
+    expect(
+      supportsPictureInPicture(
+        android: true,
+        systemSupported: true,
+        television: true,
+      ),
+      isFalse,
     );
     expect(
       supportsPictureInPicture(android: false, systemSupported: true),
@@ -138,6 +146,16 @@ void main() {
         enabled: true,
       ),
       isTrue,
+    );
+    expect(
+      shouldAutoEnterPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+        television: true,
+      ),
+      isFalse,
     );
     for (final values in [
       (android: false, systemSupported: true, playing: true, enabled: true),
