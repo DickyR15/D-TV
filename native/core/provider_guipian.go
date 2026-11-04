@@ -57,6 +57,10 @@ var (
 	reGuipianMainList   = regexp.MustCompile(`(?is)<ul class="row video-list video-film-list[^"]*">(.*?)</ul>`)
 	reGuipianCard       = regexp.MustCompile(`(?is)<a class="video-link" href="/nv/(\d+)\.html"[^>]*title="([^"]*)"(.*?)</a>`)
 	reGuipianCover      = regexp.MustCompile(`(?is)data-(?:original|background)="([^"]+)"`)
+	reGuipianArtworkTag    = regexp.MustCompile(`(?is)<(img|source|div|span|a|figure|meta)\b[^>]*>`)
+	reGuipianArtworkAttr   = regexp.MustCompile(`(?is)([a-z_:][-a-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
+	reGuipianArtworkCSSURL = regexp.MustCompile(`(?is)url\(\s*["']?([^"')]+)["']?\s*\)`)
+	reGuipianDetailArtwork = regexp.MustCompile(`(?is)<(?:div|figure)\b[^>]*(?:class|id)=["'][^"']*(?:detail-img|detail-cover|detail-pic|detail-poster|video-cover|media-cover)[^"']*["'][^>]*>`)
 	reGuipianRemark     = regexp.MustCompile(`(?is)<div class="video-duration">(.*?)</div>`)
 	reGuipianTitle      = regexp.MustCompile(`(?is)<h1 class="media-title[^"]*">(.*?)</h1>`)
 	reGuipianTitleTag   = regexp.MustCompile(`(?is)<title>(.*?)</title>`)
@@ -144,20 +148,172 @@ func guipianUnescape(text string) string {
 }
 
 func guipianFixURL(raw string) string {
-	raw = strings.TrimSpace(raw)
+	raw = strings.TrimSpace(guipianUnescape(raw))
 	if raw == "" {
 		return ""
 	}
-	if strings.HasPrefix(raw, "//") {
-		raw = "https:" + raw
-	} else if strings.HasPrefix(raw, "/") {
-		raw = guipianSiteBaseURL + raw
-	}
 	parsed, err := url.Parse(raw)
-	if err != nil || !validNativeCoverURL(parsed) {
+	if err != nil {
+		return ""
+	}
+	if !parsed.IsAbs() {
+		base, _ := url.Parse(guipianSiteBaseURL + "/")
+		parsed = base.ResolveReference(parsed)
+	}
+	if !validNativeCoverURL(parsed) {
 		return ""
 	}
 	return parsed.String()
+}
+
+// guipianPosterCandidates reads lazy-loading, responsive-image and CSS
+// artwork attributes in their intended priority order. It deliberately ignores
+// unrelated anchor URLs and non-artwork layout elements.
+func guipianPosterCandidates(markup string) []string {
+	var original, lazy, background, regular, responsive, css, meta []string
+	for _, match := range reGuipianArtworkTag.FindAllStringSubmatch(markup, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		tagName := strings.ToLower(match[1])
+		tag := match[0]
+		attrs := map[string]string{}
+		for _, attr := range reGuipianArtworkAttr.FindAllStringSubmatch(tag, -1) {
+			if len(attr) < 5 {
+				continue
+			}
+			value := firstNonEmpty(attr[2], attr[3], attr[4])
+			attrs[strings.ToLower(attr[1])] = guipianUnescape(strings.TrimSpace(value))
+		}
+		if tagName == "meta" {
+			imageMeta := strings.ToLower(attrs["property"] + " " + attrs["name"])
+			if strings.Contains(imageMeta, "og:image") || strings.Contains(imageMeta, "twitter:image") {
+				if address := guipianFixURL(attrs["content"]); address != "" {
+					meta = append(meta, address)
+				}
+			}
+			continue
+		}
+		className := strings.ToLower(attrs["class"] + " " + attrs["id"])
+		imageTag := tagName == "img" || tagName == "source"
+		artworkContainer := false
+		for _, marker := range []string{"cover", "poster", "detail-img", "detail-cover", "detail-pic", "video-img", "media-img", "thumbnail", "thumb", "picture"} {
+			if strings.Contains(className, marker) {
+				artworkContainer = true
+				break
+			}
+		}
+		if !imageTag && !artworkContainer {
+			continue
+		}
+		for _, key := range []string{"data-original", "data-original-src"} {
+			if address := guipianFixURL(attrs[key]); address != "" {
+				original = append(original, address)
+			}
+		}
+		for _, key := range []string{"data-src", "data-lazy-src", "data-echo"} {
+			if address := guipianFixURL(attrs[key]); address != "" {
+				lazy = append(lazy, address)
+			}
+		}
+		for _, key := range []string{"data-background", "data-bg"} {
+			if address := guipianFixURL(attrs[key]); address != "" {
+				background = append(background, address)
+			}
+		}
+		if address := guipianFixURL(attrs["src"]); address != "" {
+			regular = append(regular, address)
+		}
+		for _, value := range strings.Split(attrs["srcset"], ",") {
+			fields := strings.Fields(strings.TrimSpace(value))
+			if len(fields) > 0 {
+				if address := guipianFixURL(fields[0]); address != "" {
+					responsive = append(responsive, address)
+				}
+			}
+		}
+		for _, styleURL := range reGuipianArtworkCSSURL.FindAllStringSubmatch(attrs["style"], -1) {
+			if len(styleURL) > 1 {
+				if address := guipianFixURL(styleURL[1]); address != "" {
+					css = append(css, address)
+				}
+			}
+		}
+	}
+	return nativeUniqueCoverAddresses(append(append(append(append(append(append(original, lazy...), background...), regular...), responsive...), css...), meta...)...)
+}
+
+func guipianDetailPosterCandidates(body string) []string {
+	var candidates []string
+	for _, match := range reGuipianDetailArtwork.FindAllStringIndex(body, -1) {
+		start := match[0]
+		end := min(len(body), start+4096)
+		block := body[start:end]
+		if close := strings.Index(strings.ToLower(block), "</div>"); close >= 0 {
+			block = block[:close+len("</div>")]
+		}
+		candidates = append(candidates, guipianPosterCandidates(block)...)
+	}
+	// Open Graph artwork is often the only reliable poster field on detail
+	// pages whose visible image is populated by a JavaScript lazy loader.
+	for _, tag := range reGuipianArtworkTag.FindAllString(body, -1) {
+		if strings.HasPrefix(strings.ToLower(tag), "<meta") {
+			candidates = append(candidates, guipianPosterCandidates(tag)...)
+		}
+	}
+	if len(candidates) == 0 {
+		if match := reGuipianDetailPic.FindStringSubmatch(body); len(match) > 1 {
+			if address := guipianFixURL(match[1]); address != "" {
+				candidates = append(candidates, address)
+			}
+		}
+		if match := reGuipianDetailPic2.FindStringSubmatch(body); len(match) > 1 {
+			if address := guipianFixURL(match[1]); address != "" {
+				candidates = append(candidates, address)
+			}
+		}
+	}
+	return nativeUniqueCoverAddresses(candidates...)
+}
+
+func guipianCategoryKind(category string) string {
+	switch category {
+	case "3", "6", "7", "8", "9", "10", "11", "31":
+		return "電影"
+	case "12", "13", "14", "15", "16", "17", "18":
+		return "劇集"
+	case "23", "24", "25", "26":
+		return "動漫"
+	default:
+		return ""
+	}
+}
+
+func guipianKindFromText(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch {
+	case strings.Contains(value, "动漫") || strings.Contains(value, "動畫") || strings.Contains(value, "动画") || strings.Contains(value, "番剧"):
+		return "動漫"
+	case strings.Contains(value, "电视剧") || strings.Contains(value, "電視劇") || strings.Contains(value, "剧集") || strings.Contains(value, "劇集") || strings.Contains(value, "国产剧") || strings.Contains(value, "美剧") || strings.Contains(value, "韩剧") || strings.Contains(value, "日剧") || strings.Contains(value, "泰剧"):
+		return "劇集"
+	case strings.Contains(value, "电影") || strings.Contains(value, "電影") || strings.Contains(value, "恐怖片") || strings.Contains(value, "剧情片") || strings.Contains(value, "剧情") || strings.Contains(value, "战争"):
+		return "電影"
+	default:
+		return ""
+	}
+}
+
+func guipianAppendTag(tags []string, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return tags
+	}
+	for _, tag := range tags {
+		if strings.EqualFold(strings.TrimSpace(tag), value) {
+			return tags
+		}
+	}
+	return append(tags, value)
 }
 
 func (d *Downloader) fetchGuipianCategories() []nativeCategory {
@@ -193,8 +349,13 @@ func parseGuipianCards(body string) []Drama {
 			continue
 		}
 		seen[id] = true
+		coverCandidates := guipianPosterCandidates(chunk)
 		cover := ""
-		if coverMatch := reGuipianCover.FindStringSubmatch(chunk); len(coverMatch) > 1 {
+		var coverAlternatives []string
+		if len(coverCandidates) > 0 {
+			cover = coverCandidates[0]
+			coverAlternatives = append(coverAlternatives, coverCandidates[1:]...)
+		} else if coverMatch := reGuipianCover.FindStringSubmatch(chunk); len(coverMatch) > 1 {
 			cover = guipianFixURL(coverMatch[1])
 		}
 		remark := ""
@@ -204,7 +365,7 @@ func parseGuipianCards(body string) []Drama {
 		items = append(items, Drama{
 			ID: providerDramaID(sourceGuipian, id), Source: sourceGuipian, SourceID: id,
 			Title: truncate(title, 512), Name: truncate(title, 512),
-			Cover: cover, CoverURL: cover, ChannelName: "鬼片网",
+			Cover: cover, CoverURL: cover, ImageURL: coverAlternatives, ChannelName: "鬼片网",
 			CategoryName: "影视", Remark: truncate(remark, 64),
 		})
 		if len(items) > 500 {
@@ -256,6 +417,13 @@ func (d *Downloader) fetchGuipianCatalogPage(ctx context.Context, page int, cate
 	items := parseGuipianCards(body)
 	if len(items) == 0 {
 		return []Drama{}, false, nil
+	}
+	// Keep the unified catalogue category, but retain the work type as
+	// metadata so strict external poster matching can distinguish films,
+	// series and animation without adding a redundant Guipian category menu.
+	kind := guipianCategoryKind(category)
+	for index := range items {
+		items[index].Tags = guipianAppendTag(items[index].Tags, kind)
 	}
 	pageCount := guipianPageCount(body, category, page, len(items))
 	return items, page < pageCount, nil
@@ -405,14 +573,12 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (D
 	if name == "" {
 		return Drama{}, nil, errors.New("鬼片网详情缺少视频名称")
 	}
+	coverCandidates := guipianDetailPosterCandidates(body)
 	cover := ""
-	if match := reGuipianDetailPic.FindStringSubmatch(body); len(match) > 1 {
-		cover = guipianFixURL(match[1])
-	}
-	if cover == "" {
-		if match := reGuipianDetailPic2.FindStringSubmatch(body); len(match) > 1 {
-			cover = guipianFixURL(match[1])
-		}
+	var coverAlternatives []string
+	if len(coverCandidates) > 0 {
+		cover = coverCandidates[0]
+		coverAlternatives = append(coverAlternatives, coverCandidates[1:]...)
 	}
 	description := guipianExtractField(body, "content", reGuipianContent)
 	year := guipianExtractField(body, "year", reGuipianYear)
@@ -425,7 +591,8 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (D
 		ID: providerDramaID(sourceGuipian, sourceID), Source: sourceGuipian, SourceID: sourceID,
 		Title: truncate(name, 512), Name: truncate(name, 512),
 		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
-		Cover: cover, CoverURL: cover, ChannelName: "鬼片网", CategoryName: "影视",
+		Cover: cover, CoverURL: cover, ImageURL: coverAlternatives,
+		ChannelName: "鬼片网", CategoryName: "影视", OnlineDate: year,
 		Remark: truncate(status, 64),
 	}
 	tags := make([]string, 0, 8)
@@ -440,6 +607,7 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (D
 	if year != "" {
 		addTag(year + "年")
 	}
+	addTag(guipianKindFromText(body))
 	if area != "" {
 		addTag(area)
 	}

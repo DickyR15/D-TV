@@ -27,6 +27,64 @@ func TestGuipianParseCards(t *testing.T) {
 	}
 }
 
+func TestGuipianPosterCandidatesSupportLazyAndResponsiveArtwork(t *testing.T) {
+	markup := "<div class=\"video-cover\" style=\"background-image:url('//cdn.example.test/background.jpg')\">" +
+		"<img class=\"lazy\" src=\"/assets/placeholder.gif\" data-original=\"/upload/original.jpg?token=1&amp;mode=poster\" " +
+		"data-src=\"/upload/lazy.jpg\" srcset=\"//cdn.example.test/small.jpg 1x, //cdn.example.test/large.jpg 2x\"></div>"
+	got := guipianPosterCandidates(markup)
+	want := []string{
+		guipianSiteBaseURL + "/upload/original.jpg?token=1&mode=poster",
+		guipianSiteBaseURL + "/upload/lazy.jpg",
+		guipianSiteBaseURL + "/assets/placeholder.gif",
+		"https://cdn.example.test/small.jpg",
+		"https://cdn.example.test/large.jpg",
+		"https://cdn.example.test/background.jpg",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("poster candidates = %#v, want %#v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("poster candidate %d = %q, want %q", index, got[index], want[index])
+		}
+	}
+}
+
+func TestGuipianDetailPosterCandidatesPreferDetailArtworkAndOpenGraph(t *testing.T) {
+	body := "<meta property=\"og:image\" content=\"https://cdn.example.test/og-poster.jpg\">" +
+		"<div class=\"detail-img\"><img src=\"/assets/placeholder.gif\" data-src=\"/upload/detail-poster.webp\"></div>" +
+		"<div class=\"recommend-cover\"><img src=\"/upload/other-title.jpg\"></div>"
+	got := guipianDetailPosterCandidates(body)
+	if len(got) < 2 {
+		t.Fatalf("detail poster candidates = %#v", got)
+	}
+	if got[0] != guipianSiteBaseURL+"/upload/detail-poster.webp" {
+		t.Fatalf("detail poster priority = %q", got[0])
+	}
+	if got[len(got)-1] != "https://cdn.example.test/og-poster.jpg" {
+		t.Fatalf("Open Graph poster should be retained as a fallback: %#v", got)
+	}
+}
+
+func TestGuipianCategoryKindIsRetainedForPosterMatching(t *testing.T) {
+	for category, want := range map[string]string{
+		"3": "電影", "31": "電影", "12": "劇集", "18": "劇集", "23": "動漫", "26": "動漫",
+	} {
+		if got := guipianCategoryKind(category); got != want {
+			t.Errorf("category %s kind = %q, want %q", category, got, want)
+		}
+	}
+	if got := bangumiPosterSubjectTypes(nativeDrama{Category: "影视", Tags: []string{"電影"}}); len(got) != 1 || got[0] != 6 {
+		t.Fatalf("film classification did not select movie posters: %#v", got)
+	}
+	if got := bangumiPosterSubjectTypes(nativeDrama{Category: "影视", Tags: []string{"劇集"}}); len(got) != 1 || got[0] != 6 {
+		t.Fatalf("series classification did not select TV posters: %#v", got)
+	}
+	if got := bangumiPosterSubjectTypes(nativeDrama{Category: "影视", Tags: []string{"動漫"}}); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("animation classification did not select anime posters: %#v", got)
+	}
+}
+
 func TestGuipianPlayURLValidation(t *testing.T) {
 	if got := guipianPlayURL("/play/123-1-1.html"); got != guipianSiteBaseURL+"/play/123-1-1.html" {
 		t.Fatalf("unexpected normalized URL: %q", got)

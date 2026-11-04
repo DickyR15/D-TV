@@ -111,7 +111,37 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 		return nativeCoverAddressesFromDrama(fresh), err
 	case sourceGuipian:
 		fresh, _, err := d.fetchGuipianDetail(ctx, id)
-		return nativeCoverAddressesFromDrama(fresh), err
+		if err != nil {
+			return nil, strings.TrimSpace(drama.DoubanID), err
+		}
+		normalized := nativeNormalize(fresh)
+		if normalized.OnlineDate == "" {
+			normalized.OnlineDate = drama.OnlineDate
+		}
+		if normalized.Category == "" {
+			normalized.Category = drama.Category
+		}
+		seenTags := make(map[string]bool, len(normalized.Tags)+len(drama.Tags))
+		for _, tag := range normalized.Tags {
+			seenTags[strings.ToLower(strings.TrimSpace(tag))] = true
+		}
+		for _, tag := range drama.Tags {
+			tag = strings.TrimSpace(tag)
+			key := strings.ToLower(tag)
+			if tag != "" && !seenTags[key] {
+				normalized.Tags = append(normalized.Tags, tag)
+				seenTags[key] = true
+			}
+		}
+		normalized.CoverCandidates = nativeUniqueCoverAddresses(append(
+			normalized.CoverCandidates,
+			append([]string{drama.Cover}, drama.CoverCandidates...)...,
+		)...)
+		addresses := append([]string{}, normalized.CoverCandidates...)
+		if normalized.Cover != "" {
+			addresses = append([]string{normalized.Cover}, addresses...)
+		}
+		return nativeUniqueCoverAddresses(addresses...), strings.TrimSpace(drama.DoubanID), nil
 	case sourceHanxiaoquan:
 		fresh, _, err := d.fetchHanxiaoquanDetail(ctx, id)
 		return nativeCoverAddressesFromDrama(fresh), err
