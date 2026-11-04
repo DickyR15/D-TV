@@ -177,7 +177,7 @@ jobs:
                       limit=65536, byte_range="bytes=0-65535"
                   )
                   preview = seg_body.lstrip()[:24].lower()
-                  error_page = preview.startswith((b"<!doctype html", b"<html", b"{\\"error", b"{\\"code"))
+                  error_page = preview.startswith((b"<!doctype html", b"<html", b'{"error', b'{"code'))
                   ok = (
                       seg_status in (200, 206) and bool(seg_body)
                       and "text/html" not in seg_type.lower()
