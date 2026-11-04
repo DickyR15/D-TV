@@ -58,6 +58,7 @@ void main() {
     expect(restored.detail.warning, '測試警告');
     expect(restored.initialIndex, 1);
     expect(restored.initialPosition, 125.5);
+    expect(restored.authorizedSession, isTrue);
   });
 
   test('mini-player parser rejects the main window and malformed arguments', () {
