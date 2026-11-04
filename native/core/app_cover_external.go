@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -20,26 +19,70 @@ const (
 	bangumiPosterSearchLimit = 20
 )
 
-// Match season-suffixed provider titles to the parent series entry when the
-// candidate has no season suffix; year and ambiguity checks still apply.
-var bangumiPosterSeasonSuffix = regexp.MustCompile(`(?i)(?:第[0-9一二三四五六七八九十百零〇两兩]+季|season[\\s._-]*0*[0-9]+|s0*[0-9]+)package core
-
-import (
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"net/url"
-	"path"
-	"regexp"
-	"strings"
-	"time"
-	"unicode"
-)
-
-)
+// bangumiPosterBaseTitle allows an explicitly season-suffixed source title to
+// match a database entry for the parent series. The caller still enforces
+// exact normalized title, allowed media type, release year and uniqueness.
+func bangumiPosterBaseTitle(value string) string {
+	value = strings.TrimSpace(value)
+	lower := strings.ToLower(value)
+	if index := strings.LastIndex(value, "第"); index >= 0 && strings.HasSuffix(value, "季") {
+		season := strings.TrimSpace(value[index+len("第") : len(value)-len("季")])
+		valid := season != ""
+		for _, character := range season {
+			if !strings.ContainsRune("0123456789一二三四五六七八九十百零〇两兩", character) {
+				valid = false
+				break
+			}
+		}
+		if valid {
+			value = strings.TrimSpace(value[:index])
+			lower = strings.ToLower(value)
+		}
+	}
+	if index := strings.LastIndex(lower, "season"); index >= 0 {
+		season := strings.TrimSpace(value[index+len("season"):])
+		valid := season != ""
+		for _, character := range season {
+			if character < '0' || character > '9' {
+				valid = false
+				break
+			}
+		}
+		if valid {
+			value = strings.TrimSpace(value[:index])
+			lower = strings.ToLower(value)
+		}
+	}
+	if index := strings.LastIndex(lower, "s"); index >= 0 {
+		season := lower[index+1:]
+		valid := season != ""
+		for _, character := range season {
+			if character < '0' || character > '9' {
+				valid = false
+				break
+			}
+		}
+		if valid {
+			value = strings.TrimSpace(value[:index])
+		}
+	}
+	// Some Chinese catalogues write a sequel number without the word "季"
+	// (for example, "這是我的西遊2"). Treat one/two trailing digits as a
+	// season marker only when the preceding character is Han.
+	runes := []rune(strings.TrimSpace(value))
+	digitStart := len(runes)
+	for digitStart > 0 && runes[digitStart-1] >= '0' && runes[digitStart-1] <= '9' {
+		digitStart--
+	}
+	if digitStart > 0 && len(runes)-digitStart > 0 && len(runes)-digitStart <= 2 {
+		prefix := strings.TrimSpace(string(runes[:digitStart]))
+		prefixRunes := []rune(prefix)
+		if len(prefixRunes) > 0 && unicode.Is(unicode.Han, prefixRunes[len(prefixRunes)-1]) {
+			value = prefix
+		}
+	}
+	return strings.TrimSpace(value)
+}
 
 type bangumiPosterSubject struct {
 	ID     int               `json:"id"`
@@ -346,7 +389,7 @@ func bangumiPosterSubjectTypes(drama nativeDrama) []int {
 	switch {
 	case bangumiPosterContainsAny(category, "綜藝", "综艺", "綜藝節目", "综艺节目", "脫口秀", "脱口秀", "真人秀", "實境秀", "真人實境", "真人实境", "variety"):
 		// Bangumi classifies variety programmes under real-world media (type 6).
-		// Search by type 6, then retain exact-title/year checks below.
+		// Exact title/year checks below still prevent unrelated matches.
 		return []int{6}
 	case bangumiPosterContainsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime"):
 		return []int{2}
@@ -358,7 +401,7 @@ func bangumiPosterSubjectTypes(drama nativeDrama) []int {
 }
 
 func normalizeBangumiPosterTitle(value string) string {
-	value = bangumiPosterSeasonSuffix.ReplaceAllString(strings.TrimSpace(value), "")
+	value = bangumiPosterBaseTitle(value)
 	var normalized strings.Builder
 	for _, character := range strings.ToLower(strings.TrimSpace(value)) {
 		if unicode.IsLetter(character) || unicode.IsDigit(character) {
