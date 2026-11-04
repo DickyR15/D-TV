@@ -85,6 +85,7 @@ func newNativeCoverCache(directory string, downloader *Downloader) *nativeCoverC
 		cache.entries[key] = nativeCoverEntry{size: info.Size(), updatedAt: info.ModTime(), usedAt: info.ModTime()}
 		cache.size += info.Size()
 	}
+	cache.loadCoverFailures()
 	cache.prune("")
 	return cache
 }
