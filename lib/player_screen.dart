@@ -134,6 +134,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? _loadingOverlayTimer;
   bool _showLoadingOverlay = false;
   Timer? _errorTimer;
+  bool _suppressVolumePersistence = false;
   Timer? _volumeSaveTimer;
   double? _pendingNonZeroVolume;
   Future<void> _initialVolumeReady = Future<void>.value();
@@ -1905,7 +1906,9 @@ class _PlayerScreenState extends State<PlayerScreen>
           '[Play] open generation=$ticket route=${plan.routeIndex}/${plan.routeCount} session=${playbackDiagnosticId(plan.session)} url=${playbackDiagnosticUrl(plan.url)} headers=${plan.headers.keys.toList()}',
         );
         final openClock = Stopwatch()..start();
-        await _player
+        _suppressVolumePersistence = !_television;
+        try {
+          await _player
             .open(
               Media(
                 plan.url,
@@ -1932,10 +1935,13 @@ class _PlayerScreenState extends State<PlayerScreen>
                 );
               },
             );
-        openMs = openClock.elapsedMilliseconds;
-        if (volumeBeforeOpen != null && !_closed && ticket == _generation) {
-          await _player.setVolume(volumeBeforeOpen);
+          if (volumeBeforeOpen != null && !_closed && ticket == _generation) {
+            await _player.setVolume(volumeBeforeOpen);
+          }
+        } finally {
+          _suppressVolumePersistence = false;
         }
+        openMs = openClock.elapsedMilliseconds;
         if (_closed || ticket != _generation) {
           return;
         }
@@ -2494,8 +2500,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _rememberNonZeroVolume(double value) {
-    if (_television || _closed || !value.isFinite || value <= 0) return;
-    _pendingNonZeroVolume = value.clamp(1.0, 100.0);
+    if (_television ||
+        _closed ||
+        _suppressVolumePersistence ||
+        !value.isFinite ||
+        value <= 0) {
+      return;
+    }
+    _pendingNonZeroVolume = value.clamp(1.0, 100.0).toDouble();
     _volumeSaveTimer?.cancel();
     _volumeSaveTimer = Timer(const Duration(milliseconds: 500), () {
       _volumeSaveTimer = null;

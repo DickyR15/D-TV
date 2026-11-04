@@ -12,7 +12,6 @@ class DesktopWindowState {
     required this.top,
     required this.width,
     required this.height,
-    this.maximized = false,
   });
 
   static const preferencesKey = 'dtv.desktopWindowState.v1';
@@ -21,8 +20,6 @@ class DesktopWindowState {
   final double top;
   final double width;
   final double height;
-  final bool maximized;
-
   Rect get bounds => Rect.fromLTWH(left, top, width, height);
 
   bool get isValid =>
@@ -37,16 +34,12 @@ class DesktopWindowState {
       width <= 16384 &&
       height <= 16384;
 
-  static DesktopWindowState? fromRect(
-    Rect bounds, {
-    bool maximized = false,
-  }) {
+  static DesktopWindowState? fromRect(Rect bounds) {
     final state = DesktopWindowState(
       left: bounds.left,
       top: bounds.top,
       width: bounds.width,
       height: bounds.height,
-      maximized: maximized,
     );
     return state.isValid ? state : null;
   }
@@ -61,7 +54,6 @@ class DesktopWindowState {
         top: (decoded['top'] as num).toDouble(),
         width: (decoded['width'] as num).toDouble(),
         height: (decoded['height'] as num).toDouble(),
-        maximized: decoded['maximized'] == true,
       );
       return state.isValid ? state : null;
     } catch (_) {
@@ -69,21 +61,29 @@ class DesktopWindowState {
     }
   }
 
-  DesktopWindowState copyWith({bool? maximized}) => DesktopWindowState(
-    left: left,
-    top: top,
-    width: width,
-    height: height,
-    maximized: maximized ?? this.maximized,
-  );
-
   String encode() => jsonEncode({
     'left': left,
     'top': top,
     'width': width,
     'height': height,
-    'maximized': maximized,
   });
+}
+
+bool desktopWindowOverlapsDisplay(
+  Rect bounds,
+  Iterable<Rect> displayWorkAreas, {
+  double minimumVisibleWidth = 120,
+  double minimumVisibleHeight = 80,
+}) {
+  for (final workArea in displayWorkAreas) {
+    final overlap = bounds.intersect(workArea);
+    if (!overlap.isEmpty &&
+        overlap.width >= minimumVisibleWidth &&
+        overlap.height >= minimumVisibleHeight) {
+      return true;
+    }
+  }
+  return false;
 }
 
 class ToggleDesktopFullscreenIntent extends Intent {

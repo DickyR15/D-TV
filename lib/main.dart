@@ -8,6 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 import 'desktop_window_state.dart';
@@ -75,6 +76,21 @@ Future<void> main(List<String> args) async {
     }
   }
 
+  if (desktop) {
+    windowManager.waitUntilReadyToShow(
+      const WindowOptions(
+        size: Size(1280, 800),
+        minimumSize: Size(900, 560),
+        center: true,
+        title: 'D TV',
+      ),
+      () async {
+        await windowManager.setMinimumSize(const Size(900, 560));
+        await windowManager.show();
+      },
+    );
+  }
+
   // Draw the first Flutter frame before loading and parsing the OpenCC dictionaries.
   runApp(const AppBootstrap());
   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -103,30 +119,50 @@ class _AppBootstrapState extends State<AppBootstrap>
   SharedPreferences? _desktopPreferences;
   Timer? _desktopWindowSaveTimer;
   bool _restoringDesktopWindow = false;
-  bool? _pendingMaximizedState;
   late final _desktopWindowListener = _DesktopWindowListener(
     onGeometryChanged: _scheduleDesktopWindowSave,
-    onMaximizeChanged: _scheduleDesktopWindowSave,
     onClose: () => unawaited(_saveDesktopWindowState()),
   );
 
   bool get _isDesktopWindow =>
       Platform.isWindows || Platform.isMacOS;
 
-  void _scheduleDesktopWindowSave([bool? maximized]) {
+  void _scheduleDesktopWindowSave() {
     if (!_isDesktopWindow ||
         _desktopPreferences == null ||
         _restoringDesktopWindow) {
       return;
     }
-    _pendingMaximizedState = maximized;
     _desktopWindowSaveTimer?.cancel();
     _desktopWindowSaveTimer = Timer(_desktopWindowSaveDelay, () {
       _desktopWindowSaveTimer = null;
-      unawaited(
-        _saveDesktopWindowState(maximizedOverride: _pendingMaximizedState),
-      );
+      unawaited(_saveDesktopWindowState());
     });
+  }
+
+  Future<bool> _isOnConnectedDisplay(Rect bounds) async {
+    try {
+      final displays = await ScreenRetriever.instance.getAllDisplays();
+      final workAreas = displays.map((display) {
+        final position = display.visiblePosition ?? Offset.zero;
+        final size = display.visibleSize ?? display.size;
+        return Rect.fromLTWH(
+          position.dx,
+          position.dy,
+          size.width,
+          size.height,
+        );
+      });
+      return desktopWindowOverlapsDisplay(bounds, workAreas);
+    } catch (_) {
+      // If display enumeration itself fails, retain saved geometry.
+      return true;
+    }
+  }
+
+  Future<void> _showDefaultDesktopWindow() async {
+    await windowManager.setSize(const Size(1280, 800));
+    await windowManager.center();
   }
 
   Future<void> _restoreDesktopWindowState(
@@ -137,49 +173,45 @@ class _AppBootstrapState extends State<AppBootstrap>
     final saved = DesktopWindowState.tryParse(
       preferences.getString(DesktopWindowState.preferencesKey),
     );
-    if (saved == null) return;
-
     _restoringDesktopWindow = true;
     try {
-      await windowManager.setBounds(saved.bounds);
-      if (saved.maximized) await windowManager.maximize();
+      if (await windowManager.isFullScreen()) {
+        await windowManager.setFullScreen(false);
+      }
+      if (await windowManager.isMaximized()) {
+        await windowManager.unmaximize();
+      }
+      if (saved != null && await _isOnConnectedDisplay(saved.bounds)) {
+        await windowManager.setBounds(saved.bounds);
+      } else {
+        await _showDefaultDesktopWindow();
+      }
     } catch (_) {
-      // Ignore a stale display geometry and keep the platform default window.
+      await _showDefaultDesktopWindow();
     } finally {
       _restoringDesktopWindow = false;
     }
   }
 
-  Future<void> _saveDesktopWindowState({bool? maximizedOverride}) async {
+  Future<void> _saveDesktopWindowState() async {
     final preferences = _desktopPreferences;
     if (!_isDesktopWindow || preferences == null || _restoringDesktopWindow) {
       return;
     }
     try {
       final fullScreen = await windowManager.isFullScreen();
-      final maximized =
-          maximizedOverride ?? await windowManager.isMaximized();
-      var saved = DesktopWindowState.tryParse(
-        preferences.getString(DesktopWindowState.preferencesKey),
-      ) ?? const DesktopWindowState(
-        left: 80,
-        top: 80,
-        width: 1280,
-        height: 800,
+      final maximized = await windowManager.isMaximized();
+      final minimized = await windowManager.isMinimized();
+      if (fullScreen || maximized || minimized) return;
+      final current = DesktopWindowState.fromRect(
+        await windowManager.getBounds(),
       );
-
-      // getBounds() while maximized/full-screen is the monitor bounds, not the
-      // user's normal window size. Keep the last normal geometry in that case.
-      if (!fullScreen && !maximized) {
-        final current = DesktopWindowState.fromRect(
-          await windowManager.getBounds(),
+      if (current != null) {
+        await preferences.setString(
+          DesktopWindowState.preferencesKey,
+          current.encode(),
         );
-        if (current != null) saved = current;
       }
-      await preferences.setString(
-        DesktopWindowState.preferencesKey,
-        saved.copyWith(maximized: maximized).encode(),
-      );
     } catch (_) {
       // Window-state persistence must never interfere with playback or exit.
     }
@@ -376,12 +408,10 @@ class _AppBootstrapState extends State<AppBootstrap>
 class _DesktopWindowListener with WindowListener {
   _DesktopWindowListener({
     required this.onGeometryChanged,
-    required this.onMaximizeChanged,
     required this.onClose,
   });
 
   final VoidCallback onGeometryChanged;
-  final ValueChanged<bool> onMaximizeChanged;
   final VoidCallback onClose;
 
   @override
@@ -391,10 +421,10 @@ class _DesktopWindowListener with WindowListener {
   void onWindowResized() => onGeometryChanged();
 
   @override
-  void onWindowMaximize() => onMaximizeChanged(true);
+  void onWindowMaximize() {}
 
   @override
-  void onWindowUnmaximize() => onMaximizeChanged(false);
+  void onWindowUnmaximize() => onGeometryChanged();
 
   @override
   void onWindowLeaveFullScreen() => onGeometryChanged();

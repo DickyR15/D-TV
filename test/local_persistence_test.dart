@@ -107,6 +107,17 @@ void main() {
     );
   }
 
+  test('player volume persists only non-muted values', () async {
+    final (store, platform) = await create();
+    expect(store.playerVolume, 100);
+    await store.setPlayerVolume(42);
+    expect(store.playerVolume, 42);
+    await store.setPlayerVolume(0);
+    expect(store.playerVolume, 42);
+    final restored = await restart(platform);
+    expect(restored.playerVolume, 42);
+  });
+
   test(
     'backup restoration is one snapshot and never mixes old and new data',
     () async {
