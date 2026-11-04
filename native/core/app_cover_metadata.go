@@ -56,11 +56,11 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nat
 		if err != nil {
 			return nil, drama.DoubanID, err
 		}
-		doubanID := strings.TrimSpace(fresh.DoubanID)
-		if !validDoubanSubjectID(drama.DoubanID) && validDoubanSubjectID(doubanID) {
-			drama.DoubanID = doubanID
-		}
-		return nativeCoverAddressesFromDrama(fresh), drama.DoubanID, nil
+		// The catalogue row can omit Douban ID, release year or the precise
+		// work category. Merge the authoritative detail metadata into the same
+		// drama used by the external matcher before trying Bangumi.
+		addresses := nativeMergeCoverRecoveryMetadata(drama, fresh)
+		return addresses, strings.TrimSpace(drama.DoubanID), nil
 	}
 	if source == sourceGuipian {
 		// Poster recovery must not depend on playlist/episode parsing. A detail
@@ -108,7 +108,7 @@ func nativeMergeCoverRecoveryMetadata(drama *nativeDrama, fresh Drama) []string 
 			drama.OnlineDate = freshYear
 		}
 	}
-	if drama.Category == "" && normalized.Category != "" {
+	if (drama.Category == "" || drama.Category == "影视" || drama.Category == "影視") && normalized.Category != "" {
 		drama.Category = normalized.Category
 	}
 	seenTags := make(map[string]bool, len(drama.Tags)+len(normalized.Tags))
