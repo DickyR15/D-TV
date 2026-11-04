@@ -28,6 +28,7 @@ import 'playback_preloader.dart';
 import 'playback_recovery.dart';
 import 'playback_controls_visibility.dart';
 import 'playback_preferences.dart';
+import 'playback_lifecycle_policy.dart';
 import 'portrait_blur_policy.dart';
 import 'luna_exo_player.dart';
 import 'player_controls.dart';
@@ -133,6 +134,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? _loadingOverlayTimer;
   bool _showLoadingOverlay = false;
   Timer? _errorTimer;
+  Timer? _volumeSaveTimer;
+  double? _pendingNonZeroVolume;
+  Future<void> _initialVolumeReady = Future<void>.value();
   Timer? _pictureInPictureExitTimer;
   Future<void> _operations = Future<void>.value();
   late int _index;
@@ -297,6 +301,14 @@ class _PlayerScreenState extends State<PlayerScreen>
                   logLevel: MPVLogLevel.error,
                 ),
               ));
+    _initialVolumeReady = _television
+        ? Future<void>.value()
+        : _player.setVolume(widget.store.playerVolume);
+    if (!_television) {
+      _subscriptions.add(
+        _player.stream.volume.listen(_rememberNonZeroVolume),
+      );
+    }
     final exoPlayer = _player is LunaExoPlayer;
     DiaryService.add(
       '[Player] backend=${exoPlayer
@@ -729,11 +741,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _applyLifecycleVisibility({bool pauseWhenHidden = true}) {
-    final treatAsVisible = Platform.isWindows
-        ? (AppLifecycleState.resumed == _lifecycleState ||
-              AppLifecycleState.inactive == _lifecycleState)
-        : _lifecycleState == AppLifecycleState.resumed;
-    final visible = treatAsVisible || _pictureInPictureVisible;
+    final visible =
+        playbackLifecycleVisible(_lifecycleState) || _pictureInPictureVisible;
     _foreground = visible;
     _enhancement.setForeground(_foreground);
     _syncDanmaku();
@@ -742,10 +751,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (!visible) _interactions.cancel();
     if (pauseWhenHidden &&
         !visible &&
-        (_lifecycleState == AppLifecycleState.paused ||
-            (!Platform.isWindows &&
-                _lifecycleState == AppLifecycleState.inactive) ||
-            _lifecycleState == AppLifecycleState.hidden)) {
+        playbackLifecycleShouldPause(_lifecycleState)) {
       _playIntent = false;
       unawaited(_player.pause());
       unawaited(_saveProgress(flush: true));
@@ -1617,6 +1623,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         index >= widget.detail.episodes.length) {
       return;
     }
+    await _initialVolumeReady;
+    final volumeBeforeOpen = _television ? null : _player.state.volume;
     final playClock = Stopwatch()..start();
     var cleanupMs = 0;
     var resolveMs = 0;
@@ -1925,6 +1933,9 @@ class _PlayerScreenState extends State<PlayerScreen>
               },
             );
         openMs = openClock.elapsedMilliseconds;
+        if (volumeBeforeOpen != null && !_closed && ticket == _generation) {
+          await _player.setVolume(volumeBeforeOpen);
+        }
         if (_closed || ticket != _generation) {
           return;
         }
@@ -2482,9 +2493,29 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  void _rememberNonZeroVolume(double value) {
+    if (_television || _closed || !value.isFinite || value <= 0) return;
+    _pendingNonZeroVolume = value.clamp(1.0, 100.0);
+    _volumeSaveTimer?.cancel();
+    _volumeSaveTimer = Timer(const Duration(milliseconds: 500), () {
+      _volumeSaveTimer = null;
+      final saved = _pendingNonZeroVolume;
+      _pendingNonZeroVolume = null;
+      if (saved != null && saved > 0) {
+        unawaited(widget.store.setPlayerVolume(saved));
+      }
+    });
+  }
+
   @override
   void dispose() {
     _closed = true;
+    _volumeSaveTimer?.cancel();
+    final pendingVolume = _pendingNonZeroVolume;
+    _pendingNonZeroVolume = null;
+    if (!_television && pendingVolume != null && pendingVolume > 0) {
+      unawaited(widget.store.setPlayerVolume(pendingVolume));
+    }
     if (_desktopMiniPlayerSupported) {
       if (_desktopMiniActive) {
         unawaited(

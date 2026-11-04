@@ -81,7 +81,18 @@ void main() {
       );
       final save = find.byKey(const ValueKey('profile-editor-save'));
       expect(save, findsOneWidget);
-      expect(tester.widget<FilledButton>(save).autofocus, isTrue);
+      expect(tester.widget<FilledButton>(save).autofocus, isFalse);
+      final nameField = tester.widget<TextField>(
+        find.byKey(const ValueKey('profile-editor-name')),
+      );
+      expect(nameField.autofocus, isTrue);
+      expect(nameField.focusNode!.canRequestFocus, isTrue);
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-pin')),
+        ).focusNode!.canRequestFocus,
+        isTrue,
+      );
 
       await tester.enterText(
         find.byKey(const ValueKey('profile-editor-name')),

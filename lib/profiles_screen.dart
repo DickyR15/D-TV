@@ -476,6 +476,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
   late final _name = TextEditingController(text: widget.profile?.name ?? '');
   final _pin = TextEditingController(), _confirm = TextEditingController();
   final _currentPin = TextEditingController();
+  final _nameFocus = FocusNode(debugLabel: 'profile-editor-name');
+  final _currentPinFocus = FocusNode(debugLabel: 'profile-editor-current-pin');
+  final _pinFocus = FocusNode(debugLabel: 'profile-editor-pin');
+  final _confirmPinFocus = FocusNode(debugLabel: 'profile-editor-confirm-pin');
   late final _sources =
       (widget.profile?.sources ??
               widget.store.sources.map((s) => s.id).toList())
@@ -489,7 +493,15 @@ class _ProfileEditorState extends State<ProfileEditor> {
     _pin.dispose();
     _confirm.dispose();
     _currentPin.dispose();
+    _nameFocus.dispose();
+    _currentPinFocus.dispose();
+    _pinFocus.dispose();
+    _confirmPinFocus.dispose();
     super.dispose();
+  }
+
+  void _focusEditorField(FocusNode node) {
+    if (node.canRequestFocus) node.requestFocus();
   }
 
   Future<void> _save() async {
@@ -549,52 +561,86 @@ class _ProfileEditorState extends State<ProfileEditor> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(widget.profile == null ? '新增使用者' : '編輯使用者')),
-    body: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
-        child: ListView(
+    body: FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            TextField(
-              key: const ValueKey('profile-editor-name'),
-              controller: _name,
-              maxLength: 40,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: '使用者名稱'),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(1),
+              child: TextField(
+                key: const ValueKey('profile-editor-name'),
+                controller: _name,
+                focusNode: _nameFocus,
+                autofocus: AppLayout.isTelevision(context),
+                maxLength: 40,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _focusEditorField(
+                  widget.profile?.admin == true && widget.profile?.protected == true
+                      ? _currentPinFocus
+                      : _pinFocus,
+                ),
+                decoration: const InputDecoration(labelText: '使用者名稱'),
+              ),
             ),
             if (widget.profile?.admin == true && widget.profile?.protected == true) ...[
-              TextField(
-                key: const ValueKey('profile-editor-current-pin'),
-                controller: _currentPin,
-                obscureText: true,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: '目前管理員密碼',
-                  helperText: '變更管理員密碼前，請先輸入目前密碼',
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(2),
+                child: TextField(
+                  key: const ValueKey('profile-editor-current-pin'),
+                  controller: _currentPin,
+                  focusNode: _currentPinFocus,
+                  obscureText: true,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => _focusEditorField(_pinFocus),
+                  decoration: const InputDecoration(
+                    labelText: '目前管理員密碼',
+                    helperText: '變更管理員密碼前，請先輸入目前密碼',
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
             ],
-            TextField(
-              key: const ValueKey('profile-editor-pin'),
-              controller: _pin,
-              obscureText: true,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: '設定密碼（至少 6 位）',
-                helperText: '留空保留原密碼',
+            FocusTraversalOrder(
+              order: NumericFocusOrder(
+                widget.profile?.admin == true && widget.profile?.protected == true
+                    ? 3
+                    : 2,
+              ),
+              child: TextField(
+                key: const ValueKey('profile-editor-pin'),
+                controller: _pin,
+                focusNode: _pinFocus,
+                obscureText: true,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _focusEditorField(_confirmPinFocus),
+                decoration: const InputDecoration(
+                  labelText: '設定密碼（至少 6 位）',
+                  helperText: '留空保留原密碼',
+                ),
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              key: const ValueKey('profile-editor-confirm-pin'),
-              controller: _confirm,
-              obscureText: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) {
-                if (!_busy) _save();
-              },
-              decoration: const InputDecoration(labelText: '再次輸入密碼'),
+            FocusTraversalOrder(
+              order: NumericFocusOrder(
+                widget.profile?.admin == true && widget.profile?.protected == true
+                    ? 4
+                    : 3,
+              ),
+              child: TextField(
+                key: const ValueKey('profile-editor-confirm-pin'),
+                controller: _confirm,
+                focusNode: _confirmPinFocus,
+                obscureText: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) {
+                  if (!_busy) _save();
+                },
+                decoration: const InputDecoration(labelText: '再次輸入密碼'),
+              ),
             ),
             if (widget.profile?.protected == true &&
                 widget.profile?.admin != true)
@@ -642,7 +688,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
             const SizedBox(height: 24),
             FilledButton(
               key: const ValueKey('profile-editor-save'),
-              autofocus: true,
+              autofocus: false,
               onPressed: _busy ? null : _save,
               child: Text(_busy ? '正在儲存…' : '儲存'),
             ),
@@ -652,6 +698,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
                 child: const Text('刪除使用者'),
               ),
           ],
+          ),
         ),
       ),
     ),

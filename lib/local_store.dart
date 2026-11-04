@@ -142,6 +142,19 @@ class LocalStore extends ChangeNotifier {
   bool? _bool(String key) => _snapshot?.getBool(key);
   String _key(String key, [String? id]) =>
       (id ?? _current) == 'default' ? key : 'profile.${id ?? _current}.$key';
+  double get playerVolume {
+    final value = preferences.getDouble('playerVolume') ?? 100.0;
+    if (!value.isFinite || value <= 0) return 100.0;
+    return value.clamp(1.0, 100.0);
+  }
+
+  Future<void> setPlayerVolume(double value) {
+    if (!value.isFinite || value <= 0) return Future.value();
+    return _queue(() async {
+      await preferences.setDouble('playerVolume', value.clamp(1.0, 100.0));
+    });
+  }
+
   String? get configurationError => _configurationError;
   List<LocalProfile> get profiles => List.unmodifiable(_profiles);
   LocalProfile get profile =>
