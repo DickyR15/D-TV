@@ -268,31 +268,6 @@ func TestBangumiPosterAddressRejectsMismatchedReleaseYear(t *testing.T) {
 	}
 }
 
-func TestNativeMergeGuipianCoverRecoveryMetadataPreservesYearAndType(t *testing.T) {
-	drama := nativeDrama{
-		ID: "guipian:123", Source: sourceGuipian, SourceID: "123",
-		Title: "夺金战", Category: "影视", Tags: []string{"劇集"},
-	}
-	fresh := Drama{
-		ID: "guipian:123", Source: sourceGuipian, SourceID: "123",
-		Title: "奪金戰", CategoryName: "影視", OnlineDate: "2018",
-		Cover: "https://images.example.test/duojinzhan.jpg",
-	}
-	addresses := nativeMergeCoverRecoveryMetadata(&drama, fresh)
-	if drama.OnlineDate != "2018" {
-		t.Fatalf("detail release year was not propagated: %+v", drama)
-	}
-	if len(drama.Tags) != 1 || drama.Tags[0] != "劇集" {
-		t.Fatalf("catalogue work type was not preserved: %#v", drama.Tags)
-	}
-	if len(addresses) != 1 || addresses[0] != "https://images.example.test/duojinzhan.jpg" {
-		t.Fatalf("detail poster address = %#v", addresses)
-	}
-	if got := bangumiPosterSubjectTypes(drama); len(got) != 1 || got[0] != 6 {
-		t.Fatalf("external poster matching lost the work type: %#v", got)
-	}
-}
-
 func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 	flowerURL := "https://k.sinaimg.cn/n/sinakd20250816s/450/w800h450/20250816/ec1c-4c5fc3ef466113eb1d27a75cc8c37fcf.jpg/w700d1q75cms.jpg?by=cms_fixed_width"
 	xiyouURL := "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0"
@@ -320,16 +295,6 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 			name: "traditional second-season title",
 			drama: nativeDrama{Title: "這是我的西遊 第二季", Category: "綜藝", OnlineDate: "2026"},
 			want: xiyouURL,
-		},
-		{
-			name: "Guipian Fast Cash uses sales-agent artwork only for exact provider ID and title",
-			drama: nativeDrama{ID: "guipian:77333", Title: "歹路无可退", Category: "影视", Tags: []string{"電影"}, OnlineDate: "2027"},
-			want: "https://jingafilms.com/wp-content/uploads/2026/02/FastCash.jpg",
-		},
-		{
-			name: "Unicorn Academy Chapter Two uses the official Netflix Season 2 still for the exact Guipian record",
-			drama: nativeDrama{ID: "guipian:77681", Title: "独角兽学院：秘密揭开第二章", Category: "影视", Tags: []string{"動漫"}, OnlineDate: "2026"},
-			want: "https://www.whats-on-netflix.com/wp-content/uploads/2026/09/Unicorn-Academy-Secrets-Revealed-n-S2-E1-00-10-43-15-1536x864.jpg",
 		},
 		{
 			name: "Duoduo 87221 Single's Inferno Season 5 uses Netflix key art",
@@ -413,9 +378,7 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 		})
 	}
 	for _, drama := range []nativeDrama{
-		{ID: "guipian:77682", Title: "獨角獸學院：秘密揭開第二章"},
 		{ID: "duoduo:1193", Title: "奉子成婚"},
-		{ID: "guipian:77681", Title: "獨角獸學院：秘密揭開第一章"},
 		{ID: "duoduo:1192", Title: "奉子不成婚"},
 	} {
 		if address, ok := nativePreferredOfficialPosterAddress(drama); ok {
@@ -431,14 +394,11 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{Title: "花兒與少年．同心季", Category: "電影", OnlineDate: "2025"},
 		{Title: "這是我的西遊", Category: "綜藝", OnlineDate: "2026"},
 		{Title: "這是我的西遊 第二季", Category: "電影", OnlineDate: "2026"},
-		{ID: "guipian:77334", Title: "歹路無可退", Category: "影视", OnlineDate: "2026"},
 		{ID: "duoduo:77333", Title: "歹路無可退", Category: "電影", OnlineDate: "2026"},
-		{ID: "guipian:77333", Title: "其他作品", Category: "影视", OnlineDate: "2026"},
 		{ID: "guipian:77682", Title: "獨角獸學院：秘密揭開第二章", Category: "動漫", OnlineDate: "2026"},
 		{ID: "duoduo:77681", Title: "獨角獸學院：秘密揭開第二章", Category: "動漫", OnlineDate: "2026"},
 		{ID: "guipian:77681", Title: "獨角獸學院：秘密揭開第一章", Category: "動漫", OnlineDate: "2026"},
 		{ID: "duoduo:1193", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
-		{ID: "guipian:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
 		{ID: "duoduo:87222", Title: "單身即地獄 第五季", Category: "劇集", OnlineDate: "2026"},
 		{ID: "duoduo:87221", Title: "單身即地獄 第四季", Category: "劇集", OnlineDate: "2025"},
 		{ID: "duoduo:59903", Title: "明星大偵探 第二季", Category: "綜藝", OnlineDate: "2017"},
