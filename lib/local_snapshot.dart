@@ -6,11 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'local_files.dart';
 
 class LocalSnapshot {
-  LocalSnapshot(this.preferences) {
+  LocalSnapshot(this.preferences) : fileStore = null {
     reloadValues();
   }
 
-  LocalSnapshot.empty(this.preferences);
+  LocalSnapshot.empty(this.preferences) : fileStore = null;
 
   LocalSnapshot._fileBacked(
     this.preferences,
@@ -362,12 +362,6 @@ class LocalSnapshot {
   }
 
   LocalSnapshot._emptyForRead(this.preferences, this.fileStore);
-
-  LocalSnapshot._fileBacked(
-    this.preferences,
-    this.fileStore,
-    Map<String, Object> values,
-  ) : _values = Map.of(values);
 
   LocalSnapshot.emptyFileBacked(this.preferences, this.fileStore);
 

@@ -1689,7 +1689,7 @@ class LocalStore extends ChangeNotifier {
       'values': _snapshot?.values ?? {
         for (final key in preferences.getKeys())
           if (LocalSnapshot.owns(key) || key == LocalSnapshot.storageKey)
-            key: preferences.get(key),
+            key: preferences.get(key)!,
       },
       if (files != null) 'files': await files.dump(),
     });
