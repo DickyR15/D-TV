@@ -37,12 +37,17 @@ class LocalStore extends ChangeNotifier {
   LocalStore(
     this.preferences, {
     Future<String> Function(String, String)? pinHasher,
-  }) : _pinHasher = pinHasher ?? hashProfilePin {
+    bool assumeAuthenticated = false,
+  }) : _pinHasher = pinHasher ?? hashProfilePin,
+       _assumeAuthenticated = assumeAuthenticated {
     _initialize();
   }
 
   final SharedPreferences preferences;
   final Future<String> Function(String pin, String salt) _pinHasher;
+  // Only a player window created by an already-unlocked app session may use
+  // this. Profile and per-source permissions are still loaded and enforced.
+  final bool _assumeAuthenticated;
   LocalSnapshot? _snapshot;
   LanDocument? _lanDocumentCache;
   int _lanRevision = 0;
@@ -85,7 +90,7 @@ class LocalStore extends ChangeNotifier {
         _current = _profiles.firstWhere((profile) => profile.admin).id;
       }
       _configurationError = null;
-      _locked = forceLogin && profile.protected;
+      _locked = !_assumeAuthenticated && forceLogin && profile.protected;
       _loadSourceSwitches();
       _loadLibrary();
       _loadSeriesCandidates();
@@ -1460,7 +1465,7 @@ class LocalStore extends ChangeNotifier {
     _profiles = profiles;
     _current = profiles.firstWhere((profile) => profile.admin).id;
     _configurationError = null;
-    _locked = forceLogin && profile.protected;
+    _locked = !_assumeAuthenticated && forceLogin && profile.protected;
     _loadSourceSwitches();
     _loadLibrary();
     _loadSeriesCandidates();
@@ -1717,7 +1722,7 @@ class LocalStore extends ChangeNotifier {
     _profiles = profiles;
     _current = profiles.firstWhere((profile) => profile.admin).id;
     _configurationError = null;
-    _locked = forceLogin && profile.protected;
+    _locked = !_assumeAuthenticated && forceLogin && profile.protected;
     _loadSourceSwitches();
     _loadLibrary();
     _loadSeriesCandidates();
