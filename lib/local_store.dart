@@ -509,8 +509,16 @@ class LocalStore extends ChangeNotifier {
 
   bool isFavorite(String id) =>
       _favorites[id] != null && allowsSource(_favorites[id]!.source);
-  FollowState? following(String id) =>
-      isFavorite(id) ? _followStates[id] : null;
+  FollowState? following(String id) {
+    if (!isFavorite(id)) return null;
+    final state = _followStates[id];
+    final watched = _history[id];
+    // Playback updates the watch-history file only. Derive the display status
+    // from that record instead of rewriting a separate follow-state file.
+    return state != null && watched != null
+        ? state.afterPlayback(watched)
+        : state;
+  }
   List<Drama> seriesDramasFor(Drama anchor) {
     if (!allowsSource(SourceSite.hongguo.id) ||
         anchor.source != SourceSite.hongguo.id) {
@@ -958,25 +966,10 @@ class LocalStore extends ChangeNotifier {
       final entries = Map.of(_history)..[entry.drama.id] = current;
       final sorted = entries.values.toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-      final following = _followStates[entry.drama.id];
-      final states = Map.of(_followStates);
-      final favorites = Map.of(_favorites);
-      if (following != null) {
-        states[entry.drama.id] = following.afterPlayback(current);
-        favorites[entry.drama.id] = favorites[entry.drama.id]!.merge(
-          current.drama,
-        );
-      }
       await _commit({
         _key('history'): jsonEncode(
           sorted.take(300).map((entry) => entry.toJson()).toList(),
         ),
-        if (following != null) ...{
-          _key('followStates'): _encodeFollowStates(states),
-          _key('favorites'): jsonEncode(
-            favorites.values.map((entry) => entry.toJson()).toList(),
-          ),
-        },
       }, syncUrgent: false);
       _loadLibrary();
       _notify();

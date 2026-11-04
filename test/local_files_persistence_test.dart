@@ -86,19 +86,32 @@ void main() {
     }
 
     final favoritesBefore = await favoritesFile.readAsString();
+    final followStatesFile = File(
+      path.join(directory.path, 'users', 'default', 'followStates.json'),
+    );
+    final followStatesBefore = await followStatesFile.readAsString();
     final settingsBefore = await userSettingsFile.readAsString();
     final historyBefore = await historyFile.readAsString();
 
-    // This title is not favourited, so playback must not rewrite favourite
-    // data or the user's settings file.
+    // Playback of an already-favourited drama also changes only watch history.
     await store.saveWatch(
-      entry(watched, episode: 2, position: 48),
+      entry(favorite, episode: 2, position: 48),
     );
-
     expect(await favoritesFile.readAsString(), favoritesBefore);
+    expect(await followStatesFile.readAsString(), followStatesBefore);
     expect(await userSettingsFile.readAsString(), settingsBefore);
     expect(await historyFile.readAsString(), isNot(historyBefore));
-    expect(store.watched(watched.id)?.position, 48);
+    expect(store.following(favorite.id)?.status.name, 'watching');
+
+    final historyAfterFavoritePlayback = await historyFile.readAsString();
+    await store.saveWatch(
+      entry(watched, episode: 2, position: 56),
+    );
+    expect(await favoritesFile.readAsString(), favoritesBefore);
+    expect(await followStatesFile.readAsString(), followStatesBefore);
+    expect(await userSettingsFile.readAsString(), settingsBefore);
+    expect(await historyFile.readAsString(), isNot(historyAfterFavoritePlayback));
+    expect(store.watched(watched.id)?.position, 56);
   });
 
   test('a damaged history file is quarantined without locking other categories', () async {

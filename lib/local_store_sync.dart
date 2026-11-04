@@ -111,9 +111,12 @@ extension LocalStoreSync on LocalStore {
       jsonDecode(values[_key('followStates')] as String? ?? '{}'),
     );
     for (final drama in favorites.values) {
-      states[drama.id] = rawStates[drama.id] == null
+      final savedState = rawStates[drama.id] == null
           ? FollowState.initial(drama, history[drama.id])
           : FollowState.fromJson(lanMap(rawStates[drama.id]));
+      states[drama.id] = history[drama.id] == null
+          ? savedState
+          : savedState.afterPlayback(history[drama.id]!);
     }
     document.reconcile(
       previous: _favorites,
