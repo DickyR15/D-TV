@@ -92,7 +92,10 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	// Refresh/check provider-native detail metadata before consulting an
 	// external match. This protects provider priority even after a restart
 	// when only an external fallback was persisted.
-	providerAddress, repairedExternal, repairErr := cache.repair(ctx, drama, force, strings.TrimSpace(drama.FallbackCover) == "" && cachedExternal == "")
+	// Revalidate any persisted external fallback after provider posters have
+	// failed. A previously cached URL may have expired or been removed; keeping
+	// it must not suppress a fresh metadata lookup.
+	providerAddress, repairedExternal, repairErr := cache.repair(ctx, drama, force, true)
 	if providerAddress != "" && providerAddress != primaryAddress {
 		path, err := cache.loadAlternativeAddress(
 			ctx, drama, providerAddress,
