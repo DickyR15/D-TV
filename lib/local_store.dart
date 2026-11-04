@@ -1,10 +1,14 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'local_profiles.dart';
+import 'local_files.dart';
 import 'local_snapshot.dart';
 import 'models.dart';
 import 'playback_preferences.dart';
@@ -39,12 +43,118 @@ class LocalStore extends ChangeNotifier {
     Future<String> Function(String, String)? pinHasher,
     bool assumeAuthenticated = false,
   }) : _pinHasher = pinHasher ?? hashProfilePin,
-       _assumeAuthenticated = assumeAuthenticated {
+       _assumeAuthenticated = assumeAuthenticated,
+       _fileStore = null {
     _initialize();
+  }
+
+  LocalStore._fileBacked(
+    this.preferences,
+    this._pinHasher,
+    this._assumeAuthenticated,
+    this._fileStore,
+    LocalSnapshot snapshot,
+  ) : _snapshot = snapshot {
+    _initialize(snapshot: snapshot);
+  }
+
+  static Future<LocalStore> open(
+    SharedPreferences preferences, {
+    Directory? storageDirectory,
+    Future<String> Function(String, String)? pinHasher,
+    bool assumeAuthenticated = false,
+  }) async {
+    final directory = storageDirectory ??
+        Directory(
+          path.join(
+            (await getApplicationSupportDirectory()).path,
+            'D TV',
+            'store',
+          ),
+        );
+    final files = LocalFiles(directory);
+    try {
+      final snapshot = await LocalSnapshot.open(preferences, files);
+      // Move the two auxiliary per-user caches from their legacy preference
+      // keys into the same per-user file store before deleting those keys.
+      final ids = <String>{'default'};
+      final rawProfiles = snapshot.getString('profiles');
+      if (rawProfiles != null) {
+        final rows = jsonDecode(rawProfiles);
+        if (rows is List) {
+          for (final row in rows) {
+            if (row is Map && row['id'] is String) {
+              ids.add(row['id'] as String);
+            }
+          }
+        }
+      }
+      final migrated = snapshot.values;
+      var auxiliaryChanged = false;
+      for (final id in ids) {
+        final seriesPreference = preferences.getString('seriesCandidates.$id');
+        final seriesKey = id == 'default'
+            ? 'seriesCandidates'
+            : 'profile.$id.seriesCandidates';
+        if (seriesPreference != null && !migrated.containsKey(seriesKey)) {
+          migrated[seriesKey] = seriesPreference;
+          auxiliaryChanged = true;
+        }
+        final checksPreference = preferences.getString('followChecks.$id');
+        final checksKey = id == 'default'
+            ? 'followChecks'
+            : 'profile.$id.followChecks';
+        if (checksPreference != null && !migrated.containsKey(checksKey)) {
+          migrated[checksKey] = checksPreference;
+          auxiliaryChanged = true;
+        }
+      }
+      try {
+        if (auxiliaryChanged) await snapshot.commit(migrated);
+        for (final key in preferences.getKeys().toList()) {
+          if (key.startsWith('seriesCandidates.') ||
+              key.startsWith('followChecks.')) {
+            await preferences.remove(key);
+          }
+        }
+      } catch (_) {
+        // Keep the legacy keys if their copy could not be written. The
+        // file-backed getters below use them as a read-only fallback.
+      }
+      return LocalStore._fileBacked(
+        preferences,
+        pinHasher ?? hashProfilePin,
+        assumeAuthenticated,
+        files,
+        snapshot,
+      );
+    } catch (_) {
+      // A failed first-time migration leaves the old SharedPreferences
+      // snapshot untouched, so keep the app usable from that source.
+      if (!await files.exists()) {
+        return LocalStore(
+          preferences,
+          pinHasher: pinHasher,
+          assumeAuthenticated: assumeAuthenticated,
+        );
+      }
+      // If the users index itself is damaged and no backup is readable, keep
+      // access locked. A validated settings backup can atomically rebuild it.
+      final store = LocalStore._fileBacked(
+        preferences,
+        pinHasher ?? hashProfilePin,
+        assumeAuthenticated,
+        files,
+        LocalSnapshot.emptyFileBacked(preferences, files),
+      );
+      store._block('本機使用者索引損毀，原始檔案已保留；請從備份恢復使用者與設定。');
+      return store;
+    }
   }
 
   final SharedPreferences preferences;
   final Future<String> Function(String pin, String salt) _pinHasher;
+  final LocalFiles? _fileStore;
   // Only a player window created by an already-unlocked app session may use
   // this. Profile and per-source permissions are still loaded and enforced.
   final bool _assumeAuthenticated;
@@ -71,9 +181,9 @@ class LocalStore extends ChangeNotifier {
   int _sourceAccessEpoch = 0;
   DateTime _retryAfter = DateTime(2000);
 
-  void _initialize() {
+  void _initialize({LocalSnapshot? snapshot}) {
     try {
-      _snapshot = LocalSnapshot(preferences);
+      _snapshot = snapshot ?? LocalSnapshot(preferences);
       final raw = _snapshot!.getString('profiles');
       if (raw == null &&
           (_snapshot!.getString('activeProfile') != null ||
@@ -303,10 +413,22 @@ class LocalStore extends ChangeNotifier {
   String _seriesKey([String? id]) => 'seriesCandidates.${id ?? _current}';
   String _followChecksKey([String? id]) => 'followChecks.${id ?? _current}';
 
+  String? _seriesCandidatesRaw([String? id]) {
+    if (_fileStore != null) {
+      return _string(_key('seriesCandidates', id)) ??
+          preferences.getString(_seriesKey(id));
+    }
+    return preferences.getString(_seriesKey(id)) ??
+        _string(_key('seriesCandidates', id));
+  }
+
   Map<String, FollowCheck> get followChecks {
     try {
-      final data =
-          jsonDecode(preferences.getString(_followChecksKey()) ?? '{}') as Map;
+      final raw = _fileStore != null
+          ? _string(_key('followChecks')) ??
+              preferences.getString(_followChecksKey())
+          : preferences.getString(_followChecksKey());
+      final data = jsonDecode(raw ?? '{}') as Map;
       return {
         for (final entry in data.entries)
           entry.key as String: FollowCheck.fromJson(entry.value),
@@ -321,22 +443,22 @@ class LocalStore extends ChangeNotifier {
     required int epoch,
   }) => _queue(() async {
     if (locked || epoch != _epoch) return;
-    await preferences.setString(
-      _followChecksKey(),
-      jsonEncode({
-        for (final entry in checks.entries)
-          if (_favorites.containsKey(entry.key))
-            entry.key: entry.value.toJson(),
-      }),
-    );
+    final value = jsonEncode({
+      for (final entry in checks.entries)
+        if (_favorites.containsKey(entry.key))
+          entry.key: entry.value.toJson(),
+    });
+    if (_fileStore != null) {
+      await _commit({_key('followChecks'): value}, trackSync: false);
+    } else {
+      await preferences.setString(_followChecksKey(), value);
+    }
   });
 
   void _loadSeriesCandidates() {
     _seriesCandidates.clear();
     if (_configurationError != null) return;
-    for (final row in readJsonList(
-      preferences.getString(_seriesKey()) ?? _string(_key('seriesCandidates')),
-    )) {
+    for (final row in readJsonList(_seriesCandidatesRaw())) {
       try {
         final drama = Drama.fromJson(row);
         if (drama.source == SourceSite.hongguo.id) {
@@ -347,7 +469,7 @@ class LocalStore extends ChangeNotifier {
   }
 
   Future<void> _moveSeriesCandidates() async {
-    if (_configurationError != null) return;
+    if (_configurationError != null || _fileStore != null) return;
     final legacy = {
       for (final profile in _profiles)
         profile.id: ?_string(_key('seriesCandidates', profile.id)),
@@ -660,7 +782,7 @@ class LocalStore extends ChangeNotifier {
     );
     values.putIfAbsent('activeProfile', () => _current);
     try {
-      await snapshot.commit(values);
+      await snapshot.commit(values, replace: replace);
       if (trackSync &&
           !replace &&
           {...changes.keys, ...remove}.any(
@@ -1059,11 +1181,16 @@ class LocalStore extends ChangeNotifier {
       if (statesJson != _encodeFollowStates(_followStates)) {
         changes[_key('followStates')] = statesJson;
       }
+      final currentSeriesCandidates = _seriesCandidatesRaw();
       final seriesChanged =
           seriesCandidateJson != null &&
-          seriesCandidateJson != preferences.getString(_seriesKey());
+          seriesCandidateJson != currentSeriesCandidates;
       if (seriesChanged) {
-        await preferences.setString(_seriesKey(), seriesCandidateJson);
+        if (_fileStore != null) {
+          changes[_key('seriesCandidates')] = seriesCandidateJson;
+        } else {
+          await preferences.setString(_seriesKey(), seriesCandidateJson);
+        }
         _seriesCandidates
           ..clear()
           ..addEntries(
@@ -1251,8 +1378,13 @@ class LocalStore extends ChangeNotifier {
               _string(_key('followStates', profile.id)) ?? '{}',
             ),
             'seriesCandidates': readJsonList(
-              preferences.getString(_seriesKey(profile.id)) ??
-                  _string(_key('seriesCandidates', profile.id)),
+              _seriesCandidatesRaw(profile.id),
+            ),
+            'followChecks': jsonDecode(
+              (_fileStore != null
+                      ? _string(_key('followChecks', profile.id))
+                      : preferences.getString(_followChecksKey(profile.id))) ??
+                  '{}',
             ),
             'mediaHistory': jsonDecode(
               _string(_key('mediaHistory', profile.id)) ?? '{}',
@@ -1451,6 +1583,12 @@ class LocalStore extends ChangeNotifier {
         _key('mediaHistory', profile.id): jsonEncode(
           library['mediaHistory'] ?? {},
         ),
+        _key('seriesCandidates', profile.id): jsonEncode(
+          library['seriesCandidates'] ?? [],
+        ),
+        _key('followChecks', profile.id): jsonEncode(
+          library['followChecks'] ?? {},
+        ),
         _key('source', profile.id): library['source'] as String,
         _key('hideVip', profile.id): library['hideVip'] as bool,
         _key('playback', profile.id): jsonEncode(library['playback'] ?? {}),
@@ -1470,13 +1608,22 @@ class LocalStore extends ChangeNotifier {
     }
     await _commit(values, replace: true);
     for (final key in preferences.getKeys().toList()) {
-      if (key.startsWith('seriesCandidates.')) await preferences.remove(key);
+      if (key.startsWith('seriesCandidates.') ||
+          key.startsWith('followChecks.')) {
+        await preferences.remove(key);
+      }
     }
-    for (final profile in profiles) {
-      await preferences.setString(
-        _seriesKey(profile.id),
-        jsonEncode((libraries[profile.id] as Map)['seriesCandidates'] ?? []),
-      );
+    if (_fileStore == null) {
+      for (final profile in profiles) {
+        await preferences.setString(
+          _seriesKey(profile.id),
+          jsonEncode((libraries[profile.id] as Map)['seriesCandidates'] ?? []),
+        );
+        await preferences.setString(
+          _followChecksKey(profile.id),
+          jsonEncode((libraries[profile.id] as Map)['followChecks'] ?? {}),
+        );
+      }
     }
     _profiles = profiles;
     _current = profiles.firstWhere((profile) => profile.admin).id;
@@ -1500,17 +1647,17 @@ class LocalStore extends ChangeNotifier {
         final data = validateBackup(content);
         LocalProfile? originalAdmin;
         try {
+          final activeProfiles = _string('profiles');
           final raw = preferences.getString(LocalSnapshot.storageKey);
-          final values = raw == null
+          final legacyValues = raw == null
               ? null
               : (jsonDecode(raw) as Map)['values'] as Map;
-          final records =
-              jsonDecode(
-                    (values?['profiles'] as String?) ??
-                        preferences.getString('profiles') ??
-                        '[]',
-                  )
-                  as List;
+          final records = jsonDecode(
+            activeProfiles ??
+                (legacyValues?['profiles'] as String?) ??
+                preferences.getString('profiles') ??
+                '[]',
+          ) as List;
           for (final row in records) {
             if (row is Map && row['admin'] == true) {
               originalAdmin = LocalProfile.fromJson(
@@ -1527,20 +1674,24 @@ class LocalStore extends ChangeNotifier {
             : backupAdmin;
         if (!verifier.protected) throw StateError('無法驗證管理員身份，請使用包含管理員密碼的備份恢復');
         await _checkPin(verifier, pin);
-        _snapshot ??= LocalSnapshot.empty(preferences);
+        _snapshot ??= _fileStore == null
+            ? LocalSnapshot.empty(preferences)
+            : LocalSnapshot.emptyFileBacked(preferences, _fileStore!);
         await _installBackup(data);
       });
 
-  String exportRecoveryData() {
+  Future<String> exportRecoveryData() async {
     if (_configurationError == null) throw StateError('請從設定中匯出備份');
+    final files = _fileStore;
     return jsonEncode({
       'app': 'zhenguojian',
       'recovery': true,
-      'values': {
+      'values': _snapshot?.values ?? {
         for (final key in preferences.getKeys())
           if (LocalSnapshot.owns(key) || key == LocalSnapshot.storageKey)
             key: preferences.get(key),
       },
+      if (files != null) 'files': await files.dump(),
     });
   }
 
@@ -1551,7 +1702,16 @@ class LocalStore extends ChangeNotifier {
     final previousId = _current;
     final previousLocked = locked;
     await preferences.reload();
-    _initialize();
+    if (_fileStore != null) {
+      try {
+        final snapshot = await LocalSnapshot.open(preferences, _fileStore!);
+        _initialize(snapshot: snapshot);
+      } catch (_) {
+        _block('本機使用者索引損毀，原始檔案已保留；請從備份恢復使用者與設定。');
+      }
+    } else {
+      _initialize();
+    }
     if (_configurationError == null &&
         previousProfiles == _string('profiles') &&
         previousId == _current) {

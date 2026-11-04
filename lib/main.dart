@@ -326,10 +326,11 @@ class _AppBootstrapState extends State<AppBootstrap>
       final accents = await AppDevice.systemAccentColors();
       unawaited(_logStartupRendering());
       await repository.initialize();
+      final localStore = await LocalStore.open(preferences);
       if (mounted) {
         setState(() {
           systemAccentColors = accents;
-          store = LocalStore(preferences);
+          store = localStore;
           repository.access = store;
           MediaLibrary.attach(repository, store!);
           LanController.current?.dispose();

@@ -81,7 +81,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       if (reload) {
         await widget.store.reload();
       } else if (export) {
-        final recoveryData = widget.store.exportRecoveryData();
+        final recoveryData = await widget.store.exportRecoveryData();
         if (Platform.isAndroid) {
           // Android TV images may not include a document-picker activity.
           // Export directly through MediaStore, matching the normal settings backup.
