@@ -230,6 +230,181 @@ func validDoubanPosterAddress(raw string) string {
 	}
 }
 
+// posterTitleVariants adds only conservative, title-like alternatives. It
+// does not accept fuzzy similarity: every external candidate must still equal
+// one of these normalized variants exactly.
+func posterTitleVariants(value string) []string {
+	value = strings.TrimSpace(value)
+	withoutYear := value
+	for _, pair := range [][2]string{{"(", ")"}, {"（", "）"}, {"[", "]"}, {"【", "】"}} {
+		if !strings.HasSuffix(withoutYear, pair[1]) {
+			continue
+		}
+		index := strings.LastIndex(withoutYear, pair[0])
+		if index < 0 {
+			continue
+		}
+		suffix := strings.TrimSpace(withoutYear[index+len(pair[0]) : len(withoutYear)-len(pair[1])])
+		if len(suffix) == 4 && bangumiPosterYear(suffix) != "" {
+			withoutYear = strings.TrimSpace(withoutYear[:index])
+			break
+		}
+	}
+	candidates := []string{value, bangumiPosterBaseTitle(value), withoutYear}
+	for _, separator := range []string{" / ", "／", "｜", " | "} {
+		if strings.Contains(value, separator) {
+			for _, part := range strings.Split(value, separator) {
+				candidates = append(candidates, strings.TrimSpace(part))
+			}
+		}
+	}
+	seen := map[string]bool{}
+	var result []string
+	for _, candidate := range candidates {
+		normalized := normalizeBangumiPosterTitle(candidate)
+		if normalized == "" || len([]rune(normalized)) < 2 || seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		result = append(result, strings.TrimSpace(candidate))
+		if len(result) >= 4 {
+			break
+		}
+	}
+	return result
+}
+
+func nativePosterTitleMatches(sourceTitle string, candidates ...string) bool {
+	wanted := map[string]bool{}
+	for _, variant := range posterTitleVariants(sourceTitle) {
+		wanted[normalizeBangumiPosterTitle(variant)] = true
+	}
+	for _, candidate := range candidates {
+		if normalized := normalizeBangumiPosterTitle(candidate); normalized != "" && wanted[normalized] {
+			return true
+		}
+	}
+	return false
+}
+
+func nativePosterTypeCompatible(drama nativeDrama, kind string) bool {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if kind != "movie" && kind != "tv" && kind != "tv_show" && kind != "tv series" {
+		return false
+	}
+	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
+	isMovie := bangumiPosterContainsAny(category, "電影", "电影", "movie", "film")
+	isTV := bangumiPosterContainsAny(category, "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "韓劇", "韩剧", "日劇", "日剧", "美劇", "美剧", "短劇", "短剧", "series", "tv")
+	isAnime := bangumiPosterContainsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
+	isVariety := bangumiPosterContainsAny(category, "綜藝", "综艺", "真人秀", "實境秀", "真人實境", "variety")
+	if isAnime || isVariety || (!isMovie && !isTV) {
+		return true
+	}
+	if isMovie {
+		return kind == "movie"
+	}
+	return kind == "tv" || kind == "tv_show" || kind == "tv series"
+}
+
+// doubanSuggestedPosterAddress uses Douban's public title-suggestion endpoint
+// when a provider catalogue omitted its Douban ID. It only accepts exact
+// normalized title matches with a compatible work type and release year.
+func (d *Downloader) doubanSuggestedPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
+	if d == nil || d.client == nil {
+		return "", errors.New("豆瓣片名搜尋用戶端尚未初始化")
+	}
+	if strings.TrimSpace(drama.Title) == "" {
+		return "", errors.New("缺少作品名稱，略過豆瓣片名搜尋")
+	}
+	searchCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	matches := map[string]string{}
+	var lastErr error
+	for _, keyword := range posterTitleVariants(drama.Title) {
+		if err := searchCtx.Err(); err != nil {
+			return "", err
+		}
+		endpoint, err := url.Parse("https://movie.douban.com/j/subject_suggest")
+		if err != nil {
+			return "", err
+		}
+		query := endpoint.Query()
+		query.Set("q", keyword)
+		endpoint.RawQuery = query.Encode()
+		request, err := http.NewRequestWithContext(
+			context.WithValue(searchCtx, nativeCoverNetworkKey{}, true),
+			http.MethodGet, endpoint.String(), nil,
+		)
+		if err != nil {
+			return "", err
+		}
+		request.Header.Set("User-Agent", userAgent)
+		request.Header.Set("Accept", "application/json")
+		request.Header.Set("Referer", "https://movie.douban.com/")
+		request.Header.Set("Origin", "https://movie.douban.com")
+		request.Header.Set("X-Requested-With", "XMLHttpRequest")
+		client := *d.client
+		response, requestErr := client.Do(request)
+		if requestErr != nil {
+			lastErr = requestErr
+			continue
+		}
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+		response.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+		if response.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("豆瓣片名搜尋回應 HTTP %d", response.StatusCode)
+			continue
+		}
+		if len(body) > 1<<20 {
+			lastErr = errors.New("豆瓣片名搜尋回應超過大小限制")
+			continue
+		}
+		var rows []map[string]any
+		if err := json.Unmarshal(body, &rows); err != nil {
+			lastErr = errors.New("豆瓣片名搜尋回應格式無效")
+			continue
+		}
+		for _, row := range rows {
+			id := strings.TrimSpace(duoduoString(row["id"]))
+			title := strings.TrimSpace(duoduoString(row["title"]))
+			kind := strings.TrimSpace(duoduoString(row["type"]))
+			year := strings.TrimSpace(duoduoString(row["year"]))
+			if !validDoubanSubjectID(id) || title == "" ||
+				!nativePosterTypeCompatible(drama, kind) ||
+				!nativePosterTitleMatches(drama.Title, title) {
+				continue
+			}
+			sourceYear := bangumiPosterYear(drama.OnlineDate)
+			candidateYear := bangumiPosterYear(year)
+			if sourceYear != "" && candidateYear != "" && sourceYear != candidateYear {
+				continue
+			}
+			address := validDoubanPosterAddress(firstNonEmpty(
+				duoduoString(row["img"]), duoduoString(row["pic"]),
+			))
+			if address != "" {
+				matches[id] = address
+			}
+		}
+	}
+	if len(matches) == 1 {
+		for _, address := range matches {
+			return address, nil
+		}
+	}
+	if len(matches) > 1 {
+		return "", errors.New("豆瓣片名搜尋有多個同名候選，為避免錯配已略過")
+	}
+	if lastErr != nil {
+		return "", fmt.Errorf("豆瓣片名搜尋失敗：%w", lastErr)
+	}
+	return "", errors.New("豆瓣找不到片名、類型與年份相符的海報")
+}
+
 type nativeVerifiedOfficialPoster struct {
 	title      string
 	year       string
