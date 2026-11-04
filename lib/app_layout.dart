@@ -246,6 +246,14 @@ class AppDevice {
   }
 }
 
+/// Keeps desktop poster cards readable on wide and ultrawide monitors.
+int desktopPosterColumnsForWidth(double width) {
+  if (!width.isFinite || width <= 0) return 2;
+  // A 214 px minimum rhythm (about 200 px tile width after grid spacing)
+  // prevents 21:9 displays from squeezing text into overly narrow posters.
+  return ((width + 18) / 214).floor().clamp(2, 16).toInt();
+}
+
 class AppLayout extends InheritedWidget {
   const AppLayout({
     super.key,
