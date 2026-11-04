@@ -534,6 +534,38 @@ func TestDuoduoPosterRecoveryGetsDoubanIDWhenCatalogOmitsIt(t *testing.T) {
 	}
 }
 
+func TestDuoduoPosterRecoveryMergesDetailMatchingMetadata(t *testing.T) {
+	const poster = "https://images.example.test/stranger-things.jpg"
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path != "/api.php/web/vod/get_detail" {
+			t.Fatalf("poster recovery called an unexpected endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+		return sourceFixtureResponse(request, http.StatusOK,
+			`{"code":200,"data":[{"vod_id":78296,"vod_name":"怪奇物語 第一季","type_name":"剧集","vod_year":"2016","vod_douban_id":26322774,"vod_class":["科幻"],"vod_pic":"https://images.example.test/stranger-things.jpg"}]}`), nil
+	})
+	drama := nativeDrama{
+		ID: "duoduo:78296", Source: sourceDuoduo, SourceID: "78296",
+		Title: "怪奇物語 第一季",
+	}
+	addresses, doubanID, err := d.nativeCoverRecoveryMetadata(context.Background(), &drama)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doubanID != "26322774" || drama.DoubanID != "26322774" {
+		t.Fatalf("detail Douban ID was not merged: returned=%q drama=%+v", doubanID, drama)
+	}
+	if drama.OnlineDate != "2016" || drama.Category != "剧集" {
+		t.Fatalf("detail year/category were not merged: %+v", drama)
+	}
+	if len(drama.Tags) == 0 || drama.Tags[0] != "科幻" {
+		t.Fatalf("detail tags were not merged: %#v", drama.Tags)
+	}
+	if len(addresses) == 0 || addresses[0] != poster {
+		t.Fatalf("detail poster = %#v, want %q", addresses, poster)
+	}
+}
+
 func TestDuoduoPosterMetadataDoesNotRequirePlayableLines(t *testing.T) {
 	const cover = "https://images.example.test/poster.jpg"
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
