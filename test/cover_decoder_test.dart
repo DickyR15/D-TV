@@ -5,7 +5,7 @@ import 'package:hgtv/media_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class CoverExecutor implements MediaExecutor {
-  CoverExecutor(this.onStart, this.onEnd, {this.fail = false});
+  CoverExecutor(this.onStart, this.onEnd, {this.fail = false, this.onArguments});
   final void Function() onStart;
   final void Function() onEnd;
   final bool fail;
