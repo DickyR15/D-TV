@@ -153,7 +153,11 @@ void main() {
       expect(desktopOptions.containsKey('window'), isTrue);
       expect(desktopOptions['window'], '電腦');
       expect(
-        AppLayout.displayModeLabel('window', currentFactor: FormFactor.window),
+        AppLayout.displayModeLabel(
+          'window',
+          currentFactor: FormFactor.window,
+          desktopPlatform: true,
+        ),
         '電腦',
       );
     });
