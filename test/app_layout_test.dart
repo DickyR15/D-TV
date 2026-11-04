@@ -67,7 +67,7 @@ void main() {
       );
     });
 
-    test('auto distinguishes phone, pad and desktop window', () {
+    test('auto distinguishes phone, pad and desktop computer', () {
       expect(
         AppLayout.resolveFormFactor(
           mode: 'auto',
@@ -119,7 +119,7 @@ void main() {
       }
     });
 
-    test('window falls back to pad off desktop; legacy standard suppresses TV', () {
+    test('computer mode falls back to pad off desktop; legacy standard suppresses TV', () {
       expect(
         AppLayout.resolveFormFactor(
           mode: 'window',
@@ -140,7 +140,7 @@ void main() {
       );
     });
 
-    test('window option is only shown on desktop platforms', () {
+    test('computer option is only shown on desktop platforms', () {
       final mobileOptions = AppLayout.availableDisplayModes(
         desktopPlatform: false,
       );
@@ -149,9 +149,12 @@ void main() {
         containsAll(['auto', 'television', 'phone', 'pad']),
       );
       expect(mobileOptions.containsKey('window'), isFalse);
+      final desktopOptions = AppLayout.availableDisplayModes(desktopPlatform: true);
+      expect(desktopOptions.containsKey('window'), isTrue);
+      expect(desktopOptions['window'], '電腦');
       expect(
-        AppLayout.availableDisplayModes(desktopPlatform: true).containsKey('window'),
-        isTrue,
+        AppLayout.displayModeLabel('window', currentFactor: FormFactor.window),
+        '電腦',
       );
     });
   });
