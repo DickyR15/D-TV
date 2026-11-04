@@ -13,6 +13,30 @@ import (
 	"time"
 )
 
+func TestGuipianDetailTitleFallbacks(t *testing.T) {
+	cases := []struct { name, body, want string }{
+		{"h1 attributes and nested text may change", `<html><body><h1 id="detail-title" data-v="1" class="title-main"><span>客房服務2024</span></h1></body></html>`, "客房服務2024"},
+		{"Open Graph title with reordered attributes", `<html><head><meta content="撒旦：黑暗 - 鬼片網" data-x="1" property="og:title"></head></html>`, "撒旦：黑暗"},
+		{"Twitter title fallback", `<html><head><meta content="歹路無可退" name="twitter:title"></head></html>`, "歹路無可退"},
+		{"JSON-LD name fallback", `<html><head><script type="application/ld+json">{"@type":"Movie","name":"獨角獸學院：秘密揭開第二章"}</script></head></html>`, "獨角獸學院：秘密揭開第二章"},
+		{"HTML title fallback", `<html><head><title>《客房服務2024》 - 鬼片網</title></head></html>`, "客房服務2024"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := guipianDetailTitle(testCase.body); got != testCase.want {
+				t.Fatalf("guipianDetailTitle() = %q, want %q", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestGuipianDetailTitleMissingReturnsDiagnostic(t *testing.T) {
+	_, err := parseGuipianCoverMetadata("99123", `<html><head><title>提示信息</title></head><body></body></html>`)
+	if err == nil || !strings.Contains(err.Error(), "99123") || !strings.Contains(err.Error(), "og:title") {
+		t.Fatalf("expected an ID-aware title diagnostic, got %v", err)
+	}
+}
+
 func TestGuipianParseCards(t *testing.T) {
 	body := `<ul class="row video-list video-film-list"><a class="video-link" href="/nv/123.html" title="測試鬼片"><div data-original="/upload/poster.jpg"></div><div class="video-duration">HD</div></a></ul>`
 	got := parseGuipianCards(body)
@@ -238,88 +262,72 @@ func guipianLiveProbeAsset(ctx context.Context, client *http.Client, address, re
 	return nil
 }
 
+func normalizeGuipianRequestedTitle(value string) string {
+	value = strings.NewReplacer("服务", "服務", "无", "無", "与", "與", "这", "這",
+		"揭开", "揭開", "：", ":", "．", ".", "　", " ").Replace(strings.TrimSpace(value))
+	var builder strings.Builder
+	for _, character := range strings.ToLower(value) {
+		if (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') ||
+			(character >= '一' && character <= '鿿') { builder.WriteRune(character) }
+	}
+	return builder.String()
+}
+
 func TestGuipianRequestedPostersLive(t *testing.T) {
-	if os.Getenv("DTV_LIVE_GUIPIAN") != "1" {
-		t.Skip("set DTV_LIVE_GUIPIAN=1 to probe the public Guipian source")
-	}
+	if os.Getenv("DTV_LIVE_GUIPIAN") != "1" { t.Skip("set DTV_LIVE_GUIPIAN=1 to probe the public Guipian source") }
 	engine, err := newNativeEngine(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	t.Cleanup(engine.downloads.close)
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 220*time.Second)
 	defer cancel()
-
-	targets := map[string]bool{"失控撞劫": false, "奪金戰": false}
-	categories := []string{"31", "12", "13", "14", "15", "17", "18", "3", "11", "6", "7", "9"}
+	targets := []struct { label string; aliases []string; found bool }{
+		{"歹路無可退", []string{"歹路無可退", "歹路无可退", "Fast Cash"}, false},
+		{"客房服務2024", []string{"客房服務2024", "客房服務 2024", "客房服务2024", "客房服务 2024", "Room Service 2024", "Room Service"}, false},
+		{"撒旦：黑暗", []string{"撒旦：黑暗", "撒旦:黑暗", "撒旦 黑暗", "Satan: The Dark", "Satan - The Dark", "The Black Bible"}, false},
+	}
+	aliases := make([]map[string]bool, len(targets))
+	for index, target := range targets {
+		aliases[index] = make(map[string]bool, len(target.aliases))
+		for _, alias := range target.aliases { aliases[index][normalizeGuipianRequestedTitle(alias)] = true }
+	}
 	var failures []string
-	for _, category := range categories {
-		if ctx.Err() != nil {
-			break
-		}
-		items, _, fetchErr := engine.downloader.fetchGuipianCatalogPage(ctx, 1, category, "")
-		if fetchErr != nil {
-			t.Logf("category %s fetch warning: %v", category, fetchErr)
-			continue
-		}
-		for _, item := range items {
-			target := ""
-			title := strings.TrimSpace(item.Title)
-			switch {
-			case strings.Contains(title, "失控撞劫"):
-				target = "失控撞劫"
-			case strings.Contains(title, "奪金戰"):
-				target = "奪金戰"
-			case strings.Contains(title, "夺金战"):
-				target = "奪金戰"
-			}
-			if target == "" || targets[target] {
-				continue
-			}
-			targets[target] = true
-			t.Logf("requested title found: %s category=%s id=%s listCover=%v candidates=%d",
-				title, category, item.ID, item.Cover, len(nativeNormalize(item).CoverCandidates))
-
-			detail, detailErr := engine.downloader.fetchGuipianCoverMetadata(ctx, item.SourceID)
-			if detailErr != nil {
-				failures = append(failures, target+": poster-only detail: "+detailErr.Error())
-				continue
-			}
-			t.Logf("poster-only detail: title=%s douban=%s year=%s cover=%q alternatives=%d",
-				detail.Title, detail.DoubanID, detail.OnlineDate, detail.Cover, len(nativeNormalize(detail).CoverCandidates))
-
-			nativeItem := nativeNormalize(item)
-			if nativeItem.DoubanID == "" {
-				nativeItem.DoubanID = detail.DoubanID
-			}
-			if nativeItem.OnlineDate == "" {
-				nativeItem.OnlineDate = detail.OnlineDate
-			}
-			result, loadErr := engine.loadCover(ctx, nativeItem, true)
-			if loadErr != nil {
-				failures = append(failures, target+": full cover pipeline: "+loadErr.Error())
-				continue
-			}
-			t.Logf("requested poster loaded: %s -> %v", target, result["path"])
-			if path, ok := result["path"].(string); ok {
-				data, readErr := os.ReadFile(path)
-				if readErr != nil || !nativeIsCoverImage(data) {
-					failures = append(failures, target+": cached poster is not a valid image")
+	for _, category := range guipianCategories {
+		if ctx.Err() != nil { break }
+		for page := 1; page <= 2 && ctx.Err() == nil; page++ {
+			items, hasMore, fetchErr := engine.downloader.fetchGuipianCatalogPage(ctx, page, category.ID, "")
+			if fetchErr != nil { t.Logf("category %s page %d diagnostic: %v", category.ID, page, fetchErr); break }
+			for _, item := range items {
+				for targetIndex := range targets {
+					if targets[targetIndex].found || !aliases[targetIndex][normalizeGuipianRequestedTitle(item.Title)] { continue }
+					targets[targetIndex].found = true
+					label := targets[targetIndex].label
+					t.Logf("requested title resolved: %s -> %s category=%s id=%s", label, item.Title, category.ID, item.ID)
+					detail, detailErr := engine.downloader.fetchGuipianCoverMetadata(ctx, item.SourceID)
+					if detailErr != nil { failures = append(failures, label+": poster-only detail: "+detailErr.Error()); continue }
+					if strings.TrimSpace(detail.Title) == "" { failures = append(failures, label+": detail title is empty"); continue }
+					t.Logf("detail title OK: requested=%s resolved=%s douban=%s year=%s cover=%q", label, detail.Title, detail.DoubanID, detail.OnlineDate, detail.Cover)
+					nativeItem := nativeNormalize(item)
+					if nativeItem.DoubanID == "" { nativeItem.DoubanID = detail.DoubanID }
+					if nativeItem.OnlineDate == "" { nativeItem.OnlineDate = detail.OnlineDate }
+					result, loadErr := engine.loadCover(ctx, nativeItem, true)
+					if loadErr != nil { failures = append(failures, label+": full cover pipeline: "+loadErr.Error()); continue }
+					path, ok := result["path"].(string)
+					if !ok || path == "" { failures = append(failures, label+": full cover pipeline returned no local path"); continue }
+					data, readErr := os.ReadFile(path)
+					if readErr != nil || !nativeIsCoverImage(data) { failures = append(failures, label+": cached poster is not a valid image"); continue }
+					t.Logf("PASS: requested poster fully cached: %s -> %s (%d bytes)", label, path, len(data))
 				}
-			} else {
-				failures = append(failures, target+": full cover pipeline returned no local path")
 			}
+			if !hasMore || len(items) == 0 { break }
 		}
+		allFound := true
+		for _, target := range targets { allFound = allFound && target.found }
+		if allFound { break }
 	}
-
-	for title, found := range targets {
-		if !found {
-			failures = append(failures, title+": title not found in the probed Guipian categories")
-		}
+	for _, target := range targets {
+		if !target.found { failures = append(failures, target.label+": title not found in first two pages of Guipian categories; confirm source/title alias") }
 	}
-	if len(failures) > 0 {
-		t.Fatalf("requested posters did not load: %s", strings.Join(failures, " | "))
-	}
+	if len(failures) > 0 { t.Fatalf("requested Guipian title/poster cases did not pass: %s", strings.Join(failures, " | ")) }
 }
 
 func TestGuipianLivePlayback(t *testing.T) {
