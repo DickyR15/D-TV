@@ -247,7 +247,13 @@ func TestNativeStreamDiagnosticsHLSAssetsAndPrivacy(t *testing.T) {
 		}
 	}
 	if count != 6 {
-		t.Fatalf("logged %d completed responses, want 6", count)
+		var summary []string
+		for _, event := range events {
+			if event.Event == "stream.local_response" {
+				summary = append(summary, fmt.Sprintf("asset=%s status=%d method=%s", event.Message, event.HTTPStatus, event.Client))
+			}
+		}
+		t.Fatalf("logged %d completed responses, want 6; local response events: %s", count, strings.Join(summary, " | "))
 	}
 }
 
