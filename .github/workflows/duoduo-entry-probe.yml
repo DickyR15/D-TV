@@ -805,22 +805,8 @@ jobs:
                   return False
 
           def verified_official_title_poster(title, row):
-              # Exact programme artwork from the production / official platform.
-              # The second-season source row is currently mislabeled as 2025 by
-              # Duoduo; its exact season title is the identity key, not a fuzzy
-              # parent-series match.
-              aliases = {
-                  "花兒與少年同心季": {
-                      "title": "花兒與少年同心季",
-                      "year": "2025",
-                      "address": "https://k.sinaimg.cn/n/sinakd20250816s/450/w800h450/20250816/ec1c-4c5fc3ef466113eb1d27a75cc8c37fcf.jpg/w700d1q75cms.jpg?by=cms_fixed_width",
-                  },
-                  "這是我的西遊第二季": {
-                      "title": "這是我的西遊第二季",
-                      "year": "",
-                      "address": "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0",
-                  },
-              }
+              # Exact programme artwork from programme-owner / official-platform materials.
+              # Do not use fuzzy parent-title matching or substitute another season.
               def normalize_exact(value):
                   simplified_to_traditional = str.maketrans({
                       "与": "與", "儿": "兒", "这": "這", "游": "遊",
@@ -831,21 +817,54 @@ jobs:
                       if ch.isalnum()
                   )
 
-              category_text = str(row.get("type_name") or "") + " " + " ".join(
-                  str(item) for item in (row.get("vod_class") or [])
-              )
-              if not any(word in category_text.lower() for word in ("綜藝", "综艺", "真人秀", "variety")):
+              flower_key = normalize_exact("花兒與少年同心季")
+              xiyou_key = normalize_exact("這是我的西遊第二季")
+              aliases = {
+                  flower_key: {
+                      "label": "花兒與少年．同心季",
+                      "year": "2025",
+                      "address": "https://k.sinaimg.cn/n/sinakd20250816s/450/w800h450/20250816/ec1c-4c5fc3ef466113eb1d27a75cc8c37fcf.jpg/w700d1q75cms.jpg?by=cms_fixed_width",
+                  },
+                  xiyou_key: {
+                      "label": "這是我的西遊 第二季",
+                      "year": "",
+                      "address": "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0",
+                  },
+              }
+
+              category = str(row.get("type_name") or "")
+              tags_value = row.get("vod_class") or []
+              if isinstance(tags_value, str):
+                  tags = [part.strip() for part in tags_value.replace("，", ",").split(",") if part.strip()]
+              else:
+                  tags = [str(item) for item in tags_value]
+              category_text = category + " " + " ".join(tags)
+              category_key = category_text.casefold()
+              if not any(word in category_key for word in ("綜藝", "综艺", "真人秀", "variety")):
+                  print(
+                      f"  verified poster rejected category title={title!r} "
+                      f"category={category!r} tags={tags!r}"
+                  )
                   return ""
+
               key = normalize_exact(title)
               item = aliases.get(key)
+              source_year = str(row.get("vod_year") or "").strip()[:4]
+              print(
+                  f"  verified poster lookup title={title!r} normalized={key!r} "
+                  f"category={category!r} year={source_year!r} hit={bool(item)}"
+              )
               if not item:
                   return ""
               expected_year = item["year"]
-              source_year = str(row.get("vod_year") or "").strip()[:4]
               if expected_year and source_year != expected_year:
+                  print(
+                      f"  verified poster rejected year title={title!r} "
+                      f"expected={expected_year!r} got={source_year!r}"
+                  )
                   return ""
+              print(f"  verified poster matched programme={item['label']!r}")
               return item["address"]
-
           def bangumi_exact_poster(title, row):
               category = str(row.get("type_name") or "")
               tags = row.get("vod_class") or []
