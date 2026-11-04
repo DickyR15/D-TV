@@ -12,6 +12,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 import 'desktop_window_state.dart';
 import 'desktop_mini_player.dart';
+import 'desktop_mini_player_bridge.dart';
 
 import 'core_bridge.dart';
 import 'app_layout.dart';
