@@ -65,6 +65,38 @@ func catalogFixtureEngine(t *testing.T, transport sourceFixtureTransport) *nativ
 	return engine
 }
 
+func TestMigrateNativeDramaReconstructsLegacyPosterIdentity(t *testing.T) {
+	cases := []struct {
+		name string
+		drama nativeDrama
+		want string
+	}{
+		{
+			name: "missing ID uses cached source and source ID",
+			drama: nativeDrama{Source: sourceDuoduo, SourceID: "137937", Title: "撒旦：黑暗"},
+			want: "duoduo:137937",
+		},
+		{
+			name: "raw provider ID is namespaced",
+			drama: nativeDrama{ID: "77333", Source: sourceGuipian, Title: "歹路無可退"},
+			want: "guipian:77333",
+		},
+		{
+			name: "canonical composite ID stays authoritative",
+			drama: nativeDrama{ID: "duoduo:137937", Source: sourceGuipian, SourceID: "999"},
+			want: "duoduo:137937",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := migrateNativeDrama(tc.drama)
+			if got.ID != tc.want || got.Source == "" || got.SourceID == "" {
+				t.Fatalf("migrated identity = %q / %q / %q, want %q", got.ID, got.Source, got.SourceID, tc.want)
+			}
+		})
+	}
+}
+
 func TestNativeHongguoCursorRestartsPerCatalog(t *testing.T) {
 	var calls []nativeHongguoRequest
 	var device, install string
