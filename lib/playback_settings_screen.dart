@@ -324,12 +324,14 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               value: _autoAdvance,
               onChanged: _updateAutoAdvance,
             ),
-            if (Platform.isAndroid && _pictureInPictureSupported)
+            if (Platform.isAndroid &&
+                _pictureInPictureSupported &&
+                !AppLayout.isTelevision(context))
               SwitchListTile(
                 key: const ValueKey('playback-auto-picture-in-picture'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('離開應用時自動小窗'),
-                subtitle: const Text('播放中返回桌面或切換其他應用時進入系統畫中畫；也可在播放控制列手動開啟'),
+                title: const Text('離開應用程式時自動進入子母畫面'),
+                subtitle: const Text('播放中離開應用程式或切換其他應用時進入系統子母畫面；也可在播放控制列手動開啟'),
                 value: _autoPictureInPicture,
                 onChanged: _updateAutoPictureInPicture,
               ),
