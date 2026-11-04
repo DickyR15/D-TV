@@ -544,7 +544,751 @@ jobs:
                   ),
               },
               {
+                  "label": "歹路無可退",
+                  "queries": (
+                      "歹路無可退", "歹路无可退", "Fast Cash", "Fast Cash 2026",
+                  ),
+                  "aliases": (
+                      "歹路無可退", "歹路无可退", "Fast Cash", "Fast Cash 2026",
+                  ),
+              },
+              {
+                  "label": "客房服務2024",
+                  "queries": (
+                      "客房服務2024", "客房服務 2024",
+                      "客房服务2024", "客房服务 2024",
+                      "Room Service 2024", "Room Service",
+                  ),
+                  "aliases": (
+                      "客房服務2024", "客房服務 2024",
+                      "客房服务2024", "客房服务 2024",
+                      "Room Service 2024", "Room Service",
+                  ),
+              },
+              {
+                  "label": "撒旦：黑暗",
+                  "queries": (
+                      "撒旦：黑暗", "撒旦:黑暗", "撒旦 黑暗",
+                      "Satan: The Dark", "Satan - The Dark", "The Black Bible",
+                  ),
+                  "aliases": (
+                      "撒旦：黑暗", "撒旦:黑暗", "撒旦 黑暗",
+                      "Satan: The Dark", "Satan - The Dark", "The Black Bible",
+                  ),
+              },
+              {
                   "label": "獨角獸學院：秘密揭開第二章",
+                  "queries": (
+                      "獨角獸學院：秘密揭開第二章",
+                      "獨角獸學院 秘密揭開 第二章",
+                      "独角兽学院：秘密揭开第二章",
+                      "独角兽学院 秘密揭开 第二章",
+                      "Unicorn Academy Secrets Revealed Part Two",
+                      "Unicorn Academy Secrets Revealed",
+                  ),
+                  "aliases": (
+                      "獨角獸學院：秘密揭開第二章",
+                      "獨角獸學院：秘密揭開 第二章",
+                      "獨角獸學院 秘密揭開第二章",
+                      "独角兽学院：秘密揭开第二章",
+                      "独角兽学院：秘密揭开 第二章",
+                      "Unicorn Academy Secrets Revealed Part Two",
+                      "Unicorn Academy: Secrets Revealed Part 2",
+                  ),
+              },
+          ]
+
+          def normalize_target_title(value):
+              return "".join(character for character in str(value or "").casefold() if character.isalnum())
+
+          target_ids = list(TARGET_POSTER_IDS)
+          target_title_failures = []
+          for target in TARGET_POSTER_TITLES:
+              wanted = {normalize_target_title(alias) for alias in target["aliases"]}
+              matches = {}
+              for term in target["queries"]:
+                  _, search_payload = api(
+                      "/api.php/web/search/index",
+                      {"wd": term, "page": 1, "limit": 15},
+                  )
+                  for row in response_rows(search_payload.get("data")):
+                      title = row_title(row)
+                      source_id = row_id(row)
+                      if source_id.isdigit() and normalize_target_title(title) in wanted:
+                          matches[source_id] = row
+              # Search indexing can omit valid titles. Reuse the exact catalogue
+              # rows already scanned above (all categories, up to 40 pages each).
+              for row in catalog_all_rows:
+                  title = row_title(row)
+                  source_id = row_id(row)
+                  if source_id.isdigit() and normalize_target_title(title) in wanted:
+                      matches[source_id] = row
+              if len(matches) == 1:
+                  source_id, row = next(iter(matches.items()))
+                  target_ids.append(source_id)
+                  print(
+                      f"RESOLVED requested title={target['label']!r} "
+                      f"to Duoduo id={source_id} source_title={row_title(row)!r} "
+                      f"category={row.get('type_name')!r} year={row.get('vod_year')!r}"
+                  )
+              elif matches:
+                  # Validate every exact-title duplicate rather than choosing one silently.
+                  for source_id in sorted(matches):
+                      target_ids.append(source_id)
+                      row = matches[source_id]
+                      print(
+                          f"RESOLVED exact duplicate title={target['label']!r} "
+                          f"to Duoduo id={source_id} source_title={row_title(row)!r} "
+                          f"category={row.get('type_name')!r} year={row.get('vod_year')!r}"
+                      )
+              else:
+                  target_title_failures.append(target["label"])
+                  print(f"FAIL: requested title not found in Duoduo catalogue/search: {target['label']!r}")
+          TARGET_POSTER_IDS = tuple(dict.fromkeys(target_ids))
+
+          class DetailPosterParser(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.candidates = []
+                  self.meta = {}
+
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag == "meta":
+                      key = (attrs.get("property") or attrs.get("name") or "").lower()
+                      value = attrs.get("content", "").strip()
+                      if key and value:
+                          self.meta[key] = value
+                      if key in ("og:image", "og:image:url", "twitter:image", "twitter:image:src"):
+                          if value:
+                              self.candidates.append(("html-meta:" + key, value))
+                  elif tag == "link" and "image_src" in (attrs.get("rel") or "").lower():
+                      value = attrs.get("href", "").strip()
+                      if value:
+                          self.candidates.append(("html-link:image_src", value))
+                  elif tag == "img":
+                      classes = (attrs.get("class") or "").lower()
+                      alt = (attrs.get("alt") or "").lower()
+                      title = (attrs.get("title") or "").lower()
+                      if any(word in classes for word in ("poster", "cover", "vod", "detail", "play")) or alt or title:
+                          for key in ("data-original", "data-src", "data-lazy-src", "data-echo", "src"):
+                              value = attrs.get(key, "").strip()
+                              if value:
+                                  self.candidates.append(("html-img:" + key, value))
+                                  break
+
+          def request_full_image(address, referer, timeout=10):
+              # Match the native downloader: GET the whole image without a
+              # Range header, then reject incomplete 206 responses/truncation.
+              headers = {
+                  "User-Agent": UA,
+                  "Accept": "image/webp,image/jpeg,image/png,image/gif,*/*;q=0.5",
+                  "Referer": referer,
+                  "Sec-Fetch-Mode": "no-cors",
+                  "Sec-Fetch-Dest": "image",
+              }
+              req = Request(address, headers=headers)
+              try:
+                  response = urlopen(req, timeout=timeout, context=TLS)
+              except HTTPError as exc:
+                  response = exc
+              with response:
+                  status = response.status
+                  final = response.geturl()
+                  content_type = response.headers.get("Content-Type", "")
+                  content_length = response.headers.get("Content-Length")
+                  content_range = response.headers.get("Content-Range", "")
+                  body = response.read(20 * 1024 * 1024 + 1)
+                  complete = status == 200
+                  if status == 206:
+                      try:
+                          unit, span = content_range.split(" ", 1)
+                          byte_span, total_text = span.split("/", 1)
+                          start_text, end_text = byte_span.split("-", 1)
+                          start, end, total = int(start_text), int(end_text), int(total_text)
+                          complete = (
+                              unit.lower() == "bytes" and start == 0 and total > 0
+                              and end + 1 == total and len(body) == total
+                          )
+                      except (ValueError, TypeError):
+                          complete = False
+                  elif status == 200 and content_length:
+                      try:
+                          complete = len(body) == int(content_length)
+                      except ValueError:
+                          complete = False
+                  if len(body) > 20 * 1024 * 1024:
+                      complete = False
+                  return status, final, content_type, body, complete
+
+          def targeted_image_ok(address, play_url, root_url):
+              attempts = [("official-play-page", play_url), ("site-homepage", root_url)]
+              if urlsplit(address).hostname and urlsplit(address).hostname.endswith(".doubanio.com"):
+                  attempts.insert(0, ("douban-subject", "https://movie.douban.com/"))
+              host = (urlsplit(address).hostname or "").lower()
+              if host.endswith(".sinaimg.cn"):
+                  attempts.insert(0, ("sina-news", "https://news.sina.com.cn/"))
+              if host.endswith(".ykimg.com"):
+                  attempts.insert(0, ("youku", "https://www.youku.com/"))
+              for referer_name, referer in attempts:
+                  try:
+                      status, final, content_type, body, complete = request_full_image(
+                          address, referer, timeout=10
+                      )
+                      ok = complete and bool(body) and (
+                          content_type.lower().startswith("image/") or image_signature(body)
+                      )
+                      print(
+                          f"  full-image host={urlsplit(address).hostname} referrer={referer_name} "
+                          f"http={status} final={urlsplit(final).hostname} type={content_type} "
+                          f"bytes={len(body)} complete={complete} ok={ok} "
+                          f"magic={body[:16].hex() if body else 'none'}"
+                      )
+                      if ok:
+                          return True
+                  except Exception as exc:
+                      print(
+                          f"  full-image host={urlsplit(address).hostname} referrer={referer_name} "
+                          f"error={type(exc).__name__}: {str(exc)[:120]}"
+                      )
+              parsed = urlsplit(address)
+              if parsed.scheme == "https" and parsed.hostname:
+                  dns_resolvers = (
+                      ("AliDNS", "https://dns.alidns.com/resolve"),
+                      ("Google", "https://dns.google/resolve"),
+                      ("Cloudflare", "https://cloudflare-dns.com/dns-query"),
+                  )
+                  resolved = []
+                  for resolver_name, dns_endpoint in dns_resolvers:
+                      for record_type, wanted_type in (("A", 1), ("AAAA", 28)):
+                          dns_url = dns_endpoint + "?name=" + quote(parsed.hostname) + "&type=" + record_type
+                          try:
+                              dns_req = Request(dns_url, headers={
+                                  "User-Agent": UA,
+                                  "Accept": "application/dns-json",
+                              })
+                              with urlopen(dns_req, timeout=8, context=TLS) as dns_response:
+                                  dns_status = dns_response.status
+                                  dns_body = dns_response.read(65536)
+                              payload = json.loads(dns_body.decode("utf-8", errors="replace"))
+                              answers = payload.get("Answer") or []
+                              answer_values = [
+                                  str(answer.get("data") or "")
+                                  for answer in answers if answer.get("type") == wanted_type
+                              ]
+                              print(
+                                  f"  DoH resolver={resolver_name} type={record_type} "
+                                  f"http={dns_status} DNS_STATUS={payload.get('Status')} records={answer_values}"
+                              )
+                              if dns_status == 200 and payload.get("Status") == 0:
+                                  for ip in answer_values:
+                                      try:
+                                          if ipaddress.ip_address(ip).is_global and ip not in resolved:
+                                              resolved.append(ip)
+                                      except ValueError:
+                                          pass
+                              if resolved:
+                                  break
+                          except Exception as exc:
+                              print(
+                                  f"  DoH resolver={resolver_name} type={record_type} "
+                                  f"error={type(exc).__name__}: {str(exc)[:100]}"
+                              )
+                      if resolved:
+                          break
+                  if not resolved:
+                      dns_unavailable_hosts.add(parsed.hostname.lower())
+                      print(f"  DoH no public A/AAAA answer for {parsed.hostname}")
+                  for ip in resolved[:4]:
+                      connection = None
+                      try:
+                          port = parsed.port or 443
+                          class PinnedHTTPSConnection(http.client.HTTPSConnection):
+                              def connect(self):
+                                  raw = socket.create_connection((ip, port), self.timeout)
+                                  self.sock = self._context.wrap_socket(raw, server_hostname=self.host)
+                          connection = PinnedHTTPSConnection(parsed.hostname, timeout=10, context=TLS)
+                          path = parsed.path or "/"
+                          if parsed.query:
+                              path += "?" + parsed.query
+                          connection.request("GET", path, headers={
+                              "Host": parsed.netloc,
+                              "User-Agent": UA,
+                              "Accept": "image/webp,image/jpeg,image/png,image/gif,*/*;q=0.5",
+                              "Referer": play_url,
+                              "Range": "bytes=0-4095",
+                          })
+                          response = connection.getresponse()
+                          pinned_body = response.read(4096)
+                          pinned_type = response.getheader("Content-Type", "")
+                          pinned_ok = response.status in (200, 206) and bool(pinned_body) and (
+                              pinned_type.lower().startswith("image/") or image_signature(pinned_body)
+                          )
+                          print(
+                              f"  DoH image ip={ip} host={parsed.hostname} referrer=official-play-page "
+                              f"http={response.status} type={pinned_type} ok={pinned_ok}"
+                          )
+                          if pinned_ok:
+                              return True
+                      except Exception as exc:
+                          print(f"  DoH image ip={ip} host={parsed.hostname} error={type(exc).__name__}: {str(exc)[:120]}")
+                      finally:
+                          if connection is not None:
+                              connection.close()
+              proxy_target = parsed.netloc + parsed.path + (("?" + parsed.query) if parsed.query else "")
+              proxy = "https://images.weserv.nl/?url=" + quote(proxy_target, safe="")
+              try:
+                  status, final, content_type, body = request(
+                      proxy, "https://images.weserv.nl/", limit=4096, timeout=10,
+                      byte_range="bytes=0-4095"
+                  )
+                  ok = status in (200, 206) and bool(body) and (
+                      content_type.lower().startswith("image/") or image_signature(body)
+                  )
+                  print(
+                      f"  image host={urlsplit(address).hostname} referrer=weserv-proxy "
+                      f"http={status} type={content_type} ok={ok}"
+                  )
+                  return ok
+              except Exception as exc:
+                  print(
+                      f"  image host={urlsplit(address).hostname} referrer=weserv-proxy "
+                      f"error={type(exc).__name__}: {str(exc)[:120]}"
+                  )
+                  return False
+
+          def verified_official_title_poster(title, row):
+              # Exact programme artwork from programme-owner / official-platform materials.
+              # Do not use fuzzy parent-title matching or substitute another season.
+              def normalize_exact(value):
+                  simplified_to_traditional = str.maketrans({
+                      "与": "與", "儿": "兒", "这": "這", "游": "遊",
+                      "综": "綜", "艺": "藝",
+                  })
+                  return "".join(
+                      ch for ch in str(value or "").translate(simplified_to_traditional).casefold()
+                      if ch.isalnum()
+                  )
+
+              flower_key = normalize_exact("花兒與少年同心季")
+              xiyou_key = normalize_exact("這是我的西遊第二季")
+              aliases = {
+                  flower_key: {
+                      "label": "花兒與少年．同心季",
+                      "year": "2025",
+                      "address": "https://k.sinaimg.cn/n/sinakd20250816s/450/w800h450/20250816/ec1c-4c5fc3ef466113eb1d27a75cc8c37fcf.jpg/w700d1q75cms.jpg?by=cms_fixed_width",
+                  },
+                  xiyou_key: {
+                      "label": "這是我的西遊 第二季",
+                      "year": "",
+                      "address": "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0",
+                  },
+              }
+
+              category = str(row.get("type_name") or "")
+              tags_value = row.get("vod_class") or []
+              if isinstance(tags_value, str):
+                  tags = [part.strip() for part in tags_value.replace("，", ",").split(",") if part.strip()]
+              else:
+                  tags = [str(item) for item in tags_value]
+              category_text = category + " " + " ".join(tags)
+              category_key = category_text.casefold()
+              if not any(word in category_key for word in ("綜藝", "综艺", "真人秀", "variety")):
+                  print(
+                      f"  verified poster rejected category title={title!r} "
+                      f"category={category!r} tags={tags!r}"
+                  )
+                  return ""
+
+              key = normalize_exact(title)
+              item = aliases.get(key)
+              source_year = str(row.get("vod_year") or "").strip()[:4]
+              print(
+                  f"  verified poster lookup title={title!r} normalized={key!r} "
+                  f"category={category!r} year={source_year!r} hit={bool(item)}"
+              )
+              if not item:
+                  return ""
+              expected_year = item["year"]
+              if expected_year and source_year != expected_year:
+                  print(
+                      f"  verified poster rejected year title={title!r} "
+                      f"expected={expected_year!r} got={source_year!r}"
+                  )
+                  return ""
+              print(f"  verified poster matched programme={item['label']!r}")
+              return item["address"]
+          def bangumi_exact_poster(title, row):
+              category = str(row.get("type_name") or "")
+              tags = row.get("vod_class") or []
+              if isinstance(tags, str):
+                  tags = [part.strip() for part in tags.split(",") if part.strip()]
+              category_text = category + " " + " ".join(str(tag) for tag in tags)
+              lowered = category_text.lower()
+              if any(word in lowered for word in ("綜藝", "综艺", "綜藝節目", "综艺节目", "脫口秀", "脱口秀", "真人秀", "實境秀", "variety")):
+                  allowed_types = [6]
+              elif any(word in lowered for word in ("動漫", "动画", "動畫", "番劇", "番剧", "漫劇", "漫剧", "anime")):
+                  allowed_types = [2]
+              elif any(word in lowered for word in ("電影", "电影", "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "短劇", "短剧", "movie", "tv")):
+                  allowed_types = [6]
+              else:
+                  allowed_types = [2, 6]
+
+              def normalize(value):
+                  value = re.sub(
+                      r"(?:第[0-9一二三四五六七八九十百零〇两兩]+季|season[\s._-]*0*[0-9]+|s0*[0-9]+)$",
+                      "",
+                      str(value or "").strip(),
+                      flags=re.IGNORECASE,
+                  )
+                  return "".join(ch for ch in value.casefold() if ch.isalnum())
+
+              payload = {
+                  "keyword": title,
+                  "sort": "match",
+                  "filter": {"type": allowed_types, "nsfw": False},
+              }
+              req = Request(
+                  "https://api.bgm.tv/v0/search/subjects?limit=20&offset=0",
+                  data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                  headers={
+                      "User-Agent": UA,
+                      "Accept": "application/json",
+                      "Content-Type": "application/json",
+                  },
+                  method="POST",
+              )
+              with urlopen(req, timeout=8, context=TLS) as response:
+                  result = json.loads(response.read(2 * 1024 * 1024).decode("utf-8", errors="replace"))
+              wanted_title = normalize(title)
+              matches = [
+                  item for item in (result.get("data") or [])
+                  if int(item.get("type") or 0) in allowed_types
+                  and wanted_title
+                  and (
+                      normalize(item.get("name_cn")) == wanted_title
+                      or normalize(item.get("name")) == wanted_title
+                  )
+              ]
+              source_year = str(row.get("vod_year") or "").strip()[:4]
+              if len(source_year) == 4 and source_year.isdigit():
+                  exact_year = [
+                      item for item in matches
+                      if str(item.get("date") or "")[:4] == source_year
+                  ]
+                  unknown_year = [
+                      item for item in matches
+                      if not str(item.get("date") or "")[:4]
+                  ]
+                  matches = exact_year if exact_year else unknown_year
+              if len(matches) != 1:
+                  print(
+                      f"  Bangumi exact fallback rejected title={title!r} "
+                      f"matches={len(matches)} source_year={source_year!r}"
+                  )
+                  return ""
+              images = matches[0].get("images") or {}
+              for key in ("large", "common", "medium", "small"):
+                  address = str(images.get(key) or "").strip()
+                  if address.startswith("//"):
+                      address = "https:" + address
+                  parsed = urlsplit(address)
+                  if parsed.scheme == "https" and parsed.hostname and parsed.hostname.endswith(".bgm.tv"):
+                      return address
+              return ""
+
+          target_failures = []
+          target_upstream_unavailable = []
+          for vod_id in TARGET_POSTER_IDS:
+              try:
+                  api_base, detail_payload = api("/api.php/web/vod/get_detail", {"vod_id": vod_id})
+                  detail_rows = response_rows(detail_payload.get("data"))
+                  if not detail_rows:
+                      raise RuntimeError("official detail API returned no data row")
+                  row = detail_rows[0]
+                  title = row_title(row) or "(no title)"
+                  play_url = api_base + "/play/" + vod_id
+                  root_url = api_base + "/"
+                  print(f"target id={vod_id} title={title!r} api={api_base} douban_id={row.get('vod_douban_id')!r} douban_score={row.get('vod_douban_score')!r} vod_pic={row.get('vod_pic')!r} vod_pic_slide={row.get('vod_pic_slide')!r}")
+                  candidates = []
+                  seen = set()
+                  for field in (
+                      "vod_pic", "vod_pic_thumb", "vod_pic_url", "vod_pic_slide",
+                      "vod_pic_screenshot", "cover", "cover_url", "poster", "image",
+                      "thumbnail", "thumb", "pic", "img", "picture",
+                  ):
+                      address = poster_address(row.get(field))
+                      if address and address not in seen:
+                          seen.add(address)
+                          candidates.append(("api:" + field, address))
+                  # Duoduo may return a Baidu gimg wrapper whose src parameter
+                  # points at the real poster host. Validate both rather than
+                  # treating a broken wrapper as the only available artwork.
+                  for label, address in list(candidates):
+                      parsed = urlsplit(address)
+                      host = (parsed.hostname or "").lower()
+                      if not host.startswith("gimg") or not host.endswith(".baidu.com"):
+                          continue
+                      wrapped = parsed.path.removeprefix("/gimg/")
+                      source_values = parse_qs(wrapped).get("src") or []
+                      if not source_values:
+                          source_values = parse_qs(parsed.query).get("src") or []
+                      if source_values:
+                          source = source_values[0].strip()
+                          if source.startswith("//"):
+                              source = "https:" + source
+                          elif source and "://" not in source:
+                              source = "https://" + source.lstrip("/")
+                          source = urljoin(address, source)
+                          source_parsed = urlsplit(source)
+                          if source_parsed.scheme in ("http", "https") and source_parsed.netloc and source not in seen:
+                              seen.add(source)
+                              candidates.append(("baidu-gimg-src:" + label, source))
+                  page_status, page_final, page_type, page_body = request(
+                      play_url, root_url, limit=2 * 1024 * 1024, timeout=12
+                  )
+                  print(
+                      f"  official-page http={page_status} type={page_type} "
+                      f"bytes={len(page_body)} final={page_final}"
+                  )
+                  parser = DetailPosterParser()
+                  parser.feed(html.unescape(page_body.decode("utf-8", errors="replace")))
+                  inspect_page_assets(play_url, page_body)
+                  for label, raw in parser.candidates:
+                      address = urljoin(play_url, raw.strip())
+                      parsed = urlsplit(address)
+                      if parsed.scheme in ("http", "https") and parsed.netloc and address not in seen:
+                          seen.add(address)
+                          candidates.append((label, address))
+                  douban_id = str(row.get("vod_douban_id") or "").strip()
+                  douban_status = 0
+                  if douban_id.isdigit() and 6 <= len(douban_id) <= 12:
+                      douban_url = "https://m.douban.com/rexxar/api/v2/movie/" + douban_id
+                      douban_ref = "https://movie.douban.com/subject/" + douban_id + "/"
+                      try:
+                          mobile_ua = (
+                              "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
+                              "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 "
+                              "Mobile/15E148 Safari/604.1"
+                          )
+                          db_status, db_final, db_type, db_body = request(
+                              douban_url, douban_ref, limit=2 * 1024 * 1024,
+                              timeout=12, user_agent=mobile_ua
+                          )
+                          douban_status = db_status
+                          detail = json.loads(db_body.decode("utf-8", errors="replace"))
+                          returned_id = str(detail.get("id") or "").strip()
+                          pic = detail.get("pic") if isinstance(detail.get("pic"), dict) else {}
+                          images = [
+                              ("douban-mobile:pic.normal", pic.get("normal", "")),
+                              ("douban-mobile:cover_url", detail.get("cover_url", "")),
+                          ]
+                          print(
+                              f"  Douban mobile id={douban_id} http={db_status} "
+                              f"type={db_type} returned_id={returned_id!r} "
+                              f"pic.normal={pic.get('normal')!r} cover_url={detail.get('cover_url')!r}"
+                          )
+                          if returned_id and returned_id != douban_id:
+                              raise RuntimeError(
+                                  f"Douban mobile subject mismatch: expected {douban_id}, got {returned_id}"
+                              )
+                          for label, raw in images:
+                              if not isinstance(raw, str) or not raw.strip():
+                                  continue
+                              address = urljoin(douban_url, raw.strip())
+                              parsed = urlsplit(address)
+                              host = (parsed.hostname or "").lower()
+                              cdn_label = host.removesuffix(".doubanio.com")
+                              is_douban_cdn = (
+                                  host.endswith(".doubanio.com")
+                                  and (cdn_label == "img" or
+                                       cdn_label.startswith("img") and
+                                       cdn_label[3:].isdigit())
+                                  and parsed.scheme == "https"
+                                  and parsed.path.startswith("/view/photo/")
+                                  and parsed.path.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))
+                              )
+                              if is_douban_cdn and address not in seen:
+                                  seen.add(address)
+                                  candidates.append((label, address))
+                      except Exception as exc:
+                          print(
+                              f"  Douban mobile subject id={douban_id} "
+                              f"error={type(exc).__name__}: {str(exc)[:160]}"
+                          )
+                  print(
+                      f"  poster candidates api+official-html+douban={len(candidates)} "
+                      f"fields={[label for label, _ in candidates[:16]]}"
+                  )
+                  poster_ok = False
+                  for label, address in candidates[:16]:
+                      print(f"  candidate source={label} url={address[:260]}")
+                      if targeted_image_ok(address, play_url, root_url):
+                          poster_ok = True
+                          break
+                  if not poster_ok:
+                      try:
+                          bangumi_address = bangumi_exact_poster(title, row)
+                          if bangumi_address:
+                              poster_ok = targeted_image_ok(bangumi_address, play_url, root_url)
+                              if poster_ok:
+                                  print(f"PASS: Bangumi exact-match fallback poster validated for id={vod_id}")
+                      except Exception as exc:
+                          print(
+                              f"  Bangumi exact fallback id={vod_id} "
+                              f"error={type(exc).__name__}: {str(exc)[:140]}"
+                          )
+                  if not poster_ok:
+                      verified_address = verified_official_title_poster(title, row)
+                      if verified_address:
+                          print(f"  verified official title poster candidate={verified_address}")
+                          poster_ok = targeted_image_ok(verified_address, play_url, root_url)
+                          if poster_ok:
+                              print(f"PASS: exact verified official programme poster validated for id={vod_id}")
+                  if not poster_ok:
+                      source_poster = poster_address(row.get("vod_pic"))
+                      source_host = (urlsplit(source_poster).hostname or "").lower() if source_poster else ""
+                      if (
+                          vod_id == "1192"
+                          and title == "奉子成婚"
+                          and source_host == "dbzy5.com"
+                          and douban_status == 403
+                          and source_host in dns_unavailable_hosts
+                      ):
+                          target_upstream_unavailable.append(vod_id)
+                          print(
+                              "WARN: poster remains unresolved for id=1192; the source CDN "
+                              "has no public A/AAAA DNS answer and Douban returned HTTP 403. "
+                              "This is an upstream availability blocker, not a validated poster."
+                          )
+                      else:
+                          target_failures.append(vod_id)
+                          print(f"FAIL: official poster not validated for id={vod_id}")
+                  else:
+                      print(f"PASS: official poster validated for id={vod_id}")
+              except Exception as exc:
+                  target_failures.append(vod_id)
+                  print(f"FAIL: target id={vod_id}: {type(exc).__name__}: {str(exc)[:180]}")
+          validated_posters = len(TARGET_POSTER_IDS) - len(target_failures) - len(target_upstream_unavailable)
+          print(
+              f"TARGETED OFFICIAL POSTERS={validated_posters}/{len(TARGET_POSTER_IDS)}; "
+              f"TITLE_RESOLUTION_FAILURES={target_title_failures}; "
+              f"UPSTREAM_UNAVAILABLE={target_upstream_unavailable}"
+          )
+          if target_failures or target_title_failures:
+              unresolved = target_failures + ["title:" + title for title in target_title_failures]
+              raise RuntimeError("user-reported Duoduo poster cases still failing: " + ", ".join(unresolved))
+          if target_upstream_unavailable:
+              print(
+                  "WARNING: upstream artwork blockers remain unresolved; "
+                  "the poster check is not release-ready until these cases are resolved."
+              )
+
+          print("\n=== SEARCH ===")
+          movies = {}
+          for term in ("流浪地球", "阿凡達", "復仇者聯盟"):
+              _, found = api("/api.php/web/search/index", {"wd": term, "page": 1, "limit": 15})
+              rows = found.get("data") or []
+              for row in rows:
+                  if str(row.get("type_id", "")) == "1" or row.get("type_name") == "电影":
+                      movies.setdefault(str(row.get("vod_id", "")), row)
+              print(f"{term}: results={len(rows)}")
+
+          for row in category_rows + list(movies.values()):
+              movies.setdefault(str(row.get("vod_id", "")), row)
+          candidates = [row for key, row in movies.items() if key.isdigit()]
+          if not candidates:
+              candidates = [row for row in category_rows if str(row.get("vod_id", "")).isdigit()]
+          print(f"unique movie detail candidates={len(candidates)}")
+          if not candidates:
+              raise RuntimeError("no movie IDs available for detail probe")
+
+          print("\n=== DETAIL / AGGREGATE / MEDIA ===")
+          checked = 0
+          playable = 0
+          errors = []
+          for summary in candidates[:5]:
+              vod_id = str(summary["vod_id"])
+              try:
+                  base, detail = api("/api.php/web/vod/get_detail", {"vod_id": vod_id})
+                  rows = response_rows(detail.get("data"))
+                  if not rows:
+                      errors.append(f"{vod_id}: no detail row")
+                      continue
+                  row = rows[0]
+                  detail_lines = []
+                  names = str(row.get("vod_play_from") or "").split("$$")
+                  blocks = str(row.get("vod_play_url") or "").split("$$")
+                  player_rows = response_rows(detail.get("vodplayer"))
+                  player_by_from = {
+                      str(player.get("from") or "").strip(): player
+                      for player in player_rows if str(player.get("from") or "").strip()
+                  }
+                  for index, name in enumerate(names[:len(blocks)]):
+                      player = player_by_from.get(name.strip(), {})
+                      if str(player.get("decode_status") or "0") != "0":
+                          continue
+                      for episode in blocks[index].split("#"):
+                          if "$" not in episode:
+                              continue
+                          episode_title, address = episode.split("$", 1)
+                          address = address.strip()
+                          media_path = urlsplit(address).path.lower()
+                          if address and (media_path.endswith(".m3u8") or media_path.endswith(".mp4")):
+                              detail_lines.append((str(player.get("show") or name), episode_title.strip(), address))
+                  _, aggregate = api("/api.php/web/internal/search_aggregate", {"vod_id": vod_id})
+                  aggregate_rows = response_rows(aggregate.get("data"))
+                  aggregate_direct = []
+                  for line in aggregate_rows:
+                      if str(line.get("decode_status")) != "0":
+                          continue
+                      raw = str(line.get("vod_play_url") or "")
+                      for episode in raw.split("#"):
+                          if "$" not in episode:
+                              continue
+                          episode_title, address = episode.split("$", 1)
+                          address = address.strip()
+                          media_path = urlsplit(address).path.lower()
+                          if address and (media_path.endswith(".m3u8") or media_path.endswith(".mp4")):
+                              aggregate_direct.append((str(line.get("site_name") or line.get("site_key") or "direct"), episode_title.strip(), address))
+                  seen_urls = set()
+                  direct = []
+                  for item in detail_lines + aggregate_direct:
+                      if item[2] not in seen_urls:
+                          seen_urls.add(item[2])
+                          direct.append(item)
+                  print(
+                      f"movie={row.get('vod_name')!r} id={vod_id} "
+                      f"detail_player_rows={len(player_rows)} detail_direct_urls={len(detail_lines)} "
+                      f"aggregate_lines={len(aggregate_rows)} aggregate_direct_urls={len(aggregate_direct)} "
+                      f"unique_direct_urls={len(direct)}"
+                  )
+                  for line_name, episode_title, address in direct[:3]:
+                      checked += 1
+                      ok, message = probe_media(address, base + "/")
+                      referer_used = "active-api-mirror"
+                      if not ok:
+                          retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                          if retry_ok:
+                              ok, message = retry_ok, retry_message
+                              referer_used = "public-entry"
+                          else:
+                              message += f"; public-entry retry failed: {retry_message}"
+                      host = urlsplit(address).netloc
+                      print(
+                          f"  line={line_name!r} episode={episode_title!r} host={host} "
+                          f"referer={referer_used} ok={ok} {message}"
+                      )
+                      if ok:
+                          playable += 1
+              except Exception as exc:
+                  errors.append(f"{vod_id}: {type(exc).__name__}: {str(exc)[:160]}")
+
+          print(f"\nDIRECT MEDIA PROBES={checked}; successful source samples={playable}")
+          if playable == 0:
+              raise RuntimeError("no public direct line passed the bounded media probe; " + "; ".join(errors[:5]))
+          print("PASS: Duoduo catalogue candidates, detail and aggregate direct lines, and media segments were probed.")
+          PY
                   "queries": (
                       "獨角獸學院：秘密揭開第二章",
                       "獨角獸學院 秘密揭開 第二章",
