@@ -281,9 +281,14 @@ func TestGuipianRequestedPostersLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 260*time.Second)
 	defer cancel()
 	targets := []struct { label string; aliases []string; found bool }{
-		{"歹路無可退", []string{"歹路無可退", "歹路无可退", "Fast Cash"}, false},
-		{"客房服務2024", []string{"客房服務2024", "客房服務 2024", "客房服务2024", "客房服务 2024", "Room Service 2024", "Room Service"}, false},
-		{"撒旦：黑暗", []string{"撒旦：黑暗", "撒旦:黑暗", "撒旦 黑暗", "Satan: The Dark", "Satan - The Dark", "The Black Bible"}, false},
+		{"歹路無可退", []string{"歹路無可退", "歹路无可退", "Fast Cash", "Caja Rápida"}, false},
+		{"獨角獸學院：秘密揭開第二章", []string{
+			"獨角獸學院：秘密揭開第二章", "獨角獸學院 秘密揭開 第二章",
+			"独角兽学院：秘密揭开第二章", "独角兽学院 秘密揭开 第二章",
+			"Unicorn Academy: Secrets Revealed Chapter Two",
+			"Unicorn Academy Secrets Revealed Chapter Two",
+			"Unicorn Academy: Secrets Revealed Part 2",
+		}, false},
 	}
 	aliases := make([]map[string]bool, len(targets))
 	for index, target := range targets {
@@ -292,7 +297,8 @@ func TestGuipianRequestedPostersLive(t *testing.T) {
 	}
 	var failures []string
 	for _, category := range guipianCategories {
-		if guipianCategoryKind(category.ID) != "電影" { continue }
+		kind := guipianCategoryKind(category.ID)
+		if kind != "電影" && kind != "動漫" { continue }
 		if ctx.Err() != nil { break }
 		// Search a wider, bounded window because requested older titles may not be on the first pages.
 		for page := 1; page <= 10 && ctx.Err() == nil; page++ {
@@ -327,7 +333,7 @@ func TestGuipianRequestedPostersLive(t *testing.T) {
 		if allFound { break }
 	}
 	for _, target := range targets {
-		if !target.found { t.Logf("DISCOVERY NOT FOUND IN GUIPIAN: %s (searched movie categories, up to 10 pages each); source may be another provider or title alias differs", target.label) }
+		if !target.found { t.Logf("DISCOVERY NOT FOUND IN GUIPIAN: %s (searched movie/anime categories, up to 10 pages each); source may be another provider or title alias differs", target.label) }
 	}
 	if ctx.Err() != nil { failures = append(failures, "Guipian requested-title scan timed out before the bounded search completed") }
 	if len(failures) > 0 { t.Fatalf("requested Guipian title/poster cases did not pass: %s", strings.Join(failures, " | ")) }
