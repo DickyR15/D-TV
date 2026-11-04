@@ -175,19 +175,38 @@ func (cache *nativeCoverCache) loadExternalPoster(
 	if cache.downloader == nil {
 		return "", "", primaryErr
 	}
+
+	// A previously cached external fallback can become unavailable after its
+	// CDN disappears. Re-check exact, curated official programme artwork before
+	// falling back to a third-party title search.
+	var officialErr error
+	if officialAddress, ok := nativeVerifiedOfficialPosterAddress(drama); ok && officialAddress != address {
+		officialPath, err := cache.loadAlternativeAddress(
+			ctx, drama, officialAddress,
+			nativeCoverFallbackReferer(cache.downloader, drama, officialAddress), "external",
+		)
+		if err == nil {
+			return officialPath, officialAddress, nil
+		}
+		if ctx.Err() != nil {
+			return "", "", ctx.Err()
+		}
+		officialErr = fmt.Errorf("官方節目海報下載失敗：%w", err)
+	}
+
 	bangumiAddress, bangumiErr := cache.downloader.bangumiPosterAddress(ctx, drama)
 	if bangumiErr != nil {
-		return "", "", errors.Join(primaryErr, bangumiErr)
+		return "", "", errors.Join(primaryErr, officialErr, bangumiErr)
 	}
 	if bangumiAddress == "" || bangumiAddress == address {
-		return "", "", primaryErr
+		return "", "", errors.Join(primaryErr, officialErr)
 	}
 	fallbackPath, fallbackErr := cache.loadAlternativeAddress(
 		ctx, drama, bangumiAddress,
 		nativeCoverFallbackReferer(cache.downloader, drama, bangumiAddress), "external",
 	)
 	if fallbackErr != nil {
-		return "", "", errors.Join(primaryErr, fallbackErr)
+		return "", "", errors.Join(primaryErr, officialErr, fallbackErr)
 	}
 	return fallbackPath, bangumiAddress, nil
 }
