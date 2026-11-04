@@ -351,6 +351,11 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
 			want: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
 		},
+		{
+			name: "Duoduo 66452 逆愛2後會無期 uses exact-record archive artwork as fallback",
+			drama: nativeDrama{ID: "duoduo:66452", Title: "逆爱2：后会无期", Category: "爱情", OnlineDate: "2014"},
+			want: "https://www.newton.com.tw/img/e/b8a/9f44ba2acde42d436ab0d151da63.jpg",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -441,6 +446,8 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{ID: "duoduo:78012", Title: "人間中毒", Category: "電影", OnlineDate: "2014"},
 		{ID: "duoduo:78011", Title: "其他作品", Category: "電影", OnlineDate: "2014"},
 		{ID: "duoduo:1192", Title: "奉子不成婚", Category: "電影", OnlineDate: "2016"},
+		{ID: "duoduo:66453", Title: "逆愛2後會無期", Category: "愛情", OnlineDate: "2014"},
+		{ID: "duoduo:66452", Title: "其他作品", Category: "愛情", OnlineDate: "2014"},
 	}
 	for _, drama := range cases {
 		if address, ok := nativeVerifiedOfficialPosterAddress(drama); ok {
