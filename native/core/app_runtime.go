@@ -341,11 +341,15 @@ func nativeNormalize(drama Drama) nativeDrama {
 			episodes = count
 		}
 	}
+	onlineDate := providerReleaseDate(drama.OnlineDate)
+	if onlineDate == "" {
+		onlineDate = strings.TrimSpace(drama.OnlineDate)
+	}
 	return nativeDrama{MetadataSchema: 1, ID: id, Source: source, SourceID: sourceID, DoubanID: strings.TrimSpace(drama.DoubanID), Title: drama.DisplayTitle(),
 		Description: firstNonEmpty(drama.Desc, drama.Intro), Cover: cover, CoverCandidates: candidates, Episodes: episodes,
 		EpisodesVerified: drama.EpisodesVerified || episodes > 0,
 		Category: nativeDramaCategory(drama), VIP: drama.VIP,
-		Heat: drama.Heat, Views: drama.Views, OnlineDate: providerReleaseDate(drama.OnlineDate),
+		Heat: drama.Heat, Views: drama.Views, OnlineDate: onlineDate,
 		Tags: append([]string(nil), drama.Tags...), ReleaseStatus: drama.ReleaseStatus}
 }
 

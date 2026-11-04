@@ -57,6 +57,8 @@ var (
 	reGuipianMainList   = regexp.MustCompile(`(?is)<ul class="row video-list video-film-list[^"]*">(.*?)</ul>`)
 	reGuipianCard       = regexp.MustCompile(`(?is)<a class="video-link" href="/nv/(\d+)\.html"[^>]*title="([^"]*)"(.*?)</a>`)
 	reGuipianCover      = regexp.MustCompile(`(?is)data-(?:original|background)="([^"]+)"`)
+	reGuipianDoubanLink = regexp.MustCompile(`(?i)douban\.com/(?:movie/)?subject/(\d{6,12})`)
+	reGuipianDoubanPoster = regexp.MustCompile(`(?i)/(?:douban|subject)/(\d{6,12})(?:\.[a-z0-9]{2,5})?(?:[/?#]|$)`)
 	reGuipianArtworkTag    = regexp.MustCompile(`(?is)<(img|source|div|span|a|figure|meta)\b[^>]*>`)
 	reGuipianArtworkAttr   = regexp.MustCompile(`(?is)([a-z_:][-a-z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`)
 	reGuipianArtworkCSSURL = regexp.MustCompile(`(?is)url\(\s*["']?([^"')]+)["']?\s*\)`)
@@ -145,6 +147,17 @@ func guipianUnescape(text string) string {
 		text = next
 	}
 	return text
+}
+
+func guipianDoubanID(values ...string) string {
+	for _, value := range values {
+		for _, pattern := range []*regexp.Regexp{reGuipianDoubanLink, reGuipianDoubanPoster} {
+			if match := pattern.FindStringSubmatch(value); len(match) > 1 && validDoubanSubjectID(match[1]) {
+				return match[1]
+			}
+		}
+	}
+	return ""
 }
 
 func guipianFixURL(raw string) string {
@@ -357,6 +370,7 @@ func parseGuipianCards(body string) []Drama {
 		}
 		items = append(items, Drama{
 			ID: providerDramaID(sourceGuipian, id), Source: sourceGuipian, SourceID: id,
+			DoubanID: guipianDoubanID(append(coverCandidates, chunk)...),
 			Title: truncate(title, 512), Name: truncate(title, 512),
 			Cover: cover, CoverURL: cover, ImageURL: coverAlternatives, ChannelName: "鬼片网",
 			CategoryName: "影视", Remark: truncate(remark, 64),
@@ -575,6 +589,7 @@ func parseGuipianCoverMetadata(sourceID, body string) (Drama, error) {
 	year := guipianExtractField(body, "year", reGuipianYear)
 	drama := Drama{
 		ID: providerDramaID(sourceGuipian, sourceID), Source: sourceGuipian, SourceID: sourceID,
+		DoubanID: guipianDoubanID(append(coverCandidates, body)...),
 		Title: truncate(name, 512), Name: truncate(name, 512),
 		Cover: cover, CoverURL: cover, ImageURL: alternatives,
 		ChannelName: "鬼片網", CategoryName: "影視", OnlineDate: year,
@@ -633,6 +648,7 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (D
 
 	drama := Drama{
 		ID: providerDramaID(sourceGuipian, sourceID), Source: sourceGuipian, SourceID: sourceID,
+		DoubanID: guipianDoubanID(append(coverCandidates, body)...),
 		Title: truncate(name, 512), Name: truncate(name, 512),
 		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
 		Cover: cover, CoverURL: cover, ImageURL: coverAlternatives,

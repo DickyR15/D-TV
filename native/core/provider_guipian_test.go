@@ -27,6 +27,21 @@ func TestGuipianParseCards(t *testing.T) {
 	}
 }
 
+func TestGuipianDoubanIDCanBeRecoveredFromOfficialArtworkPath(t *testing.T) {
+	for _, value := range []string{
+		"https://img.202766.xyz/douban/27110566.webp",
+		"https://img.202766.xyz/douban/37812480.webp",
+		"https://movie.douban.com/subject/20502443/",
+	} {
+		if got := guipianDoubanID(value); got == "" {
+			t.Errorf("Douban subject ID was not extracted from %q", value)
+		}
+	}
+	if got := guipianDoubanID("https://cdn.example.test/poster/12345678.webp"); got != "" {
+		t.Fatalf("unlabelled numeric image path was misidentified as Douban ID: %q", got)
+	}
+}
+
 func TestGuipianPosterCandidatesSupportLazyAndResponsiveArtwork(t *testing.T) {
 	markup := "<div class=\"video-cover\" style=\"background-image:url('//cdn.example.test/background.jpg')\">" +
 		"<img class=\"lazy\" src=\"/assets/placeholder.gif\" data-original=\"/upload/original.jpg?token=1&amp;mode=poster\" " +
@@ -102,6 +117,26 @@ func TestGuipianCoverMetadataDoesNotRequirePlayablePlaylist(t *testing.T) {
 	normalized := nativeNormalize(drama)
 	if normalized.OnlineDate != "2018" {
 		t.Fatalf("normalized release year = %q", normalized.OnlineDate)
+	}
+}
+
+func TestGuipianPosterOnlyMetadataCarriesDoubanIDAndYear(t *testing.T) {
+	body := "<h1 class=\"media-title\">夺金战</h1>" +
+		"<div class=\"detail-img\"><img data-src=\"https://img.202766.xyz/douban/27110566.webp\"></div>" +
+		"<li>年份：<span>2018</span></li>"
+	drama, err := parseGuipianCoverMetadata("77896", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if drama.DoubanID != "27110566" {
+		t.Fatalf("Douban ID = %q", drama.DoubanID)
+	}
+	normalized := nativeNormalize(drama)
+	if normalized.OnlineDate != "2018" {
+		t.Fatalf("normalized release year = %q", normalized.OnlineDate)
+	}
+	if normalized.DoubanID != "27110566" {
+		t.Fatalf("normalized Douban ID = %q", normalized.DoubanID)
 	}
 }
 
@@ -215,7 +250,7 @@ func TestGuipianRequestedPostersLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
 
-	targets := map[string]bool{"失控撞劫": false, "奪金戰": false, "夺金战": false}
+	targets := map[string]bool{"失控撞劫": false, "奪金戰": false}
 	categories := []string{"31", "12", "13", "14", "15", "17", "18", "3", "11", "6", "7", "9"}
 	var failures []string
 	for _, category := range categories {
@@ -236,7 +271,7 @@ func TestGuipianRequestedPostersLive(t *testing.T) {
 			case strings.Contains(title, "奪金戰"):
 				target = "奪金戰"
 			case strings.Contains(title, "夺金战"):
-				target = "夺金战"
+				target = "奪金戰"
 			}
 			if target == "" || targets[target] {
 				continue
@@ -250,21 +285,36 @@ func TestGuipianRequestedPostersLive(t *testing.T) {
 				failures = append(failures, target+": poster-only detail: "+detailErr.Error())
 				continue
 			}
-			t.Logf("poster-only detail: title=%s year=%s cover=%q alternatives=%d",
-				detail.Title, detail.OnlineDate, detail.Cover, len(nativeNormalize(detail).CoverCandidates))
+			t.Logf("poster-only detail: title=%s douban=%s year=%s cover=%q alternatives=%d",
+				detail.Title, detail.DoubanID, detail.OnlineDate, detail.Cover, len(nativeNormalize(detail).CoverCandidates))
 
-			result, loadErr := engine.loadCover(ctx, nativeNormalize(item), true)
+			nativeItem := nativeNormalize(item)
+			if nativeItem.DoubanID == "" {
+				nativeItem.DoubanID = detail.DoubanID
+			}
+			if nativeItem.OnlineDate == "" {
+				nativeItem.OnlineDate = detail.OnlineDate
+			}
+			result, loadErr := engine.loadCover(ctx, nativeItem, true)
 			if loadErr != nil {
 				failures = append(failures, target+": full cover pipeline: "+loadErr.Error())
 				continue
 			}
 			t.Logf("requested poster loaded: %s -> %v", target, result["path"])
+			if path, ok := result["path"].(string); ok {
+				data, readErr := os.ReadFile(path)
+				if readErr != nil || !nativeIsCoverImage(data) {
+					failures = append(failures, target+": cached poster is not a valid image")
+				}
+			} else {
+				failures = append(failures, target+": full cover pipeline returned no local path")
+			}
 		}
 	}
 
 	for title, found := range targets {
 		if !found {
-			t.Logf("requested title not found in the probed first-page categories: %s", title)
+			failures = append(failures, title+": title not found in the probed Guipian categories")
 		}
 	}
 	if len(failures) > 0 {

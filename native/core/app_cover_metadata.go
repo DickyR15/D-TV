@@ -87,11 +87,26 @@ func nativeMergeCoverRecoveryMetadata(drama *nativeDrama, fresh Drama) []string 
 	if (drama.Title == "" || drama.Title == "短劇") && normalized.Title != "" {
 		drama.Title = normalized.Title
 	}
-	if !validDoubanSubjectID(drama.DoubanID) && validDoubanSubjectID(normalized.DoubanID) {
-		drama.DoubanID = normalized.DoubanID
+	freshDoubanID := strings.TrimSpace(fresh.DoubanID)
+	if !validDoubanSubjectID(freshDoubanID) {
+		freshDoubanID = strings.TrimSpace(normalized.DoubanID)
 	}
-	if normalized.OnlineDate != "" {
-		drama.OnlineDate = normalized.OnlineDate
+	if !validDoubanSubjectID(freshDoubanID) {
+		var freshCoverValues []string
+		for _, value := range []any{fresh.Cover, fresh.CoverURL, fresh.CoverURLSnake, fresh.Image, fresh.ImageURL, fresh.ImageURLSnake} {
+			freshCoverValues = append(freshCoverValues, nativeCoverValueStrings(value)...)
+		}
+		freshDoubanID = guipianDoubanID(freshCoverValues...)
+	}
+	if !validDoubanSubjectID(drama.DoubanID) && validDoubanSubjectID(freshDoubanID) {
+		drama.DoubanID = freshDoubanID
+	}
+	freshYear := firstNonEmpty(strings.TrimSpace(fresh.OnlineDate), strings.TrimSpace(normalized.OnlineDate))
+	if freshYear != "" {
+		drama.OnlineDate = providerReleaseDate(freshYear)
+		if drama.OnlineDate == "" {
+			drama.OnlineDate = freshYear
+		}
 	}
 	if drama.Category == "" && normalized.Category != "" {
 		drama.Category = normalized.Category
