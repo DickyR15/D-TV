@@ -137,7 +137,7 @@ class CoverDecoder {
         '67108864',
         '-threads',
         '1',
-        if (heic) ...['-f', 'hevc'],
+        if (heic) ...['-f', 'hevc'] else if (avif) ...['-f', 'mov'],
         '-i',
         input,
         '-frames:v',
