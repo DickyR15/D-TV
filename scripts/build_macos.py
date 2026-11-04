@@ -112,6 +112,29 @@ def ensure_macos_system_accent_channel(project):
     source_path.write_text(source.replace(marker, marker + "\n" + handler), encoding="utf-8")
 
 
+def ensure_macos_multi_window_registration(project):
+    """Register every generated Flutter plugin on the independent player engine."""
+    source_path = project / "Runner" / "MainFlutterWindow.swift"
+    if not source_path.is_file():
+        raise SystemExit("macOS 缺少 Runner/MainFlutterWindow.swift。")
+    source = source_path.read_text(encoding="utf-8")
+    if "import desktop_multi_window" not in source:
+        source = source.replace(
+            "import FlutterMacOS",
+            "import FlutterMacOS\nimport desktop_multi_window",
+        )
+    marker = "    RegisterGeneratedPlugins(registry: flutterViewController)"
+    if marker not in source:
+        raise SystemExit("無法在 macOS Flutter 視窗註冊多視窗插件。")
+    callback = """    FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
+      RegisterGeneratedPlugins(registry: controller)
+    }
+"""
+    if "FlutterMultiWindowPlugin.setOnWindowCreatedCallback" not in source:
+        source = source.replace(marker, marker + "\n" + callback)
+    source_path.write_text(source, encoding="utf-8")
+
+
 def validate_macos_icon_assets():
     """Fail early if the shared D TV artwork was not generated for macOS."""
     manifest_path = MACOS_ICON_SET / "Contents.json"
@@ -268,6 +291,7 @@ def main():
         raise SystemExit("找不到 Xcode Command Line Tools。")
 
     ensure_macos_project(flutter)
+    ensure_macos_multi_window_registration(ROOT / "macos")
     ensure_macos_system_accent_channel(ROOT / "macos")
     run([sys.executable, str(ROOT / "scripts" / "generate_brand_assets.py")])
     validate_macos_icon_assets()
