@@ -9,6 +9,7 @@ class CoverExecutor implements MediaExecutor {
   final void Function() onStart;
   final void Function() onEnd;
   final bool fail;
+  final void Function(List<String>)? onArguments;
 
   @override
   Future<void> run(
@@ -16,6 +17,7 @@ class CoverExecutor implements MediaExecutor {
     double duration = 0,
     void Function(double)? progress,
   }) async {
+    onArguments?.call(arguments);
     onStart();
     try {
       await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -94,6 +96,41 @@ void main() {
     },
   );
 
+  test(
+    'AVIF posters are converted from the container instead of being sent to Image.file',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'synthetic-avif-cover-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final original = File('${directory.path}/poster.img');
+      await original.writeAsBytes([
+        0, 0, 0, 24, 102, 116, 121, 112, 97, 118, 105, 102,
+        0, 0, 0, 0, 109, 105, 102, 49, 97, 118, 105, 102,
+      ]);
+      List<String>? received;
+      final decoder = CoverDecoder(
+        createExecutor: () => CoverExecutor(
+          () {},
+          () {},
+          onArguments: (arguments) => received = arguments,
+        ),
+      );
+
+      final output = await decoder.convert(original.path, () async => {
+        'path': original.path,
+        'avif': true,
+      });
+
+      expect(await File(output).exists(), isTrue);
+      expect(received, isNotNull);
+      expect(received, contains('-i'));
+      expect(received![received!.indexOf('-i') + 1], original.path);
+      expect(received, isNot(contains('-f')));
+      expect(received, containsAll(['-c:v', 'mjpeg']));
+      expect(await original.exists(), isTrue);
+    },
+  );
   test(
     'conversion failures clean temporary data and allow a later retry',
     () async {
