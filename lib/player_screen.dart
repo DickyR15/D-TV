@@ -16,7 +16,7 @@ import 'player_fullscreen_layout_policy.dart';
 import 'app_theme.dart';
 import 'back_safe_dialog.dart';
 import 'core_bridge.dart';
-import 'desktop_mini_player.dart';
+import 'desktop_mini_player_bridge.dart';
 import 'diary_service.dart';
 import 'playback_diagnostics.dart';
 import 'danmaku_controller.dart';
