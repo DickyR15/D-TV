@@ -234,6 +234,8 @@ type nativeVerifiedOfficialPoster struct {
 	title   string
 	year    string
 	address string
+	source  string
+	sourceID string
 }
 
 // These two assets were independently identified from programme-owner /
@@ -252,6 +254,18 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		title: "這是我的西遊第二季",
 		address: "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0",
 	},
+	{
+		// This exact Guipian record is titled Fast Cash / 歹路無可退.
+		// The provider's own image URL is broken; use the sales agent's
+		// official campaign artwork, restricted to this source ID and title.
+		// Guipian's detail currently reports 2027, while Apple TV and LiTV
+		// list the same production as 2026, so this exact-ID mapping has no
+		// source-year gate.
+		title: "歹路無可退",
+		source: sourceGuipian,
+		sourceID: "77333",
+		address: "https://jingafilms.com/wp-content/uploads/2026/02/FastCash.jpg",
+	},
 }
 
 func normalizeBangumiPosterExactTitle(value string) string {
@@ -266,26 +280,35 @@ func normalizeBangumiPosterExactTitle(value string) string {
 }
 
 func nativeVerifiedOfficialPosterAddress(drama nativeDrama) (string, bool) {
-	// A Bangumi type-6 result can be either a movie or a television programme.
-	// Curated variety artwork therefore requires an explicit variety / reality
-	// label; a generic "movie" or "live-action" type is not sufficient.
+	title := normalizeBangumiPosterExactTitle(drama.Title)
+	year := bangumiPosterYear(drama.OnlineDate)
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
-	if !bangumiPosterContainsAny(
+	isVariety := bangumiPosterContainsAny(
 		category,
 		"綜藝", "综艺", "綜藝節目", "综艺节目",
 		"真人秀", "實境秀", "真人實境", "真人实境",
 		"脫口秀", "脱口秀", "variety",
-	) {
-		return "", false
-	}
-	title := normalizeBangumiPosterExactTitle(drama.Title)
-	year := bangumiPosterYear(drama.OnlineDate)
+	)
+	source, sourceID, hasSourceID := splitProviderDramaID(drama.ID)
 	for _, candidate := range nativeVerifiedOfficialPosters {
 		if title != normalizeBangumiPosterExactTitle(candidate.title) {
 			continue
 		}
-		if candidate.year != "" && year != candidate.year {
-			continue
+		if candidate.source != "" || candidate.sourceID != "" {
+			// Provider-specific artwork is safe only for the exact source record
+			// and exact title; it does not broaden matching to unrelated sources.
+			if !hasSourceID || source != candidate.source || sourceID != candidate.sourceID {
+				continue
+			}
+		} else {
+			// A Bangumi type-6 result can be either a movie or a television
+			// programme, so general curated programme artwork is variety-only.
+			if !isVariety {
+				continue
+			}
+			if candidate.year != "" && year != candidate.year {
+				continue
+			}
 		}
 		parsed, err := url.Parse(candidate.address)
 		if err != nil || !validNativeCoverURL(parsed) {
@@ -480,7 +503,7 @@ var bangumiPosterChineseVariants = strings.NewReplacer(
 	"脱", "脫", "说", "說", "剧", "劇", "电", "電",
 	"视", "視", "传", "傳", "华", "華", "国", "國",
 	"乐", "樂", "门", "門",
-	"云", "雲", "龙", "龍", "风", "風",
+	"云", "雲", "龙", "龍", "风", "風", "无", "無",
 )
 
 func normalizeBangumiPosterTitle(value string) string {
