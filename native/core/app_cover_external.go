@@ -266,16 +266,16 @@ func normalizeBangumiPosterExactTitle(value string) string {
 }
 
 func nativeVerifiedOfficialPosterAddress(drama nativeDrama) (string, bool) {
-	// Curated programme artwork is limited to variety / live-action works;
-	// never reuse these assets for a similarly named film or animation.
-	allowed := false
-	for _, subjectType := range bangumiPosterSubjectTypes(drama) {
-		if subjectType == 6 {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
+	// A Bangumi type-6 result can be either a movie or a television programme.
+	// Curated variety artwork therefore requires an explicit variety / reality
+	// label; a generic "movie" or "live-action" type is not sufficient.
+	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
+	if !bangumiPosterContainsAny(
+		category,
+		"綜藝", "综艺", "綜藝節目", "综艺节目",
+		"真人秀", "實境秀", "真人實境", "真人实境",
+		"脫口秀", "脱口秀", "variety",
+	) {
 		return "", false
 	}
 	title := normalizeBangumiPosterExactTitle(drama.Title)
