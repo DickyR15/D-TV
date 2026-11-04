@@ -109,11 +109,21 @@ class LocalStore extends ChangeNotifier {
           auxiliaryChanged = true;
         }
       }
+      final legacyVolume = preferences.getDouble('playerVolume');
+      final activeId = snapshot.getString('activeProfile') ?? 'default';
+      final volumeKey = activeId == 'default'
+          ? 'playerVolume'
+          : 'profile.$activeId.playerVolume';
+      if (legacyVolume != null && !migrated.containsKey(volumeKey)) {
+        migrated[volumeKey] = legacyVolume.clamp(1.0, 100.0).toString();
+        auxiliaryChanged = true;
+      }
       try {
         if (auxiliaryChanged) await snapshot.commit(migrated);
         for (final key in preferences.getKeys().toList()) {
           if (key.startsWith('seriesCandidates.') ||
-              key.startsWith('followChecks.')) {
+              key.startsWith('followChecks.') ||
+              key == 'playerVolume') {
             await preferences.remove(key);
           }
         }
@@ -253,18 +263,20 @@ class LocalStore extends ChangeNotifier {
   String _key(String key, [String? id]) =>
       (id ?? _current) == 'default' ? key : 'profile.${id ?? _current}.$key';
   double get playerVolume {
-    final value = preferences.getDouble('playerVolume') ?? 100.0;
+    final saved = double.tryParse(_string(_key('playerVolume')) ?? '');
+    final value = saved ?? preferences.getDouble('playerVolume') ?? 100.0;
     if (!value.isFinite || value <= 0) return 100.0;
     return value.clamp(1.0, 100.0).toDouble();
   }
 
   Future<void> setPlayerVolume(double value) {
     if (!value.isFinite || value <= 0) return Future.value();
+    if (locked) return Future.value();
     return _queue(() async {
-      await preferences.setDouble(
-        'playerVolume',
-        value.clamp(1.0, 100.0).toDouble(),
-      );
+      final normalized = value.clamp(1.0, 100.0).toDouble();
+      await _commit({
+        _key('playerVolume'): normalized.toString(),
+      }, trackSync: false);
     });
   }
 
@@ -1398,6 +1410,11 @@ class LocalStore extends ChangeNotifier {
             'recentSearches': jsonDecode(
               _string(_key('recentSearches', profile.id)) ?? '[]',
             ),
+            'playerVolume':
+                double.tryParse(
+                  _string(_key('playerVolume', profile.id)) ?? '',
+                ) ??
+                100.0,
           },
       },
     };
@@ -1526,6 +1543,11 @@ class LocalStore extends ChangeNotifier {
       CatalogView.fromJson(
         Map<String, dynamic>.from(library['catalogView'] as Map? ?? {}),
       );
+      final volume = library['playerVolume'];
+      if (volume != null &&
+          (volume is! num || !volume.isFinite || volume <= 0 || volume > 100)) {
+        throw const FormatException('備份音量設定無效');
+      }
       final searches = library['recentSearches'] as List? ?? [];
       if (searches.length > 20 ||
           searches.any(
@@ -1597,6 +1619,8 @@ class LocalStore extends ChangeNotifier {
         _key('recentSearches', profile.id): jsonEncode(
           library['recentSearches'] ?? [],
         ),
+        _key('playerVolume', profile.id):
+            ((library['playerVolume'] as num?) ?? 100).toDouble().toString(),
       });
     }
     await _commit(values, replace: true);

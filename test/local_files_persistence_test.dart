@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hgtv/local_snapshot.dart';
 import 'package:hgtv/local_store.dart';
 import 'package:hgtv/models.dart';
+import 'package:hgtv/playback_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +42,8 @@ void main() {
     final preferences = await freshPreferences();
     final legacy = LocalStore(preferences);
     await legacy.toggleFavorite(favorite);
+    await legacy.setThemeMode('light');
+    await legacy.setPlaybackPreferences(const PlaybackPreferences());
     await legacy.saveWatch(
       entry(favorite, episode: 1, position: 10),
     );
@@ -109,6 +112,33 @@ void main() {
     expect(await userSettingsFile.readAsString(), settingsBefore);
     expect(await historyFile.readAsString(), isNot(historyAfterFavoritePlayback));
     expect(store.watched(watched.id)?.position, 56);
+  });
+
+  test('legacy global player volume is migrated to the active user setting', () async {
+    final preferences = await freshPreferences();
+    await preferences.setString(
+      'profiles',
+      '[{"id":"default","name":"管理員","admin":true,"sources":[],"download":true}]',
+    );
+    await preferences.setString('activeProfile', 'default');
+    await preferences.setDouble('playerVolume', 38);
+    final directory = await Directory.systemTemp.createTemp('dtv-volume-migrate-');
+    addTearDown(() => directory.delete(recursive: true));
+
+    final store = await LocalStore.open(
+      preferences,
+      storageDirectory: directory,
+    );
+    addTearDown(store.dispose);
+
+    expect(store.playerVolume, 38);
+    expect(preferences.getDouble('playerVolume'), isNull);
+    expect(
+      await File(
+        path.join(directory.path, 'users', 'default', 'settings.json'),
+      ).exists(),
+      isTrue,
+    );
   });
 
   test('a damaged history file is quarantined without locking other categories', () async {
