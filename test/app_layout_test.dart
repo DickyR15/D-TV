@@ -10,6 +10,22 @@ void main() {
     expect(formatAppVersion(''), '1.0.0');
   });
 
+  group('desktop poster density', () {
+    test('keeps poster cards readable from HD to ultrawide widths', () {
+      expect(desktopPosterColumnsForWidth(1366), 6);
+      expect(desktopPosterColumnsForWidth(1920), 9);
+      expect(desktopPosterColumnsForWidth(2560), 12);
+      expect(desktopPosterColumnsForWidth(3440), 16);
+    });
+
+    test('caps extreme desktop widths and handles invalid constraints', () {
+      expect(desktopPosterColumnsForWidth(5120), 16);
+      expect(desktopPosterColumnsForWidth(double.infinity), 2);
+      expect(desktopPosterColumnsForWidth(double.nan), 2);
+      expect(desktopPosterColumnsForWidth(0), 2);
+    });
+  });
+
   group('interface mode resolution', () {
     test('auto selects TV before screen-size rules', () {
       expect(
