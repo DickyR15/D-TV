@@ -52,6 +52,7 @@ void main() {
           .having((value) => value.data, 'restore backup explanation', contains('觀看紀錄'))
           .having((value) => value.data, 'restore backup explanation', contains('偏好設定'))
           .having((value) => value.data, 'restore backup explanation', contains('完整性'))
+          .having((value) => value.data, 'restore backup explanation', isNot(contains('舊版備份仍可還原')))
           .having((value) => value.data, 'restore backup explanation', isNot(contains('已下載影片')))
           .having((value) => value.data, 'restore backup explanation', isNot(contains('影片檔案'))),
     );
