@@ -413,14 +413,19 @@ class LocalSnapshot {
 
   void _normalizeLegacyVolumeValues(Map<String, Object> values) {
     for (final entry in values.entries.toList()) {
-      if (entry.key == 'playerVolume' ||
-          RegExp(
-            r'^profile\.[a-zA-Z0-9_-]{1,64}\.playerVolume
-    for (final entry in values.entries) {
-      final boolean = _booleanKeys.contains(entry.key.split('.').last);
-      if (!owns(entry.key) ||
-          (boolean ? entry.value is! bool : entry.value is! String)) {
-        throw const FormatException('本地配置欄位無效');
+      final parts = entry.key.split('.');
+      final isProfileVolume =
+          parts.length == 3 &&
+          parts[0] == 'profile' &&
+          parts[1].isNotEmpty &&
+          parts[2] == 'playerVolume';
+      if (entry.key == 'playerVolume' || isProfileVolume) {
+        if (entry.value is num) {
+          final value = (entry.value as num).toDouble();
+          values[entry.key] = value.isFinite && value > 0
+              ? value.clamp(1.0, 100.0).toString()
+              : '100.0';
+        }
       }
     }
   }
