@@ -906,7 +906,7 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 	case sourceDuoduo:
 		raw, chapters, err = engine.downloader.fetchDuoduoDetailWithCategory(ctx, sourceID, drama.Category)
 	case sourceGuipian:
-		raw, chapters, err = engine.downloader.fetchGuipianDetail(ctx, sourceID)
+		raw, chapters, err = engine.downloader.fetchGuipianDetail(ctx, sourceID, drama.Title)
 	case sourceHanxiaoquan:
 		raw, chapters, err = engine.downloader.fetchHanxiaoquanDetail(ctx, sourceID)
 	default:
