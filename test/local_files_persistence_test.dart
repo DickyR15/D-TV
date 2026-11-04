@@ -73,6 +73,9 @@ void main() {
     final followStatesFile = File(
       path.join(directory.path, 'users', 'default', 'followStates.json'),
     );
+    final lanRecordsFile = File(
+      path.join(directory.path, 'users', 'default', 'lanRecords.json'),
+    );
     final userSettingsFile = File(
       path.join(directory.path, 'users', 'default', 'settings.json'),
     );
@@ -83,6 +86,7 @@ void main() {
       historyFile,
       favoritesFile,
       followStatesFile,
+      lanRecordsFile,
       userSettingsFile,
     ]) {
       expect(await file.exists(), isTrue, reason: file.path);
@@ -90,6 +94,7 @@ void main() {
 
     final favoritesBefore = await favoritesFile.readAsString();
     final followStatesBefore = await followStatesFile.readAsString();
+    final lanRecordsBefore = await lanRecordsFile.readAsString();
     final settingsBefore = await userSettingsFile.readAsString();
     final historyBefore = await historyFile.readAsString();
 
@@ -99,9 +104,11 @@ void main() {
     );
     expect(await favoritesFile.readAsString(), favoritesBefore);
     expect(await followStatesFile.readAsString(), followStatesBefore);
+    expect(await lanRecordsFile.readAsString(), lanRecordsBefore);
     expect(await userSettingsFile.readAsString(), settingsBefore);
     expect(await historyFile.readAsString(), isNot(historyBefore));
     expect(store.following(favorite.id)?.status.name, 'watching');
+    expect(store.lanDocument.records[favorite.id]?.watch?.position, 48);
 
     final historyAfterFavoritePlayback = await historyFile.readAsString();
     await store.saveWatch(
@@ -109,6 +116,7 @@ void main() {
     );
     expect(await favoritesFile.readAsString(), favoritesBefore);
     expect(await followStatesFile.readAsString(), followStatesBefore);
+    expect(await lanRecordsFile.readAsString(), lanRecordsBefore);
     expect(await userSettingsFile.readAsString(), settingsBefore);
     expect(await historyFile.readAsString(), isNot(historyAfterFavoritePlayback));
     expect(store.watched(watched.id)?.position, 56);

@@ -985,8 +985,13 @@ class LocalStore extends ChangeNotifier {
         _key('history'): jsonEncode(
           sorted.take(300).map((entry) => entry.toJson()).toList(),
         ),
-      }, syncUrgent: false);
+      }, trackSync: false, syncUrgent: false);
       _loadLibrary();
+      if (_favorites.containsKey(entry.drama.id)) {
+        // The LAN view is derived from watch history on read. Avoid writing
+        // the LAN snapshot during playback; it is persisted on sync/startup.
+        _lanRevision++;
+      }
       _notify();
     });
   }
