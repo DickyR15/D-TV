@@ -36,6 +36,8 @@ void main() {
       'sourceSwitches': jsonEncode({'guipian': false, 'kanmovie': true}),
     });
     expect(SourceSite.isKnown('guipian'), isTrue);
+    expect(SourceSite.byId('guipian').pagedSearch, isTrue);
+    expect(SourceSite.byId('guipian').onlineSearch, isTrue);
     expect(SourceSite.isKnown('kanmovie'), isFalse);
     expect(store.sourceEnabled('duoduo'), isTrue);
     expect(store.allowsSource('baofeng'), isFalse);
