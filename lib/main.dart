@@ -42,9 +42,15 @@ Future<void> main(List<String> args) async {
   VideoEnhancementAssets.registerLicenses();
 
   if (desktop) {
-    final currentWindow = await WindowController.fromCurrentEngine();
+    String currentWindowArguments = '';
+    try {
+      final currentWindow = await WindowController.fromCurrentEngine();
+      currentWindowArguments = currentWindow.arguments;
+    } catch (_) {
+      // Keep the main application usable if multi-window support is unavailable.
+    }
     final miniPlayerArguments =
-        DesktopMiniPlayerArguments.tryParse(currentWindow.arguments);
+        DesktopMiniPlayerArguments.tryParse(currentWindowArguments);
     if (miniPlayerArguments != null) {
       windowManager.waitUntilReadyToShow(
         const WindowOptions(
@@ -61,6 +67,9 @@ Future<void> main(List<String> args) async {
         },
       );
       runApp(DesktopMiniPlayerApp(arguments: miniPlayerArguments));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_initializeUiLocalizationSafely());
+      });
       return;
     }
   }
