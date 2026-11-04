@@ -778,16 +778,16 @@ func (d *Downloader) tvMazePosterAddress(ctx context.Context, drama nativeDrama)
 	return "", errors.New("TVmaze 找不到片名與年份相符的影集海報")
 }
 
-// externalPosterAddress prefers Duoduo's exact Douban subject ID. If Douban
-// denies the request or has no usable poster, Bangumi is a guarded fallback:
-// its result must still match the exact title, allowed work type and release
-// year, and ambiguous matches are rejected.
+// externalPosterAddress tries independent catalogues in a conservative order.
+// Each catalogue must still return an exact title match, a compatible work type,
+// and a non-conflicting release year. Ambiguous titles are never auto-selected.
 func (d *Downloader) externalPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
 	// Prefer exact, source-verified programme artwork over a third-party search.
 	// The original provider poster is still attempted first by the cover cache.
 	if address, ok := nativeVerifiedOfficialPosterAddress(drama); ok {
 		return address, nil
 	}
+	var failures []error
 	if validDoubanSubjectID(drama.DoubanID) {
 		address, doubanErr := d.doubanPosterAddress(ctx, drama)
 		if doubanErr == nil {
@@ -799,16 +799,33 @@ func (d *Downloader) externalPosterAddress(ctx context.Context, drama nativeDram
 		if strings.Contains(doubanErr.Error(), "豆瓣詳情 ID 與官網提供的作品 ID 不符") {
 			return "", doubanErr
 		}
-		bangumiAddress, bangumiErr := d.bangumiPosterAddress(ctx, drama)
-		if bangumiErr == nil {
-			return bangumiAddress, nil
-		}
-		return "", errors.Join(
-			fmt.Errorf("豆瓣精準海報查詢失敗：%w", doubanErr),
-			fmt.Errorf("Bangumi 備援查詢失敗：%w", bangumiErr),
-		)
+		failures = append(failures, fmt.Errorf("豆瓣精準海報查詢失敗：%w", doubanErr))
 	}
-	return d.bangumiPosterAddress(ctx, drama)
+	if address, err := d.bangumiPosterAddress(ctx, drama); err == nil {
+		return address, nil
+	} else {
+		failures = append(failures, fmt.Errorf("Bangumi 備援查詢失敗：%w", err))
+	}
+	if address, err := d.doubanSuggestedPosterAddress(ctx, drama); err == nil {
+		return address, nil
+	} else {
+		failures = append(failures, fmt.Errorf("豆瓣片名備援查詢失敗：%w", err))
+	}
+	if nativePosterIsAnime(drama) {
+		if address, err := d.aniListPosterAddress(ctx, drama); err == nil {
+			return address, nil
+		} else {
+			failures = append(failures, fmt.Errorf("AniList 備援查詢失敗：%w", err))
+		}
+	}
+	if nativePosterIsTVSeries(drama) {
+		if address, err := d.tvMazePosterAddress(ctx, drama); err == nil {
+			return address, nil
+		} else {
+			failures = append(failures, fmt.Errorf("TVmaze 備援查詢失敗：%w", err))
+		}
+	}
+	return "", errors.Join(failures...)
 }
 
 func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
