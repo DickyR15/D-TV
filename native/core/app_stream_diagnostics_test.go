@@ -240,11 +240,24 @@ func TestNativeStreamDiagnosticsHLSAssetsAndPrivacy(t *testing.T) {
 			t.Errorf("missing diagnostic %s", marker)
 		}
 	}
+	// The HTTP client can observe the final response body before the
+	// server handler's deferred local_response diagnostic has finished
+	// appending its log line. Wait briefly for that synchronous write instead
+	// of making this test depend on runner scheduling (notably Windows).
 	count := 0
-	for _, event := range events {
-		if event.Event == "stream.local_response" && event.HTTPStatus == 200 {
-			count++
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		count = 0
+		for _, event := range events {
+			if event.Event == "stream.local_response" && event.HTTPStatus == 200 {
+				count++
+			}
 		}
+		if count >= 6 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+		events, text = streamDiagnosticEvents(t, stream)
 	}
 	if count != 6 {
 		var summary []string
