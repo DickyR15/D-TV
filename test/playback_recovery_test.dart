@@ -224,6 +224,25 @@ void main() {
     expect(stalled(23, buffer: 5), isTrue); // 16 seconds without real progress.
   });
 
+  test('continuous buffer growth cannot hide 32 seconds without playback movement', () {
+    final health = PlaybackHealth();
+    final start = DateTime(2026, 10, 24, 3);
+
+    bool stalled(int seconds) => health.stalled(
+      position: Duration.zero,
+      duration: const Duration(minutes: 90),
+      buffer: Duration(seconds: seconds),
+      intendedToPlay: true,
+      foreground: true,
+      now: start.add(Duration(seconds: seconds)),
+    );
+
+    for (var second = 0; second < PlaybackHealth.stallTimeout.inSeconds; second++) {
+      expect(stalled(second), isFalse);
+    }
+    expect(stalled(PlaybackHealth.stallTimeout.inSeconds), isTrue);
+  });
+
   test('duration metadata jitter cannot reset an already-started stall timer', () {
     final health = PlaybackHealth();
     final start = DateTime(2026, 10, 24, 2);
