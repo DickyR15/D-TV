@@ -230,11 +230,82 @@ func validDoubanPosterAddress(raw string) string {
 	}
 }
 
+type nativeVerifiedOfficialPoster struct {
+	title   string
+	year    string
+	address string
+}
+
+// These two assets were independently identified from programme-owner /
+// official-platform materials. They are used only for an exact Chinese title
+// and the variety/real-world work type, after normal provider artwork fails.
+// "這是我的西遊 第二季" intentionally has no year gate: Duoduo currently
+// labels this exact second-season title as 2025, while Youku's official
+// catalogue identifies the second season as a 2026 programme.
+var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
+	{
+		title: "花兒與少年同心季",
+		year: "2025",
+		address: "https://k.sinaimg.cn/n/sinakd20250816s/450/w800h450/20250816/ec1c-4c5fc3ef466113eb1d27a75cc8c37fcf.jpg/w700d1q75cms.jpg?by=cms_fixed_width",
+	},
+	{
+		title: "這是我的西遊第二季",
+		address: "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0",
+	},
+}
+
+func normalizeBangumiPosterExactTitle(value string) string {
+	value = bangumiPosterChineseVariants.Replace(strings.TrimSpace(value))
+	var normalized strings.Builder
+	for _, character := range strings.ToLower(value) {
+		if unicode.IsLetter(character) || unicode.IsDigit(character) {
+			normalized.WriteRune(character)
+		}
+	}
+	return normalized.String()
+}
+
+func nativeVerifiedOfficialPosterAddress(drama nativeDrama) (string, bool) {
+	// Curated programme artwork is limited to variety / live-action works;
+	// never reuse these assets for a similarly named film or animation.
+	allowed := false
+	for _, subjectType := range bangumiPosterSubjectTypes(drama) {
+		if subjectType == 6 {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return "", false
+	}
+	title := normalizeBangumiPosterExactTitle(drama.Title)
+	year := bangumiPosterYear(drama.OnlineDate)
+	for _, candidate := range nativeVerifiedOfficialPosters {
+		if title != normalizeBangumiPosterExactTitle(candidate.title) {
+			continue
+		}
+		if candidate.year != "" && year != candidate.year {
+			continue
+		}
+		parsed, err := url.Parse(candidate.address)
+		if err != nil || !validNativeCoverURL(parsed) {
+			continue
+		}
+		return parsed.String(), true
+	}
+	return "", false
+}
+
 // externalPosterAddress prefers Duoduo's exact Douban subject ID. If Douban
 // denies the request or has no usable poster, Bangumi is a guarded fallback:
 // its result must still match the exact title, allowed work type and release
 // year, and ambiguous matches are rejected.
 func (d *Downloader) externalPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
+	// Prefer exact, source-verified programme artwork over a third-party search.
+	// The original provider poster is still attempted first by the cover cache.
+	if address, ok := nativeVerifiedOfficialPosterAddress(drama); ok {
+		return address, nil
+	}
 	if validDoubanSubjectID(drama.DoubanID) {
 		address, doubanErr := d.doubanPosterAddress(ctx, drama)
 		if doubanErr == nil {
