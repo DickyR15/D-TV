@@ -318,10 +318,10 @@ func TestGuipianRequestedPostersLive(t *testing.T) {
 	var failures []string
 	for _, category := range guipianCategories {
 		kind := guipianCategoryKind(category.ID)
-		if kind != "電影" && kind != "動漫" { continue }
+		if kind == "" { continue }
 		if ctx.Err() != nil { break }
 		// Search a wider, bounded window because requested older titles may not be on the first pages.
-		for page := 1; page <= 10 && ctx.Err() == nil; page++ {
+		for page := 1; page <= 20 && ctx.Err() == nil; page++ {
 			items, hasMore, fetchErr := engine.downloader.fetchGuipianCatalogPage(ctx, page, category.ID, "")
 			if fetchErr != nil { t.Logf("category %s page %d diagnostic: %v", category.ID, page, fetchErr); break }
 			for _, item := range items {
@@ -353,7 +353,11 @@ func TestGuipianRequestedPostersLive(t *testing.T) {
 		if allFound { break }
 	}
 	for _, target := range targets {
-		if !target.found { t.Logf("DISCOVERY NOT FOUND IN GUIPIAN: %s (searched movie/anime categories, up to 10 pages each); source may be another provider or title alias differs", target.label) }
+		if !target.found {
+			message := target.label + ": not found in any Guipian film, series or animation category within the 20-page scan"
+			t.Logf("FAIL: DISCOVERY NOT FOUND IN GUIPIAN: %s", target.label)
+			failures = append(failures, message)
+		}
 	}
 	if ctx.Err() != nil { failures = append(failures, "Guipian requested-title scan timed out before the bounded search completed") }
 	if len(failures) > 0 { t.Fatalf("requested Guipian title/poster cases did not pass: %s", strings.Join(failures, " | ")) }
