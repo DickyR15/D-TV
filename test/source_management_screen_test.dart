@@ -10,7 +10,7 @@ import 'fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('four primary sources and guidance are visible in every edition', (
+  testWidgets('three primary sources and guidance are visible in every edition', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -29,17 +29,15 @@ void main() {
     );
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
-    expect(find.text('鬼片'), findsOneWidget);
     expect(find.text('多多追劇'), findsOneWidget);
     expect(
       find.textContaining(
-        '預設開啟 4 個一般片源：紅果、韓小圈、鬼片、多多追劇。',
+        '預設開啟 3 個一般片源：紅果、韓小圈、多多追劇。',
       ),
       findsOneWidget,
     );
     expect(store.sourceEnabled('hongguo'), isTrue);
     expect(store.sourceEnabled('hanxiaoquan'), isTrue);
-    expect(store.sourceEnabled('guipian'), isTrue);
     expect(store.sourceEnabled('duoduo'), isTrue);
   });
 
@@ -64,7 +62,6 @@ void main() {
     );
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
-    expect(find.text('鬼片'), findsOneWidget);
     expect(find.text('多多追劇'), findsOneWidget);
     expect(find.text('暴風'), findsNothing);
     expect(find.text('極速'), findsNothing);
@@ -76,7 +73,7 @@ void main() {
     expect(find.text('進階片源'), findsNothing);
     expect(
       find.textContaining(
-        '預設開啟 4 個一般片源：紅果、韓小圈、鬼片、多多追劇。',
+        '預設開啟 3 個一般片源：紅果、韓小圈、多多追劇。',
       ),
       findsOneWidget,
     );
