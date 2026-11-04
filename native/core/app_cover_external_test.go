@@ -1147,7 +1147,7 @@ func TestAniListPosterAddressUsesExactAnimeTitleAndYear(t *testing.T) {
 		var payload struct { Query string `json:"query"`; Variables map[string]any `json:"variables"` }
 		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil { t.Fatal(err) }
 		if !strings.Contains(payload.Query, "type: ANIME") || payload.Variables["search"] == nil { t.Fatalf("AniList query is missing anime filter: %+v", payload) }
-		body := `{"data":{"Page":{"media":[{"id":12345,"title":{"native":"葬送のフリーレン","romaji":"Sousou no Frieren","english":"Frieren: Beyond Journey's End"},"startDate":{"year":2023},"coverImage":{"extraLarge":"` + expected + `"}}]}}`
+		body := `{"data":{"Page":{"media":[{"id":12345,"title":{"native":"葬送のフリーレン","romaji":"Sousou no Frieren","english":"Frieren: Beyond Journey's End"},"startDate":{"year":2023},"coverImage":{"extraLarge":"` + expected + `"}}]}}}`
 		return posterLookupJSONResponse(request, body), nil
 	})}
 	downloader := &Downloader{client: client, cfg: defaultConfig()}
