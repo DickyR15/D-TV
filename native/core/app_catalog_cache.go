@@ -84,6 +84,22 @@ func (engine *nativeEngine) loadCatalogCache() {
 }
 
 func migrateNativeDrama(drama nativeDrama) nativeDrama {
+	// Repair old catalog snapshots that stored source/sourceId separately or
+	// left ID as a raw provider ID. Cached tiles must receive the same canonical
+	// identity as freshly normalized catalog rows, otherwise DramaCover skips
+	// the poster request permanently.
+	if source, sourceID, valid := splitProviderDramaID(drama.ID); valid {
+		drama.ID, drama.Source, drama.SourceID = providerDramaID(source, sourceID), source, sourceID
+	} else {
+		source := canonicalProviderSource(drama.Source)
+		sourceID := strings.TrimSpace(drama.SourceID)
+		if sourceID == "" {
+			sourceID = strings.TrimSpace(drama.ID)
+		}
+		if isHuangguoProviderSource(source) && sourceID != "" {
+			drama.ID, drama.Source, drama.SourceID = providerDramaID(source, sourceID), source, sourceID
+		}
+	}
   if drama.Source == sourceDuoduo && (drama.Category == "影視" || drama.Category == "影视") {
     drama.Category = ""
   }
