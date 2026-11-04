@@ -583,7 +583,7 @@ func (d *Downloader) aniListPosterAddress(ctx context.Context, drama nativeDrama
 	if !nativePosterIsAnime(drama) {
 		return "", errors.New("作品類型不是動畫，略過 AniList 搜尋")
 	}
-	const queryText = "query ($search: String!) { Page(page: 1, perPage: 25) { media(search: $search, type: ANIME, isAdult: false) { id title { native romaji english } startDate { year } coverImage { extraLarge large } } } }"
+	const queryText = "query ($search: String!) { Page(page: 1, perPage: 25) { media(search: $search, type: ANIME, isAdult: false) { id title { native romaji english } synonyms startDate { year } coverImage { extraLarge large } } } }"
 	searchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	matches := map[string]string{}
@@ -638,12 +638,13 @@ func (d *Downloader) aniListPosterAddress(ctx context.Context, drama nativeDrama
 		for _, candidate := range duoduoRows(page["media"]) {
 			id := strings.TrimSpace(duoduoString(candidate["id"]))
 			title := nestedMap(candidate, "title")
-			if id == "" || !nativePosterTitleMatches(
-				drama.Title,
+			aliases := []string{
 				duoduoString(title["native"]),
 				duoduoString(title["romaji"]),
 				duoduoString(title["english"]),
-			) {
+			}
+			aliases = append(aliases, duoduoStrings(candidate["synonyms"])...)
+			if id == "" || !nativePosterTitleMatches(drama.Title, aliases...) {
 				continue
 			}
 			date := nestedMap(candidate, "startDate")
