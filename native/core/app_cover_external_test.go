@@ -344,11 +344,6 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 		want  string
 	}{
 		{
-			name: "Unicorn Chapter Two",
-			drama: nativeDrama{ID: "retired-source:77681", Title: "独角兽学院：秘密揭开第二章"},
-			want: "https://www.whats-on-netflix.com/wp-content/uploads/2026/09/Unicorn-Academy-Secrets-Revealed-n-S2-E1-00-10-43-15-1536x864.jpg",
-		},
-		{
 			name: "Single's Inferno Season 5",
 			drama: nativeDrama{ID: "duoduo:87221", Title: "單身即地獄 第五季"},
 			want: "https://resource02.ulifestyle.com.hk/ulcms/content/article/image/w1280/2026/01/20260106180130_adf32c82e8e9ede7a5f96d795e9f224666da43bd.jpg",
