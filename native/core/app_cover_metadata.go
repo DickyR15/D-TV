@@ -67,7 +67,7 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nat
 
 	// The external matcher needs the same authoritative title, work type,
 	// release year and provider identifiers that are available on each source's
-	// detail page. Previously only Duoduo and Guipian merged those hints; the
+	// detail page. Earlier implementations merged details for only a subset of providers;
 	// other sources discarded the detail row after extracting image URLs, which
 	// caused otherwise searchable titles to be rejected as ambiguous or unknown.
 	var fresh Drama
