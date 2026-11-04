@@ -112,11 +112,13 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
   }
 
   void _progressChanged(int index, double position) {
+    final episodeChanged = index != _episodeIndex;
     _episodeIndex = index;
     if (position.isFinite && position >= 0) _position = position;
     final now = DateTime.now();
-    if (now.difference(_lastProgressMessage) <
-        const Duration(milliseconds: 900)) {
+    if (!episodeChanged &&
+        now.difference(_lastProgressMessage) <
+            const Duration(milliseconds: 900)) {
       return;
     }
     _lastProgressMessage = now;
