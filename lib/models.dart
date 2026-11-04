@@ -14,6 +14,7 @@ class SourceSite {
       id == 'yeguo' ||
       id == 'dsd' ||
       id == 'duoduo' ||
+      id == 'guipian' ||
       id == 'hanxiaoquan';
   bool get searchSuggestions => id == 'hongguo';
   // These providers must remain independent in
