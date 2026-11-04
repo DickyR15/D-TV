@@ -102,8 +102,12 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
     _position = widget.arguments.initialPosition;
     windowManager.addListener(this);
     unawaited(windowManager.setPreventClose(true));
-    unawaited(_channelReady());
-    unawaited(_initialize());
+    unawaited(_start());
+  }
+
+  Future<void> _start() async {
+    await _channelReady();
+    await _initialize();
   }
 
   Future<void> _channelReady() async {
