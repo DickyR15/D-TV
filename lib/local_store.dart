@@ -16,6 +16,22 @@ import 'lan_sync_models.dart';
 
 part 'local_store_sync.dart';
 
+Object? _canonicalBackupValue(Object? value) {
+  if (value is Map) {
+    final keys = value.keys.map((key) => key.toString()).toList()..sort();
+    return <String, Object?>{
+      for (final key in keys) key: _canonicalBackupValue(value[key]),
+    };
+  }
+  if (value is List) {
+    return value.map(_canonicalBackupValue).toList();
+  }
+  return value;
+}
+
+String _canonicalBackupJson(Object? value) =>
+    jsonEncode(_canonicalBackupValue(value));
+
 class LocalStore extends ChangeNotifier {
   /// [pinHasher] 可注入，便於測試替換掉預設的 isolate 雜湊實現。
   LocalStore(
@@ -1240,7 +1256,7 @@ class LocalStore extends ChangeNotifier {
       },
     };
     final digest = crypto.sha256
-        .convert(utf8.encode(jsonEncode(payload)))
+        .convert(utf8.encode(_canonicalBackupJson(payload)))
         .toString();
     final content = jsonEncode({
       ...payload,
@@ -1284,7 +1300,7 @@ class LocalStore extends ChangeNotifier {
       }
       final payload = Map<String, dynamic>.from(data)..remove('integrity');
       final actualDigest = crypto.sha256
-          .convert(utf8.encode(jsonEncode(payload)))
+          .convert(utf8.encode(_canonicalBackupJson(payload)))
           .toString();
       if (actualDigest != expectedDigest) {
         throw const FormatException('備份完整性檢查失敗，檔案可能已遭修改或損毀');
