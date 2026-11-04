@@ -430,6 +430,16 @@ class LocalSnapshot {
     }
   }
 
+  void _validate(Map<String, Object> values) {
+    for (final entry in values.entries) {
+      final boolean = _booleanKeys.contains(entry.key.split('.').last);
+      if (!owns(entry.key) ||
+          (boolean ? entry.value is! bool : entry.value is! String)) {
+        throw const FormatException('本地配置欄位無效');
+      }
+    }
+  }
+
   Future<bool> _restore(Object? value) => switch (value) {
     null => preferences.remove(storageKey),
     String value => preferences.setString(storageKey, value),
