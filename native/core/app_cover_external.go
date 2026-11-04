@@ -697,7 +697,7 @@ func (d *Downloader) tvMazePosterAddress(ctx context.Context, drama nativeDrama)
 	}
 	searchCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
-	matches := map[int]string{}
+	matches := map[string]string{}
 	var lastErr error
 	for _, keyword := range posterTitleVariants(drama.Title) {
 		if err := searchCtx.Err(); err != nil {
@@ -746,8 +746,8 @@ func (d *Downloader) tvMazePosterAddress(ctx context.Context, drama nativeDrama)
 		}
 		for _, row := range rows {
 			show := nestedMap(row, "show")
-			id := intValue(show["id"])
-			if id <= 0 || !nativePosterTitleMatches(drama.Title, duoduoString(show["name"])) {
+			id := strings.TrimSpace(duoduoString(show["id"]))
+			if id == "" || id == "0" || !nativePosterTitleMatches(drama.Title, duoduoString(show["name"])) {
 				continue
 			}
 			sourceYear := bangumiPosterYear(drama.OnlineDate)
