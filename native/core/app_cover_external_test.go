@@ -1238,3 +1238,23 @@ func TestLoadAlternativeAddressForcedRetryReDownloadsFreshCache(t *testing.T) {
 		t.Fatalf("forced retry made %d downloads, want 2", calls)
 	}
 }
+func TestProviderDoubanSubjectIDExtractsArtworkIdentifiers(t *testing.T) {
+	cases := []struct {
+		name string
+		url  string
+		want string
+	}{
+		{name: "movie subject URL", url: "https://movie.douban.com/subject/1292052/", want: "1292052"},
+		{name: "poster path with Douban directory", url: "https://cdn.example.test/douban/1292052.jpg", want: "1292052"},
+		{name: "subject image path", url: "https://cdn.example.test/subject/1292052.webp", want: "1292052"},
+		{name: "unrelated poster filename", url: "https://cdn.example.test/poster/1292052.webp", want: ""},
+		{name: "invalid placeholder subject", url: "https://movie.douban.com/subject/000000/", want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := providerDoubanSubjectID(tc.url); got != tc.want {
+				t.Fatalf("providerDoubanSubjectID() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
