@@ -14,6 +14,7 @@ import 'core_bridge.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'player_screen.dart';
+import 'ui_localization.dart';
 
 const desktopMiniPlayerChannelName = 'dtv.desktop.mini.player';
 
@@ -108,6 +109,11 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
   Future<void> _start() async {
     try {
       await _channelReady();
+      try {
+        await initializeUiLocalization();
+      } catch (_) {
+        // Keep the Taiwanese fallback translations if OpenCC is unavailable.
+      }
       await _initialize();
     } catch (error) {
       if (mounted) setState(() => _error = error);
