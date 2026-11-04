@@ -127,12 +127,14 @@ class PlaybackHealth {
   Duration? _position;
   Duration? _highestBuffer;
   DateTime? _lastProgress;
+  DateTime? _lastPositionProgress;
   bool _durationDiscovered = false;
 
   void reset() {
     _position = null;
     _highestBuffer = null;
     _lastProgress = null;
+    _lastPositionProgress = null;
     _durationDiscovered = false;
   }
 
@@ -150,6 +152,7 @@ class PlaybackHealth {
       _highestBuffer = buffer;
       _durationDiscovered = duration > Duration.zero;
       _lastProgress = now;
+      _lastPositionProgress = now;
       return false;
     }
 
@@ -163,6 +166,7 @@ class PlaybackHealth {
     final bufferAdvanced =
         _highestBuffer == null || buffer > _highestBuffer!;
 
+    if (positionChanged) _lastPositionProgress = now;
     if (positionChanged || discoveredDuration || bufferAdvanced) {
       _lastProgress = now;
     }
@@ -173,11 +177,14 @@ class PlaybackHealth {
     _position = position;
 
     _lastProgress ??= now;
+    _lastPositionProgress ??= now;
+    final noPositionProgress =
+        now.difference(_lastPositionProgress!) >= stallTimeout;
     final waitingForInitialMedia =
         position == Duration.zero && duration == Duration.zero;
     final timeout = waitingForInitialMedia
         ? startupTimeoutForRoute(routeIndex)
         : stallTimeout;
-    return now.difference(_lastProgress!) >= timeout;
+    return noPositionProgress || now.difference(_lastProgress!) >= timeout;
   }
 }
