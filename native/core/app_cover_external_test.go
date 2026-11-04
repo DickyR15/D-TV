@@ -294,6 +294,65 @@ func TestNativeMergeGuipianCoverRecoveryMetadataPreservesYearAndType(t *testing.
 	}
 }
 
+func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
+	flowerURL := "https://k.sinaimg.cn/n/sinakd20250816s/450/w800h450/20250816/ec1c-4c5fc3ef466113eb1d27a75cc8c37fcf.jpg/w700d1q75cms.jpg?by=cms_fixed_width"
+	xiyouURL := "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0"
+	cases := []struct {
+		name string
+		drama nativeDrama
+		want string
+	}{
+		{
+			name: "traditional title maps to official simplified-origin MangoTV artwork",
+			drama: nativeDrama{Title: "花兒與少年．同心季", Category: "綜藝", OnlineDate: "2025"},
+			want: flowerURL,
+		},
+		{
+			name: "simplified duplicate source title matches the same work",
+			drama: nativeDrama{Title: "花儿与少年同心季", Category: "综艺", OnlineDate: "2025"},
+			want: flowerURL,
+		},
+		{
+			name: "exact second-season Youku title overrides stale upstream year",
+			drama: nativeDrama{Title: "这是我的西游 第二季", Category: "综艺", OnlineDate: "2025"},
+			want: xiyouURL,
+		},
+		{
+			name: "traditional second-season title",
+			drama: nativeDrama{Title: "這是我的西遊 第二季", Category: "綜藝", OnlineDate: "2026"},
+			want: xiyouURL,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			address, ok := nativeVerifiedOfficialPosterAddress(tc.drama)
+			if !ok || address != tc.want {
+				t.Fatalf("verified poster = %q, ok=%t; want %q", address, ok, tc.want)
+			}
+			// Exact, trusted artwork should be available before a third-party search.
+			got, err := (&Downloader{}).externalPosterAddress(context.Background(), tc.drama)
+			if err != nil || got != tc.want {
+				t.Fatalf("external poster = %q, err=%v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) {
+	cases := []nativeDrama{
+		{Title: "花兒與少年．同心季", Category: "綜藝", OnlineDate: "2024"},
+		{Title: "花兒與少年．同心季 特別篇", Category: "綜藝", OnlineDate: "2025"},
+		{Title: "花兒與少年．同心季", Category: "電影", OnlineDate: "2025"},
+		{Title: "這是我的西遊", Category: "綜藝", OnlineDate: "2026"},
+		{Title: "這是我的西遊 第二季", Category: "電影", OnlineDate: "2026"},
+	}
+	for _, drama := range cases {
+		if address, ok := nativeVerifiedOfficialPosterAddress(drama); ok {
+			t.Errorf("unverified title/type/year received poster %q for %+v", address, drama)
+		}
+	}
+}
+
 func TestNativeNormalizeRetainsAlternativePosterFields(t *testing.T) {
 	drama := nativeNormalize(Drama{
 		ID: "duoduo:901",
