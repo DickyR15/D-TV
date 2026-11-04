@@ -34,6 +34,28 @@ func TestNativeCoverFailureCooldownIsScopedByRefererAndCanBeCleared(t *testing.T
 	if cache.coverOnCooldown(address, referer) { t.Fatal("successful retry did not clear cooldown") }
 }
 
+func TestNativeCoverFailureCooldownPersistsAcrossCacheRestart(t *testing.T) {
+	directory := t.TempDir()
+	address := "https://images.example.test/missing-poster.jpg"
+	referer := "https://source.example.test/play/137937"
+	first := newNativeCoverCache(directory, nil)
+	first.noteCoverFailure(address, referer, &nativeCoverHTTPStatusError{StatusCode: 404})
+
+	second := newNativeCoverCache(directory, nil)
+	if !second.coverOnCooldown(address, referer) {
+		t.Fatal("poster failure cooldown was lost after cache restart")
+	}
+	if second.coverOnCooldown(address, "https://other.example.test/") {
+		t.Fatal("persisted cooldown was not scoped to the original Referer")
+	}
+	second.clearCoverFailure(address, referer)
+
+	third := newNativeCoverCache(directory, nil)
+	if third.coverOnCooldown(address, referer) {
+		t.Fatal("successful poster retry did not persist cooldown removal")
+	}
+}
+
 func TestNativeCoverFailureCooldownExpires(t *testing.T) {
 	cache := &nativeCoverCache{failures: make(map[string]time.Time)}
 	address, referer := "https://images.example.test/poster.jpg", "https://source.example.test/"
