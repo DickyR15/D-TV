@@ -959,7 +959,12 @@ jobs:
                       "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
                       "label": "Distributor poster for Obsessed (2014)",
                   },
-                  "1192": {
+                  "1625": {
+                  "aliases": {"鬼灭之刃剧场版无限城篇第一章猗窝座再来", "鬼滅之刃劇場版無限城篇第一章猗窩座再來"},
+                  "address": "https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2926775179.jpg",
+                  "label": "Douban exact subject 36524559 poster for Demon Slayer Infinity Castle Chapter 1 (2025)",
+              },
+              "1192": {
                       "aliases": {"奉子成婚"},
                       "address": "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
                       "label": "Fuji Creative official Shotgun Marriage artwork (2001)",
@@ -1263,6 +1268,14 @@ jobs:
                       source_poster = poster_address(row.get("vod_pic"))
                       source_host = (urlsplit(source_poster).hostname or "").lower() if source_poster else ""
                       unresolved_upstream_artwork = (
+                          (
+                              vod_id == "54635"
+                              and title == "玩物"
+                              and source_host == "dbzy5.com"
+                              and source_host in dns_unavailable_hosts
+                              and not verified_address
+                          )
+                      ) or (
                           vod_id == "1192"
                           and title == "奉子成婚"
                           and source_host == "dbzy5.com"
@@ -1853,7 +1866,12 @@ jobs:
                       "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
                       "label": "Distributor poster for Obsessed (2014)",
                   },
-                  "1192": {
+                  "1625": {
+                  "aliases": {"鬼灭之刃剧场版无限城篇第一章猗窝座再来", "鬼滅之刃劇場版無限城篇第一章猗窩座再來"},
+                  "address": "https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2926775179.jpg",
+                  "label": "Douban exact subject 36524559 poster for Demon Slayer Infinity Castle Chapter 1 (2025)",
+              },
+              "1192": {
                       "aliases": {"奉子成婚"},
                       "address": "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
                       "label": "Fuji Creative official Shotgun Marriage artwork (2001)",
@@ -2149,6 +2167,14 @@ jobs:
                       source_poster = poster_address(row.get("vod_pic"))
                       source_host = (urlsplit(source_poster).hostname or "").lower() if source_poster else ""
                       unresolved_upstream_artwork = (
+                          (
+                              vod_id == "54635"
+                              and title == "玩物"
+                              and source_host == "dbzy5.com"
+                              and source_host in dns_unavailable_hosts
+                              and not verified_address
+                          )
+                      ) or (
                           vod_id == "1192"
                           and title == "奉子成婚"
                           and source_host == "dbzy5.com"
