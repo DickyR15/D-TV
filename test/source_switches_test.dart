@@ -31,13 +31,12 @@ void main() {
     await expectLater(store.setSourceEnabled('sorani', true), throwsStateError);
   });
 
-  test('Guipian is restored while KANMovie stays retired', () async {
+  test('Guipian and KANMovie are retired and stale switches are ignored', () async {
     final store = await create({
-      'sourceSwitches': jsonEncode({'guipian': false, 'kanmovie': true}),
+      'sourceSwitches': jsonEncode({'guipian': true, 'kanmovie': true}),
     });
-    expect(SourceSite.isKnown('guipian'), isTrue);
-    expect(SourceSite.byId('guipian').pagedSearch, isTrue);
-    expect(SourceSite.byId('guipian').onlineSearch, isTrue);
+    expect(SourceSite.isKnown('guipian'), isFalse);
+    expect(SourceSite.isAvailable('guipian'), isFalse);
     expect(SourceSite.isKnown('kanmovie'), isFalse);
     expect(store.sourceEnabled('duoduo'), isTrue);
     expect(store.allowsSource('baofeng'), isFalse);
@@ -68,9 +67,9 @@ void main() {
       'activeProfile': 'viewer',
     });
     expect(store.configurationError, isNull);
-    expect(store.profile.sources, ['guipian', 'duoduo']);
+    expect(store.profile.sources, ['duoduo']);
     expect(store.profile.allows('duoduo'), isTrue);
-    expect(store.profile.allows('guipian'), isTrue);
+    expect(store.profile.allows('guipian'), isFalse);
   });
 
   test('saved KANMovie records are not remapped to unrelated sources', () {
@@ -85,16 +84,15 @@ void main() {
     expect(drama.sourceId, 'bfzy.tv~12345');
   });
 
-  test('four primary sources start enabled and restricted sources start switched off', () async {
+  test('three primary sources start enabled and restricted sources start switched off', () async {
     final store = await create();
     expect(
       store.sources.map((site) => site.id),
-      ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo'],
+      ['hongguo', 'hanxiaoquan', 'duoduo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);
     expect(store.sourceEnabled('hongguo'), isTrue);
     expect(store.sourceEnabled('hanxiaoquan'), isTrue);
-    expect(store.sourceEnabled('guipian'), isTrue);
     expect(store.sourceEnabled('duoduo'), isTrue);
     expect(store.sourceEnabled('huangdou'), isFalse);
     expect(store.allowsSource('huangdou'), isFalse);
