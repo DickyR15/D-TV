@@ -736,6 +736,51 @@ func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
 }
 
 
+func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
+	const poster = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2932687546.jpg"
+	imageBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
+	var seenReferer string
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() != poster {
+			t.Fatalf("unexpected poster request: %s", request.URL)
+		}
+		seenReferer = request.Header.Get("Referer")
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+			Body: io.NopCloser(bytes.NewReader(imageBytes)),
+			ContentLength: int64(len(imageBytes)),
+			Request: request,
+		}, nil
+	})}
+	downloader := &Downloader{
+		client: client,
+		cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
+	}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	if err := os.MkdirAll(cache.directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path, err := cache.load(context.Background(), nativeDrama{
+		ID: "duoduo:137937", Source: sourceDuoduo, SourceID: "137937",
+		Title: "撒旦：黑暗", Cover: poster,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seenReferer != "https://323433ssdfd.top/play/137937" {
+		t.Fatalf("poster Referer = %q, want the work's official play page", seenReferer)
+	}
+	cached, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cached) == 0 || !nativeIsCoverImage(cached) {
+		t.Fatalf("native cover cache did not save a valid image: %d bytes", len(cached))
+	}
+}
+
 func TestExternalPosterAddressUsesBangumiWhenDoubanIDIsMissing(t *testing.T) {
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Host != "api.bgm.tv" {
