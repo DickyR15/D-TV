@@ -127,7 +127,7 @@ void main() {
       expect(received, contains('-i'));
       final inputIndex = received!.indexOf('-i');
       expect(received![inputIndex + 1], original.path);
-      expect(received!.take(inputIndex), isNot(contains('-f')));
+      expect(received!.take(inputIndex), containsAll(['-f', 'mov']));
       expect(received, containsAll(['-c:v', 'mjpeg']));
       expect(await original.exists(), isTrue);
     },
