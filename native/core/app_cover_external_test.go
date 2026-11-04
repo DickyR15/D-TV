@@ -1115,3 +1115,71 @@ func TestValidNativeCoverURLRejectsZXKIImageAPI(t *testing.T) {
 		t.Fatal("paid API gateway must not be treated as a public image CDN")
 	}
 }
+
+func TestDoubanSuggestedPosterAddressUsesExactTitleTypeAndYear(t *testing.T) {
+	const expected = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p1234567890.jpg"
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodGet || request.URL.Host != "movie.douban.com" || request.URL.Path != "/j/subject_suggest" || request.URL.Query().Get("q") == "" {
+			t.Fatalf("unexpected Douban suggestion request: %s", request.URL.String())
+		}
+		body := `[{"id":"12345678","title":"怪奇物語","type":"tv","year":"2016","img":"` + expected + `"},{"id":"12345679","title":"怪奇物語","type":"movie","year":"2016","img":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/wrong.jpg"},{"id":"12345680","title":"怪奇物語","type":"tv","year":"2019","img":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/wrong-year.jpg"}]`
+		return posterLookupJSONResponse(request, body), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.doubanSuggestedPosterAddress(context.Background(), nativeDrama{Title: "怪奇物語（2016）", Category: "劇集", OnlineDate: "2016"})
+	if err != nil { t.Fatal(err) }
+	if address != expected { t.Fatalf("Douban suggested poster = %q, want %q", address, expected) }
+}
+
+func TestDoubanSuggestedPosterAddressRejectsAmbiguousExactMatches(t *testing.T) {
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		return posterLookupJSONResponse(request, `[{"id":"12345678","title":"同名作品","type":"movie","year":"2020","img":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/a.jpg"},{"id":"12345679","title":"同名作品","type":"movie","year":"2020","img":"https://img9.doubanio.com/view/photo/s_ratio_poster/public/b.jpg"}]`), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	_, err := downloader.doubanSuggestedPosterAddress(context.Background(), nativeDrama{Title: "同名作品", Category: "電影", OnlineDate: "2020"})
+	if err == nil || !strings.Contains(err.Error(), "多個同名候選") { t.Fatalf("ambiguous candidates should be rejected, got %v", err) }
+}
+
+func TestAniListPosterAddressUsesExactAnimeTitleAndYear(t *testing.T) {
+	const expected = "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx12345-test.jpg"
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPost || request.URL.Host != "graphql.anilist.co" { t.Fatalf("unexpected AniList request: %s", request.URL.String()) }
+		var payload struct { Query string `json:"query"`; Variables map[string]any `json:"variables"` }
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil { t.Fatal(err) }
+		if !strings.Contains(payload.Query, "type: ANIME") || payload.Variables["search"] == nil { t.Fatalf("AniList query is missing anime filter: %+v", payload) }
+		body := `{"data":{"Page":{"media":[{"id":12345,"title":{"native":"葬送のフリーレン","romaji":"Sousou no Frieren","english":"Frieren: Beyond Journey's End"},"startDate":{"year":2023},"coverImage":{"extraLarge":"` + expected + `"}}]}}`
+		return posterLookupJSONResponse(request, body), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.aniListPosterAddress(context.Background(), nativeDrama{Title: "葬送のフリーレン", Category: "動漫", OnlineDate: "2023"})
+	if err != nil { t.Fatal(err) }
+	if address != expected { t.Fatalf("AniList poster = %q, want %q", address, expected) }
+}
+
+func TestTVMazePosterAddressUsesExactTVTitleAndYear(t *testing.T) {
+	const expected = "https://static.tvmaze.com/uploads/images/original_untouched/1/3456.jpg"
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodGet || request.URL.Host != "api.tvmaze.com" || request.URL.Path != "/search/shows" || request.URL.Query().Get("q") == "" { t.Fatalf("unexpected TVmaze request: %s", request.URL.String()) }
+		body := `[{"score":1,"show":{"id":139,"name":"怪奇物語","premiered":"2016-07-15","image":{"original":"` + expected + `"}}},{"score":0.9,"show":{"id":140,"name":"怪奇物語","premiered":"2019-01-01","image":{"original":"https://static.tvmaze.com/uploads/images/original_untouched/2/wrong-year.jpg"}}}]`
+		return posterLookupJSONResponse(request, body), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.tvMazePosterAddress(context.Background(), nativeDrama{Title: "怪奇物語", Category: "劇集", OnlineDate: "2016"})
+	if err != nil { t.Fatal(err) }
+	if address != expected { t.Fatalf("TVmaze poster = %q, want %q", address, expected) }
+}
+
+func TestExternalPosterAddressUsesDoubanSuggestionAfterBangumiMiss(t *testing.T) {
+	const expected = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/suggestion.jpg"
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "api.bgm.tv": return posterLookupJSONResponse(request, `{"data":[]}`), nil
+		case "movie.douban.com": return posterLookupJSONResponse(request, `[{"id":"12345678","title":"補圖測試電影","type":"movie","year":"2025","img":"` + expected + `"}]`), nil
+		default: t.Fatalf("unexpected poster metadata host: %s", request.URL.Host); return nil, errors.New("unexpected host")
+		}
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.externalPosterAddress(context.Background(), nativeDrama{ID: "duoduo:777", Source: sourceDuoduo, Title: "補圖測試電影", Category: "電影", OnlineDate: "2025"})
+	if err != nil { t.Fatal(err) }
+	if address != expected { t.Fatalf("external fallback poster = %q, want %q", address, expected) }
+}
