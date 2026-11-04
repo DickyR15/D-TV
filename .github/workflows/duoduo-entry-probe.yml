@@ -794,7 +794,7 @@ jobs:
 
               def normalize(value):
                   value = re.sub(
-                      r"(?:第[0-9一二三四五六七八九十百零〇两兩]+季|season[\\s._-]*0*[0-9]+|s0*[0-9]+)$",
+                      r"(?:第[0-9一二三四五六七八九十百零〇两兩]+季|season[\s._-]*0*[0-9]+|s0*[0-9]+)$",
                       "",
                       str(value or "").strip(),
                       flags=re.IGNORECASE,
