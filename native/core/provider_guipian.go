@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -9,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	xhtml "golang.org/x/net/html"
 )
 
 // 鬼片网（guipian）原生站源：MacCMS 风格的 HTML 站点，鬼片/电视剧/动漫三大类。
@@ -562,22 +565,123 @@ func guipianPlayURL(href string) string {
 // parseGuipianCoverMetadata extracts poster and matching metadata without
 // requiring a playable playlist. Artwork remains available when player markup
 // is incomplete or the source has not exposed episode links.
+func guipianHTMLNodeText(node *xhtml.Node, raw bool) string {
+	var builder strings.Builder
+	var walk func(*xhtml.Node)
+	walk = func(current *xhtml.Node) {
+		if current == nil { return }
+		if current.Type == xhtml.TextNode {
+			builder.WriteString(current.Data)
+			if !raw { builder.WriteByte(' ') }
+			return
+		}
+		for child := current.FirstChild; child != nil; child = child.NextSibling { walk(child) }
+	}
+	walk(node)
+	value := strings.TrimSpace(builder.String())
+	if raw { return value }
+	return guipianClean(value)
+}
+
+func guipianTitleCandidate(raw string) string {
+	title := guipianClean(raw)
+	if title == "" || strings.Contains(title, "提示信息") || strings.Contains(title, "影片不存在") { return "" }
+	if open := strings.Index(title, "《"); open >= 0 {
+		if close := strings.Index(title[open+len("《"):], "》"); close >= 0 {
+			candidate := strings.TrimSpace(title[open+len("《"):open+len("《")+close])
+			if candidate != "" { return candidate }
+		}
+	}
+	for _, suffix := range []string{" - 鬼片网", " | 鬼片网", "_鬼片网", " - 鬼片", " - guipianwu.com"} {
+		if index := strings.LastIndex(strings.ToLower(title), strings.ToLower(suffix)); index >= 0 {
+			title = strings.TrimSpace(title[:index])
+		}
+	}
+	return strings.TrimSpace(title)
+}
+
+func guipianJSONLDName(value any) string {
+	switch item := value.(type) {
+	case map[string]any:
+		if name, ok := item["name"].(string); ok {
+			kind, _ := item["@type"].(string)
+			kind = strings.ToLower(kind)
+			if kind == "" || strings.Contains(kind, "movie") || strings.Contains(kind, "tv") ||
+				strings.Contains(kind, "creativework") || strings.Contains(kind, "videoobject") {
+				if candidate := guipianTitleCandidate(name); candidate != "" { return candidate }
+			}
+		}
+		for _, key := range []string{"@graph", "mainEntity", "itemListElement", "item"} {
+			if candidate := guipianJSONLDName(item[key]); candidate != "" { return candidate }
+		}
+	case []any:
+		for _, child := range item {
+			if candidate := guipianJSONLDName(child); candidate != "" { return candidate }
+		}
+	}
+	return ""
+}
+
+func guipianDetailTitle(body string) string {
+	document, err := xhtml.Parse(strings.NewReader(body))
+	if err != nil { return "" }
+	var mediaHeading, anyHeading, openGraph, twitter, jsonLD, pageTitle string
+	var walk func(*xhtml.Node)
+	walk = func(node *xhtml.Node) {
+		if node == nil { return }
+		if node.Type == xhtml.ElementNode {
+			switch strings.ToLower(node.Data) {
+			case "h1":
+				candidate := guipianTitleCandidate(guipianHTMLNodeText(node, false))
+				if candidate != "" {
+					if anyHeading == "" { anyHeading = candidate }
+					for _, attribute := range node.Attr {
+						if strings.EqualFold(attribute.Key, "class") &&
+							strings.Contains(strings.ToLower(attribute.Val), "media-title") { mediaHeading = candidate }
+					}
+				}
+			case "meta":
+				var key, content string
+				for _, attribute := range node.Attr {
+					switch strings.ToLower(attribute.Key) {
+					case "property", "name": key = strings.ToLower(strings.TrimSpace(attribute.Val))
+					case "content": content = attribute.Val
+					}
+				}
+				candidate := guipianTitleCandidate(content)
+				if candidate != "" {
+					switch key {
+					case "og:title": if openGraph == "" { openGraph = candidate }
+					case "twitter:title": if twitter == "" { twitter = candidate }
+					}
+				}
+			case "title":
+				if pageTitle == "" { pageTitle = guipianTitleCandidate(guipianHTMLNodeText(node, false)) }
+			case "script":
+				isJSONLD := false
+				for _, attribute := range node.Attr {
+					if strings.EqualFold(attribute.Key, "type") &&
+						strings.EqualFold(strings.TrimSpace(attribute.Val), "application/ld+json") { isJSONLD = true }
+				}
+				if isJSONLD && jsonLD == "" {
+					var data any
+					if json.Unmarshal([]byte(guipianHTMLNodeText(node, true)), &data) == nil { jsonLD = guipianJSONLDName(data) }
+				}
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling { walk(child) }
+	}
+	walk(document)
+	return firstNonEmpty(mediaHeading, anyHeading, openGraph, twitter, jsonLD, pageTitle)
+}
+
 func parseGuipianCoverMetadata(sourceID, body string) (Drama, error) {
 	if !guipianNumericID(sourceID) {
 		return Drama{}, errors.New("鬼片網影片 ID 無效")
 	}
-	name := guipianExtractField(body, "title", reGuipianTitle)
+	name := guipianDetailTitle(body)
 	if name == "" {
-		if match := reGuipianTitleTag.FindStringSubmatch(body); len(match) > 1 {
-			raw := guipianClean(match[1])
-			if strings.Contains(raw, "提示信息") || strings.Contains(raw, "影片不存在") {
-				return Drama{}, errors.New("鬼片網影片不存在")
-			}
-			name = strings.TrimSpace(regexp.MustCompile("《(.*?)》.*").ReplaceAllString(raw, "$1"))
-		}
-	}
-	if name == "" {
-		return Drama{}, errors.New("鬼片網詳情缺少影片名稱")
+		return Drama{}, fmt.Errorf("鬼片網詳情缺少影片名稱（ID：%s；已檢查 H1、og:title、twitter:title、JSON-LD 與 HTML title）", sourceID)
 	}
 	coverCandidates := guipianDetailPosterCandidates(body)
 	cover := ""
@@ -619,18 +723,9 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (D
 	if err != nil {
 		return Drama{}, nil, err
 	}
-	name := guipianExtractField(body, "title", reGuipianTitle)
+	name := guipianDetailTitle(body)
 	if name == "" {
-		if match := reGuipianTitleTag.FindStringSubmatch(body); len(match) > 1 {
-			raw := guipianClean(match[1])
-			if strings.Contains(raw, "提示信息") || strings.Contains(raw, "影片不存在") {
-				return Drama{}, nil, errors.New("鬼片网影片不存在")
-			}
-			name = strings.TrimSpace(regexp.MustCompile(`《(.*?)》.*`).ReplaceAllString(raw, "$1"))
-		}
-	}
-	if name == "" {
-		return Drama{}, nil, errors.New("鬼片网详情缺少视频名称")
+		return Drama{}, nil, fmt.Errorf("鬼片網詳情缺少影片名稱（ID：%s；已檢查 H1、og:title、twitter:title、JSON-LD 與 HTML title）", sourceID)
 	}
 	coverCandidates := guipianDetailPosterCandidates(body)
 	cover := ""
