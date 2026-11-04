@@ -585,7 +585,12 @@ func guipianHTMLNodeText(node *xhtml.Node, raw bool) string {
 
 func guipianTitleCandidate(raw string) string {
 	title := guipianClean(raw)
-	if title == "" || strings.Contains(title, "提示信息") || strings.Contains(title, "影片不存在") { return "" }
+	if title == "" || title == "短劇" || title == "短剧" || title == "片名獲取失敗" || title == "片名获取失败" ||
+		strings.Contains(title, "提示信息") || strings.Contains(title, "影片不存在") ||
+		strings.Contains(title, "片名獲取失敗") || strings.Contains(title, "片名获取失败") ||
+		strings.Contains(title, "獲取片名失敗") || strings.Contains(title, "获取片名失败") {
+		return ""
+	}
 	if open := strings.Index(title, "《"); open >= 0 {
 		if close := strings.Index(title[open+len("《"):], "》"); close >= 0 {
 			candidate := strings.TrimSpace(title[open+len("《"):open+len("《")+close])
@@ -675,13 +680,25 @@ func guipianDetailTitle(body string) string {
 	return firstNonEmpty(mediaHeading, anyHeading, openGraph, twitter, jsonLD, pageTitle)
 }
 
-func parseGuipianCoverMetadata(sourceID, body string) (Drama, error) {
+func guipianDetailTitleWithFallback(body string, fallbackTitles ...string) string {
+	if title := guipianDetailTitle(body); title != "" {
+		return title
+	}
+	for _, raw := range fallbackTitles {
+		if title := guipianTitleCandidate(raw); title != "" {
+			return title
+		}
+	}
+	return ""
+}
+
+func parseGuipianCoverMetadata(sourceID, body string, fallbackTitles ...string) (Drama, error) {
 	if !guipianNumericID(sourceID) {
 		return Drama{}, errors.New("鬼片網影片 ID 無效")
 	}
-	name := guipianDetailTitle(body)
+	name := guipianDetailTitleWithFallback(body, fallbackTitles...)
 	if name == "" {
-		return Drama{}, fmt.Errorf("鬼片網詳情缺少影片名稱（ID：%s；已檢查 H1、og:title、twitter:title、JSON-LD 與 HTML title）", sourceID)
+		return Drama{}, fmt.Errorf("鬼片網詳情缺少影片名稱（ID：%s；已檢查 H1、og:title、twitter:title、JSON-LD、HTML title 與目錄片名）", sourceID)
 	}
 	coverCandidates := guipianDetailPosterCandidates(body)
 	cover := ""
@@ -704,7 +721,7 @@ func parseGuipianCoverMetadata(sourceID, body string) (Drama, error) {
 	return drama, nil
 }
 
-func (d *Downloader) fetchGuipianCoverMetadata(ctx context.Context, sourceID string) (Drama, error) {
+func (d *Downloader) fetchGuipianCoverMetadata(ctx context.Context, sourceID string, fallbackTitles ...string) (Drama, error) {
 	if !guipianNumericID(sourceID) {
 		return Drama{}, errors.New("鬼片網影片 ID 無效")
 	}
@@ -712,10 +729,10 @@ func (d *Downloader) fetchGuipianCoverMetadata(ctx context.Context, sourceID str
 	if err != nil {
 		return Drama{}, err
 	}
-	return parseGuipianCoverMetadata(sourceID, body)
+	return parseGuipianCoverMetadata(sourceID, body, fallbackTitles...)
 }
 
-func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
+func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string, fallbackTitles ...string) (Drama, []Chapter, error) {
 	if !guipianNumericID(sourceID) {
 		return Drama{}, nil, errors.New("鬼片网视频 ID 无效")
 	}
@@ -723,9 +740,9 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (D
 	if err != nil {
 		return Drama{}, nil, err
 	}
-	name := guipianDetailTitle(body)
+	name := guipianDetailTitleWithFallback(body, fallbackTitles...)
 	if name == "" {
-		return Drama{}, nil, fmt.Errorf("鬼片網詳情缺少影片名稱（ID：%s；已檢查 H1、og:title、twitter:title、JSON-LD 與 HTML title）", sourceID)
+		return Drama{}, nil, fmt.Errorf("鬼片網詳情缺少影片名稱（ID：%s；已檢查 H1、og:title、twitter:title、JSON-LD、HTML title 與目錄片名）", sourceID)
 	}
 	coverCandidates := guipianDetailPosterCandidates(body)
 	cover := ""
