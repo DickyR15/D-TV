@@ -204,6 +204,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool get _canUsePictureInPicture => supportsPictureInPicture(
     android: defaultTargetPlatform == TargetPlatform.android,
     systemSupported: _pictureInPictureSupported,
+    television: _television,
   );
   bool get _mobile => _formFactor == FormFactor.phone;
   VideoEnhancementController? get _enhancementForUi =>
@@ -641,10 +642,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     final hasPrevious = _index > 0;
     final hasNext = _index + 1 < widget.detail.episodes.length;
     final autoEnter = shouldAutoEnterPictureInPicture(
-      android: true,
+      android: defaultTargetPlatform == TargetPlatform.android,
       systemSupported: _pictureInPictureSupported,
       playing: playing,
       enabled: widget.store.playbackPreferences.autoPictureInPicture,
+      television: _television,
     );
     final signature = '$width:$height:$playing:$hasPrevious:$hasNext:$autoEnter';
     if (_pictureInPictureStateSignature == signature) return;
