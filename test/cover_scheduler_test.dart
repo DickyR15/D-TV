@@ -5,7 +5,7 @@ import 'package:hgtv/widgets.dart';
 
 void main() {
   test(
-    'poster scheduler prioritizes the newest queued viewport requests',
+    'poster scheduler completes older visible requests before newer backlog',
     () async {
       final started = <int>[];
       final gates = <int, Completer<void>>{
@@ -41,7 +41,7 @@ void main() {
         await Future<void>.delayed(Duration.zero);
         await Future<void>.delayed(Duration.zero);
 
-        expect(started, [1, 2, 3, 4, 5, 6, 9, 8, 7]);
+        expect(started, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
         for (var id = 7; id <= 9; id++) {
           gates[id]!.complete();
