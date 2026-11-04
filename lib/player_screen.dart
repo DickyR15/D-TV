@@ -2790,7 +2790,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 : _desktopMiniPlayerSupported
                 ? _openDesktopMiniPlayer
                 : null,
-            pictureInPictureTooltip: _desktopMiniPlayerSupported ? '小窗' : '畫中畫',
             onBack: _back,
           )
         : PlayerControls(
