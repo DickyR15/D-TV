@@ -48,6 +48,7 @@ void main() {
     final gesture = await tester.startGesture(
       tester.getCenter(viewport),
       kind: PointerDeviceKind.mouse,
+      buttons: kPrimaryButton,
     );
     await gesture.moveBy(const Offset(-180, 0));
     await tester.pumpAndSettle();
