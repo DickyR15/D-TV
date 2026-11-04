@@ -356,7 +356,7 @@ class LocalStore extends ChangeNotifier {
       if (oldAggregateEnabled != null) {
         migrated.putIfAbsent('duoduo', () => oldAggregateEnabled);
       }
-      // The retired Guipian switch is intentionally discarded.
+      // Removed source switches are filtered out; only current sources survive.
       _sourceSwitches = migrated;
     } catch (_) {
       _sourceSwitches = {};
