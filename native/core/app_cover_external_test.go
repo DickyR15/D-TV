@@ -949,7 +949,7 @@ func TestNativeCoverExternalDownloadFailureRetriesVerifiedOfficialProgrammePoste
 				Title: "這是我的西遊 第二季", Category: "綜藝", OnlineDate: "2025",
 			},
 			wantURL: "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0",
-			wantHost: "live.ykimg.com", wantRef: "https://www.youku.com/",
+			wantHost: "live.ykimg.com", wantRef: "https://323433ssdfd.top/",
 		},
 	}
 	for _, tc := range cases {
@@ -977,7 +977,10 @@ func TestNativeCoverExternalDownloadFailureRetriesVerifiedOfficialProgrammePoste
 					return nil, errors.New("unexpected poster request: " + request.URL.String())
 				}
 			})}
-			downloader := &Downloader{client: client, cfg: defaultConfig()}
+			downloader := &Downloader{
+				client: client, cfg: defaultConfig(),
+				providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
+			}
 			cache := newNativeCoverCache(t.TempDir(), downloader)
 			path, address, err := cache.loadExternalPoster(
 				context.Background(), tc.drama,
