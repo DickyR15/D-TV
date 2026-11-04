@@ -791,7 +791,9 @@ class NativeRepository extends AppRepository {
     });
     final file = result['path'] as String? ?? '';
     if (file.isEmpty) throw AppFailure('海報暫不可用');
-    if (result['heic'] != true) return _rememberCover(key, file);
+    if (result['heic'] != true && result['avif'] != true) {
+      return _rememberCover(key, file);
+    }
     final converted = await _coverDecoder.convert(
       file,
       () => _call({'action': 'prepareCover', 'drama': drama.toJson()}),
