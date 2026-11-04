@@ -130,6 +130,12 @@ class Drama {
   final String id;
   final String source;
   final String sourceId;
+  /// Stable identity for catalog items whose legacy JSON only has source + ID.
+  String get stableId => id.isNotEmpty
+      ? id
+      : source.isNotEmpty && sourceId.isNotEmpty
+      ? '$source:$sourceId'
+      : '';
   final String title;
   final String description;
   final String cover;
@@ -206,7 +212,7 @@ class Drama {
   };
 
   Drama merge(Drama fresh) {
-    if (id != fresh.id) return fresh;
+    if (stableId != fresh.stableId) return fresh;
     const genericCategories = {
       '短劇',
       '真人劇',
@@ -223,7 +229,7 @@ class Drama {
         ? ''
         : category;
     return Drama(
-      id: id,
+      id: id.isEmpty ? fresh.id : id,
       source: fresh.source.isEmpty ? source : fresh.source,
       sourceId: fresh.sourceId.isEmpty ? sourceId : fresh.sourceId,
       title: fresh.title.isEmpty || fresh.title == '短劇' ? title : fresh.title,
