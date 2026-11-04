@@ -133,9 +133,9 @@ class DramaCover extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           placeholder,
-          if (!imagesDisabled && drama.id.isNotEmpty)
+          if (!imagesDisabled && drama.stableId.isNotEmpty)
             CachedCoverImage(
-              key: ValueKey('${drama.id}\u0000${drama.cover}'),
+              key: ValueKey('${drama.stableId}\u0000${drama.cover}'),
               drama: drama,
               repository: repository,
               placeholder: placeholder,
@@ -281,11 +281,13 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
   bool _retryQueued = false;
   String? _failedPath;
 
+  String get _dramaId => widget.drama.stableId;
+
   @override
   void initState() {
     super.initState();
     _coverRevision = widget.repository.catalogUpdates.coverRevision(
-      widget.drama.id,
+      _dramaId,
     );
     widget.repository.catalogUpdates.addListener(_metadataChanged);
     _request();
@@ -329,13 +331,13 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
       widget.repository.catalogUpdates.addListener(_metadataChanged);
     }
     if (oldWidget.repository != widget.repository ||
-        oldWidget.drama.id != widget.drama.id ||
+        oldWidget.drama.stableId != widget.drama.stableId ||
         oldWidget.drama.cover != widget.drama.cover ||
         oldWidget.drama.source != widget.drama.source) {
       _coverFailed = _retryOnFailure = false;
       _failedPath = null;
       _coverRevision = widget.repository.catalogUpdates.coverRevision(
-        widget.drama.id,
+        _dramaId,
       );
       _request();
     }
@@ -343,7 +345,7 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
 
   void _metadataChanged() {
     final revision = widget.repository.catalogUpdates.coverRevision(
-      widget.drama.id,
+      _dramaId,
     );
     if (revision == _coverRevision) return;
     _coverRevision = revision;
