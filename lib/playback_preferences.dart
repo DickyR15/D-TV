@@ -36,7 +36,8 @@ String? playbackHwdecFor({
 bool supportsPictureInPicture({
   required bool android,
   required bool systemSupported,
-}) => android && systemSupported;
+  bool television = false,
+}) => android && !television && systemSupported;
 
 /// PiP auto-entry is only enabled while a supported Android player is running.
 bool shouldAutoEnterPictureInPicture({
@@ -44,10 +45,12 @@ bool shouldAutoEnterPictureInPicture({
   required bool systemSupported,
   required bool playing,
   required bool enabled,
+  bool television = false,
 }) =>
     supportsPictureInPicture(
       android: android,
       systemSupported: systemSupported,
+      television: television,
     ) &&
     playing &&
     enabled;
