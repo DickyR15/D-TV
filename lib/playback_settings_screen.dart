@@ -324,9 +324,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               value: _autoAdvance,
               onChanged: _updateAutoAdvance,
             ),
-            if (Platform.isAndroid &&
-                _pictureInPictureSupported &&
-                !AppLayout.isTelevision(context))
+            if (supportsPictureInPicture(
+              android: Platform.isAndroid,
+              systemSupported: _pictureInPictureSupported,
+              television: AppLayout.isTelevision(context),
+            ))
               SwitchListTile(
                 key: const ValueKey('playback-auto-picture-in-picture'),
                 contentPadding: EdgeInsets.zero,
