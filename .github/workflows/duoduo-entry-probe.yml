@@ -913,6 +913,16 @@ jobs:
                       "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
                       "label": "Distributor poster for Obsessed (2014)",
                   },
+                  "1192": {
+                      "aliases": {"奉子成婚"},
+                      "address": "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+                      "label": "Fuji Creative official Shotgun Marriage artwork (2001)",
+                  },
+                  "66452": {
+                      "aliases": {"逆愛2後會無期", "逆爱2后会无期", "逆愛2：後會無期", "逆爱2：后会无期"},
+                      "address": "https://www.newton.com.tw/img/e/b8a/9f44ba2acde42d436ab0d151da63.jpg",
+                      "label": "Archive image indexed under the exact 逆愛2後會無期 programme record (2014)",
+                  },
               }
               exact_item = exact_source_records.get(str(vod_id))
               if exact_item and normalize_exact(title) in exact_item["aliases"]:
@@ -1195,13 +1205,14 @@ jobs:
                               f"  Bangumi exact fallback id={vod_id} "
                               f"error={type(exc).__name__}: {str(exc)[:140]}"
                           )
+                  verified_address = ""
                   if not poster_ok:
                       verified_address = verified_official_title_poster(vod_id, title, row)
                       if verified_address:
-                          print(f"  verified official title poster candidate={verified_address}")
+                          print(f"  verified exact-record artwork candidate={verified_address}")
                           poster_ok = targeted_image_ok(verified_address, play_url, root_url)
                           if poster_ok:
-                              print(f"PASS: exact verified official programme poster validated for id={vod_id}")
+                              print(f"PASS: exact source-record artwork validated for id={vod_id}")
                   if not poster_ok:
                       source_poster = poster_address(row.get("vod_pic"))
                       source_host = (urlsplit(source_poster).hostname or "").lower() if source_poster else ""
@@ -1211,12 +1222,14 @@ jobs:
                           and source_host == "dbzy5.com"
                           and douban_status == 403
                           and source_host in dns_unavailable_hosts
+                          and not verified_address
                       ) or (
                           vod_id == "66452"
                           and title == "逆爱2：后会无期"
                           and str(row.get("vod_year") or "").strip()[:4] == "2014"
                           and source_host == "dbzy5.com"
                           and source_host in dns_unavailable_hosts
+                          and not verified_address
                       )
                       if unresolved_upstream_artwork:
                           target_upstream_unavailable.append(vod_id)
@@ -1751,6 +1764,16 @@ jobs:
                       "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
                       "label": "Distributor poster for Obsessed (2014)",
                   },
+                  "1192": {
+                      "aliases": {"奉子成婚"},
+                      "address": "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+                      "label": "Fuji Creative official Shotgun Marriage artwork (2001)",
+                  },
+                  "66452": {
+                      "aliases": {"逆愛2後會無期", "逆爱2后会无期", "逆愛2：後會無期", "逆爱2：后会无期"},
+                      "address": "https://www.newton.com.tw/img/e/b8a/9f44ba2acde42d436ab0d151da63.jpg",
+                      "label": "Archive image indexed under the exact 逆愛2後會無期 programme record (2014)",
+                  },
               }
               exact_item = exact_source_records.get(str(vod_id))
               if exact_item and normalize_exact(title) in exact_item["aliases"]:
@@ -2025,13 +2048,14 @@ jobs:
                               f"  Bangumi exact fallback id={vod_id} "
                               f"error={type(exc).__name__}: {str(exc)[:140]}"
                           )
+                  verified_address = ""
                   if not poster_ok:
                       verified_address = verified_official_title_poster(vod_id, title, row)
                       if verified_address:
-                          print(f"  verified official title poster candidate={verified_address}")
+                          print(f"  verified exact-record artwork candidate={verified_address}")
                           poster_ok = targeted_image_ok(verified_address, play_url, root_url)
                           if poster_ok:
-                              print(f"PASS: exact verified official programme poster validated for id={vod_id}")
+                              print(f"PASS: exact source-record artwork validated for id={vod_id}")
                   if not poster_ok:
                       source_poster = poster_address(row.get("vod_pic"))
                       source_host = (urlsplit(source_poster).hostname or "").lower() if source_poster else ""
@@ -2041,12 +2065,14 @@ jobs:
                           and source_host == "dbzy5.com"
                           and douban_status == 403
                           and source_host in dns_unavailable_hosts
+                          and not verified_address
                       ) or (
                           vod_id == "66452"
                           and title == "逆爱2：后会无期"
                           and str(row.get("vod_year") or "").strip()[:4] == "2014"
                           and source_host == "dbzy5.com"
                           and source_host in dns_unavailable_hosts
+                          and not verified_address
                       )
                       if unresolved_upstream_artwork:
                           target_upstream_unavailable.append(vod_id)
