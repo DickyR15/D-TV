@@ -83,3 +83,24 @@ func TestFailedPrimaryPosterDoesNotRepeatDuoduoDetailLookup(t *testing.T) {
 	}
 }
 
+
+func TestAVIFImageDetectionIncludesCompatibleBrands(t *testing.T) {
+	majorBrand := []byte{
+		0, 0, 0, 24, 'f', 't', 'y', 'p', 'a', 'v', 'i', 'f',
+		0, 0, 0, 0, 'm', 'i', 'f', '1', 'a', 'v', 'i', 'f',
+	}
+	if !isAVIFImage(majorBrand) || !nativeIsCoverImage(majorBrand) {
+		t.Fatal("AVIF major brand was not recognized as a cover image")
+	}
+
+	compatibleBrand := []byte{
+		0, 0, 0, 24, 'f', 't', 'y', 'p', 'm', 'i', 'f', '1',
+		0, 0, 0, 0, 'm', 'i', 'f', '1', 'a', 'v', 'i', 'f',
+	}
+	if !isAVIFImage(compatibleBrand) || !nativeIsCoverImage(compatibleBrand) {
+		t.Fatal("AVIF compatible brand was not recognized as a cover image")
+	}
+	if isAVIFImage([]byte{0, 0, 0, 16, 'f', 't', 'y', 'p', 'h', 'e', 'i', 'c', 0, 0, 0, 0}) {
+		t.Fatal("HEIC was incorrectly classified as AVIF")
+	}
+}
