@@ -321,6 +321,11 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 			drama: nativeDrama{Title: "這是我的西遊 第二季", Category: "綜藝", OnlineDate: "2026"},
 			want: xiyouURL,
 		},
+		{
+			name: "Guipian Fast Cash uses sales-agent artwork only for exact provider ID and title",
+			drama: nativeDrama{ID: "guipian:77333", Title: "歹路无可退", Category: "影视", Tags: []string{"電影"}, OnlineDate: "2027"},
+			want: "https://jingafilms.com/wp-content/uploads/2026/02/FastCash.jpg",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -344,6 +349,9 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{Title: "花兒與少年．同心季", Category: "電影", OnlineDate: "2025"},
 		{Title: "這是我的西遊", Category: "綜藝", OnlineDate: "2026"},
 		{Title: "這是我的西遊 第二季", Category: "電影", OnlineDate: "2026"},
+		{ID: "guipian:77334", Title: "歹路無可退", Category: "影视", OnlineDate: "2026"},
+		{ID: "duoduo:77333", Title: "歹路無可退", Category: "電影", OnlineDate: "2026"},
+		{ID: "guipian:77333", Title: "其他作品", Category: "影视", OnlineDate: "2026"},
 	}
 	for _, drama := range cases {
 		if address, ok := nativeVerifiedOfficialPosterAddress(drama); ok {
