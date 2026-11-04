@@ -202,6 +202,46 @@ void main() {
     expect(stalled(332, duration: 120), isTrue); // Mid-playback timeout remains 32s.
   });
 
+  test('buffer oscillation cannot keep a stalled startup alive forever', () {
+    final health = PlaybackHealth();
+    final start = DateTime(2026, 10, 24, 1);
+
+    bool stalled(int seconds, {int buffer = 0}) => health.stalled(
+      position: Duration.zero,
+      duration: Duration.zero,
+      buffer: Duration(seconds: buffer),
+      intendedToPlay: true,
+      foreground: true,
+      now: start.add(Duration(seconds: seconds)),
+      routeIndex: 0,
+    );
+
+    expect(stalled(0), isFalse);
+    expect(stalled(7, buffer: 5), isFalse); // Forward buffer growth.
+    expect(stalled(10, buffer: 4), isFalse); // Buffer shrank.
+    expect(stalled(20, buffer: 5), isFalse); // Same high-water mark.
+    expect(stalled(22, buffer: 4), isFalse);
+    expect(stalled(23, buffer: 5), isTrue); // 16 seconds without real progress.
+  });
+
+  test('duration metadata jitter cannot reset an already-started stall timer', () {
+    final health = PlaybackHealth();
+    final start = DateTime(2026, 10, 24, 2);
+
+    bool stalled(int seconds, {int duration = 120}) => health.stalled(
+      position: Duration.zero,
+      duration: Duration(seconds: duration),
+      intendedToPlay: true,
+      foreground: true,
+      now: start.add(Duration(seconds: seconds)),
+    );
+
+    expect(stalled(0), isFalse); // First duration discovery is useful progress.
+    expect(stalled(15, duration: 121), isFalse);
+    expect(stalled(31, duration: 119), isFalse);
+    expect(stalled(32, duration: 122), isTrue);
+  });
+
   test('recovery budget resets only after 30 seconds of progressing playback', () {
     final tracker = PlaybackRecoveryStability();
     final start = DateTime(2026, 10, 25, 12);
