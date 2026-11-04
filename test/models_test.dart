@@ -2,6 +2,38 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/models.dart';
 
 void main() {
+  test('legacy drama with source ID has a stable poster identity', () {
+    const drama = Drama(
+      id: '',
+      source: 'duoduo',
+      sourceId: '137937',
+      title: '撒旦：黑暗',
+    );
+
+    expect(drama.stableId, 'duoduo:137937');
+  });
+
+  test('Drama merge matches a legacy row to its canonical provider ID', () {
+    const legacy = Drama(
+      id: '',
+      source: 'duoduo',
+      sourceId: '137937',
+      title: '撒旦：黑暗',
+    );
+    const canonical = Drama(
+      id: 'duoduo:137937',
+      source: 'duoduo',
+      sourceId: '137937',
+      title: '撒旦：黑暗',
+      cover: 'https://img.example.test/poster.jpg',
+    );
+
+    final merged = legacy.merge(canonical);
+    expect(merged.id, 'duoduo:137937');
+    expect(merged.cover, 'https://img.example.test/poster.jpg');
+    expect(merged.stableId, 'duoduo:137937');
+  });
+
   test('Drama preserves Douban ID for later poster recovery', () {
     final drama = Drama.fromJson({
       'id': 'duoduo:54635',
