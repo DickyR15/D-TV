@@ -345,7 +345,7 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 	}{
 		{
 			name: "Unicorn Chapter Two",
-			drama: nativeDrama{ID: "guipian:77681", Title: "独角兽学院：秘密揭开第二章"},
+			drama: nativeDrama{ID: "retired-source:77681", Title: "独角兽学院：秘密揭开第二章"},
 			want: "https://www.whats-on-netflix.com/wp-content/uploads/2026/09/Unicorn-Academy-Secrets-Revealed-n-S2-E1-00-10-43-15-1536x864.jpg",
 		},
 		{
@@ -395,9 +395,9 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{Title: "這是我的西遊", Category: "綜藝", OnlineDate: "2026"},
 		{Title: "這是我的西遊 第二季", Category: "電影", OnlineDate: "2026"},
 		{ID: "duoduo:77333", Title: "歹路無可退", Category: "電影", OnlineDate: "2026"},
-		{ID: "guipian:77682", Title: "獨角獸學院：秘密揭開第二章", Category: "動漫", OnlineDate: "2026"},
+		{ID: "retired-source:77682", Title: "獨角獸學院：秘密揭開第二章", Category: "動漫", OnlineDate: "2026"},
 		{ID: "duoduo:77681", Title: "獨角獸學院：秘密揭開第二章", Category: "動漫", OnlineDate: "2026"},
-		{ID: "guipian:77681", Title: "獨角獸學院：秘密揭開第一章", Category: "動漫", OnlineDate: "2026"},
+		{ID: "retired-source:77681", Title: "獨角獸學院：秘密揭開第一章", Category: "動漫", OnlineDate: "2026"},
 		{ID: "duoduo:1193", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
 		{ID: "duoduo:87222", Title: "單身即地獄 第五季", Category: "劇集", OnlineDate: "2026"},
 		{ID: "duoduo:87221", Title: "單身即地獄 第四季", Category: "劇集", OnlineDate: "2025"},
