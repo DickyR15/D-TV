@@ -916,7 +916,7 @@ func TestExternalPosterAddressFallsBackToBangumiWhenDoubanIsDenied(t *testing.T)
 	})}
 	downloader := &Downloader{client: client, cfg: defaultConfig()}
 	address, err := downloader.externalPosterAddress(context.Background(), nativeDrama{
-		ID: "duoduo:1192", DoubanID: "37394760",
+		ID: "duoduo:1193", DoubanID: "37394760",
 		Title: "奉子成婚", Category: "短劇",
 	})
 	if err != nil {
