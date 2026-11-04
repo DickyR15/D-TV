@@ -543,6 +543,26 @@ jobs:
                       "这是我的西游2",
                   ),
               },
+              {
+                  "label": "獨角獸學院：秘密揭開第二章",
+                  "queries": (
+                      "獨角獸學院：秘密揭開第二章",
+                      "獨角獸學院 秘密揭開 第二章",
+                      "独角兽学院：秘密揭开第二章",
+                      "独角兽学院 秘密揭开 第二章",
+                      "Unicorn Academy Secrets Revealed Part Two",
+                      "Unicorn Academy Secrets Revealed",
+                  ),
+                  "aliases": (
+                      "獨角獸學院：秘密揭開第二章",
+                      "獨角獸學院：秘密揭開 第二章",
+                      "獨角獸學院 秘密揭開第二章",
+                      "独角兽学院：秘密揭开第二章",
+                      "独角兽学院：秘密揭开 第二章",
+                      "Unicorn Academy Secrets Revealed Part Two",
+                      "Unicorn Academy: Secrets Revealed Part 2",
+                  ),
+              },
           ]
 
           def normalize_target_title(value):
