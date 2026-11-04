@@ -44,6 +44,7 @@ void main() {
       detail: detail,
       initialIndex: 1,
       initialPosition: 125.5,
+      authorizedSession: true,
     );
 
     final restored = DesktopMiniPlayerArguments.tryParse(
@@ -83,6 +84,7 @@ void main() {
       },
       'initialIndex': 0,
       'initialPosition': -10,
+      'authorizedSession': true,
     });
     final restored = DesktopMiniPlayerArguments.tryParse(encoded);
     expect(restored, isNotNull);
