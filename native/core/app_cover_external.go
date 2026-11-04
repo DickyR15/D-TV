@@ -543,6 +543,241 @@ func nativePreferredOfficialPosterAddress(drama nativeDrama) (string, bool) {
 	return candidate.address, true
 }
 
+func nativePosterIsAnime(drama nativeDrama) bool {
+	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
+	return bangumiPosterContainsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
+}
+
+func nativePosterIsTVSeries(drama nativeDrama) bool {
+	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
+	if nativePosterIsAnime(drama) || bangumiPosterContainsAny(category, "電影", "电影", "movie", "film") {
+		return false
+	}
+	return bangumiPosterContainsAny(
+		category,
+		"劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧",
+		"韓劇", "韩剧", "日劇", "日剧", "美劇", "美剧",
+		"台劇", "台剧", "港劇", "港剧", "短劇", "短剧",
+		"綜藝", "综艺", "真人秀", "實境秀", "variety", "series", "tv",
+	)
+}
+
+func validAniListPosterAddress(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil || parsed.Scheme != "https" ||
+		parsed.User != nil || parsed.Port() != "" ||
+		!strings.HasPrefix(parsed.Path, "/file/anilistcdn/") {
+		return ""
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host != "anilist.co" && !strings.HasSuffix(host, ".anilist.co") {
+		return ""
+	}
+	return parsed.String()
+}
+
+func (d *Downloader) aniListPosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
+	if d == nil || d.client == nil {
+		return "", errors.New("AniList 海報搜尋用戶端尚未初始化")
+	}
+	if !nativePosterIsAnime(drama) {
+		return "", errors.New("作品類型不是動畫，略過 AniList 搜尋")
+	}
+	const queryText = "query ($search: String!) { Page(page: 1, perPage: 25) { media(search: $search, type: ANIME, isAdult: false) { id title { native romaji english } startDate { year } coverImage { extraLarge large } } } }"
+	searchCtx, cancel := context.WithTimeout(ctx, 7*time.Second)
+	defer cancel()
+	matches := map[string]string{}
+	var lastErr error
+	for _, keyword := range posterTitleVariants(drama.Title) {
+		if err := searchCtx.Err(); err != nil {
+			return "", err
+		}
+		payload, err := json.Marshal(map[string]any{
+			"query": queryText,
+			"variables": map[string]any{"search": keyword},
+		})
+		if err != nil {
+			return "", err
+		}
+		request, err := http.NewRequestWithContext(
+			context.WithValue(searchCtx, nativeCoverNetworkKey{}, true),
+			http.MethodPost, "https://graphql.anilist.co", strings.NewReader(string(payload)),
+		)
+		if err != nil {
+			return "", err
+		}
+		request.Header.Set("User-Agent", userAgent)
+		request.Header.Set("Accept", "application/json")
+		request.Header.Set("Content-Type", "application/json")
+		client := *d.client
+		response, requestErr := client.Do(request)
+		if requestErr != nil {
+			lastErr = requestErr
+			continue
+		}
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, (2<<20)+1))
+		response.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+		if response.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("AniList 搜尋回應 HTTP %d", response.StatusCode)
+			continue
+		}
+		if len(body) > 2<<20 {
+			lastErr = errors.New("AniList 搜尋回應超過大小限制")
+			continue
+		}
+		var result map[string]any
+		if err := json.Unmarshal(body, &result); err != nil {
+			lastErr = errors.New("AniList 搜尋回應格式無效")
+			continue
+		}
+		page := nestedMap(result, "data", "Page")
+		for _, candidate := range duoduoRows(page["media"]) {
+			id := strings.TrimSpace(duoduoString(candidate["id"]))
+			title := nestedMap(candidate, "title")
+			if id == "" || !nativePosterTitleMatches(
+				drama.Title,
+				duoduoString(title["native"]),
+				duoduoString(title["romaji"]),
+				duoduoString(title["english"]),
+			) {
+				continue
+			}
+			date := nestedMap(candidate, "startDate")
+			sourceYear := bangumiPosterYear(drama.OnlineDate)
+			candidateYear := bangumiPosterYear(duoduoString(date["year"]))
+			if sourceYear != "" && candidateYear != "" && sourceYear != candidateYear {
+				continue
+			}
+			cover := nestedMap(candidate, "coverImage")
+			address := validAniListPosterAddress(firstNonEmpty(
+				duoduoString(cover["extraLarge"]), duoduoString(cover["large"]),
+			))
+			if address != "" {
+				matches[id] = address
+			}
+		}
+	}
+	if len(matches) == 1 {
+		for _, address := range matches {
+			return address, nil
+		}
+	}
+	if len(matches) > 1 {
+		return "", errors.New("AniList 有多個同名候選，為避免錯配已略過")
+	}
+	if lastErr != nil {
+		return "", fmt.Errorf("AniList 海報搜尋失敗：%w", lastErr)
+	}
+	return "", errors.New("AniList 找不到片名與年份相符的動畫海報")
+}
+
+func validTVMazePosterAddress(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil || parsed.Scheme != "https" ||
+		parsed.User != nil || parsed.Port() != "" ||
+		!strings.HasPrefix(parsed.Path, "/uploads/images/") {
+		return ""
+	}
+	if !strings.EqualFold(parsed.Hostname(), "static.tvmaze.com") {
+		return ""
+	}
+	return parsed.String()
+}
+
+func (d *Downloader) tvMazePosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
+	if d == nil || d.client == nil {
+		return "", errors.New("TVmaze 海報搜尋用戶端尚未初始化")
+	}
+	if !nativePosterIsTVSeries(drama) {
+		return "", errors.New("作品類型不是電視劇或綜藝，略過 TVmaze 搜尋")
+	}
+	searchCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	matches := map[int]string{}
+	var lastErr error
+	for _, keyword := range posterTitleVariants(drama.Title) {
+		if err := searchCtx.Err(); err != nil {
+			return "", err
+		}
+		endpoint, err := url.Parse("https://api.tvmaze.com/search/shows")
+		if err != nil {
+			return "", err
+		}
+		query := endpoint.Query()
+		query.Set("q", keyword)
+		endpoint.RawQuery = query.Encode()
+		request, err := http.NewRequestWithContext(
+			context.WithValue(searchCtx, nativeCoverNetworkKey{}, true),
+			http.MethodGet, endpoint.String(), nil,
+		)
+		if err != nil {
+			return "", err
+		}
+		request.Header.Set("User-Agent", userAgent)
+		request.Header.Set("Accept", "application/json")
+		client := *d.client
+		response, requestErr := client.Do(request)
+		if requestErr != nil {
+			lastErr = requestErr
+			continue
+		}
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+		response.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+		if response.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("TVmaze 搜尋回應 HTTP %d", response.StatusCode)
+			continue
+		}
+		if len(body) > 1<<20 {
+			lastErr = errors.New("TVmaze 搜尋回應超過大小限制")
+			continue
+		}
+		var rows []map[string]any
+		if err := json.Unmarshal(body, &rows); err != nil {
+			lastErr = errors.New("TVmaze 搜尋回應格式無效")
+			continue
+		}
+		for _, row := range rows {
+			show := nestedMap(row, "show")
+			id := intValue(show["id"])
+			if id <= 0 || !nativePosterTitleMatches(drama.Title, duoduoString(show["name"])) {
+				continue
+			}
+			sourceYear := bangumiPosterYear(drama.OnlineDate)
+			candidateYear := bangumiPosterYear(duoduoString(show["premiered"]))
+			if sourceYear != "" && candidateYear != "" && sourceYear != candidateYear {
+				continue
+			}
+			image := nestedMap(show, "image")
+			address := validTVMazePosterAddress(firstNonEmpty(
+				duoduoString(image["original"]), duoduoString(image["medium"]),
+			))
+			if address != "" {
+				matches[id] = address
+			}
+		}
+	}
+	if len(matches) == 1 {
+		for _, address := range matches {
+			return address, nil
+		}
+	}
+	if len(matches) > 1 {
+		return "", errors.New("TVmaze 有多個同名候選，為避免錯配已略過")
+	}
+	if lastErr != nil {
+		return "", fmt.Errorf("TVmaze 海報搜尋失敗：%w", lastErr)
+	}
+	return "", errors.New("TVmaze 找不到片名與年份相符的影集海報")
+}
+
 // externalPosterAddress prefers Duoduo's exact Douban subject ID. If Douban
 // denies the request or has no usable poster, Bangumi is a guarded fallback:
 // its result must still match the exact title, allowed work type and release
