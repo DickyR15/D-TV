@@ -204,6 +204,31 @@ func TestBangumiPosterAddressRejectsMismatchedReleaseYear(t *testing.T) {
 	}
 }
 
+func TestNativeMergeGuipianCoverRecoveryMetadataPreservesYearAndType(t *testing.T) {
+	drama := nativeDrama{
+		ID: "guipian:123", Source: sourceGuipian, SourceID: "123",
+		Title: "夺金战", Category: "影视", Tags: []string{"劇集"},
+	}
+	fresh := Drama{
+		ID: "guipian:123", Source: sourceGuipian, SourceID: "123",
+		Title: "奪金戰", CategoryName: "影視", OnlineDate: "2018",
+		Cover: "https://images.example.test/duojinzhan.jpg",
+	}
+	addresses := nativeMergeCoverRecoveryMetadata(&drama, fresh)
+	if drama.OnlineDate != "2018" {
+		t.Fatalf("detail release year was not propagated: %+v", drama)
+	}
+	if len(drama.Tags) != 1 || drama.Tags[0] != "劇集" {
+		t.Fatalf("catalogue work type was not preserved: %#v", drama.Tags)
+	}
+	if len(addresses) != 1 || addresses[0] != "https://images.example.test/duojinzhan.jpg" {
+		t.Fatalf("detail poster address = %#v", addresses)
+	}
+	if got := bangumiPosterSubjectTypes(drama); len(got) != 1 || got[0] != 6 {
+		t.Fatalf("external poster matching lost the work type: %#v", got)
+	}
+}
+
 func TestNativeNormalizeRetainsAlternativePosterFields(t *testing.T) {
 	drama := nativeNormalize(Drama{
 		ID: "duoduo:901",

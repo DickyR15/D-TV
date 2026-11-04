@@ -85,6 +85,26 @@ func TestGuipianCategoryKindIsRetainedForPosterMatching(t *testing.T) {
 	}
 }
 
+func TestGuipianCoverMetadataDoesNotRequirePlayablePlaylist(t *testing.T) {
+	body := "<h1 class=\"media-title\">奪金戰</h1>" +
+		"<div class=\"detail-img\"><img src=\"/assets/placeholder.gif\" data-src=\"/upload/duojinzhan.webp\"></div>" +
+		"<li>年份：<span>2018</span></li>"
+	drama, err := parseGuipianCoverMetadata("123", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if drama.Title != "奪金戰" || drama.OnlineDate != "2018" {
+		t.Fatalf("detail metadata = %+v", drama)
+	}
+	if drama.Cover != guipianSiteBaseURL+"/upload/duojinzhan.webp" {
+		t.Fatalf("poster = %q", drama.Cover)
+	}
+	normalized := nativeNormalize(drama)
+	if normalized.OnlineDate != "2018" {
+		t.Fatalf("normalized release year = %q", normalized.OnlineDate)
+	}
+}
+
 func TestGuipianPlayURLValidation(t *testing.T) {
 	if got := guipianPlayURL("/play/123-1-1.html"); got != guipianSiteBaseURL+"/play/123-1-1.html" {
 		t.Fatalf("unexpected normalized URL: %q", got)

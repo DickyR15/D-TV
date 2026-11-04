@@ -545,6 +545,57 @@ func guipianPlayURL(href string) string {
 	return parsed.String()
 }
 
+// parseGuipianCoverMetadata extracts poster and matching metadata without
+// requiring a playable playlist. Artwork remains available when player markup
+// is incomplete or the source has not exposed episode links.
+func parseGuipianCoverMetadata(sourceID, body string) (Drama, error) {
+	if !guipianNumericID(sourceID) {
+		return Drama{}, errors.New("鬼片網影片 ID 無效")
+	}
+	name := guipianExtractField(body, "title", reGuipianTitle)
+	if name == "" {
+		if match := reGuipianTitleTag.FindStringSubmatch(body); len(match) > 1 {
+			raw := guipianClean(match[1])
+			if strings.Contains(raw, "提示信息") || strings.Contains(raw, "影片不存在") {
+				return Drama{}, errors.New("鬼片網影片不存在")
+			}
+			name = strings.TrimSpace(regexp.MustCompile("《(.*?)》.*").ReplaceAllString(raw, "$1"))
+		}
+	}
+	if name == "" {
+		return Drama{}, errors.New("鬼片網詳情缺少影片名稱")
+	}
+	coverCandidates := guipianDetailPosterCandidates(body)
+	cover := ""
+	var alternatives []string
+	if len(coverCandidates) > 0 {
+		cover = coverCandidates[0]
+		alternatives = append(alternatives, coverCandidates[1:]...)
+	}
+	year := guipianExtractField(body, "year", reGuipianYear)
+	drama := Drama{
+		ID: providerDramaID(sourceGuipian, sourceID), Source: sourceGuipian, SourceID: sourceID,
+		Title: truncate(name, 512), Name: truncate(name, 512),
+		Cover: cover, CoverURL: cover, ImageURL: alternatives,
+		ChannelName: "鬼片網", CategoryName: "影視", OnlineDate: year,
+	}
+	if year != "" {
+		drama.Tags = append(drama.Tags, year+"年")
+	}
+	return drama, nil
+}
+
+func (d *Downloader) fetchGuipianCoverMetadata(ctx context.Context, sourceID string) (Drama, error) {
+	if !guipianNumericID(sourceID) {
+		return Drama{}, errors.New("鬼片網影片 ID 無效")
+	}
+	body, err := d.guipianGet(ctx, "/nv/"+sourceID+".html")
+	if err != nil {
+		return Drama{}, err
+	}
+	return parseGuipianCoverMetadata(sourceID, body)
+}
+
 func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
 	if !guipianNumericID(sourceID) {
 		return Drama{}, nil, errors.New("鬼片网视频 ID 无效")

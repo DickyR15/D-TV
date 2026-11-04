@@ -394,8 +394,8 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 				externalLookup = startNativeCoverExternalPosterLookup(work, cache.downloader, drama)
 			}
 
-			nativeAddresses, doubanID, nativeErr := cache.downloader.nativeCoverRecoveryMetadata(work, drama)
-			if drama.DoubanID == "" {
+			nativeAddresses, doubanID, nativeErr := cache.downloader.nativeCoverRecoveryMetadata(work, &drama)
+			if !validDoubanSubjectID(drama.DoubanID) && validDoubanSubjectID(doubanID) {
 				drama.DoubanID = doubanID
 			}
 			if nativeErr != nil {

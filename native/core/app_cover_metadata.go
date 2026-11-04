@@ -43,7 +43,10 @@ func nativeLegacyCoverAddresses(values ...any) []string {
 // nativeCoverRecoveryMetadata loads provider-native artwork and IDs in one
 // detail request. Catalog pages may omit Douban IDs even when the detail API
 // exposes them, so fallback recovery must use the authoritative detail row.
-func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama nativeDrama) ([]string, string, error) {
+func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nativeDrama) ([]string, string, error) {
+	if drama == nil {
+		return nil, "", errors.New("海報資料無效")
+	}
 	source, id, valid := splitProviderDramaID(drama.ID)
 	if !valid {
 		return nil, drama.DoubanID, errors.New("無效的劇集 ID")
@@ -54,47 +57,68 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama nati
 			return nil, drama.DoubanID, err
 		}
 		doubanID := strings.TrimSpace(fresh.DoubanID)
-		if doubanID == "" {
-			doubanID = strings.TrimSpace(drama.DoubanID)
+		if !validDoubanSubjectID(drama.DoubanID) && validDoubanSubjectID(doubanID) {
+			drama.DoubanID = doubanID
 		}
-		return nativeCoverAddressesFromDrama(fresh), doubanID, nil
+		return nativeCoverAddressesFromDrama(fresh), drama.DoubanID, nil
 	}
 	if source == sourceGuipian {
-		fresh, _, err := d.fetchGuipianDetail(ctx, id)
+		// Poster recovery must not depend on playlist/episode parsing. A detail
+		// page can contain a valid poster even when its player markup changes.
+		fresh, err := d.fetchGuipianCoverMetadata(ctx, id)
 		if err != nil {
 			return nil, strings.TrimSpace(drama.DoubanID), err
 		}
-		normalized := nativeNormalize(fresh)
-		if normalized.OnlineDate == "" {
-			normalized.OnlineDate = drama.OnlineDate
-		}
-		if normalized.Category == "" {
-			normalized.Category = drama.Category
-		}
-		seenTags := make(map[string]bool, len(normalized.Tags)+len(drama.Tags))
-		for _, tag := range normalized.Tags {
-			seenTags[strings.ToLower(strings.TrimSpace(tag))] = true
-		}
-		for _, tag := range drama.Tags {
-			tag = strings.TrimSpace(tag)
-			key := strings.ToLower(tag)
-			if tag != "" && !seenTags[key] {
-				normalized.Tags = append(normalized.Tags, tag)
-				seenTags[key] = true
-			}
-		}
-		normalized.CoverCandidates = nativeUniqueCoverAddresses(append(
-			normalized.CoverCandidates,
-			append([]string{drama.Cover}, drama.CoverCandidates...)...,
-		)...)
-		addresses := append([]string{}, normalized.CoverCandidates...)
-		if normalized.Cover != "" {
-			addresses = append([]string{normalized.Cover}, addresses...)
-		}
-		return nativeUniqueCoverAddresses(addresses...), strings.TrimSpace(drama.DoubanID), nil
+		addresses := nativeMergeCoverRecoveryMetadata(drama, fresh)
+		return addresses, strings.TrimSpace(drama.DoubanID), nil
 	}
-	addresses, err := d.nativeCoverAddresses(ctx, drama)
+	addresses, err := d.nativeCoverAddresses(ctx, *drama)
 	return addresses, strings.TrimSpace(drama.DoubanID), err
+}
+
+// nativeMergeCoverRecoveryMetadata propagates matching hints from a provider
+// detail row to the same drama used by the external poster matcher. Without
+// this, its release year and detail-only identifiers are silently discarded.
+func nativeMergeCoverRecoveryMetadata(drama *nativeDrama, fresh Drama) []string {
+	if drama == nil {
+		return nil
+	}
+	normalized := nativeNormalize(fresh)
+	if (drama.Title == "" || drama.Title == "短劇") && normalized.Title != "" {
+		drama.Title = normalized.Title
+	}
+	if !validDoubanSubjectID(drama.DoubanID) && validDoubanSubjectID(normalized.DoubanID) {
+		drama.DoubanID = normalized.DoubanID
+	}
+	if normalized.OnlineDate != "" {
+		drama.OnlineDate = normalized.OnlineDate
+	}
+	if drama.Category == "" && normalized.Category != "" {
+		drama.Category = normalized.Category
+	}
+	seenTags := make(map[string]bool, len(drama.Tags)+len(normalized.Tags))
+	for _, tag := range drama.Tags {
+		seenTags[strings.ToLower(strings.TrimSpace(tag))] = true
+	}
+	for _, tag := range normalized.Tags {
+		tag = strings.TrimSpace(tag)
+		key := strings.ToLower(tag)
+		if tag != "" && !seenTags[key] {
+			drama.Tags = append(drama.Tags, tag)
+			seenTags[key] = true
+		}
+	}
+	if drama.Cover == "" {
+		drama.Cover = normalized.Cover
+	}
+	drama.CoverCandidates = nativeUniqueCoverAddresses(append(
+		drama.CoverCandidates, normalized.CoverCandidates...,
+	)...)
+	addresses := append([]string{}, drama.CoverCandidates...)
+	if drama.Cover != "" {
+		addresses = append([]string{drama.Cover}, addresses...)
+	}
+	return nativeUniqueCoverAddresses(addresses...)
 }
 
 func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama) ([]string, error) {
