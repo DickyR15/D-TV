@@ -26,6 +26,21 @@ type nativeCoverRepair struct {
 // load keeps a strict source-preference order:
 // catalogue poster -> provider detail poster -> external poster.
 func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, force bool) (string, error) {
+	// A small set of user-reported records have verified official artwork that
+	// should replace a successful-but-unusable source image. These mappings are
+	// restricted by exact provider ID and title; all other works retain the
+	// normal catalogue -> provider detail -> external fallback order.
+	if cache.downloader != nil {
+		if preferredAddress, ok := nativePreferredOfficialPosterAddress(drama); ok {
+			path, err := cache.loadAlternativeAddress(
+				ctx, drama, preferredAddress,
+				nativeCoverFallbackReferer(cache.downloader, drama, preferredAddress), "external",
+			)
+			if err == nil {
+				return path, nil
+			}
+		}
+	}
 	primaryAddress := strings.TrimSpace(drama.Cover)
 	primaryErr := errors.New("站源尚未提供原始海報網址")
 	if primaryAddress != "" {
