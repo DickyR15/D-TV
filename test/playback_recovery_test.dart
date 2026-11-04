@@ -157,7 +157,7 @@ void main() {
     },
   );
 
-  test('startup uses 12 seconds first, 8 seconds on alternates, and respects progress', () {
+  test('startup uses 16 seconds first, 14 seconds on alternates, and respects progress', () {
     final health = PlaybackHealth();
     final start = DateTime(2026, 10, 24);
 
