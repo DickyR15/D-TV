@@ -8,7 +8,7 @@ var errNativeBuildSource = errors.New("当前版本不包含此站源")
 
 func nativePrimarySource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHongguo, sourceHanxiaoquan, sourceGuipian, sourceDuoduo:
+	case sourceHongguo, sourceHanxiaoquan, sourceDuoduo:
 		return true
 	default:
 		return false
