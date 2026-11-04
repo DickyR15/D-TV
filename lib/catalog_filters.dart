@@ -7,8 +7,8 @@ import 'app_layout.dart';
 import 'models.dart';
 import 'ui_localization.dart';
 
-class _CatalogFilterScrollBehavior extends MaterialScrollBehavior {
-  const _CatalogFilterScrollBehavior();
+class CatalogFilterScrollBehavior extends MaterialScrollBehavior {
+  const CatalogFilterScrollBehavior();
 
   @override
   Set<PointerDeviceKind> get dragDevices => {
@@ -70,7 +70,7 @@ class _CatalogFiltersState extends State<CatalogFilters> {
         children: [
           Expanded(
             child: ScrollConfiguration(
-              behavior: const _CatalogFilterScrollBehavior(),
+              behavior: const CatalogFilterScrollBehavior(),
               child: SingleChildScrollView(
                 key: const ValueKey('catalog-categories'),
                 scrollDirection: Axis.horizontal,
