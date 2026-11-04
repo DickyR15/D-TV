@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -17,6 +18,28 @@ import (
 const (
 	bangumiSubjectSearchURL = "https://api.bgm.tv/v0/search/subjects"
 	bangumiPosterSearchLimit = 20
+)
+
+// Accept explicit season suffixes when comparing a provider title with a
+// database entry that represents the parent series without a season suffix.
+// Release-year and ambiguity checks still decide whether the candidate is safe.
+var bangumiPosterSeasonSuffix = regexp.MustCompile(`(?i)(?:第[0-9一二三四五六七八九十百零〇两兩]+季|season[\\s._-]*0*[0-9]+|s0*[0-9]+)package core
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"path"
+	"regexp"
+	"strings"
+	"time"
+	"unicode"
+)
+
 )
 
 type bangumiPosterSubject struct {
@@ -322,8 +345,10 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 func bangumiPosterSubjectTypes(drama nativeDrama) []int {
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
 	switch {
-	case bangumiPosterContainsAny(category, "綜藝", "综艺", "脫口秀", "脱口秀", "variety"):
-		return nil
+	case bangumiPosterContainsAny(category, "綜藝", "综艺", "綜藝節目", "综艺节目", "脫口秀", "脱口秀", "真人秀", "實境秀", "真人實境", "真人实境", "variety"):
+		// Bangumi classifies variety programmes under real-world media (type 6).
+		// Search by type 6, then retain exact-title/year checks below.
+		return []int{6}
 	case bangumiPosterContainsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime"):
 		return []int{2}
 	case bangumiPosterContainsAny(category, "電影", "电影", "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "短劇", "短剧", "movie", "tv"):
@@ -334,6 +359,7 @@ func bangumiPosterSubjectTypes(drama nativeDrama) []int {
 }
 
 func normalizeBangumiPosterTitle(value string) string {
+	value = bangumiPosterSeasonSuffix.ReplaceAllString(strings.TrimSpace(value), "")
 	var normalized strings.Builder
 	for _, character := range strings.ToLower(strings.TrimSpace(value)) {
 		if unicode.IsLetter(character) || unicode.IsDigit(character) {
