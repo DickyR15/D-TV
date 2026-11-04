@@ -3134,8 +3134,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case FormFactor.pad:
         return (width / 180).floor().clamp(4, 9).toInt();
       case FormFactor.window:
-        final columns = ((width + 18) / 178).floor();
-        return columns < 2 ? 2 : columns;
+        return desktopPosterColumnsForWidth(width);
       case FormFactor.television:
         return width >= 620 ? 5 : width >= 420 ? 3 : 2;
     }
