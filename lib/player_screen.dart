@@ -783,7 +783,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         _desktopMiniReady = null;
         if (wasActive && mounted && !_closed) {
           await _play(
-            index.clamp(0, widget.detail.episodes.length - 1),
+            index.clamp(0, widget.detail.episodes.length - 1).toInt(),
             position: position,
           );
         }
@@ -808,11 +808,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     _desktopMiniPosition = _currentPosition;
     final ready = Completer<void>();
     _desktopMiniReady = ready;
-    _desktopMiniActive = true;
 
     try {
       // Save the last checkpoint before pausing the main-window engine.
       await _saveProgress(flush: true);
+      await _desktopMiniChannel.setMethodCallHandler(
+        _handleDesktopMiniMessage,
+      );
+      _desktopMiniActive = true;
       await _player.pause();
       _desktopMiniWindow = await createDesktopMiniPlayerWindow(
         detail: widget.detail,
