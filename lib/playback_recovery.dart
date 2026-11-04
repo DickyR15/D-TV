@@ -126,14 +126,16 @@ class PlaybackHealth {
 
   Duration? _position;
   Duration? _duration;
-  Duration? _buffer;
+  Duration? _highestBuffer;
   DateTime? _lastProgress;
+  bool _durationDiscovered = false;
 
   void reset() {
     _position = null;
     _duration = null;
-    _buffer = null;
+    _highestBuffer = null;
     _lastProgress = null;
+    _durationDiscovered = false;
   }
 
   bool stalled({
@@ -148,23 +150,31 @@ class PlaybackHealth {
     if (!intendedToPlay || !foreground) {
       _position = position;
       _duration = duration;
-      _buffer = buffer;
+      _highestBuffer = buffer;
+      _durationDiscovered = duration > Duration.zero;
       _lastProgress = now;
       return false;
     }
 
-    // MPV can still be opening the demuxer while position remains zero.
-    // A changing buffer or discovered duration is meaningful progress and
-    // should not cause a healthy (but slow) stream to be discarded.
-    if (position != _position ||
-        duration != _duration ||
-        buffer != _buffer) {
-      _position = position;
-      _duration = duration;
-      _buffer = buffer;
+    // Only real playback movement, first-time duration discovery, or forward
+    // buffer growth counts as progress. Buffer ranges can shrink/oscillate and
+    // duration metadata can be revised while a stream is stuck; treating every
+    // value change as progress can suppress failover indefinitely.
+    final positionChanged = _position != null && position != _position;
+    final discoveredDuration =
+        !_durationDiscovered && duration > Duration.zero;
+    final bufferAdvanced =
+        _highestBuffer == null || buffer > _highestBuffer!;
+
+    if (positionChanged || discoveredDuration || bufferAdvanced) {
       _lastProgress = now;
-      return false;
     }
+    if (discoveredDuration) _durationDiscovered = true;
+    if (_highestBuffer == null || buffer > _highestBuffer!) {
+      _highestBuffer = buffer;
+    }
+    _position = position;
+    _duration = duration;
 
     _lastProgress ??= now;
     final waitingForInitialMedia =
