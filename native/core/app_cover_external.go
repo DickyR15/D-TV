@@ -432,29 +432,6 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		address: "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0",
 	},
 	{
-		// This exact Guipian record is titled Fast Cash / 歹路無可退.
-		// The provider's own image URL is broken; use the sales agent's
-		// official campaign artwork, restricted to this source ID and title.
-		// Guipian's detail currently reports 2027, while Apple TV and LiTV
-		// list the same production as 2026, so this exact-ID mapping has no
-		// source-year gate.
-		title: "歹路無可退",
-		source: sourceGuipian,
-		sourceID: "77333",
-		address: "https://jingafilms.com/wp-content/uploads/2026/02/FastCash.jpg",
-	},
-	{
-		// The source's 4.5 KB PNG is returned as a successful image but is not
-		// what the user sees in D TV. Prefer Netflix's Season 2 press still for
-		// this exact Guipian anime record, never for another title or source ID.
-		title: "獨角獸學院秘密揭開第二章",
-		titleAliases: []string{"独角兽学院秘密揭开第二章"},
-		source: sourceGuipian,
-		sourceID: "77681",
-		preferred: true,
-		address: "https://www.whats-on-netflix.com/wp-content/uploads/2026/09/Unicorn-Academy-Secrets-Revealed-n-S2-E1-00-10-43-15-1536x864.jpg",
-	},
-	{
 		// Duoduo ID 87221 is Single's Inferno Season 5 (Netflix, 2026).
 		// Use the season-specific Netflix key art, restricted to this exact
 		// source ID and title to prevent another season from matching.
