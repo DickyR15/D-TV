@@ -8,8 +8,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 import 'desktop_window_state.dart';
+import 'desktop_mini_player.dart';
 
 import 'core_bridge.dart';
 import 'app_layout.dart';
@@ -26,17 +28,42 @@ import 'diary_service.dart';
 import 'app_navigation.dart';
 import 'ui_localization.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isAndroid) {
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemBars(Brightness.dark));
   }
-  if (Platform.isWindows || Platform.isMacOS) {
+  final desktop = Platform.isWindows || Platform.isMacOS;
+  if (desktop) {
     await windowManager.ensureInitialized();
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
+
+  if (desktop) {
+    final currentWindow = await WindowController.fromCurrentEngine();
+    final miniPlayerArguments =
+        DesktopMiniPlayerArguments.tryParse(currentWindow.arguments);
+    if (miniPlayerArguments != null) {
+      windowManager.waitUntilReadyToShow(
+        const WindowOptions(
+          size: Size(660, 390),
+          center: true,
+          title: 'D TV 小窗播放器',
+        ),
+        () async {
+          await windowManager.setMinimumSize(const Size(480, 300));
+          await windowManager.setResizable(true);
+          await windowManager.setAlwaysOnTop(true);
+          await windowManager.show();
+          await windowManager.focus();
+        },
+      );
+      runApp(DesktopMiniPlayerApp(arguments: miniPlayerArguments));
+      return;
+    }
+  }
 
   // Draw the first Flutter frame before loading and parsing the OpenCC dictionaries.
   runApp(const AppBootstrap());
