@@ -237,6 +237,7 @@ type nativeVerifiedOfficialPoster struct {
 	source     string
 	sourceID   string
 	preferred  bool
+	titleAliases []string
 }
 
 // These two assets were independently identified from programme-owner /
@@ -272,6 +273,7 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		// what the user sees in D TV. Prefer Netflix's Season 2 press still for
 		// this exact Guipian anime record, never for another title or source ID.
 		title: "獨角獸學院秘密揭開第二章",
+		titleAliases: []string{"独角兽学院秘密揭开第二章"},
 		source: sourceGuipian,
 		sourceID: "77681",
 		preferred: true,
@@ -313,7 +315,16 @@ func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficia
 	)
 	source, sourceID, hasSourceID := splitProviderDramaID(drama.ID)
 	for _, candidate := range nativeVerifiedOfficialPosters {
-		if title != normalizeBangumiPosterExactTitle(candidate.title) {
+		matchesTitle := title == normalizeBangumiPosterExactTitle(candidate.title)
+		if !matchesTitle {
+			for _, alias := range candidate.titleAliases {
+				if title == normalizeBangumiPosterExactTitle(alias) {
+					matchesTitle = true
+					break
+				}
+			}
+		}
+		if !matchesTitle {
 			continue
 		}
 		if candidate.source != "" || candidate.sourceID != "" {
