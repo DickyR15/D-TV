@@ -30,6 +30,24 @@ func TestGuipianDetailTitleFallbacks(t *testing.T) {
 	}
 }
 
+func TestGuipianDetailTitleUsesTrustedCatalogueFallback(t *testing.T) {
+	body := `<html><head><title>提示信息</title></head><body><div class="detail-img"><img data-src="/upload/test-poster.jpg"></div></body></html>`
+	got := guipianDetailTitleWithFallback(body, "預謀獵殺")
+	if got != "預謀獵殺" {
+		t.Fatalf("catalogue title fallback = %q, want 預謀獵殺", got)
+	}
+	drama, err := parseGuipianCoverMetadata("99124", body, "預謀獵殺")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if drama.Title != "預謀獵殺" {
+		t.Fatalf("poster-only metadata title = %q, want 預謀獵殺", drama.Title)
+	}
+	if got := guipianDetailTitleWithFallback(body, "片名獲取失敗"); got != "" {
+		t.Fatalf("generic error placeholder was accepted as a title: %q", got)
+	}
+}
+
 func TestGuipianDetailTitleMissingReturnsDiagnostic(t *testing.T) {
 	_, err := parseGuipianCoverMetadata("99123", `<html><head><title>提示信息</title></head><body></body></html>`)
 	if err == nil || !strings.Contains(err.Error(), "99123") || !strings.Contains(err.Error(), "og:title") {
