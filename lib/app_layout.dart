@@ -26,7 +26,7 @@ const _displayModeLabels = <String, String>{
   'television': '電視',
   'phone': '手機',
   'pad': '平板',
-  'window': '視窗',
+  'window': '電腦',
 };
 
 ThemeData televisionTheme(ThemeData theme) {
