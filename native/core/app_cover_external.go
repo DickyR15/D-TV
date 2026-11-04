@@ -496,6 +496,16 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		preferred: true,
 		address: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
 	},
+	{
+		// Duoduo ID 66452 is the 2014 micro-film 逆愛2後會無期.
+		// The archive page matches the exact title, synopsis, director and cast.
+		// Keep this image as a fallback only for this exact source record.
+		title: "逆愛2後會無期",
+		titleAliases: []string{"逆爱2后会无期", "逆愛2：後會無期", "逆爱2：后会无期"},
+		source: sourceDuoduo,
+		sourceID: "66452",
+		address: "https://www.newton.com.tw/img/e/b8a/9f44ba2acde42d436ab0d151da63.jpg",
+	},
 }
 
 func normalizeBangumiPosterExactTitle(value string) string {
