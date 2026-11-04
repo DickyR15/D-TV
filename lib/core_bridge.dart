@@ -772,11 +772,11 @@ class NativeRepository extends AppRepository {
 
   @override
   bool coverCached(Drama drama) =>
-      _coverPaths.containsKey('${drama.id}\u0000${drama.cover}');
+      _coverPaths.containsKey('${drama.stableId}\u0000${drama.cover}');
 
   @override
   Future<String> cover(Drama drama, {bool force = false}) async {
-    final key = '${drama.id}\u0000${drama.cover}';
+    final key = '${drama.stableId}\u0000${drama.cover}';
     final known = force ? null : _coverPaths[key];
     if (known != null) {
       _authorize(drama.source);
