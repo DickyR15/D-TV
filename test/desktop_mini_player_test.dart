@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hgtv/desktop_mini_player.dart';
+import 'package:hgtv/desktop_mini_player_bridge.dart';
 import 'package:hgtv/models.dart';
 
 void main() {
