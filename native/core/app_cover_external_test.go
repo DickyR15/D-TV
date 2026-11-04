@@ -200,7 +200,6 @@ func TestBangumiPosterAddressSupportsVarietyAndSeasonSpecificSeries(t *testing.T
 					t.Fatal(err)
 				}
 				return posterLookupJSONResponse(request, string(body)), nil
-				return posterLookupJSONResponse(request, string(body)), nil
 			})}
 			downloader := &Downloader{client: client, cfg: defaultConfig()}
 			address, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
@@ -922,6 +921,79 @@ func TestNativeCoverExternalDownloadFailureFallsBackToBangumi(t *testing.T) {
 	body, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(body, image) {
 		t.Fatalf("Bangumi fallback image was not cached: %v", err)
+	}
+}
+
+func TestNativeCoverExternalDownloadFailureRetriesVerifiedOfficialProgrammePoster(t *testing.T) {
+	image := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0, 1}
+	cases := []struct {
+		name      string
+		drama     nativeDrama
+		wantURL   string
+		wantHost  string
+		wantRef   string
+	}{
+		{
+			name: "flower programme retries Sina official artwork",
+			drama: nativeDrama{
+				ID: "duoduo:153909", Source: sourceDuoduo,
+				Title: "花兒與少年．同心季", Category: "綜藝", OnlineDate: "2025",
+			},
+			wantURL: "https://k.sinaimg.cn/n/sinakd20250816s/450/w800h450/20250816/ec1c-4c5fc3ef466113eb1d27a75cc8c37fcf.jpg/w700d1q75cms.jpg?by=cms_fixed_width",
+			wantHost: "k.sinaimg.cn", wantRef: "https://news.sina.com.cn/",
+		},
+		{
+			name: "Xiyou second season retries Youku official artwork",
+			drama: nativeDrama{
+				ID: "duoduo:77041", Source: sourceDuoduo,
+				Title: "這是我的西遊 第二季", Category: "綜藝", OnlineDate: "2025",
+			},
+			wantURL: "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0",
+			wantHost: "live.ykimg.com", wantRef: "https://www.youku.com/",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var officialCalls int
+			client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+				switch request.URL.Host {
+				case "old-fallback.example.test":
+					return &http.Response{
+						StatusCode: http.StatusNotFound, Header: make(http.Header),
+						Body: io.NopCloser(strings.NewReader("missing")), Request: request,
+					}, nil
+				case tc.wantHost:
+					officialCalls++
+					if request.Header.Get("Referer") != tc.wantRef {
+						t.Errorf("official image Referer = %q, want %q", request.Header.Get("Referer"), tc.wantRef)
+					}
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+						Body: io.NopCloser(bytes.NewReader(image)),
+						ContentLength: int64(len(image)), Request: request,
+					}, nil
+				default:
+					return nil, errors.New("unexpected poster request: " + request.URL.String())
+				}
+			})}
+			downloader := &Downloader{client: client, cfg: defaultConfig()}
+			cache := newNativeCoverCache(t.TempDir(), downloader)
+			path, address, err := cache.loadExternalPoster(
+				context.Background(), tc.drama,
+				"https://old-fallback.example.test/poster.jpg",
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if address != tc.wantURL || officialCalls != 1 {
+				t.Fatalf("official fallback address=%q calls=%d, want %q and one download", address, officialCalls, tc.wantURL)
+			}
+			cached, readErr := os.ReadFile(path)
+			if readErr != nil || !bytes.Equal(cached, image) {
+				t.Fatalf("official programme poster was not cached: %v", readErr)
+			}
+		})
 	}
 }
 
