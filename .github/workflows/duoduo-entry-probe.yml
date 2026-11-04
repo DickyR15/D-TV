@@ -568,6 +568,19 @@ jobs:
                   ),
               },
               {
+                  "label": "單身即地獄 第五季",
+                  "queries": (
+                      "單身即地獄 第五季", "單身即地獄第五季",
+                      "单身即地狱第五季", "单身即地狱 第五季",
+                      "單身即地獄5", "单身即地狱5",
+                  ),
+                  "aliases": (
+                      "單身即地獄 第五季", "單身即地獄第五季",
+                      "单身即地狱第五季", "单身即地狱 第五季",
+                      "單身即地獄5", "单身即地狱5",
+                  ),
+              },
+              {
                   "label": "明星大偵探 第二季",
                   "queries": (
                       "明星大偵探 第二季", "明星大侦探 第二季",
@@ -603,6 +616,7 @@ jobs:
           target_ids = list(TARGET_POSTER_IDS)
           target_title_failures = []
           target_detail_expectations = {}
+          target_title_ids = {}
           for target in TARGET_POSTER_TITLES:
               wanted = {normalize_target_title(alias) for alias in target["aliases"]}
               matches = {}
@@ -623,6 +637,8 @@ jobs:
                   source_id = row_id(row)
                   if source_id.isdigit() and normalize_target_title(title) in wanted:
                       matches[source_id] = row
+              if matches:
+                  target_title_ids[target["label"]] = sorted(matches)
               if len(matches) == 1:
                   source_id, row = next(iter(matches.items()))
                   target_ids.append(source_id)
@@ -1193,6 +1209,111 @@ jobs:
                   "WARNING: upstream artwork blockers remain unresolved; "
                   "the poster check is not release-ready until these cases are resolved."
               )
+
+
+          # Playback regression probe for the user's previously playable item.
+          single_inferno_ids = target_title_ids.get("單身即地獄 第五季", [])
+          if not single_inferno_ids:
+              raise RuntimeError("單身即地獄 第五季 was not resolved in Duoduo catalogue/search")
+          single_inferno_checked = 0
+          single_inferno_ok = 0
+          for vod_id in single_inferno_ids:
+              api_base, detail_payload = api(
+                  "/api.php/web/vod/get_detail", {"vod_id": vod_id}
+              )
+              detail_rows = response_rows(detail_payload.get("data"))
+              if not detail_rows:
+                  raise RuntimeError(f"單身即地獄 第五季 id={vod_id}: no detail row")
+              row = detail_rows[0]
+              title = row_title(row)
+              expected = {
+                  normalize_target_title("單身即地獄 第五季"),
+                  normalize_target_title("單身即地獄第五季"),
+                  normalize_target_title("单身即地狱第五季"),
+                  normalize_target_title("单身即地狱 第五季"),
+                  normalize_target_title("單身即地獄5"),
+              }
+              if normalize_target_title(title) not in expected:
+                  raise RuntimeError(
+                      f"單身即地獄 第五季 detail title mismatch: id={vod_id} title={title!r}"
+                  )
+              names = str(row.get("vod_play_from") or "").split("$$")
+              blocks = str(row.get("vod_play_url") or "").split("$$")
+              player_rows = response_rows(detail_payload.get("vodplayer"))
+              player_by_from = {
+                  str(player.get("from") or "").strip(): player
+                  for player in player_rows if str(player.get("from") or "").strip()
+              }
+              detail_direct = []
+              episode_count = 0
+              for index, name in enumerate(names[:len(blocks)]):
+                  player = player_by_from.get(name.strip(), {})
+                  if str(player.get("decode_status") or "0") != "0":
+                      continue
+                  for episode in blocks[index].split("#"):
+                      if "$" not in episode:
+                          continue
+                      episode_title, address = episode.split("$", 1)
+                      address = address.strip()
+                      if not address:
+                          continue
+                      episode_count += 1
+                      if urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
+                          detail_direct.append((str(player.get("show") or name), episode_title.strip(), address))
+              _, aggregate_payload = api(
+                  "/api.php/web/internal/search_aggregate", {"vod_id": vod_id}
+              )
+              aggregate_rows = response_rows(aggregate_payload.get("data"))
+              aggregate_direct = []
+              for line in aggregate_rows:
+                  if str(line.get("decode_status")) != "0":
+                      continue
+                  for episode in str(line.get("vod_play_url") or "").split("#"):
+                      if "$" not in episode:
+                          continue
+                      episode_title, address = episode.split("$", 1)
+                      address = address.strip()
+                      if address and urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
+                          aggregate_direct.append((
+                              str(line.get("site_name") or line.get("site_key") or "aggregate"),
+                              episode_title.strip(), address
+                          ))
+              seen = set()
+              direct = []
+              for item in detail_direct + aggregate_direct:
+                  if item[2] not in seen:
+                      seen.add(item[2])
+                      direct.append(item)
+              print(
+                  f"SINGLE_INFERNO id={vod_id} title={title!r} episodes={episode_count} "
+                  f"player_rows={len(player_rows)} detail_direct={len(detail_direct)} "
+                  f"aggregate_rows={len(aggregate_rows)} aggregate_direct={len(aggregate_direct)}"
+              )
+              if not episode_count:
+                  raise RuntimeError(f"單身即地獄 第五季 id={vod_id}: no episodes returned")
+              if not direct:
+                  raise RuntimeError(
+                      f"單身即地獄 第五季 id={vod_id}: episodes exist but no direct HLS/MP4 links"
+                  )
+              for line_name, episode_title, address in direct[:4]:
+                  single_inferno_checked += 1
+                  ok, message = probe_media(address, api_base + "/")
+                  referer = "active-api-mirror"
+                  if not ok:
+                      retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                      if retry_ok:
+                          ok, message, referer = retry_ok, retry_message, "public-entry"
+                      else:
+                          message += f"; public-entry retry failed: {retry_message}"
+                  print(
+                      f"SINGLE_INFERNO_MEDIA line={line_name!r} episode={episode_title!r} "
+                      f"host={urlsplit(address).netloc} referer={referer} ok={ok} {message}"
+                  )
+                  if ok:
+                      single_inferno_ok += 1
+          print(f"SINGLE_INFERNO_PLAYBACK_PROBES={single_inferno_ok}/{single_inferno_checked}")
+          if not single_inferno_ok:
+              raise RuntimeError("單身即地獄 第五季 currently has no validated public direct playback line")
 
           print("\n=== SEARCH ===")
           movies = {}
