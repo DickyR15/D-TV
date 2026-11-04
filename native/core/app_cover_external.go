@@ -504,7 +504,7 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		titleAliases: []string{"逆爱2后会无期", "逆愛2：後會無期", "逆爱2：后会无期"},
 		source: sourceDuoduo,
 		sourceID: "66452",
-		address: "https://www.newton.com.tw/img/e/b8a/9f44ba2acde42d436ab0d151da63.jpg",
+		address: "https://www.jendow.com.tw/img/5/105/nBnauM3X1gTO1AzM4MzMzIzM3QTM5YzNyITOzQTNwAzMwIzLzMzL3YzLt92YucmbvRWdo5Cd0FmL0E2LvoDc0RHa.jpg",
 	},
 }
 
