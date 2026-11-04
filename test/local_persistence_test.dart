@@ -270,6 +270,22 @@ void main() {
         (unit >= 48 && unit <= 57) || (unit >= 97 && unit <= 102)), isTrue);
     expect(() => store.validateBackup(content), returnsNormally);
 
+    // JSON key ordering and whitespace must not invalidate an unchanged backup.
+    final reordered = <String, dynamic>{
+      'libraries': backup['libraries'],
+      'integrity': backup['integrity'],
+      'app': backup['app'],
+      'schema': backup['schema'],
+      'profiles': backup['profiles'],
+      'displayMode': backup['displayMode'],
+      'themeMode': backup['themeMode'],
+      'themeAccent': backup['themeAccent'],
+      'forceLogin': backup['forceLogin'],
+      'ignoredUpdateVersion': backup['ignoredUpdateVersion'],
+      'checkForUpdatesOnStartup': backup['checkForUpdatesOnStartup'],
+    };
+    expect(() => store.validateBackup(jsonEncode(reordered)), returnsNormally);
+
     final corrupted = Map<String, dynamic>.from(backup)
       ..['themeMode'] = 'light';
     expect(
