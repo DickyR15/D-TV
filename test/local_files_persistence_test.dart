@@ -86,9 +86,6 @@ void main() {
     }
 
     final favoritesBefore = await favoritesFile.readAsString();
-    final followStatesFile = File(
-      path.join(directory.path, 'users', 'default', 'followStates.json'),
-    );
     final followStatesBefore = await followStatesFile.readAsString();
     final settingsBefore = await userSettingsFile.readAsString();
     final historyBefore = await historyFile.readAsString();

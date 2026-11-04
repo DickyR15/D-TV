@@ -264,7 +264,7 @@ void main() {
         final restored = await restart(platform);
         expect(restored.configurationError, isNotNull);
         expect(restored.preferences.get('profiles'), records);
-        expect(store.exportRecoveryData(), contains('舊資料'));
+        expect(await store.exportRecoveryData(), contains('舊資料'));
       },
     );
   }
