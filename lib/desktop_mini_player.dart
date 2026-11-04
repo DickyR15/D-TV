@@ -1,7 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:async';
 
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,66 +10,10 @@ import 'app_layout.dart';
 import 'app_orientation.dart';
 import 'app_theme.dart';
 import 'core_bridge.dart';
+import 'desktop_mini_player_bridge.dart';
 import 'local_store.dart';
-import 'models.dart';
 import 'player_screen.dart';
 import 'ui_localization.dart';
-
-const desktopMiniPlayerChannelName = 'dtv.desktop.mini.player';
-
-const desktopMiniPlayerChannel = WindowMethodChannel(
-  desktopMiniPlayerChannelName,
-);
-
-class DesktopMiniPlayerArguments {
-  const DesktopMiniPlayerArguments({
-    required this.detail,
-    required this.initialIndex,
-    required this.initialPosition,
-  });
-
-  static const businessId = 'dtv_mini_player';
-
-  final DramaDetail detail;
-  final int initialIndex;
-  final double initialPosition;
-
-  factory DesktopMiniPlayerArguments.fromJson(Map<String, dynamic> json) {
-    final index = intValue(json['initialIndex']);
-    final position = (json['initialPosition'] as num?)?.toDouble() ?? 0;
-    return DesktopMiniPlayerArguments(
-      detail: DramaDetail.fromJson(
-        Map<String, dynamic>.from(json['detail'] as Map),
-      ),
-      initialIndex: index,
-      initialPosition: position.isFinite && position > 0 ? position : 0,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-    'businessId': businessId,
-    'detail': {
-      'drama': detail.drama.toJson(),
-      'chapters': detail.episodes.map((episode) => episode.raw).toList(),
-      'warning': detail.warning,
-    },
-    'initialIndex': initialIndex,
-    'initialPosition': initialPosition,
-  };
-
-  static DesktopMiniPlayerArguments? tryParse(String encoded) {
-    if (encoded.isEmpty) return null;
-    try {
-      final json = jsonDecode(encoded);
-      if (json is! Map) return null;
-      final data = Map<String, dynamic>.from(json);
-      if (data['businessId'] != businessId) return null;
-      return DesktopMiniPlayerArguments.fromJson(data);
-    } catch (_) {
-      return null;
-    }
-  }
-}
 
 /// A second Flutter engine owns the desktop mini-player. The main window stays
 /// paused behind it and resumes at the latest reported episode/position.
@@ -281,26 +224,4 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
       ),
     );
   }
-}
-
-/// Opens the native second-window player using the exact same episode snapshot
-/// and progress. Only Windows and macOS invoke this service.
-Future<WindowController> createDesktopMiniPlayerWindow({
-  required DramaDetail detail,
-  required int index,
-  required double position,
-}) async {
-  final arguments = DesktopMiniPlayerArguments(
-    detail: detail,
-    initialIndex: index,
-    initialPosition: position,
-  );
-  final controller = await WindowController.create(
-    WindowConfiguration(
-      arguments: jsonEncode(arguments.toJson()),
-      hiddenAtLaunch: true,
-    ),
-  );
-  await controller.show();
-  return controller;
 }
