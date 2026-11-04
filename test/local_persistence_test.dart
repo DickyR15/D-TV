@@ -123,6 +123,8 @@ void main() {
       );
       final old = await store.exportBackup();
       final backup = jsonDecode(old) as Map<String, dynamic>;
+      // Simulate a pre-integrity schema-1 backup and retain backward compatibility.
+      backup.remove('integrity');
       backup['themeMode'] = 'light';
       final library = (backup['libraries'] as Map)['default'] as Map;
       library.remove('followSync');
@@ -254,7 +256,13 @@ void main() {
         expect(store.exportRecoveryData(), contains('舊資料'));
       },
     );
-  }  test('update preferences persist and are included in a settings backup', () async {
+  }  test('exported settings backups detect corruption and keep legacy schema-1 support', () async {
+    final (store, _) = await create();
+    final content = await store.exportBackup();
+    final backup = jsonDecode(content) as Map<String, dynamic>;
+    final integrity = backup['integrity'] as Map<String, dynamic>;
+    expect(integrity['algorithm'], 'sha256');
+    expect(integrity['digest'], matches(RegExp(r'^[a-f0-9]{64}
     final (store, platform) = await create();
     expect(store.checkForUpdatesOnStartup, isTrue);
     await store.ignoreUpdateVersion('v1.0.1');
@@ -263,6 +271,55 @@ void main() {
     expect(store.checkForUpdatesOnStartup, isFalse);
 
     final backup = jsonDecode(await store.exportBackup()) as Map<String, dynamic>;
+    backup.remove('integrity');
+    expect(backup['ignoredUpdateVersion'], 'v1.0.1');
+    expect(backup['checkForUpdatesOnStartup'], isFalse);
+    backup['ignoredUpdateVersion'] = 'v1.0.2';
+    backup['checkForUpdatesOnStartup'] = true;
+    await store.importBackup(jsonEncode(backup));
+    expect(store.ignoredUpdateVersion, 'v1.0.2');
+    expect(store.checkForUpdatesOnStartup, isTrue);
+
+    final restored = await restart(platform);
+    expect(restored.ignoredUpdateVersion, 'v1.0.2');
+    expect(restored.checkForUpdatesOnStartup, isTrue);
+    await restored.setCheckForUpdatesOnStartup(false);
+    await restored.clearIgnoredUpdateVersion();
+    expect(restored.ignoredUpdateVersion, isEmpty);
+    expect(restored.checkForUpdatesOnStartup, isFalse);
+  });
+
+
+}
+)));
+    expect(() => store.validateBackup(content), returnsNormally);
+
+    final corrupted = Map<String, dynamic>.from(backup)
+      ..['themeMode'] = 'light';
+    expect(
+      () => store.validateBackup(jsonEncode(corrupted)),
+      throwsA(isA<FormatException>().having(
+        (error) => error.message,
+        'message',
+        contains('完整性檢查失敗'),
+      )),
+    );
+
+    // Existing schema-1 backups without a digest remain importable.
+    final legacy = Map<String, dynamic>.from(backup)..remove('integrity');
+    expect(() => store.validateBackup(jsonEncode(legacy)), returnsNormally);
+  });
+
+  test('update preferences persist and are included in a settings backup', () async {
+    final (store, platform) = await create();
+    expect(store.checkForUpdatesOnStartup, isTrue);
+    await store.ignoreUpdateVersion('v1.0.1');
+    await store.setCheckForUpdatesOnStartup(false);
+    expect(store.ignoredUpdateVersion, 'v1.0.1');
+    expect(store.checkForUpdatesOnStartup, isFalse);
+
+    final backup = jsonDecode(await store.exportBackup()) as Map<String, dynamic>;
+    backup.remove('integrity');
     expect(backup['ignoredUpdateVersion'], 'v1.0.1');
     expect(backup['checkForUpdatesOnStartup'], isFalse);
     backup['ignoredUpdateVersion'] = 'v1.0.2';
