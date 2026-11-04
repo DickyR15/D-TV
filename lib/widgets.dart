@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -212,11 +213,13 @@ class CachedCoverImage extends StatefulWidget {
 /// Coordinates poster downloads so background grids do not compete with
 /// detail-page navigation and playback. Priority covers may still load while
 /// background requests are paused.
+typedef _CoverRequest = ({VoidCallback start, bool priority});
+
 class CoverRequestScheduler {
   // Match the official app's six-way poster loading so the first visible
   // screen is not unnecessarily serialized on slower Android TV hardware.
   static const _limit = 6;
-  static final _waiting = <({VoidCallback start, bool priority})>[];
+  static final Queue<_CoverRequest> _waiting = Queue<_CoverRequest>();
   static var _running = 0;
   static var _backgroundPauseCount = 0;
 
@@ -232,12 +235,32 @@ class CoverRequestScheduler {
   }
 
   static void add(VoidCallback start, {bool priority = false}) {
-    _waiting.add((start: start, priority: priority));
+    _waiting.addLast((start: start, priority: priority));
     _drain();
   }
 
-  static void remove(VoidCallback start) =>
-      _waiting.removeWhere((entry) => entry.start == start);
+  static void remove(VoidCallback start) {
+    if (_waiting.isEmpty) return;
+    final retained = _waiting.where((entry) => entry.start != start).toList();
+    _waiting
+      ..clear()
+      ..addAll(retained);
+  }
+
+  static _CoverRequest? _takeNext() {
+    if (_waiting.isEmpty) return null;
+    if (_backgroundPauseCount == 0) return _waiting.removeFirst();
+
+    // While playback/detail is active, preserve FIFO order among priority
+    // requests but leave ordinary background work queued until playback ends.
+    for (final entry in _waiting) {
+      if (entry.priority) {
+        _waiting.remove(entry);
+        return entry;
+      }
+    }
+    return null;
+  }
 
   static Future<String> run(Future<String> Function() request) async {
     try {
@@ -250,22 +273,8 @@ class CoverRequestScheduler {
 
   static void _drain() {
     while (_running < _limit && _waiting.isNotEmpty) {
-      // Newer requests are most likely to belong to the currently visible
-      // viewport after scrolling. Pop from the end in the normal path so
-      // dequeuing a large poster backlog stays O(1), matching the upstream
-      // app's visible-poster prioritization.
-      var index = _waiting.length - 1;
-      if (_backgroundPauseCount > 0) {
-        // While playback/detail is active, only start priority work; scan from
-        // the end to avoid repeatedly shifting the entire waiting list.
-        while (index >= 0 && !_waiting[index].priority) {
-          index--;
-        }
-        if (index < 0) return;
-      }
-      final entry = index == _waiting.length - 1
-          ? _waiting.removeLast()
-          : _waiting.removeAt(index);
+      final entry = _takeNext();
+      if (entry == null) return;
       _running++;
       entry.start();
     }
