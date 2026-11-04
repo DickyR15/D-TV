@@ -204,6 +204,13 @@ func guipianPosterCandidates(markup string) []string {
 			}
 		}
 		if !imageTag && !artworkContainer {
+			// Older list templates put data-original directly on an otherwise
+			// unclassified div instead of using an img or poster class.
+			artworkContainer = attrs["data-original"] != "" ||
+				attrs["data-original-src"] != "" ||
+				attrs["data-background"] != "" || attrs["data-bg"] != ""
+		}
+		if !imageTag && !artworkContainer {
 			continue
 		}
 		for _, key := range []string{"data-original", "data-original-src"} {
@@ -254,23 +261,23 @@ func guipianDetailPosterCandidates(body string) []string {
 		}
 		candidates = append(candidates, guipianPosterCandidates(block)...)
 	}
-	// Open Graph artwork is often the only reliable poster field on detail
-	// pages whose visible image is populated by a JavaScript lazy loader.
+	// Preserve the original detail-page selectors even when Open Graph metadata
+	// is present; provider-native artwork always has priority over external art.
+	if match := reGuipianDetailPic.FindStringSubmatch(body); len(match) > 1 {
+		if address := guipianFixURL(match[1]); address != "" {
+			candidates = append(candidates, address)
+		}
+	}
+	if match := reGuipianDetailPic2.FindStringSubmatch(body); len(match) > 1 {
+		if address := guipianFixURL(match[1]); address != "" {
+			candidates = append(candidates, address)
+		}
+	}
+	// Open Graph artwork is the final provider-page fallback when the visible
+	// cover markup is incomplete or populated only after JavaScript executes.
 	for _, tag := range reGuipianArtworkTag.FindAllString(body, -1) {
 		if strings.HasPrefix(strings.ToLower(tag), "<meta") {
 			candidates = append(candidates, guipianPosterCandidates(tag)...)
-		}
-	}
-	if len(candidates) == 0 {
-		if match := reGuipianDetailPic.FindStringSubmatch(body); len(match) > 1 {
-			if address := guipianFixURL(match[1]); address != "" {
-				candidates = append(candidates, address)
-			}
-		}
-		if match := reGuipianDetailPic2.FindStringSubmatch(body); len(match) > 1 {
-			if address := guipianFixURL(match[1]); address != "" {
-				candidates = append(candidates, address)
-			}
 		}
 	}
 	return nativeUniqueCoverAddresses(candidates...)
@@ -284,20 +291,6 @@ func guipianCategoryKind(category string) string {
 		return "劇集"
 	case "23", "24", "25", "26":
 		return "動漫"
-	default:
-		return ""
-	}
-}
-
-func guipianKindFromText(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	switch {
-	case strings.Contains(value, "动漫") || strings.Contains(value, "動畫") || strings.Contains(value, "动画") || strings.Contains(value, "番剧"):
-		return "動漫"
-	case strings.Contains(value, "电视剧") || strings.Contains(value, "電視劇") || strings.Contains(value, "剧集") || strings.Contains(value, "劇集") || strings.Contains(value, "国产剧") || strings.Contains(value, "美剧") || strings.Contains(value, "韩剧") || strings.Contains(value, "日剧") || strings.Contains(value, "泰剧"):
-		return "劇集"
-	case strings.Contains(value, "电影") || strings.Contains(value, "電影") || strings.Contains(value, "恐怖片") || strings.Contains(value, "剧情片") || strings.Contains(value, "剧情") || strings.Contains(value, "战争"):
-		return "電影"
 	default:
 		return ""
 	}
@@ -607,7 +600,6 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (D
 	if year != "" {
 		addTag(year + "年")
 	}
-	addTag(guipianKindFromText(body))
 	if area != "" {
 		addTag(area)
 	}
