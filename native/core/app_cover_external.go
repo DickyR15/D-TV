@@ -139,7 +139,7 @@ func (d *Downloader) doubanPosterAddress(ctx context.Context, drama nativeDrama)
 		return "", errors.New("豆瓣海報查詢用戶端尚未初始化")
 	}
 
-	work, cancel := context.WithTimeout(ctx, 8*time.Second)
+	work, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	endpoint := doubanMobileDetailURL + url.PathEscape(id)
 	request, err := http.NewRequestWithContext(
@@ -316,7 +316,7 @@ func (d *Downloader) doubanSuggestedPosterAddress(ctx context.Context, drama nat
 	if strings.TrimSpace(drama.Title) == "" {
 		return "", errors.New("缺少作品名稱，略過豆瓣片名搜尋")
 	}
-	searchCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	searchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	matches := map[string]string{}
 	var lastErr error
@@ -584,7 +584,7 @@ func (d *Downloader) aniListPosterAddress(ctx context.Context, drama nativeDrama
 		return "", errors.New("作品類型不是動畫，略過 AniList 搜尋")
 	}
 	const queryText = "query ($search: String!) { Page(page: 1, perPage: 25) { media(search: $search, type: ANIME, isAdult: false) { id title { native romaji english } startDate { year } coverImage { extraLarge large } } } }"
-	searchCtx, cancel := context.WithTimeout(ctx, 7*time.Second)
+	searchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	matches := map[string]string{}
 	var lastErr error
@@ -695,7 +695,7 @@ func (d *Downloader) tvMazePosterAddress(ctx context.Context, drama nativeDrama)
 	if !nativePosterIsTVSeries(drama) {
 		return "", errors.New("作品類型不是電視劇或綜藝，略過 TVmaze 搜尋")
 	}
-	searchCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	searchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	matches := map[string]string{}
 	var lastErr error
@@ -857,7 +857,7 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 	if err != nil {
 		return "", err
 	}
-	searchCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	searchCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(
 		context.WithValue(searchCtx, nativeCoverNetworkKey{}, true),
