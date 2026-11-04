@@ -1273,7 +1273,24 @@ class LocalStore extends ChangeNotifier {
         throw const FormatException('備份完整性資訊無效');
       }
       final expectedDigest = integrity['digest'] as String;
-      if (!RegExp(r'^[a-f0-9]{64}
+      final validDigest = expectedDigest.length == 64 &&
+          expectedDigest.codeUnits.every(
+            (unit) =>
+                (unit >= 48 && unit <= 57) ||
+                (unit >= 97 && unit <= 102),
+          );
+      if (!validDigest) {
+        throw const FormatException('備份完整性資訊無效');
+      }
+      final payload = Map<String, dynamic>.from(data)..remove('integrity');
+      final actualDigest = crypto.sha256
+          .convert(utf8.encode(jsonEncode(payload)))
+          .toString();
+      if (actualDigest != expectedDigest) {
+        throw const FormatException('備份完整性檢查失敗，檔案可能已遭修改或損毀');
+      }
+    }
+
     final profiles = _readProfiles(data['profiles']);
     if (data.containsKey('themeMode') &&
         !{'light', 'dark', 'system'}.contains(data['themeMode'])) {
