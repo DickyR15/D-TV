@@ -227,6 +227,23 @@ func nativeCoverFallbackReferer(downloader *Downloader, drama nativeDrama, addre
 	if err == nil {
 		host := strings.ToLower(parsed.Hostname())
 		if host == "live.ykimg.com" || strings.HasSuffix(host, ".ykimg.com") {
+			// The official Youku image CDN was observed timing out with a
+			// Youku-domain Referer and succeeding with Duoduo's public homepage.
+			// Use the currently active Duoduo mirror when available, matching
+			// the successful live smoke-test request.
+			source := canonicalProviderSource(drama.Source)
+			if source == "" {
+				source = sourceFromDramaID(drama.ID)
+			}
+			if source == sourceDuoduo {
+				if downloader != nil {
+					base := strings.TrimRight(downloader.providerBaseURL(sourceDuoduo), "/")
+					if base != "" {
+						return base + "/"
+					}
+				}
+				return strings.TrimRight(duoduoPublicEntryURL, "/") + "/"
+			}
 			return "https://www.youku.com/"
 		}
 		if host == "k.sinaimg.cn" || strings.HasSuffix(host, ".sinaimg.cn") {
