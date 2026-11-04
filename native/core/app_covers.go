@@ -548,7 +548,7 @@ func nativeDecodeCover(data []byte) []byte {
 }
 
 func nativeIsCoverImage(data []byte) bool {
-	if isHEICImage(data) {
+	if isHEICImage(data) || isAVIFImage(data) {
 		return true
 	}
 	if bytes.HasPrefix(data, []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}) ||
