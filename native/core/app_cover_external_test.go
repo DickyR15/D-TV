@@ -168,6 +168,12 @@ func TestBangumiPosterAddressSupportsVarietyAndSeasonSpecificSeries(t *testing.T
 			image: "https://lain.bgm.tv/pic/cover/variety.jpg",
 		},
 		{
+			name: "season suffix maps to parent series and simplifies",
+			title: "這是我的西遊 第二季", category: "綜藝", year: "2026",
+			candidate: "这是我的西游", date: "2026-05-29",
+			image: "https://lain.bgm.tv/pic/cover/adventure-s2.jpg",
+		},
+		{
 			name: "first season title maps to parent series",
 			title: "怪奇物語 第一季", category: "劇集", year: "2016",
 			candidate: "怪奇物語", date: "2016-07-15",
