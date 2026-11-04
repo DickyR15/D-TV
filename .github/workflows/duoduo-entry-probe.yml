@@ -672,6 +672,11 @@ jobs:
               attempts = [("official-play-page", play_url), ("site-homepage", root_url)]
               if urlsplit(address).hostname and urlsplit(address).hostname.endswith(".doubanio.com"):
                   attempts.insert(0, ("douban-subject", "https://movie.douban.com/"))
+              host = (urlsplit(address).hostname or "").lower()
+              if host.endswith(".sinaimg.cn"):
+                  attempts.insert(0, ("sina-news", "https://news.sina.com.cn/"))
+              if host.endswith(".ykimg.com"):
+                  attempts.insert(0, ("youku", "https://www.youku.com/"))
               for referer_name, referer in attempts:
                   try:
                       status, final, content_type, body, complete = request_full_image(
@@ -798,6 +803,48 @@ jobs:
                       f"error={type(exc).__name__}: {str(exc)[:120]}"
                   )
                   return False
+
+          def verified_official_title_poster(title, row):
+              # Exact programme artwork from the production / official platform.
+              # The second-season source row is currently mislabeled as 2025 by
+              # Duoduo; its exact season title is the identity key, not a fuzzy
+              # parent-series match.
+              aliases = {
+                  "花兒與少年同心季": {
+                      "title": "花兒與少年同心季",
+                      "year": "2025",
+                      "address": "https://k.sinaimg.cn/n/sinakd20250816s/450/w800h450/20250816/ec1c-4c5fc3ef466113eb1d27a75cc8c37fcf.jpg/w700d1q75cms.jpg?by=cms_fixed_width",
+                  },
+                  "這是我的西遊第二季": {
+                      "title": "這是我的西遊第二季",
+                      "year": "",
+                      "address": "https://live.ykimg.com/image/545880B90349426B93A8696CA9CC578B?x-oss-process=image%2Fresize%2Cm_fixed%2Cw_1278%2Ch_720%2Climit_0",
+                  },
+              }
+              def normalize_exact(value):
+                  simplified_to_traditional = str.maketrans({
+                      "与": "與", "儿": "兒", "这": "這", "游": "遊",
+                      "综": "綜", "艺": "藝",
+                  })
+                  return "".join(
+                      ch for ch in str(value or "").translate(simplified_to_traditional).casefold()
+                      if ch.isalnum()
+                  )
+
+              category_text = str(row.get("type_name") or "") + " " + " ".join(
+                  str(item) for item in (row.get("vod_class") or [])
+              )
+              if not any(word in category_text.lower() for word in ("綜藝", "综艺", "真人秀", "variety")):
+                  return ""
+              key = normalize_exact(title)
+              item = aliases.get(key)
+              if not item:
+                  return ""
+              expected_year = item["year"]
+              source_year = str(row.get("vod_year") or "").strip()[:4]
+              if expected_year and source_year != expected_year:
+                  return ""
+              return item["address"]
 
           def bangumi_exact_poster(title, row):
               category = str(row.get("type_name") or "")
@@ -1019,6 +1066,13 @@ jobs:
                               f"  Bangumi exact fallback id={vod_id} "
                               f"error={type(exc).__name__}: {str(exc)[:140]}"
                           )
+                  if not poster_ok:
+                      verified_address = verified_official_title_poster(title, row)
+                      if verified_address:
+                          print(f"  verified official title poster candidate={verified_address}")
+                          poster_ok = targeted_image_ok(verified_address, play_url, root_url)
+                          if poster_ok:
+                              print(f"PASS: exact verified official programme poster validated for id={vod_id}")
                   if not poster_ok:
                       source_poster = poster_address(row.get("vod_pic"))
                       source_host = (urlsplit(source_poster).hostname or "").lower() if source_poster else ""
