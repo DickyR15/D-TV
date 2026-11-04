@@ -608,7 +608,11 @@ func (engine *nativeEngine) loadCover(ctx context.Context, drama nativeDrama, fo
 	if err != nil && err != io.EOF {
 		return nil, err
 	}
-	return map[string]any{"path": path, "heic": isHEICImage(header[:count])}, nil
+	return map[string]any{
+		"path": path,
+		"heic": isHEICImage(header[:count]),
+		"avif": isAVIFImage(header[:count]),
+	}, nil
 }
 
 // Provider-native detail artwork is kept separately so it always outranks an
