@@ -242,6 +242,7 @@ jobs:
           CONTINUATION_THRESHOLD = 18
           category_specs = [{"type_id": 0, "type_name": "全部"}] + categories
           category_rows = []
+          catalog_all_rows = []
           second_rows = []
           poster_candidates = []
           poster_seen = set()
@@ -269,6 +270,7 @@ jobs:
                       params["type_name"] = category_name
                   _, response = api("/api.php/web/filter/vod", params)
                   rows = response_rows(response.get("data"))
+                  catalog_all_rows.extend(rows)
                   count = len(rows)
                   page_counts.append(count)
                   raw_total += count
@@ -551,6 +553,13 @@ jobs:
                       source_id = row_id(row)
                       if source_id.isdigit() and normalize_target_title(title) in wanted:
                           matches[source_id] = row
+              # Search indexing can omit valid titles. Reuse the exact catalogue
+              # rows already scanned above (all categories, up to 40 pages each).
+              for row in catalog_all_rows:
+                  title = row_title(row)
+                  source_id = row_id(row)
+                  if source_id.isdigit() and normalize_target_title(title) in wanted:
+                      matches[source_id] = row
               if len(matches) == 1:
                   source_id, row = next(iter(matches.items()))
                   target_ids.append(source_id)
@@ -559,15 +568,19 @@ jobs:
                       f"to Duoduo id={source_id} source_title={row_title(row)!r} "
                       f"category={row.get('type_name')!r} year={row.get('vod_year')!r}"
                   )
-              elif not matches:
-                  target_title_failures.append(target["label"])
-                  print(f"FAIL: requested title not found in Duoduo search: {target['label']!r}")
+              elif matches:
+                  # Validate every exact-title duplicate rather than choosing one silently.
+                  for source_id in sorted(matches):
+                      target_ids.append(source_id)
+                      row = matches[source_id]
+                      print(
+                          f"RESOLVED exact duplicate title={target['label']!r} "
+                          f"to Duoduo id={source_id} source_title={row_title(row)!r} "
+                          f"category={row.get('type_name')!r} year={row.get('vod_year')!r}"
+                      )
               else:
                   target_title_failures.append(target["label"])
-                  print(
-                      f"FAIL: requested title is ambiguous in Duoduo search: "
-                      f"{target['label']!r} ids={sorted(matches)}"
-                  )
+                  print(f"FAIL: requested title not found in Duoduo catalogue/search: {target['label']!r}")
           TARGET_POSTER_IDS = tuple(dict.fromkeys(target_ids))
 
           class DetailPosterParser(HTMLParser):
