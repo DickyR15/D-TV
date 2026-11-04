@@ -9,6 +9,19 @@ import (
 	"strings"
 )
 
+var providerDoubanSubjectPattern = regexp.MustCompile(`(?i)(?:douban\.com/(?:movie/)?subject/|/(?:douban|subject)/)(\d{6,12})(?:\.[a-z0-9]{2,5})?(?:[/?#]|$)`)
+
+func providerDoubanSubjectID(values ...string) string {
+	for _, value := range values {
+		for _, match := range providerDoubanSubjectPattern.FindAllStringSubmatch(value, -1) {
+			if len(match) > 1 && validDoubanSubjectID(match[1]) {
+				return match[1]
+			}
+		}
+	}
+	return ""
+}
+
 var coverMetaTag = regexp.MustCompile(`(?is)<meta\b[^>]*>`)
 
 func (d *Downloader) nativeCoverAddress(ctx context.Context, drama nativeDrama) (string, error) {
@@ -92,10 +105,6 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nat
 		fresh, _, err = d.fetchHanxiaoquanDetail(ctx, id)
 	case sourceDuoduo:
 		fresh, _, _, _, err = d.fetchDuoduoDetailRow(ctx, id)
-	case sourceGuipian:
-		// Poster recovery must not depend on playlist/episode parsing. A detail
-		// page can contain a valid poster even when its player markup changes.
-		fresh, err = d.fetchGuipianCoverMetadata(ctx, id, drama.Title)
 	case sourceCloudFront:
 		if !rankingSourceID.MatchString(id) {
 			return nil, drama.DoubanID, errors.New("無效的黃果劇集 ID")
@@ -171,7 +180,7 @@ func nativeMergeCoverRecoveryMetadata(drama *nativeDrama, fresh Drama) []string 
 		for _, value := range []any{fresh.Cover, fresh.CoverURL, fresh.CoverURLSnake, fresh.Image, fresh.ImageURL, fresh.ImageURLSnake} {
 			freshCoverValues = append(freshCoverValues, nativeCoverValueStrings(value)...)
 		}
-		freshDoubanID = guipianDoubanID(freshCoverValues...)
+		freshDoubanID = providerDoubanSubjectID(freshCoverValues...)
 	}
 	if !validDoubanSubjectID(drama.DoubanID) && validDoubanSubjectID(freshDoubanID) {
 		drama.DoubanID = freshDoubanID
@@ -256,9 +265,6 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 		// aggregate playback service is unavailable or the title has no
 		// supported direct media URL.
 		fresh, _, _, _, err := d.fetchDuoduoDetailRow(ctx, id)
-		return nativeCoverAddressesFromDrama(fresh), err
-	case sourceGuipian:
-		fresh, _, err := d.fetchGuipianDetail(ctx, id)
 		return nativeCoverAddressesFromDrama(fresh), err
 	case sourceHanxiaoquan:
 		fresh, _, err := d.fetchHanxiaoquanDetail(ctx, id)
