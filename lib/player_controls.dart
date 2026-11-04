@@ -39,6 +39,7 @@ class PlayerControls extends StatefulWidget {
     this.onRetryDanmaku,
     this.onPush,
     this.onPictureInPicture,
+    this.pictureInPictureTooltip = '畫中畫',
     this.enhancement,
     this.playbackGeneration = 0,
   });
@@ -70,6 +71,7 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function()? onRetryDanmaku;
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
+  final String pictureInPictureTooltip;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
 
@@ -807,7 +809,7 @@ class _PlayerControlsState extends State<PlayerControls> {
       if (widget.onPictureInPicture != null)
         _toolIcon(
           key: const ValueKey('player-picture-in-picture'),
-          tooltip: '畫中畫',
+          tooltip: widget.pictureInPictureTooltip,
           icon: Icons.picture_in_picture_alt_rounded,
           onPressed: widget.enabled
               ? () => _panel(widget.onPictureInPicture!)
@@ -856,7 +858,7 @@ class _PlayerControlsState extends State<PlayerControls> {
       if (widget.onPictureInPicture != null)
         _toolIcon(
           key: const ValueKey('player-picture-in-picture'),
-          tooltip: '畫中畫',
+          tooltip: widget.pictureInPictureTooltip,
           icon: Icons.picture_in_picture_alt_rounded,
           onPressed: widget.enabled
               ? () => _panel(widget.onPictureInPicture!)
