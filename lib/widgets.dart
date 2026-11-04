@@ -253,13 +253,16 @@ class CoverRequestScheduler {
 
     // While playback/detail is active, preserve FIFO order among priority
     // requests but leave ordinary background work queued until playback ends.
+    _CoverRequest? nextPriority;
     for (final entry in _waiting) {
       if (entry.priority) {
-        _waiting.remove(entry);
-        return entry;
+        nextPriority = entry;
+        break;
       }
     }
-    return null;
+    if (nextPriority == null) return null;
+    _waiting.remove(nextPriority);
+    return nextPriority;
   }
 
   static Future<String> run(Future<String> Function() request) async {
