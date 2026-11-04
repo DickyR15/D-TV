@@ -16,6 +16,7 @@ class DesktopMiniPlayerArguments {
     required this.detail,
     required this.initialIndex,
     required this.initialPosition,
+    required this.authorizedSession,
   });
 
   static const businessId = 'dtv_mini_player';
@@ -23,6 +24,7 @@ class DesktopMiniPlayerArguments {
   final DramaDetail detail;
   final int initialIndex;
   final double initialPosition;
+  final bool authorizedSession;
 
   factory DesktopMiniPlayerArguments.fromJson(Map<String, dynamic> json) {
     final index = intValue(json['initialIndex']);
@@ -33,6 +35,7 @@ class DesktopMiniPlayerArguments {
       ),
       initialIndex: index,
       initialPosition: position.isFinite && position > 0 ? position : 0,
+      authorizedSession: json['authorizedSession'] == true,
     );
   }
 
@@ -45,6 +48,7 @@ class DesktopMiniPlayerArguments {
     },
     'initialIndex': initialIndex,
     'initialPosition': initialPosition,
+    'authorizedSession': authorizedSession,
   };
 
   static DesktopMiniPlayerArguments? tryParse(String encoded) {
@@ -66,11 +70,13 @@ Future<WindowController> createDesktopMiniPlayerWindow({
   required DramaDetail detail,
   required int index,
   required double position,
+  required bool authorizedSession,
 }) async {
   final arguments = DesktopMiniPlayerArguments(
     detail: detail,
     initialIndex: index,
     initialPosition: position,
+    authorizedSession: authorizedSession,
   );
   final controller = await WindowController.create(
     WindowConfiguration(
