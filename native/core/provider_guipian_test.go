@@ -48,10 +48,65 @@ func TestGuipianDetailTitleUsesTrustedCatalogueFallback(t *testing.T) {
 	}
 }
 
-func TestGuipianDetailTitleMissingReturnsDiagnostic(t *testing.T) {
-	_, err := parseGuipianCoverMetadata("99123", `<html><head><title>提示信息</title></head><body></body></html>`)
-	if err == nil || !strings.Contains(err.Error(), "99123") || !strings.Contains(err.Error(), "og:title") {
-		t.Fatalf("expected an ID-aware title diagnostic, got %v", err)
+func TestGuipianCoverMetadataDoesNotRequireTitle(t *testing.T) {
+	body := `<html><head><title>提示信息</title></head><body><div class="detail-img"><img data-src="/upload/titleless-poster.jpg"></div></body></html>`
+	drama, err := parseGuipianCoverMetadata("99123", body)
+	if err != nil {
+		t.Fatalf("poster metadata should not depend on title extraction: %v", err)
+	}
+	if drama.ID != providerDramaID(sourceGuipian, "99123") {
+		t.Fatalf("unexpected drama ID: %q", drama.ID)
+	}
+	if drama.Title != "" {
+		t.Fatalf("missing title should remain empty metadata, got %q", drama.Title)
+	}
+	if drama.Cover != guipianSiteBaseURL+"/upload/titleless-poster.jpg" {
+		t.Fatalf("poster should survive missing title metadata: %q", drama.Cover)
+	}
+}
+
+func TestGuipianDetailKeepsEpisodesWhenTitleIsMissing(t *testing.T) {
+	body := `<html><head><title>提示信息</title></head><body>` +
+		`<div class="detail-img"><img data-src="/upload/titleless-poster.jpg"></div>` +
+		`<li>年份：<span>2025</span></li>` +
+		`<li class="swiper-slide ewave-tab" data-target="#ewave-playlist-1">线路一</li>` +
+		`<div id="ewave-playlist-1"><ul>` +
+		`<li><a title='第1集' href='/play/75590-1-1.html'>第1集</a></li>` +
+		`<li><a title='第2集' href='/play/75590-1-2.html'>第2集</a></li>` +
+		`</ul></div><section></body></html>`
+	drama, chapters, err := parseGuipianDetail("75590", body)
+	if err != nil {
+		t.Fatalf("missing title must not block playable episodes: %v", err)
+	}
+	if drama.Title != "片名取得失敗" {
+		t.Fatalf("expected visible title placeholder, got %q", drama.Title)
+	}
+	if drama.Cover != guipianSiteBaseURL+"/upload/titleless-poster.jpg" {
+		t.Fatalf("poster was lost when title was missing: %q", drama.Cover)
+	}
+	if len(chapters) != 2 {
+		t.Fatalf("got %d episodes, want 2", len(chapters))
+	}
+	if chapters[0].ID != providerChapterID(sourceGuipian, "75590", guipianSiteBaseURL+"/play/75590-1-1.html") {
+		t.Fatalf("chapter source identity was not retained: %#v", chapters[0])
+	}
+	if chapters[0].PageURL != guipianSiteBaseURL+"/play/75590-1-1.html" {
+		t.Fatalf("playback page URL = %q", chapters[0].PageURL)
+	}
+}
+
+func TestGuipianMissingTitleDoesNotReplaceCatalogueTitle(t *testing.T) {
+	body := `<html><head><title>提示信息</title></head><body>` +
+		`<li class="swiper-slide ewave-tab" data-target="#ewave-playlist-1">线路一</li>` +
+		`<div id="ewave-playlist-1"><ul><li><a title='第1集' href='/play/75590-1-1.html'>第1集</a></li></ul></div><section></body></html>`
+	freshDrama, _, err := parseGuipianDetail("75590", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := nativeDrama{ID: freshDrama.ID, Title: "Trap 48"}
+	merged := mergeNativeDrama(previous, nativeNormalize(freshDrama))
+	if merged.Title != "Trap 48" {
+		t.Fatalf("missing-title placeholder overwrote the catalogue title: %q", merged.Title)
 	}
 }
 
@@ -375,6 +430,26 @@ func TestGuipianLivePlayback(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
 	downloader := engine.downloader
+
+	// Regression case reported by the user: the detail page may omit its title
+	// while the episode page still has a playable stream.
+	reportedDrama, reportedChapters, reportedErr := downloader.fetchGuipianDetail(ctx, "75590")
+	if reportedErr != nil {
+		t.Fatalf("reported Guipian ID 75590 must retain playable episodes when its title is missing: %v", reportedErr)
+	}
+	if len(reportedChapters) == 0 {
+		t.Fatal("reported Guipian ID 75590 returned no episodes")
+	}
+	t.Logf("reported ID 75590 detail OK: title=%q episodes=%d", reportedDrama.Title, len(reportedChapters))
+	reportedTask := Task{DramaID: reportedDrama.ID, DramaTitle: reportedDrama.Title, Chapter: reportedChapters[0], Index: 0, Total: len(reportedChapters)}
+	reportedMedia, reportedMediaErr := downloader.resolveGuipianMedia(ctx, reportedTask)
+	if reportedMediaErr != nil {
+		t.Fatalf("reported Guipian ID 75590 first episode resolve: %v", reportedMediaErr)
+	}
+	if probeErr := guipianLiveProbeAsset(ctx, downloader.streamClient, reportedMedia.URL, reportedMedia.Referer, 0); probeErr != nil {
+		t.Fatalf("reported Guipian ID 75590 first episode media probe: %v", probeErr)
+	}
+	t.Logf("reported ID 75590 playback OK: %s", reportedMedia.URL)
 
 	rss, err := downloader.guipianGet(ctx, "/xml/rss.xml")
 	if err != nil {

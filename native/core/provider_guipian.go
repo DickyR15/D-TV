@@ -696,10 +696,9 @@ func parseGuipianCoverMetadata(sourceID, body string, fallbackTitles ...string) 
 	if !guipianNumericID(sourceID) {
 		return Drama{}, errors.New("鬼片網影片 ID 無效")
 	}
+	// Poster metadata is independent from title metadata. Keep valid
+	// artwork even when the upstream page temporarily omits every title field.
 	name := guipianDetailTitleWithFallback(body, fallbackTitles...)
-	if name == "" {
-		return Drama{}, fmt.Errorf("鬼片網詳情缺少影片名稱（ID：%s；已檢查 H1、og:title、twitter:title、JSON-LD、HTML title 與目錄片名）", sourceID)
-	}
 	coverCandidates := guipianDetailPosterCandidates(body)
 	cover := ""
 	var alternatives []string
@@ -732,17 +731,23 @@ func (d *Downloader) fetchGuipianCoverMetadata(ctx context.Context, sourceID str
 	return parseGuipianCoverMetadata(sourceID, body, fallbackTitles...)
 }
 
-func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string, fallbackTitles ...string) (Drama, []Chapter, error) {
+func parseGuipianDetail(sourceID, body string, fallbackTitles ...string) (Drama, []Chapter, error) {
 	if !guipianNumericID(sourceID) {
-		return Drama{}, nil, errors.New("鬼片网视频 ID 无效")
+		return Drama{}, nil, errors.New("鬼片網影片 ID 無效")
 	}
-	body, err := d.guipianGet(ctx, "/nv/"+sourceID+".html")
+
+	// Playback is driven by the episode page URLs, not by the display title.
+	// Parse the playlist first so a missing title does not block a playable item.
+	_, chapters, err := guipianPickPlaylist(body)
 	if err != nil {
 		return Drama{}, nil, err
 	}
+
 	name := guipianDetailTitleWithFallback(body, fallbackTitles...)
 	if name == "" {
-		return Drama{}, nil, fmt.Errorf("鬼片網詳情缺少影片名稱（ID：%s；已檢查 H1、og:title、twitter:title、JSON-LD、HTML title 與目錄片名）", sourceID)
+		// Keep the episode list usable and make the missing metadata explicit.
+		// mergeNativeDrama preserves a real catalogue title over this placeholder.
+		name = "片名取得失敗"
 	}
 	coverCandidates := guipianDetailPosterCandidates(body)
 	cover := ""
@@ -764,7 +769,7 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string, fa
 		Title: truncate(name, 512), Name: truncate(name, 512),
 		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
 		Cover: cover, CoverURL: cover, ImageURL: coverAlternatives,
-		ChannelName: "鬼片网", CategoryName: "影视", OnlineDate: year,
+		ChannelName: "鬼片網", CategoryName: "影視", OnlineDate: year,
 		Remark: truncate(status, 64),
 	}
 	tags := make([]string, 0, 8)
@@ -783,23 +788,30 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string, fa
 		addTag(area)
 	}
 	if director != "" {
-		addTag("导演 " + truncate(director, 32))
+		addTag("導演 " + truncate(director, 32))
 	}
 	if actors != "" {
 		addTag("主演 " + truncate(actors, 48))
 	}
 	drama.Tags = tags
 
-	_, chapters, err := guipianPickPlaylist(body)
-	if err != nil {
-		return Drama{}, nil, err
-	}
-	// 分集 ID 里带的是完整播放页 URL，回填 sourceID 前缀便于播放阶段校验归属。
+	// 分集 ID 里帶的是完整播放頁 URL，回填 sourceID 前綴便於播放階段校驗歸屬。
 	for index := range chapters {
 		chapters[index].ID = providerChapterID(sourceGuipian, sourceID, chapters[index].PageURL)
 	}
 	drama.TotalEpisode, drama.EpisodeCount = len(chapters), len(chapters)
 	return drama, chapters, nil
+}
+
+func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string, fallbackTitles ...string) (Drama, []Chapter, error) {
+	if !guipianNumericID(sourceID) {
+		return Drama{}, nil, errors.New("鬼片網影片 ID 無效")
+	}
+	body, err := d.guipianGet(ctx, "/nv/"+sourceID+".html")
+	if err != nil {
+		return Drama{}, nil, err
+	}
+	return parseGuipianDetail(sourceID, body, fallbackTitles...)
 }
 
 func (d *Downloader) resolveGuipianMedia(ctx context.Context, task Task) (providerMedia, error) {

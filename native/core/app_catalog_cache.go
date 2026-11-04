@@ -206,6 +206,11 @@ func mergeNativeDrama(previous, fresh nativeDrama) nativeDrama {
 	}
 	if fresh.Title == "" || fresh.Title == "短剧" {
 		fresh.Title = previous.Title
+	} else if fresh.Title == "片名取得失敗" || fresh.Title == "片名获取失败" {
+		if previous.Title != "" && previous.Title != "短剧" &&
+			previous.Title != "片名取得失敗" && previous.Title != "片名获取失败" {
+			fresh.Title = previous.Title
+		}
 	}
 	if fresh.Description == "" {
 		fresh.Description = previous.Description
