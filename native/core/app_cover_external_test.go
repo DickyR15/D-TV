@@ -326,6 +326,16 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 			drama: nativeDrama{ID: "guipian:77333", Title: "歹路无可退", Category: "影视", Tags: []string{"電影"}, OnlineDate: "2027"},
 			want: "https://jingafilms.com/wp-content/uploads/2026/02/FastCash.jpg",
 		},
+		{
+			name: "Unicorn Academy Chapter Two uses the official Netflix Season 2 still for the exact Guipian record",
+			drama: nativeDrama{ID: "guipian:77681", Title: "独角兽学院：秘密揭开第二章", Category: "影视", Tags: []string{"動漫"}, OnlineDate: "2026"},
+			want: "https://www.whats-on-netflix.com/wp-content/uploads/2026/09/Unicorn-Academy-Secrets-Revealed-n-S2-E1-00-10-43-15-1536x864.jpg",
+		},
+		{
+			name: "Duoduo 1192 Shotgun Marriage uses Fuji Creative official artwork",
+			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
+			want: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -342,6 +352,43 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 	}
 }
 
+func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *testing.T) {
+	tests := []struct {
+		name  string
+		drama nativeDrama
+		want  string
+	}{
+		{
+			name: "Unicorn Chapter Two",
+			drama: nativeDrama{ID: "guipian:77681", Title: "独角兽学院：秘密揭开第二章"},
+			want: "https://www.whats-on-netflix.com/wp-content/uploads/2026/09/Unicorn-Academy-Secrets-Revealed-n-S2-E1-00-10-43-15-1536x864.jpg",
+		},
+		{
+			name: "Shotgun Marriage 2001",
+			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚"},
+			want: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			address, ok := nativePreferredOfficialPosterAddress(tc.drama)
+			if !ok || address != tc.want {
+				t.Fatalf("preferred official poster = %q, ok=%t; want %q", address, ok, tc.want)
+			}
+		})
+	}
+	for _, drama := range []nativeDrama{
+		{ID: "guipian:77682", Title: "獨角獸學院：秘密揭開第二章"},
+		{ID: "duoduo:1193", Title: "奉子成婚"},
+		{ID: "guipian:77681", Title: "獨角獸學院：秘密揭開第一章"},
+		{ID: "duoduo:1192", Title: "奉子不成婚"},
+	} {
+		if address, ok := nativePreferredOfficialPosterAddress(drama); ok {
+			t.Errorf("wrong record received preferred artwork %q: %+v", address, drama)
+		}
+	}
+}
+
 func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) {
 	cases := []nativeDrama{
 		{Title: "花兒與少年．同心季", Category: "綜藝", OnlineDate: "2024"},
@@ -352,6 +399,12 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{ID: "guipian:77334", Title: "歹路無可退", Category: "影视", OnlineDate: "2026"},
 		{ID: "duoduo:77333", Title: "歹路無可退", Category: "電影", OnlineDate: "2026"},
 		{ID: "guipian:77333", Title: "其他作品", Category: "影视", OnlineDate: "2026"},
+		{ID: "guipian:77682", Title: "獨角獸學院：秘密揭開第二章", Category: "動漫", OnlineDate: "2026"},
+		{ID: "duoduo:77681", Title: "獨角獸學院：秘密揭開第二章", Category: "動漫", OnlineDate: "2026"},
+		{ID: "guipian:77681", Title: "獨角獸學院：秘密揭開第一章", Category: "動漫", OnlineDate: "2026"},
+		{ID: "duoduo:1193", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
+		{ID: "guipian:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
+		{ID: "duoduo:1192", Title: "奉子不成婚", Category: "電影", OnlineDate: "2016"},
 	}
 	for _, drama := range cases {
 		if address, ok := nativeVerifiedOfficialPosterAddress(drama); ok {
