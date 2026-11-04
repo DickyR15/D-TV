@@ -83,7 +83,13 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
     try {
       final preferences = await SharedPreferences.getInstance();
       await _repository.initialize();
-      final store = LocalStore(preferences);
+      if (!widget.arguments.authorizedSession) {
+        throw StateError('主視窗尚未完成使用者驗證');
+      }
+      final store = LocalStore(
+        preferences,
+        assumeAuthenticated: widget.arguments.authorizedSession,
+      );
       _repository.access = store;
       if (!mounted) {
         store.dispose();
