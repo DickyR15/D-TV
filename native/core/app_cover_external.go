@@ -455,6 +455,37 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		address: "https://www.whats-on-netflix.com/wp-content/uploads/2026/09/Unicorn-Academy-Secrets-Revealed-n-S2-E1-00-10-43-15-1536x864.jpg",
 	},
 	{
+		// Duoduo ID 87221 is Single's Inferno Season 5 (Netflix, 2026).
+		// Use the season-specific Netflix key art, restricted to this exact
+		// source ID and title to prevent another season from matching.
+		title: "單身即地獄第五季",
+		titleAliases: []string{"单身即地狱第五季", "單身即地獄 第五季", "单身即地狱 第五季"},
+		source: sourceDuoduo,
+		sourceID: "87221",
+		preferred: true,
+		address: "https://resource02.ulifestyle.com.hk/ulcms/content/article/image/w1280/2026/01/20260106180130_adf32c82e8e9ede7a5f96d795e9f224666da43bd.jpg",
+	},
+	{
+		// Duoduo ID 59902 is the exact MangoTV programme record for
+		// 明星大侦探 第二季; use that season's programme artwork.
+		title: "明星大偵探第二季",
+		titleAliases: []string{"明星大侦探第二季", "明星大偵探 第二季", "明星大侦探 第二季"},
+		source: sourceDuoduo,
+		sourceID: "59902",
+		preferred: true,
+		address: "https://4img.hitv.com/preview/internettv/sp_images/ott/2018/zongyi/309556/20180328100639870-new.jpg",
+	},
+	{
+		// Duoduo ID 78011 is the 2014 Korean film Obsessed (인간중독).
+		// Use the distributor's poster, restricted to this exact source ID.
+		title: "人間中毒",
+		titleAliases: []string{"人间中毒"},
+		source: sourceDuoduo,
+		sourceID: "78011",
+		preferred: true,
+		address: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
+	},
+	{
 		// Duoduo ID 1192 is the 2001 Fuji TV series できちゃった結婚
 		// (Shotgun Marriage). Prefer the programme distributor's official
 		// artwork because the source CDN is unavailable and Douban is blocked.

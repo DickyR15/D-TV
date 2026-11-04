@@ -875,7 +875,7 @@ jobs:
                   )
                   return False
 
-          def verified_official_title_poster(title, row):
+          def verified_official_title_poster(vod_id, title, row):
               # Exact programme artwork from programme-owner / official-platform materials.
               # Do not use fuzzy parent-title matching or substitute another season.
               def normalize_exact(value):
@@ -887,6 +887,28 @@ jobs:
                       ch for ch in str(value or "").translate(simplified_to_traditional).casefold()
                       if ch.isalnum()
                   )
+
+              exact_source_records = {
+                  "87221": {
+                      "aliases": {"單身即地獄第五季", "单身即地狱第五季"},
+                      "address": "https://resource02.ulifestyle.com.hk/ulcms/content/article/image/w1280/2026/01/20260106180130_adf32c82e8e9ede7a5f96d795e9f224666da43bd.jpg",
+                      "label": "Netflix Single's Inferno Season 5",
+                  },
+                  "59902": {
+                      "aliases": {"明星大偵探第二季", "明星大侦探第二季"},
+                      "address": "https://4img.hitv.com/preview/internettv/sp_images/ott/2018/zongyi/309556/20180328100639870-new.jpg",
+                      "label": "MangoTV 明星大侦探 第二季",
+                  },
+                  "78011": {
+                      "aliases": {"人間中毒", "人间中毒"},
+                      "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
+                      "label": "Distributor poster for Obsessed (2014)",
+                  },
+              }
+              exact_item = exact_source_records.get(str(vod_id))
+              if exact_item and normalize_exact(title) in exact_item["aliases"]:
+                  print(f"  verified poster matched exact source record={vod_id} programme={exact_item['label']!r}")
+                  return exact_item["address"]
 
               flower_key = normalize_exact("花兒與少年同心季")
               xiyou_key = normalize_exact("這是我的西遊第二季")
@@ -1165,7 +1187,7 @@ jobs:
                               f"error={type(exc).__name__}: {str(exc)[:140]}"
                           )
                   if not poster_ok:
-                      verified_address = verified_official_title_poster(title, row)
+                      verified_address = verified_official_title_poster(vod_id, title, row)
                       if verified_address:
                           print(f"  verified official title poster candidate={verified_address}")
                           poster_ok = targeted_image_ok(verified_address, play_url, root_url)
@@ -1174,18 +1196,26 @@ jobs:
                   if not poster_ok:
                       source_poster = poster_address(row.get("vod_pic"))
                       source_host = (urlsplit(source_poster).hostname or "").lower() if source_poster else ""
-                      if (
+                      unresolved_upstream_artwork = (
                           vod_id == "1192"
                           and title == "奉子成婚"
                           and source_host == "dbzy5.com"
                           and douban_status == 403
                           and source_host in dns_unavailable_hosts
-                      ):
+                      ) or (
+                          vod_id == "66452"
+                          and title == "逆爱2：后会无期"
+                          and str(row.get("vod_year") or "").strip()[:4] == "2014"
+                          and source_host == "dbzy5.com"
+                          and source_host in dns_unavailable_hosts
+                      )
+                      if unresolved_upstream_artwork:
                           target_upstream_unavailable.append(vod_id)
                           print(
-                              "WARN: poster remains unresolved for id=1192; the source CDN "
-                              "has no public A/AAAA DNS answer and Douban returned HTTP 403. "
-                              "This is an upstream availability blocker, not a validated poster."
+                              f"WARN: poster remains unresolved for id={vod_id} title={title!r}; "
+                              "the source CDN has no public A/AAAA DNS answer and no exact, "
+                              "verified replacement poster is available. This is an upstream "
+                              "availability blocker, not a validated poster."
                           )
                       else:
                           target_failures.append(vod_id)
@@ -1679,7 +1709,7 @@ jobs:
                   )
                   return False
 
-          def verified_official_title_poster(title, row):
+          def verified_official_title_poster(vod_id, title, row):
               # Exact programme artwork from programme-owner / official-platform materials.
               # Do not use fuzzy parent-title matching or substitute another season.
               def normalize_exact(value):
@@ -1691,6 +1721,28 @@ jobs:
                       ch for ch in str(value or "").translate(simplified_to_traditional).casefold()
                       if ch.isalnum()
                   )
+
+              exact_source_records = {
+                  "87221": {
+                      "aliases": {"單身即地獄第五季", "单身即地狱第五季"},
+                      "address": "https://resource02.ulifestyle.com.hk/ulcms/content/article/image/w1280/2026/01/20260106180130_adf32c82e8e9ede7a5f96d795e9f224666da43bd.jpg",
+                      "label": "Netflix Single's Inferno Season 5",
+                  },
+                  "59902": {
+                      "aliases": {"明星大偵探第二季", "明星大侦探第二季"},
+                      "address": "https://4img.hitv.com/preview/internettv/sp_images/ott/2018/zongyi/309556/20180328100639870-new.jpg",
+                      "label": "MangoTV 明星大侦探 第二季",
+                  },
+                  "78011": {
+                      "aliases": {"人間中毒", "人间中毒"},
+                      "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
+                      "label": "Distributor poster for Obsessed (2014)",
+                  },
+              }
+              exact_item = exact_source_records.get(str(vod_id))
+              if exact_item and normalize_exact(title) in exact_item["aliases"]:
+                  print(f"  verified poster matched exact source record={vod_id} programme={exact_item['label']!r}")
+                  return exact_item["address"]
 
               flower_key = normalize_exact("花兒與少年同心季")
               xiyou_key = normalize_exact("這是我的西遊第二季")
@@ -1961,7 +2013,7 @@ jobs:
                               f"error={type(exc).__name__}: {str(exc)[:140]}"
                           )
                   if not poster_ok:
-                      verified_address = verified_official_title_poster(title, row)
+                      verified_address = verified_official_title_poster(vod_id, title, row)
                       if verified_address:
                           print(f"  verified official title poster candidate={verified_address}")
                           poster_ok = targeted_image_ok(verified_address, play_url, root_url)
@@ -1970,18 +2022,26 @@ jobs:
                   if not poster_ok:
                       source_poster = poster_address(row.get("vod_pic"))
                       source_host = (urlsplit(source_poster).hostname or "").lower() if source_poster else ""
-                      if (
+                      unresolved_upstream_artwork = (
                           vod_id == "1192"
                           and title == "奉子成婚"
                           and source_host == "dbzy5.com"
                           and douban_status == 403
                           and source_host in dns_unavailable_hosts
-                      ):
+                      ) or (
+                          vod_id == "66452"
+                          and title == "逆爱2：后会无期"
+                          and str(row.get("vod_year") or "").strip()[:4] == "2014"
+                          and source_host == "dbzy5.com"
+                          and source_host in dns_unavailable_hosts
+                      )
+                      if unresolved_upstream_artwork:
                           target_upstream_unavailable.append(vod_id)
                           print(
-                              "WARN: poster remains unresolved for id=1192; the source CDN "
-                              "has no public A/AAAA DNS answer and Douban returned HTTP 403. "
-                              "This is an upstream availability blocker, not a validated poster."
+                              f"WARN: poster remains unresolved for id={vod_id} title={title!r}; "
+                              "the source CDN has no public A/AAAA DNS answer and no exact, "
+                              "verified replacement poster is available. This is an upstream "
+                              "availability blocker, not a validated poster."
                           )
                       else:
                           target_failures.append(vod_id)

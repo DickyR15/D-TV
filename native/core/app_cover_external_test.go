@@ -332,6 +332,21 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 			want: "https://www.whats-on-netflix.com/wp-content/uploads/2026/09/Unicorn-Academy-Secrets-Revealed-n-S2-E1-00-10-43-15-1536x864.jpg",
 		},
 		{
+			name: "Duoduo 87221 Single's Inferno Season 5 uses Netflix key art",
+			drama: nativeDrama{ID: "duoduo:87221", Title: "单身即地狱 第五季", Category: "剧集", OnlineDate: "2026"},
+			want: "https://resource02.ulifestyle.com.hk/ulcms/content/article/image/w1280/2026/01/20260106180130_adf32c82e8e9ede7a5f96d795e9f224666da43bd.jpg",
+		},
+		{
+			name: "Duoduo 59902 明星大侦探 Season 2 uses MangoTV programme artwork",
+			drama: nativeDrama{ID: "duoduo:59902", Title: "明星大侦探 第二季", Category: "综艺", OnlineDate: "2017"},
+			want: "https://4img.hitv.com/preview/internettv/sp_images/ott/2018/zongyi/309556/20180328100639870-new.jpg",
+		},
+		{
+			name: "Duoduo 78011 Obsessed uses distributor poster",
+			drama: nativeDrama{ID: "duoduo:78011", Title: "人间中毒", Category: "電影", OnlineDate: "2014"},
+			want: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
+		},
+		{
 			name: "Duoduo 1192 Shotgun Marriage uses Fuji Creative official artwork",
 			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
 			want: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
@@ -362,6 +377,21 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 			name: "Unicorn Chapter Two",
 			drama: nativeDrama{ID: "guipian:77681", Title: "独角兽学院：秘密揭开第二章"},
 			want: "https://www.whats-on-netflix.com/wp-content/uploads/2026/09/Unicorn-Academy-Secrets-Revealed-n-S2-E1-00-10-43-15-1536x864.jpg",
+		},
+		{
+			name: "Single's Inferno Season 5",
+			drama: nativeDrama{ID: "duoduo:87221", Title: "單身即地獄 第五季"},
+			want: "https://resource02.ulifestyle.com.hk/ulcms/content/article/image/w1280/2026/01/20260106180130_adf32c82e8e9ede7a5f96d795e9f224666da43bd.jpg",
+		},
+		{
+			name: "明星大侦探 Season 2",
+			drama: nativeDrama{ID: "duoduo:59902", Title: "明星大偵探 第二季"},
+			want: "https://4img.hitv.com/preview/internettv/sp_images/ott/2018/zongyi/309556/20180328100639870-new.jpg",
+		},
+		{
+			name: "Obsessed",
+			drama: nativeDrama{ID: "duoduo:78011", Title: "人間中毒"},
+			want: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
 		},
 		{
 			name: "Shotgun Marriage 2001",
@@ -404,6 +434,12 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{ID: "guipian:77681", Title: "獨角獸學院：秘密揭開第一章", Category: "動漫", OnlineDate: "2026"},
 		{ID: "duoduo:1193", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
 		{ID: "guipian:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
+		{ID: "duoduo:87222", Title: "單身即地獄 第五季", Category: "劇集", OnlineDate: "2026"},
+		{ID: "duoduo:87221", Title: "單身即地獄 第四季", Category: "劇集", OnlineDate: "2025"},
+		{ID: "duoduo:59903", Title: "明星大偵探 第二季", Category: "綜藝", OnlineDate: "2017"},
+		{ID: "duoduo:59902", Title: "明星大偵探 第一季", Category: "綜藝", OnlineDate: "2016"},
+		{ID: "duoduo:78012", Title: "人間中毒", Category: "電影", OnlineDate: "2014"},
+		{ID: "duoduo:78011", Title: "其他作品", Category: "電影", OnlineDate: "2014"},
 		{ID: "duoduo:1192", Title: "奉子不成婚", Category: "電影", OnlineDate: "2016"},
 	}
 	for _, drama := range cases {
