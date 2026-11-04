@@ -9,6 +9,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'desktop_window_state.dart';
+
 import 'core_bridge.dart';
 import 'app_layout.dart';
 import 'app_orientation.dart';
@@ -60,6 +62,91 @@ class AppBootstrap extends StatefulWidget {
 
 class _AppBootstrapState extends State<AppBootstrap>
     with WidgetsBindingObserver {
+  static const _desktopWindowSaveDelay = Duration(milliseconds: 320);
+  SharedPreferences? _desktopPreferences;
+  Timer? _desktopWindowSaveTimer;
+  bool _restoringDesktopWindow = false;
+  bool? _pendingMaximizedState;
+  late final _desktopWindowListener = _DesktopWindowListener(
+    onGeometryChanged: _scheduleDesktopWindowSave,
+    onMaximizeChanged: _scheduleDesktopWindowSave,
+    onClose: () => unawaited(_saveDesktopWindowState()),
+  );
+
+  bool get _isDesktopWindow =>
+      Platform.isWindows || Platform.isMacOS;
+
+  void _scheduleDesktopWindowSave([bool? maximized]) {
+    if (!_isDesktopWindow ||
+        _desktopPreferences == null ||
+        _restoringDesktopWindow) {
+      return;
+    }
+    _pendingMaximizedState = maximized;
+    _desktopWindowSaveTimer?.cancel();
+    _desktopWindowSaveTimer = Timer(_desktopWindowSaveDelay, () {
+      _desktopWindowSaveTimer = null;
+      unawaited(
+        _saveDesktopWindowState(maximizedOverride: _pendingMaximizedState),
+      );
+    });
+  }
+
+  Future<void> _restoreDesktopWindowState(
+    SharedPreferences preferences,
+  ) async {
+    if (!_isDesktopWindow) return;
+    _desktopPreferences = preferences;
+    final saved = DesktopWindowState.tryParse(
+      preferences.getString(DesktopWindowState.preferencesKey),
+    );
+    if (saved == null) return;
+
+    _restoringDesktopWindow = true;
+    try {
+      await windowManager.setBounds(saved.bounds);
+      if (saved.maximized) await windowManager.maximize();
+    } catch (_) {
+      // Ignore a stale display geometry and keep the platform default window.
+    } finally {
+      _restoringDesktopWindow = false;
+    }
+  }
+
+  Future<void> _saveDesktopWindowState({bool? maximizedOverride}) async {
+    final preferences = _desktopPreferences;
+    if (!_isDesktopWindow || preferences == null || _restoringDesktopWindow) {
+      return;
+    }
+    try {
+      final fullScreen = await windowManager.isFullScreen();
+      final maximized =
+          maximizedOverride ?? await windowManager.isMaximized();
+      var saved = DesktopWindowState.tryParse(
+        preferences.getString(DesktopWindowState.preferencesKey),
+      ) ?? const DesktopWindowState(
+        left: 80,
+        top: 80,
+        width: 1280,
+        height: 800,
+      );
+
+      // getBounds() while maximized/full-screen is the monitor bounds, not the
+      // user's normal window size. Keep the last normal geometry in that case.
+      if (!fullScreen && !maximized) {
+        final current = DesktopWindowState.fromRect(
+          await windowManager.getBounds(),
+        );
+        if (current != null) saved = current;
+      }
+      await preferences.setString(
+        DesktopWindowState.preferencesKey,
+        saved.copyWith(maximized: maximized).encode(),
+      );
+    } catch (_) {
+      // Window-state persistence must never interfere with playback or exit.
+    }
+  }
   final repository = NativeRepository();
   final navigator = GlobalKey<NavigatorState>();
   LocalStore? store;
@@ -70,6 +157,11 @@ class _AppBootstrapState extends State<AppBootstrap>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (_isDesktopWindow) {
+      windowManager.removeListener(_desktopWindowListener);
+      _desktopWindowSaveTimer?.cancel();
+      unawaited(_saveDesktopWindowState());
+    }
     LanController.current?.dispose();
     LanController.current = null;
     MediaLibrary.current?.dispose();
@@ -82,6 +174,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (_isDesktopWindow) windowManager.addListener(_desktopWindowListener);
     _initialize();
   }
 
@@ -159,6 +252,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     });
     try {
       final preferences = await SharedPreferences.getInstance();
+      await _restoreDesktopWindowState(preferences);
       await _refreshDevice();
       final accents = await AppDevice.systemAccentColors();
       unawaited(_logStartupRendering());
@@ -241,6 +335,37 @@ class _AppBootstrapState extends State<AppBootstrap>
   );
 }
 
+
+class _DesktopWindowListener with WindowListener {
+  _DesktopWindowListener({
+    required this.onGeometryChanged,
+    required this.onMaximizeChanged,
+    required this.onClose,
+  });
+
+  final VoidCallback onGeometryChanged;
+  final ValueChanged<bool> onMaximizeChanged;
+  final VoidCallback onClose;
+
+  @override
+  void onWindowMoved() => onGeometryChanged();
+
+  @override
+  void onWindowResized() => onGeometryChanged();
+
+  @override
+  void onWindowMaximize() => onMaximizeChanged(true);
+
+  @override
+  void onWindowUnmaximize() => onMaximizeChanged(false);
+
+  @override
+  void onWindowLeaveFullScreen() => onGeometryChanged();
+
+  @override
+  void onWindowClose() => onClose();
+}
+
 class DuanjuApp extends StatelessWidget {
   const DuanjuApp({
     super.key,
@@ -269,6 +394,16 @@ class DuanjuApp extends StatelessWidget {
     animation: Listenable.merge([store]),
     builder: (_, _) => _application(),
   );
+
+  Future<void> _toggleDesktopFullscreen() async {
+    if (!Platform.isWindows && !Platform.isMacOS) return;
+    try {
+      final fullScreen = await windowManager.isFullScreen();
+      await windowManager.setFullScreen(!fullScreen);
+    } catch (_) {
+      // Unsupported window managers should leave the current window unchanged.
+    }
+  }
 
   Widget _application() => MaterialApp(
     navigatorKey: navigatorKey,
@@ -320,19 +455,33 @@ class DuanjuApp extends StatelessWidget {
               version: version,
               child: Theme(
                 data: tv ? televisionTheme(theme) : theme,
-                child: Shortcuts(
-                  shortcuts: const {
-                    SingleActivator(
-                      LogicalKeyboardKey.select,
-                      includeRepeats: false,
-                    ): ActivateIntent(),
-                    SingleActivator(
-                      LogicalKeyboardKey.gameButtonA,
-                      includeRepeats: false,
-                    ): ActivateIntent(),
-                    SingleActivator(LogicalKeyboardKey.goBack): DismissIntent(),
+                child: Actions(
+                  actions: {
+                    ToggleDesktopFullscreenIntent:
+                        CallbackAction<ToggleDesktopFullscreenIntent>(
+                          onInvoke: (_) {
+                            unawaited(_toggleDesktopFullscreen());
+                            return null;
+                          },
+                        ),
                   },
-                  child: FocusTraversalGroup(child: child!),
+                  child: Shortcuts(
+                    shortcuts: {
+                      ...desktopRootShortcuts,
+                      const SingleActivator(
+                        LogicalKeyboardKey.select,
+                        includeRepeats: false,
+                      ): const ActivateIntent(),
+                      const SingleActivator(
+                        LogicalKeyboardKey.gameButtonA,
+                        includeRepeats: false,
+                      ): const ActivateIntent(),
+                      const SingleActivator(
+                        LogicalKeyboardKey.goBack,
+                      ): const DismissIntent(),
+                    },
+                    child: FocusTraversalGroup(child: child!),
+                  ),
                 ),
               ),
             ),
