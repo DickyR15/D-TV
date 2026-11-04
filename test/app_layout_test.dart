@@ -162,4 +162,26 @@ void main() {
       );
     });
   });
+  testWidgets('physical TV detection is retained when the user selects phone layout', (
+    tester,
+  ) async {
+    var detectedTelevision = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppLayout(
+          television: false,
+          detectedTelevision: true,
+          formFactor: FormFactor.phone,
+          child: Builder(
+            builder: (context) {
+              detectedTelevision = AppLayout.isTelevisionDevice(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+    expect(detectedTelevision, isTrue);
+  });
+
 }
