@@ -726,6 +726,7 @@ func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
 		"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2170193684.jpg",
 		"https://movie.douban.com/",
 		"external",
+		false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1014,6 +1015,7 @@ func TestNativeCoverExternalDownloadFailureFallsBackToBangumi(t *testing.T) {
 		context.Background(),
 		drama,
 		"https://img9.doubanio.com/view/photo/s_ratio_poster/public/p1234567890.jpg",
+		false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -1091,6 +1093,7 @@ func TestNativeCoverExternalDownloadFailureRetriesVerifiedOfficialProgrammePoste
 			path, address, err := cache.loadExternalPoster(
 				context.Background(), tc.drama,
 				"https://old-fallback.example.test/poster.jpg",
+				false,
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -1182,4 +1185,53 @@ func TestExternalPosterAddressUsesDoubanSuggestionAfterBangumiMiss(t *testing.T)
 	address, err := downloader.externalPosterAddress(context.Background(), nativeDrama{ID: "duoduo:777", Source: sourceDuoduo, Title: "補圖測試電影", Category: "電影", OnlineDate: "2025"})
 	if err != nil { t.Fatal(err) }
 	if address != expected { t.Fatalf("external fallback poster = %q, want %q", address, expected) }
+}
+
+func TestLoadAlternativeAddressForcedRetryReDownloadsFreshCache(t *testing.T) {
+	firstImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 1}
+	secondImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 2}
+	var calls int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		calls++
+		image := firstImage
+		if calls > 1 {
+			image = secondImage
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+			Body: io.NopCloser(bytes.NewReader(image)),
+			ContentLength: int64(len(image)),
+			Request: request,
+		}, nil
+	})}
+	cache := newNativeCoverCache(t.TempDir(), &Downloader{client: client, cfg: defaultConfig()})
+	drama := nativeDrama{ID: "duoduo:retry", Source: sourceDuoduo, SourceID: "retry"}
+	address := "https://img9.doubanio.com/view/photo/s_ratio_poster/public/retry.jpg"
+	referer := "https://movie.douban.com/"
+
+	firstPath, err := cache.loadAlternativeAddress(
+		context.Background(), drama, address, referer, "external", false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstCached, err := os.ReadFile(firstPath)
+	if err != nil || !bytes.Equal(firstCached, firstImage) {
+		t.Fatalf("initial external poster cache mismatch: %v", err)
+	}
+
+	secondPath, err := cache.loadAlternativeAddress(
+		context.Background(), drama, address, referer, "external", true,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondCached, err := os.ReadFile(secondPath)
+	if err != nil || !bytes.Equal(secondCached, secondImage) {
+		t.Fatalf("forced retry reused stale external poster cache: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("forced retry made %d downloads, want 2", calls)
+	}
 }
