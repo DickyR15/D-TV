@@ -114,6 +114,27 @@ void main() {
     expect(store.watched(watched.id)?.position, 56);
   });
 
+  test('failed file migration retains and exports the original snapshot', () async {
+    final preferences = await freshPreferences();
+    await preferences.setString(LocalSnapshot.storageKey, '{broken-json');
+    await preferences.setString('history', '[{"title":"舊資料"}]');
+
+    final directory = await Directory.systemTemp.createTemp('dtv-files-fallback-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = await LocalStore.open(
+      preferences,
+      storageDirectory: directory,
+    );
+    addTearDown(store.dispose);
+
+    expect(store.configurationError, isNotNull);
+    expect(await store.exportRecoveryData(), contains('舊資料'));
+    expect(
+      await File(path.join(directory.path, 'users.json')).exists(),
+      isFalse,
+    );
+  });
+
   test('legacy global player volume is migrated to the active user setting', () async {
     final preferences = await freshPreferences();
     await preferences.setString(

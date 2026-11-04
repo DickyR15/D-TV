@@ -173,6 +173,7 @@ class LocalSnapshot {
     if (values['forceLogin'] case final Object forceLogin) {
       users['forceLogin'] = forceLogin;
     }
+    users['formatVersion'] = 1;
     files['users.json'] = users;
 
     final globalSettings = <String, Object?>{};
@@ -242,6 +243,9 @@ class LocalSnapshot {
       throw const FormatException('本機使用者索引無法讀取');
     }
     final users = Map<String, dynamic>.from(usersRaw);
+    if (users['formatVersion'] != 1) {
+      throw const FormatException('本機使用者索引版本無效');
+    }
     final values = <String, Object>{};
 
     if (users['profiles'] != null) {
@@ -369,11 +373,12 @@ class LocalSnapshot {
       files,
     )._readFiles(files);
 
-    for (final key in preferences.getKeys().toList()) {
-      if (owns(key) || key == storageKey) {
-        await preferences.remove(key);
-      }
+    // Keep the monolithic snapshot until every old preference key has been
+    // removed. If cleanup is interrupted, startup can still fall back to it.
+    for (final key in preferences.getKeys().where(owns).toList()) {
+      await preferences.remove(key);
     }
+    await preferences.remove(storageKey);
     return LocalSnapshot._fileBacked(preferences, files, verifiedValues);
   }
 

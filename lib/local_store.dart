@@ -139,17 +139,20 @@ class LocalStore extends ChangeNotifier {
         snapshot,
       );
     } catch (_) {
-      // A failed first-time migration leaves the old SharedPreferences
-      // snapshot untouched, so keep the app usable from that source.
-      if (!await files.exists()) {
+      // The legacy snapshot is retained until the file store has been
+      // written and verified. Prefer it whenever it is still available.
+      final hasLegacyData =
+          preferences.getString(LocalSnapshot.storageKey) != null ||
+          preferences.getKeys().any(LocalSnapshot.owns);
+      if (hasLegacyData || !await files.exists()) {
         return LocalStore(
           preferences,
           pinHasher: pinHasher,
           assumeAuthenticated: assumeAuthenticated,
         );
       }
-      // If the users index itself is damaged and no backup is readable, keep
-      // access locked. A validated settings backup can atomically rebuild it.
+      // If the users index itself is damaged and no legacy copy remains,
+      // keep access locked and allow a validated backup to rebuild the store.
       final store = LocalStore._fileBacked(
         preferences,
         pinHasher ?? hashProfilePin,
