@@ -106,22 +106,28 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
   }
 
   Future<void> _start() async {
-    await _channelReady();
-    await _initialize();
+    try {
+      await _channelReady();
+      await _initialize();
+    } catch (error) {
+      if (mounted) setState(() => _error = error);
+      try {
+        await desktopMiniPlayerChannel.invokeMethod<void>(
+          'mini_error',
+          {'message': error.toString()},
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> _channelReady() async {
-    try {
-      await desktopMiniPlayerChannel.setMethodCallHandler((call) async {
-        if (call.method == 'close') {
-          unawaited(_closeMiniPlayer());
-          return true;
-        }
-        return null;
-      });
-    } catch (_) {
-      // The player remains usable even if cross-window controls are unavailable.
-    }
+    await desktopMiniPlayerChannel.setMethodCallHandler((call) async {
+      if (call.method == 'close') {
+        unawaited(_closeMiniPlayer());
+        return true;
+      }
+      return null;
+    });
   }
 
   Future<void> _initialize() async {
