@@ -231,11 +231,12 @@ func validDoubanPosterAddress(raw string) string {
 }
 
 type nativeVerifiedOfficialPoster struct {
-	title   string
-	year    string
-	address string
-	source  string
-	sourceID string
+	title      string
+	year       string
+	address    string
+	source     string
+	sourceID   string
+	preferred  bool
 }
 
 // These two assets were independently identified from programme-owner /
@@ -266,6 +267,27 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		sourceID: "77333",
 		address: "https://jingafilms.com/wp-content/uploads/2026/02/FastCash.jpg",
 	},
+	{
+		// The source's 4.5 KB PNG is returned as a successful image but is not
+		// what the user sees in D TV. Prefer Netflix's Season 2 press still for
+		// this exact Guipian anime record, never for another title or source ID.
+		title: "獨角獸學院秘密揭開第二章",
+		source: sourceGuipian,
+		sourceID: "77681",
+		preferred: true,
+		address: "https://www.whats-on-netflix.com/wp-content/uploads/2026/09/Unicorn-Academy-Secrets-Revealed-n-S2-E1-00-10-43-15-1536x864.jpg",
+	},
+	{
+		// Duoduo ID 1192 is the 2001 Fuji TV series できちゃった結婚
+		// (Shotgun Marriage). Prefer the programme distributor's official
+		// artwork because the source CDN is unavailable and Douban is blocked.
+		// The mapping is restricted to this exact provider ID and title.
+		title: "奉子成婚",
+		source: sourceDuoduo,
+		sourceID: "1192",
+		preferred: true,
+		address: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+	},
 }
 
 func normalizeBangumiPosterExactTitle(value string) string {
@@ -279,7 +301,7 @@ func normalizeBangumiPosterExactTitle(value string) string {
 	return normalized.String()
 }
 
-func nativeVerifiedOfficialPosterAddress(drama nativeDrama) (string, bool) {
+func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficialPoster, bool) {
 	title := normalizeBangumiPosterExactTitle(drama.Title)
 	year := bangumiPosterYear(drama.OnlineDate)
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
@@ -314,9 +336,25 @@ func nativeVerifiedOfficialPosterAddress(drama nativeDrama) (string, bool) {
 		if err != nil || !validNativeCoverURL(parsed) {
 			continue
 		}
-		return parsed.String(), true
+		return candidate, true
 	}
-	return "", false
+	return nativeVerifiedOfficialPoster{}, false
+}
+
+func nativeVerifiedOfficialPosterAddress(drama nativeDrama) (string, bool) {
+	candidate, ok := nativeVerifiedOfficialPosterEntry(drama)
+	if !ok {
+		return "", false
+	}
+	return candidate.address, true
+}
+
+func nativePreferredOfficialPosterAddress(drama nativeDrama) (string, bool) {
+	candidate, ok := nativeVerifiedOfficialPosterEntry(drama)
+	if !ok || !candidate.preferred {
+		return "", false
+	}
+	return candidate.address, true
 }
 
 // externalPosterAddress prefers Duoduo's exact Douban subject ID. If Douban
@@ -504,6 +542,7 @@ var bangumiPosterChineseVariants = strings.NewReplacer(
 	"视", "視", "传", "傳", "华", "華", "国", "國",
 	"乐", "樂", "门", "門",
 	"云", "雲", "龙", "龍", "风", "風", "无", "無",
+	"独", "獨", "学", "學",
 )
 
 func normalizeBangumiPosterTitle(value string) string {
