@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'local_profiles.dart';
@@ -1192,7 +1193,8 @@ class LocalStore extends ChangeNotifier {
   Future<String> exportBackup() async {
     await _writes.catchError((Object _) {});
     _requireAdmin();
-    final content = jsonEncode({
+    final payload = <String, dynamic>{
+
       'schema': 1,
       'app': 'dtv',
       'profiles': _profiles.map((profile) => profile.toJson()).toList(),
@@ -1236,6 +1238,16 @@ class LocalStore extends ChangeNotifier {
             ),
           },
       },
+    };
+    final digest = crypto.sha256
+        .convert(utf8.encode(jsonEncode(payload)))
+        .toString();
+    final content = jsonEncode({
+      ...payload,
+      'integrity': {
+        'algorithm': 'sha256',
+        'digest': digest,
+      },
     });
     if (utf8.encode(content).length > 8 * 1024 * 1024) {
       throw StateError('備份超過 8 MiB 儲存上限，請先整理記錄；尚未寫出備份檔案');
@@ -1253,6 +1265,272 @@ class LocalStore extends ChangeNotifier {
         !{'dtv', 'zhenguojian', 'hongguojian'}.contains(data['app'])) {
       throw const FormatException('不支援的備份格式');
     }
+    final integrity = data['integrity'];
+    if (integrity != null) {
+      if (integrity is! Map ||
+          integrity['algorithm'] != 'sha256' ||
+          integrity['digest'] is! String) {
+        throw const FormatException('備份完整性資訊無效');
+      }
+      final expectedDigest = integrity['digest'] as String;
+      if (!RegExp(r'^[a-f0-9]{64}
+    final profiles = _readProfiles(data['profiles']);
+    if (data.containsKey('themeMode') &&
+        !{'light', 'dark', 'system'}.contains(data['themeMode'])) {
+      throw const FormatException('備份主題設定無效');
+    }
+    if (data.containsKey('themeAccent') &&
+        !const {
+          'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
+        }.contains(data['themeAccent'])) {
+      throw const FormatException('備份主題配色無效');
+    }
+    if (data.containsKey('forceLogin') && data['forceLogin'] is! bool) {
+      throw const FormatException('備份登入設定無效');
+    }
+    if (data.containsKey('ignoredUpdateVersion') &&
+        (data['ignoredUpdateVersion'] is! String ||
+            (data['ignoredUpdateVersion'] as String).length > 80)) {
+      throw const FormatException('備份忽略更新版本無效');
+    }
+    if (data.containsKey('checkForUpdatesOnStartup') &&
+        data['checkForUpdatesOnStartup'] is! bool) {
+      throw const FormatException('備份啟動更新檢查設定無效');
+    }
+    final libraries = data['libraries'] as Map;
+    for (final profile in profiles) {
+      final library = libraries[profile.id] as Map;
+      final history = library['history'] as List,
+          favorites = library['favorites'] as List;
+      final media = library['mediaHistory'] as Map? ?? {};
+      if (media.length > 300 ||
+          history.length > 300 ||
+          favorites.length > 20000) {
+        throw const FormatException('備份記錄過多');
+      }
+      for (final row in [...history, ...media.values]) {
+        WatchEntry.fromJson(Map<String, dynamic>.from(row as Map));
+      }
+      for (final row in favorites) {
+        Drama.fromJson(Map<String, dynamic>.from(row as Map));
+      }
+      final states = library['followStates'] as Map? ?? {};
+      final seriesCandidates = library['seriesCandidates'] as List? ?? [];
+      final favoriteIds = favorites.map((row) => (row as Map)['id']).toSet();
+      _readBackupFollowSync(library);
+      if (states.length > 20000 ||
+          states.keys.any((id) => id is! String || !favoriteIds.contains(id))) {
+        throw const FormatException('備份收藏狀態無效');
+      }
+      for (final row in states.values) {
+        FollowState.fromJson(Map<String, dynamic>.from(row as Map));
+      }
+      if (seriesCandidates.length > 2000) {
+        throw const FormatException('備份系列候選過多');
+      }
+      for (final row in seriesCandidates) {
+        Drama.fromJson(Map<String, dynamic>.from(row as Map));
+      }
+      if (library['hideVip'] is! bool || library['source'] is! String) {
+        throw const FormatException('備份設定無效');
+      }
+      PlaybackPreferences.fromJson(
+        Map<String, dynamic>.from(library['playback'] as Map? ?? {}),
+      );
+      if (library.containsKey('portraitBlurLandscapeDefaultV1') &&
+          library['portraitBlurLandscapeDefaultV1'] is! bool) {
+        throw const FormatException('備份模糊背景預設設定無效');
+      }
+      DownloadPreferences.fromJson(
+        Map<String, dynamic>.from(library['downloadPreferences'] as Map? ?? {}),
+      );
+      CatalogView.fromJson(
+        Map<String, dynamic>.from(library['catalogView'] as Map? ?? {}),
+      );
+      final searches = library['recentSearches'] as List? ?? [];
+      if (searches.length > 20 ||
+          searches.any(
+            (value) => value is! String || value.runes.length > 80,
+          )) {
+        throw const FormatException('備份搜尋記錄無效');
+      }
+    }
+    return data;
+  }
+
+  Future<void> _installBackup(Map<String, dynamic> data) async {
+    final profiles = _readProfiles(data['profiles']);
+    final values = <String, Object>{
+      'profiles': jsonEncode(
+        profiles.map((profile) => profile.toJson()).toList(),
+      ),
+      'activeProfile': profiles.firstWhere((profile) => profile.admin).id,
+      'displayMode':
+          {
+            'auto', 'television', 'standard', 'phone', 'pad', 'window',
+          }.contains(data['displayMode'])
+          ? data['displayMode'] as String
+          : 'auto',
+      'themeMode': data['themeMode'] as String? ?? themeMode,
+      'themeAccent': data['themeAccent'] as String? ?? themeAccent,
+      'forceLogin': data['forceLogin'] is bool
+          ? data['forceLogin'] as bool
+          : profiles.firstWhere((profile) => profile.admin).protected,
+      'ignoredUpdateVersion': data['ignoredUpdateVersion'] as String? ?? '',
+      'checkForUpdatesOnStartup':
+          data['checkForUpdatesOnStartup'] as bool? ?? true,
+    };
+    final libraries = data['libraries'] as Map;
+    for (final profile in profiles) {
+      final library = libraries[profile.id] as Map;
+      final syncRecords = _readBackupFollowSync(library);
+      values.addAll({
+        if (syncRecords != null)
+          _key('lanRecords', profile.id): jsonEncode(
+            LanDocument(replica: lanID(), records: syncRecords).toJson(),
+          ),
+        _key('history', profile.id): jsonEncode(library['history']),
+        _key('favorites', profile.id): jsonEncode(library['favorites']),
+        _key('followStates', profile.id): jsonEncode(
+          library['followStates'] ?? {},
+        ),
+        _key('mediaHistory', profile.id): jsonEncode(
+          library['mediaHistory'] ?? {},
+        ),
+        _key('source', profile.id): library['source'] as String,
+        _key('hideVip', profile.id): library['hideVip'] as bool,
+        _key('playback', profile.id): jsonEncode(library['playback'] ?? {}),
+        if (library.containsKey('portraitBlurLandscapeDefaultV1'))
+          _key('portraitBlurLandscapeDefaultV1', profile.id):
+              library['portraitBlurLandscapeDefaultV1'] as bool,
+        _key('downloadPreferences', profile.id): jsonEncode(
+          library['downloadPreferences'] ?? {},
+        ),
+        _key('catalogView', profile.id): jsonEncode(
+          library['catalogView'] ?? {},
+        ),
+        _key('recentSearches', profile.id): jsonEncode(
+          library['recentSearches'] ?? [],
+        ),
+      });
+    }
+    await _commit(values, replace: true);
+    for (final key in preferences.getKeys().toList()) {
+      if (key.startsWith('seriesCandidates.')) await preferences.remove(key);
+    }
+    for (final profile in profiles) {
+      await preferences.setString(
+        _seriesKey(profile.id),
+        jsonEncode((libraries[profile.id] as Map)['seriesCandidates'] ?? []),
+      );
+    }
+    _profiles = profiles;
+    _current = profiles.firstWhere((profile) => profile.admin).id;
+    _configurationError = null;
+    _locked = forceLogin && profile.protected;
+    _loadSourceSwitches();
+    _loadLibrary();
+    _loadSeriesCandidates();
+    _epoch++;
+    _notify();
+  }
+
+  Future<void> importBackup(String content) => _queue(() async {
+    _requireAdmin();
+    await _installBackup(validateBackup(content));
+  });
+
+  Future<void> recoverBackup(String content, {required String pin}) =>
+      _queue(() async {
+        if (_configurationError == null) throw StateError('請從設定中恢復備份');
+        final data = validateBackup(content);
+        LocalProfile? originalAdmin;
+        try {
+          final raw = preferences.getString(LocalSnapshot.storageKey);
+          final values = raw == null
+              ? null
+              : (jsonDecode(raw) as Map)['values'] as Map;
+          final records =
+              jsonDecode(
+                    (values?['profiles'] as String?) ??
+                        preferences.getString('profiles') ??
+                        '[]',
+                  )
+                  as List;
+          for (final row in records) {
+            if (row is Map && row['admin'] == true) {
+              originalAdmin = LocalProfile.fromJson(
+                Map<String, dynamic>.from(row),
+              );
+            }
+          }
+        } catch (_) {}
+        final backupAdmin = _readProfiles(
+          data['profiles'],
+        ).firstWhere((profile) => profile.admin);
+        final verifier = originalAdmin?.protected == true
+            ? originalAdmin!
+            : backupAdmin;
+        if (!verifier.protected) throw StateError('無法驗證管理員身份，請使用包含管理員密碼的備份恢復');
+        await _checkPin(verifier, pin);
+        _snapshot ??= LocalSnapshot.empty(preferences);
+        await _installBackup(data);
+      });
+
+  String exportRecoveryData() {
+    if (_configurationError == null) throw StateError('請從設定中匯出備份');
+    return jsonEncode({
+      'app': 'zhenguojian',
+      'recovery': true,
+      'values': {
+        for (final key in preferences.getKeys())
+          if (LocalSnapshot.owns(key) || key == LocalSnapshot.storageKey)
+            key: preferences.get(key),
+      },
+    });
+  }
+
+  Future<void> reload() => _queue(() async {
+    final previousProfiles = _configurationError == null
+        ? _string('profiles')
+        : null;
+    final previousId = _current;
+    final previousLocked = locked;
+    await preferences.reload();
+    _initialize();
+    if (_configurationError == null &&
+        previousProfiles == _string('profiles') &&
+        previousId == _current) {
+      _locked = previousLocked;
+    } else {
+      _epoch++;
+    }
+    _notify();
+  });
+
+  Future<void> _queue(Future<void> Function() action) {
+    _writes = _writes.catchError((Object _) {}).then((_) => action());
+    return _writes;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+}
+).hasMatch(expectedDigest)) {
+        throw const FormatException('備份完整性資訊無效');
+      }
+      final payload = Map<String, dynamic>.from(data)..remove('integrity');
+      final actualDigest = crypto.sha256
+          .convert(utf8.encode(jsonEncode(payload)))
+          .toString();
+      if (actualDigest != expectedDigest) {
+        throw const FormatException('備份完整性檢查失敗，檔案可能已遭修改或損毀');
+      }
+    }
+
     final profiles = _readProfiles(data['profiles']);
     if (data.containsKey('themeMode') &&
         !{'light', 'dark', 'system'}.contains(data['themeMode'])) {
