@@ -312,7 +312,8 @@ class LocalStore extends ChangeNotifier {
   ];
 
   bool sourceEnabled(String source) =>
-      _sourceSwitches[source] ?? !SourceSite.isRestricted(source);
+      SourceSite.isAvailable(source) &&
+      (_sourceSwitches[source] ?? !SourceSite.isRestricted(source));
 
   /// Validates the existing administrator password for advanced source settings.
   Future<void> unlockAdvancedSources(String pin) {
