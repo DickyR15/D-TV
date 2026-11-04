@@ -408,7 +408,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.backup_outlined),
                   title: const Text('匯出設定備份'),
-                  subtitle: const Text('包含本機使用者、收藏清單、觀看紀錄與設定'),
+                  subtitle: const Text('包含本機使用者、收藏清單、觀看紀錄與設定；備份附完整性檢查'),
                   onTap: _busy ? null : () => _backup(false),
                 ),
                 ListTile(
@@ -416,7 +416,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   leading: const Icon(Icons.restore),
                   title: const Text('還原設定備份'),
                   subtitle: const Text(
-                    '取代本機使用者、收藏清單、觀看紀錄與偏好設定',
+                    '還原前會檢查備份完整性（舊版備份仍可還原）；取代本機使用者、收藏清單、觀看紀錄與偏好設定',
                   ),
                   onTap: _busy ? null : () => _backup(true),
                 ),
