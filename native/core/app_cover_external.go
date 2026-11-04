@@ -400,8 +400,21 @@ func bangumiPosterSubjectTypes(drama nativeDrama) []int {
 	}
 }
 
+// Bangumi stores many Chinese subject names in Simplified Chinese while
+// source catalogues and the UI may use Traditional Chinese. Normalize the
+// common title characters before strict equality matching.
+var bangumiPosterChineseVariants = strings.NewReplacer(
+	"与", "與", "儿", "兒", "这", "這", "游", "遊",
+	"综", "綜", "艺", "藝", "实", "實", "境", "境",
+	"脱", "脫", "说", "說", "剧", "劇", "电", "電",
+	"视", "視", "传", "傳", "华", "華", "国", "國",
+	"乐", "樂", "门", "門", "后", "後", "发", "發",
+	"云", "雲", "龙", "龍", "风", "風", "台", "臺",
+)
+
 func normalizeBangumiPosterTitle(value string) string {
 	value = bangumiPosterBaseTitle(value)
+	value = bangumiPosterChineseVariants.Replace(value)
 	var normalized strings.Builder
 	for _, character := range strings.ToLower(strings.TrimSpace(value)) {
 		if unicode.IsLetter(character) || unicode.IsDigit(character) {
