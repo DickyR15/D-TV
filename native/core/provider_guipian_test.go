@@ -203,6 +203,75 @@ func guipianLiveProbeAsset(ctx context.Context, client *http.Client, address, re
 	return nil
 }
 
+func TestGuipianRequestedPostersLive(t *testing.T) {
+	if os.Getenv("DTV_LIVE_GUIPIAN") != "1" {
+		t.Skip("set DTV_LIVE_GUIPIAN=1 to probe the public Guipian source")
+	}
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.downloads.close)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+	defer cancel()
+
+	targets := map[string]bool{"失控撞劫": false, "奪金戰": false, "夺金战": false}
+	categories := []string{"31", "12", "13", "14", "15", "17", "18", "3", "11", "6", "7", "9"}
+	var failures []string
+	for _, category := range categories {
+		if ctx.Err() != nil {
+			break
+		}
+		items, _, fetchErr := engine.downloader.fetchGuipianCatalogPage(ctx, 1, category, "")
+		if fetchErr != nil {
+			t.Logf("category %s fetch warning: %v", category, fetchErr)
+			continue
+		}
+		for _, item := range items {
+			target := ""
+			title := strings.TrimSpace(item.Title)
+			switch {
+			case strings.Contains(title, "失控撞劫"):
+				target = "失控撞劫"
+			case strings.Contains(title, "奪金戰"):
+				target = "奪金戰"
+			case strings.Contains(title, "夺金战"):
+				target = "夺金战"
+			}
+			if target == "" || targets[target] {
+				continue
+			}
+			targets[target] = true
+			t.Logf("requested title found: %s category=%s id=%s listCover=%v candidates=%d",
+				title, category, item.ID, item.Cover, len(nativeNormalize(item).CoverCandidates))
+
+			detail, detailErr := engine.downloader.fetchGuipianCoverMetadata(ctx, item.SourceID)
+			if detailErr != nil {
+				failures = append(failures, target+": poster-only detail: "+detailErr.Error())
+				continue
+			}
+			t.Logf("poster-only detail: title=%s year=%s cover=%q alternatives=%d",
+				detail.Title, detail.OnlineDate, detail.Cover, len(nativeNormalize(detail).CoverCandidates))
+
+			result, loadErr := engine.loadCover(ctx, nativeNormalize(item), true)
+			if loadErr != nil {
+				failures = append(failures, target+": full cover pipeline: "+loadErr.Error())
+				continue
+			}
+			t.Logf("requested poster loaded: %s -> %v", target, result["path"])
+		}
+	}
+
+	for title, found := range targets {
+		if !found {
+			t.Logf("requested title not found in the probed first-page categories: %s", title)
+		}
+	}
+	if len(failures) > 0 {
+		t.Fatalf("requested posters did not load: %s", strings.Join(failures, " | "))
+	}
+}
+
 func TestGuipianLivePlayback(t *testing.T) {
 	if os.Getenv("DTV_LIVE_GUIPIAN") != "1" {
 		t.Skip("set DTV_LIVE_GUIPIAN=1 to probe the public Guipian source")
