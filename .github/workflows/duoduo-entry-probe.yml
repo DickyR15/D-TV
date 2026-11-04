@@ -22,7 +22,7 @@ jobs:
   public-source-smoke:
     name: Public catalogue and direct media validation
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - name: Validate public API, category, search, detail and direct media
         shell: bash
@@ -114,13 +114,21 @@ jobs:
                   return False, "invalid media URL"
               if parsed.path.lower().endswith(".mp4"):
                   status, final, content_type, body = request(
-                      address, referer, limit=2048, byte_range="bytes=0-2047"
+                      address, referer, limit=65536, byte_range="bytes=0-65535"
                   )
-                  ok = status in (200, 206) and bool(body) and "text/html" not in content_type.lower()
+                  ok = (
+                      status in (200, 206) and len(body) >= 16
+                      and "text/html" not in content_type.lower()
+                      and "application/json" not in content_type.lower()
+                  )
                   return ok, f"MP4 HTTP={status} type={content_type} bytes={len(body)}"
               if not parsed.path.lower().endswith(".m3u8"):
                   return False, "not a direct HLS/MP4 URL"
+
               current = address
+              playlist_status = 0
+              media_uris = []
+              durations = []
               for depth in range(4):
                   status, final, content_type, body = request(
                       current, referer, limit=262144, byte_range="bytes=0-262143"
@@ -130,27 +138,65 @@ jobs:
                   text = body.decode("utf-8-sig", errors="replace")
                   if not text.lstrip().startswith("#EXTM3U"):
                       return False, "invalid M3U8 playlist"
-                  child = next(
-                      (line.strip() for line in text.splitlines()
-                       if line.strip() and not line.lstrip().startswith("#")),
-                      "",
-                  )
-                  if not child:
-                      return False, "playlist has no media URI"
-                  current = urljoin(final, child)
-                  child_path = urlsplit(current).path.lower()
-                  if child_path.endswith(".m3u8"):
+                  playlist_status = status
+                  nested = []
+                  media_uris = []
+                  durations = []
+                  pending_duration = 0.0
+                  for raw_line in text.splitlines():
+                      line = raw_line.strip()
+                      if not line:
+                          continue
+                      if line.startswith("#EXTINF:"):
+                          try:
+                              pending_duration = float(line.split(":", 1)[1].split(",", 1)[0])
+                          except (ValueError, IndexError):
+                              pending_duration = 0.0
+                      elif not line.startswith("#"):
+                          child = urljoin(final, line)
+                          if urlsplit(child).path.lower().endswith(".m3u8"):
+                              nested.append(child)
+                          else:
+                              media_uris.append(child)
+                              durations.append(pending_duration)
+                          pending_duration = 0.0
+                  if media_uris:
+                      break
+                  if nested:
+                      current = nested[0]
                       continue
+                  return False, "playlist has no media segments"
+              else:
+                  return False, "playlist nesting exceeded probe limit"
+
+              segment_count = min(3, len(media_uris))
+              checked_seconds = 0.0
+              for segment_index in range(segment_count):
                   seg_status, _, seg_type, seg_body = request(
-                      current, referer, limit=1024, byte_range="bytes=0-1023"
+                      media_uris[segment_index], referer,
+                      limit=65536, byte_range="bytes=0-65535"
                   )
+                  preview = seg_body.lstrip()[:24].lower()
+                  error_page = preview.startswith((b"<!doctype html", b"<html", b"{\\"error", b"{\\"code"))
                   ok = (
                       seg_status in (200, 206) and bool(seg_body)
                       and "text/html" not in seg_type.lower()
                       and "application/json" not in seg_type.lower()
+                      and not error_page
                   )
-                  return ok, f"HLS HTTP={status}; first segment HTTP={seg_status} type={seg_type} bytes={len(seg_body)}"
-              return False, "playlist nesting exceeded probe limit"
+                  if not ok:
+                      return False, (
+                          f"HLS playlist HTTP={playlist_status}; segment "
+                          f"{segment_index + 1}/{segment_count} HTTP={seg_status} "
+                          f"type={seg_type} bytes={len(seg_body)}"
+                      )
+                  if segment_index < len(durations):
+                      checked_seconds += durations[segment_index]
+              return True, (
+                  f"HLS playlist HTTP={playlist_status}; first segments "
+                  f"{segment_count}/{len(media_uris)} fetched; "
+                  f"playlist duration checked={checked_seconds:.2f}s"
+              )
 
           print("\\n=== USER-REPORTED MOVIE EPISODE DIAGNOSTIC: 161235 ===")
           target_id = "161235"
@@ -1371,30 +1417,53 @@ jobs:
           if not single_inferno_ok:
               raise RuntimeError("單身即地獄 第五季 currently has no validated public direct playback line")
 
-          print("\n=== SEARCH ===")
-          movies = {}
-          for term in ("流浪地球", "阿凡達", "復仇者聯盟"):
-              _, found = api("/api.php/web/search/index", {"wd": term, "page": 1, "limit": 15})
-              rows = found.get("data") or []
-              for row in rows:
-                  if str(row.get("type_id", "")) == "1" or row.get("type_name") == "电影":
-                      movies.setdefault(str(row.get("vod_id", "")), row)
-              print(f"{term}: results={len(rows)}")
-
-          for row in category_rows + list(movies.values()):
-              movies.setdefault(str(row.get("vod_id", "")), row)
-          candidates = [row for key, row in movies.items() if key.isdigit()]
-          if not candidates:
-              candidates = [row for row in category_rows if str(row.get("vod_id", "")).isdigit()]
-          print(f"unique movie detail candidates={len(candidates)}")
-          if not candidates:
-              raise RuntimeError("no movie IDs available for detail probe")
+          print("\n=== CROSS-CATEGORY SEARCH / DETAIL SAMPLES ===")
+          candidates = []
+          seen_candidate_ids = set()
+          category_sample_counts = {}
+          for category_name in ("电影", "剧集", "动漫", "综艺"):
+              category_items = [
+                  row for row in catalog_all_rows
+                  if str(row.get("type_name") or "").strip() == category_name
+                  and str(row.get("vod_id") or "").isdigit()
+                  and str(row.get("vod_name") or "").strip()
+              ]
+              if not category_items:
+                  print(f"WARNING: no catalogue rows available for {category_name!r}")
+                  category_sample_counts[category_name] = 0
+                  continue
+              # Catalogue scan is ordered by page; choose the first, middle and
+              # last records to span newest/popular through deeper catalogue pages.
+              selected_indices = sorted({0, len(category_items) // 2, len(category_items) - 1})
+              count = 0
+              for index in selected_indices:
+                  row = category_items[index]
+                  vod_id = str(row.get("vod_id") or "").strip()
+                  if vod_id in seen_candidate_ids:
+                      continue
+                  seen_candidate_ids.add(vod_id)
+                  candidates.append(row)
+                  count += 1
+                  print(
+                      f"PLAYBACK_SAMPLE category={category_name!r} "
+                      f"id={vod_id} title={row.get('vod_name')!r} "
+                      f"year={row.get('vod_year')!r} catalogue_index={index + 1}/{len(category_items)}"
+                  )
+              category_sample_counts[category_name] = count
+          print(
+              f"unique cross-category detail candidates={len(candidates)} "
+              f"category_samples={category_sample_counts}"
+          )
+          if len(candidates) < 8:
+              raise RuntimeError(
+                  f"insufficient cross-category catalogue samples: {len(candidates)}"
+              )
 
           print("\n=== DETAIL / AGGREGATE / MEDIA ===")
           checked = 0
           playable = 0
           errors = []
-          for summary in candidates[:5]:
+          for summary in candidates:
               vod_id = str(summary["vod_id"])
               try:
                   base, detail = api("/api.php/web/vod/get_detail", {"vod_id": vod_id})
@@ -1450,7 +1519,27 @@ jobs:
                       f"aggregate_lines={len(aggregate_rows)} aggregate_direct_urls={len(aggregate_direct)} "
                       f"unique_direct_urls={len(direct)}"
                   )
-                  for line_name, episode_title, address in direct[:3]:
+                  selected_media = []
+                  seen_line_names = set()
+                  for item in direct:
+                      if item[0] in seen_line_names:
+                          continue
+                      selected_media.append(item)
+                      seen_line_names.add(item[0])
+                      if len(selected_media) >= 2:
+                          break
+                  # Also probe the next episode from the preferred line when it
+                  # exists, so series are checked beyond only episode one.
+                  if selected_media:
+                      preferred_name, _, preferred_address = selected_media[0]
+                      follow_up = next(
+                          (item for item in direct
+                           if item[0] == preferred_name and item[2] != preferred_address),
+                          None,
+                      )
+                      if follow_up:
+                          selected_media.append(follow_up)
+                  for line_name, episode_title, address in selected_media:
                       checked += 1
                       ok, message = probe_media(address, base + "/")
                       referer_used = "active-api-mirror"
