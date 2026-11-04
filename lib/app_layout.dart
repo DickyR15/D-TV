@@ -258,6 +258,7 @@ class AppLayout extends InheritedWidget {
   const AppLayout({
     super.key,
     required this.television,
+    this.detectedTelevision,
     this.formFactor,
     this.version = appVersion,
     required super.child,
@@ -266,6 +267,8 @@ class AppLayout extends InheritedWidget {
   /// Kept for older call sites and tests. New app entry points should pass
   /// [formFactor] so all screens use the same explicit layout decision.
   final bool television;
+  /// Physical device classification, independent of the user-selected layout.
+  final bool? detectedTelevision;
   final FormFactor? formFactor;
   final String version;
 
@@ -338,6 +341,11 @@ class AppLayout extends InheritedWidget {
 
   static bool isTelevision(BuildContext context) =>
       formFactorOf(context) == FormFactor.television;
+
+  static bool isTelevisionDevice(BuildContext context) {
+    final layout = context.dependOnInheritedWidgetOfExactType<AppLayout>();
+    return layout?.detectedTelevision ?? layout?.television ?? false;
+  }
   static bool isPhone(BuildContext context) =>
       formFactorOf(context) == FormFactor.phone;
   static bool isPad(BuildContext context) =>
@@ -401,6 +409,7 @@ class AppLayout extends InheritedWidget {
   @override
   bool updateShouldNotify(AppLayout oldWidget) =>
       television != oldWidget.television ||
+      detectedTelevision != oldWidget.detectedTelevision ||
       formFactor != oldWidget.formFactor ||
       version != oldWidget.version;
 }
