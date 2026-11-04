@@ -298,8 +298,22 @@ func nativeUniqueCoverAddresses(values ...string) []string {
 
 func nativeNormalize(drama Drama) nativeDrama {
 	source, sourceID, valid := splitProviderDramaID(drama.ID)
-	id := drama.ID
-	if valid {
+	id := strings.TrimSpace(drama.ID)
+	if !valid {
+		// Older provider parsers and persisted catalogue rows may keep the raw
+		// numeric ID in ID while storing the provider identity separately.
+		// Build the canonical source:id key so the Flutter poster widget does
+		// not silently skip the image request because ID is empty/non-canonical.
+		source = canonicalProviderSource(drama.Source)
+		sourceID = strings.TrimSpace(drama.SourceID)
+		if sourceID == "" {
+			sourceID = id
+		}
+		valid = isHuangguoProviderSource(source) && sourceID != ""
+		if valid {
+			id = providerDramaID(source, sourceID)
+		}
+	} else {
 		id = providerDramaID(source, sourceID)
 	}
 
