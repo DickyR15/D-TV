@@ -14,7 +14,6 @@ class SourceSite {
       id == 'yeguo' ||
       id == 'dsd' ||
       id == 'duoduo' ||
-      id == 'guipian' ||
       id == 'hanxiaoquan';
   bool get searchSuggestions => id == 'hongguo';
   // These providers must remain independent in
@@ -43,15 +42,14 @@ class SourceSite {
     '多多追劇',
     '電影 · 電視劇 · 動畫 · 綜藝',
   );
-  static const guipian = SourceSite('guipian', '鬼片', '恐怖片 · 電視劇 · 動畫');
   static const hanxiaoquan = SourceSite(
     'hanxiaoquan',
     '韓小圈',
     '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
 
-  /// 預設開啟的四個一般片源：紅果、韓小圈、鬼片、多多追劇。
-  static const primaryValues = [hongguo, hanxiaoquan, guipian, duoduo];
+  /// 預設開啟的三個一般片源：紅果、韓小圈、多多追劇。
+  static const primaryValues = [hongguo, hanxiaoquan, duoduo];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
