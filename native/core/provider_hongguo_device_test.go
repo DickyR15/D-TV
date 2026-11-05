@@ -133,6 +133,32 @@ func TestHongguoTransientRegistrationFailureCanRetryImmediately(t *testing.T) {
 	}
 }
 
+func TestHongguoTemporaryHTTPRegistrationFailuresCanRetryImmediately(t *testing.T) {
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			requests := 0
+			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+				requests++
+				if requests == 1 {
+					return sourceFixtureResponse(request, status, `{"message":"temporary upstream failure"}`), nil
+				}
+				return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
+			})
+			client := d.hongguoClient()
+			client.state.DeviceID, client.state.InstallID, client.state.Registered = "7", "8", false
+			if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
+				t.Fatal("first temporary registration failure was hidden")
+			}
+			if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+				t.Fatalf("temporary HTTP %d must retry immediately: %v", status, err)
+			}
+			if requests != 2 {
+				t.Fatalf("registration requests = %d, want 2", requests)
+			}
+		})
+	}
+}
+
 func TestHongguoExplicitRegistrationRejectionIsPausedWithReason(t *testing.T) {
 	requests := 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
