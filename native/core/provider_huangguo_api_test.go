@@ -118,3 +118,14 @@ func TestHuangguoAICategoryAndRankingUseEdgeAPI(t *testing.T) {
 		t.Fatal("ranking API did not return its items", err, page)
 	}
 }
+
+func TestHuangguoAIRejectsInvalidSourceIDBeforeRequest(t *testing.T) {
+	requests := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		requests++
+		return nil, errors.New("unexpected network request")
+	})
+	if _, _, err := d.fetchHuangguoAIDetail(context.Background(), "../invalid"); err == nil || requests != 0 {
+		t.Fatal("invalid source ID reached the site API", err, requests)
+	}
+}
