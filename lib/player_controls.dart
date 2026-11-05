@@ -7,6 +7,7 @@ import 'lan_controller.dart';
 import 'player_interactions.dart';
 import 'playback_controls_visibility.dart';
 import 'widgets.dart';
+import 'contained_slider.dart';
 import 'video_enhancement.dart';
 
 class PlayerControls extends StatefulWidget {
@@ -527,7 +528,8 @@ class _PlayerControlsState extends State<PlayerControls> {
                     overlayRadius: 14,
                   ),
                 ),
-                child: Slider(
+                child: ContainedSlider(
+                  slider: Slider(
                   key: const ValueKey('player-progress'),
                   value: (_seekValue ?? position).clamp(
                     0,
@@ -560,7 +562,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                     setState(() => _seekValue = null);
                     _show();
                   },
-                ),
+                )),
               ),
             ),
             SizedBox(
@@ -886,7 +888,8 @@ class _PlayerControlsState extends State<PlayerControls> {
                                     overlayRadius: 14,
                                   ),
                                 ),
-                                child: Slider(
+                                child: ContainedSlider(
+                  slider: Slider(
                                   value: volume,
                                   max: 100,
                                   divisions: 20,
@@ -894,7 +897,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                                     setState(() => volume = value);
                                     unawaited(widget.player.setVolume(value));
                                   },
-                                ),
+                                )),
                               ),
                             ),
                           ),

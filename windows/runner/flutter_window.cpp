@@ -1,5 +1,7 @@
 #include "flutter_window.h"
 
+#include <commctrl.h>
+
 #include <optional>
 #include <cstdint>
 #include <flutter/standard_method_codec.h>
@@ -7,6 +9,22 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "desktop_multi_window/desktop_multi_window_plugin.h"
+
+namespace {
+
+LRESULT CALLBACK DeclineAccessibilityQueries(HWND window, UINT message,
+                                             WPARAM wparam, LPARAM lparam,
+                                             UINT_PTR, DWORD_PTR) {
+  if (message == WM_GETOBJECT) {
+    return DefWindowProc(window, message, wparam, lparam);
+  }
+  if (message == WM_NCDESTROY) {
+    RemoveWindowSubclass(window, DeclineAccessibilityQueries, 0);
+  }
+  return DefSubclassProc(window, message, wparam, lparam);
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -79,6 +97,8 @@ bool FlutterWindow::OnCreate() {
         result->Success(flutter::EncodableValue(values));
       });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  SetWindowSubclass(flutter_controller_->view()->GetNativeWindow(),
+                    DeclineAccessibilityQueries, 0, 0);
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();

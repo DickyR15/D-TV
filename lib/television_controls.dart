@@ -12,6 +12,7 @@ import 'video_enhancement_settings.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
 import 'diary_service.dart';
+import 'contained_slider.dart';
 import 'playback_controls_visibility.dart';
 
 class TelevisionControls extends StatefulWidget {
@@ -442,7 +443,8 @@ class TelevisionControlsState extends State<TelevisionControls> {
                                 ),
                                 secondaryActiveTrackColor: Colors.white38,
                               ),
-                              child: Slider(
+                              child: ContainedSlider(
+                  slider: Slider(
                                 key: const ValueKey('tv-player-seek-slider'),
                                 value: position,
                                 max: duration > 0 ? duration : 1,
@@ -459,7 +461,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
                                 onChangeEnd: widget.enabled && duration > 0
                                     ? _seekToSeconds
                                     : null,
-                              ),
+                              )),
                             ),
                             Row(
                               children: [
