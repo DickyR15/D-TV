@@ -156,13 +156,9 @@ const Map<String, String> _twPhrases = {
   '观看记录': '觀看紀錄',
   '收藏夹': '收藏',
   '搜索': '搜尋',
-  '視頻': '影片',
   '视频': '影片',
-  '默認': '預設',
   '设置': '設定',
-  '用户': '使用者',
   '网络': '網路',
-  '视频': '影片',
   '剧集': '劇集',
   '详情': '詳情',
   '简介': '簡介',
@@ -236,7 +232,6 @@ const Map<String, String> _twPhrases = {
   '后续': '後續',
   '皇宫': '皇宮',
   '里面的': '裡面的',
-  '在线': '線上',
   '下载': '下載',
   '网页': '網頁',
   '两代人': '兩代人',
@@ -743,3 +738,4 @@ String uiTraditional(String value) {
   _conversionCache[value] = result;
   return result;
 }
+
