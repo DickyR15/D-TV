@@ -3,6 +3,15 @@ import 'package:hgtv/catalog_sort.dart';
 import 'package:hgtv/models.dart';
 
 void main() {
+  test('uses Taiwan Traditional Chinese labels for catalog sorting', () {
+    expect(CatalogSort.source.label, '預設排序');
+    expect(CatalogSort.name.label, '片名');
+    expect(CatalogSort.season.label, '季數');
+    expect(CatalogSort.date.label, '年份（由新到舊）');
+    expect(CatalogSort.heat.label, '熱門程度');
+    expect(CatalogSort.views.label, '播放次數');
+  });
+
   group('catalog year sorting', () {
     test('sorts newest release year first across mixed sources', () {
       final rows = [
