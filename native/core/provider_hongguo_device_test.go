@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -179,5 +180,39 @@ func TestHongguoDeviceRotationClearsOnlyForbiddenHostCooldown(t *testing.T) {
 	}
 	if _, ok := limiter.backoffs["blocked.example.test"]; !ok {
 		t.Fatal("device rotation cleared a browser challenge")
+	}
+}
+
+
+func TestHongguoPlaybackDoesNotCallRetiredThirdPartyAPI(t *testing.T) {
+	var requested []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		requested = append(requested, request.URL.Host+request.URL.Path)
+		switch request.URL.Host {
+		case "novelquickapp.com":
+			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
+		case "api5-normal-sinfonlinea.fqnovel.com":
+			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
+		case "hongguoduanju.com":
+			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
+		case "djapi.999888456.xyz":
+			t.Fatal("retired third-party playback API must not be called")
+		}
+		return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
+	})
+	_, err := d.resolveHongguoMedia(context.Background(), Task{
+		DramaID: "hongguo:100",
+		Chapter: Chapter{VideoURL: "hongguo-cenc://200"},
+	})
+	if err == nil {
+		t.Fatal("expected first-party route failures")
+	}
+	for _, host := range requested {
+		if strings.Contains(host, "djapi.999888456.xyz") {
+			t.Fatal("retired third-party API was requested")
+		}
+	}
+	if !strings.Contains(err.Error(), "官網網頁") || strings.Contains(err.Error(), "最終備用取流") {
+		t.Fatalf("unexpected user-facing error: %v", err)
 	}
 }
