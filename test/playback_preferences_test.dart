@@ -2,6 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/playback_preferences.dart';
 
 void main() {
+  test('legacy danmaku preference is ignored and omitted from saved settings', () {
+    final restored = PlaybackPreferences.fromJson(const {'danmaku': true});
+    expect(restored.toJson().containsKey('danmaku'), isFalse);
+  });
+
   test('next episode preload defaults on for phones and TVs', () {
     final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
     expect(defaults.preload, isNull);

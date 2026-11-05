@@ -51,8 +51,6 @@ type hongguoAppClient struct {
 	searchCursors       map[string]hongguoSearchCursor
 	suggestions         map[string]hongguoSuggestionEntry
 	suggestPending      map[string]*hongguoSuggestionCall
-	danmaku             map[string]hongguoDanmakuCacheEntry
-	danmakuPending      map[string]*hongguoDanmakuCall
 }
 
 func (downloader *Downloader) hongguoClient() *hongguoAppClient {
@@ -168,8 +166,7 @@ func clientDeviceIDs(client *hongguoAppClient) (string, string, bool) {
 
 func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
 	client := downloader.hongguoClient()
-	comment, _ := ctx.Value(hongguoCommentKey{}).(bool)
-	signed := !comment && path != hongguoBookmallTabPath
+	signed := path != hongguoBookmallTabPath
 	if signed {
 		// Registration is best-effort: if the registration service is temporarily
 		// unavailable, preserve the existing IDs and still try the signed request.
@@ -215,15 +212,6 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		request.Header.Set("Accept", "application/json")
 		request.Header.Set("X-XS-From-Web", "0")
 		request.Header.Set("Sdk-Version", "2")
-		var commentNonce hongguoCommentNonce
-		if comment {
-			commentNonce, err = newHongguoCommentNonce()
-			if err != nil {
-				return nil, errors.New("无法准备红果文字请求")
-			}
-			request.Header.Set("Comment-Source", "601")
-			request.Header.Set("Server-Channel", "1000")
-		}
 		if payload != nil {
 			request.Header.Set("Content-Type", "application/json; charset=utf-8")
 		}
@@ -231,9 +219,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			now := time.Now()
 			query.Set("_rticket", strconv.FormatInt(now.UnixMilli(), 10))
 			prepared.URL.RawQuery = query.Encode()
-			if comment {
-				signHongguoCommentRequest(prepared, commentNonce, now)
-			} else if signed {
+			if signed {
 				signHongguoPlayerRequest(prepared, body, now)
 			}
 		})

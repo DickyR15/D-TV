@@ -645,7 +645,6 @@ class TelevisionPlaybackSetting {
     this.speed,
     this.quality,
     this.autoAdvance,
-    this.danmaku,
     this.preload,
     this.enhancement,
     this.decoder,
@@ -654,7 +653,6 @@ class TelevisionPlaybackSetting {
   final double? speed;
   final int? quality;
   final bool? autoAdvance;
-  final bool? danmaku;
   final bool? preload;
   final VideoEnhancementPreferences? enhancement;
   final TelevisionDecoder? decoder;
@@ -670,10 +668,6 @@ class TelevisionSettingsDialog extends StatelessWidget {
     required this.favorite,
     required this.onFavorite,
     this.autoAdvance = true,
-    this.danmaku = true,
-    this.showDanmaku = false,
-    this.danmakuStatus = '',
-    this.onRetryDanmaku,
     this.preload = true,
     this.preloadStatus = '',
     this.enhancement,
@@ -687,10 +681,6 @@ class TelevisionSettingsDialog extends StatelessWidget {
   final bool favorite;
   final VoidCallback onFavorite;
   final bool autoAdvance;
-  final bool danmaku;
-  final bool showDanmaku;
-  final String danmakuStatus;
-  final VoidCallback? onRetryDanmaku;
   final bool preload;
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
@@ -805,25 +795,6 @@ class TelevisionSettingsDialog extends StatelessWidget {
                 ),
                 onCompare: onCompareEnhancement ?? () {},
               ),
-            if (showDanmaku) ...[
-              RemoteButton(
-                key: const ValueKey('tv-danmaku-enabled'),
-                label: danmaku ? '彈幕：開' : '彈幕：關',
-                onPressed: () => Navigator.pop(
-                  context,
-                  TelevisionPlaybackSetting(danmaku: !danmaku),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(danmakuStatus, style: const TextStyle(fontSize: 14)),
-              if (onRetryDanmaku != null)
-                RemoteButton(
-                  key: const ValueKey('tv-danmaku-retry'),
-                  label: '重試彈幕',
-                  onPressed: onRetryDanmaku,
-                ),
-              const SizedBox(height: 20),
-            ],
             RemoteButton(
               key: const ValueKey('tv-auto-advance'),
               label: autoAdvance ? '自動連播：開' : '自動連播：關',

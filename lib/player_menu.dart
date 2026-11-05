@@ -26,9 +26,6 @@ class PlayerMenu extends StatefulWidget {
     required this.onEpisode,
     required this.onPreferences,
     required this.onFavorite,
-    this.showDanmaku = false,
-    this.danmakuStatus = '',
-    this.onRetryDanmaku,
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
@@ -43,9 +40,6 @@ class PlayerMenu extends StatefulWidget {
   final bool local;
   final bool favorite;
   final bool mobile;
-  final bool showDanmaku;
-  final String danmakuStatus;
-  final VoidCallback? onRetryDanmaku;
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
@@ -239,30 +233,6 @@ class _PlayerMenuState extends State<PlayerMenu> {
             ),
             onCompare: widget.onCompareEnhancement ?? () {},
           ),
-        if (all && widget.showDanmaku) ...[
-          SwitchListTile.adaptive(
-            key: const ValueKey('player-danmaku-enabled'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('彈幕'),
-            subtitle: Text(widget.danmakuStatus),
-            value: preferences.danmaku,
-            onChanged: _busy
-                ? null
-                : (value) => _run(
-                    () => widget.onPreferences(
-                      preferences.copyWith(danmaku: value),
-                    ),
-                  ),
-          ),
-          if (widget.onRetryDanmaku != null)
-            TextButton.icon(
-              key: const ValueKey('player-danmaku-retry'),
-              onPressed: _busy ? null : widget.onRetryDanmaku,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('重試彈幕'),
-            ),
-          const SizedBox(height: 8),
-        ],
         if (all) ...[
           SwitchListTile.adaptive(
             key: const ValueKey('player-preload-enabled'),

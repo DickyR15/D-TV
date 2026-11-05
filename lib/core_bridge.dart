@@ -9,7 +9,6 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import 'models.dart';
-import 'danmaku_models.dart';
 import 'background_downloads.dart';
 import 'local_store.dart';
 import 'app_build.dart';
@@ -100,12 +99,6 @@ abstract class AppRepository {
     int quality = 0,
     bool online = false,
   }) async => null;
-  Future<void> cancelDanmaku() async {}
-  Future<DanmakuPage> danmaku(
-    PlaybackPlan plan, {
-    required int startMs,
-    required int durationMs,
-  }) async => throw AppFailure('目前環境不支援彈幕');
   Future<void> cancelCatalog() async {}
   Future<void> cancelSuggestions() async {}
   Future<void> cancelRecommendations() async {}
@@ -311,9 +304,6 @@ class NativeRepository extends AppRepository {
   }
 
   @override
-  Future<void> cancelDanmaku() => _cancelReads('danmaku');
-
-  @override
   Future<void> cancelPreload() => _cancelReads('preload');
 
   @override
@@ -332,29 +322,6 @@ class NativeRepository extends AppRepository {
       'force': online || access?.canDownload == false,
     }),
   );
-
-  @override
-  Future<DanmakuPage> danmaku(
-    PlaybackPlan plan, {
-    required int startMs,
-    required int durationMs,
-  }) async {
-    _authorize('hongguo');
-    if (plan.local || plan.session.isEmpty || plan.danmakuId.isEmpty) {
-      throw AppFailure('本集暫不支援彈幕');
-    }
-    return DanmakuPage.fromJson(
-      await _read('danmaku', {
-        'action': 'danmaku',
-        'playbackSession': plan.session,
-        'startMs': startMs,
-        'durationMs': durationMs,
-      }),
-      episodeId: plan.danmakuId,
-      startMs: startMs,
-      durationMs: durationMs,
-    );
-  }
 
   @override
   Future<void> cancelCatalog() => _cancelReads('catalog-');
@@ -587,8 +554,7 @@ class NativeRepository extends AppRepository {
       }
       if (action == 'recommendations' ||
           action == 'cachedRecommendations' ||
-          action == 'suggestions' ||
-          action == 'danmaku') {
+          action == 'suggestions') {
         _authorize('hongguo');
       }
       if ({
@@ -641,8 +607,6 @@ class NativeRepository extends AppRepository {
             Duration(
               seconds: action == 'moveDownloads'
                   ? 620
-                  : action == 'danmaku'
-                  ? 15
                   : action == 'preload'
                   ? 20
                   : 70,
@@ -676,7 +640,6 @@ class NativeRepository extends AppRepository {
             'suggestions',
             'recommendations',
             'metadata',
-            'danmaku',
             'preload',
             'prepareHandoff',
           }.contains(input['action'])) {

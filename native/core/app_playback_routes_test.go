@@ -204,8 +204,6 @@ func TestNativePlaybackRefreshSkipsTriedURLsAndKeepsUnusedFallbacks(t *testing.T
 		qualities:        []int{1080, 720},
 		task:             Task{DramaID: "hongguo:fixture", DramaTitle: "refresh fixture", Index: 7},
 		requestedQuality: 1080,
-		danmakuSeries:    "series",
-		danmakuVideo:     "video",
 	}
 	fresh := nativePlaybackChoices(providerMedia{
 		URL: "https://fresh-a.test/new.mp4",
@@ -238,7 +236,7 @@ func TestNativePlaybackRefreshSkipsTriedURLsAndKeepsUnusedFallbacks(t *testing.T
 	if merged.index != 0 || !merged.earlyRefreshUsed || merged.requestedQuality != 1080 {
 		t.Fatalf("refreshed choice lost state: %+v", merged)
 	}
-	if merged.task.DramaID != previous.task.DramaID || merged.danmakuVideo != previous.danmakuVideo {
+	if merged.task.DramaID != previous.task.DramaID {
 		t.Fatalf("refreshed choice lost playback identity: %+v", merged)
 	}
 }

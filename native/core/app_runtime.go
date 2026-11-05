@@ -103,9 +103,6 @@ type nativeInput struct {
 	SystemProxy      nativeSystemProxy       `json:"systemProxy"`
 	Settings         nativeResourceSettings  `json:"settings"`
 	JobIDs           []string                `json:"jobIds"`
-	PlaybackSession  string                  `json:"playbackSession"`
-	StartMS          int64                   `json:"startMs"`
-	DurationMS       int64                   `json:"durationMs"`
 	Board            string                  `json:"board"`
 	Entries          []nativeDownloadEpisode `json:"entries"`
 	JobID            string                  `json:"jobId"`
@@ -140,7 +137,6 @@ type nativeCatalogResult struct {
 type nativePlan struct {
 	ExpiresAt       int64             `json:"expiresAt,omitempty"`
 	PrefetchedBytes int64             `json:"prefetchedBytes,omitempty"`
-	DanmakuID       string            `json:"danmakuId,omitempty"`
 	Local           bool              `json:"local"`
 	URL             string            `json:"url"`
 	Headers         map[string]string `json:"headers"`
@@ -511,15 +507,13 @@ func nativeDispatch(input nativeInput) (any, error) {
 	duration := 60 * time.Second
 	if input.Action == "moveDownloads" {
 		duration = 10 * time.Minute
-	} else if input.Action == "danmaku" {
-		duration = 10 * time.Second
 	} else if input.Action == "preload" {
 		duration = 15 * time.Second
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
-	if input.Action == "danmaku" || input.Action == "preload" || input.Action == "prepareHandoff" || input.Session != "" && (input.Action == "catalog" || input.Action == "categories" || input.Action == "suggestions" || input.Action == "recommendations" || input.Action == "metadata") {
+	if input.Action == "preload" || input.Action == "prepareHandoff" || input.Session != "" && (input.Action == "catalog" || input.Action == "categories" || input.Action == "suggestions" || input.Action == "recommendations" || input.Action == "metadata") {
 		work, finish, err := engine.beginRead(ctx, input)
 		if err != nil {
 			return nil, err
@@ -542,8 +536,6 @@ func nativeDispatch(input nativeInput) (any, error) {
 		return engine.nativePreload(ctx, input)
 	case "prepareHandoff":
 		return engine.nativeResolve(ctx, input)
-	case "danmaku":
-		return engine.nativeDanmaku(ctx, input)
 	case "cancelRead":
 		engine.cancelRead(input)
 		return true, nil
@@ -1038,8 +1030,5 @@ func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput
 	choice.task = task
 	choice.requestedQuality = input.Quality
 	choice = engine.rankNativePlaybackRoutes(ctx, choice, task)
-	if series, video, valid := hongguoPlaybackIDs(task); valid {
-		choice.danmakuSeries, choice.danmakuVideo = series, video
-	}
 	return engine.nativeOpenPlayback(ctx, choice)
 }

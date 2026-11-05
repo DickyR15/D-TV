@@ -29,14 +29,9 @@ class PlayerControls extends StatefulWidget {
     required this.speed,
     required this.qualityLabel,
     required this.onFocusSurface,
-    this.showDanmaku = false,
-    this.danmakuEnabled = false,
-    this.danmakuStatus = '',
     this.swipeEnabled = false,
     this.panelOpen = false,
     this.onSeek,
-    this.onDanmaku,
-    this.onRetryDanmaku,
     this.onPush,
     this.onPictureInPicture,
     this.pictureInPictureTooltip = '畫中畫',
@@ -61,14 +56,9 @@ class PlayerControls extends StatefulWidget {
   final double speed;
   final String qualityLabel;
   final VoidCallback onFocusSurface;
-  final bool showDanmaku;
-  final bool danmakuEnabled;
-  final String danmakuStatus;
   final bool swipeEnabled;
   final bool panelOpen;
   final Future<void> Function(Duration)? onSeek;
-  final Future<void> Function()? onDanmaku;
-  final Future<void> Function()? onRetryDanmaku;
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
   final String pictureInPictureTooltip;
@@ -303,7 +293,6 @@ class _PlayerControlsState extends State<PlayerControls> {
                           children: [
                             if (widget.fullscreen || widget.swipeEnabled)
                               _topBar(),
-                            _sideDanmakuControl(),
                             _bottomControls(
                               constraints: constraints,
                               volume: state.volume,
@@ -436,17 +425,6 @@ class _PlayerControlsState extends State<PlayerControls> {
         onPressed: widget.onNext,
       ),
     ]);
-  }
-
-  Widget _sideDanmakuControl() {
-    if (!widget.showDanmaku) return const SizedBox.shrink();
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Padding(
-        padding: EdgeInsets.only(right: widget.swipeEnabled ? 0 : 4),
-        child: _danmakuTool(),
-      ),
-    );
   }
 
   Widget _bottomControls({
@@ -733,31 +711,6 @@ class _PlayerControlsState extends State<PlayerControls> {
         ),
       ),
     ],
-  );
-
-  Widget _danmakuTool() => _toolButton(
-    key: const ValueKey('player-danmaku-toggle'),
-    tooltip: widget.danmakuStatus.isEmpty
-        ? (widget.danmakuEnabled ? '關閉彈幕' : '開啟彈幕')
-        : widget.danmakuStatus,
-    visualWidth: 36,
-    selected: widget.danmakuEnabled,
-    onPressed: widget.enabled
-        ? () => _panel(widget.onRetryDanmaku ?? widget.onDanmaku!)
-        : null,
-    child: widget.onRetryDanmaku != null
-        ? const Icon(Icons.refresh_rounded, size: 21)
-        : Text(
-            '彈',
-            style: TextStyle(
-              fontSize: 14,
-              height: 1,
-              fontWeight: FontWeight.w800,
-              color: widget.danmakuEnabled
-                  ? Theme.of(context).colorScheme.primary
-                  : Colors.white.withValues(alpha: .86),
-            ),
-          ),
   );
 
   Widget _desktopControlRow({
