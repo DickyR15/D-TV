@@ -111,7 +111,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
     if (mounted) setState(() => _compatibleRendering = value);
   }
 
-  Future<void> _persistPreferences() async {
+  Future<void> _persistPreferences({VoidCallback? onSaved}) async {
     try {
       final current = widget.store.playbackPreferences;
       await widget.store.setPlaybackPreferences(
@@ -125,6 +125,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           autoPictureInPicture: _autoPictureInPicture,
         ),
       );
+      if (mounted) onSaved?.call();
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -146,7 +147,20 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateDecoder(TelevisionDecoder value) {
     setState(() => _decoder = value);
-    unawaited(_persistPreferences());
+    unawaited(
+      _persistPreferences(
+        onSaved: () {
+          final messenger = ScaffoldMessenger.of(context);
+          messenger
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text('解碼方式已儲存；重新進入播放頁面即可套用，無須重啟 D TV。'),
+              ),
+            );
+        },
+      ),
+    );
   }
 
   void _updatePortraitBlurBackground(bool value) {
@@ -266,12 +280,12 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               initialValue: _decoder,
               decoration: const InputDecoration(
                 labelText: '解碼方式',
-                helperText: '有聲音沒畫面或卡頓時，可切換相容方式；下次開啟影片時生效',
+                helperText: '自動依裝置選擇解碼路徑；硬解／軟解為手動相容模式。變更後重新進入播放頁面生效，無須重啟 D TV。',
               ),
               items: const [
                 DropdownMenuItem(
                   value: TelevisionDecoder.automatic,
-                  child: Text('預設'),
+                  child: Text('自動'),
                 ),
                 DropdownMenuItem(
                   value: TelevisionDecoder.hardware,
