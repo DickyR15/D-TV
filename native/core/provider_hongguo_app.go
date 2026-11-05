@@ -250,10 +250,8 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			continue
 		}
 		if response.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("红果 App 接口 HTTP %d", response.StatusCode)
-			// Some rejected device identities are reported as HTTP 401/403
-			// instead of an empty 200 response. Rotate only signed requests and
-			// keep the retry count bounded; unrelated 4xx responses remain fatal.
+			lastErr = fmt.Errorf("紅果 App 接口 HTTP %d", response.StatusCode)
+			// 401/403 且不是 Cloudflare 挑戰時，才有限次更換遭拒的設備識別碼。
 			if signed &&
 				(response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) &&
 				catalogResponseBlockReason(response, content) == "" &&
@@ -262,18 +260,15 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				if registerErr == nil {
 					rotations++
 					deviceID, installID, _ = client.device(helper)
-				query.Set("device_id", deviceID)
-				query.Set("iid", installID)
-				// The shared limiter observes every 403 and places a host cooldown.
-				// Once a rejected device has been replaced, clear only that 403
-				// cooldown so the bounded retry can validate the new identity.
-				// Challenge/Cloudflare responses are excluded above and remain blocked.
-				if response.StatusCode == http.StatusForbidden && downloader.limiter != nil {
-					downloader.limiter.clearDeviceRejectionBackoff(request.URL.Hostname())
-				}
+					query.Set("device_id", deviceID)
+					query.Set("iid", installID)
+					if response.StatusCode == http.StatusForbidden && downloader.limiter != nil {
+						downloader.limiter.clearDeviceRejectionBackoff(request.URL.Hostname())
+					}
 					attempt--
 					continue
 				}
+				lastErr = fmt.Errorf("%w（設備註冊失敗：%v）", lastErr, registerErr)
 			}
 			if response.StatusCode >= 400 && response.StatusCode < 500 {
 				return nil, lastErr
