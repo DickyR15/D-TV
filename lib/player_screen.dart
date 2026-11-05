@@ -43,8 +43,9 @@ import 'video_output_size.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
-  // Prefer the Android native Surface route verified on Onn. 4K Pro.
-  defaultValue: 'mpv_embed',
+  // Android TV defaults to ExoPlayer. Set DTV_ANDROID_PLAYER=mpv_embed to
+  // retain the MPV Embed path for controlled A/B testing.
+  defaultValue: 'exo',
 );
 
 // Never leave the loading overlay spinning indefinitely if MPV does not
@@ -131,8 +132,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _framePacingDiagnosticBusy = false;
   final Map<String, int> _framePacingLastCounters = {};
   DateTime? _framePacingLastSampleAt;
-  int _displayFrameRateSyncGeneration = -1;
-  bool _displayFrameRateSyncBusy = false;
   Timer? _loadingOverlayTimer;
   bool _showLoadingOverlay = false;
   Timer? _errorTimer;
@@ -256,9 +255,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _requestedQuality = preferences.quality;
     _autoAdvance = preferences.autoAdvance;
     _televisionDecoder = preferences.televisionDecoder;
-    // Android TV uses the previously validated MPV Embed + MediaCodec
-    // surface path for automatic and hardware modes. Software mode stays on
-    // the regular GPU path; phones/tablets use the regular MPV view.
+    // Android TV defaults to ExoPlayer for Media3 frame-release pacing.
+    // MPV Embed remains available through DTV_ANDROID_PLAYER=mpv_embed for A/B tests.
     final inheritedLayout = context.getInheritedWidgetOfExactType<AppLayout>();
     final isTelevisionLayout =
         inheritedLayout?.formFactor == FormFactor.television ||
@@ -283,12 +281,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     _preloader = PlaybackPreloader(widget.repository);
     widget.store.addListener(_accessChanged);
     final useMpvEmbed = _mpvEmbedBackend;
-    final useExoPlayer =
-        Platform.isAndroid &&
-        _androidPlayerEngine == 'exo' &&
-        widget.videoBuilder == null &&
-        widget.playerFactory == null &&
-        !useMpvEmbed;
+    final useExoPlayer = shouldUseExoPlayerForAndroidPlayback(
+      android: Platform.isAndroid,
+      television: isTelevisionLayout,
+      exoConfigured: _androidPlayerEngine == 'exo',
+      customPlayer: widget.videoBuilder != null || widget.playerFactory != null,
+    );
     _player =
         widget.playerFactory?.call() ??
         (useExoPlayer
@@ -469,9 +467,6 @@ class _PlayerScreenState extends State<PlayerScreen>
           _scheduleSystemUi();
         }
         unawaited(_logVideoOutput(parameters));
-        if (_televisionDecoderApplies) {
-          unawaited(_applyAndroidPlaybackDisplayMode());
-        }
       }),
     );
     _saveTimer = Timer.periodic(
@@ -1633,7 +1628,6 @@ class _PlayerScreenState extends State<PlayerScreen>
             : null);
     _preloader.clear();
     final ticket = ++_generation;
-    _displayFrameRateSyncGeneration = -1;
     _enhancement.suspend();
     _seekSequence++;
     _acceptErrors = false;
@@ -2039,9 +2033,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     unawaited(_logPlaybackSyncHealth());
     unawaited(_logFramePacingDiagnostics());
-    if (_televisionDecoderApplies) {
-      unawaited(_applyAndroidPlaybackDisplayMode());
-    }
     _syncDiagnosticTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (!_closed && _acceptErrors && _foreground && _player.state.playing) {
         unawaited(_logPlaybackSyncHealth());
@@ -2179,64 +2170,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
     } finally {
       _framePacingDiagnosticBusy = false;
-    }
-  }
-
-  Future<void> _applyAndroidPlaybackDisplayMode() async {
-    if (!_televisionDecoderApplies ||
-        !Platform.isAndroid ||
-        _displayFrameRateSyncBusy ||
-        _displayFrameRateSyncGeneration == _generation) {
-      return;
-    }
-    final platform = _player.platform;
-    if (platform is! NativePlayer) return;
-
-    _displayFrameRateSyncBusy = true;
-    final generation = _generation;
-    try {
-      double? frameRate;
-      for (var attempt = 0; attempt < 4; attempt++) {
-        for (final property in ['container-fps', 'estimated-vf-fps']) {
-          try {
-            final value = await platform.getProperty(property);
-            final parsed = double.tryParse(value.trim());
-            if (parsed != null && parsed.isFinite && parsed >= 20 && parsed <= 120) {
-              frameRate = parsed;
-              break;
-            }
-          } catch (_) {}
-        }
-        if (frameRate != null) break;
-        if (attempt < 3) {
-          await Future<void>.delayed(const Duration(milliseconds: 250));
-        }
-        if (_closed || generation != _generation) return;
-      }
-      if (frameRate == null || _closed || generation != _generation) return;
-
-      final result = await AppDevice.channel
-          .invokeMapMethod<String, dynamic>(
-            'setPlaybackDisplayMode',
-            {'frameRate': frameRate},
-          )
-          .timeout(const Duration(seconds: 2));
-      if (_closed || generation != _generation) return;
-      _displayFrameRateSyncGeneration = generation;
-      final details = result == null
-          ? 'status=unavailable'
-          : result.entries.map((entry) => '${entry.key}=${entry.value}').join(' ');
-      DiaryService.add(
-        '[DisplaySync] generation=$generation source-fps=${frameRate.toStringAsFixed(3)} $details',
-      );
-    } catch (error) {
-      if (!_closed && generation == _generation) {
-        DiaryService.add(
-          '[DisplaySync] generation=$generation error=${error.runtimeType}',
-        );
-      }
-    } finally {
-      _displayFrameRateSyncBusy = false;
     }
   }
 
@@ -2685,13 +2618,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     _loadingOverlayTimer?.cancel();
     _syncDiagnosticTimer?.cancel();
     _framePacingDiagnosticTimer?.cancel();
-    if (Platform.isAndroid && _television) {
-      unawaited(
-        AppDevice.channel
-            .invokeMethod<void>('restorePlaybackDisplayMode')
-            .catchError((Object _) {}),
-      );
-    }
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
     if (_pictureInPictureHandlerInstalled) {
