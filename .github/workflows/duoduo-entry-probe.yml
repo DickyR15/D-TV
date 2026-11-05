@@ -946,44 +946,60 @@ jobs:
               exact_source_records = {
                   "87221": {
                       "aliases": {"單身即地獄第五季", "单身即地狱第五季"},
+                      "year": "2026",
                       "address": "https://resource02.ulifestyle.com.hk/ulcms/content/article/image/w1280/2026/01/20260106180130_adf32c82e8e9ede7a5f96d795e9f224666da43bd.jpg",
                       "label": "Netflix Single's Inferno Season 5",
                   },
                   "59902": {
                       "aliases": {"明星大偵探第二季", "明星大侦探第二季"},
+                      "year": "2017",
                       "address": "https://4img.hitv.com/preview/internettv/sp_images/ott/2018/zongyi/309556/20180328100639870-new.jpg",
                       "label": "MangoTV 明星大侦探 第二季",
                   },
                   "78011": {
                       "aliases": {"人間中毒", "人间中毒"},
+                      "year": "2014",
                       "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
                       "label": "Distributor poster for Obsessed (2014)",
                   },
                   "1625": {
                   "aliases": {"鬼灭之刃剧场版无限城篇第一章猗窝座再来", "鬼滅之刃劇場版無限城篇第一章猗窩座再來"},
+                  "year": "2025",
                   "address": "https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2926775179.jpg",
                   "label": "Douban exact subject 36524559 poster for Demon Slayer Infinity Castle Chapter 1 (2025)",
               },
               "54635": {
                   "aliases": {"玩物"},
+                  "year": "2013",
                   "address": "https://file.osen.co.kr/article/2013/03/12/201303120849775921_513e6de134d01.jpg",
                   "label": "OSEN original 2013 Norigae theatrical poster (official release coverage)",
               },
               "1192": {
                       "aliases": {"奉子成婚"},
+                      "year": "2001",
                       "address": "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
                       "label": "Fuji Creative official Shotgun Marriage artwork (2001)",
                   },
                   "66452": {
                       "aliases": {"逆愛2後會無期", "逆爱2后会无期", "逆愛2：後會無期", "逆爱2：后会无期"},
+                      "year": "2014",
                       "address": "https://www.jendow.com.tw/img/5/105/nBnauM3X1gTO1AzM4MzMzIzM3QTM5YzNyITOzQTNwAzMwIzLzMzL3YzLt92YucmbvRWdo5Cd0FmL0E2LvoDc0RHa.jpg",
                       "label": "Archive image indexed under the exact 逆愛2後會無期 programme record (2014)",
                   },
               }
               exact_item = exact_source_records.get(str(vod_id))
-              if exact_item and normalize_exact(title) in exact_item["aliases"]:
+              source_year = str(row.get("vod_year") or "").strip()[:4]
+              record_year = str(exact_item.get("year") or "").strip()[:4] if exact_item else ""
+              exact_title_match = bool(exact_item and normalize_exact(title) in exact_item["aliases"])
+              exact_year_match = not source_year or not record_year or source_year == record_year
+              if exact_title_match and exact_year_match:
                   print(f"  verified poster matched exact source record={vod_id} programme={exact_item['label']!r}")
                   return exact_item["address"]
+              if exact_title_match and source_year and record_year and source_year != record_year:
+                  print(
+                      f"  verified poster rejected for id={vod_id}: source year "
+                      f"{source_year} does not match artwork year {record_year}"
+                  )
 
               flower_key = normalize_exact("花兒與少年同心季")
               xiyou_key = normalize_exact("這是我的西遊第二季")
