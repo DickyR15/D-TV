@@ -102,6 +102,43 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - name: Download and verify FFmpegKit Windows x64 bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $assetUrl = "https://github.com/sk3llo/ffmpeg_kit_flutter/releases/download/8.1.2-min-gpl/ffmpeg-kit-windows-x86_64-min-gpl-8.1.2.zip"
+          $expectedSha256 = "c3a69388f32ff86e4622baada470d2acc55d577a51b6ec15b68560c1f1b6e37b"
+          $archive = Join-Path $env:RUNNER_TEMP "ffmpeg-kit-windows-x86_64-min-gpl-8.1.2.zip"
+          $bundleDir = Join-Path $env:RUNNER_TEMP "ffmpeg-kit-windows-x86_64-min-gpl-8.1.2"
+
+          # Download the official pinned release asset outside CMake. CMake's
+          # file(DOWNLOAD) gets an HTTP error on the Windows hosted runner;
+          # curl follows GitHub's release-asset redirect reliably.
+          & curl.exe --fail --location --show-error --silent --retry 3 --retry-all-errors --retry-delay 3 --output $archive $assetUrl
+          if ($LASTEXITCODE -ne 0) {
+            throw "無法下載 FFmpegKit Windows x64 官方套件（curl exit $LASTEXITCODE）。"
+          }
+
+          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "FFmpegKit SHA-256 不符：$actualSha256"
+          }
+
+          if (Test-Path -LiteralPath $bundleDir) {
+            Remove-Item -LiteralPath $bundleDir -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $bundleDir -Force | Out-Null
+          Expand-Archive -LiteralPath $archive -DestinationPath $bundleDir -Force
+
+          $requiredDll = Join-Path $bundleDir "bin/libffmpegkit.dll"
+          if (-not (Test-Path -LiteralPath $requiredDll)) {
+            Get-ChildItem -LiteralPath $bundleDir -Recurse | Select-Object -First 40 FullName
+            throw "FFmpegKit 官方套件缺少 bin/libffmpegkit.dll。"
+          }
+
+          "FFMPEGKIT_LOCAL_DIR=$bundleDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "FFmpegKit verified: $actualSha256"
+          Get-ChildItem -LiteralPath (Join-Path $bundleDir "bin") -Filter "*.dll" | Select-Object Name, Length
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
