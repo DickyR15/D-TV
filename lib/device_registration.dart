@@ -53,7 +53,18 @@ class _DeviceRegistrationGateState extends State<DeviceRegistrationGate> {
   @override
   Widget build(BuildContext context) => _hongguoDevicesReady
       ? widget.child
-      : const Scaffold(body: Center(child: CircularProgressIndicator()));
+      : const Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('正在確認紅果主設備與輔助設備註冊狀態…'),
+              ],
+            ),
+          ),
+        );
 }
 
 class _DeviceRegistrationDialog extends StatefulWidget {
