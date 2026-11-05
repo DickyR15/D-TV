@@ -30,6 +30,28 @@ void main() {
     expect(eligible(aspectRatio: double.infinity), isFalse);
   });
 
+  test('automatic blur migration is skipped on Android TV to protect GPU headroom', () {
+    bool migrate({
+      bool windows = false,
+      bool android = true,
+      bool television = false,
+      bool landscape = true,
+      bool mpv = true,
+    }) => shouldMigratePortraitBlurLandscapeDefault(
+      windows: windows,
+      android: android,
+      television: television,
+      landscape: landscape,
+      androidMpvConfigured: mpv,
+    );
+
+    expect(migrate(), isTrue, reason: 'Android phone may use the landscape default');
+    expect(migrate(television: true), isFalse);
+    expect(migrate(windows: true, android: false), isTrue);
+    expect(migrate(landscape: false), isFalse);
+    expect(migrate(mpv: false), isFalse);
+  });
+
   test('Windows and Android MPV support portrait blur but Android ExoPlayer does not', () {
     expect(
       supportsPortraitBlurBackground(
