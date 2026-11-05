@@ -318,7 +318,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               key: const ValueKey('playback-preopen-next-episode'),
               contentPadding: EdgeInsets.zero,
               title: const Text('下一集預載入'),
-              subtitle: const Text('提前取得下一集的播放資料與網址，不會下載整集影片'),
+              subtitle: const Text('提前取得下一集的播放資料與網址，不會下載整集影片；Android TV 預設關閉以避免與目前影片共用頻寬，可手動開啟。'),
               value: _preloadEnabled,
               onChanged: _updatePreload,
             ),
