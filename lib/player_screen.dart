@@ -1176,13 +1176,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     _orientationController = AppOrientationScope.maybeOf(context);
     _syncInitialPlaybackFullscreen();
     final orientation = MediaQuery.orientationOf(context);
-    if (shouldMigratePortraitBlurLandscapeDefault(
-          windows: Platform.isWindows,
-          android: Platform.isAndroid,
-          television: television,
-          landscape: orientation == Orientation.landscape,
-          androidMpvConfigured: _androidPlayerEngine != 'exo',
-        ) &&
+    if ((Platform.isWindows ||
+            (Platform.isAndroid && _androidPlayerEngine != 'exo')) &&
+        orientation == Orientation.landscape &&
         !_portraitBlurDefaultMigrationRequested &&
         widget.store.needsPortraitBlurLandscapeDefaultMigration) {
       _portraitBlurDefaultMigrationRequested = true;

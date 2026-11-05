@@ -11,19 +11,6 @@ bool shouldUseMpvEmbedForPlayback({
     !softwareDecoderSelected &&
     !customPlayer;
 
-/// Keep the landscape portrait-blur migration on desktop and phones,
-/// but do not turn on the extra blur composition automatically on Android TV.
-/// Users can still opt in from playback settings.
-bool shouldMigratePortraitBlurLandscapeDefault({
-  required bool windows,
-  required bool android,
-  required bool television,
-  required bool landscape,
-  required bool androidMpvConfigured,
-}) =>
-    landscape &&
-    (windows || (android && !television && androidMpvConfigured));
-
 bool shouldUsePortraitBlurBackground({
   required bool enabled,
   required bool textureRendererAvailable,

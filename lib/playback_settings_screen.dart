@@ -66,13 +66,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
     super.didChangeDependencies();
     final size = MediaQuery.maybeOf(context)?.size ?? Size.zero;
     final landscape = size.width > size.height;
-    if (shouldMigratePortraitBlurLandscapeDefault(
-          windows: Platform.isWindows,
-          android: Platform.isAndroid,
-          television: AppLayout.isTelevision(context),
-          landscape: landscape,
-          androidMpvConfigured: _androidPlayerEngine != 'exo',
-        ) &&
+    if (landscape &&
         _portraitBlurSupported &&
         widget.store.needsPortraitBlurLandscapeDefaultMigration) {
       _portraitBlurBackground = true;
@@ -318,7 +312,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               key: const ValueKey('playback-preopen-next-episode'),
               contentPadding: EdgeInsets.zero,
               title: const Text('下一集預載入'),
-              subtitle: const Text('提前取得下一集的播放資料與網址，不會下載整集影片；Android TV 預設關閉以避免與目前影片共用頻寬，可手動開啟。'),
+              subtitle: const Text('提前取得下一集的播放資料與網址，不會下載整集影片'),
               value: _preloadEnabled,
               onChanged: _updatePreload,
             ),

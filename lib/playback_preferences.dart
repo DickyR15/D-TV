@@ -78,11 +78,9 @@ class PlaybackPreferences {
   final TelevisionDecoder televisionDecoder;
   final bool autoPictureInPicture;
 
-  // Keep look-ahead prefetch enabled on phones, but disabled by default on
-  // TVs. Native HLS warming can fetch up to 4 MiB while the current episode is
-  // playing, so avoiding that concurrent transfer protects TV Wi-Fi headroom.
-  // A saved explicit choice always takes precedence on every device.
-  bool preloads({required bool television}) => preload ?? !television;
+  // Fresh installs enable next-episode preloading on phones and TVs.
+  // A saved explicit choice (including false) always takes precedence.
+  bool preloads({required bool television}) => preload ?? true;
 
   PlaybackPreferences copyWith({
     double? speed,

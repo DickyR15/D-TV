@@ -2,11 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/playback_preferences.dart';
 
 void main() {
-  test('next episode preload defaults on for phones and off for TVs', () {
+  test('next episode preload defaults on for phones and TVs', () {
     final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
     expect(defaults.preload, isNull);
     expect(defaults.preloads(television: false), isTrue);
-    expect(defaults.preloads(television: true), isFalse);
+    expect(defaults.preloads(television: true), isTrue);
 
     // Explicit choices remain authoritative on every device.
     expect(
