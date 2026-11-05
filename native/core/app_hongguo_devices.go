@@ -36,7 +36,9 @@ func (engine *nativeEngine) hongguoDevices(ctx context.Context, register bool) (
 			}
 		}
 	}
-	_, _, primary := client.device(false)
-	_, _, helper := client.device(true)
-	return map[string]any{"ready": primary && helper}, nil
+	primaryID, primaryInstall, primary := client.device(false)
+	helperID, helperInstall, helper := client.device(true)
+	primaryReady := primary && hongguoNumericID.MatchString(primaryID) && hongguoNumericID.MatchString(primaryInstall) && primaryID != "0" && primaryInstall != "0"
+	helperReady := helper && hongguoNumericID.MatchString(helperID) && hongguoNumericID.MatchString(helperInstall) && helperID != "0" && helperInstall != "0"
+	return map[string]any{"ready": primaryReady && helperReady}, nil
 }

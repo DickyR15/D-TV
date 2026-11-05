@@ -77,3 +77,21 @@ func TestHongguoDevicesExplicitRetryIgnoresPause(t *testing.T) {
 		t.Fatal("explicit registration stayed paused", registers)
 	}
 }
+
+func TestHongguoDevicesRepairsInvalidSavedHelperIdentity(t *testing.T) {
+	registers := 0
+	engine := reopenCatalogEngine(t, t.TempDir(), hongguoRegistrationTransport(&registers))
+	client := engine.downloader.hongguoClient()
+	client.state.DeviceID, client.state.InstallID, client.state.Registered = "7", "8", true
+	client.state.HelperDeviceID, client.state.HelperInstallID, client.state.HelperRegistered = "invalid", "0", true
+	if hongguoDevicesReady(t, engine, false) {
+		t.Fatal("invalid saved helper identity was reported ready")
+	}
+	if !hongguoDevicesReady(t, engine, true) || registers != 1 {
+		t.Fatal("invalid helper identity was not repaired independently", registers)
+	}
+	state := engine.downloader.hongguoCatalogSnapshot()
+	if state.DeviceID != "7" || state.HelperDeviceID != "1001" || !state.HelperRegistered {
+		t.Fatal("repair changed the primary device or failed to persist the helper", state)
+	}
+}

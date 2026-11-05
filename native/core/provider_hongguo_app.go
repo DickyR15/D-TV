@@ -181,7 +181,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	base := client.baseURL
 	deviceID, installID, registered := client.deviceLocked(helper)
 	client.mu.Unlock()
-	if helper && (!signed || !registered || deviceID == "") {
+	if helper && (!signed || !registered || !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0") {
 		return nil, errors.New("紅果輔助設備尚未完成註冊")
 	}
 	query := hongguoAppQuery(deviceID, installID)

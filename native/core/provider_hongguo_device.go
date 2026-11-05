@@ -45,8 +45,9 @@ func (downloader *Downloader) ensureHongguoHelperDevice(ctx context.Context) err
 func (downloader *Downloader) ensureHongguoDeviceFor(ctx context.Context, helper bool, rejected string) error {
 	client := downloader.hongguoClient()
 	settled := func() bool {
-		current, _, registered := client.device(helper)
-		return rejected == "" && registered || rejected != "" && rejected != current
+		current, install, registered := client.device(helper)
+		valid := registered && hongguoNumericID.MatchString(current) && hongguoNumericID.MatchString(install) && current != "0" && install != "0"
+		return valid && (rejected == "" || rejected != current)
 	}
 	if settled() {
 		return nil
