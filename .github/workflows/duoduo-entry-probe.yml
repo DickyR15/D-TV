@@ -964,6 +964,11 @@ jobs:
                   "address": "https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2926775179.jpg",
                   "label": "Douban exact subject 36524559 poster for Demon Slayer Infinity Castle Chapter 1 (2025)",
               },
+              "54635": {
+                  "aliases": {"玩物"},
+                  "address": "https://file.osen.co.kr/article/2013/03/12/201303120849775921_513e6de134d01.jpg",
+                  "label": "OSEN original 2013 Norigae theatrical poster (official release coverage)",
+              },
               "1192": {
                       "aliases": {"奉子成婚"},
                       "address": "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
@@ -1870,6 +1875,11 @@ jobs:
                   "aliases": {"鬼灭之刃剧场版无限城篇第一章猗窝座再来", "鬼滅之刃劇場版無限城篇第一章猗窩座再來"},
                   "address": "https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2926775179.jpg",
                   "label": "Douban exact subject 36524559 poster for Demon Slayer Infinity Castle Chapter 1 (2025)",
+              },
+              "54635": {
+                  "aliases": {"玩物"},
+                  "address": "https://file.osen.co.kr/article/2013/03/12/201303120849775921_513e6de134d01.jpg",
+                  "label": "OSEN original 2013 Norigae theatrical poster (official release coverage)",
               },
               "1192": {
                       "aliases": {"奉子成婚"},
