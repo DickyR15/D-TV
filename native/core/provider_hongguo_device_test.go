@@ -134,7 +134,7 @@ func TestHongguoTransientRegistrationFailureCanRetryImmediately(t *testing.T) {
 }
 
 // Rate limits and upstream 5xx responses are transient, not evidence of a device ban.
-func TestHongguoTemporaryHTTPRegistrationFailuresCanRetryImmediately(t *testing.T) {
+func TestHongguoTemporaryHTTPRegistrationFailuresCanRetryWithoutDeviceCooldown(t *testing.T) {
 	for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
 			requests := 0
@@ -150,8 +150,30 @@ func TestHongguoTemporaryHTTPRegistrationFailuresCanRetryImmediately(t *testing.
 			if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
 				t.Fatal("first temporary registration failure was hidden")
 			}
+
+			// HTTP 429 must keep the host-level Retry-After backoff, but must not
+			// create the separate ten-minute device-rejection cooldown. Expire the
+			// host backoff here to test the next eligible registration attempt
+			// without sleeping for the server's full default one-minute window.
+			if status == http.StatusTooManyRequests {
+				client.deviceMu.Lock()
+				paused := client.registerPausedUntil
+				client.deviceMu.Unlock()
+				if !paused.IsZero() {
+					t.Fatalf("HTTP 429 incorrectly created device cooldown until %v", paused)
+				}
+				d.limiter.mu.Lock()
+				backoff := d.limiter.backoffs["log.snssdk.com"]
+				if backoff == nil || backoff.status != http.StatusTooManyRequests {
+					d.limiter.mu.Unlock()
+					t.Fatal("HTTP 429 Retry-After backoff was not preserved")
+				}
+				backoff.until = time.Now().Add(-time.Second)
+				d.limiter.mu.Unlock()
+			}
+
 			if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
-				t.Fatalf("temporary HTTP %d must retry immediately: %v", status, err)
+				t.Fatalf("temporary HTTP %d must be retryable after any host Retry-After: %v", status, err)
 			}
 			if requests != 2 {
 				t.Fatalf("registration requests = %d, want 2", requests)
