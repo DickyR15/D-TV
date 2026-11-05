@@ -342,6 +342,15 @@ func TestHuangguoAIPublishedMirrorLinesAreRecognizedAndRotated(t *testing.T) {
 			t.Fatalf("黄果 AI 发布线路未识别：%s -> %s", address, got)
 		}
 	}
+	candidates := providerURLCandidates(addresses[0])
+	if len(candidates) < len(huangguoAIBaseMirrors) || candidates[0] != addresses[0] {
+		t.Fatalf("黃果 AI 未先試主線或缺少備援線路：%v", candidates)
+	}
+	for _, candidate := range candidates {
+		if providerSourceForURL(candidate) != sourceHuangguoAI {
+			t.Fatalf("黃果 AI 備援候選未識別：%s", candidate)
+		}
+	}
 	generated := generatedHuangguoAIMirrors("https://huangguoai.com/api/edge/request", 8)
 	seen := map[string]bool{}
 	for _, mirror := range generated {
