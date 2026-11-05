@@ -1280,7 +1280,17 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final previous = _lifecycleState;
     _lifecycleState = state;
+    final playerState = _player.state;
+    DiaryService.add(
+      '[PlaybackLifecycle] from=${previous.name} to=${state.name} '
+      'generation=$_generation foreground=$_foreground intended=$_playIntent '
+      'playing=${playerState.playing} buffering=${playerState.buffering} '
+      'positionMs=${playerState.position.inMilliseconds} '
+      'route=${_plan?.routeIndex ?? -1}/${_plan?.routeCount ?? 0} '
+      'session=${_plan == null ? 'none' : playbackDiagnosticId(_plan!.session)}',
+    );
     _applyLifecycleVisibility();
   }
 
