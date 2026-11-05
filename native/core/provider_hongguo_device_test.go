@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"strings"
 	"testing"
 	"time"
 )
@@ -108,18 +109,45 @@ func TestHongguoTabRejectionKeepsDevice(t *testing.T) {
 	}
 }
 
-func TestHongguoRegisterFailurePausesAndKeepsOldDevice(t *testing.T) {
-	d, requests := hongguoDeviceFixture(t, nil, true)
-	for range 2 {
-		if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
-			t.Fatal("failed registration reported success")
+func TestHongguoTransientRegistrationFailureCanRetryImmediately(t *testing.T) {
+	requests := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return nil, context.DeadlineExceeded
 		}
+		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
+	})
+	client := d.hongguoClient()
+	client.state.DeviceID, client.state.InstallID, client.state.Registered = "7", "8", false
+	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
+		t.Fatal("first transient registration failure was hidden")
 	}
-	if state := d.hongguoCatalogSnapshot(); state.DeviceID != "7" || state.Registered {
-		t.Fatal("failed registration changed the device", state)
+	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+		t.Fatalf("transient failure must retry immediately: %v", err)
 	}
-	if got := *requests; len(got) != 1 || got[0] != "register" {
-		t.Fatal("registration was not paused after failure", got)
+	if requests != 2 {
+		t.Fatalf("registration requests = %d, want 2", requests)
+	}
+	if state := d.hongguoCatalogSnapshot(); !state.Registered || state.DeviceID != "1001" {
+		t.Fatalf("retry did not register device: %#v", state)
+	}
+}
+
+func TestHongguoExplicitRegistrationRejectionIsPausedWithReason(t *testing.T) {
+	requests := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		requests++
+		return sourceFixtureResponse(request, http.StatusForbidden, `{"message":"device blocked by policy"}`), nil
+	})
+	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "HTTP 403") {
+		t.Fatalf("missing explicit rejection reason: %v", err)
+	}
+	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "遭拒絕") {
+		t.Fatalf("missing paused rejection message: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("rejected registration should be paused, requests=%d", requests)
 	}
 }
 
