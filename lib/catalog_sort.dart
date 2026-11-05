@@ -2,12 +2,12 @@ import 'models.dart';
 import 'ui_localization.dart';
 
 enum CatalogSort {
-  source('預設順序'),
-  name('名稱'),
-  season('自然季號'),
-  date('年份（最新）'),
-  heat('熱度'),
-  views('播放量');
+  source('預設排序'),
+  name('片名'),
+  season('季數'),
+  date('年份（由新到舊）'),
+  heat('熱門程度'),
+  views('播放次數');
 
   const CatalogSort(this.label);
   final String label;
