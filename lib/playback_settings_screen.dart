@@ -281,7 +281,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               initialValue: _decoder,
               decoration: const InputDecoration(
                 labelText: '解碼方式',
-                helperText: '自動依裝置選擇解碼路徑；硬解／軟解為手動相容模式。變更後重新進入播放頁面生效，無須重啟 D TV。',
+                helperText: '自動依裝置選擇解碼方式；也可手動指定硬體解碼或軟體解碼。變更後重新進入播放頁面生效，無須重啟 D TV。',
               ),
               items: const [
                 DropdownMenuItem(
@@ -290,11 +290,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                 ),
                 DropdownMenuItem(
                   value: TelevisionDecoder.hardware,
-                  child: Text('硬解（相容）'),
+                  child: Text('硬體解碼'),
                 ),
                 DropdownMenuItem(
                   value: TelevisionDecoder.software,
-                  child: Text('軟解（相容）'),
+                  child: Text('軟體解碼'),
                 ),
               ],
               onChanged: Platform.isAndroid &&
