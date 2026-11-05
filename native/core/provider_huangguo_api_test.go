@@ -61,6 +61,9 @@ func TestHuangguoAIDetailAndPlaybackUseEdgeAPI(t *testing.T) {
 	if len(chapters) != 2 || chapters[0].ID != "huangguoai:12:auto-1" || chapters[0].Title != "第1集" || chapters[1].ID != "huangguoai:12:ep-2" || chapters[1].PageURL != "https://huangguoai.com/video/12/ep-2/" {
 		t.Fatal("chapter identities changed", chapters)
 	}
+	if chapterEpisodeNumber(chapters[0], 0) != 1 || chapterEpisodeNumber(chapters[1], 0) != 2 {
+		t.Fatal("episode numbers could not be recovered from the API chapter metadata", chapters)
+	}
 	media, err := d.resolveProviderMedia(context.Background(), Task{DramaID: drama.ID, Chapter: chapters[1], Index: 2})
 	if err != nil || media.URL != "https://media.example.test/12/2.mp4?auth_key=synthetic" {
 		t.Fatal("playback did not use the play API", err, media)
