@@ -12,6 +12,7 @@ on:
       - main
     paths:
       - ".github/workflows/cross-platform-build.yml"
+      - ".github/workflows/duoduo-entry-probe.yml"
       - "lib/**"
       - "native/**"
       - "android/**"
@@ -296,6 +297,7 @@ jobs:
       - name: Best-effort install and launch on x86_64 Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         continue-on-error: true
+        timeout-minutes: 15
         with:
           api-level: 35
           arch: x86_64
