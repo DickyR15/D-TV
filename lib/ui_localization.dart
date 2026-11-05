@@ -10,6 +10,8 @@ const Map<String, String> _twPhrases = {
   '在线': '線上',
   '在線': '線上',
   '自動識別設備': '自動偵測裝置',
+  // OpenCC converts 設備 to 裝置 before Taiwan-specific phrase replacements.
+  '自動識別裝置': '自動偵測裝置',
 '播放源': '播放來源',
   '播放來源': '播放來源',
   // 來源文字先經正體化，再依台灣慣用語調整。
