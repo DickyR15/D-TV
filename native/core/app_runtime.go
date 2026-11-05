@@ -536,6 +536,8 @@ func nativeDispatch(input nativeInput) (any, error) {
 	case "cancelRead":
 		engine.cancelRead(input)
 		return true, nil
+	case "hongguoDevices":
+		return engine.hongguoDevices(ctx, input.Force)
 	case "recommendations":
 		return engine.nativeRecommendations(ctx, input)
 	case "cachedRecommendations":

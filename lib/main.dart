@@ -16,6 +16,7 @@ import 'desktop_mini_player.dart';
 import 'desktop_mini_player_bridge.dart';
 
 import 'core_bridge.dart';
+import 'device_registration.dart';
 import 'app_layout.dart';
 import 'app_orientation.dart';
 import 'app_theme.dart';
@@ -577,12 +578,16 @@ class DuanjuApp extends StatelessWidget {
                     key: ValueKey('locked-${store!.profileEpoch}'),
                     child: ProfilesScreen(store: store!, locked: true),
                   )
-                : HomeScreen(
-                    key: ValueKey(
-                      'profile-${store!.profile.id}-${store!.profileEpoch}',
-                    ),
+                : DeviceRegistrationGate(
                     repository: repository,
                     store: store!,
+                    child: HomeScreen(
+                      key: ValueKey(
+                        'profile-${store!.profile.id}-${store!.profileEpoch}',
+                      ),
+                      repository: repository,
+                      store: store!,
+                    ),
                   )
           : KeyedSubtree(
               key: ValueKey<String>(

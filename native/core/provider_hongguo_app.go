@@ -33,7 +33,10 @@ type hongguoCatalogState struct {
 	Version    int                             `json:"version"`
 	DeviceID   string                          `json:"deviceId"`
 	InstallID  string                          `json:"installId"`
-	Registered bool                            `json:"registered,omitempty"`
+	Registered       bool                            `json:"registered,omitempty"`
+	HelperDeviceID   string                          `json:"helperDeviceId,omitempty"`
+	HelperInstallID  string                          `json:"helperInstallId,omitempty"`
+	HelperRegistered bool                            `json:"helperRegistered,omitempty"`
 	Feeds      map[string]hongguoCatalogCursor `json:"feeds"`
 }
 
@@ -84,6 +87,9 @@ func (downloader *Downloader) restoreHongguoCatalog(state *hongguoCatalogState) 
 		return
 	}
 	cloned := cloneHongguoCatalogState(state)
+	if !hongguoNumericID.MatchString(cloned.HelperDeviceID) || !hongguoNumericID.MatchString(cloned.HelperInstallID) {
+		cloned.HelperDeviceID, cloned.HelperInstallID, cloned.HelperRegistered = newHongguoDeviceID(), newHongguoDeviceID(), false
+	}
 	for name, cursor := range cloned.Feeds {
 		known := false
 		for _, genre := range hongguoAppGenres {
@@ -167,15 +173,20 @@ func clientDeviceIDs(client *hongguoAppClient) (string, string, bool) {
 
 func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
 	client := downloader.hongguoClient()
+	helper, _ := ctx.Value(hongguoHelperDeviceKey{}).(bool)
 	signed := path != hongguoBookmallTabPath
+	var registerErr error
 	if signed {
-		// Registration is best-effort: if the registration service is temporarily
-		// unavailable, preserve the existing IDs and still try the signed request.
-		_ = downloader.ensureHongguoDevice(ctx, "")
+		// 暫時性註冊失敗仍可沿用既有設備識別碼；首次啟動閘門會要求完成雙設備註冊。
+		registerErr = downloader.ensureHongguoDeviceFor(ctx, helper, "")
 	}
 	client.mu.Lock()
-	base, deviceID, installID := client.baseURL, client.state.DeviceID, client.state.InstallID
+	base := client.baseURL
+	deviceID, installID, registered := client.deviceLocked(helper)
 	client.mu.Unlock()
+	if helper && (!signed || !registered || deviceID == "") {
+		return nil, errors.New("紅果輔助設備尚未完成註冊")
+	}
 	query := hongguoAppQuery(deviceID, installID)
 	for key, values := range extra {
 		query[key] = append([]string(nil), values...)
@@ -246,10 +257,11 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			if signed &&
 				(response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) &&
 				catalogResponseBlockReason(response, content) == "" &&
-				rotations < hongguoDeviceRotations &&
-				downloader.ensureHongguoDevice(ctx, deviceID) == nil {
-				rotations++
-				deviceID, installID, _ = clientDeviceIDs(client)
+				rotations < hongguoDeviceRotations {
+				registerErr = downloader.ensureHongguoDeviceFor(ctx, helper, deviceID)
+				if registerErr == nil {
+					rotations++
+					deviceID, installID, _ = client.device(helper)
 				query.Set("device_id", deviceID)
 				query.Set("iid", installID)
 				// The shared limiter observes every 403 and places a host cooldown.
@@ -259,8 +271,9 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				if response.StatusCode == http.StatusForbidden && downloader.limiter != nil {
 					downloader.limiter.clearDeviceRejectionBackoff(request.URL.Hostname())
 				}
-				attempt--
-				continue
+					attempt--
+					continue
+				}
 			}
 			if response.StatusCode >= 400 && response.StatusCode < 500 {
 				return nil, lastErr
@@ -268,16 +281,19 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			continue
 		}
 		if len(content) == 0 {
-			lastErr = errors.New("红果 App 接口未返回有效数据")
-			// An empty successful response is a known sign that the current
-			// device identity may have been rejected. Rotate only signed requests,
-			// bound rotations, and retry with the newly registered IDs.
-			if signed && rotations < hongguoDeviceRotations && downloader.ensureHongguoDevice(ctx, deviceID) == nil {
-				rotations++
-				deviceID, installID, _ = clientDeviceIDs(client)
-				query.Set("device_id", deviceID)
-				query.Set("iid", installID)
-				attempt--
+			lastErr = errors.New("紅果 App 接口未返回有效資料")
+			if signed && rotations < hongguoDeviceRotations {
+				registerErr = downloader.ensureHongguoDeviceFor(ctx, helper, deviceID)
+				if registerErr == nil {
+					rotations++
+					deviceID, installID, _ = client.device(helper)
+					query.Set("device_id", deviceID)
+					query.Set("iid", installID)
+					attempt--
+				}
+			}
+			if registerErr != nil {
+				lastErr = fmt.Errorf("紅果 App 接口未返回有效資料（設備註冊失敗：%v）", registerErr)
 			}
 			continue
 		}

@@ -102,6 +102,7 @@ abstract class AppRepository {
   Future<void> cancelCatalog() async {}
   Future<void> cancelSuggestions() async {}
   Future<void> cancelRecommendations() async {}
+  Future<bool> hongguoDevices({bool register = false}) async => true;
   Future<Drama?> supplementMetadata(Drama drama) async => null;
   Future<Drama> followCheck(Drama drama) async => (await detail(drama)).drama;
   Future<CatalogPage> recommendations(
@@ -329,6 +330,15 @@ class NativeRepository extends AppRepository {
   Future<void> cancelSuggestions() => _cancelReads('suggestions');
   @override
   Future<void> cancelRecommendations() => _cancelReads('recommendations-');
+
+  @override
+  Future<bool> hongguoDevices({bool register = false}) async {
+    final result = await _call({
+      'action': 'hongguoDevices',
+      'force': register,
+    });
+    return result['ready'] == true;
+  }
 
   @override
   Future<CatalogPage> recommendations(

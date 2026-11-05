@@ -13,6 +13,7 @@ import (
 )
 
 type hongguoRegisterRejection struct{ error }
+type hongguoHelperDeviceKey struct{}
 
 const (
 	hongguoDeviceRegisterURL   = "https://log.snssdk.com/service/2/device_register/"
@@ -20,19 +21,41 @@ const (
 	hongguoDeviceRegisterPause = 10 * time.Minute
 )
 
-func (downloader *Downloader) ensureHongguoDevice(ctx context.Context, rejected string) error {
-	client := downloader.hongguoClient()
-	client.deviceMu.Lock()
-	defer client.deviceMu.Unlock()
+func (client *hongguoAppClient) deviceLocked(helper bool) (string, string, bool) {
+	if helper {
+		return client.state.HelperDeviceID, client.state.HelperInstallID, client.state.HelperRegistered
+	}
+	return client.state.DeviceID, client.state.InstallID, client.state.Registered
+}
+
+func (client *hongguoAppClient) device(helper bool) (string, string, bool) {
 	client.mu.Lock()
-	current, registered := client.state.DeviceID, client.state.Registered
-	client.mu.Unlock()
-	if rejected == "" && registered || rejected != "" && rejected != current {
+	defer client.mu.Unlock()
+	return client.deviceLocked(helper)
+}
+
+func (downloader *Downloader) ensureHongguoDevice(ctx context.Context, rejected string) error {
+	return downloader.ensureHongguoDeviceFor(ctx, false, rejected)
+}
+
+func (downloader *Downloader) ensureHongguoHelperDevice(ctx context.Context) error {
+	return downloader.ensureHongguoDeviceFor(ctx, true, "")
+}
+
+func (downloader *Downloader) ensureHongguoDeviceFor(ctx context.Context, helper bool, rejected string) error {
+	client := downloader.hongguoClient()
+	settled := func() bool {
+		current, _, registered := client.device(helper)
+		return rejected == "" && registered || rejected != "" && rejected != current
+	}
+	if settled() {
 		return nil
 	}
-	// Network failures and timeouts are transient: never cache them as a
-	// ten-minute registration lockout. Only a definite registration denial
-	// is cooled down, preserving the server's actual rejection reason.
+	client.deviceMu.Lock()
+	defer client.deviceMu.Unlock()
+	if settled() {
+		return nil
+	}
 	if time.Now().Before(client.registerPausedUntil) {
 		if client.registerPauseErr != nil {
 			return fmt.Errorf("紅果設備註冊暫不可用：%w", client.registerPauseErr)
@@ -54,7 +77,11 @@ func (downloader *Downloader) ensureHongguoDevice(ctx context.Context, rejected 
 	client.registerPausedUntil = time.Time{}
 	client.registerPauseErr = nil
 	client.mu.Lock()
-	client.state.DeviceID, client.state.InstallID, client.state.Registered = deviceID, installID, true
+	if helper {
+		client.state.HelperDeviceID, client.state.HelperInstallID, client.state.HelperRegistered = deviceID, installID, true
+	} else {
+		client.state.DeviceID, client.state.InstallID, client.state.Registered = deviceID, installID, true
+	}
 	client.mu.Unlock()
 	return nil
 }
