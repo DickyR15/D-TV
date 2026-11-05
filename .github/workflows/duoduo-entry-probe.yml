@@ -991,14 +991,17 @@ jobs:
               source_year = str(row.get("vod_year") or "").strip()[:4]
               record_year = str(exact_item.get("year") or "").strip()[:4] if exact_item else ""
               exact_title_match = bool(exact_item and normalize_exact(title) in exact_item["aliases"])
-              exact_year_match = not source_year or not record_year or source_year == record_year
+              # A dated artwork is not verifiable when the source year is missing.
+              # Missing metadata must never turn a known year mismatch into a match.
+              exact_year_match = not record_year or source_year == record_year
               if exact_title_match and exact_year_match:
                   print(f"  verified poster matched exact source record={vod_id} programme={exact_item['label']!r}")
                   return exact_item["address"]
-              if exact_title_match and source_year and record_year and source_year != record_year:
+              if exact_title_match and record_year and source_year != record_year:
+                  observed_year = source_year or "(missing)"
                   print(
                       f"  verified poster rejected for id={vod_id}: source year "
-                      f"{source_year} does not match artwork year {record_year}"
+                      f"{observed_year} does not match artwork year {record_year}"
                   )
 
               flower_key = normalize_exact("花兒與少年同心季")
