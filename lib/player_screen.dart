@@ -258,7 +258,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     _requestedQuality = preferences.quality;
     _autoAdvance = preferences.autoAdvance;
     _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
-    _preloadEnabled = preferences.preloads(television: false);
     _televisionDecoder = preferences.televisionDecoder;
     // Android TV uses the previously validated MPV Embed + MediaCodec
     // surface path for automatic and hardware modes. Software mode stays on
@@ -268,6 +267,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         inheritedLayout?.formFactor == FormFactor.television ||
         (inheritedLayout?.formFactor == null &&
             inheritedLayout?.television == true);
+    _preloadEnabled = preferences.preloads(
+      television: isTelevisionLayout,
+    );
     // Keep MPV Embed + MediaCodec for Android TV even when blur is enabled.
     // The blur is composed from the same Flutter Texture Registry output;
     // it must never force the mediacodec-copy path that caused TV A/V drift.
@@ -1170,9 +1172,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     _orientationController = AppOrientationScope.maybeOf(context);
     _syncInitialPlaybackFullscreen();
     final orientation = MediaQuery.orientationOf(context);
-    if ((Platform.isWindows ||
-            (Platform.isAndroid && _androidPlayerEngine != 'exo')) &&
-        orientation == Orientation.landscape &&
+    if (shouldMigratePortraitBlurLandscapeDefault(
+          windows: Platform.isWindows,
+          android: Platform.isAndroid,
+          television: television,
+          landscape: orientation == Orientation.landscape,
+          androidMpvConfigured: _androidPlayerEngine != 'exo',
+        ) &&
         !_portraitBlurDefaultMigrationRequested &&
         widget.store.needsPortraitBlurLandscapeDefaultMigration) {
       _portraitBlurDefaultMigrationRequested = true;
