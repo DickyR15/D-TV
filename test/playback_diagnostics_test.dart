@@ -209,4 +209,12 @@ void main() {
       expect(DiaryService.entries.last, contains('stream.local_response'));
     },
   );
+  test('frame pacing diagnostic counter deltas handle baselines and resets', () {
+    expect(playbackDiagnosticCounterDelta('4', null), 'baseline');
+    expect(playbackDiagnosticCounterDelta('7', 4), '+3');
+    expect(playbackDiagnosticCounterDelta('7', 7), '+0');
+    expect(playbackDiagnosticCounterDelta('0', 7), 'reset');
+    expect(playbackDiagnosticCounterDelta('n/a', 7), 'n/a');
+  });
+
 }
