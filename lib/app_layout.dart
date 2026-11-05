@@ -22,7 +22,7 @@ enum FormFactor { phone, pad, window, television }
 typedef SystemAccentColors = ({Color? light, Color? dark});
 
 const _displayModeLabels = <String, String>{
-  'auto': '自動識別設備',
+  'auto': '自動偵測裝置',
   'television': '電視',
   'phone': '手機',
   'pad': '平板',
