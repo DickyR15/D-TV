@@ -221,7 +221,7 @@ void main() {
     await tester.tap(decoder);
     await tester.pumpAndSettle();
 
-    final softwareOption = find.text('軟解（相容）').last;
+    final softwareOption = find.text('軟體解碼').last;
     expect(softwareOption, findsOneWidget);
     await tester.tap(softwareOption);
     await tester.pumpAndSettle();
