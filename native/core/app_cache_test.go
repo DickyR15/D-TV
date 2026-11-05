@@ -42,11 +42,28 @@ func TestNativeCoverDecryptsAndPersistsAcrossRestart(t *testing.T) {
 	plain, encrypted := syntheticNativeCover(t)
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		if r.URL.RawQuery != "signature=%2F%2b%3D&auth_key=fixture" || r.Header.Get("Referer") != "https://huangguoai.com/" || r.Header.Get("User-Agent") == "" {
-			t.Error("cover request changed its signed URL or lost source headers")
+		target := huangguoEdgeTarget(t, r)
+		if !strings.HasPrefix(target.Path, "/api/videos/category/ai-") {
+			t.Errorf("test must only request synthetic catalog metadata, got %s", target.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
-		w.Write(encrypted)
+		// 「全部」會並發請求每個 AI 分類，只讓 ai-duanju 返回資料並計數。
+		if target.Path != "/api/videos/category/ai-duanju" {
+			_, _ = w.Write([]byte(huangguoEdgeReply(map[string]any{"items": []any{}})))
+			return
+		}
+		calls.Add(1)
+		page, _ := strconv.Atoi(target.Query().Get("page"))
+		count := 24
+		if page > 1 {
+			count = 1
+		}
+		var rows []map[string]any
+		for index := range count {
+			rows = append(rows, map[string]any{"id": strconv.Itoa(page*100 + index), "title": fmt.Sprintf("合成劇集%d", page*100+index), "cover": "https://example.test/synthetic-cover"})
+		}
+		_, _ = w.Write([]byte(huangguoEdgeReply(map[string]any{"items": rows})))
 	}))
 	defer upstream.Close()
 	directory := t.TempDir()
