@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -39,31 +40,14 @@ func syntheticNativeCover(t *testing.T) ([]byte, []byte) {
 }
 
 func TestNativeCoverDecryptsAndPersistsAcrossRestart(t *testing.T) {
-	plain, _ := syntheticNativeCover(t)
+	plain, encrypted := syntheticNativeCover(t)
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		target := huangguoEdgeTarget(t, r)
-		if !strings.HasPrefix(target.Path, "/api/videos/category/ai-") {
-			t.Errorf("test must only request synthetic catalog metadata, got %s", target.Path)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		// 「全部」會並發請求每個 AI 分類，只讓 ai-duanju 返回資料並計數。
-		if target.Path != "/api/videos/category/ai-duanju" {
-			_, _ = w.Write([]byte(huangguoEdgeReply(map[string]any{"items": []any{}})))
-			return
-		}
 		calls.Add(1)
-		page, _ := strconv.Atoi(target.Query().Get("page"))
-		count := 24
-		if page > 1 {
-			count = 1
+		if r.URL.RawQuery != "signature=%2F%2b%3D&auth_key=fixture" || r.Header.Get("Referer") != "https://huangguoai.com/" || r.Header.Get("User-Agent") == "" {
+			t.Error("cover request changed its signed URL or lost source headers")
 		}
-		var rows []map[string]any
-		for index := range count {
-			rows = append(rows, map[string]any{"id": strconv.Itoa(page*100 + index), "title": fmt.Sprintf("合成劇集%d", page*100+index), "cover": "https://example.test/synthetic-cover"})
-		}
-		_, _ = w.Write([]byte(huangguoEdgeReply(map[string]any{"items": rows})))
+		_, _ = w.Write(encrypted)
 	}))
 	defer upstream.Close()
 	directory := t.TempDir()
@@ -200,27 +184,28 @@ func TestNativeCoverRedirectAndBoundedDiskCache(t *testing.T) {
 func TestNativeCatalogCacheFreshnessPagingAndRefresh(t *testing.T) {
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/api/videos/category/ai-") {
-			t.Error("test must only request synthetic catalog metadata", r.URL.Path)
+		target := huangguoEdgeTarget(t, r)
+		if !strings.HasPrefix(target.Path, "/api/videos/category/ai-") {
+			t.Error("test must only request synthetic catalog metadata", target.Path)
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		// 「全部」会并发请求每个 AI 分类，只让 ai-duanju 返回数据并计数。
-		if r.URL.Path != "/api/videos/category/ai-duanju" {
-			json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+		// 「全部」會並發請求每個 AI 分類，只讓 ai-duanju 返回資料並計數。
+		if target.Path != "/api/videos/category/ai-duanju" {
+			_, _ = io.WriteString(w, huangguoEdgeReply([]any{}))
 			return
 		}
 		calls.Add(1)
-		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		page, _ := strconv.Atoi(target.Query().Get("page"))
 		count := 24
 		if page > 1 {
 			count = 1
 		}
 		var rows []map[string]any
 		for index := range count {
-			rows = append(rows, map[string]any{"id": strconv.Itoa(page*100 + index), "title": fmt.Sprintf("合成剧集%d", page*100+index), "cover": "https://example.test/synthetic-cover"})
+			rows = append(rows, map[string]any{"id": strconv.Itoa(page*100 + index), "title": fmt.Sprintf("合成劇集%d", page*100+index), "cover": "https://example.test/synthetic-cover"})
 		}
-		json.NewEncoder(w).Encode(map[string]any{"data": rows})
+		_, _ = io.WriteString(w, huangguoEdgeReply(rows))
 	}))
 	defer upstream.Close()
 	directory := t.TempDir()
