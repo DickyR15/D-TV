@@ -89,7 +89,7 @@ Future<CatalogView?> chooseCatalogView(
               width: double.infinity,
               child: FilledButton(
                 onPressed: () => Navigator.pop(context, selected),
-                child: const Text('應用'),
+                child: const Text('套用'),
               ),
             ),
           ],
