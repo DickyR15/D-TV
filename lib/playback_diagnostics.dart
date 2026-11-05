@@ -89,3 +89,39 @@ bool playbackDiagnosticLogRequiresRecovery({
     r'moov atom not found|invalid data found when processing input',
   ).hasMatch(message);
 }
+
+
+/// Formats the change in a cumulative MPV frame counter between two samples.
+/// A missing first sample is a baseline; a decreasing value means MPV reset it.
+String playbackDiagnosticCounterDelta(String currentValue, int? previousValue) {
+  final current = int.tryParse(currentValue.trim());
+  if (current == null) return 'n/a';
+  if (previousValue == null) return 'baseline';
+  if (current < previousValue) return 'reset';
+  return '+${current - previousValue}';
+}
+
+/// Fast, read-only MPV properties sampled while Android TV playback is active.
+/// The two-second cadence is diagnostic only and does not alter playback.
+const playbackFramePacingSampleInterval = Duration(seconds: 2);
+
+const playbackFramePacingProperties = <String>[
+  'time-pos',
+  'estimated-vf-fps',
+  'display-fps',
+  'estimated-display-fps',
+  'display-sync-active',
+  'vsync-ratio',
+  'vo-delayed-frame-count',
+  'frame-drop-count',
+  'decoder-frame-drop-count',
+  'avsync',
+  'demuxer-cache-duration',
+  'paused-for-cache',
+];
+
+const playbackFramePacingCounterProperties = <String>{
+  'vo-delayed-frame-count',
+  'frame-drop-count',
+  'decoder-frame-drop-count',
+};
