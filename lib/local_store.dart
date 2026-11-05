@@ -690,7 +690,8 @@ class LocalStore extends ChangeNotifier {
     });
   }
 
-  /// One-time default migration for Windows and landscape Android MPV devices.
+  /// One-time default migration for Windows and landscape Android phone/tablet MPV devices.
+  /// Android TV is excluded because the extra blur composition can consume GPU headroom.
   /// Earlier versions serialized the default-off value whenever another
   /// playback preference was saved, so a missing-key check alone is not enough.
   bool get needsPortraitBlurLandscapeDefaultMigration =>
