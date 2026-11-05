@@ -12,21 +12,21 @@ import (
 
 func TestNativeCategoryPaginationStaysIndependent(t *testing.T) {
 	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
-		if !strings.HasPrefix(request.URL.Path, "/api/videos/category/ai-") {
-			return nil, errors.New("only catalog JSON is permitted")
+		target := huangguoEdgeTarget(t, request)
+		if !strings.HasPrefix(target.Path, "/api/videos/category/ai-") {
+			return nil, errors.New("only catalog API requests are permitted")
 		}
-		category := request.URL.Path[strings.LastIndex(request.URL.Path, "/")+1:]
-		page := request.URL.Query().Get("page")
+		category := target.Path[strings.LastIndex(target.Path, "/")+1:]
+		page := target.Query().Get("page")
 		count := 24
 		if page != "1" {
 			count = 1
 		}
 		rows := make([]map[string]any, count)
 		for index := range rows {
-			rows[index] = map[string]any{"id": fmt.Sprintf("%s-%s-%d", category, page, index), "title": "合成分类剧集"}
+			rows[index] = map[string]any{"id": fmt.Sprintf("%s-%s-%d", category, page, index), "title": "合成分類劇集"}
 		}
-		body, _ := json.Marshal(map[string]any{"data": rows})
-		return sourceFixtureResponse(request, 200, string(body)), nil
+		return sourceFixtureResponse(request, 200, huangguoEdgeReply(map[string]any{"items": rows})), nil
 	})
 	for _, input := range []nativeInput{
 		{Source: sourceHuangguoAI, Category: "ai-duanju", Page: 1},
