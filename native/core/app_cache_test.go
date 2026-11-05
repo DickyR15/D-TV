@@ -39,7 +39,7 @@ func syntheticNativeCover(t *testing.T) ([]byte, []byte) {
 }
 
 func TestNativeCoverDecryptsAndPersistsAcrossRestart(t *testing.T) {
-	plain, encrypted := syntheticNativeCover(t)
+	plain, _ := syntheticNativeCover(t)
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		target := huangguoEdgeTarget(t, r)
