@@ -66,7 +66,13 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
     super.didChangeDependencies();
     final size = MediaQuery.maybeOf(context)?.size ?? Size.zero;
     final landscape = size.width > size.height;
-    if (landscape &&
+    if (shouldMigratePortraitBlurLandscapeDefault(
+          windows: Platform.isWindows,
+          android: Platform.isAndroid,
+          television: AppLayout.isTelevision(context),
+          landscape: landscape,
+          androidMpvConfigured: _androidPlayerEngine != 'exo',
+        ) &&
         _portraitBlurSupported &&
         widget.store.needsPortraitBlurLandscapeDefaultMigration) {
       _portraitBlurBackground = true;
