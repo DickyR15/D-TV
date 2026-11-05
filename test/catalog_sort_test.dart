@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/catalog_sort.dart';
+import 'package:hgtv/catalog_sort_sheet.dart';
 import 'package:hgtv/models.dart';
 
 void main() {
