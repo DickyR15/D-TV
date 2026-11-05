@@ -2451,6 +2451,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  void _exitPlayback() {
+    final override = widget.onBackOverride;
+    if (override != null) {
+      override();
+      return;
+    }
+    if (_panelOpen) return;
+    Navigator.of(context).pop();
+  }
+
   void _handlePlaybackBack() {
     // The TV controls are disabled while the playback-error panel is visible.
     // PopScope still intercepts remote Back, so bypass the disabled controls
@@ -2620,8 +2630,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
     return PopScope(
-      // Android TV Back is consumed by the playback controls, never the video route.
-      canPop: !_television && !fullscreen,
+      // A failed playback must always allow an explicit return to the detail page.
+      // Android TV continues to consume remote Back through its playback controls.
+      canPop: _error != null ? !_television : !_television && !fullscreen,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_television) {
@@ -3002,8 +3013,13 @@ class _PlayerScreenState extends State<PlayerScreen>
                     child: Row(
                       children: [
                         IconButton(
-                          tooltip: '退出全屏',
-                          onPressed: _rotate,
+                          tooltip: _error != null ? '返回上一頁' : '退出全螢幕',
+                          onPressed: _error != null ? _exitPlayback : _rotate,
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.white.withValues(alpha: .18),
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(44, 44),
+                          ),
                           icon: const Icon(Icons.arrow_back_rounded),
                         ),
                         const Spacer(),
