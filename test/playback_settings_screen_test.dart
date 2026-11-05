@@ -190,4 +190,50 @@ void main() {
     );
   });
 
+
+  testWidgets('decoder setting uses auto wording and confirms when it applies', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppLayout(
+          television: false,
+          formFactor: FormFactor.window,
+          child: PlaybackSettingsScreen(
+            store: store,
+            portraitBlurSupported: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('自動'), findsOneWidget);
+    expect(find.text('預設'), findsNothing);
+    expect(find.textContaining('無須重啟 D TV'), findsOneWidget);
+
+    final decoder = find.byKey(const ValueKey('playback-decoder'));
+    await tester.ensureVisible(decoder);
+    await tester.tap(decoder);
+    await tester.pumpAndSettle();
+
+    final softwareOption = find.text('軟解（相容）').last;
+    expect(softwareOption, findsOneWidget);
+    await tester.tap(softwareOption);
+    await tester.pumpAndSettle();
+
+    expect(
+      store.playbackPreferences.televisionDecoder,
+      TelevisionDecoder.software,
+    );
+    expect(
+      find.text('解碼方式已儲存；重新進入播放頁面即可套用，無須重啟 D TV。'),
+      findsOneWidget,
+    );
+  });
+
 }
