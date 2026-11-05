@@ -30,6 +30,14 @@ void main() {
     );
   });
 
+  test('normalizes Taiwan terms across settings and system prompts', () {
+    expect(
+      uiTraditional('默認、用戶、網絡、保存文件、視頻、播放源、文件夾、點擊、搜索、在線'),
+      '預設、使用者、網路、儲存檔案、影片、播放來源、資料夾、點選、搜尋、線上',
+    );
+    expect(uiTraditional('自動識別設備'), '自動偵測裝置');
+  });
+
   test('Traditional input can find a Simplified source title', () {
     const drama = Drama(
       id: 'test-drama',
