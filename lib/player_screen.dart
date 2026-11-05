@@ -131,6 +131,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _framePacingDiagnosticBusy = false;
   final Map<String, int> _framePacingLastCounters = {};
   DateTime? _framePacingLastSampleAt;
+  int _displayFrameRateSyncGeneration = -1;
+  bool _displayFrameRateSyncBusy = false;
   Timer? _loadingOverlayTimer;
   bool _showLoadingOverlay = false;
   Timer? _errorTimer;
@@ -195,6 +197,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       Platform.isAndroid && _television && _player.platform is NativePlayer;
   bool get _televisionRenderingApplies =>
       Platform.isAndroid && _television && _player.platform is NativePlayer;
+  bool get _displaySyncDiagnosticsApplies =>
+      Platform.isWindows || _televisionDecoderApplies;
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
       _pictureInPictureActive || _pictureInPictureRequested;
@@ -465,6 +469,9 @@ class _PlayerScreenState extends State<PlayerScreen>
           _scheduleSystemUi();
         }
         unawaited(_logVideoOutput(parameters));
+        if (_televisionDecoderApplies) {
+          unawaited(_applyAndroidPlaybackDisplayMode());
+        }
       }),
     );
     _saveTimer = Timer.periodic(
@@ -1626,6 +1633,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             : null);
     _preloader.clear();
     final ticket = ++_generation;
+    _displayFrameRateSyncGeneration = -1;
     _enhancement.suspend();
     _seekSequence++;
     _acceptErrors = false;
@@ -1765,6 +1773,25 @@ class _PlayerScreenState extends State<PlayerScreen>
         final setupClock = Stopwatch()..start();
         final platform = _player.platform;
         if (platform is NativePlayer) {
+          final videoSyncMode = playbackVideoSyncModeFor(
+            windows: Platform.isWindows,
+            android: Platform.isAndroid,
+            television: _television,
+          );
+          if (Platform.isWindows) {
+            // The Windows log repeatedly reports file-cache creation failures.
+            // Keep short-form streaming cache in RAM and use display-clock pacing.
+            try {
+              await _setPlaybackProperty(platform, 'cache-on-disk', 'no');
+              DiaryService.add('[MPV] cache_on_disk=no');
+            } catch (error) {
+              DiaryService.add(
+                '[MPV] cache_on_disk_setting_failed=${error.runtimeType}',
+              );
+            }
+            await _setPlaybackProperty(platform, 'video-sync', videoSyncMode);
+            await _setPlaybackProperty(platform, 'framedrop', 'vo');
+          }
           final hwdec = playbackHwdecFor(
             decoder: _televisionDecoder,
             android: Platform.isAndroid,
@@ -1850,15 +1877,10 @@ class _PlayerScreenState extends State<PlayerScreen>
               await _setPlaybackProperty(platform, 'vd-lavc-threads', '4');
             }
             await _setPlaybackProperty(platform, 'vd-lavc-fast', 'yes');
-            await _setPlaybackProperty(platform, 'video-sync', 'audio');
-            // The Onn. 4K Pro log showed VO frame drops but zero decoder
-            // drops while video lagged audio by nearly four seconds.
-            // Drop late TV frames at the decoder stage to reduce GPU work.
-            await _setPlaybackProperty(
-              platform,
-              'framedrop',
-              _television ? 'decoder' : 'vo',
-            );
+            await _setPlaybackProperty(platform, 'video-sync', videoSyncMode);
+            // Decoder-based dropping can create uneven cadence even when
+            // decoding keeps up; let the video output discard late frames.
+            await _setPlaybackProperty(platform, 'framedrop', 'vo');
           }
           await _setPlaybackProperty(
             platform,
@@ -2012,11 +2034,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     _framePacingDiagnosticTimer?.cancel();
     _framePacingLastCounters.clear();
     _framePacingLastSampleAt = null;
-    if (!_televisionDecoderApplies || _player.platform is! NativePlayer) {
+    if (!_displaySyncDiagnosticsApplies || _player.platform is! NativePlayer) {
       return;
     }
     unawaited(_logPlaybackSyncHealth());
     unawaited(_logFramePacingDiagnostics());
+    if (_televisionDecoderApplies) {
+      unawaited(_applyAndroidPlaybackDisplayMode());
+    }
     _syncDiagnosticTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (!_closed && _acceptErrors && _foreground && _player.state.playing) {
         unawaited(_logPlaybackSyncHealth());
@@ -2037,7 +2062,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _logPlaybackSyncHealth() async {
     final platform = _player.platform;
-    if (_closed || !_televisionDecoderApplies || platform is! NativePlayer) {
+    if (_closed || !_displaySyncDiagnosticsApplies || platform is! NativePlayer) {
       return;
     }
     final generation = _generation;
@@ -2107,7 +2132,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         !_acceptErrors ||
         !_foreground ||
         !_player.state.playing ||
-        !_televisionDecoderApplies) {
+        !_displaySyncDiagnosticsApplies) {
       return;
     }
     final platform = _player.platform;
@@ -2154,6 +2179,64 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
     } finally {
       _framePacingDiagnosticBusy = false;
+    }
+  }
+
+  Future<void> _applyAndroidPlaybackDisplayMode() async {
+    if (!_televisionDecoderApplies ||
+        !Platform.isAndroid ||
+        _displayFrameRateSyncBusy ||
+        _displayFrameRateSyncGeneration == _generation) {
+      return;
+    }
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+
+    _displayFrameRateSyncBusy = true;
+    final generation = _generation;
+    try {
+      double? frameRate;
+      for (var attempt = 0; attempt < 4; attempt++) {
+        for (final property in ['container-fps', 'estimated-vf-fps']) {
+          try {
+            final value = await platform.getProperty(property);
+            final parsed = double.tryParse(value.trim());
+            if (parsed != null && parsed.isFinite && parsed >= 20 && parsed <= 120) {
+              frameRate = parsed;
+              break;
+            }
+          } catch (_) {}
+        }
+        if (frameRate != null) break;
+        if (attempt < 3) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+        if (_closed || generation != _generation) return;
+      }
+      if (frameRate == null || _closed || generation != _generation) return;
+
+      final result = await AppDevice.channel
+          .invokeMapMethod<String, dynamic>(
+            'setPlaybackDisplayMode',
+            {'frameRate': frameRate},
+          )
+          .timeout(const Duration(seconds: 2));
+      if (_closed || generation != _generation) return;
+      _displayFrameRateSyncGeneration = generation;
+      final details = result == null
+          ? 'status=unavailable'
+          : result.entries.map((entry) => '${entry.key}=${entry.value}').join(' ');
+      DiaryService.add(
+        '[DisplaySync] generation=$generation source-fps=${frameRate.toStringAsFixed(3)} $details',
+      );
+    } catch (error) {
+      if (!_closed && generation == _generation) {
+        DiaryService.add(
+          '[DisplaySync] generation=$generation error=${error.runtimeType}',
+        );
+      }
+    } finally {
+      _displayFrameRateSyncBusy = false;
     }
   }
 
@@ -2602,6 +2685,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     _loadingOverlayTimer?.cancel();
     _syncDiagnosticTimer?.cancel();
     _framePacingDiagnosticTimer?.cancel();
+    if (Platform.isAndroid && _television) {
+      unawaited(
+        AppDevice.channel
+            .invokeMethod<void>('restorePlaybackDisplayMode')
+            .catchError((Object _) {}),
+      );
+    }
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
     if (_pictureInPictureHandlerInstalled) {

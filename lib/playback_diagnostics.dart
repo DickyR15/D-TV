@@ -101,7 +101,14 @@ String playbackDiagnosticCounterDelta(String currentValue, int? previousValue) {
   return '+${current - previousValue}';
 }
 
-/// Fast, read-only MPV properties sampled while Android TV playback is active.
+/// Select display-clock synchronization where the supplied logs show cadence judder.
+String playbackVideoSyncModeFor({
+  required bool windows,
+  required bool android,
+  required bool television,
+}) => windows || (android && television) ? 'display-resample' : 'audio';
+
+/// Fast, read-only MPV properties sampled during native playback.
 /// The two-second cadence is diagnostic only and does not alter playback.
 const playbackFramePacingSampleInterval = Duration(seconds: 2);
 

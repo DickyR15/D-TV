@@ -5,6 +5,13 @@ import 'package:hgtv/playback_diagnostics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('display resampling is enabled for Windows and Android TV only', () {
+    expect(playbackVideoSyncModeFor(windows: true, android: false, television: false), 'display-resample');
+    expect(playbackVideoSyncModeFor(windows: false, android: true, television: true), 'display-resample');
+    expect(playbackVideoSyncModeFor(windows: false, android: true, television: false), 'audio');
+    expect(playbackVideoSyncModeFor(windows: false, android: false, television: false), 'audio');
+  });
+
   test('localhost session, credentials and query never enter playback logs', () {
     const token = '0123456789abcdef0123456789abcdef0123456789abcdef';
     final safe = playbackDiagnosticUrl(
