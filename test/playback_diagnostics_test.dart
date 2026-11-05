@@ -131,6 +131,32 @@ void main() {
     );
   });
 
+  test('cache creation and unsupported OSC property errors are diagnostic only', () {
+    const samples = [
+      (level: 'error', prefix: 'lavf', text: 'Failed to create file cache.'),
+      (level: 'error', prefix: 'media_kit', text: 'property not found _setProperty(osc, 1)'),
+    ];
+    for (final sample in samples) {
+      expect(
+        playbackDiagnosticLogRelevant(
+          level: sample.level,
+          prefix: sample.prefix,
+          text: sample.text,
+        ),
+        isTrue,
+      );
+      expect(
+        playbackDiagnosticLogRequiresRecovery(
+          level: sample.level,
+          prefix: sample.prefix,
+          text: sample.text,
+        ),
+        isFalse,
+        reason: 'A diagnostic warning alone must not trigger unnecessary source switching.',
+      );
+    }
+  });
+
   test('mpv warning and network keywords are relevant', () {
     expect(
       playbackDiagnosticLogRelevant(
