@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 import 'catalog_sort.dart';
 
+String _formatLoadedCount(int count) => count.toString().replaceAllMapped(
+  RegExp(r'\B(?=(\d{3})+(?!\d))'),
+  (_) => ',',
+);
+
 Future<CatalogView?> chooseCatalogView(
   BuildContext context,
   CatalogView current, {
@@ -32,7 +37,7 @@ Future<CatalogView?> chooseCatalogView(
             if (loadedCount != null) ...[
               const SizedBox(height: 4),
               Text(
-                '目前已載入 $loadedCount 部',
+                '目前已載入 ${_formatLoadedCount(loadedCount)} 部',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -52,7 +57,7 @@ Future<CatalogView?> chooseCatalogView(
             ),
             if (showReleaseFilter) ...[
               const SizedBox(height: 24),
-              const Text('劇集狀態'),
+              const Text('連載狀態'),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -62,7 +67,7 @@ Future<CatalogView?> chooseCatalogView(
                   '': '全部',
                   'ongoing': '連載中',
                   'finished': '已完結',
-                  'unknown': '狀態未知',
+                  'unknown': '未知',
                 }.entries)
                   ChoiceChip(
                     label: Text(entry.value),
@@ -76,7 +81,7 @@ Future<CatalogView?> chooseCatalogView(
             ],
             const SizedBox(height: 16),
             Text(
-              '排序會套用到目前已載入的內容；向下載入更多後會一併重新排序。沒有對應資料的排序或狀態篩選不會顯示。',
+              '排序會套用至目前已載入的內容；繼續載入更多內容後，也會一併重新排序。沒有對應資料的排序或狀態篩選選項將不會顯示。',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 20),
