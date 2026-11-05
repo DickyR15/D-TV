@@ -679,6 +679,17 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.Warning, result.HasMore = entry.Warning, entry.HasMore
 		return result, nil
 	}
+	if query != "" && source == sourceHuangguoAI {
+		items, more, err := d.searchHuangguoAI(ctx, page, query)
+		if err != nil {
+			return result, err
+		}
+		for _, drama := range items {
+			result.Items = append(result.Items, nativeNormalize(drama))
+		}
+		result.HasMore = more
+		return result, nil
+	}
 	if query != "" && source == sourceHuangju {
 		items, more, err := d.fetchHuangjuCatalogPage(ctx, page, "", query)
 		if err != nil {
