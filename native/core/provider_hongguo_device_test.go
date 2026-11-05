@@ -139,6 +139,8 @@ func TestHongguoExplicitRegistrationRejectionIsPausedWithReason(t *testing.T) {
 		requests++
 		return sourceFixtureResponse(request, http.StatusForbidden, `{"message":"device blocked by policy"}`), nil
 	})
+	client := d.hongguoClient()
+	client.state.DeviceID, client.state.InstallID, client.state.Registered = "7", "8", false
 	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "HTTP 403") {
 		t.Fatalf("missing explicit rejection reason: %v", err)
 	}
