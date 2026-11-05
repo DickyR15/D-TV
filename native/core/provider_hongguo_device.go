@@ -9,28 +9,16 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 )
+
+type hongguoRegisterRejection struct{ error }
 
 const (
 	hongguoDeviceRegisterURL   = "https://log.snssdk.com/service/2/device_register/"
 	hongguoDeviceRotations     = 3
 	hongguoDeviceRegisterPause = 10 * time.Minute
 )
-
-func hongguoRegistrationExplicitlyRejected(err error) bool {
-	if err == nil { return false }
-	var response *http.Response
-	if errors.As(err, &response) {
-		return response.StatusCode == http.StatusForbidden || response.StatusCode == http.StatusUnauthorized
-	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "device") &&
-		(strings.Contains(message, "reject") || strings.Contains(message, "denied") ||
-		 strings.Contains(message, "blocked") || strings.Contains(message, "拒绝") ||
-		 strings.Contains(message, "拒絕"))
-}
 
 func (downloader *Downloader) ensureHongguoDevice(ctx context.Context, rejected string) error {
 	client := downloader.hongguoClient()
@@ -46,18 +34,25 @@ func (downloader *Downloader) ensureHongguoDevice(ctx context.Context, rejected 
 	// ten-minute registration lockout. Only a definite registration denial
 	// is cooled down, preserving the server's actual rejection reason.
 	if time.Now().Before(client.registerPausedUntil) {
-		return errors.New("紅果設備註冊遭拒絕，請檢查網路設定後重試")
+		if client.registerPauseErr != nil {
+			return fmt.Errorf("紅果設備註冊暫不可用：%w", client.registerPauseErr)
+		}
+		return errors.New("紅果設備註冊暫不可用，請檢查網路設定後重試")
 	}
 	deviceID, installID, err := downloader.registerHongguoDevice(ctx)
 	if err != nil {
-		if ctx.Err() == nil && hongguoRegistrationExplicitlyRejected(err) {
+		var rejection hongguoRegisterRejection
+		if ctx.Err() == nil && errors.As(err, &rejection) {
 			client.registerPausedUntil = time.Now().Add(hongguoDeviceRegisterPause)
-			return fmt.Errorf("紅果設備註冊遭拒絕：%w", err)
+			client.registerPauseErr = fmt.Errorf("紅果設備註冊遭拒絕：%w", err)
+			return client.registerPauseErr
 		}
 		client.registerPausedUntil = time.Time{}
+		client.registerPauseErr = nil
 		return err
 	}
 	client.registerPausedUntil = time.Time{}
+	client.registerPauseErr = nil
 	client.mu.Lock()
 	client.state.DeviceID, client.state.InstallID, client.state.Registered = deviceID, installID, true
 	client.mu.Unlock()
@@ -103,17 +98,17 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 		return "", "", err
 	}
 	if response.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("红果设备注册 HTTP %d", response.StatusCode)
+		return "", "", hongguoRegisterRejection{fmt.Errorf("红果设备注册 HTTP %d", response.StatusCode)}
 	}
 	var result map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.UseNumber()
 	if err := decoder.Decode(&result); err != nil {
-		return "", "", errors.New("红果设备注册返回格式异常")
+		return "", "", hongguoRegisterRejection{errors.New("红果设备注册返回格式异常")}
 	}
 	deviceID, installID := mapString(result, "device_id_str", "device_id"), mapString(result, "install_id_str", "install_id")
 	if !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0" {
-		return "", "", errors.New("红果设备注册未返回设备号")
+		return "", "", hongguoRegisterRejection{errors.New("红果设备注册未返回设备号")}
 	}
 	return deviceID, installID, nil
 }
