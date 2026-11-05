@@ -133,6 +133,7 @@ func TestHongguoTransientRegistrationFailureCanRetryImmediately(t *testing.T) {
 	}
 }
 
+// Rate limits and upstream 5xx responses are transient, not evidence of a device ban.
 func TestHongguoTemporaryHTTPRegistrationFailuresCanRetryImmediately(t *testing.T) {
 	for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
