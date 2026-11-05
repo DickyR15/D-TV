@@ -131,6 +131,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? _saveTimer;
   Timer? _healthTimer;
   Timer? _syncDiagnosticTimer;
+  Timer? _framePacingDiagnosticTimer;
+  bool _framePacingDiagnosticBusy = false;
+  final Map<String, int> _framePacingLastCounters = {};
+  DateTime? _framePacingLastSampleAt;
   Timer? _loadingOverlayTimer;
   bool _showLoadingOverlay = false;
   Timer? _errorTimer;
@@ -1673,6 +1677,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     _acceptErrors = false;
     _syncDiagnosticTimer?.cancel();
     _syncDiagnosticTimer = null;
+    _framePacingDiagnosticTimer?.cancel();
+    _framePacingDiagnosticTimer = null;
+    _framePacingLastCounters.clear();
+    _framePacingLastSampleAt = null;
     _pendingError = false;
     _errorTimer?.cancel();
     _loadingOverlayTimer?.cancel();
@@ -2049,15 +2057,30 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _startSyncDiagnostics() {
     _syncDiagnosticTimer?.cancel();
+    _framePacingDiagnosticTimer?.cancel();
+    _framePacingLastCounters.clear();
+    _framePacingLastSampleAt = null;
     if (!_televisionDecoderApplies || _player.platform is! NativePlayer) {
       return;
     }
     unawaited(_logPlaybackSyncHealth());
+    unawaited(_logFramePacingDiagnostics());
     _syncDiagnosticTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (!_closed && _acceptErrors && _foreground && _player.state.playing) {
         unawaited(_logPlaybackSyncHealth());
       }
     });
+    // Sample cumulative frame counters and timing properties frequently enough
+    // to expose short stalls that a 15-second health snapshot can miss.
+    // This only reads MPV properties; it does not write player settings.
+    _framePacingDiagnosticTimer = Timer.periodic(
+      playbackFramePacingSampleInterval,
+      (_) {
+        if (!_closed && _acceptErrors && _foreground && _player.state.playing) {
+          unawaited(_logFramePacingDiagnostics());
+        }
+      },
+    );
   }
 
   Future<void> _logPlaybackSyncHealth() async {
@@ -2065,6 +2088,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (_closed || !_televisionDecoderApplies || platform is! NativePlayer) {
       return;
     }
+    final generation = _generation;
     const properties = <String>[
       'avsync',
       'total-avsync-change',
@@ -2080,6 +2104,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       'video-latency-hacks',
       'demuxer-readahead-secs',
       'container-fps',
+      'estimated-vf-fps',
+      'display-fps',
+      'estimated-display-fps',
+      'display-sync-active',
+      'vsync-ratio',
+      'vo-delayed-frame-count',
+      'demuxer-cache-duration',
+      'paused-for-cache',
     ];
     final values = <String>[];
     for (final property in properties) {
@@ -2089,12 +2121,88 @@ class _PlayerScreenState extends State<PlayerScreen>
       } catch (_) {
         values.add('$property=n/a');
       }
+      if (_closed || generation != _generation) return;
     }
-    if (_closed) return;
+    final displaySummary = await _readAndroidDisplaySummary();
+    if (_closed || generation != _generation) return;
     DiaryService.add(
-      '[Sync] generation=$_generation decoder=${_televisionDecoder.name} '
-      '${values.join(' ')}',
+      '[Sync] generation=$generation decoder=${_televisionDecoder.name} '
+      '${values.join(' ')} $displaySummary',
     );
+  }
+
+  Future<String> _readAndroidDisplaySummary() async {
+    if (!Platform.isAndroid) return 'android-display=n/a';
+    try {
+      final info = await AppDevice.channel
+          .invokeMapMethod<String, dynamic>('displayInfo')
+          .timeout(const Duration(milliseconds: 750));
+      if (info == null) return 'android-display=n/a';
+      final refresh = info['refreshRateHz'] ?? 'n/a';
+      final mode = info['modeId'] ?? 'n/a';
+      final width = info['width'] ?? 'n/a';
+      final height = info['height'] ?? 'n/a';
+      return 'android-display-refresh-hz=$refresh '
+          'android-display-mode=$mode android-display-size=${width}x$height';
+    } catch (_) {
+      return 'android-display=n/a';
+    }
+  }
+
+  Future<void> _logFramePacingDiagnostics() async {
+    if (_framePacingDiagnosticBusy ||
+        _closed ||
+        !_acceptErrors ||
+        !_foreground ||
+        !_player.state.playing ||
+        !_televisionDecoderApplies) {
+      return;
+    }
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+
+    _framePacingDiagnosticBusy = true;
+    final generation = _generation;
+    final sampledAt = DateTime.now();
+    final previousAt = _framePacingLastSampleAt;
+    _framePacingLastSampleAt = sampledAt;
+    final intervalMs = previousAt == null
+        ? 0
+        : sampledAt.difference(previousAt).inMilliseconds;
+    final values = <String>[];
+    try {
+      for (final property in playbackFramePacingProperties) {
+        String value;
+        try {
+          value = await platform.getProperty(property);
+        } catch (_) {
+          value = 'n/a';
+        }
+        if (_closed || generation != _generation) return;
+        values.add('$property=$value');
+        if (playbackFramePacingCounterProperties.contains(property)) {
+          final previous = _framePacingLastCounters[property];
+          values.add(
+            '$property-delta=${playbackDiagnosticCounterDelta(value, previous)}',
+          );
+          final current = int.tryParse(value.trim());
+          if (current != null) _framePacingLastCounters[property] = current;
+        }
+      }
+      if (_closed || generation != _generation) return;
+      DiaryService.add(
+        '[FramePacing] generation=$generation intervalMs=$intervalMs '
+        '${values.join(' ')}',
+      );
+    } catch (error) {
+      if (!_closed && generation == _generation) {
+        DiaryService.add(
+          '[FramePacing] generation=$generation sample_error=${error.runtimeType}',
+        );
+      }
+    } finally {
+      _framePacingDiagnosticBusy = false;
+    }
   }
 
   Future<void> _logVideoOutput(VideoParams parameters) async {
@@ -2574,6 +2682,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _healthTimer?.cancel();
     _loadingOverlayTimer?.cancel();
     _syncDiagnosticTimer?.cancel();
+    _framePacingDiagnosticTimer?.cancel();
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
     if (_pictureInPictureHandlerInstalled) {
