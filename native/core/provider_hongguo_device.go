@@ -126,7 +126,17 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 		return "", "", err
 	}
 	if response.StatusCode != http.StatusOK {
-		return "", "", hongguoRegisterRejection{fmt.Errorf("红果设备注册 HTTP %d", response.StatusCode)}
+		statusErr := fmt.Errorf("紅果設備註冊 HTTP %d", response.StatusCode)
+		// 只有明確的客戶端拒絕才進入 10 分鐘冷卻；逾時、限流及伺服器錯誤都應允許下一次請求立即重試。
+		if response.StatusCode == http.StatusUnauthorized ||
+			response.StatusCode == http.StatusForbidden ||
+			(response.StatusCode >= 400 && response.StatusCode < 500 &&
+				response.StatusCode != http.StatusRequestTimeout &&
+				response.StatusCode != http.StatusTooEarly &&
+				response.StatusCode != http.StatusTooManyRequests) {
+			return "", "", hongguoRegisterRejection{statusErr}
+		}
+		return "", "", statusErr
 	}
 	var result map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(content))
