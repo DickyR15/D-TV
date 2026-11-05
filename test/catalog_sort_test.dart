@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/catalog_sort.dart';
 import 'package:hgtv/models.dart';
@@ -168,6 +169,37 @@ void main() {
       expect(effective.sort, CatalogSort.season);
       expect(effective.release, 'ongoing');
     });
+  });
+
+
+  testWidgets('sort and filter confirmation button uses Taiwan wording', (
+    tester,
+  ) async {
+    CatalogView? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                result = await chooseCatalogView(context, const CatalogView());
+              },
+              child: const Text('開啟排序與篩選'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('開啟排序與篩選'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('套用'), findsOneWidget);
+    expect(find.text('應用'), findsNothing);
+
+    await tester.tap(find.text('套用'));
+    await tester.pumpAndSettle();
+    expect(result, isA<CatalogView>());
   });
 
 }
