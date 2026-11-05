@@ -277,7 +277,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   ios-ipa:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
+    if: (github.event_name == 'pull_request' && github.event.pull_request.number == 29) || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
     name: iOS device IPA and simulator build
     needs: core-validation
     runs-on: macos-26
