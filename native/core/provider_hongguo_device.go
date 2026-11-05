@@ -18,6 +18,19 @@ const (
 	hongguoDeviceRegisterPause = 10 * time.Minute
 )
 
+func hongguoRegistrationExplicitlyRejected(err error) bool {
+	if err == nil { return false }
+	var response *http.Response
+	if errors.As(err, &response) {
+		return response.StatusCode == http.StatusForbidden || response.StatusCode == http.StatusUnauthorized
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "device") &&
+		(strings.Contains(message, "reject") || strings.Contains(message, "denied") ||
+		 strings.Contains(message, "blocked") || strings.Contains(message, "拒绝") ||
+		 strings.Contains(message, "拒絕"))
+}
+
 func (downloader *Downloader) ensureHongguoDevice(ctx context.Context, rejected string) error {
 	client := downloader.hongguoClient()
 	client.deviceMu.Lock()
@@ -28,16 +41,22 @@ func (downloader *Downloader) ensureHongguoDevice(ctx context.Context, rejected 
 	if rejected == "" && registered || rejected != "" && rejected != current {
 		return nil
 	}
+	// Network failures and timeouts are transient: never cache them as a
+	// ten-minute registration lockout. Only a definite registration denial
+	// is cooled down, preserving the server's actual rejection reason.
 	if time.Now().Before(client.registerPausedUntil) {
-		return errors.New("红果设备注册暂不可用")
+		return errors.New("紅果設備註冊遭拒絕，請檢查網路設定後重試")
 	}
 	deviceID, installID, err := downloader.registerHongguoDevice(ctx)
 	if err != nil {
-		if ctx.Err() == nil {
+		if ctx.Err() == nil && hongguoRegistrationExplicitlyRejected(err) {
 			client.registerPausedUntil = time.Now().Add(hongguoDeviceRegisterPause)
+			return fmt.Errorf("紅果設備註冊遭拒絕：%w", err)
 		}
+		client.registerPausedUntil = time.Time{}
 		return err
 	}
+	client.registerPausedUntil = time.Time{}
 	client.mu.Lock()
 	client.state.DeviceID, client.state.InstallID, client.state.Registered = deviceID, installID, true
 	client.mu.Unlock()
