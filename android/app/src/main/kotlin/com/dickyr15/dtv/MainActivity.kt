@@ -36,8 +36,6 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.abs
-import kotlin.math.roundToInt
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.FlutterEngine
@@ -62,8 +60,6 @@ open class MainActivity : FlutterActivity() {
     private var pictureInPicture: PlayerPictureInPicture? = null
     private var pictureInPictureReceiver: BroadcastReceiver? = null
     private var televisionMode = false
-    private var originalPlaybackPreferredDisplayModeId: Int? = null
-    private var appliedPlaybackPreferredDisplayModeId: Int? = null
     private var pendingExportPlaybackLogText: String? = null
     private var pendingExportPlaybackLogPrefix: String = "DTV-playback-log"
     private var pendingExportPlaybackLogResult: MethodChannel.Result? = null
@@ -84,93 +80,6 @@ open class MainActivity : FlutterActivity() {
             "width" to display.width,
             "height" to display.height
         )
-    }
-
-    @Suppress("DEPRECATION")
-    private fun setPlaybackDisplayMode(frameRate: Double): Map<String, Any> {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            return mapOf("status" to "unsupported_api")
-        }
-        if (!televisionMode) return mapOf("status" to "not_television")
-        if (!frameRate.isFinite() || frameRate < 20.0 || frameRate > 120.0) {
-            return mapOf("status" to "invalid_frame_rate")
-        }
-
-        val display = windowManager.defaultDisplay
-        val currentMode = display.mode
-        val supportedModes = display.supportedModes
-        if (originalPlaybackPreferredDisplayModeId == null) {
-            originalPlaybackPreferredDisplayModeId = window.attributes.preferredDisplayModeId
-        }
-
-        data class CompatibleMode(
-            val mode: android.view.Display.Mode,
-            val multiple: Int,
-            val error: Double
-        )
-
-        val tolerance = maxOf(0.08, frameRate * 0.003)
-        val candidates = supportedModes.mapNotNull { mode ->
-            val multiple = (mode.refreshRate.toDouble() / frameRate).roundToInt()
-            if (multiple !in 1..6) return@mapNotNull null
-            val error = abs(mode.refreshRate.toDouble() - frameRate * multiple)
-            if (error > tolerance) return@mapNotNull null
-            CompatibleMode(mode, multiple, error)
-        }
-        val target = candidates.sortedWith(
-            compareBy<CompatibleMode> {
-                if (it.mode.physicalWidth == currentMode.physicalWidth &&
-                    it.mode.physicalHeight == currentMode.physicalHeight
-                ) 0 else 1
-            }.thenBy { it.mode.refreshRate }
-                .thenBy { it.error }
-        ).firstOrNull()
-
-        if (target == null) {
-            val restored = restorePlaybackDisplayMode()
-            return mapOf(
-                "status" to "no_cadence_match",
-                "sourceFps" to frameRate,
-                "currentModeId" to currentMode.modeId,
-                "currentRefreshRateHz" to currentMode.refreshRate.toDouble(),
-                "supportedModeCount" to supportedModes.size,
-                "restoreStatus" to (restored["status"] ?: "unknown")
-            )
-        }
-
-        val attributes = window.attributes
-        if (attributes.preferredDisplayModeId != target.mode.modeId) {
-            attributes.preferredDisplayModeId = target.mode.modeId
-            window.attributes = attributes
-        }
-        appliedPlaybackPreferredDisplayModeId = target.mode.modeId
-        return mapOf(
-            "status" to if (target.mode.modeId == currentMode.modeId) "already_matching" else "mode_requested",
-            "sourceFps" to frameRate,
-            "modeId" to target.mode.modeId,
-            "targetRefreshRateHz" to target.mode.refreshRate.toDouble(),
-            "multiple" to target.multiple,
-            "currentModeId" to currentMode.modeId,
-            "currentRefreshRateHz" to currentMode.refreshRate.toDouble()
-        )
-    }
-
-    @Suppress("DEPRECATION")
-    private fun restorePlaybackDisplayMode(): Map<String, Any> {
-        val originalModeId = originalPlaybackPreferredDisplayModeId
-            ?: return mapOf("status" to "unchanged")
-        return runCatching {
-            val attributes = window.attributes
-            if (attributes.preferredDisplayModeId != originalModeId) {
-                attributes.preferredDisplayModeId = originalModeId
-                window.attributes = attributes
-            }
-            originalPlaybackPreferredDisplayModeId = null
-            appliedPlaybackPreferredDisplayModeId = null
-            mapOf("status" to "restored", "modeId" to originalModeId)
-        }.getOrElse { error ->
-            mapOf("status" to "restore_failed", "error" to (error.message ?: error.javaClass.simpleName))
-        }
     }
 
     @Suppress("DEPRECATION")
@@ -641,17 +550,6 @@ open class MainActivity : FlutterActivity() {
                         }
                         "displayInfo" -> {
                             result.success(displayDiagnosticInfo())
-                        }
-                        "setPlaybackDisplayMode" -> {
-                            val frameRate = call.argument<Double>("frameRate")
-                            if (frameRate == null) {
-                                result.error("invalid_frame_rate", "缺少影片影格率", null)
-                            } else {
-                                result.success(setPlaybackDisplayMode(frameRate))
-                            }
-                        }
-                        "restorePlaybackDisplayMode" -> {
-                            result.success(restorePlaybackDisplayMode())
                         }
                         "openExternalUrl" -> {
                             val rawUrl = call.argument<String>("url")
