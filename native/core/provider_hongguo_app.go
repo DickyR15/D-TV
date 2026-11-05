@@ -87,9 +87,6 @@ func (downloader *Downloader) restoreHongguoCatalog(state *hongguoCatalogState) 
 		return
 	}
 	cloned := cloneHongguoCatalogState(state)
-	if !hongguoNumericID.MatchString(cloned.HelperDeviceID) || !hongguoNumericID.MatchString(cloned.HelperInstallID) {
-		cloned.HelperDeviceID, cloned.HelperInstallID, cloned.HelperRegistered = newHongguoDeviceID(), newHongguoDeviceID(), false
-	}
 	for name, cursor := range cloned.Feeds {
 		known := false
 		for _, genre := range hongguoAppGenres {
