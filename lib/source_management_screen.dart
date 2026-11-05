@@ -20,6 +20,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   final _password = TextEditingController();
   bool _unlocked = false;
   bool _busy = false;
+  final Set<String> _busySourceIds = <String>{};
   String? _error;
 
   @override
@@ -61,9 +62,9 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   }
 
   Future<void> _toggle(SourceSite source, bool enabled) async {
-    if (_busy) return;
+    if (_busy || _busySourceIds.contains(source.id)) return;
     setState(() {
-      _busy = true;
+      _busySourceIds.add(source.id);
       _error = null;
     });
     try {
@@ -71,7 +72,9 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busySourceIds.remove(source.id));
+      }
     }
   }
 
@@ -90,7 +93,9 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     title: Text(uiTraditional(source.name)),
     subtitle: Text(uiTraditional(source.description)),
     value: widget.store.sourceEnabled(source.id),
-    onChanged: _busy ? null : (value) => _toggle(source, value),
+    onChanged: _busy || _busySourceIds.contains(source.id)
+        ? null
+        : (value) => _toggle(source, value),
   );
 
   Widget _passwordGate() {

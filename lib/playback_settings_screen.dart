@@ -194,11 +194,13 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
         ),
         actions: [
           TextButton(
+            autofocus: true,
+            key: const ValueKey('compatible-rendering-cancel'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('取消'),
           ),
           FilledButton(
-            autofocus: true,
+            key: const ValueKey('compatible-rendering-restart'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('立即重啟'),
           ),

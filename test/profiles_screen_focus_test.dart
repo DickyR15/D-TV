@@ -149,4 +149,29 @@ void main() {
       store.dispose();
     },
   );
+
+  testWidgets(
+    'new user editor hides advanced source permissions before admin password setup',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = LocalStore(await SharedPreferences.getInstance());
+      await tester.pumpWidget(
+        MaterialApp(home: ProfilesScreen(store: store)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('新增使用者'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('profile-source-hongguo')), findsOneWidget);
+      expect(find.byKey(const ValueKey('profile-source-hanxiaoquan')), findsOneWidget);
+      expect(find.byKey(const ValueKey('profile-source-duoduo')), findsOneWidget);
+      expect(find.byKey(const ValueKey('profile-source-huangdou')), findsNothing);
+      expect(find.textContaining('設定管理員密碼後'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      store.dispose();
+    },
+  );
+
 }

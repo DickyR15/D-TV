@@ -38,6 +38,7 @@ class PlayerControls extends StatefulWidget {
     this.pictureInPictureTooltip = '畫中畫',
     this.enhancement,
     this.playbackGeneration = 0,
+    this.onVolumeChanged,
   });
 
   final Player player;
@@ -65,6 +66,7 @@ class PlayerControls extends StatefulWidget {
   final String pictureInPictureTooltip;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
+  final ValueChanged<double>? onVolumeChanged;
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -864,6 +866,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                               final next = volume == 0 ? 100.0 : 0.0;
                               setState(() => volume = next);
                               unawaited(widget.player.setVolume(next));
+                              widget.onVolumeChanged?.call(next);
                             },
                             icon: Icon(
                               volume == 0
@@ -896,6 +899,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                                   onChanged: (value) {
                                     setState(() => volume = value);
                                     unawaited(widget.player.setVolume(value));
+                                    widget.onVolumeChanged?.call(value);
                                   },
                                 )),
                               ),

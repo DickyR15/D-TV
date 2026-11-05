@@ -2941,6 +2941,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             onBack: _back,
             onFocusSurface: _playerFocus.requestFocus,
             onSeek: _seekTo,
+            onVolumeChanged: Platform.isWindows ? _rememberNonZeroVolume : null,
             speed: _speed,
             qualityLabel: _qualityLabel,
             onEpisodes: () => _openPanel(PlayerMenuSection.episodes),

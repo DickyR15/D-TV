@@ -160,38 +160,63 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
   Future<void> _rename() async {
     final epoch = link.store.profileEpoch;
     final name = TextEditingController(text: link.deviceName);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('裝置名稱'),
-        content: TextField(
-          controller: name,
-          maxLength: 60,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: '在其他裝置上顯示的名稱'),
-          onSubmitted: (_) => Navigator.pop(context, name.text),
+    final cancelFocus = FocusNode(debugLabel: 'lan-rename-cancel');
+    final saveFocus = FocusNode(debugLabel: 'lan-rename-save');
+    String? value;
+    try {
+      value = await showDialog<String>(
+        context: context,
+        builder: (context) => FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: AlertDialog(
+            title: const Text('裝置名稱'),
+            content: FocusTraversalOrder(
+              order: const NumericFocusOrder(1),
+              child: TextField(
+                controller: name,
+                maxLength: 60,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(labelText: '在其他裝置上顯示的名稱'),
+                onSubmitted: (_) => Navigator.pop(context, name.text),
+              ),
+            ),
+            actions: [
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(2),
+                child: TextButton(
+                  key: const ValueKey('lan-rename-cancel'),
+                  focusNode: cancelFocus,
+                  autofocus: AppLayout.isTelevision(context),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+              ),
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(3),
+                child: FilledButton(
+                  key: const ValueKey('lan-rename-save'),
+                  focusNode: saveFocus,
+                  onPressed: () => Navigator.pop(context, name.text),
+                  child: const Text('儲存'),
+                ),
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, name.text),
-            child: const Text('儲存'),
-          ),
-        ],
-      ),
-    );
-    name.dispose();
+      );
+    } finally {
+      name.dispose();
+      cancelFocus.dispose();
+      saveFocus.dispose();
+    }
     if (mounted &&
         value != null &&
         epoch == link.store.profileEpoch &&
         !link.store.locked) {
-      await _perform(() => link.rename(value));
+      await _perform(() => link.rename(value!));
     }
   }
-
   Future<void> _cancel() async {
     if (_cancelling) return;
     setState(() => _cancelling = true);
