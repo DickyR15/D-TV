@@ -10,7 +10,7 @@ import 'portrait_blur_policy.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
-  defaultValue: 'mpv_embed',
+  defaultValue: 'exo',
 );
 
 class PlaybackSettingsScreen extends StatefulWidget {
@@ -39,7 +39,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       supportsPortraitBlurBackground(
         android: Platform.isAndroid,
         windows: Platform.isWindows,
-        androidMpvConfigured: _androidPlayerEngine != 'exo',
+        androidMpvConfigured:
+            _androidPlayerEngine != 'exo' || !AppLayout.isTelevisionDevice(context),
       );
   late bool _preloadEnabled;
   late bool _autoAdvance;
@@ -296,13 +297,17 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                   child: Text('軟解（相容）'),
                 ),
               ],
-              onChanged: Platform.isAndroid && _androidPlayerEngine == 'exo'
+              onChanged: Platform.isAndroid &&
+                      AppLayout.isTelevisionDevice(context) &&
+                      _androidPlayerEngine == 'exo'
                   ? null
                   : (value) {
                       if (value != null) _updateDecoder(value);
                     },
             ),
-            if (Platform.isAndroid && _androidPlayerEngine == 'exo')
+            if (Platform.isAndroid &&
+                AppLayout.isTelevisionDevice(context) &&
+                _androidPlayerEngine == 'exo')
               const Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text('目前使用 ExoPlayer，解碼方式由 Android 管理，無法手動切換。'),
