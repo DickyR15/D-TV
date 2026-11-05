@@ -190,16 +190,6 @@ func huangguoAIChapter(base, sourceID string, episode int, title string) Chapter
 		Title: firstNonEmpty(title, fmt.Sprintf("第%d集", episode)), PageURL: pageURL, CurrentEpisode: rawEpisode(episode)}
 }
 
-func chapterEpisodeNumber(chapter Chapter, fallback int) int {
-	if episode, err := strconv.Atoi(chapter.EpisodeString(fallback)); err == nil && episode > 0 {
-		return episode
-	}
-	if fallback > 0 {
-		return fallback
-	}
-	return 1
-}
-
 func (d *Downloader) fetchHuangguoAIPlayURL(ctx context.Context, sourceID string, episode int) (string, error) {
 	if !rankingSourceID.MatchString(sourceID) || episode < 1 {
 		return "", errors.New("黃果集數無效")

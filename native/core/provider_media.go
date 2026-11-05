@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"net/url"
