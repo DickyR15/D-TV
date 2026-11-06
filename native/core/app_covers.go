@@ -29,7 +29,7 @@ const nativeCoverCacheEntries = 2000
 const nativeCoverTTL = 30 * 24 * time.Hour
 
 const nativeCoverDuoduoFetchBudget = 12 * time.Second
-const nativeCoverDuoduoFallbackBudget = 10 * time.Second
+const nativeCoverDuoduoFallbackBudget = 12 * time.Second
 
 func nativeCoverFetchTimeout(source string) time.Duration {
 	if source == sourceDuoduo {
@@ -44,6 +44,17 @@ func nativeCoverAlternativeTimeout(source, cacheClass string) time.Duration {
 	}
 	return 0
 }
+func nativeCoverAttemptTimeout(source, address string) time.Duration {
+	if source != sourceDuoduo {
+		return 12 * time.Second
+	}
+	parsed, err := url.Parse(strings.TrimSpace(address))
+	if err == nil && strings.EqualFold(parsed.Hostname(), "wsrv.nl") {
+		return 9 * time.Second
+	}
+	return 2500 * time.Millisecond
+}
+
 const nativeCoverRepairConcurrency = 4
 
 type nativeCoverEntry struct {
@@ -222,7 +233,24 @@ func duoduoPosterProxyURL(address string) string {
 	}
 	parsed.Fragment = ""
 	target := strings.TrimPrefix(parsed.String(), parsed.Scheme+"://")
-	return "https://images.weserv.nl/?url=" + url.QueryEscape(target)
+
+	// wsrv.nl resizes and caches images behind Cloudflare's global network.
+	// Keep a portrait-safe bounding box and return WebP at poster-card size:
+	// this avoids downloading multi-megapixel originals just to render a 440px
+	// catalogue tile. The original provider URL remains the first attempt.
+	proxy, err := url.Parse("https://wsrv.nl/")
+	if err != nil {
+		return ""
+	}
+	query := proxy.Query()
+	query.Set("url", target)
+	query.Set("w", "440")
+	query.Set("h", "660")
+	query.Set("fit", "inside")
+	query.Set("output", "webp")
+	query.Set("q", "80")
+	proxy.RawQuery = query.Encode()
+	return proxy.String()
 }
 
 func duoduoPosterAttemptsForDrama(address string, downloader *Downloader, drama nativeDrama) []duoduoPosterAttempt {
@@ -271,17 +299,17 @@ func duoduoPosterAttempts(address, referer string) []duoduoPosterAttempt {
 		})
 	}
 	add(address, referer)
+	// Give the original poster a short direct attempt, then try the globally
+	// cached, resized WebP variant before slower legacy Referer permutations.
+	if proxyURL := duoduoPosterProxyURL(address); proxyURL != "" {
+		add(proxyURL, "https://wsrv.nl/")
+	}
 	if sourceURL := duoduoBaiduPosterSourceURL(address); sourceURL != "" {
 		add(address, "https://www.baidu.com/")
 		add(sourceURL, "https://www.bilibili.com/")
 		add(sourceURL, "https://www.baidu.com/")
-	}
-	if proxyURL := duoduoPosterProxyURL(address); proxyURL != "" {
-		add(proxyURL, "https://images.weserv.nl/")
-	}
-	if sourceURL := duoduoBaiduPosterSourceURL(address); sourceURL != "" {
 		if proxyURL := duoduoPosterProxyURL(sourceURL); proxyURL != "" {
-			add(proxyURL, "https://images.weserv.nl/")
+			add(proxyURL, "https://wsrv.nl/")
 		}
 	}
 	return attempts
