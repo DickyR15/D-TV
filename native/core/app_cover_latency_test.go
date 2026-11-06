@@ -140,3 +140,59 @@ func TestDuoduoPosterAttemptsReserveTimeForResizedProxy(t *testing.T) {
 		t.Fatalf("other source timeout = %s, want unchanged 12s", got)
 	}
 }
+
+
+func TestNativeCoverExternalFallbackCacheSurvivesCacheRecreation(t *testing.T) {
+	fixture, err := os.ReadFile("../../test/fixtures/cover.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const fallbackURL = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/persisted.jpg"
+	const referer = "https://movie.douban.com/"
+	var requests int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requests++
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+			Body: io.NopCloser(bytes.NewReader(fixture)),
+			ContentLength: int64(len(fixture)),
+			Request: request,
+		}, nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	directory := t.TempDir()
+	drama := nativeDrama{
+		ID: "duoduo:101901", Source: sourceDuoduo, Title: "持久快取測試",
+		Category: "電影", Cover: "https://broken-source.example.test/poster.jpg",
+		FallbackCover: fallbackURL,
+	}
+
+	firstCache := newNativeCoverCache(directory, downloader)
+	firstPath, err := firstCache.loadAlternativeAddress(
+		context.Background(), drama, fallbackURL, referer, "external", false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 1 {
+		t.Fatalf("initial fallback requests = %d, want 1", requests)
+	}
+
+	// Simulate a new app process: a fresh cache instance must discover the
+	// already verified .img file from disk and avoid another network request.
+	restartedCache := newNativeCoverCache(directory, downloader)
+	restartedPath, err := restartedCache.loadAlternativeAddress(
+		context.Background(), drama, fallbackURL, referer, "external", false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restartedPath != firstPath {
+		t.Fatalf("restarted cache path = %q, want persisted path %q", restartedPath, firstPath)
+	}
+	if requests != 1 {
+		t.Fatalf("restarted cache performed %d total requests, want the original single request", requests)
+	}
+}
