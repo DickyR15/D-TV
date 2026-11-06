@@ -392,6 +392,10 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	transport.ResponseHeaderTimeout = 20 * time.Second
 	transport.Proxy = router.proxy
 	cdn := newCDNTransport(transport, newDNSResolver(transport))
+	// Media hosts can be redirected to a DNS-RPZ landing IP by the system
+	// resolver. Retry those TLS trust failures via public DoH without weakening
+	// certificate verification; non-media API behavior remains unchanged.
+	cdn.fallbackOnUnknownAuthority = true
 	// Keep the normal CDN-aware transport for every supported first-party
 	// provider route. The retired third-party Hongguo playback host no longer
 	// needs a dedicated HTTP/1.1 ALPN fallback.
@@ -412,6 +416,7 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	}
 	streamTransport := newNativeStreamTransport(transport)
 	streamCDN := newCDNTransport(streamTransport, newDNSResolver(streamTransport))
+	streamCDN.fallbackOnUnknownAuthority = true
 	d.streamClient = &http.Client{
 		Transport: newHuangguoBrowserTransport(streamCDN, d),
 		Timeout: 45 * time.Second,
