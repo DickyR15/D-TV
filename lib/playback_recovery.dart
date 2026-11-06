@@ -35,13 +35,17 @@ class PlaybackRecovery {
   PlaybackRecoveryAction next(
     PlaybackPlan plan, {
     bool allowPlayerRecreate = true,
+    int? alternativeAttemptLimit,
+    Duration? recoveryDurationLimit,
   }) {
     final now = _now();
     _startedAt ??= now;
+    final attemptLimit = alternativeAttemptLimit ?? maxAlternativeAttempts;
+    final durationLimit = recoveryDurationLimit ?? maxRecoveryDuration;
     // A route may take up to the player-open timeout to fail. Bound total
     // automatic recovery as well as individual requests so the spinner is
     // eventually replaced by a retryable error instead of cycling forever.
-    if (now.difference(_startedAt!) >= maxRecoveryDuration) {
+    if (now.difference(_startedAt!) >= durationLimit) {
       return PlaybackRecoveryAction.stop;
     }
     if (plan.hasAlternative &&
