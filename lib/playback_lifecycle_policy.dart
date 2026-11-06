@@ -8,3 +8,10 @@ bool playbackLifecycleShouldPause(AppLifecycleState state) =>
     state == AppLifecycleState.paused ||
     state == AppLifecycleState.hidden ||
     state == AppLifecycleState.detached;
+
+/// Back must bypass disabled playback controls while a stream is loading or
+/// an error panel is shown, so a failed recovery can never trap the viewer.
+bool playbackBackShouldExitImmediately({
+  required bool loading,
+  required bool hasError,
+}) => loading || hasError;
