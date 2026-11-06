@@ -107,15 +107,17 @@ void main() {
     );
   }
 
-  test('player volume persists only non-muted values', () async {
+  test('player volume persists explicit mute and restores zero after restart', () async {
     final (store, platform) = await create();
     expect(store.playerVolume, 100);
     await store.setPlayerVolume(42);
     expect(store.playerVolume, 42);
     await store.setPlayerVolume(0);
-    expect(store.playerVolume, 42);
+    expect(store.playerVolume, 0);
     final restored = await restart(platform);
-    expect(restored.playerVolume, 42);
+    expect(restored.playerVolume, 0);
+    await restored.setPlayerVolume(36);
+    expect(restored.playerVolume, 36);
   });
 
   test(
