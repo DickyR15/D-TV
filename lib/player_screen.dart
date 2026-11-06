@@ -1438,16 +1438,24 @@ class _PlayerScreenState extends State<PlayerScreen>
     _errorTimer?.cancel();
     _pendingError = false;
     final position = _currentPosition;
+    final androidRedFruit = Platform.isAndroid &&
+        const {'hongguo', 'redfruit'}.contains(widget.detail.drama.source);
     final action = current.local
         ? PlaybackRecoveryAction.stop
         : _recovery.next(
             current,
-            allowPlayerRecreate:
-                !Platform.isAndroid &&
+            // Android's ExoPlayer must not serially retry a long list of Red
+            // Fruit routes and then recreate itself into another retry loop.
+            // Try two alternates, refresh once, then surface a retryable error.
+            allowPlayerRecreate: !Platform.isAndroid &&
                 !widget.recoveryRestarted &&
                 widget.handoff == null &&
                 widget.playerFactory == null &&
                 widget.videoBuilder == null,
+            alternativeAttemptLimit: androidRedFruit ? 2 : null,
+            recoveryDurationLimit: androidRedFruit
+                ? const Duration(seconds: 75)
+                : null,
           );
     DiaryService.add(
       '[Recovery] start reason=$reason action=${action.name} generation=$_generation route=${current.routeIndex}/${current.routeCount} session=${playbackDiagnosticId(current.session)} position=${_player.state.position.inMilliseconds} duration=${_player.state.duration.inMilliseconds} buffering=${_player.state.buffering}',
