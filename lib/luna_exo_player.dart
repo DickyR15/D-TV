@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:video_player/video_player.dart';
 import 'diary_service.dart';
+import 'playback_diagnostics.dart';
 
 /// 模擬與 media_kit.PlayerStream 介面對齊的流集合
 class LunaPlayerStreams implements PlayerStream {
@@ -105,6 +106,9 @@ class LunaExoPlayer implements Player {
   VideoPlayerController? _openingController;
   VoidCallback? _valueListener;
   Timer? _positionPollTimer;
+  Timer? _diagnosticTimer;
+  Duration? _lastDiagnosticPosition;
+  DateTime? _lastDiagnosticAt;
 
   final Expando<bool> _disposeRequested =
       Expando<bool>('dtv-video-player-dispose-requested');
@@ -154,6 +158,8 @@ class LunaExoPlayer implements Player {
 
     final myGen = ++_openGeneration;
     _positionPollTimer?.cancel();
+    _diagnosticTimer?.cancel();
+    _diagnosticTimer = null;
 
     // A timed-out initialize() is still in flight below the public API. Mark
     // it stale and request disposal without waiting for its native event.
@@ -308,6 +314,7 @@ class LunaExoPlayer implements Player {
 
     // 定時輪詢真實播放位置 (與 LunaTV-Mobile 對齊)
     _startPositionPolling();
+    _startPlaybackDiagnostics(c, myGen);
 
     if (media.start != null && media.start! > Duration.zero) {
       try {
@@ -323,6 +330,51 @@ class LunaExoPlayer implements Player {
       } catch (_) {}
     }
     revision.value++;
+  }
+
+  void _startPlaybackDiagnostics(
+    VideoPlayerController controller,
+    int generation,
+  ) {
+    _diagnosticTimer?.cancel();
+    _lastDiagnosticPosition = controller.value.position;
+    _lastDiagnosticAt = DateTime.now();
+    _diagnosticTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (_disposed ||
+          generation != _openGeneration ||
+          !identical(_controller, controller)) {
+        return;
+      }
+      final value = controller.value;
+      final now = DateTime.now();
+      final previousPosition = _lastDiagnosticPosition;
+      final previousAt = _lastDiagnosticAt;
+      final intervalMs = previousAt == null
+          ? 0
+          : now.difference(previousAt).inMilliseconds;
+      final positionDeltaMs = previousPosition == null
+          ? 'baseline'
+          : (value.position - previousPosition).inMilliseconds.toString();
+      _lastDiagnosticPosition = value.position;
+      _lastDiagnosticAt = now;
+      final bufferedEnd = value.buffered.isEmpty
+          ? null
+          : value.buffered.last.end;
+      final bufferedAhead = playbackBufferedAheadMilliseconds(
+        position: value.position,
+        bufferedEnd: bufferedEnd,
+      );
+      DiaryService.add(
+        '[ExoPlayerHealth] gen=$generation intervalMs=$intervalMs '
+        'positionMs=${value.position.inMilliseconds} '
+        'positionDeltaMs=$positionDeltaMs '
+        'bufferedAheadMs=${bufferedAhead ?? 'n/a'} '
+        'buffering=${value.isBuffering} playing=${value.isPlaying} '
+        'size=${value.size.width.round()}x${value.size.height.round()} '
+        'durationMs=${value.duration.inMilliseconds} '
+        'frame-drop-count=n/a decoder=platform-managed',
+      );
+    });
   }
 
   void _startPositionPolling() {
@@ -350,7 +402,16 @@ class LunaExoPlayer implements Player {
       stateChanged = true;
     }
     if (v.isBuffering != state.buffering) {
-      DiaryService.add('[ExoPlayer] isBuffering 變為: ${v.isBuffering}');
+      final bufferedEnd = v.buffered.isEmpty ? null : v.buffered.last.end;
+      final bufferedAhead = playbackBufferedAheadMilliseconds(
+        position: v.position,
+        bufferedEnd: bufferedEnd,
+      );
+      DiaryService.add(
+        '[ExoPlayer] buffering=${v.isBuffering} '
+        'positionMs=${v.position.inMilliseconds} '
+        'bufferedAheadMs=${bufferedAhead ?? 'n/a'}',
+      );
       state = state.copyWith(buffering: v.isBuffering);
       _safeAdd(stream.bufferingController, v.isBuffering);
       stateChanged = true;
@@ -461,6 +522,8 @@ class LunaExoPlayer implements Player {
     // This is used by PlayerScreen's open timeout to unblock a reload attempt.
     _openGeneration++;
     _positionPollTimer?.cancel();
+    _diagnosticTimer?.cancel();
+    _diagnosticTimer = null;
     final pending = _openingController;
     _openingController = null;
     if (pending != null) _requestControllerDispose(pending);
@@ -489,6 +552,8 @@ class LunaExoPlayer implements Player {
     _disposed = true;
     _openGeneration++;
     _positionPollTimer?.cancel();
+    _diagnosticTimer?.cancel();
+    _diagnosticTimer = null;
     final pending = _openingController;
     _openingController = null;
     if (pending != null) _requestControllerDispose(pending);
