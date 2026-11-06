@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/local_store.dart';
 import 'package:hgtv/profiles_screen.dart';
+import 'package:hgtv/models.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -166,7 +167,13 @@ void main() {
       expect(find.byKey(const ValueKey('profile-source-hongguo')), findsOneWidget);
       expect(find.byKey(const ValueKey('profile-source-hanxiaoquan')), findsOneWidget);
       expect(find.byKey(const ValueKey('profile-source-duoduo')), findsOneWidget);
-      expect(find.byKey(const ValueKey('profile-source-huangdou')), findsNothing);
+      for (final source in SourceSite.restrictedValues) {
+        expect(
+          find.byKey(ValueKey('profile-source-${source.id}')),
+          findsNothing,
+          reason: '進階片源 ${source.name} must stay hidden until an admin password exists',
+        );
+      }
       expect(find.textContaining('設定管理員密碼後'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
