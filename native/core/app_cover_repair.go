@@ -375,7 +375,11 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 			downloadErr = errors.New("海報網址暫時冷卻，略過重複請求")
 			continue
 		}
-		data, downloadErr = cache.download(requestCtx, attempt.address, attempt.referer)
+		attemptCtx, attemptCancel := context.WithTimeout(
+			requestCtx, nativeCoverAttemptTimeout(source, attempt.address),
+		)
+		data, downloadErr = cache.download(attemptCtx, attempt.address, attempt.referer)
+		attemptCancel()
 		if downloadErr == nil {
 			cache.clearCoverFailure(attempt.address, attempt.referer)
 			break
