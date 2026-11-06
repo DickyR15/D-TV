@@ -271,7 +271,7 @@ jobs:
           build_number=$((pubspec_build_number + GITHUB_RUN_NUMBER - 1))
           echo "app_version=$version" >> "$GITHUB_OUTPUT"
           echo "app_version_code=$build_number" >> "$GITHUB_OUTPUT"
-          python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --all-sources --player-engine exo --build-name "$version" --build-number "$build_number"
+          python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --all-sources --player-engine mpv_embed --build-name "$version" --build-number "$build_number"
       - name: Verify Android Universal APK signature, package and ABIs
         shell: bash
         run: |
