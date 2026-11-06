@@ -2,15 +2,58 @@ package core
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 )
+
+func newUntrustedTLSServer(t *testing.T, host string, handler http.Handler) *httptest.Server {
+	t.Helper()
+
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certificateTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: host},
+		DNSNames:              []string{host},
+		NotBefore:             time.Now().Add(-time.Minute),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	certificateDER, err := x509.CreateCertificate(
+		rand.Reader, certificateTemplate, certificateTemplate, &privateKey.PublicKey, privateKey,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewUnstartedServer(handler)
+	server.TLS = &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{{
+			Certificate: [][]byte{certificateDER},
+			PrivateKey:  privateKey,
+			Leaf:        certificateTemplate,
+		}},
+	}
+	server.StartTLS()
+	return server
+}
 
 func TestCDNKeyEOFUsesVerifiedDNSAndKeepsMediaIdentity(t *testing.T) {
 	var direct, lookups atomic.Int32
@@ -294,7 +337,7 @@ func TestCDNTransportRetriesUnknownAuthorityThroughVerifiedDoHForMediaHosts(t *t
 	}))
 	defer goodServer.Close()
 
-	badServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	badServer := newUntrustedTLSServer(t, host, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		t.Error("untrusted certificate must be rejected before sending an HTTP request")
 	}))
 	defer badServer.Close()
