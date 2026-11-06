@@ -1253,3 +1253,93 @@ func TestProviderDoubanSubjectIDExtractsArtworkIdentifiers(t *testing.T) {
 		})
 	}
 }
+
+
+func TestDuoduoYongshengUsesExactOfficialBilibiliArtwork(t *testing.T) {
+	const want = "https://i0.hdslb.com/bfs/bangumi/image/1c697e41f5e2524b2610ec895cead5c25f494e87.png"
+	drama := nativeDrama{
+		ID: "duoduo:99999", Title: "永生", Category: "動漫", OnlineDate: "2022-01-29",
+	}
+	got, ok := nativeVerifiedOfficialPosterAddress(drama)
+	if !ok || got != want {
+		t.Fatalf("verified 永生 poster = %q, ok=%t; want %q", got, ok, want)
+	}
+	preferred, ok := nativePreferredOfficialPosterAddress(drama)
+	if !ok || preferred != want {
+		t.Fatalf("preferred 永生 poster = %q, ok=%t; want %q", preferred, ok, want)
+	}
+}
+
+func TestDuoduoYongshengOfficialArtworkRejectsWrongSourceTypeAndYear(t *testing.T) {
+	tests := []nativeDrama{
+		{ID: "other:99999", Title: "永生", Category: "動漫", OnlineDate: "2022-01-29"},
+		{ID: "duoduo:99999", Title: "永生", Category: "電影", OnlineDate: "2022-01-29"},
+		{ID: "duoduo:99999", Title: "永生", Category: "動漫", OnlineDate: "2023-01-29"},
+		{ID: "duoduo:99999", Title: "永生 第二季", Category: "動漫", OnlineDate: "2022-01-29"},
+	}
+	for _, drama := range tests {
+		if address, ok := nativeVerifiedOfficialPosterAddress(drama); ok {
+			t.Errorf("unrelated 永生 record received official artwork %q: %+v", address, drama)
+		}
+	}
+}
+
+func TestDuoduoYongshengOfficialArtworkOverridesAntiHotlinkCache(t *testing.T) {
+	const officialHost = "i0.hdslb.com"
+	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	var officialRequests, originalRequests int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case officialHost:
+			officialRequests++
+			if got := request.Header.Get("Referer"); got != "https://www.bilibili.com/" {
+				t.Fatalf("Bilibili Referer = %q", got)
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/png"}},
+				Body: io.NopCloser(bytes.NewReader(image)),
+				ContentLength: int64(len(image)),
+				Request: request,
+			}, nil
+		case "original.example.test":
+			originalRequests++
+			placeholder := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 1, 1, 1, 1}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/png"}},
+				Body: io.NopCloser(bytes.NewReader(placeholder)),
+				ContentLength: int64(len(placeholder)),
+				Request: request,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: http.StatusNotFound, Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader("not found")), Request: request,
+			}, nil
+		}
+	})}
+	downloader := &Downloader{
+		client: client, cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://duoduo.example.test"},
+	}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	path, err := cache.load(context.Background(), nativeDrama{
+		ID: "duoduo:99999", Source: sourceDuoduo, Title: "永生",
+		Category: "動漫", OnlineDate: "2022-01-29",
+		Cover: "https://original.example.test/hotlink-placeholder.png",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(body, image) {
+		t.Fatalf("official 永生 artwork was not cached: %v", err)
+	}
+	if officialRequests != 1 {
+		t.Fatalf("official artwork requests = %d, want 1", officialRequests)
+	}
+	if originalRequests != 0 {
+		t.Fatalf("anti-hotlink provider image was requested %d times before official override", originalRequests)
+	}
+}
