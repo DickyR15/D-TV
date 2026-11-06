@@ -44,8 +44,10 @@ func nativeCoverAlternativeTimeout(source, cacheClass string) time.Duration {
 	}
 	return 0
 }
-func nativeCoverAttemptTimeout(source, address string) time.Duration {
-	if source != sourceDuoduo {
+func nativeCoverAttemptTimeout(source, address string, cacheClass ...string) time.Duration {
+	// External artwork (for example a Douban fallback) is not routed through
+	// Duoduo's provider proxy and must retain the normal download window.
+	if source != sourceDuoduo || len(cacheClass) > 0 && cacheClass[0] != "provider" {
 		return 12 * time.Second
 	}
 	parsed, err := url.Parse(strings.TrimSpace(address))
