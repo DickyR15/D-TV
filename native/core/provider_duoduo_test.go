@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -591,8 +592,14 @@ func TestDuoduoPosterProxySupportsPublicCDNsAndRejectsUnsafeHosts(t *testing.T) 
 		"https://gimg0.baidu.com/gimg/app=2001&src=https%3A%2F%2Fi0.hdslb.com%2Fposter.png",
 	} {
 		proxy := duoduoPosterProxyURL(address)
-		if !strings.HasPrefix(proxy, "https://images.weserv.nl/?url=") {
-			t.Fatalf("public poster host was not routed through image proxy: address=%q proxy=%q", address, proxy)
+		parsed, err := url.Parse(proxy)
+		if err != nil || parsed.Host != "wsrv.nl" {
+			t.Fatalf("public poster host was not routed through wsrv.nl: address=%q proxy=%q err=%v", address, proxy, err)
+		}
+		query := parsed.Query()
+		if query.Get("url") == "" || query.Get("w") != "440" ||
+			query.Get("h") != "660" || query.Get("output") != "webp" {
+			t.Fatalf("poster proxy is missing resize parameters: address=%q proxy=%q", address, proxy)
 		}
 	}
 	for _, address := range []string{
