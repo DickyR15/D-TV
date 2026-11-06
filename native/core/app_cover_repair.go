@@ -154,10 +154,30 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	}
 	primaryErr := errors.New("站源尚未提供原始海報網址")
 
-	// Reuse verified local images before contacting remote hosts. A curated
-	// exact-record official image outranks a possibly hotlink-blocked catalogue
-	// cache, but a previously verified external fallback may still render
-	// immediately if that curated image is not cached yet.
+	// Reuse verified local images before contacting remote hosts. For any
+	// record that has already been repaired, its external fallback was saved
+	// only after strict identity matching and full image-signature validation.
+	// Check that durable fallback before a possibly hotlink-blocked catalogue
+	// image cache, just as the exact 永生 override does. This gives all repaired
+	// posters the same instant second-open behavior instead of special-casing
+	// one title.
+	if !force && !preferredOfficialOverride {
+		_, cachedExternal := cache.cachedRepair(drama.ID)
+		for _, externalAddress := range duoduoUniqueStrings([]string{
+			strings.TrimSpace(drama.FallbackCover),
+			cachedExternal,
+		}) {
+			if externalAddress == "" || externalAddress == primaryAddress {
+				continue
+			}
+			if path, ok := cache.cachedAlternativeCoverPath(
+				drama, externalAddress,
+				nativeCoverFallbackReferer(cache.downloader, drama, externalAddress), "external",
+			); ok {
+				return path, nil
+			}
+		}
+	}
 	if !force {
 		if preferredOfficialAddress != "" {
 			if path, ok := cache.cachedAlternativeCoverPath(
