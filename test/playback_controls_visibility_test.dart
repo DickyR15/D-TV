@@ -16,6 +16,23 @@ void main() {
     );
   });
 
+  test('remote Back exits playback while controls are disabled during loading', () {
+    expect(
+      playbackControlsBackAction(
+        controlsVisible: false,
+        enabled: false,
+      ),
+      PlaybackControlsBackAction.exitPlayback,
+    );
+    expect(
+      playbackControlsBackAction(
+        controlsVisible: true,
+        enabled: false,
+      ),
+      PlaybackControlsBackAction.exitPlayback,
+    );
+  });
+
   test('re-applies hidden-control policy on every recovery generation', () {
     final visibility = PlaybackControlsVisibility();
 
