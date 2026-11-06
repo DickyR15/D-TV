@@ -117,7 +117,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       GlobalKey<TelevisionControlsState>();
   final _menuRevision = ValueNotifier<int>(0);
   final List<StreamSubscription<dynamic>> _subscriptions = [];
-  final _recovery = PlaybackRecovery();
+  final _recovery = PlaybackRecovery(
+    maxAlternativeAttempts: Platform.isAndroid
+        ? PlaybackRecovery.androidMaxAlternativeAttempts
+        : PlaybackRecovery.maxAlternativeAttempts,
+  );
   final _recoveryStability = PlaybackRecoveryStability();
   bool _recoveryBudgetPendingReset = false;
   Object _lanIdentity = Object();
@@ -1439,6 +1443,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         : _recovery.next(
             current,
             allowPlayerRecreate:
+                !Platform.isAndroid &&
                 !widget.recoveryRestarted &&
                 widget.handoff == null &&
                 widget.playerFactory == null &&
