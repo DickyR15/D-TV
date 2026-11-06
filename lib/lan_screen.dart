@@ -159,64 +159,18 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
 
   Future<void> _rename() async {
     final epoch = link.store.profileEpoch;
-    final name = TextEditingController(text: link.deviceName);
-    final cancelFocus = FocusNode(debugLabel: 'lan-rename-cancel');
-    final saveFocus = FocusNode(debugLabel: 'lan-rename-save');
-    String? value;
-    try {
-      value = await showDialog<String>(
-        context: context,
-        builder: (context) => FocusTraversalGroup(
-          policy: OrderedTraversalPolicy(),
-          child: AlertDialog(
-            title: const Text('裝置名稱'),
-            content: FocusTraversalOrder(
-              order: const NumericFocusOrder(1),
-              child: TextField(
-                controller: name,
-                maxLength: 60,
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(labelText: '在其他裝置上顯示的名稱'),
-                onSubmitted: (_) => Navigator.pop(context, name.text),
-              ),
-            ),
-            actions: [
-              FocusTraversalOrder(
-                order: const NumericFocusOrder(2),
-                child: TextButton(
-                  key: const ValueKey('lan-rename-cancel'),
-                  focusNode: cancelFocus,
-                  autofocus: AppLayout.isTelevision(context),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-              ),
-              FocusTraversalOrder(
-                order: const NumericFocusOrder(3),
-                child: FilledButton(
-                  key: const ValueKey('lan-rename-save'),
-                  focusNode: saveFocus,
-                  onPressed: () => Navigator.pop(context, name.text),
-                  child: const Text('儲存'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } finally {
-      name.dispose();
-      cancelFocus.dispose();
-      saveFocus.dispose();
-    }
+    final value = await showDialog<String>(
+      context: context,
+      builder: (_) => DeviceRenameDialog(initialName: link.deviceName),
+    );
     if (mounted &&
         value != null &&
         epoch == link.store.profileEpoch &&
         !link.store.locked) {
-      await _perform(() => link.rename(value!));
+      await _perform(() => link.rename(value));
     }
   }
+
   Future<void> _cancel() async {
     if (_cancelling) return;
     setState(() => _cancelling = true);
@@ -781,6 +735,10 @@ class _LanManualState extends State<_LanManual> {
   late final int _epoch;
   late final LanConnection? _connection;
   String? _error;
+  final FocusNode _cancelFocus = FocusNode(debugLabel: 'lan-sync-cancel');
+  final FocusNode _submitFocus = FocusNode(debugLabel: 'lan-sync-submit');
+  final FocusNode _cancelOperationFocus =
+      FocusNode(debugLabel: 'lan-sync-cancel-operation');
   LanController get link => widget.controller;
 
   @override
@@ -807,6 +765,9 @@ class _LanManualState extends State<_LanManual> {
     if (_busy && _epoch == link.store.profileEpoch) {
       unawaited(link.cancelSync().catchError((Object _) {}));
     }
+    _cancelFocus.dispose();
+    _submitFocus.dispose();
+    _cancelOperationFocus.dispose();
     super.dispose();
   }
 
@@ -845,8 +806,10 @@ class _LanManualState extends State<_LanManual> {
     final name = link.connection?.peer.name ?? '對方';
     return PopScope<void>(
       canPop: !_busy && !_cancelling,
-      child: SafeArea(
-        top: false,
+      child: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: SafeArea(
+          top: false,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -873,7 +836,11 @@ class _LanManualState extends State<_LanManual> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   for (final mode in LanSyncMode.values)
-                    Card(
+                    FocusTraversalOrder(
+                      order: NumericFocusOrder(
+                        (LanSyncMode.values.indexOf(mode) + 1).toDouble(),
+                      ),
+                      child: Card(
                       color: _mode == mode
                           ? Theme.of(context).colorScheme.secondaryContainer
                           : null,
@@ -902,6 +869,7 @@ class _LanManualState extends State<_LanManual> {
                                 }),
                         ),
                       ),
+                    ),
                     ),
                   if (_busy)
                     const Padding(
@@ -959,26 +927,36 @@ class _LanManualState extends State<_LanManual> {
             Padding(
               padding: const EdgeInsets.all(16),
               child: _busy || _cancelling
-                  ? OutlinedButton.icon(
-                      onPressed: _cancelling ? null : _cancel,
-                      icon: const Icon(Icons.close_rounded),
-                      label: Text(_cancelling ? '正在取消' : '取消本次同步'),
-                    )
-                  : FilledButton(
-                      onPressed: _submit,
-                      child: Text(
-                        _preview == null
-                            ? '檢視預覽'
-                            : _mode == LanSyncMode.merge
-                            ? '開始同步'
-                            : _mode.label,
+                  ? FocusTraversalOrder(
+                      order: NumericFocusOrder(
+                        (LanSyncMode.values.length + 1).toDouble(),
                       ),
+                      child: OutlinedButton.icon(
+                        key: const ValueKey('lan-sync-cancel-operation'),
+                        focusNode: _cancelOperationFocus,
+                        onPressed: _cancelling ? null : _cancel,
+                        icon: const Icon(Icons.close_rounded),
+                        label: Text(_cancelling ? '正在取消' : '取消本次同步'),
+                      ),
+                    )
+                  : LanSyncActionBar(
+                      cancelFocus: _cancelFocus,
+                      submitFocus: _submitFocus,
+                      orderOffset: LanSyncMode.values.length,
+                      onCancel: () => Navigator.pop(context),
+                      onSubmit: _submit,
+                      submitLabel: _preview == null
+                          ? '檢視預覽'
+                          : _mode == LanSyncMode.merge
+                          ? '開始同步'
+                          : _mode.label,
                     ),
             ),
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }
 
@@ -1270,4 +1248,141 @@ class _LanPushPanelState extends State<_LanPushPanel> {
       ),
     ),
   );
+}
+
+
+/// D-pad ordered actions for the manual favorites-sync panel.
+class LanSyncActionBar extends StatelessWidget {
+  const LanSyncActionBar({
+    super.key,
+    required this.cancelFocus,
+    required this.submitFocus,
+    required this.onCancel,
+    required this.onSubmit,
+    required this.submitLabel,
+    this.orderOffset = 0,
+  });
+
+  final FocusNode cancelFocus;
+  final FocusNode submitFocus;
+  final VoidCallback onCancel;
+  final VoidCallback onSubmit;
+  final String submitLabel;
+  final int orderOffset;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FocusTraversalOrder(
+            order: NumericFocusOrder((orderOffset + 1).toDouble()),
+            child: TextButton(
+              key: const ValueKey('lan-sync-cancel'),
+              focusNode: cancelFocus,
+              onPressed: onCancel,
+              child: const Text('取消'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FocusTraversalOrder(
+            order: NumericFocusOrder((orderOffset + 2).toDouble()),
+            child: FilledButton(
+              key: const ValueKey('lan-sync-submit'),
+              focusNode: submitFocus,
+              onPressed: onSubmit,
+              child: Text(submitLabel),
+            ),
+          ),
+        ],
+      );
+}
+
+/// On TV the safe Cancel action receives focus first; Save is one D-pad step
+/// to the right, while the text field remains reachable by traversal.
+class DeviceRenameDialog extends StatefulWidget {
+  const DeviceRenameDialog({super.key, required this.initialName});
+
+  final String initialName;
+
+  @override
+  State<DeviceRenameDialog> createState() => _DeviceRenameDialogState();
+}
+
+class _DeviceRenameDialogState extends State<DeviceRenameDialog> {
+  late final TextEditingController _name =
+      TextEditingController(text: widget.initialName);
+  final FocusNode _nameFocus = FocusNode(debugLabel: 'lan-rename-name');
+  final FocusNode _cancelFocus = FocusNode(debugLabel: 'lan-rename-cancel');
+  final FocusNode _saveFocus = FocusNode(debugLabel: 'lan-rename-save');
+  bool _initialFocusRequested = false;
+
+  void _save() => Navigator.of(context).pop(_name.text);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialFocusRequested) return;
+    _initialFocusRequested = true;
+    final television = AppLayout.isTelevision(context);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      (television ? _cancelFocus : _nameFocus).requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _nameFocus.dispose();
+    _cancelFocus.dispose();
+    _saveFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final television = AppLayout.isTelevision(context);
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: AlertDialog(
+        title: const Text('裝置名稱'),
+        content: FocusTraversalOrder(
+          order: const NumericFocusOrder(1),
+          child: TextField(
+            key: const ValueKey('lan-rename-name'),
+            controller: _name,
+            focusNode: _nameFocus,
+            maxLength: 60,
+            autofocus: !television,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: '在其他裝置上顯示的名稱',
+            ),
+            onSubmitted: (_) => _save(),
+          ),
+        ),
+        actions: [
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(2),
+            child: TextButton(
+              key: const ValueKey('lan-rename-cancel'),
+              focusNode: _cancelFocus,
+              autofocus: television,
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+          ),
+          FocusTraversalOrder(
+            order: const NumericFocusOrder(3),
+            child: FilledButton(
+              key: const ValueKey('lan-rename-save'),
+              focusNode: _saveFocus,
+              onPressed: _save,
+              child: const Text('儲存'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
