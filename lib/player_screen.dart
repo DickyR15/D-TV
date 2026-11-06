@@ -117,11 +117,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       GlobalKey<TelevisionControlsState>();
   final _menuRevision = ValueNotifier<int>(0);
   final List<StreamSubscription<dynamic>> _subscriptions = [];
-  final _recovery = PlaybackRecovery(
-    maxAlternativeAttempts: Platform.isAndroid
-        ? PlaybackRecovery.androidMaxAlternativeAttempts
-        : PlaybackRecovery.maxAlternativeAttempts,
-  );
+  final _recovery = PlaybackRecovery();
   final _recoveryStability = PlaybackRecoveryStability();
   bool _recoveryBudgetPendingReset = false;
   Object _lanIdentity = Object();
@@ -1447,7 +1443,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             // Android's ExoPlayer must not serially retry a long list of Red
             // Fruit routes and then recreate itself into another retry loop.
             // Try two alternates, refresh once, then surface a retryable error.
-            allowPlayerRecreate: !Platform.isAndroid &&
+            allowPlayerRecreate: !androidRedFruit &&
                 !widget.recoveryRestarted &&
                 widget.handoff == null &&
                 widget.playerFactory == null &&
