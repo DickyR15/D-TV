@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -132,3 +133,61 @@ const playbackFramePacingCounterProperties = <String>{
   'frame-drop-count',
   'decoder-frame-drop-count',
 };
+
+
+/// Debounces persisted volume changes while keeping the latest requested value
+/// available immediately for episode replacement. Zero is an intentional mute.
+class PlaybackVolumeMemory {
+  PlaybackVolumeMemory({
+    required this.save,
+    double initial = 100,
+    this.debounce = const Duration(milliseconds: 500),
+  }) : _value = initial.isFinite
+           ? initial.clamp(0.0, 100.0).toDouble()
+           : 100.0;
+
+  final Future<void> Function(double value) save;
+  final Duration debounce;
+
+  Timer? _timer;
+  double _value;
+  double? _pending;
+  bool _disposed = false;
+
+  double get value => _value;
+
+  void remember(double value) {
+    if (_disposed || !value.isFinite) return;
+    _value = value.clamp(0.0, 100.0).toDouble();
+    _pending = _value;
+    _timer?.cancel();
+    _timer = Timer(debounce, flush);
+  }
+
+  void flush() {
+    _timer?.cancel();
+    _timer = null;
+    final pending = _pending;
+    _pending = null;
+    if (pending == null) return;
+    try {
+      unawaited(save(pending).catchError((Object _) {}));
+    } catch (_) {}
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    flush();
+    _disposed = true;
+  }
+}
+
+/// Buffered media time ahead of the current position, used by ExoPlayer
+/// diagnostics to separate network starvation from decode/frame pacing.
+int? playbackBufferedAheadMilliseconds({
+  required Duration position,
+  required Duration? bufferedEnd,
+}) {
+  if (bufferedEnd == null) return null;
+  return (bufferedEnd - position).inMilliseconds;
+}
