@@ -350,4 +350,88 @@ void main() {
     }
   });
 
+  test('Android Red Fruit recovery tries two alternates and one refresh then stops', () {
+    final recovery = PlaybackRecovery();
+    const compactLimit = 2;
+    const compactDuration = Duration(seconds: 75);
+
+    expect(
+      recovery.next(
+        route(0, count: 8),
+        alternativeAttemptLimit: compactLimit,
+        recoveryDurationLimit: compactDuration,
+        allowPlayerRecreate: false,
+      ),
+      PlaybackRecoveryAction.alternative,
+    );
+    expect(
+      recovery.next(
+        route(1, count: 8),
+        alternativeAttemptLimit: compactLimit,
+        recoveryDurationLimit: compactDuration,
+        allowPlayerRecreate: false,
+      ),
+      PlaybackRecoveryAction.alternative,
+    );
+    expect(
+      recovery.next(
+        route(2, count: 8),
+        alternativeAttemptLimit: compactLimit,
+        recoveryDurationLimit: compactDuration,
+        allowPlayerRecreate: false,
+      ),
+      PlaybackRecoveryAction.refresh,
+    );
+
+    // Freshly resolved URLs receive the same small bounded pass.
+    expect(
+      recovery.next(
+        route(0, count: 8),
+        alternativeAttemptLimit: compactLimit,
+        recoveryDurationLimit: compactDuration,
+        allowPlayerRecreate: false,
+      ),
+      PlaybackRecoveryAction.alternative,
+    );
+    expect(
+      recovery.next(
+        route(1, count: 8),
+        alternativeAttemptLimit: compactLimit,
+        recoveryDurationLimit: compactDuration,
+        allowPlayerRecreate: false,
+      ),
+      PlaybackRecoveryAction.alternative,
+    );
+    expect(
+      recovery.next(
+        route(2, count: 8),
+        alternativeAttemptLimit: compactLimit,
+        recoveryDurationLimit: compactDuration,
+        allowPlayerRecreate: false,
+      ),
+      PlaybackRecoveryAction.stop,
+    );
+  });
+
+  test('recovery duration override stops Android route loop earlier', () {
+    final start = DateTime(2026, 11, 6, 12);
+    var now = start;
+    final recovery = PlaybackRecovery(now: () => now);
+    expect(
+      recovery.next(
+        route(0, count: 8),
+        recoveryDurationLimit: const Duration(seconds: 75),
+      ),
+      PlaybackRecoveryAction.alternative,
+    );
+    now = start.add(const Duration(seconds: 75));
+    expect(
+      recovery.next(
+        route(1, count: 8),
+        recoveryDurationLimit: const Duration(seconds: 75),
+      ),
+      PlaybackRecoveryAction.stop,
+    );
+  });
+
 }
