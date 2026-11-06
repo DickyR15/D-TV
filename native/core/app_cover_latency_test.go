@@ -149,6 +149,9 @@ func TestDuoduoPosterAttemptsReserveTimeForResizedProxy(t *testing.T) {
 	if got := nativeCoverAttemptTimeout(sourceHongguo, "https://img.example.test/poster.jpg"); got != 12*time.Second {
 		t.Fatalf("other source timeout = %s, want unchanged 12s", got)
 	}
+	if got := nativeCoverAttemptTimeout(sourceDuoduo, "https://img9.doubanio.com/poster.jpg", "external"); got != 12*time.Second {
+		t.Fatalf("Duoduo external fallback timeout = %s, want 12s", got)
+	}
 }
 
 
