@@ -1806,6 +1806,19 @@ class _PlayerScreenState extends State<PlayerScreen>
           await _releasePlayback(plan.session, 'stale_generation');
           return;
         }
+        // A fallback plan no longer depends on the previous native stream
+        // session. Retire it before opening the new URL so late HLS requests
+        // and MPV errors from the old playlist cannot be mistaken for errors
+        // from the replacement route.
+        if (retained != null) {
+          final previous = retained!;
+          retained = null;
+          await _releasePlayback(
+            previous.session,
+            'fallback_previous_before_open',
+          );
+          if (_closed || ticket != _generation) return;
+        }
         if (plan.url.isEmpty) {
           throw AppFailure('片源未提供播放網址，請重試');
         }
@@ -1940,7 +1953,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         setupMs = setupClock.elapsedMilliseconds;
         _plan = plan;
         installed = true;
-        _acceptErrors = true;
         DiaryService.add(
           '[Play] open generation=$ticket route=${plan.routeIndex}/${plan.routeCount} session=${playbackDiagnosticId(plan.session)} url=${playbackDiagnosticUrl(plan.url)} headers=${plan.headers.keys.toList()}',
         );
@@ -1977,6 +1989,11 @@ class _PlayerScreenState extends State<PlayerScreen>
           if (volumeBeforeOpen != null && !_closed && ticket == _generation) {
             await _player.setVolume(volumeBeforeOpen);
           }
+          // Ignore delayed errors from the previous MPV/HLS session until the
+          // replacement media has completed its open operation. A genuine
+          // startup failure is still covered by the open timeout and health
+          // watchdog below.
+          _acceptErrors = true;
         } finally {
           _suppressVolumePersistence = false;
         }
