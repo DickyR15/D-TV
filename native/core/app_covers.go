@@ -9,7 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -162,6 +162,56 @@ func nativeCoverRefererForDrama(downloader *Downloader, drama nativeDrama, addre
 type duoduoPosterAttempt struct {
 	address string
 	referer string
+}
+
+// recordDuoduoPosterAttempt captures origin-vs-edge latency without writing
+// signed image URLs, query strings, or Referer values into exported logs.
+func (cache *nativeCoverCache) recordDuoduoPosterAttempt(
+	drama nativeDrama,
+	attempt duoduoPosterAttempt,
+	number int,
+	started time.Time,
+	data []byte,
+	err error,
+) {
+	if cache == nil || cache.downloader == nil {
+		return
+	}
+	source := canonicalProviderSource(drama.Source)
+	if source == "" {
+		source = sourceFromDramaID(drama.ID)
+	}
+	if source != sourceDuoduo {
+		return
+	}
+	parsed, parseErr := url.Parse(strings.TrimSpace(attempt.address))
+	host := ""
+	if parseErr == nil {
+		host = strings.ToLower(parsed.Hostname())
+	}
+	strategy := "origin"
+	if host == "wsrv.nl" {
+		strategy = "cloudflare_edge"
+	}
+	result := "success"
+	level := "info"
+	if err != nil {
+		level = "warn"
+		result = nativeStreamError(err)
+		if result == "io_error" {
+			message := strings.ToLower(err.Error())
+			if strings.Contains(message, "status") || strings.Contains(message, "content-type") ||
+				strings.Contains(message, "image") {
+				result = "http_or_invalid_image"
+			}
+		}
+	}
+	cache.downloader.recordDiagnostic(diagnosticEvent{
+		Level: level, Event: "cover.attempt", Source: source, DramaID: drama.ID,
+		Host: host, Attempt: number,
+		Message: fmt.Sprintf("strategy=%s elapsed_ms=%d bytes=%d result=%s",
+			strategy, time.Since(started).Milliseconds(), len(data), result),
+	})
 }
 
 // Baidu's gimg endpoint sometimes wraps a real poster URL inside its path,
@@ -412,7 +462,7 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 			attempts = duoduoPosterAttemptsForDrama(drama.Cover, cache.downloader, drama)
 		}
 		tryAttempts := func(candidates []duoduoPosterAttempt) {
-			for _, attempt := range candidates {
+			for index, attempt := range candidates {
 				if ctx.Err() != nil {
 					err = ctx.Err()
 					return
@@ -421,11 +471,13 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 					err = errors.New("海報網址暫時冷卻，略過重複請求")
 					continue
 				}
+				started := time.Now()
 				attemptCtx, attemptCancel := context.WithTimeout(
 					ctx, nativeCoverAttemptTimeout(coverSource, attempt.address),
 				)
 				data, err = cache.download(attemptCtx, attempt.address, attempt.referer)
 				attemptCancel()
+				cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, err)
 				if err == nil {
 					cache.clearCoverFailure(attempt.address, attempt.referer)
 					return
