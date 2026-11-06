@@ -49,6 +49,7 @@ class PlaybackRecovery {
       return PlaybackRecoveryAction.stop;
     }
     if (plan.hasAlternative &&
+        _alternativeAttempts < attemptLimit &&
         _alternativeAttempts < _maxAlternativeAttempts) {
       _alternativeAttempts++;
       return PlaybackRecoveryAction.alternative;
