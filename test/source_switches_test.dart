@@ -243,4 +243,25 @@ void main() {
     ]);
   });
 
+  test('new-user save is rejected without admin password and preserves existing profiles', () async {
+    final store = await create();
+    final before = store.profiles
+        .map((profile) => jsonEncode(profile.toJson()))
+        .toList();
+    await expectLater(
+      store.saveProfile(
+        name: '一般使用者',
+        sources: SourceSite.values.map((source) => source.id).toList(),
+        download: false,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(store.administratorPasswordConfigured, isFalse);
+    expect(
+      store.profiles.map((profile) => jsonEncode(profile.toJson())).toList(),
+      before,
+    );
+    expect(store.profiles, hasLength(1));
+  });
+
 }
