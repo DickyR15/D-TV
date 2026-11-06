@@ -363,7 +363,7 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 	if source == sourceDuoduo && cacheClass == "provider" {
 		attempts = duoduoPosterAttemptsForDrama(address, cache.downloader, drama)
 	}
-	for _, attempt := range attempts {
+	for index, attempt := range attempts {
 		if requestCtx.Err() != nil {
 			downloadErr = requestCtx.Err()
 			break
@@ -375,11 +375,13 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 			downloadErr = errors.New("海報網址暫時冷卻，略過重複請求")
 			continue
 		}
+		started := time.Now()
 		attemptCtx, attemptCancel := context.WithTimeout(
 			requestCtx, nativeCoverAttemptTimeout(source, attempt.address),
 		)
 		data, downloadErr = cache.download(attemptCtx, attempt.address, attempt.referer)
 		attemptCancel()
+		cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, downloadErr)
 		if downloadErr == nil {
 			cache.clearCoverFailure(attempt.address, attempt.referer)
 			break
