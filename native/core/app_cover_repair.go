@@ -108,7 +108,17 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	// Check every already-verified local image before contacting remote hosts.
 	// This keeps the display order intact but prevents a slow origin request
 	// from delaying a previously downloaded provider or external fallback.
-	if !force {
+	if !force && preferredOfficialAddress != "" {
+		// An exact-record official override must outrank an older cached image
+		// that may itself be a hotlink-denial placeholder.
+		if path, ok := cache.cachedAlternativeCoverPath(
+			drama, preferredOfficialAddress,
+			nativeCoverFallbackReferer(cache.downloader, drama, preferredOfficialAddress), "external",
+		); ok {
+			return path, nil
+		}
+	}
+	if !force && preferredOfficialAddress == "" {
 		if path, ok := cache.cachedPrimaryCoverPath(drama); ok {
 			return path, nil
 		}
@@ -149,9 +159,9 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 			}
 		}
 	}
-	// Exact, independently verified official artwork retains its override
-	// semantics, but only after every already-cached catalogue/provider/external
-	// image has had a chance to render without network access.
+	// Exact, independently verified official artwork retains override
+	// semantics, including over stale or hotlink-denial images already cached
+	// under the original source URL.
 	if preferredOfficialAddress != "" {
 		path, err := cache.loadAlternativeAddress(
 			ctx, drama, preferredOfficialAddress,
