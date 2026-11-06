@@ -23,6 +23,74 @@ type nativeCoverRepair struct {
 	retryAt         time.Time
 }
 
+// cachedCoverPath checks the on-disk cache without starting a network request.
+// A verified fallback image can therefore render immediately while an origin
+// URL is slow or temporarily unreachable.
+func (cache *nativeCoverCache) cachedCoverPath(key string) (string, bool) {
+	path := filepathJoinCover(cache.directory, key+".img")
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	entry, found := cache.entries[key]
+	if !found {
+		return "", false
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() != entry.size {
+		delete(cache.entries, key)
+		cache.size -= entry.size
+		return "", false
+	}
+	age := time.Since(entry.updatedAt)
+	if age < 0 || age >= nativeCoverTTL {
+		return "", false
+	}
+	entry.usedAt = time.Now()
+	cache.entries[key] = entry
+	return path, true
+}
+
+func (cache *nativeCoverCache) cachedPrimaryCoverPath(drama nativeDrama) (string, bool) {
+	if cache.downloader == nil {
+		return "", false
+	}
+	drama.Cover = repairLegacyCoverURL(drama)
+	if drama.Cover == "" {
+		return "", false
+	}
+	source := canonicalProviderSource(drama.Source)
+	if source == "" {
+		source = sourceFromDramaID(drama.ID)
+	}
+	referer := nativeCoverRefererForDrama(cache.downloader, drama, drama.Cover)
+	digest := sha256.Sum256([]byte(source + "\x00" + drama.Cover + "\x00" + referer))
+	return cache.cachedCoverPath(hex.EncodeToString(digest[:]))
+}
+
+func (cache *nativeCoverCache) cachedAlternativeCoverPath(
+	drama nativeDrama,
+	address string,
+	referer string,
+	cacheClass string,
+) (string, bool) {
+	address = strings.TrimSpace(address)
+	parsed, err := url.Parse(address)
+	if err != nil || !validNativeCoverURL(parsed) {
+		return "", false
+	}
+	source := canonicalProviderSource(drama.Source)
+	if source == "" {
+		source = sourceFromDramaID(drama.ID)
+	}
+	if referer == "" {
+		if cache.downloader == nil {
+			return "", false
+		}
+		referer = nativeCoverFallbackReferer(cache.downloader, drama, address)
+	}
+	digest := sha256.Sum256([]byte(source + "\x00" + cacheClass + "\x00" + address + "\x00" + referer))
+	return cache.cachedCoverPath(hex.EncodeToString(digest[:]))
+}
+
 // load keeps a strict source-preference order:
 // catalogue poster -> provider detail poster -> external poster.
 func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, force bool) (string, error) {
@@ -44,6 +112,50 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	}
 	primaryAddress := strings.TrimSpace(drama.Cover)
 	primaryErr := errors.New("站源尚未提供原始海報網址")
+
+	// Check every already-verified local image before contacting remote hosts.
+	// This keeps the display order intact but prevents a slow origin request
+	// from delaying a previously downloaded provider or external fallback.
+	if !force {
+		if path, ok := cache.cachedPrimaryCoverPath(drama); ok {
+			return path, nil
+		}
+		for _, candidate := range nativeUniqueCoverAddresses(drama.CoverCandidates...) {
+			if candidate == primaryAddress {
+				continue
+			}
+			if path, ok := cache.cachedAlternativeCoverPath(
+				drama, candidate,
+				nativeCoverRefererForDrama(cache.downloader, drama, candidate), "provider",
+			); ok {
+				return path, nil
+			}
+		}
+		cachedProvider, cachedExternal := cache.cachedRepair(drama.ID)
+		providerAddress := firstNonEmpty(strings.TrimSpace(drama.ProviderFallbackCover), cachedProvider)
+		if providerAddress != "" && providerAddress != primaryAddress {
+			if path, ok := cache.cachedAlternativeCoverPath(
+				drama, providerAddress,
+				nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
+			); ok {
+				return path, nil
+			}
+		}
+		for _, externalAddress := range duoduoUniqueStrings([]string{
+			strings.TrimSpace(drama.FallbackCover),
+			cachedExternal,
+		}) {
+			if externalAddress == "" || externalAddress == primaryAddress || externalAddress == providerAddress {
+				continue
+			}
+			if path, ok := cache.cachedAlternativeCoverPath(
+				drama, externalAddress,
+				nativeCoverFallbackReferer(cache.downloader, drama, externalAddress), "external",
+			); ok {
+				return path, nil
+			}
+		}
+	}
 	if primaryAddress != "" {
 		path, err := cache.loadAddress(ctx, drama, force)
 		if err == nil || ctx.Err() != nil {
