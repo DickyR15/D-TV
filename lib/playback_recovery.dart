@@ -3,13 +3,20 @@ import 'models.dart';
 enum PlaybackRecoveryAction { alternative, refresh, recreatePlayer, stop }
 
 class PlaybackRecovery {
-  PlaybackRecovery({DateTime Function()? now}) : _now = now ?? DateTime.now;
+  PlaybackRecovery({
+    DateTime Function()? now,
+    int? maxAlternativeAttempts,
+  }) : _now = now ?? DateTime.now,
+       _maxAlternativeAttempts =
+           maxAlternativeAttempts ?? PlaybackRecovery.maxAlternativeAttempts;
 
-  // Try a bounded number of provider URLs, then force one fresh resolve.
-  // Signed media URLs and CDN routes can expire or return incomplete MP4 data;
-  // retrying the same session after exhaustion would only reuse stale URLs.
+  // Desktop retains the broader route sweep. Android ExoPlayer gets a short,
+  // bounded sweep so unsupported or consistently failing routes cannot keep
+  // replacing the loading overlay for minutes.
   static const maxAlternativeAttempts = 12;
+  static const androidMaxAlternativeAttempts = 2;
   static const maxRefreshAttempts = 1;
+  final int _maxAlternativeAttempts;
   // A candidate can spend several seconds in DNS/connect/TLS and then wait
   // for response headers. Keep enough time to try the available route list,
   // while still guaranteeing that automatic recovery eventually terminates.
@@ -38,7 +45,7 @@ class PlaybackRecovery {
       return PlaybackRecoveryAction.stop;
     }
     if (plan.hasAlternative &&
-        _alternativeAttempts < maxAlternativeAttempts) {
+        _alternativeAttempts < _maxAlternativeAttempts) {
       _alternativeAttempts++;
       return PlaybackRecoveryAction.alternative;
     }
