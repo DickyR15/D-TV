@@ -489,7 +489,7 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 		}
 		started := time.Now()
 		attemptCtx, attemptCancel := context.WithTimeout(
-			requestCtx, nativeCoverAttemptTimeout(source, attempt.address),
+			requestCtx, nativeCoverAttemptTimeout(source, attempt.address, cacheClass),
 		)
 		data, downloadErr = cache.download(attemptCtx, attempt.address, attempt.referer)
 		attemptCancel()
