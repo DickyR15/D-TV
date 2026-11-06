@@ -8,9 +8,15 @@ import 'profiles_screen.dart';
 import 'ui_localization.dart';
 
 class SourceManagementScreen extends StatefulWidget {
-  const SourceManagementScreen({super.key, required this.store});
+  const SourceManagementScreen({
+    super.key,
+    required this.store,
+    this.updateSourceEnabled,
+  });
 
   final LocalStore store;
+  final Future<void> Function(String sourceId, bool enabled)?
+      updateSourceEnabled;
 
   @override
   State<SourceManagementScreen> createState() => _SourceManagementScreenState();
@@ -68,7 +74,8 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
       _error = null;
     });
     try {
-      await widget.store.setSourceEnabled(source.id, enabled);
+      final update = widget.updateSourceEnabled ?? widget.store.setSourceEnabled;
+      await update(source.id, enabled);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
