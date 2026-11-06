@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *testing.T) {
+func TestNativeCoverLoadReusesCachedExternalFallbackAfterCacheRecreationBeforeAnyNetwork(t *testing.T) {
 	fixture, err := os.ReadFile("../../test/fixtures/cover.jpg")
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +20,7 @@ func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *tes
 
 	const primaryURL = "https://broken-source.example.test/poster.jpg"
 	const fallbackURL = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/cached.jpg"
-	var fallbackRequests, metadataRequests, originRequests, proxyRequests int
+	var fallbackRequests, metadataRequests, originRequests, proxyRequests, officialRequests int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Hostname() {
 		case "broken-source.example.test":
@@ -38,6 +38,9 @@ func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *tes
 				ContentLength: int64(len(fixture)),
 				Request: request,
 			}, nil
+		case "fujicreative.co.jp":
+			officialRequests++
+			return posterLookupJSONResponse(request, "unexpected official poster request"), nil
 		default:
 			metadataRequests++
 			return posterLookupJSONResponse(request, "unexpected metadata request"), nil
@@ -48,16 +51,18 @@ func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *tes
 		cfg: defaultConfig(),
 		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
 	}
-	cache := newNativeCoverCache(t.TempDir(), downloader)
+	directory := t.TempDir()
 	drama := nativeDrama{
-		ID: "duoduo:101901", Source: sourceDuoduo, Title: "測試海報",
-		Category: "電影", Cover: primaryURL, FallbackCover: fallbackURL,
+		ID: "duoduo:1192", Source: sourceDuoduo, Title: "奉子成婚",
+		Category: "劇集", Cover: primaryURL, FallbackCover: fallbackURL,
 	}
 
-	// Seed the persistent cover-file cache as if an earlier launch had already
-	// downloaded and verified this exact external fallback.
+	// Seed a verified external fallback as if an earlier app process had
+	// downloaded it. Recreate the cache object before calling load(), which is
+	// the real entry point used by poster rendering.
+	firstCache := newNativeCoverCache(directory, downloader)
 	referer := nativeCoverFallbackReferer(downloader, drama, fallbackURL)
-	cachedPath, err := cache.loadAlternativeAddress(
+	cachedPath, err := firstCache.loadAlternativeAddress(
 		context.Background(), drama, fallbackURL, referer, "external", false,
 	)
 	if err != nil {
@@ -66,8 +71,11 @@ func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *tes
 	fallbackRequests = 0
 	originRequests = 0
 	proxyRequests = 0
+	metadataRequests = 0
+	officialRequests = 0
 
-	gotPath, err := cache.load(context.Background(), drama, false)
+	restartedCache := newNativeCoverCache(directory, downloader)
+	gotPath, err := restartedCache.load(context.Background(), drama, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,13 +83,13 @@ func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *tes
 		t.Fatalf("poster path = %q, want cached fallback %q", gotPath, cachedPath)
 	}
 	if fallbackRequests != 0 {
-		t.Fatalf("cached fallback triggered %d redundant network requests", fallbackRequests)
+		t.Fatalf("cached fallback triggered %d redundant fallback requests", fallbackRequests)
 	}
 	if originRequests != 0 || proxyRequests != 0 {
 		t.Fatalf("cached fallback waited for origin/proxy network attempts: origin=%d proxy=%d", originRequests, proxyRequests)
 	}
-	if metadataRequests != 0 {
-		t.Fatalf("cached fallback waited for %d unnecessary metadata requests", metadataRequests)
+	if metadataRequests != 0 || officialRequests != 0 {
+		t.Fatalf("cached fallback triggered metadata/curated-poster requests: metadata=%d official=%d", metadataRequests, officialRequests)
 	}
 }
 
