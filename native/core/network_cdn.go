@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -61,11 +63,12 @@ func newHTTP1NoALPNTransport(base *http.Transport) *http.Transport {
 }
 
 type cdnTransport struct {
-	base       *http.Transport
-	resolver   *dnsResolver
-	mu         sync.Mutex
-	transports map[string]*http.Transport
-	preferred  map[string]cdnRoute
+	base                        *http.Transport
+	resolver                    *dnsResolver
+	fallbackOnUnknownAuthority  bool
+	mu                          sync.Mutex
+	transports                  map[string]*http.Transport
+	preferred                   map[string]cdnRoute
 }
 
 func newCDNTransport(base *http.Transport, resolver *dnsResolver) *cdnTransport {
@@ -73,9 +76,15 @@ func newCDNTransport(base *http.Transport, resolver *dnsResolver) *cdnTransport 
 }
 
 func (transport *cdnTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.URL.Scheme != "https" || (!protectedCDNHost(request.URL.Hostname()) && request.Context().Value(nativeCoverNetworkKey{}) != true) || (request.Method != http.MethodGet && request.Method != http.MethodHead) {
+	if request.URL.Scheme != "https" || (request.Method != http.MethodGet && request.Method != http.MethodHead) {
 		return transport.base.RoundTrip(request)
 	}
+
+	protected := protectedCDNHost(request.URL.Hostname()) || request.Context().Value(nativeCoverNetworkKey{}) == true
+	if !protected && !transport.fallbackOnUnknownAuthority {
+		return transport.base.RoundTrip(request)
+	}
+
 	var proxyURL *url.URL
 	var err error
 	if transport.base.Proxy != nil {
@@ -88,27 +97,38 @@ func (transport *cdnTransport) RoundTrip(request *http.Request) (*http.Response,
 	if proxyURL != nil {
 		routeKey += "|" + proxyURL.String()
 	}
+
 	transport.mu.Lock()
 	preferred := transport.preferred[routeKey]
 	transport.mu.Unlock()
 	tried := map[string]bool{}
 	var response *http.Response
+	var lastErr error
 	if preferred.address != "" && time.Now().Before(preferred.expires) {
 		tried[preferred.address] = true
 		response, err = transport.roundTripAddress(request, proxyURL, routeKey, preferred.address)
 		if err == nil {
 			return response, nil
 		}
+		lastErr = err
 	} else {
 		response, err = transport.base.RoundTrip(request)
 		if err == nil {
 			return response, nil
 		}
+		if !protected && !isUnknownAuthorityError(err) {
+			return response, err
+		}
+		lastErr = err
 	}
 	if request.Context().Err() != nil {
 		return nil, request.Context().Err()
 	}
-	lastErr := err
+
+	// For media requests, a system resolver may return a DNS-RPZ landing IP
+	// instead of the CDN address. Retry only after an unknown-authority TLS
+	// failure, using public DoH results and the same normal certificate checks.
+	// A successful DoH route is cached so later segments avoid the bad resolver.
 	subnets := []string{dnsAlternateSubnet, ""}
 	for _, subnet := range subnets {
 		entry, lookupErr := transport.resolver.lookupEntry(request.Context(), request.URL.Hostname(), subnet)
@@ -137,6 +157,11 @@ func (transport *cdnTransport) RoundTrip(request *http.Request) (*http.Response,
 		}
 	}
 	return nil, fmt.Errorf("资源 %s 连接失败（已尝试备用 DNS 地址）: %w", request.URL.Hostname(), publicError(lastErr))
+}
+
+func isUnknownAuthorityError(err error) bool {
+	var authorityError x509.UnknownAuthorityError
+	return errors.As(err, &authorityError)
 }
 
 func (transport *cdnTransport) roundTripAddress(request *http.Request, proxyURL *url.URL, routeKey, address string) (*http.Response, error) {
