@@ -57,6 +57,32 @@ void main() {
     );
   });
 
+  test('Android recovery uses two alternatives, one refresh, then stops', () {
+    final recovery = PlaybackRecovery(
+      maxAlternativeAttempts: PlaybackRecovery.androidMaxAlternativeAttempts,
+    );
+    for (var i = 0; i < PlaybackRecovery.androidMaxAlternativeAttempts; i++) {
+      expect(
+        recovery.next(route(i, count: 8), allowPlayerRecreate: false),
+        PlaybackRecoveryAction.alternative,
+      );
+    }
+    expect(
+      recovery.next(route(2, count: 8), allowPlayerRecreate: false),
+      PlaybackRecoveryAction.refresh,
+    );
+    for (var i = 0; i < PlaybackRecovery.androidMaxAlternativeAttempts; i++) {
+      expect(
+        recovery.next(route(i, count: 8), allowPlayerRecreate: false),
+        PlaybackRecoveryAction.alternative,
+      );
+    }
+    expect(
+      recovery.next(route(2, count: 8), allowPlayerRecreate: false),
+      PlaybackRecoveryAction.stop,
+    );
+  });
+
   test('one-route sources force one fresh URL before terminal recovery', () {
     final recovery = PlaybackRecovery();
     expect(
