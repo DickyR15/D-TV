@@ -120,7 +120,34 @@ func newNativeCoverCache(directory string, downloader *Downloader) *nativeCoverC
 	return cache
 }
 
+func nativeCoverOriginReferer(address string) string {
+	parsed, err := url.Parse(strings.TrimSpace(address))
+	if err != nil || parsed == nil {
+		return ""
+	}
+	host := strings.ToLower(parsed.Hostname())
+	switch {
+	case host == "movie.douban.com" || host == "www.douban.com" ||
+		strings.HasSuffix(host, ".doubanio.com"):
+		return "https://movie.douban.com/"
+	case host == "bilibili.com" || strings.HasSuffix(host, ".bilibili.com") ||
+		host == "hdslb.com" || strings.HasSuffix(host, ".hdslb.com"):
+		return "https://www.bilibili.com/"
+	case host == "bgm.tv" || strings.HasSuffix(host, ".bgm.tv"):
+		return "https://bgm.tv/"
+	case host == "k.sinaimg.cn" || strings.HasSuffix(host, ".sinaimg.cn"):
+		return "https://news.sina.com.cn/"
+	case host == "live.ykimg.com" || strings.HasSuffix(host, ".ykimg.com"):
+		return "https://www.youku.com/"
+	default:
+		return ""
+	}
+}
+
 func nativeCoverReferer(downloader *Downloader, source, address string) string {
+	if referer := nativeCoverOriginReferer(address); referer != "" {
+		return referer
+	}
 	if source == sourceCloudFront {
 		if parsed, err := url.Parse(address); err == nil && (strings.HasSuffix(strings.ToLower(parsed.Hostname()), ".zdmhyg.cn") || strings.EqualFold(parsed.Hostname(), "pic.tuafjz.cn")) {
 			return downloader.providerBaseURL(sourceHuangguoAI) + "/"
@@ -145,6 +172,9 @@ func nativeCoverReferer(downloader *Downloader, source, address string) string {
 // The website shows posters at /play/{id}; a homepage-only Referer may be
 // rejected even though the same image is visible from the official page.
 func nativeCoverRefererForDrama(downloader *Downloader, drama nativeDrama, address string) string {
+	if referer := nativeCoverOriginReferer(address); referer != "" {
+		return referer
+	}
 	source := canonicalProviderSource(drama.Source)
 	if source == "" {
 		source = sourceFromDramaID(drama.ID)
