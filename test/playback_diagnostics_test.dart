@@ -292,4 +292,15 @@ void main() {
     expect(playbackDiagnosticCounterDelta('n/a', 7), 'n/a');
   });
 
+  test('MPV frame pacing diagnostics are low overhead and include key signals', () {
+    expect(playbackFramePacingSampleInterval, const Duration(seconds: 5));
+    expect(playbackFramePacingProperties, contains('hwdec-current'));
+    expect(playbackFramePacingProperties, contains('current-vo'));
+    expect(playbackFramePacingProperties, contains('decoder-frame-drop-count'));
+    expect(playbackFramePacingProperties, contains('vo-delayed-frame-count'));
+    expect(playbackFramePacingProperties, contains('demuxer-cache-duration'));
+    expect(playbackFramePacingProperties, isNot(contains('total-avsync-change')));
+    expect(playbackFramePacingProperties, isNot(contains('vsync-ratio')));
+  });
+
 }
