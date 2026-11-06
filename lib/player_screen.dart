@@ -136,8 +136,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _showLoadingOverlay = false;
   Timer? _errorTimer;
   bool _suppressVolumePersistence = false;
-  Timer? _volumeSaveTimer;
-  double? _pendingNonZeroVolume;
+  late final PlaybackVolumeMemory _volumeMemory;
   Future<void> _initialVolumeReady = Future<void>.value();
   Timer? _pictureInPictureExitTimer;
   Future<void> _operations = Future<void>.value();
@@ -244,6 +243,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     WidgetsBinding.instance.addObserver(this);
     _index = widget.initialIndex;
     _profileEpoch = widget.handoff?.profileEpoch ?? widget.store.profileEpoch;
+    _volumeMemory = PlaybackVolumeMemory(
+      initial: widget.store.playerVolume,
+      save: widget.store.setPlayerVolume,
+    );
     if (_desktopMiniPlayerSupported) {
       unawaited(
         _desktopMiniChannel.setMethodCallHandler(_handleDesktopMiniMessage)
@@ -302,7 +305,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         : _player.setVolume(widget.store.playerVolume);
     if (!_television) {
       _subscriptions.add(
-        _player.stream.volume.listen(_rememberNonZeroVolume),
+        _player.stream.volume.listen(_rememberVolume),
       );
     }
     final exoPlayer = _player is LunaExoPlayer;
@@ -1252,6 +1255,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final previous = _lifecycleState;
     _lifecycleState = state;
+    if (state != AppLifecycleState.resumed) _volumeMemory.flush();
     final playerState = _player.state;
     DiaryService.add(
       '[PlaybackLifecycle] from=${previous.name} to=${state.name} '
@@ -1602,7 +1606,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     await _initialVolumeReady;
-    final volumeBeforeOpen = _television ? null : _player.state.volume;
+    final volumeBeforeOpen = _television ? null : _volumeMemory.value;
     final playClock = Stopwatch()..start();
     var cleanupMs = 0;
     var resolveMs = 0;
@@ -2028,6 +2032,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     _framePacingDiagnosticTimer?.cancel();
     _framePacingLastCounters.clear();
     _framePacingLastSampleAt = null;
+    if (_player is LunaExoPlayer) {
+      if (Platform.isAndroid && _television) {
+        unawaited(_logExoPlaybackEnvironment());
+      }
+      return;
+    }
     if (!_displaySyncDiagnosticsApplies || _player.platform is! NativePlayer) {
       return;
     }
@@ -2096,6 +2106,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     DiaryService.add(
       '[Sync] generation=$generation decoder=${_televisionDecoder.name} '
       '${values.join(' ')} $displaySummary',
+    );
+  }
+
+  Future<void> _logExoPlaybackEnvironment() async {
+    final displaySummary = await _readAndroidDisplaySummary();
+    if (_closed) return;
+    DiaryService.add(
+      '[ExoPlayerEnvironment] $displaySummary '
+      'frame-drop-counters=not-exposed-by-video_player '
+      'decoder=platform-managed buffer-control=plugin-default',
     );
   }
 
@@ -2569,35 +2589,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  void _rememberNonZeroVolume(double value) {
-    if (_television ||
-        _closed ||
-        _suppressVolumePersistence ||
-        !value.isFinite ||
-        value <= 0) {
-      return;
-    }
-    _pendingNonZeroVolume = value.clamp(1.0, 100.0).toDouble();
-    _volumeSaveTimer?.cancel();
-    _volumeSaveTimer = Timer(const Duration(milliseconds: 500), () {
-      _volumeSaveTimer = null;
-      final saved = _pendingNonZeroVolume;
-      _pendingNonZeroVolume = null;
-      if (saved != null && saved > 0) {
-        unawaited(widget.store.setPlayerVolume(saved));
-      }
-    });
+  void _rememberVolume(double value) {
+    if (_television || _closed || _suppressVolumePersistence) return;
+    _volumeMemory.remember(value);
   }
 
   @override
   void dispose() {
     _closed = true;
-    _volumeSaveTimer?.cancel();
-    final pendingVolume = _pendingNonZeroVolume;
-    _pendingNonZeroVolume = null;
-    if (!_television && pendingVolume != null && pendingVolume > 0) {
-      unawaited(widget.store.setPlayerVolume(pendingVolume));
-    }
+    _volumeMemory.dispose();
     if (_desktopMiniPlayerSupported) {
       if (_desktopMiniActive) {
         unawaited(
@@ -2941,7 +2941,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             onBack: _back,
             onFocusSurface: _playerFocus.requestFocus,
             onSeek: _seekTo,
-            onVolumeChanged: Platform.isWindows ? _rememberNonZeroVolume : null,
+            onVolumeChanged: Platform.isWindows ? _rememberVolume : null,
             speed: _speed,
             qualityLabel: _qualityLabel,
             onEpisodes: () => _openPanel(PlayerMenuSection.episodes),
