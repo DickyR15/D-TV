@@ -294,7 +294,7 @@ func TestYongshengOfficialPosterRequiresExactAnimeYearAndTitle(t *testing.T) {
 	}
 }
 
-func TestNativeCoverRefererUsesOriginalPosterHostForBilibiliAndDouban(t *testing.T) {
+func TestDuoduoPosterRefererUsesBilibiliOriginButKeepsDuoduoDetailForDouban(t *testing.T) {
 	downloader := &Downloader{
 		cfg: defaultConfig(),
 		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
@@ -305,7 +305,7 @@ func TestNativeCoverRefererUsesOriginalPosterHostForBilibiliAndDouban(t *testing
 		want string
 	}{
 		{"https://i0.hdslb.com/bfs/bangumi/image/poster.png", "https://www.bilibili.com/"},
-		{"https://img9.doubanio.com/view/photo/s_ratio_poster/public/poster.jpg", "https://movie.douban.com/"},
+		{"https://img9.doubanio.com/view/photo/s_ratio_poster/public/poster.jpg", "https://323433ssdfd.top/play/12345"},
 	}
 	for _, test := range cases {
 		if got := nativeCoverRefererForDrama(downloader, drama, test.address); got != test.want {
