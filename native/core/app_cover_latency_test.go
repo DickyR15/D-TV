@@ -269,3 +269,101 @@ func TestDuoduoPosterAttemptDiagnosticsAreUsefulAndRedacted(t *testing.T) {
 		}
 	}
 }
+
+func TestYongshengOfficialPosterRequiresExactAnimeYearAndTitle(t *testing.T) {
+	const want = "https://i0.hdslb.com/bfs/bangumi/image/1c697e41f5e2524b2610ec895cead5c25f494e87.png"
+	accepted := nativeDrama{
+		ID: "duoduo:12345", Source: sourceDuoduo, SourceID: "12345",
+		Title: "永生", Category: "動畫", OnlineDate: "2022",
+	}
+	if got, ok := nativePreferredOfficialPosterAddress(accepted); !ok || got != want {
+		t.Fatalf("preferred Yongsheng poster = %q, matched=%v; want %q", got, ok, want)
+	}
+
+	rejected := []nativeDrama{
+		{ID: "duoduo:12345", Source: sourceDuoduo, Title: "永生", Category: "動畫", OnlineDate: "2023"},
+		{ID: "duoduo:12345", Source: sourceDuoduo, Title: "永生", Category: "電影", OnlineDate: "2022"},
+		{ID: "duoduo:12345", Source: sourceDuoduo, Title: "永生之十年之約", Category: "動畫", OnlineDate: "2023"},
+		{ID: "duoduo:12345", Source: sourceDuoduo, Title: "永生", Category: "動畫"},
+	}
+	for _, drama := range rejected {
+		if got, ok := nativePreferredOfficialPosterAddress(drama); ok {
+			t.Errorf("unrelated Yongsheng record unexpectedly matched poster %q: %+v", got, drama)
+		}
+	}
+}
+
+func TestNativeCoverRefererUsesOriginalPosterHostForBilibiliAndDouban(t *testing.T) {
+	downloader := &Downloader{
+		cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
+	}
+	drama := nativeDrama{ID: "duoduo:12345", Source: sourceDuoduo, SourceID: "12345"}
+	cases := []struct {
+		address string
+		want string
+	}{
+		{"https://i0.hdslb.com/bfs/bangumi/image/poster.png", "https://www.bilibili.com/"},
+		{"https://img9.doubanio.com/view/photo/s_ratio_poster/public/poster.jpg", "https://movie.douban.com/"},
+	}
+	for _, test := range cases {
+		if got := nativeCoverRefererForDrama(downloader, drama, test.address); got != test.want {
+			t.Errorf("Referer for %s = %q, want %q", test.address, got, test.want)
+		}
+	}
+}
+
+func TestPreferredYongshengPosterOverridesPreviouslyCachedHotlinkPlaceholder(t *testing.T) {
+	fixture, err := os.ReadFile("../../test/fixtures/cover.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const primaryURL = "https://images.example.test/hotlink-placeholder.jpg"
+	const officialURL = "https://i0.hdslb.com/bfs/bangumi/image/1c697e41f5e2524b2610ec895cead5c25f494e87.png"
+	var primaryRequests, officialRequests int
+	var officialReferer string
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Hostname() {
+		case "images.example.test":
+			primaryRequests++
+		case "i0.hdslb.com":
+			officialRequests++
+			officialReferer = request.Header.Get("Referer")
+		default:
+			return nil, errors.New("unexpected poster host: " + request.URL.Hostname())
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+			Body: io.NopCloser(bytes.NewReader(fixture)),
+			ContentLength: int64(len(fixture)),
+			Request: request,
+		}, nil
+	})}
+	downloader := &Downloader{
+		client: client, cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
+	}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	drama := nativeDrama{
+		ID: "duoduo:12345", Source: sourceDuoduo, SourceID: "12345",
+		Title: "永生", Category: "動畫", OnlineDate: "2022", Cover: primaryURL,
+	}
+	placeholderPath, err := cache.loadAddress(context.Background(), drama, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if primaryRequests != 1 {
+		t.Fatalf("primary image requests = %d, want 1", primaryRequests)
+	}
+	officialPath, err := cache.load(context.Background(), drama, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if officialPath == placeholderPath {
+		t.Fatal("cached primary hotlink placeholder was returned instead of official Yongsheng poster")
+	}
+	if officialRequests != 1 || officialReferer != "https://www.bilibili.com/" {
+		t.Fatalf("official poster requests=%d Referer=%q, want one request from Bilibili", officialRequests, officialReferer)
+	}
+}
