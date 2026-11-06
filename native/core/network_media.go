@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+type nativeMediaRequestKey struct{}
+
 type huangguoPreviewSession struct {
 	mu      sync.Mutex
 	token   string
@@ -129,6 +131,7 @@ func (d *Downloader) doMediaRequest(request *http.Request) (*http.Response, erro
 }
 
 func (d *Downloader) doMediaRequestWithClient(request *http.Request, client *http.Client) (*http.Response, error) {
+	request = request.WithContext(context.WithValue(request.Context(), nativeMediaRequestKey{}, true))
 	mediaRequestHeaders(request, request.Header.Get("Referer"))
 	if credentials, _ := request.Context().Value(providerMediaCredentialsKey{}).(*providerMediaCredentials); credentials != nil {
 		if err := credentials.apply(request); err != nil {
