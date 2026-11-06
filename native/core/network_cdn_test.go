@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"net"
 	"net/http"
@@ -61,7 +62,7 @@ func TestCDNKeyEOFUsesVerifiedDNSAndKeepsMediaIdentity(t *testing.T) {
 	if direct.Load() != 1 || lookups.Load() != 1 {
 		t.Fatal("working CDN route was not reused", direct.Load(), lookups.Load())
 	}
-	for _, addresses := range [][]string{{"127.0.0.1"}, {"198.18.0.1"}, {"93.184.216.34", "10.0.0.1"}} {
+	for _, addresses := range [][]string{{"127.0.0.1"}, {"198.18.0.1"}, {"182.173.0.181"}, {"93.184.216.34", "10.0.0.1"}} {
 		if validateCDNAddresses(addresses) == nil {
 			t.Fatal("unsafe DNS answer was accepted", addresses)
 		}
@@ -272,5 +273,94 @@ func TestHTTP1NoALPNTransportCompletesTLSWithoutNegotiatedProtocol(t *testing.T)
 	body, err := io.ReadAll(response.Body)
 	if err != nil || string(body) != "ok" {
 		t.Fatalf("unexpected response body %q, err=%v", body, err)
+	}
+}
+
+
+func TestCDNTransportRetriesUnknownAuthorityThroughVerifiedDoHForMediaHosts(t *testing.T) {
+	const host = "example.com"
+	const fallbackIP = "93.184.216.34"
+	var directAttempts, dohLookups, recoveredRequests atomic.Int32
+
+	goodServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.TLS == nil || request.TLS.ServerName != host || request.URL.Path != "/video/index.m3u8" {
+			t.Errorf("DoH retry changed TLS SNI or media path: tls=%+v path=%q", request.TLS, request.URL.Path)
+		}
+		if request.Host == "" || request.Host == fallbackIP {
+			t.Errorf("DoH retry did not preserve the original media Host header: %q", request.Host)
+		}
+		recoveredRequests.Add(1)
+		_, _ = io.WriteString(writer, "verified media playlist")
+	}))
+	defer goodServer.Close()
+
+	badServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		t.Error("untrusted certificate must be rejected before sending an HTTP request")
+	}))
+	defer badServer.Close()
+
+	_, port, err := net.SplitHostPort(goodServer.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalAddress := net.JoinHostPort(host, port)
+	fallbackAddress := net.JoinHostPort(fallbackIP, port)
+	trustedRoots := x509.NewCertPool()
+	trustedRoots.AddCert(goodServer.Certificate())
+
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.Proxy = nil
+	base.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: trustedRoots}
+	base.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if address == originalAddress {
+			if directAttempts.Add(1) != 1 {
+				t.Errorf("unexpected repeat of the system-DNS route: %s", address)
+				return nil, io.EOF
+			}
+			return (&net.Dialer{}).DialContext(ctx, network, badServer.Listener.Addr().String())
+		}
+		if address == fallbackAddress {
+			return (&net.Dialer{}).DialContext(ctx, network, goodServer.Listener.Addr().String())
+		}
+		t.Errorf("unexpected media dial destination: %s", address)
+		return nil, io.EOF
+	}
+
+	resolver := newDNSResolver(base)
+	resolver.endpoints = []string{"https://dns.example.test/resolve"}
+	resolver.client = &http.Client{
+		Transport: sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+			dohLookups.Add(1)
+			if request.URL.Query().Get("name") != host || request.URL.Query().Get("type") != "A" {
+				t.Errorf("unexpected DoH lookup: %s", request.URL.String())
+			}
+			return sourceFixtureResponse(request, http.StatusOK,
+				`{"Status":0,"Answer":[{"type":1,"TTL":120,"data":"93.184.216.34"}]}`), nil
+		}),
+	}
+
+	transport := newCDNTransport(base, resolver)
+	transport.fallbackOnUnknownAuthority = true
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
+
+	for attempt := 0; attempt < 2; attempt++ {
+		response, requestErr := client.Get("https://" + host + ":" + port + "/video/index.m3u8")
+		if requestErr != nil {
+			t.Fatalf("media request %d did not recover using verified DoH: %v", attempt+1, requestErr)
+		}
+		body, readErr := io.ReadAll(response.Body)
+		response.Body.Close()
+		if readErr != nil || response.StatusCode != http.StatusOK || string(body) != "verified media playlist" {
+			t.Fatalf("unexpected recovered media response: status=%d body=%q err=%v", response.StatusCode, body, readErr)
+		}
+	}
+
+	if directAttempts.Load() != 1 || dohLookups.Load() != 1 || recoveredRequests.Load() != 2 {
+		t.Fatalf("verified DoH route was not cached: system_dns=%d doh=%d recovered=%d",
+			directAttempts.Load(), dohLookups.Load(), recoveredRequests.Load())
+	}
+	if base.TLSClientConfig == nil || base.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("DNS recovery must not disable normal TLS certificate verification")
 	}
 }
