@@ -20,10 +20,14 @@ func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *tes
 
 	const primaryURL = "https://broken-source.example.test/poster.jpg"
 	const fallbackURL = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/cached.jpg"
-	var fallbackRequests, metadataRequests int
+	var fallbackRequests, metadataRequests, originRequests, proxyRequests int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Hostname() {
-		case "broken-source.example.test", "images.weserv.nl", "wsrv.nl":
+		case "broken-source.example.test":
+			originRequests++
+			return posterLookupJSONResponse(request, "not found"), nil
+		case "images.weserv.nl", "wsrv.nl":
+			proxyRequests++
 			return posterLookupJSONResponse(request, "not found"), nil
 		case "img9.doubanio.com":
 			fallbackRequests++
@@ -60,6 +64,8 @@ func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *tes
 		t.Fatal(err)
 	}
 	fallbackRequests = 0
+	originRequests = 0
+	proxyRequests = 0
 
 	gotPath, err := cache.load(context.Background(), drama, false)
 	if err != nil {
@@ -70,6 +76,9 @@ func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *tes
 	}
 	if fallbackRequests != 0 {
 		t.Fatalf("cached fallback triggered %d redundant network requests", fallbackRequests)
+	}
+	if originRequests != 0 || proxyRequests != 0 {
+		t.Fatalf("cached fallback waited for origin/proxy network attempts: origin=%d proxy=%d", originRequests, proxyRequests)
 	}
 	if metadataRequests != 0 {
 		t.Fatalf("cached fallback waited for %d unnecessary metadata requests", metadataRequests)
