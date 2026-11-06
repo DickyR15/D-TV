@@ -268,15 +268,15 @@ class LocalStore extends ChangeNotifier {
   double get playerVolume {
     final saved = double.tryParse(_string(_key('playerVolume')) ?? '');
     final value = saved ?? preferences.getDouble('playerVolume') ?? 100.0;
-    if (!value.isFinite || value <= 0) return 100.0;
-    return value.clamp(1.0, 100.0).toDouble();
+    if (!value.isFinite) return 100.0;
+    return value.clamp(0.0, 100.0).toDouble();
   }
 
   Future<void> setPlayerVolume(double value) {
-    if (!value.isFinite || value <= 0) return Future.value();
+    if (!value.isFinite) return Future.value();
     if (locked) return Future.value();
     return _queue(() async {
-      final normalized = value.clamp(1.0, 100.0).toDouble();
+      final normalized = value.clamp(0.0, 100.0).toDouble();
       await _commit({
         _key('playerVolume'): normalized.toString(),
       }, trackSync: false);
