@@ -12,6 +12,50 @@ void main() {
     expect(playbackVideoSyncModeFor(windows: false, android: false, television: false), 'audio');
   });
 
+  test('ExoPlayer buffer headroom is measured without changing cache policy', () {
+    expect(
+      playbackBufferedAheadMilliseconds(
+        position: const Duration(seconds: 8),
+        bufferedEnd: const Duration(seconds: 11),
+      ),
+      3000,
+    );
+    expect(
+      playbackBufferedAheadMilliseconds(
+        position: const Duration(seconds: 8),
+        bufferedEnd: null,
+      ),
+      isNull,
+    );
+    expect(
+      playbackBufferedAheadMilliseconds(
+        position: const Duration(seconds: 8),
+        bufferedEnd: const Duration(seconds: 7),
+      ),
+      -1000,
+    );
+  });
+
+  test('PlaybackVolumeMemory preserves mute and the latest slider value', () async {
+    final saved = <double>[];
+    final memory = PlaybackVolumeMemory(
+      initial: 42,
+      debounce: const Duration(days: 1),
+      save: (value) async => saved.add(value),
+    );
+    memory.remember(0);
+    expect(memory.value, 0);
+    memory.flush();
+    await Future<void>.delayed(Duration.zero);
+    expect(saved, [0]);
+    memory.remember(25);
+    memory.remember(38);
+    expect(memory.value, 38);
+    memory.dispose();
+    await Future<void>.delayed(Duration.zero);
+    expect(saved, [0, 38]);
+  });
+
   test('localhost session, credentials and query never enter playback logs', () {
     const token = '0123456789abcdef0123456789abcdef0123456789abcdef';
     final safe = playbackDiagnosticUrl(
