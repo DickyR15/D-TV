@@ -447,3 +447,74 @@ func TestPreferredYongshengPosterOverridesPreviouslyCachedHotlinkPlaceholder(t *
 		t.Fatalf("official poster requests=%d Referer=%q, want one request from Bilibili", officialRequests, officialReferer)
 	}
 }
+
+
+func TestAllRepairedDuoduoPostersReuseExternalFallbackBeforeSourceCache(t *testing.T) {
+	fixture, err := os.ReadFile("../../test/fixtures/cover.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const primaryURL = "https://source.example.test/poster.jpg"
+	const fallbackURL = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/repaired.jpg"
+	var primaryRequests, fallbackRequests int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Hostname() {
+		case "source.example.test":
+			primaryRequests++
+		case "img9.doubanio.com":
+			fallbackRequests++
+		default:
+			return posterLookupJSONResponse(request, "unexpected request"), nil
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+			Body: io.NopCloser(bytes.NewReader(fixture)),
+			ContentLength: int64(len(fixture)),
+			Request: request,
+		}, nil
+	})}
+	downloader := &Downloader{
+		client: client, cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
+	}
+	directory := t.TempDir()
+	drama := nativeDrama{
+		ID: "duoduo:987654", Source: sourceDuoduo,
+		Title: "一般已修復作品", Category: "劇集",
+		Cover: primaryURL, FallbackCover: fallbackURL,
+	}
+
+	// First launch: both the source poster and the strictly verified external
+	// fallback have already been downloaded and persisted.
+	firstCache := newNativeCoverCache(directory, downloader)
+	primaryPath, err := firstCache.loadAddress(context.Background(), drama, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fallbackPath, err := firstCache.loadAlternativeAddress(
+		context.Background(), drama, fallbackURL,
+		nativeCoverFallbackReferer(downloader, drama, fallbackURL), "external", false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if primaryPath == fallbackPath {
+		t.Fatal("source and external poster caches unexpectedly share a path")
+	}
+	primaryRequests, fallbackRequests = 0, 0
+
+	// A new app process must render the repaired external poster immediately,
+	// without first trusting the possibly hotlink-blocked source image cache.
+	restartedCache := newNativeCoverCache(directory, downloader)
+	gotPath, err := restartedCache.load(context.Background(), drama, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != fallbackPath {
+		t.Fatalf("poster path = %q, want repaired fallback %q", gotPath, fallbackPath)
+	}
+	if primaryRequests != 0 || fallbackRequests != 0 {
+		t.Fatalf("cached repaired poster made network requests: source=%d fallback=%d", primaryRequests, fallbackRequests)
+	}
+}
