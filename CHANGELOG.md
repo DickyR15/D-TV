@@ -19,6 +19,8 @@
 
 ### 播放體驗
 - Windows 繼續使用 MPV，採用 `display-resample` 與輸出端遲到影格處理；Android TV 預設改用 ExoPlayer 播放路徑，交由 ExoPlayer 的影格時間戳與 VSync 對齊機制管理畫面節奏，MPV Embed 保留為可切換的 A/B 測試路徑。
+- 修正 Android Universal APK 建置腳本仍預設輸出 MPV Embed、與播放頁預設 ExoPlayer 不一致的問題；CI 明確以 ExoPlayer 建置，`--player-engine mpv_embed` 保留作為人工 A/B 測試選項。
+- Windows MPV 保留曾修正影像綠邊的 `d3d11va-copy` 相容解碼，不直接強制切換可能造成影像瑕疵的原生 D3D11 路徑；播放診斷增加 GPU API、Context 與裝置資訊，作為後續安全調整依據。
 - Windows MPV 關閉磁碟檔案快取，改用記憶體緩衝，避免每次開啟串流都出現 `Failed to create file cache`。
 - Android TV 不再由 D TV 強制修改 Activity 的 `preferredDisplayModeId`，避免離開播放頁時切回原更新率造成短暫黑畫面；顯示更新率交由 ExoPlayer／Android 的 Surface 影格率協調機制處理，預設只要求無縫切換。
 - 完全移除彈幕功能：刪除播放畫面顯示、播放器與電視設定中的開關及重試入口、彈幕偏好設定、紅果彈幕資料請求與原生核心處理；舊版設定檔中的彈幕欄位會直接忽略。
