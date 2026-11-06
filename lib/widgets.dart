@@ -758,7 +758,8 @@ void showDtvToast(
             Flexible(
               child: Text(
                 message,
-                maxLines: 2,
+                maxLines: 1,
+                softWrap: false,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
