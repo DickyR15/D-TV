@@ -2611,11 +2611,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _handlePlaybackBack() {
-    // The TV controls are disabled while the playback-error panel is visible.
-    // PopScope still intercepts remote Back, so bypass the disabled controls
-    // and apply the normal route/dialog back behavior directly.
-    if (_error != null) {
-      _back();
+    // Loading/recovery disables the playback control row. Back must remain
+    // available in this state, otherwise ExoPlayer route retries can trap the
+    // viewer on Android TV. Exit the playback route directly.
+    if (playbackBackShouldExitImmediately(
+      loading: _loading,
+      hasError: _error != null,
+    )) {
+      _exitPlayback();
       return;
     }
     if (_television) {
