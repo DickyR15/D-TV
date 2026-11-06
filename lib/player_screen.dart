@@ -2497,6 +2497,9 @@ class _PlayerScreenState extends State<PlayerScreen>
           televisionDecoder: selection.decoder,
         ),
       );
+      if (selection.decoder != null && mounted && !_closed) {
+        showDtvToast(context, '解碼方式已變更，已重新載入影片。');
+      }
     } catch (_) {
       _notice('播放偏好未能儲存，請重試');
     }
