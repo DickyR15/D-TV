@@ -22,7 +22,7 @@ func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *tes
 	var fallbackRequests, metadataRequests int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Hostname() {
-		case "broken-source.example.test", "images.weserv.nl":
+		case "broken-source.example.test", "images.weserv.nl", "wsrv.nl":
 			return posterLookupJSONResponse(request, "not found"), nil
 		case "img9.doubanio.com":
 			fallbackRequests++
@@ -79,8 +79,8 @@ func TestDuoduoCoverFailoverUsesBoundedBudgets(t *testing.T) {
 	if got := nativeCoverFetchTimeout(sourceDuoduo); got != 12*time.Second {
 		t.Fatalf("Duoduo initial fetch budget = %s, want 12s", got)
 	}
-	if got := nativeCoverAlternativeTimeout(sourceDuoduo, "provider"); got != 10*time.Second {
-		t.Fatalf("Duoduo provider fallback budget = %s, want 10s", got)
+	if got := nativeCoverAlternativeTimeout(sourceDuoduo, "provider"); got != 12*time.Second {
+		t.Fatalf("Duoduo provider fallback budget = %s, want 12s", got)
 	}
 	if got := nativeCoverFetchTimeout(sourceHongguo); got != 25*time.Second {
 		t.Fatalf("other provider initial fetch budget = %s, want 25s", got)
