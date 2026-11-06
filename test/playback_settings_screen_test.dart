@@ -273,7 +273,7 @@ void main() {
       find.byKey(const ValueKey('compatible-rendering-cancel')),
     );
     expect(cancel.focusNode!.hasPrimaryFocus, isTrue);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(await result, isFalse);
   });
@@ -312,7 +312,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(restart.focusNode!.hasPrimaryFocus, isTrue);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(await result, isTrue);
   });
@@ -361,7 +361,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(save.focusNode!.hasPrimaryFocus, isTrue);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(result, '客廳電視');
   });
@@ -400,7 +400,7 @@ void main() {
       ).focusNode!.hasPrimaryFocus,
       isTrue,
     );
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(result, isNull);
   });
@@ -440,12 +440,12 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
     expect(submitFocus.hasPrimaryFocus, isTrue);
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
     expect(action, 'confirm');
     cancelFocus.requestFocus();
     await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
     expect(action, 'cancel');
   });
