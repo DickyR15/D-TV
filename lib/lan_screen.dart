@@ -1316,7 +1316,7 @@ class _DeviceRenameDialogState extends State<DeviceRenameDialog> {
   final FocusNode _saveFocus = FocusNode(debugLabel: 'lan-rename-save');
   bool _initialFocusRequested = false;
 
-  void _save() => Navigator.of(context).pop(_name.text);
+  void _save() => Navigator.of(context).pop(_name.text.trim());
 
   @override
   void didChangeDependencies() {
