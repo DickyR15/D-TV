@@ -732,7 +732,8 @@ void showDtvToast(
   final messenger = ScaffoldMessenger.maybeOf(context);
   if (messenger == null) return;
   final width = ((MediaQuery.maybeOf(context)?.size.width ?? 320).toDouble())
-      .clamp(260.0, 320.0);
+      .clamp(260.0, 320.0)
+      .toDouble();
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
