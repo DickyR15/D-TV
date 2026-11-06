@@ -122,6 +122,25 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 			); ok {
 				return path, nil
 			}
+			// The curated image is preferred over a known hotlink-blocked
+			// provider cache, but a previously verified external fallback is
+			// still better for first-screen rendering than another network wait.
+			_, cachedExternal := cache.cachedRepair(drama.ID)
+			for _, externalAddress := range duoduoUniqueStrings([]string{
+				strings.TrimSpace(drama.FallbackCover),
+				cachedExternal,
+			}) {
+				if externalAddress == "" || externalAddress == primaryAddress {
+					continue
+				}
+				if path, ok := cache.cachedAlternativeCoverPath(
+					drama, externalAddress,
+					nativeCoverFallbackReferer(cache.downloader, drama, externalAddress),
+					"external",
+				); ok {
+					return path, nil
+				}
+			}
 		}
 		path, err := cache.loadAlternativeAddress(
 			ctx, drama, preferredOfficialAddress, referer, "external", force,
