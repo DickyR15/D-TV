@@ -172,14 +172,22 @@ func nativeCoverReferer(downloader *Downloader, source, address string) string {
 // The website shows posters at /play/{id}; a homepage-only Referer may be
 // rejected even though the same image is visible from the official page.
 func nativeCoverRefererForDrama(downloader *Downloader, drama nativeDrama, address string) string {
-	if referer := nativeCoverOriginReferer(address); referer != "" {
-		return referer
-	}
 	source := canonicalProviderSource(drama.Source)
 	if source == "" {
 		source = sourceFromDramaID(drama.ID)
 	}
 	if source == sourceDuoduo {
+		// Bilibili's CDN requires its own site Referer to avoid returning its
+		// "image hotlink disabled" placeholder. Other original catalogue
+		// images keep Duoduo's exact work page Referer; external fallback
+		// images continue to use their own host-specific Referer below.
+		if parsed, err := url.Parse(strings.TrimSpace(address)); err == nil {
+			host := strings.ToLower(parsed.Hostname())
+			if host == "bilibili.com" || strings.HasSuffix(host, ".bilibili.com") ||
+				host == "hdslb.com" || strings.HasSuffix(host, ".hdslb.com") {
+				return "https://www.bilibili.com/"
+			}
+		}
 		if _, sourceID, valid := splitProviderDramaID(drama.ID); valid && webProviderNumericID.MatchString(sourceID) {
 			base := strings.TrimRight(downloader.providerBaseURL(source), "/")
 			if base == "" {
