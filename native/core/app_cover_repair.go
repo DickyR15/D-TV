@@ -95,20 +95,12 @@ func (cache *nativeCoverCache) cachedAlternativeCoverPath(
 // catalogue poster -> provider detail poster -> external poster.
 func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, force bool) (string, error) {
 	requestedForce := force
-	// A small set of user-reported records have verified official artwork that
-	// should replace a successful-but-unusable source image. These mappings are
-	// restricted by exact provider ID and title; all other works retain the
-	// normal catalogue -> provider detail -> external fallback order.
+	// Curated official artwork is an exact-record external override. Resolve its
+	// address without I/O now; check its local cache alongside other verified
+	// fallbacks before any remote poster or metadata request.
+	preferredOfficialAddress := ""
 	if cache.downloader != nil {
-		if preferredAddress, ok := nativePreferredOfficialPosterAddress(drama); ok {
-			path, err := cache.loadAlternativeAddress(
-				ctx, drama, preferredAddress,
-				nativeCoverFallbackReferer(cache.downloader, drama, preferredAddress), "external", force,
-			)
-			if err == nil {
-				return path, nil
-			}
-		}
+		preferredOfficialAddress, _ = nativePreferredOfficialPosterAddress(drama)
 	}
 	primaryAddress := strings.TrimSpace(drama.Cover)
 	primaryErr := errors.New("站源尚未提供原始海報網址")
@@ -142,6 +134,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 			}
 		}
 		for _, externalAddress := range duoduoUniqueStrings([]string{
+			preferredOfficialAddress,
 			strings.TrimSpace(drama.FallbackCover),
 			cachedExternal,
 		}) {
@@ -156,6 +149,19 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 			}
 		}
 	}
+	// Exact, independently verified official artwork retains its override
+	// semantics, but only after every already-cached catalogue/provider/external
+	// image has had a chance to render without network access.
+	if preferredOfficialAddress != "" {
+		path, err := cache.loadAlternativeAddress(
+			ctx, drama, preferredOfficialAddress,
+			nativeCoverFallbackReferer(cache.downloader, drama, preferredOfficialAddress), "external", force,
+		)
+		if err == nil {
+			return path, nil
+		}
+	}
+
 	if primaryAddress != "" {
 		path, err := cache.loadAddress(ctx, drama, force)
 		if err == nil || ctx.Err() != nil {
