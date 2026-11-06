@@ -20,3 +20,18 @@ void main() {
     }
   });
 }
+
+test('playback Back bypasses disabled controls while loading or in error', () {
+  expect(
+    playbackBackShouldExitImmediately(loading: true, hasError: false),
+    isTrue,
+  );
+  expect(
+    playbackBackShouldExitImmediately(loading: false, hasError: true),
+    isTrue,
+  );
+  expect(
+    playbackBackShouldExitImmediately(loading: false, hasError: false),
+    isFalse,
+  );
+});
