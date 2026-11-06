@@ -81,7 +81,8 @@ func (transport *cdnTransport) RoundTrip(request *http.Request) (*http.Response,
 	}
 
 	protected := protectedCDNHost(request.URL.Hostname()) || request.Context().Value(nativeCoverNetworkKey{}) == true
-	if !protected && !transport.fallbackOnUnknownAuthority {
+	mediaRetry := transport.fallbackOnUnknownAuthority && request.Context().Value(nativeMediaRequestKey{}) == true
+	if !protected && !mediaRetry {
 		return transport.base.RoundTrip(request)
 	}
 
