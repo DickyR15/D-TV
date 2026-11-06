@@ -43,9 +43,9 @@ import 'video_output_size.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
-  // Android TV defaults to ExoPlayer. Set DTV_ANDROID_PLAYER=mpv_embed to
-  // retain the MPV Embed path for controlled A/B testing.
-  defaultValue: 'exo',
+  // Keep the previously validated Android TV backend: MPV Embed + MediaCodec.
+  // ExoPlayer remains available for controlled A/B testing.
+  defaultValue: 'mpv_embed',
 );
 
 // Never leave the loading overlay spinning indefinitely if MPV does not
@@ -261,8 +261,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _requestedQuality = preferences.quality;
     _autoAdvance = preferences.autoAdvance;
     _televisionDecoder = preferences.televisionDecoder;
-    // Android TV defaults to ExoPlayer for Media3 frame-release pacing.
-    // MPV Embed remains available through DTV_ANDROID_PLAYER=mpv_embed for A/B tests.
+    // Preserve the previously validated Android TV MPV Embed + MediaCodec path.
+    // ExoPlayer remains opt-in through DTV_ANDROID_PLAYER=exo for A/B tests.
     final inheritedLayout = context.getInheritedWidgetOfExactType<AppLayout>();
     final isTelevisionLayout =
         inheritedLayout?.formFactor == FormFactor.television ||
