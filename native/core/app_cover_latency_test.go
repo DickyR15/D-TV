@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -194,5 +195,57 @@ func TestNativeCoverExternalFallbackCacheSurvivesCacheRecreation(t *testing.T) {
 	}
 	if requests != 1 {
 		t.Fatalf("restarted cache performed %d total requests, want the original single request", requests)
+	}
+}
+
+
+func TestDuoduoPosterAttemptDiagnosticsAreUsefulAndRedacted(t *testing.T) {
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache := newNativeCoverCache(t.TempDir(), engine.downloader)
+	drama := nativeDrama{ID: "duoduo:101901", Source: sourceDuoduo, Title: "診斷測試"}
+
+	cache.recordDuoduoPosterAttempt(
+		drama,
+		duoduoPosterAttempt{
+			address: "https://img.example.test/poster.jpg?token=origin-secret",
+			referer: "https://source.example.test/play/101901?session=private",
+		},
+		1, time.Now().Add(-150*time.Millisecond), nil, context.DeadlineExceeded,
+	)
+	cache.recordDuoduoPosterAttempt(
+		drama,
+		duoduoPosterAttempt{
+			address: "https://wsrv.nl/?url=img.example.test%2Fposter.jpg%3Ftoken%3Dproxy-secret",
+			referer: "https://wsrv.nl/",
+		},
+		2, time.Now().Add(-75*time.Millisecond), []byte("webp-poster"), nil,
+	)
+
+	data, err := os.ReadFile(engine.downloader.diagnostics.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(data)
+	for _, secret := range []string{"origin-secret", "proxy-secret", "session=private"} {
+		if strings.Contains(log, secret) {
+			t.Fatalf("poster diagnostics leaked signed URL or Referer data %q: %s", secret, log)
+		}
+	}
+	for _, marker := range []string{
+		"\"event\":\"cover.attempt\"",
+		"\"host\":\"img.example.test\"",
+		"\"host\":\"wsrv.nl\"",
+		"strategy=origin",
+		"strategy=cloudflare_edge",
+		"elapsed_ms=",
+		"result=deadline",
+		"result=success",
+	} {
+		if !strings.Contains(log, marker) {
+			t.Errorf("poster diagnostics missing %q: %s", marker, log)
+		}
 	}
 }
