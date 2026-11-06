@@ -132,6 +132,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _framePacingDiagnosticBusy = false;
   final Map<String, int> _framePacingLastCounters = {};
   DateTime? _framePacingLastSampleAt;
+  Duration? _framePacingLastPosition;
+  bool? _framePacingLastBuffering;
+  bool? _lastPlaybackBuffering;
   Timer? _loadingOverlayTimer;
   bool _showLoadingOverlay = false;
   Timer? _errorTimer;
@@ -453,6 +456,32 @@ class _PlayerScreenState extends State<PlayerScreen>
         }),
       );
     }
+    _subscriptions.add(
+      _player.stream.buffering.listen((buffering) {
+        if (_closed || _loading || _openedIndex != _index ||
+            _lastPlaybackBuffering == buffering) {
+          return;
+        }
+        _lastPlaybackBuffering = buffering;
+        final state = _player.state;
+        final bufferedAhead = playbackBufferedAheadMilliseconds(
+          position: state.position,
+          bufferedEnd: state.buffer > Duration.zero ? state.buffer : null,
+        );
+        final backend = _player is LunaExoPlayer
+            ? 'exo'
+            : _mpvEmbedBackend
+            ? 'mpv_embed'
+            : 'mpv';
+        DiaryService.add(
+          '[PlaybackBuffer] backend=$backend generation=$_generation '
+          'episode=$_index buffering=$buffering playing=${state.playing} '
+          'positionMs=${state.position.inMilliseconds} '
+          'bufferEndMs=${state.buffer.inMilliseconds} '
+          'bufferedAheadMs=${bufferedAhead ?? 'n/a'}',
+        );
+      }),
+    );
     _subscriptions.add(
       _player.stream.videoParams.listen((parameters) {
         final size = videoDisplaySize(parameters);
@@ -1641,6 +1670,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     _framePacingDiagnosticTimer = null;
     _framePacingLastCounters.clear();
     _framePacingLastSampleAt = null;
+    _framePacingLastPosition = null;
+    _framePacingLastBuffering = null;
+    _lastPlaybackBuffering = null;
     _pendingError = false;
     _errorTimer?.cancel();
     _loadingOverlayTimer?.cancel();
@@ -2158,6 +2190,23 @@ class _PlayerScreenState extends State<PlayerScreen>
     final intervalMs = previousAt == null
         ? 0
         : sampledAt.difference(previousAt).inMilliseconds;
+    final state = _player.state;
+    final previousPosition = _framePacingLastPosition;
+    final positionDeltaMs = previousPosition == null
+        ? 'baseline'
+        : (state.position - previousPosition).inMilliseconds.toString();
+    final expectedDeltaMs = playbackExpectedPositionDeltaMilliseconds(
+      elapsed: Duration(milliseconds: intervalMs),
+      rate: state.rate,
+    );
+    final bufferedAheadMs = playbackBufferedAheadMilliseconds(
+      position: state.position,
+      bufferedEnd: state.buffer > Duration.zero ? state.buffer : null,
+    );
+    final bufferingTransition = _framePacingLastBuffering != null &&
+        _framePacingLastBuffering != state.buffering;
+    _framePacingLastPosition = state.position;
+    _framePacingLastBuffering = state.buffering;
     final values = <String>[];
     try {
       for (final property in playbackFramePacingProperties) {
@@ -2179,8 +2228,19 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
       }
       if (_closed || generation != _generation) return;
+      final backend = _player is LunaExoPlayer
+          ? 'exo'
+          : _mpvEmbedBackend
+          ? 'mpv_embed'
+          : 'mpv';
       DiaryService.add(
-        '[FramePacing] generation=$generation intervalMs=$intervalMs '
+        '[FramePacing] backend=$backend generation=$generation '
+        'intervalMs=$intervalMs positionMs=${state.position.inMilliseconds} '
+        'positionDeltaMs=$positionDeltaMs expectedDeltaMs=${expectedDeltaMs ?? 'n/a'} '
+        'bufferEndMs=${state.buffer.inMilliseconds} '
+        'bufferedAheadMs=${bufferedAheadMs ?? 'n/a'} '
+        'buffering=${state.buffering} bufferingTransition=$bufferingTransition '
+        'playing=${state.playing} rate=${state.rate} '
         '${values.join(' ')}',
       );
     } catch (error) {
