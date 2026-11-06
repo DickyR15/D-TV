@@ -345,7 +345,14 @@ func TestCDNTransportRetriesUnknownAuthorityThroughVerifiedDoHForMediaHosts(t *t
 	client := &http.Client{Transport: transport}
 
 	for attempt := 0; attempt < 2; attempt++ {
-		response, requestErr := client.Get("https://" + host + ":" + port + "/video/index.m3u8")
+		request, requestErr := http.NewRequestWithContext(
+			context.WithValue(context.Background(), nativeMediaRequestKey{}, true),
+			http.MethodGet, "https://"+host+":"+port+"/video/index.m3u8", nil,
+		)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		response, requestErr := client.Do(request)
 		if requestErr != nil {
 			t.Fatalf("media request %d did not recover using verified DoH: %v", attempt+1, requestErr)
 		}
