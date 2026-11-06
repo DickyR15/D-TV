@@ -34,8 +34,8 @@ parser.add_argument(
 parser.add_argument(
     "--player-engine",
     choices=["mpv", "exo", "mpv_embed"],
-    default="mpv_embed",
-    help="Android 播放引擎；預設使用 MPV mediacodec_embed。",
+    default="exo",
+    help="Android 播放引擎；預設使用 ExoPlayer；可指定 mpv_embed 進行 A/B 測試。",
 )
 parser.add_argument("--build-name", help="覆寫 Android app versionName。")
 parser.add_argument("--build-number", help="覆寫 Android app versionCode。")
