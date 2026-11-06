@@ -11,7 +11,7 @@ import 'widgets.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
-  defaultValue: 'exo',
+  defaultValue: 'mpv_embed',
 );
 
 class PlaybackSettingsScreen extends StatefulWidget {
