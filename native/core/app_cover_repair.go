@@ -99,10 +99,40 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	// address without I/O now; check its local cache alongside other verified
 	// fallbacks before any remote poster or metadata request.
 	preferredOfficialAddress := ""
+	preferredOfficialOverride := false
 	if cache.downloader != nil {
 		preferredOfficialAddress, _ = nativePreferredOfficialPosterAddress(drama)
+		if entry, ok := nativeVerifiedOfficialPosterEntry(drama); ok && entry.preferred {
+			preferredOfficialOverride = entry.overrideProvider
+		}
 	}
 	primaryAddress := strings.TrimSpace(drama.Cover)
+
+	// Some provider URLs return a valid image container with an anti-hotlink
+	// notice instead of the poster. For these exact, verified records, prefer
+	// the official image (including its local cache) before trusting the
+	// provider's previously cached placeholder.
+	if preferredOfficialOverride && preferredOfficialAddress != "" {
+		referer := nativeCoverFallbackReferer(
+			cache.downloader, drama, preferredOfficialAddress,
+		)
+		if !force {
+			if path, ok := cache.cachedAlternativeCoverPath(
+				drama, preferredOfficialAddress, referer, "external",
+			); ok {
+				return path, nil
+			}
+		}
+		path, err := cache.loadAlternativeAddress(
+			ctx, drama, preferredOfficialAddress, referer, "external", force,
+		)
+		if err == nil {
+			return path, nil
+		}
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+	}
 	primaryErr := errors.New("站源尚未提供原始海報網址")
 
 	// Reuse verified local images before contacting remote hosts. A curated
@@ -164,7 +194,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	// Exact, independently verified official artwork retains override
 	// semantics, including over stale or hotlink-denial images already cached
 	// under the original source URL.
-	if preferredOfficialAddress != "" {
+	if preferredOfficialAddress != "" && !preferredOfficialOverride {
 		path, err := cache.loadAlternativeAddress(
 			ctx, drama, preferredOfficialAddress,
 			nativeCoverFallbackReferer(cache.downloader, drama, preferredOfficialAddress), "external", force,
