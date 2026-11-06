@@ -191,3 +191,13 @@ int? playbackBufferedAheadMilliseconds({
   if (bufferedEnd == null) return null;
   return (bufferedEnd - position).inMilliseconds;
 }
+
+/// Estimates how much media time should advance during a wall-clock sample.
+/// Returns null when the player rate is unavailable or invalid.
+int? playbackExpectedPositionDeltaMilliseconds({
+  required Duration elapsed,
+  required double rate,
+}) {
+  if (!rate.isFinite || rate <= 0) return null;
+  return (elapsed.inMilliseconds * rate).round();
+}
