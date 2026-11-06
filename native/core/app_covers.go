@@ -421,7 +421,11 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 					err = errors.New("海報網址暫時冷卻，略過重複請求")
 					continue
 				}
-				data, err = cache.download(ctx, attempt.address, attempt.referer)
+				attemptCtx, attemptCancel := context.WithTimeout(
+					ctx, nativeCoverAttemptTimeout(coverSource, attempt.address),
+				)
+				data, err = cache.download(attemptCtx, attempt.address, attempt.referer)
+				attemptCancel()
 				if err == nil {
 					cache.clearCoverFailure(attempt.address, attempt.referer)
 					return
