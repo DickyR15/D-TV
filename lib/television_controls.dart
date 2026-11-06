@@ -170,8 +170,11 @@ class TelevisionControlsState extends State<TelevisionControls> {
 
   /// Hidden controls: Back exits playback. Visible controls: Back hides them.
   void handleBack() {
-    if (!widget.enabled || _panelOpen) return;
-    final action = playbackControlsBackAction(controlsVisible: _visible);
+    if (_panelOpen) return;
+    final action = playbackControlsBackAction(
+      controlsVisible: _visible,
+      enabled: widget.enabled,
+    );
     if (action == PlaybackControlsBackAction.hideControls) {
       setState(() => _visible = false);
       _hideTimer?.cancel();
