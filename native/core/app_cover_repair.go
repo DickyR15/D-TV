@@ -447,6 +447,9 @@ func nativeCoverFallbackReferer(downloader *Downloader, drama nativeDrama, addre
 		if host == "bgm.tv" || strings.HasSuffix(host, ".bgm.tv") {
 			return "https://bgm.tv/"
 		}
+		if host == "hdslb.com" || strings.HasSuffix(host, ".hdslb.com") {
+			return "https://www.bilibili.com/"
+		}
 		if host == "movie.douban.com" || host == "www.douban.com" || strings.HasSuffix(host, ".doubanio.com") {
 			return "https://movie.douban.com/"
 		}
