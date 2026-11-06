@@ -1,7 +1,9 @@
 package core
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"os"
 	"testing"
@@ -26,7 +28,7 @@ func TestNativeCoverLoadReusesCachedExternalFallbackBeforeProviderRefresh(t *tes
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
-				Body: ioNopCloserBytes(fixture),
+				Body: io.NopCloser(bytes.NewReader(fixture)),
 				ContentLength: int64(len(fixture)),
 				Request: request,
 			}, nil
