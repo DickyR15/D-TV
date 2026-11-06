@@ -412,6 +412,7 @@ type nativeVerifiedOfficialPoster struct {
 	source     string
 	sourceID   string
 	preferred  bool
+	workType   string
 	titleAliases []string
 }
 
@@ -422,6 +423,17 @@ type nativeVerifiedOfficialPoster struct {
 // labels this exact second-season title as 2025, while Youku's official
 // catalogue identifies the second season as a 2026 programme.
 var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
+	{
+		// Official Bilibili artwork for the 2022 Chinese animation 永生.
+		// The match is deliberately restricted to the exact title, animation
+		// category and release year; unrelated works with the same title must
+		// never inherit this poster.
+		title: "永生",
+		year: "2022",
+		workType: "anime",
+		preferred: true,
+		address: "https://i0.hdslb.com/bfs/bangumi/image/1c697e41f5e2524b2610ec895cead5c25f494e87.png",
+	},
 	{
 		title: "花兒與少年同心季",
 		year: "2025",
@@ -524,6 +536,12 @@ func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficia
 			// Provider-specific artwork is safe only for the exact source record
 			// and exact title; it does not broaden matching to unrelated sources.
 			if !hasSourceID || source != candidate.source || sourceID != candidate.sourceID {
+				continue
+			}
+		} else if candidate.workType == "anime" {
+			// Anime overrides require all three identity hints. In particular,
+			// do not accept a yearless catalogue row for a season-sensitive title.
+			if !nativePosterIsAnime(drama) || year == "" || year != candidate.year {
 				continue
 			}
 		} else {
