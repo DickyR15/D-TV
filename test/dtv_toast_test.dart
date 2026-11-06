@@ -6,11 +6,6 @@ void main() {
   testWidgets('D-TV branded toast keeps its message on one line', (
     tester,
   ) async {
-    await tester.view.setPhysicalSize(const Size(800, 600));
-    await tester.view.setDevicePixelRatio(1);
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
