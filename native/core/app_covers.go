@@ -27,6 +27,23 @@ const nativeCoverMaxBytes = 20 << 20
 const nativeCoverCacheBytes = 256 << 20
 const nativeCoverCacheEntries = 2000
 const nativeCoverTTL = 30 * 24 * time.Hour
+
+const nativeCoverDuoduoFetchBudget = 12 * time.Second
+const nativeCoverDuoduoFallbackBudget = 10 * time.Second
+
+func nativeCoverFetchTimeout(source string) time.Duration {
+	if source == sourceDuoduo {
+		return nativeCoverDuoduoFetchBudget
+	}
+	return 25 * time.Second
+}
+
+func nativeCoverAlternativeTimeout(source, cacheClass string) time.Duration {
+	if source == sourceDuoduo && cacheClass == "provider" {
+		return nativeCoverDuoduoFallbackBudget
+	}
+	return 0
+}
 const nativeCoverRepairConcurrency = 4
 
 type nativeCoverEntry struct {
@@ -349,16 +366,19 @@ func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDram
 }
 
 func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fallback string, call *nativeCoverCall) {
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	coverSource := canonicalProviderSource(drama.Source)
+	if coverSource == "" {
+		coverSource = sourceFromDramaID(drama.ID)
+	}
+	// Duoduo image mirrors can spend a long time on dead hosts or Referer
+	// retries. Bound the initial poster path so the repair pipeline can start
+	// sooner; other providers retain the existing 25-second budget.
+	ctx, cancel := context.WithTimeout(context.Background(), nativeCoverFetchTimeout(coverSource))
 	defer cancel()
 	var data []byte
 	var err error
 	select {
 	case cache.slots <- struct{}{}:
-		coverSource := canonicalProviderSource(drama.Source)
-		if coverSource == "" {
-			coverSource = sourceFromDramaID(drama.ID)
-		}
 		attempts := []duoduoPosterAttempt{{address: drama.Cover, referer: referer}}
 		if coverSource == sourceDuoduo {
 			attempts = duoduoPosterAttemptsForDrama(drama.Cover, cache.downloader, drama)
