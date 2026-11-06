@@ -109,21 +109,19 @@ String playbackVideoSyncModeFor({
   required bool television,
 }) => windows || (android && television) ? 'display-resample' : 'audio';
 
-/// Fast, read-only MPV properties sampled during native playback.
-/// The two-second cadence is diagnostic only and does not alter playback.
-const playbackFramePacingSampleInterval = Duration(seconds: 2);
+/// Low-overhead MPV properties sampled during native playback. Query only
+/// signals that distinguish decoder drops, output drops, display cadence and
+/// network cache starvation; avoid polling at near-render frequency.
+const playbackFramePacingSampleInterval = Duration(seconds: 5);
 
 const playbackFramePacingProperties = <String>[
-  'time-pos',
+  'hwdec-current',
+  'current-vo',
   'estimated-vf-fps',
   'display-fps',
-  'estimated-display-fps',
   'display-sync-active',
-  'vsync-ratio',
   'vo-delayed-frame-count',
-  'frame-drop-count',
   'decoder-frame-drop-count',
-  'avsync',
   'demuxer-cache-duration',
   'paused-for-cache',
 ];
