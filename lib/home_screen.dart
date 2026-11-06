@@ -1564,7 +1564,7 @@ class _HomeScreenState extends State<HomeScreen> {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const _DtvBrandMark(size: 42),
+              const DtvBrandMark(size: 42),
               const SizedBox(width: 12),
               const Text('關於 D TV'),
             ],
@@ -2294,7 +2294,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _DtvBrandMark(size: height * 0.92),
+          DtvBrandMark(size: height * 0.92),
           const SizedBox(width: 8),
           Flexible(
             child: Text(
@@ -2328,7 +2328,7 @@ class _HomeScreenState extends State<HomeScreen> {
       height: 72,
       child: Row(
         children: [
-          const _DtvBrandMark(size: 50),
+          const DtvBrandMark(size: 50),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
