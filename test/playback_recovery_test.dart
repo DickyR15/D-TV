@@ -57,28 +57,42 @@ void main() {
     );
   });
 
-  test('Android recovery uses two alternatives, one refresh, then stops', () {
-    final recovery = PlaybackRecovery(
-      maxAlternativeAttempts: PlaybackRecovery.androidMaxAlternativeAttempts,
-    );
+  test('Android Red Fruit route policy limits each pass to two alternatives', () {
+    final recovery = PlaybackRecovery();
     for (var i = 0; i < PlaybackRecovery.androidMaxAlternativeAttempts; i++) {
       expect(
-        recovery.next(route(i, count: 8), allowPlayerRecreate: false),
+        recovery.next(
+          route(i, count: 8),
+          allowPlayerRecreate: false,
+          alternativeAttemptLimit: PlaybackRecovery.androidMaxAlternativeAttempts,
+        ),
         PlaybackRecoveryAction.alternative,
       );
     }
     expect(
-      recovery.next(route(2, count: 8), allowPlayerRecreate: false),
+      recovery.next(
+        route(2, count: 8),
+        allowPlayerRecreate: false,
+        alternativeAttemptLimit: PlaybackRecovery.androidMaxAlternativeAttempts,
+      ),
       PlaybackRecoveryAction.refresh,
     );
     for (var i = 0; i < PlaybackRecovery.androidMaxAlternativeAttempts; i++) {
       expect(
-        recovery.next(route(i, count: 8), allowPlayerRecreate: false),
+        recovery.next(
+          route(i, count: 8),
+          allowPlayerRecreate: false,
+          alternativeAttemptLimit: PlaybackRecovery.androidMaxAlternativeAttempts,
+        ),
         PlaybackRecoveryAction.alternative,
       );
     }
     expect(
-      recovery.next(route(2, count: 8), allowPlayerRecreate: false),
+      recovery.next(
+        route(2, count: 8),
+        allowPlayerRecreate: false,
+        alternativeAttemptLimit: PlaybackRecovery.androidMaxAlternativeAttempts,
+      ),
       PlaybackRecoveryAction.stop,
     );
   });
