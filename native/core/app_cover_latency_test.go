@@ -94,6 +94,85 @@ func TestNativeCoverLoadReusesCachedExternalFallbackAfterCacheRecreationBeforeAn
 	}
 }
 
+func TestDuoduoYongshengReusesCachedVerifiedFallbackBeforeOfficialOrOriginNetwork(t *testing.T) {
+	fixture, err := os.ReadFile("../../test/fixtures/cover.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const primaryURL = "https://broken-source.example.test/yongsheng-hotlink.png"
+	const fallbackURL = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/yongsheng-cached.jpg"
+	var fallbackRequests, originRequests, proxyRequests, officialRequests, metadataRequests int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Hostname() {
+		case "broken-source.example.test":
+			originRequests++
+			return posterLookupJSONResponse(request, "anti-hotlink placeholder"), nil
+		case "wsrv.nl", "images.weserv.nl":
+			proxyRequests++
+			return posterLookupJSONResponse(request, "unexpected proxy request"), nil
+		case "img9.doubanio.com":
+			fallbackRequests++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(fixture)),
+				ContentLength: int64(len(fixture)),
+				Request: request,
+			}, nil
+		case "i0.hdslb.com":
+			officialRequests++
+			return posterLookupJSONResponse(request, "unexpected official request"), nil
+		default:
+			metadataRequests++
+			return posterLookupJSONResponse(request, "unexpected metadata request"), nil
+		}
+	})}
+	downloader := &Downloader{
+		client: client,
+		cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
+	}
+	directory := t.TempDir()
+	drama := nativeDrama{
+		ID: "duoduo:99999", Source: sourceDuoduo, Title: "永生",
+		Category: "動漫", OnlineDate: "2022-01-29",
+		Cover: primaryURL, FallbackCover: fallbackURL,
+	}
+
+	// Simulate an external fallback already verified and persisted by a prior
+	// app process. A new cache instance must reuse it before fetching the
+	// curated Bilibili override or the known anti-hotlink provider image.
+	firstCache := newNativeCoverCache(directory, downloader)
+	referer := nativeCoverFallbackReferer(downloader, drama, fallbackURL)
+	cachedPath, err := firstCache.loadAlternativeAddress(
+		context.Background(), drama, fallbackURL, referer, "external", false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fallbackRequests = 0
+	originRequests = 0
+	proxyRequests = 0
+	officialRequests = 0
+	metadataRequests = 0
+
+	restartedCache := newNativeCoverCache(directory, downloader)
+	gotPath, err := restartedCache.load(context.Background(), drama, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != cachedPath {
+		t.Fatalf("poster path = %q, want persisted fallback %q", gotPath, cachedPath)
+	}
+	if fallbackRequests+originRequests+proxyRequests+officialRequests+metadataRequests != 0 {
+		t.Fatalf(
+			"cached 永生 fallback caused network requests: fallback=%d origin=%d proxy=%d official=%d metadata=%d",
+			fallbackRequests, originRequests, proxyRequests, officialRequests, metadataRequests,
+		)
+	}
+}
+
 func TestDuoduoCoverFailoverUsesBoundedBudgets(t *testing.T) {
 	if got := nativeCoverFetchTimeout(sourceDuoduo); got != 12*time.Second {
 		t.Fatalf("Duoduo initial fetch budget = %s, want 12s", got)
