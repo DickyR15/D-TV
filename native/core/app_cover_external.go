@@ -410,10 +410,11 @@ type nativeVerifiedOfficialPoster struct {
 	year       string
 	address    string
 	source     string
-	sourceID   string
-	preferred  bool
-	workType   string
-	titleAliases []string
+	sourceID        string
+	preferred       bool
+	overrideProvider bool
+	workType        string
+	titleAliases    []string
 }
 
 // These two assets were independently identified from programme-owner /
@@ -423,6 +424,19 @@ type nativeVerifiedOfficialPoster struct {
 // labels this exact second-season title as 2025, while Youku's official
 // catalogue identifies the second season as a 2026 programme.
 var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
+	{
+		// Duoduo's image for 永生 returns a valid anti-hotlink notice graphic.
+		// Override only the exact Duoduo anime title and 2022 series record with
+		// Bilibili's official programme artwork.
+		title: "永生",
+		titleAliases: []string{"永生之無盡仙途", "永生之无尽仙途"},
+		source: sourceDuoduo,
+		year: "2022",
+		workType: "anime",
+		preferred: true,
+		overrideProvider: true,
+		address: "https://i0.hdslb.com/bfs/bangumi/image/1c697e41f5e2524b2610ec895cead5c25f494e87.png",
+	},
 	{
 		// Official Bilibili artwork for the 2022 Chinese animation 永生.
 		// The match is deliberately restricted to the exact title, animation
@@ -532,21 +546,20 @@ func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficia
 		if !matchesTitle {
 			continue
 		}
-		if candidate.source != "" || candidate.sourceID != "" {
-			// Provider-specific artwork is safe only for the exact source record
-			// and exact title; it does not broaden matching to unrelated sources.
-			if !hasSourceID || source != candidate.source || sourceID != candidate.sourceID {
-				continue
-			}
-		} else if candidate.workType == "anime" {
-			// Anime overrides require all three identity hints. In particular,
-			// do not accept a yearless catalogue row for a season-sensitive title.
+		if candidate.source != "" && (!hasSourceID || source != candidate.source) {
+			continue
+		}
+		if candidate.sourceID != "" && (!hasSourceID || sourceID != candidate.sourceID) {
+			continue
+		}
+		if candidate.workType == "anime" {
+			// Anime artwork must match the exact source, programme title,
+			// category and release year to avoid selecting a different season.
 			if !nativePosterIsAnime(drama) || year == "" || year != candidate.year {
 				continue
 			}
-		} else {
-			// A Bangumi type-6 result can be either a movie or a television
-			// programme, so general curated programme artwork is variety-only.
+		} else if candidate.source == "" && candidate.sourceID == "" {
+			// Unscoped curated programme artwork remains variety-only.
 			if !isVariety {
 				continue
 			}
