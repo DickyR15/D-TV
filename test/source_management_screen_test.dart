@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:hgtv/app_build.dart';
+import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/source_management_screen.dart';
 
 import 'fixtures.dart';
@@ -116,4 +119,58 @@ void main() {
       throwsStateError,
     );
   });
+  testWidgets('iPhone-sized source list keeps other switches active during one pending write', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    final pendingWrite = Completer<void>();
+    addTearDown(() {
+      if (!pendingWrite.isCompleted) pendingWrite.complete();
+    });
+
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      AppLayout(
+        television: false,
+        formFactor: FormFactor.phone,
+        child: MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.iOS),
+          home: SourceManagementScreen(
+            store: store,
+            updateSourceEnabled: (sourceId, enabled) async {
+              if (sourceId == 'hongguo') await pendingWrite.future;
+              await store.setSourceEnabled(sourceId, enabled);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final first = find.byKey(const ValueKey('source-switch-hongguo'));
+    final other = find.byKey(const ValueKey('source-switch-hanxiaoquan'));
+    await tester.ensureVisible(first);
+    await tester.pumpAndSettle();
+    final otherElement = tester.element(other);
+
+    await tester.tap(first);
+    await tester.pump();
+
+    expect(tester.widget<SwitchListTile>(first).onChanged, isNull);
+    expect(tester.widget<SwitchListTile>(other).onChanged, isNotNull);
+    expect(tester.widget<SwitchListTile>(other).value, isTrue);
+    expect(identical(tester.element(other), otherElement), isTrue);
+    expect(store.sourceEnabled('hongguo'), isTrue);
+
+    pendingWrite.complete();
+    await tester.pumpAndSettle();
+    expect(store.sourceEnabled('hongguo'), isFalse);
+    expect(tester.widget<SwitchListTile>(other).onChanged, isNotNull);
+    expect(tester.takeException(), isNull);
+  });
+
 }
