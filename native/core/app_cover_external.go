@@ -438,17 +438,6 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		address: "https://i0.hdslb.com/bfs/bangumi/image/1c697e41f5e2524b2610ec895cead5c25f494e87.png",
 	},
 	{
-		// Official Bilibili artwork for the 2022 Chinese animation 永生.
-		// The match is deliberately restricted to the exact title, animation
-		// category and release year; unrelated works with the same title must
-		// never inherit this poster.
-		title: "永生",
-		year: "2022",
-		workType: "anime",
-		preferred: true,
-		address: "https://i0.hdslb.com/bfs/bangumi/image/1c697e41f5e2524b2610ec895cead5c25f494e87.png",
-	},
-	{
 		title: "花兒與少年同心季",
 		year: "2025",
 		address: "https://k.sinaimg.cn/n/sinakd20250816s/450/w800h450/20250816/ec1c-4c5fc3ef466113eb1d27a75cc8c37fcf.jpg/w700d1q75cms.jpg?by=cms_fixed_width",
