@@ -36,6 +36,30 @@ void main() {
     );
   });
 
+  test('expected playback progress follows elapsed time and playback rate', () {
+    expect(
+      playbackExpectedPositionDeltaMilliseconds(
+        elapsed: const Duration(seconds: 2),
+        rate: 1.25,
+      ),
+      2500,
+    );
+    expect(
+      playbackExpectedPositionDeltaMilliseconds(
+        elapsed: const Duration(seconds: 2),
+        rate: 0,
+      ),
+      isNull,
+    );
+    expect(
+      playbackExpectedPositionDeltaMilliseconds(
+        elapsed: const Duration(seconds: 2),
+        rate: double.nan,
+      ),
+      isNull,
+    );
+  });
+
   test('PlaybackVolumeMemory preserves mute and the latest slider value', () async {
     final saved = <double>[];
     final memory = PlaybackVolumeMemory(
