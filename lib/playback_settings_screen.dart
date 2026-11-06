@@ -7,6 +7,7 @@ import 'app_layout.dart';
 import 'local_store.dart';
 import 'playback_preferences.dart';
 import 'portrait_blur_policy.dart';
+import 'widgets.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
@@ -151,14 +152,10 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
     unawaited(
       _persistPreferences(
         onSaved: () {
-          final messenger = ScaffoldMessenger.of(context);
-          messenger
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              const SnackBar(
-                content: Text('解碼方式已儲存；重新進入播放頁面即可套用，無須重啟 D TV。'),
-              ),
-            );
+          showDtvToast(
+            context,
+            '解碼方式已儲存；重新進入播放頁面即可套用，無須重啟 D TV。',
+          );
         },
       ),
     );
@@ -187,25 +184,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   Future<void> _setCompatibleRendering(bool enabled) async {
     final accepted = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(enabled ? '開啟相容渲染模式？' : '關閉相容渲染模式？'),
-        content: const Text(
-          '需要重新啟動 App 才會生效，播放會中斷。Android TV 預設使用 Skia 相容渲染以避免部分電視盒黑屏；手機預設使用 Impeller。你也可以手動切換後重啟測試。',
-        ),
-        actions: [
-          TextButton(
-            autofocus: true,
-            key: const ValueKey('compatible-rendering-cancel'),
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            key: const ValueKey('compatible-rendering-restart'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('立即重啟'),
-          ),
-        ],
-      ),
+      builder: (_) => CompatibleRenderingRestartDialog(enabled: enabled),
     );
     if (accepted != true || !mounted) return;
     final saved = await AppDevice.setCompatibleRendering(enabled);
@@ -387,4 +366,75 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       ),
     ),
   );
+}
+
+
+class CompatibleRenderingRestartDialog extends StatefulWidget {
+  const CompatibleRenderingRestartDialog({super.key, required this.enabled});
+
+  final bool enabled;
+
+  @override
+  State<CompatibleRenderingRestartDialog> createState() =>
+      _CompatibleRenderingRestartDialogState();
+}
+
+class _CompatibleRenderingRestartDialogState
+    extends State<CompatibleRenderingRestartDialog> {
+  final FocusNode _cancelFocus =
+      FocusNode(debugLabel: 'compatible-rendering-cancel');
+  final FocusNode _restartFocus =
+      FocusNode(debugLabel: 'compatible-rendering-restart');
+  bool _initialFocusRequested = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialFocusRequested) return;
+    _initialFocusRequested = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _cancelFocus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _cancelFocus.dispose();
+    _restartFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: AlertDialog(
+          title: Text(
+            widget.enabled ? '開啟相容渲染模式？' : '關閉相容渲染模式？',
+          ),
+          content: const Text(
+            '需要重新啟動 App 才會生效，播放會中斷。Android TV 預設使用 Skia 相容渲染以避免部分電視盒黑屏；手機預設使用 Impeller。你也可以手動切換後重啟測試。',
+          ),
+          actions: [
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(1),
+              child: TextButton(
+                key: const ValueKey('compatible-rendering-cancel'),
+                focusNode: _cancelFocus,
+                autofocus: true,
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+            ),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(2),
+              child: FilledButton(
+                key: const ValueKey('compatible-rendering-restart'),
+                focusNode: _restartFocus,
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('立即重啟'),
+              ),
+            ),
+          ],
+        ),
+      );
 }
