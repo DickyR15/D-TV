@@ -105,50 +105,51 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	primaryAddress := strings.TrimSpace(drama.Cover)
 	primaryErr := errors.New("站源尚未提供原始海報網址")
 
-	// Check every already-verified local image before contacting remote hosts.
-	// This keeps the display order intact but prevents a slow origin request
-	// from delaying a previously downloaded provider or external fallback.
-	if !force && preferredOfficialAddress != "" {
-		// An exact-record official override must outrank an older cached image
-		// that may itself be a hotlink-denial placeholder.
-		if path, ok := cache.cachedAlternativeCoverPath(
-			drama, preferredOfficialAddress,
-			nativeCoverFallbackReferer(cache.downloader, drama, preferredOfficialAddress), "external",
-		); ok {
-			return path, nil
-		}
-	}
-	if !force && preferredOfficialAddress == "" {
-		if path, ok := cache.cachedPrimaryCoverPath(drama); ok {
-			return path, nil
-		}
-		for _, candidate := range nativeUniqueCoverAddresses(drama.CoverCandidates...) {
-			if candidate == primaryAddress {
-				continue
-			}
+	// Reuse verified local images before contacting remote hosts. A curated
+	// exact-record official image outranks a possibly hotlink-blocked catalogue
+	// cache, but a previously verified external fallback may still render
+	// immediately if that curated image is not cached yet.
+	if !force {
+		if preferredOfficialAddress != "" {
 			if path, ok := cache.cachedAlternativeCoverPath(
-				drama, candidate,
-				nativeCoverRefererForDrama(cache.downloader, drama, candidate), "provider",
+				drama, preferredOfficialAddress,
+				nativeCoverFallbackReferer(cache.downloader, drama, preferredOfficialAddress), "external",
 			); ok {
 				return path, nil
 			}
-		}
-		cachedProvider, cachedExternal := cache.cachedRepair(drama.ID)
-		providerAddress := firstNonEmpty(strings.TrimSpace(drama.ProviderFallbackCover), cachedProvider)
-		if providerAddress != "" && providerAddress != primaryAddress {
-			if path, ok := cache.cachedAlternativeCoverPath(
-				drama, providerAddress,
-				nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
-			); ok {
+		} else {
+			if path, ok := cache.cachedPrimaryCoverPath(drama); ok {
 				return path, nil
 			}
+			for _, candidate := range nativeUniqueCoverAddresses(drama.CoverCandidates...) {
+				if candidate == primaryAddress {
+					continue
+				}
+				if path, ok := cache.cachedAlternativeCoverPath(
+					drama, candidate,
+					nativeCoverRefererForDrama(cache.downloader, drama, candidate), "provider",
+				); ok {
+					return path, nil
+				}
+			}
+			cachedProvider, _ := cache.cachedRepair(drama.ID)
+			providerAddress := firstNonEmpty(strings.TrimSpace(drama.ProviderFallbackCover), cachedProvider)
+			if providerAddress != "" && providerAddress != primaryAddress {
+				if path, ok := cache.cachedAlternativeCoverPath(
+					drama, providerAddress,
+					nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider",
+				); ok {
+					return path, nil
+				}
+			}
 		}
+
+		_, cachedExternal := cache.cachedRepair(drama.ID)
 		for _, externalAddress := range duoduoUniqueStrings([]string{
-			preferredOfficialAddress,
 			strings.TrimSpace(drama.FallbackCover),
 			cachedExternal,
 		}) {
-			if externalAddress == "" || externalAddress == primaryAddress || externalAddress == providerAddress {
+			if externalAddress == "" || externalAddress == primaryAddress {
 				continue
 			}
 			if path, ok := cache.cachedAlternativeCoverPath(
@@ -159,6 +160,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 			}
 		}
 	}
+
 	// Exact, independently verified official artwork retains override
 	// semantics, including over stale or hotlink-denial images already cached
 	// under the original source URL.
