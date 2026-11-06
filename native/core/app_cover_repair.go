@@ -26,6 +26,7 @@ type nativeCoverRepair struct {
 // load keeps a strict source-preference order:
 // catalogue poster -> provider detail poster -> external poster.
 func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, force bool) (string, error) {
+	requestedForce := force
 	// A small set of user-reported records have verified official artwork that
 	// should replace a successful-but-unusable source image. These mappings are
 	// restricted by exact provider ID and title; all other works retain the
@@ -89,17 +90,21 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		force = true
 	}
 
-	// Refresh/check provider-native detail metadata before consulting an
-	// external match. This protects provider priority even after a restart
-	// when only an external fallback was persisted.
-	// Revalidate any persisted external fallback after provider posters have
-	// failed. A previously cached URL may have expired or been removed; keeping
-	// it must not suppress a fresh metadata lookup.
-	providerAddress, repairedExternal, repairErr := cache.repair(ctx, drama, force, true)
-	if providerAddress != "" && providerAddress != primaryAddress {
+	// FallbackCover and cachedExternal are saved only after a strict identity
+	// match and a complete image-signature check. Try their local cache entries
+	// before refreshing provider details; a previously repaired poster should
+	// not wait for another metadata round trip every time a catalogue is opened.
+	for _, externalAddress := range duoduoUniqueStrings([]string{
+		strings.TrimSpace(drama.FallbackCover),
+		cachedExternal,
+	}) {
+		if externalAddress == "" || externalAddress == primaryAddress || externalAddress == providerAddress {
+			continue
+		}
 		path, err := cache.loadAlternativeAddress(
-			ctx, drama, providerAddress,
-			nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider", force,
+			ctx, drama, externalAddress,
+			nativeCoverFallbackReferer(cache.downloader, drama, externalAddress),
+			"external", requestedForce,
 		)
 		if err == nil {
 			return path, nil
@@ -110,16 +115,27 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 		force = true
 	}
 
-	externalCandidates := duoduoUniqueStrings([]string{
-		strings.TrimSpace(drama.FallbackCover),
-		cachedExternal,
-		repairedExternal,
-	})
-	for _, externalAddress := range externalCandidates {
-		if externalAddress == "" || externalAddress == primaryAddress || externalAddress == providerAddress {
-			continue
+	// Refresh provider metadata only when no previously validated local poster
+	// can be reused. This still refreshes expired or unavailable fallback URLs.
+	providerAddress, repairedExternal, repairErr := cache.repair(ctx, drama, force, true)
+	if providerAddress != "" && providerAddress != primaryAddress {
+		path, err := cache.loadAlternativeAddress(
+			ctx, drama, providerAddress,
+			nativeCoverFallbackReferer(cache.downloader, drama, providerAddress), "provider", false,
+		)
+		if err == nil {
+			return path, nil
 		}
-		path, _, err := cache.loadExternalPoster(ctx, drama, externalAddress, force)
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		force = true
+	}
+	if repairedExternal != "" && repairedExternal != primaryAddress && repairedExternal != providerAddress {
+		path, err := cache.loadAlternativeAddress(
+			ctx, drama, repairedExternal,
+			nativeCoverFallbackReferer(cache.downloader, drama, repairedExternal), "external", false,
+		)
 		if err == nil {
 			return path, nil
 		}
@@ -325,10 +341,17 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 	}
 	cache.mu.Unlock()
 
+	requestCtx := ctx
+	cancel := func() {}
+	if timeout := nativeCoverAlternativeTimeout(source, cacheClass); timeout > 0 {
+		requestCtx, cancel = context.WithTimeout(ctx, timeout)
+	}
+	defer cancel()
+
 	select {
 	case cache.slots <- struct{}{}:
-	case <-ctx.Done():
-		return "", ctx.Err()
+	case <-requestCtx.Done():
+		return "", requestCtx.Err()
 	}
 	var data []byte
 	var downloadErr error
@@ -341,8 +364,8 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 		attempts = duoduoPosterAttemptsForDrama(address, cache.downloader, drama)
 	}
 	for _, attempt := range attempts {
-		if ctx.Err() != nil {
-			downloadErr = ctx.Err()
+		if requestCtx.Err() != nil {
+			downloadErr = requestCtx.Err()
 			break
 		}
 		if force {
@@ -352,7 +375,7 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 			downloadErr = errors.New("海報網址暫時冷卻，略過重複請求")
 			continue
 		}
-		data, downloadErr = cache.download(ctx, attempt.address, attempt.referer)
+		data, downloadErr = cache.download(requestCtx, attempt.address, attempt.referer)
 		if downloadErr == nil {
 			cache.clearCoverFailure(attempt.address, attempt.referer)
 			break
