@@ -273,4 +273,57 @@ void main() {
     },
   );
 
+  testWidgets(
+    'TV Back duplicate after closing a theme chooser does not pop Settings page',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppLayout(
+            television: true,
+            formFactor: FormFactor.television,
+            child: HomeScreen(
+              repository: FixtureRepository(),
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+
+      await tester.tap(find.byKey(const ValueKey('home-more-menu')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.tap(find.text('設定與備份').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('theme-setting')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byType(SimpleDialog), findsOneWidget);
+
+      // Android's route pop closes the chooser. Some TV remotes then deliver
+      // the same physical Back as a GoBack keyboard event.
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(find.byType(SimpleDialog), findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+
+      expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+      expect(find.text('設定與備份'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
 }
