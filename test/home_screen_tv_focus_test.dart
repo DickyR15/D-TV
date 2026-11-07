@@ -223,4 +223,54 @@ void main() {
   );
 
 
+  testWidgets(
+    'TV Back from a theme chooser returns to Settings, not Home',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'sourceSwitches': '{"hongguo": false}',
+      });
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppLayout(
+            television: true,
+            formFactor: FormFactor.television,
+            child: HomeScreen(
+              repository: FixtureRepository(),
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+
+      final settingsNavigation = find.byKey(const ValueKey('side-nav-9'));
+      tester.widget<RemoteTarget>(settingsNavigation).onPressed!.call();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('theme-setting')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byType(SimpleDialog), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+
+      expect(find.byType(SimpleDialog), findsNothing);
+      expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+      expect(
+        tester.widget<RemoteTarget>(settingsNavigation).selected,
+        isTrue,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
 }
