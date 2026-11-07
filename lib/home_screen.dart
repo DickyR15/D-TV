@@ -72,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   int _generation = 0;
   int _tab = 0;
-  int _tabBeforeSettings = 4;
   bool _initialTabResolved = false;
   bool _portraitBlurDefaultMigrationRequested = false;
   FormFactor? _lastFormFactor;
@@ -516,7 +515,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 shortcutRow('Ctrl + 5', '真人劇熱播榜'),
                 shortcutRow('Ctrl + 6', 'AI 劇熱播榜'),
                 shortcutRow('Ctrl + 7', '漫劇熱播榜'),
-                shortcutRow('Ctrl + 8', '設定'),
                 shortcutRow('Ctrl + F／Ctrl + K', '搜尋'),
                 const Divider(height: 20),
                 Text('播放中', style: Theme.of(context).textTheme.titleSmall),
@@ -845,14 +843,6 @@ class _HomeScreenState extends State<HomeScreen> {
     // Settings, source management, dialogs and popup routes must close first.
     // Never show the app-exit prompt while the home route is not on top.
     _ignoreExitPromptUntil = null;
-    if (_tab == 9) {
-      final destination = _tabBeforeSettings == 9 ? 4 : _tabBeforeSettings;
-      _lastBackAt = null;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      _selectNavigationDestination(destination);
-      _navigationFocusNodes[destination]?.requestFocus();
-      return;
-    }
     if (_searchResultsOnCurrentTab) {
       _leaveSearchResults();
       _lastBackAt = null;
@@ -2071,7 +2061,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
                 Expanded(
                   child: (_isCatalogTab ||
-                          (_searchResultsOnCurrentTab && _tab != 9))
+                          _searchResultsOnCurrentTab)
                       ? widget.store.sources.isEmpty
                             ? const StatusPanel(
                                 title: '暫無可用片源',
@@ -2087,12 +2077,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           initialBoardId: _rankingBoardId,
                           embedded: true,
                           onExitLeft: _focusCurrentNavigation,
-                        )
-                      : _tab == 9
-                      ? SettingsScreen(
-                          repository: widget.repository,
-                          store: widget.store,
-                          embedded: true,
                         )
                       : SavedLibrary(
                           key: ValueKey('saved-tab-$_tab'),
@@ -2524,47 +2508,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _selectCatalogTab(int tab) {
-    final returningFromSettings = _tab == 9;
     final wasSearchResults = _searchResultsOnCurrentTab;
-    final shouldReload = !returningFromSettings &&
-        (_catalogNeedsReload ||
-            _items.isEmpty ||
-            wasSearchResults ||
-            _category.isNotEmpty ||
-            _showRecommendations ||
-            _search.text.trim().isNotEmpty ||
-            _submittedQuery.isNotEmpty);
-    final shouldReloadCategories = !returningFromSettings &&
-        (_categoriesError != null || _categories.length <= 1);
+    final shouldReload = _catalogNeedsReload ||
+        _items.isEmpty ||
+        wasSearchResults ||
+        _category.isNotEmpty ||
+        _showRecommendations ||
+        _search.text.trim().isNotEmpty ||
+        _submittedQuery.isNotEmpty;
+    final shouldReloadCategories =
+        _categoriesError != null || _categories.length <= 1;
     final wasInitialized = _catalogInitialized;
     _debounce?.cancel();
     setState(() {
       _tab = tab;
-      // Settings is a temporary destination, not a request to reset the
-      // user's catalog session. Preserve the selected category, search query,
-      // recommendations, and current posters when returning from settings.
-      if (!returningFromSettings) {
-        if (_catalogNeedsReload || wasSearchResults) {
-          _items = [];
-          _hasMore = true;
-        }
-        _searchResultsOnCurrentTab = false;
-        _catalogNeedsReload = false;
-        _showRecommendations = false;
-        _search.clear();
-        _searchVisible = false;
-        _submittedQuery = '';
-        _categorySelections[_group.id] = '';
+      if (_catalogNeedsReload || wasSearchResults) {
+        _items = [];
+        _hasMore = true;
       }
+      _searchResultsOnCurrentTab = false;
+      _catalogNeedsReload = false;
+      _showRecommendations = false;
+      _search.clear();
+      _searchVisible = false;
+      _submittedQuery = '';
+      _categorySelections[_group.id] = '';
       _error = null;
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
     if (!wasInitialized) {
       _ensureCatalogInitialized();
-    } else if (returningFromSettings) {
-      // Returning from the remote-control test should never leave an empty
-      // poster page merely because an earlier request was cancelled on pause.
-      if (_items.isEmpty) _load(useCache: true);
     } else {
       if (shouldReload) _load(useCache: true);
       if (shouldReloadCategories && !_categoriesLoading) {
@@ -2578,17 +2551,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _selectNavigationDestination(int tab) {
-    final returningFromSettings = _tab == 9;
-    if (tab == 9 && _tab != 9) {
-      _tabBeforeSettings = _tab;
-    }
     if (tab == 0 || tab == 8) {
       _selectCatalogTab(tab);
       return;
     }
     _pauseCatalog();
     setState(() {
-      if (_searchResultsOnCurrentTab && !returningFromSettings && tab != 9) {
+      if (_searchResultsOnCurrentTab) {
         _searchResultsOnCurrentTab = false;
         _catalogNeedsReload = true;
         _search.clear();
