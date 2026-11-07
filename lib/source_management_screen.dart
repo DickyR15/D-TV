@@ -8,6 +8,10 @@ import 'models.dart';
 import 'profiles_screen.dart';
 import 'ui_localization.dart';
 
+String sourceManagementErrorMessage(Object error) => uiTraditional(
+  error.toString().replaceFirst(RegExp(r'^Bad state:\s*'), ''),
+);
+
 class SourceManagementScreen extends StatefulWidget {
   const SourceManagementScreen({
     super.key,
@@ -42,10 +46,6 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   bool _initialFocusScheduled = false;
   final Set<String> _busySourceIds = <String>{};
   String? _error;
-
-  String _errorMessage(Object error) => uiTraditional(
-    error.toString().replaceFirst(RegExp(r'^Bad state:\s*'), ''),
-  );
 
   @override
   void didChangeDependencies() {
@@ -99,7 +99,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         }
       });
     } catch (error) {
-      if (mounted) setState(() => _error = _errorMessage(error));
+      if (mounted) setState(() => _error = sourceManagementErrorMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
