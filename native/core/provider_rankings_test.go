@@ -387,6 +387,32 @@ func TestRankingConcurrentRequestsShareFetch(t *testing.T) {
 	}
 }
 
+
+func TestNormalizeViewsHidesZero(t *testing.T) {
+	for input, want := range map[string]string{
+		"": "",
+		"0": "",
+		"0.0": "",
+		"-1": "",
+		"000": "",
+		"994287": "994287次播放",
+		"3.4万": "3.4万次播放",
+		"0.5万": "0.5万次播放",
+	} {
+		if got := normalizeViews(input); got != want {
+			t.Fatalf("normalizeViews(%q) = %q, want %q", input, got, want)
+		}
+	}
+	drama := huangdouDramaFromMap(map[string]any{
+		"id": "13d3d636027d2fd5",
+		"name": "黄豆自制短剧",
+		"click": json.Number("0"),
+	})
+	if drama.Views != "" {
+		t.Fatalf("huangdou views = %q, want empty", drama.Views)
+	}
+}
+
 func TestCachedRankingTop100ReturnsLocalPagesImmediately(t *testing.T) {
 	board, _ := findRankingBoard("hongguo-hot")
 	d := &Downloader{}
