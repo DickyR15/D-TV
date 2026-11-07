@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'core_bridge.dart';
 import 'app_theme.dart';
 import 'app_navigation.dart';
+import 'app_navigation.dart';
 import 'app_layout.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
@@ -101,13 +102,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final current = widget.store.themeMode;
     final selected = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () =>
-              Navigator.of(dialogContext).pop(),
-          const SingleActivator(LogicalKeyboardKey.goBack): () =>
-              Navigator.of(dialogContext).pop(),
-        },
+      builder: (dialogContext) => DialogRouteBackHandler(
+        onBack: () => Navigator.of(dialogContext).pop(),
         child: SimpleDialog(
         title: const Text('外觀主題'),
         children: [
@@ -144,13 +140,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _chooseThemeAccent() async {
     final selected = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () =>
-              Navigator.of(dialogContext).pop(),
-          const SingleActivator(LogicalKeyboardKey.goBack): () =>
-              Navigator.of(dialogContext).pop(),
-        },
+      builder: (dialogContext) => DialogRouteBackHandler(
+        onBack: () => Navigator.of(dialogContext).pop(),
         child: SimpleDialog(
         title: const Text('介面配色'),
         children: [
