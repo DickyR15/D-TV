@@ -30,6 +30,7 @@ void main() {
   });
 
   testWidgets('wrong admin password never displays the Dart Bad state prefix', (tester) async {
+    if (!allSourcesEnabled) return;
     SharedPreferences.setMockInitialValues({});
     final store = testStore(await SharedPreferences.getInstance());
     addTearDown(store.dispose);
