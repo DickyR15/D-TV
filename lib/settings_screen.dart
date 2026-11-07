@@ -477,7 +477,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final navigator = Navigator.of(context);
       if (!navigator.canPop()) return;
       // When a chooser dialog is open, this key should close the dialog first.
-      // The NavigatorObserver arms the suppression window after that pop.
+      // Arm locally as well as through NavigatorObserver so widget tests and
+      // alternate hosts without the app-level observer remain single-pop safe.
+      if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
+        _ignoreTrailingBackUntil = now.add(
+          const Duration(milliseconds: 900),
+        );
+      }
       navigator.pop();
     }
 
