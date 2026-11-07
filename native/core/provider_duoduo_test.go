@@ -317,6 +317,38 @@ func TestDuoduoCatalogAndSearchUseNativeAPI(t *testing.T) {
 	}
 }
 
+func TestDuoduoCatalogSupportsAllRequestedSorts(t *testing.T) {
+	for _, sortValue := range []string{"hits", "time", "score", "year"} {
+		t.Run(sortValue, func(t *testing.T) {
+			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+				switch request.URL.Path {
+				case "/api.php/web/index/home":
+					return sourceFixtureResponse(request, http.StatusOK,
+						`{"code":200,"data":{"categories":[{"type_id":1,"type_name":"电影"}]}}`), nil
+				case "/api.php/web/filter/vod":
+					if got := request.URL.Query().Get("sort"); got != sortValue {
+						t.Fatalf("sort query = %q, want %q", got, sortValue)
+					}
+					if request.URL.Query().Get("type_name") != "电影" {
+						t.Fatalf("category was not preserved: %s", request.URL.RawQuery)
+					}
+					return sourceFixtureResponse(request, http.StatusOK,
+						`{"code":200,"data":[{"vod_id":78296,"vod_name":"流浪地球","type_name":"电影"}]}`), nil
+				default:
+					t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+					return nil, nil
+				}
+			})
+			items, _, err := d.fetchDuoduoCatalogPage(
+				context.Background(), 1, "1", "", sortValue,
+			)
+			if err != nil || len(items) != 1 {
+				t.Fatalf("sorted Duoduo page failed: items=%+v err=%v", items, err)
+			}
+		})
+	}
+}
+
 func TestDuoduoMirrorFailoverAndPreferredHost(t *testing.T) {
 	var first, second int
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
