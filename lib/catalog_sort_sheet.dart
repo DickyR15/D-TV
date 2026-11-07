@@ -50,8 +50,10 @@ Future<CatalogView?> chooseCatalogView(
                   ChoiceChip(
                     label: Text(sort.label),
                     selected: selected.sort == sort,
-                    onSelected: (_) =>
-                        update(() => selected = selected.copyWith(sort: sort)),
+                    onSelected: (_) => Navigator.pop(
+                      context,
+                      selected.copyWith(sort: sort),
+                    ),
                   ),
               ],
             ),
@@ -72,8 +74,9 @@ Future<CatalogView?> chooseCatalogView(
                   ChoiceChip(
                     label: Text(entry.value),
                     selected: selected.release == entry.key,
-                    onSelected: (_) => update(
-                      () => selected = selected.copyWith(release: entry.key),
+                    onSelected: (_) => Navigator.pop(
+                      context,
+                      selected.copyWith(release: entry.key),
                     ),
                   ),
                 ],
@@ -81,17 +84,10 @@ Future<CatalogView?> chooseCatalogView(
             ],
             const SizedBox(height: 16),
             Text(
-              '排序會套用至目前已載入的內容；繼續載入更多內容後，也會一併重新排序。沒有對應資料的排序或狀態篩選選項將不會顯示。',
+              '選取排序或篩選後會立即套用並關閉選單；沒有對應資料的選項不會顯示。',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () => Navigator.pop(context, selected),
-                child: const Text('套用'),
-              ),
-            ),
+            const SizedBox(height: 12),
           ],
         ),
       ),
