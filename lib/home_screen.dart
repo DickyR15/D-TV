@@ -161,6 +161,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String get _category => _categorySelections[_group.id] ?? '';
+  bool get _isDuoduoCatalog =>
+      _group.sources.length == 1 &&
+      _group.sources.single.id == 'duoduo' &&
+      const {'1', '2', '3', '4'}.contains(_category);
+
+  String get _duoduoSort {
+    if (!_isDuoduoCatalog) return '';
+    return switch (widget.store.catalogView.sort) {
+      CatalogSort.latest => 'time',
+      CatalogSort.score => 'score',
+      // The supplied site URLs use the score order for types 2–4.
+      CatalogSort.year => _category == '1' ? 'year' : 'score',
+      CatalogSort.popular || CatalogSort.source || CatalogSort.date ||
+      CatalogSort.name || CatalogSort.season || CatalogSort.heat ||
+      CatalogSort.views => 'hits',
+    };
+  }
   List<CatalogCategory> get _categories => _browser.categories(_group);
   String get _displayCategory =>
       _showRecommendations ? _recommendationCategory : _category;
@@ -1190,6 +1207,7 @@ class _HomeScreenState extends State<HomeScreen> {
         useCache: useCache,
         force: force,
         cacheOnly: cacheOnly,
+        sort: query.isEmpty ? _duoduoSort : '',
         onCached: (result) => accept(result, cached: true),
       );
       accept(result);
@@ -1704,12 +1722,23 @@ class _HomeScreenState extends State<HomeScreen> {
     final items = _items
         .where((drama) => widget.store.allowsSource(drama.source))
         .toList();
-    final current = effectiveCatalogView(widget.store.catalogView, items);
+    final current = effectiveCatalogView(
+      widget.store.catalogView,
+      items,
+      fallbackSort: _isDuoduoCatalog ? CatalogSort.popular : CatalogSort.source,
+    );
     final selected = await chooseCatalogView(
       context,
       current,
-      availableSorts: availableCatalogSorts(items),
-      showReleaseFilter: hasCatalogReleaseStatus(items),
+      availableSorts: _isDuoduoCatalog
+          ? const {
+              CatalogSort.popular,
+              CatalogSort.latest,
+              CatalogSort.score,
+              CatalogSort.year,
+            }
+          : availableCatalogSorts(items),
+      showReleaseFilter: !_isDuoduoCatalog && hasCatalogReleaseStatus(items),
       loadedCount: items.length,
     );
     if (!mounted || selected == null) return;
@@ -1718,6 +1747,8 @@ class _HomeScreenState extends State<HomeScreen> {
         selected.allSources == widget.store.catalogView.allSources) {
       return;
     }
+    final remoteSortChanged =
+        _isDuoduoCatalog && selected.sort != widget.store.catalogView.sort;
     await saveUserChange(
       context,
       () => widget.store.setCatalogView(selected),
@@ -1726,8 +1757,10 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _visibleCacheItems = null;
       _visibleCacheKey = null;
+      if (remoteSortChanged) _items = [];
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
+    if (remoteSortChanged) await _load(force: true);
   }
 
   bool get _supportsVipFilter =>
@@ -1774,6 +1807,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final view = effectiveCatalogView(
       widget.store.catalogView,
       candidates,
+      fallbackSort: _isDuoduoCatalog ? CatalogSort.popular : CatalogSort.source,
     );
     final result = sortCatalog(candidates, view);
     _visibleCacheItems = _items;
