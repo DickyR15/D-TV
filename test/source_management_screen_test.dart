@@ -44,6 +44,79 @@ void main() {
     expect(store.sourceEnabled('duoduo'), isTrue);
   });
 
+  testWidgets(
+    'TV source management focuses setup-password action before password setup',
+    (tester) async {
+      if (!allSourcesEnabled) return;
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: MaterialApp(home: SourceManagementScreen(store: store)),
+        ),
+      );
+      await tester.pump();
+
+      final setup = tester.widget<OutlinedButton>(
+        find.byKey(const ValueKey('configure-admin-source-password')),
+      );
+      expect(setup.focusNode!.hasPrimaryFocus, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'TV source management moves focus from password gate to first advanced source after unlock',
+    (tester) async {
+      if (!allSourcesEnabled) return;
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'source-pass-123',
+      );
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: MaterialApp(home: SourceManagementScreen(store: store)),
+        ),
+      );
+      await tester.pump();
+
+      final password = tester.widget<TextField>(
+        find.byKey(const ValueKey('advanced-source-password')),
+      );
+      expect(password.focusNode!.hasPrimaryFocus, isTrue);
+      await tester.enterText(
+        find.byKey(const ValueKey('advanced-source-password')),
+        'source-pass-123',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final firstAdvanced = tester.widget<SwitchListTile>(
+        find.byKey(const ValueKey('source-switch-huangdou')),
+      );
+      expect(firstAdvanced.focusNode!.hasPrimaryFocus, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
   testWidgets('advanced source toggles are hidden until admin password is verified', (
     tester,
   ) async {
