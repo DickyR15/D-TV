@@ -741,3 +741,14 @@ String uiTraditional(String value) {
   return result;
 }
 
+
+
+/// 依片源調整作品分類顯示名稱；不修改站源原始分類或 API 參數。
+String uiDramaCategory(String source, String category) {
+  final compact = category.trim().replaceAll(RegExp(r'\\s+'), '');
+  if (source == 'duoduo' &&
+      const {'動畫', '动画', '動漫', '动漫'}.contains(compact)) {
+    return '動漫';
+  }
+  return uiTraditional(category);
+}
