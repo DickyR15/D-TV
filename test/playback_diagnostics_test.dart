@@ -5,11 +5,21 @@ import 'package:hgtv/playback_diagnostics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('display resampling is enabled for Windows and Android TV only', () {
-    expect(playbackVideoSyncModeFor(windows: true, android: false, television: false), 'display-resample');
-    expect(playbackVideoSyncModeFor(windows: false, android: true, television: true), 'display-resample');
-    expect(playbackVideoSyncModeFor(windows: false, android: true, television: false), 'audio');
-    expect(playbackVideoSyncModeFor(windows: false, android: false, television: false), 'audio');
+  test('MPV sync and frame-drop policy matches official 1.0.1 defaults', () {
+    expect(playbackVideoSyncModeFor(android: true), 'audio');
+    expect(playbackVideoSyncModeFor(android: false), isNull);
+    expect(
+      playbackFrameDropModeFor(android: true, television: true),
+      'decoder',
+    );
+    expect(
+      playbackFrameDropModeFor(android: true, television: false),
+      'vo',
+    );
+    expect(
+      playbackFrameDropModeFor(android: false, television: false),
+      isNull,
+    );
   });
 
   test('ExoPlayer buffer headroom is measured without changing cache policy', () {
