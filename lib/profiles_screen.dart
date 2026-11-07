@@ -12,6 +12,7 @@ import 'local_store.dart';
 import 'ui_localization.dart';
 import 'models.dart';
 import 'app_build.dart';
+import 'remote_widgets.dart';
 
 class ProfilesScreen extends StatefulWidget {
   const ProfilesScreen({super.key, required this.store, this.locked = false});
@@ -423,6 +424,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         ),
       ),
     ),
+    ),
   );
 }
 
@@ -561,9 +563,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(widget.profile == null ? '新增使用者' : '編輯使用者')),
-    body: FocusTraversalGroup(
-      policy: OrderedTraversalPolicy(),
-      child: Center(
+    body: RemoteTextInput(
+      child: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640),
           child: ListView(
