@@ -550,12 +550,7 @@ class DuanjuApp extends StatelessWidget {
                         LogicalKeyboardKey.goBack,
                       ): const DismissIntent(),
                     },
-                    child: FocusTraversalGroup(
-                      child: AppRouteBackHandler(
-                        television: tv,
-                        child: child!,
-                      ),
-                    ),
+                    child: FocusTraversalGroup(child: child!),
                   ),
                 ),
               ),
