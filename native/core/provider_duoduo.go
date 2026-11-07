@@ -481,9 +481,18 @@ func duoduoHomeSupplement(data map[string]any, category string) []Drama {
 	return items
 }
 
-func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, category, query string) ([]Drama, bool, error) {
+func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, category, query string, requestedSort ...string) ([]Drama, bool, error) {
 	if page < 1 || page > 100000 || len(query) > 256 || category != "" && len(category) > 16 {
 		return nil, false, errors.New("多多追劇目錄查詢參數無效")
+	}
+	sortValue := "hits"
+	if len(requestedSort) > 0 && strings.TrimSpace(requestedSort[0]) != "" {
+		sortValue = strings.TrimSpace(requestedSort[0])
+	}
+	switch sortValue {
+	case "hits", "time", "score", "year":
+	default:
+		return nil, false, errors.New("多多追劇排序選項無效")
 	}
 	var route string
 	params := url.Values{"page": {strconv.Itoa(page)}}
@@ -499,7 +508,7 @@ func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, categ
 		params.Set("limit", strconv.Itoa(duoduoPageSize))
 	} else {
 		route = "/api.php/web/filter/vod"
-		params.Set("sort", "hits")
+		params.Set("sort", sortValue)
 		params.Set("pageSize", "24")
 		if category != "" {
 			// The upstream web API filters by type_name; type_id is only the
