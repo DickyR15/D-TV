@@ -52,23 +52,42 @@ class CatalogView {
     'allSources': allSources,
   };
 
-  factory CatalogView.fromJson(Map<String, dynamic> value) => CatalogView(
-    sort:
+  factory CatalogView.fromJson(Map<String, dynamic> value) {
+    final savedSort =
         CatalogSort.values
             .where((sort) => sort.name == value['sort'])
             .firstOrNull ??
-        CatalogSort.date,
-    duoduoSort: switch (value['duoduoSort']) {
+        CatalogSort.date;
+    const duoduoSorts = {
+      CatalogSort.popular,
+      CatalogSort.latest,
+      CatalogSort.score,
+      CatalogSort.year,
+    };
+    final hasSeparateDuoduoSort = value.containsKey('duoduoSort');
+    final duoduoSort = switch (value['duoduoSort']) {
       'latest' => CatalogSort.latest,
       'score' => CatalogSort.score,
       'year' => CatalogSort.year,
-      _ => CatalogSort.popular,
-    },
-    release: {'', 'finished', 'ongoing', 'unknown'}.contains(value['release'])
-        ? value['release'] as String
-        : '',
-    allSources: value['allSources'] == true,
-  );
+      'popular' => CatalogSort.popular,
+      _ => hasSeparateDuoduoSort || !duoduoSorts.contains(savedSort)
+          ? CatalogSort.popular
+          : savedSort,
+    };
+    return CatalogView(
+      // Migrate the previous global Duoduo sort out of the shared provider
+      // preference. Other sources return to the normal year/source setting.
+      sort: !hasSeparateDuoduoSort && duoduoSorts.contains(savedSort)
+          ? CatalogSort.date
+          : savedSort,
+      duoduoSort: duoduoSort,
+      release:
+          {'', 'finished', 'ongoing', 'unknown'}.contains(value['release'])
+          ? value['release'] as String
+          : '',
+      allSources: value['allSources'] == true,
+    );
+  }
 }
 
 String normalizedSearchText(String text) {
