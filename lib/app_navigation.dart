@@ -74,9 +74,34 @@ class AppNavigationObserver extends NavigatorObserver {
 
 final appNavigationObserver = AppNavigationObserver();
 
-/// Handles TV remote Back at the Navigator boundary so dialogs and child
-/// routes receive Back even when the home route's PopScope blocks route exit.
-/// When no child route is on top, the home route keeps its own tab/exit policy.
+class AppRouteBackIntent extends Intent {
+  const AppRouteBackIntent();
+}
+
+class _AppRouteBackAction extends Action<AppRouteBackIntent> {
+  _AppRouteBackAction({
+    required this.enabled,
+    required this.onInvoke,
+  });
+
+  final bool Function() enabled;
+  final VoidCallback onInvoke;
+
+  @override
+  bool isEnabled(AppRouteBackIntent intent) => enabled();
+
+  @override
+  Object? invoke(AppRouteBackIntent intent) {
+    onInvoke();
+    return null;
+  }
+}
+
+/// Handles TV remote Back above MaterialApp's Navigator. Shortcuts/Actions
+/// are shared by the Navigator overlay, so dialogs and child pages receive
+/// Back even when the home route's PopScope blocks route exit. When no child
+/// route is on top, the shortcut stays disabled and HomeScreen keeps its own
+/// tab/exit policy.
 class AppRouteBackHandler extends StatelessWidget {
   const AppRouteBackHandler({
     super.key,
@@ -87,32 +112,30 @@ class AppRouteBackHandler extends StatelessWidget {
   final bool television;
   final Widget child;
 
-  KeyEventResult _handleKey(BuildContext context, KeyEvent event) {
-    if (!television ||
-        event is! KeyDownEvent ||
-        (event.logicalKey != LogicalKeyboardKey.escape &&
-            event.logicalKey != LogicalKeyboardKey.goBack) ||
-        !appNavigationObserver.hasChildRoute) {
-      return KeyEventResult.ignored;
-    }
-
-    // This handler is installed above MaterialApp's Navigator, so its own
-    // context is intentionally above the Navigator. Resolve from the focused
-    // route widget instead (dialog, settings page, or player content).
+  void _popTopRoute() {
+    // This handler is above Navigator, so resolve the active Navigator through
+    // the currently focused widget inside its top route or dialog.
     final focusedContext = FocusManager.instance.primaryFocus?.context;
     final navigator = focusedContext == null
         ? null
         : Navigator.maybeOf(focusedContext, rootNavigator: true);
-    if (navigator == null) return KeyEventResult.ignored;
-    unawaited(navigator.maybePop());
-    return KeyEventResult.handled;
+    if (navigator != null) unawaited(navigator.maybePop());
   }
 
   @override
-  Widget build(BuildContext context) => Focus(
-    canRequestFocus: false,
-    skipTraversal: true,
-    onKeyEvent: (node, event) => _handleKey(context, event),
-    child: child,
+  Widget build(BuildContext context) => Actions(
+    actions: {
+      AppRouteBackIntent: _AppRouteBackAction(
+        enabled: () => television && appNavigationObserver.hasChildRoute,
+        onInvoke: _popTopRoute,
+      ),
+    },
+    child: Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.escape): AppRouteBackIntent(),
+        SingleActivator(LogicalKeyboardKey.goBack): AppRouteBackIntent(),
+      },
+      child: child,
+    ),
   );
 }
