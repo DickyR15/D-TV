@@ -113,6 +113,7 @@ type nativeInput struct {
 	Page             int                     `json:"page"`
 	Query            string                  `json:"query"`
 	Category         string                  `json:"category"`
+	Sort             string                  `json:"sort"`
 	Drama            nativeDrama             `json:"drama"`
 	Chapter          Chapter                 `json:"chapter"`
 	Index            int                     `json:"index"`
@@ -650,7 +651,21 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	}
 	page := max(1, input.Page)
 	query := strings.TrimSpace(input.Query)
-	if query == "" {
+	duoduoSort := ""
+	if source == sourceDuoduo && query == "" {
+		duoduoSort = strings.TrimSpace(input.Sort)
+		if duoduoSort == "" {
+			duoduoSort = "hits"
+		}
+		switch duoduoSort {
+		case "hits", "time", "score", "year":
+		default:
+			return nativeCatalogResult{}, errors.New("多多追劇排序選項無效")
+		}
+	}
+	bypassUnsortedDuoduoCache :=
+		source == sourceDuoduo && query == "" && duoduoSort != "hits"
+	if query == "" && !bypassUnsortedDuoduoCache {
 		if retried, err := engine.retryCatalogSave(); retried {
 			cached := engine.nativeCached(cacheKey)
 			if err != nil || len(cached.Items) > 0 {
@@ -658,7 +673,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 			}
 		}
 	}
-	if query == "" && page == 1 && !input.Force {
+	if query == "" && page == 1 && !input.Force && !bypassUnsortedDuoduoCache {
 		if cached := engine.nativeCached(cacheKey); cached.Fresh {
 			return cached, nil
 		}
@@ -828,7 +843,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	case sourceDSD:
 		items, result.HasMore, err = d.fetchDSDCatalogPage(ctx, page, category, "")
 	case sourceDuoduo:
-		items, result.HasMore, err = d.fetchDuoduoCatalogPage(ctx, page, category, "")
+		items, result.HasMore, err = d.fetchDuoduoCatalogPage(ctx, page, category, "", duoduoSort)
 	case sourceHanxiaoquan:
 		items, result.HasMore, err = d.fetchHanxiaoquanCatalogPage(ctx, page, category, "")
 	case sourceHuangguoVideo:
@@ -862,7 +877,9 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		seen[drama.ID] = true
 		result.Items = append(result.Items, nativeNormalize(drama))
 	}
-	engine.saveCatalogCache(cacheKey, &result)
+	if !bypassUnsortedDuoduoCache {
+		engine.saveCatalogCache(cacheKey, &result)
+	}
 	if hongguoWebsiteErr != nil {
 		return result, hongguoWebsiteErr
 	}
