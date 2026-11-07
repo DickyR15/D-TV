@@ -185,6 +185,7 @@ abstract class AppRepository {
     String query = '',
     String category = '',
     bool force = false,
+    String sort = '',
   });
   Future<CatalogPage> cached(String source, {String category = ''});
   /// Fast first-screen snapshot. Implementations without a bounded native
@@ -711,6 +712,7 @@ class NativeRepository extends AppRepository {
     String query = '',
     String category = '',
     bool force = false,
+    String sort = '',
   }) async => CatalogPage.fromJson(
     await _read('catalog-$source', {
       'action': 'catalog',
@@ -718,6 +720,7 @@ class NativeRepository extends AppRepository {
       'page': page,
       'query': query,
       'category': category,
+      'sort': sort,
       'force': force,
     }),
   );
