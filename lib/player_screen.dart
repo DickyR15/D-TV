@@ -2374,7 +2374,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (!mounted || _closed) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: Text(uiTraditional(message))));
   }
 
   Future<void> _setPreferences(PlaybackPreferences preferences) async {
