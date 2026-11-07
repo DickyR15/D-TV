@@ -442,20 +442,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     ),
   );
-    if (widget.embedded || !AppLayout.isTelevision(context)) {
-      return settings;
-    }
-    void closeSettings() {
-      final navigator = Navigator.of(context);
-      if (navigator.canPop()) navigator.pop();
-    }
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.goBack): closeSettings,
-        const SingleActivator(LogicalKeyboardKey.escape): closeSettings,
-      },
-      child: settings,
-    );
+    // HomeScreen owns the single TV Back handler for both pushed and embedded
+    // settings. A second shortcut here can pop the chooser dialog and the
+    // settings page from one physical remote Back press.
+    return settings;
   }
 }
 
