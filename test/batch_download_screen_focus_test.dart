@@ -35,7 +35,10 @@ void main() {
     final quality = tester.widget<DropdownButtonFormField<int>>(
       find.byKey(const ValueKey('batch-download-quality')),
     );
-    expect(quality.autofocus, isTrue);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'batch-download-quality',
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -66,7 +69,10 @@ void main() {
     final quality = tester.widget<DropdownButtonFormField<int>>(
       find.byKey(const ValueKey('batch-download-quality')),
     );
-    expect(quality.autofocus, isFalse);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      isNot('batch-download-quality'),
+    );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
