@@ -729,12 +729,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     final change = appNavigationObserver.changes.value;
     if (change == null) return;
-    DiaryService.add(
-      '[BackTrace] nav event=${change.event.name} top=${change.topRoute} '
-      'children=${appNavigationObserver.hasChildRoute} '
-      'homeCurrent=${ModalRoute.of(context)?.isCurrent ?? true} '
-      'ignoreUntil=${_ignoreExitPromptUntil?.toIso8601String() ?? 'none'}',
-    );
     switch (change.event) {
       case AppNavigationEvent.pop:
       case AppNavigationEvent.remove:
@@ -795,10 +789,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Future<bool> didPopRoute() async {
-    DiaryService.add(
-      '[BackTrace] didPopRoute mounted=$mounted '
-      'tv=${mounted && AppLayout.isTelevision(context)}',
-    );
     if (!mounted || !AppLayout.isTelevision(context)) return false;
     // PopScope can block a Navigator route pop while the home route is below
     // Settings or another child route. Handle platform Back at the home shell
@@ -811,11 +801,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final now = DateTime.now();
     final navigator = Navigator.of(context);
     final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
-    DiaryService.add(
-      '[BackTrace] televisionBack children=${appNavigationObserver.hasChildRoute} '
-      'canPop=${navigator.canPop()} homeCurrent=$routeIsCurrent '
-      'ignoreUntil=${_ignoreExitPromptUntil?.toIso8601String() ?? 'none'}',
-    );
 
     // Always dismiss the top route/dialog first. Settings is also a home tab,
     // so relying only on the home ModalRoute's current flag can mistakenly
