@@ -38,8 +38,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   String? _message;
-  DateTime? _ignoreTrailingBackUntil;
-
   final FocusNode _deviceInterconnectFocus =
       FocusNode(debugLabel: 'settings-device-interconnect');
   bool _initialFocusScheduled = false;
@@ -57,29 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    appNavigationObserver.changes.addListener(_onNavigationChanged);
-  }
-
-  void _onNavigationChanged() {
-    final event = appNavigationObserver.changes.value?.event;
-    if (event == AppNavigationEvent.pop ||
-        event == AppNavigationEvent.remove ||
-        event == AppNavigationEvent.replace) {
-      // A physical TV Back may arrive once as a route pop and again as a
-      // keyboard shortcut. Do not let the second delivery close Settings.
-      _ignoreTrailingBackUntil = DateTime.now().add(
-        const Duration(milliseconds: 900),
-      );
-    } else if (event == AppNavigationEvent.push) {
-      _ignoreTrailingBackUntil = null;
-    }
-  }
-
-  @override
   void dispose() {
-    appNavigationObserver.changes.removeListener(_onNavigationChanged);
     _deviceInterconnectFocus.dispose();
     super.dispose();
   }
@@ -474,33 +450,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     ),
   );
-    if (widget.embedded || !AppLayout.isTelevision(context)) {
-      return settings;
-    }
-    void closeSettings() {
-      final now = DateTime.now();
-      final ignoredUntil = _ignoreTrailingBackUntil;
-      if (ignoredUntil != null && now.isBefore(ignoredUntil)) return;
-      final navigator = Navigator.of(context);
-      if (!navigator.canPop()) return;
-      // When a chooser dialog is open, this key should close the dialog first.
-      // Arm locally as well as through NavigatorObserver so widget tests and
-      // alternate hosts without the app-level observer remain single-pop safe.
-      if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
-        _ignoreTrailingBackUntil = now.add(
-          const Duration(milliseconds: 900),
-        );
-      }
-      navigator.pop();
-    }
-
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.goBack): closeSettings,
-        const SingleActivator(LogicalKeyboardKey.escape): closeSettings,
-      },
-      child: settings,
-    );
+    return settings;
   }
 }
 
