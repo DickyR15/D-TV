@@ -27,6 +27,23 @@ class BatchDownloadScreen extends StatefulWidget {
 
 class _BatchDownloadScreenState extends State<BatchDownloadScreen> {
   late final BatchDownloads _batch;
+  final FocusNode _qualityFocus = FocusNode(
+    debugLabel: 'batch-download-quality',
+  );
+  bool _initialFocusScheduled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
+    _initialFocusScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _qualityFocus.context != null &&
+          _qualityFocus.canRequestFocus) {
+        _qualityFocus.requestFocus();
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -37,6 +54,7 @@ class _BatchDownloadScreenState extends State<BatchDownloadScreen> {
 
   @override
   void dispose() {
+    _qualityFocus.dispose();
     _batch.dispose();
     super.dispose();
   }
@@ -97,7 +115,7 @@ class _BatchDownloadScreenState extends State<BatchDownloadScreen> {
                             const SizedBox(height: 12),
                             DropdownButtonFormField<int>(
                               key: const ValueKey('batch-download-quality'),
-                              autofocus: AppLayout.isTelevision(context),
+                              focusNode: _qualityFocus,
                               initialValue: _batch.quality,
                               isExpanded: true,
                               decoration: const InputDecoration(
