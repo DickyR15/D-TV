@@ -102,12 +102,17 @@ String playbackDiagnosticCounterDelta(String currentValue, int? previousValue) {
   return '+${current - previousValue}';
 }
 
-/// Select display-clock synchronization where the supplied logs show cadence judder.
-String playbackVideoSyncModeFor({
-  required bool windows,
+/// Preserve the official 1.0.1 MPV synchronization policy: Android uses
+/// audio-clock sync, while desktop platforms retain MPV's native defaults.
+String? playbackVideoSyncModeFor({required bool android}) =>
+    android ? 'audio' : null;
+
+/// Preserve 1.0.1's Android late-frame policy. Android TV uses decoder dropping
+/// to reduce late frames before the embedded video output; phones use VO drop.
+String? playbackFrameDropModeFor({
   required bool android,
   required bool television,
-}) => windows || (android && television) ? 'display-resample' : 'audio';
+}) => android ? (television ? 'decoder' : 'vo') : null;
 
 /// Low-overhead MPV properties sampled during native playback. Query only
 /// signals that distinguish decoder drops, output drops, display cadence and
