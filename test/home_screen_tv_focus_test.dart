@@ -398,7 +398,7 @@ void main() {
       expect(find.byType(SimpleDialog), findsNothing);
       expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 150));
 
