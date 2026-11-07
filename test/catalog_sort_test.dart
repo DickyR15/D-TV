@@ -18,6 +18,46 @@ void main() {
     expect(CatalogSort.year.label, '年份');
   });
 
+  test('Duoduo sort preference is isolated from provider default sorting', () {
+    final saved = const CatalogView(
+      sort: CatalogSort.date,
+      duoduoSort: CatalogSort.latest,
+    );
+    final restored = CatalogView.fromJson(saved.toJson());
+
+    expect(restored.sort, CatalogSort.date);
+    expect(restored.duoduoSort, CatalogSort.latest);
+
+    final legacy = CatalogView.fromJson({
+      'sort': 'heat',
+      'release': '',
+      'allSources': false,
+    });
+    expect(legacy.sort, CatalogSort.heat);
+    expect(legacy.duoduoSort, CatalogSort.popular);
+
+    const rows = [
+      Drama(
+        id: 'hongguo:1',
+        source: 'hongguo',
+        title: '新劇',
+        onlineDate: '2026',
+      ),
+      Drama(
+        id: 'hongguo:2',
+        source: 'hongguo',
+        title: '舊劇',
+        onlineDate: '2024',
+      ),
+    ];
+    final normalProviderView = effectiveCatalogView(restored, rows);
+    expect(normalProviderView.sort, CatalogSort.date);
+    expect(
+      sortCatalog(rows, normalProviderView).map((item) => item.id),
+      ['hongguo:1', 'hongguo:2'],
+    );
+  });
+
   group('catalog year sorting', () {
     test('sorts newest release year first across mixed sources', () {
       final rows = [
