@@ -139,3 +139,33 @@ class AppRouteBackHandler extends StatelessWidget {
     ),
   );
 }
+
+
+/// Gives a modal settings chooser its own TV remote Back target. The dialog
+/// route owns this Focus, so Escape/GoBack dismisses that chooser rather than
+/// bubbling to the home screen's navigation policy.
+class DialogRouteBackHandler extends StatelessWidget {
+  const DialogRouteBackHandler({
+    super.key,
+    required this.onBack,
+    required this.child,
+  });
+
+  final VoidCallback onBack;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    autofocus: true,
+    onKeyEvent: (node, event) {
+      if (event is KeyDownEvent &&
+          (event.logicalKey == LogicalKeyboardKey.escape ||
+              event.logicalKey == LogicalKeyboardKey.goBack)) {
+        onBack();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    child: child,
+  );
+}
