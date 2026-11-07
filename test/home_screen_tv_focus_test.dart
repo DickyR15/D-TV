@@ -35,6 +35,16 @@ Future<void> _openSettingsFromMoreMenu(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 350));
 }
 
+Widget _tvAppWithNavigatorLayout({required Widget home}) => MaterialApp(
+  navigatorObservers: [appNavigationObserver],
+  builder: (context, child) => AppLayout(
+    television: true,
+    formFactor: FormFactor.television,
+    child: child ?? const SizedBox.shrink(),
+  ),
+  home: home,
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -172,16 +182,8 @@ void main() {
       addTearDown(store.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          navigatorObservers: [appNavigationObserver],
-          home: AppLayout(
-            television: true,
-            formFactor: FormFactor.television,
-            child: HomeScreen(
-              repository: FixtureRepository(),
-              store: store,
-            ),
-          ),
+        _tvAppWithNavigatorLayout(
+          home: HomeScreen(repository: FixtureRepository(), store: store),
         ),
       );
       await tester.pump();
@@ -263,16 +265,8 @@ void main() {
       addTearDown(store.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          navigatorObservers: [appNavigationObserver],
-          home: AppLayout(
-            television: true,
-            formFactor: FormFactor.television,
-            child: HomeScreen(
-              repository: FixtureRepository(),
-              store: store,
-            ),
-          ),
+        _tvAppWithNavigatorLayout(
+          home: HomeScreen(repository: FixtureRepository(), store: store),
         ),
       );
       await tester.pump(const Duration(milliseconds: 350));
@@ -315,17 +309,9 @@ void main() {
         addTearDown(store.dispose);
 
         await tester.pumpWidget(
-          MaterialApp(
-            navigatorObservers: [appNavigationObserver],
-            home: AppLayout(
-              television: true,
-              formFactor: FormFactor.television,
-              child: HomeScreen(
-                repository: FixtureRepository(),
-                store: store,
-              ),
-            ),
-          ),
+          _tvAppWithNavigatorLayout(
+          home: HomeScreen(repository: FixtureRepository(), store: store),
+        ),
         );
         await tester.pump(const Duration(milliseconds: 350));
 
@@ -363,16 +349,8 @@ void main() {
       addTearDown(store.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          navigatorObservers: [appNavigationObserver],
-          home: AppLayout(
-            television: true,
-            formFactor: FormFactor.television,
-            child: HomeScreen(
-              repository: FixtureRepository(),
-              store: store,
-            ),
-          ),
+        _tvAppWithNavigatorLayout(
+          home: HomeScreen(repository: FixtureRepository(), store: store),
         ),
       );
       await tester.pump(const Duration(milliseconds: 350));
@@ -398,7 +376,7 @@ void main() {
       expect(find.byType(SimpleDialog), findsNothing);
       expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 150));
 
@@ -418,16 +396,8 @@ void main() {
       addTearDown(store.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          navigatorObservers: [appNavigationObserver],
-          home: AppLayout(
-            television: true,
-            formFactor: FormFactor.television,
-            child: HomeScreen(
-              repository: FixtureRepository(),
-              store: store,
-            ),
-          ),
+        _tvAppWithNavigatorLayout(
+          home: HomeScreen(repository: FixtureRepository(), store: store),
         ),
       );
       await tester.pump(const Duration(milliseconds: 350));
@@ -463,16 +433,8 @@ void main() {
       addTearDown(store.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          navigatorObservers: [appNavigationObserver],
-          home: AppLayout(
-            television: true,
-            formFactor: FormFactor.television,
-            child: HomeScreen(
-              repository: FixtureRepository(),
-              store: store,
-            ),
-          ),
+        _tvAppWithNavigatorLayout(
+          home: HomeScreen(repository: FixtureRepository(), store: store),
         ),
       );
       await tester.pump(const Duration(milliseconds: 350));
@@ -508,16 +470,8 @@ void main() {
       addTearDown(store.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          navigatorObservers: [appNavigationObserver],
-          home: AppLayout(
-            television: true,
-            formFactor: FormFactor.television,
-            child: HomeScreen(
-              repository: FixtureRepository(),
-              store: store,
-            ),
-          ),
+        _tvAppWithNavigatorLayout(
+          home: HomeScreen(repository: FixtureRepository(), store: store),
         ),
       );
       await tester.pump(const Duration(milliseconds: 350));
@@ -530,7 +484,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
       expect(find.byType(SimpleDialog), findsOneWidget);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.binding.handlePopRoute();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
 
@@ -552,16 +506,8 @@ void main() {
       addTearDown(store.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          navigatorObservers: [appNavigationObserver],
-          home: AppLayout(
-            television: true,
-            formFactor: FormFactor.television,
-            child: HomeScreen(
-              repository: FixtureRepository(),
-              store: store,
-            ),
-          ),
+        _tvAppWithNavigatorLayout(
+          home: HomeScreen(repository: FixtureRepository(), store: store),
         ),
       );
       await tester.pump(const Duration(milliseconds: 350));
@@ -579,7 +525,7 @@ void main() {
       );
       expect(find.byKey(const ValueKey('playback-setting')), findsNothing);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.binding.handlePopRoute();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
       expect(find.byKey(const ValueKey('playback-setting')), findsOneWidget);
@@ -587,7 +533,7 @@ void main() {
 
       // A second delivery from the same physical remote press must not close
       // the Settings route after the playback page has already been dismissed.
-      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
       expect(find.byKey(const ValueKey('playback-setting')), findsOneWidget);
       expect(find.text('設定與備份'), findsOneWidget);
@@ -612,16 +558,8 @@ void main() {
       addTearDown(store.dispose);
 
       await tester.pumpWidget(
-        MaterialApp(
-          navigatorObservers: [appNavigationObserver],
-          home: AppLayout(
-            television: true,
-            formFactor: FormFactor.television,
-            child: HomeScreen(
-              repository: FixtureRepository(),
-              store: store,
-            ),
-          ),
+        _tvAppWithNavigatorLayout(
+          home: HomeScreen(repository: FixtureRepository(), store: store),
         ),
       );
       await tester.pump(const Duration(milliseconds: 350));
