@@ -546,7 +546,10 @@ func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, categ
 		}
 	}
 	appendRows(rows)
-	if query == "" && page == 1 && homeData != nil {
+	if query == "" && page == 1 && homeData != nil && sortValue == "hits" {
+		// Curated homepage rows are only suitable for the default Hot list.
+		// Appending them to latest/score/year results would corrupt the upstream
+		// order and inject items that do not satisfy the selected ranking.
 		supplement := duoduoHomeSupplement(homeData, category)
 		for _, drama := range supplement {
 			if drama.ID != "" && !seen[drama.ID] {
