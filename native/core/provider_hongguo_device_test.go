@@ -10,7 +10,7 @@ import (
 )
 
 func TestHongguoAppBaseURLMatchesUpstreamFallbackHost(t *testing.T) {
-	const want = "https://api5-normal-sinfonlinea.fqnovel.com"
+	const want = "https://api5-normal-sinfonlineb.fqnovel.com"
 	if hongguoAppBaseURL != want {
 		t.Fatalf("Hongguo App API host = %q, want upstream fallback host %q", hongguoAppBaseURL, want)
 	}
