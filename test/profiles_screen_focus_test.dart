@@ -110,7 +110,10 @@ void main() {
         sources: const ['hongguo'],
         download: false,
       );
-      await store.switchProfile('visitor');
+      final visitor = store.profiles.firstWhere(
+        (profile) => profile.name == '訪客',
+      );
+      await store.switchProfile(visitor.id);
 
       await tester.pumpWidget(
         AppLayout(
@@ -121,7 +124,7 @@ void main() {
       );
       await tester.pump();
 
-      final focusable = store.profiles.firstWhere((p) => p.id == 'visitor');
+      final focusable = store.profile;
       final row = tester.widget<InkWell>(
         find.byKey(ValueKey('profile-open-${focusable.id}')),
       );
