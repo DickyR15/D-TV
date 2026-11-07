@@ -7,6 +7,11 @@ import 'package:hgtv/batch_download_screen.dart';
 
 import 'fixtures.dart';
 
+class _DownloadFixtureRepository extends FixtureRepository {
+  @override
+  bool get supportsDownloads => true;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -23,7 +28,7 @@ void main() {
         formFactor: FormFactor.television,
         child: MaterialApp(
           home: BatchDownloadScreen(
-            repository: FixtureRepository(),
+            repository: _DownloadFixtureRepository(),
             store: store,
             dramas: const [],
           ),
@@ -32,9 +37,7 @@ void main() {
     );
     await tester.pump();
 
-    final quality = tester.widget<DropdownButtonFormField<int>>(
-      find.byKey(const ValueKey('batch-download-quality')),
-    );
+    expect(find.byKey(const ValueKey('batch-download-quality')), findsOneWidget);
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
       'batch-download-quality',
@@ -57,7 +60,7 @@ void main() {
         formFactor: FormFactor.phone,
         child: MaterialApp(
           home: BatchDownloadScreen(
-            repository: FixtureRepository(),
+            repository: _DownloadFixtureRepository(),
             store: store,
             dramas: const [],
           ),
