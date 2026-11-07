@@ -31,6 +31,7 @@ const (
 	legacyKanmMovieSource = "kanmovie"
 	sourceDuoduo          = "duoduo"
 	sourceHanxiaoquan     = "hanxiaoquan"
+	sourceHeitao          = "heitao"
 
 	providerMaxBodyBytes = 20 * 1024 * 1024
 	providerTimeout      = 12 * time.Second
@@ -95,7 +96,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceHeitao:
 		return true
 	default:
 		return false
@@ -126,6 +127,8 @@ func canonicalProviderSource(source string) string {
 		return sourceDuoduo
 	case "hanxiaoquan", "jennyhow.com", "www.jennyhow.com":
 		return sourceHanxiaoquan
+	case "heitao", "heitaodj.com", "www.heitaodj.com":
+		return sourceHeitao
 	default:
 		return strings.TrimSpace(source)
 	}
@@ -241,6 +244,9 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 	case sourceHanxiaoquan:
 		drama, chapters, err := d.fetchHanxiaoquanDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
+	case sourceHeitao:
+		drama, chapters, err := d.fetchHeitaoDetail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
 	case sourceCloudFront:
 		return d.fetchLegacyChapters(ctx, sourceID)
 	default:
@@ -354,6 +360,9 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 				req.Header.Set("Referer", referer)
 			}
 			req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
+			if cookie, ok := ctx.Value(providerTextCookieKey{}).(string); ok && cookie != "" {
+				req.Header.Set("Cookie", cookie)
+			}
 			if noCache, _ := ctx.Value(providerTextNoCacheKey{}).(bool); noCache {
 				req.Header.Set("Cache-Control", "no-cache")
 			}
