@@ -61,6 +61,15 @@ func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoic
 	return choice
 }
 
+// nativeInitialPlaybackChoice preserves the provider's preferred route for the first
+// frame. Network probing belongs to recovery, not the cold-start critical path.
+func nativeInitialPlaybackChoice(media providerMedia, quality int, task Task) nativePlaybackChoice {
+	choice := nativePlaybackChoices(media, quality)
+	choice.task = task
+	choice.requestedQuality = quality
+	return choice
+}
+
 func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativePlaybackChoice) (nativePlan, error) {
 	if err := ctx.Err(); err != nil {
 		return nativePlan{}, err
