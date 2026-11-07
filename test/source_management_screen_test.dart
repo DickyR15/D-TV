@@ -220,6 +220,67 @@ void main() {
       throwsStateError,
     );
   });
+
+  testWidgets('wrong admin password displays the message without Bad state prefix', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: SourceManagementScreen(store: store)),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('advanced-source-password')),
+      'wrong-password',
+    );
+    await tester.tap(find.byKey(const ValueKey('unlock-advanced-sources')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('密碼不正確'), findsOneWidget);
+    expect(find.textContaining('Bad state:'), findsNothing);
+  });
+
+  testWidgets('Heitao is available in the locked advanced source list', (
+    tester,
+  ) async {
+    if (!allSourcesEnabled) return;
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: SourceManagementScreen(store: store)),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('advanced-source-password')),
+      'source-pass-123',
+    );
+    await tester.tap(find.byKey(const ValueKey('unlock-advanced-sources')));
+    await tester.pumpAndSettle();
+
+    final blackSpade = find.byKey(const ValueKey('source-switch-heitao'));
+    await tester.ensureVisible(blackSpade);
+    await tester.pumpAndSettle();
+    expect(blackSpade, findsOneWidget);
+    expect(tester.widget<SwitchListTile>(blackSpade).value, isFalse);
+  });
+
   testWidgets('iPhone-sized source list keeps other switches active during one pending write', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final store = testStore(await SharedPreferences.getInstance());
