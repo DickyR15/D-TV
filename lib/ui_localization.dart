@@ -694,9 +694,15 @@ String _convertOpenCc(String input, _OpenCcNode root) {
 /// Convert source-site text to Taiwan Traditional Chinese for display only.
 /// API identifiers, category IDs, request arguments, and raw records stay intact.
 String uiTraditional(String value) {
-  final cached = _conversionCache.remove(value);
+  // Dart's StateError.toString() prepends "Bad state:". Never expose this
+  // implementation detail in user-facing labels, errors, or status text.
+  final displayValue = value.replaceAll(
+    RegExp(r'Bad state:\\s*', caseSensitive: false),
+    '',
+  );
+  final cached = _conversionCache.remove(displayValue);
   if (cached != null) {
-    _conversionCache[value] = cached;
+    _conversionCache[displayValue] = cached;
     return cached;
   }
 
@@ -704,9 +710,9 @@ String uiTraditional(String value) {
   final taiwan = _openCcTaiwan;
   late final String result;
   if (!_openCcReady || s2t == null || taiwan == null) {
-    result = _uiTraditionalFallback(value);
+    result = _uiTraditionalFallback(displayValue);
   } else {
-    var converted = _convertOpenCc(value, s2t);
+    var converted = _convertOpenCc(displayValue, s2t);
     converted = _convertOpenCc(converted, taiwan);
     // D TV 專用詞彙，補足 OpenCC 未涵蓋的台灣用語。
     for (final entry in _twPhrases.entries) {
@@ -737,7 +743,7 @@ String uiTraditional(String value) {
   if (_conversionCache.length >= _conversionCacheLimit) {
     _conversionCache.remove(_conversionCache.keys.first);
   }
-  _conversionCache[value] = result;
+  _conversionCache[displayValue] = result;
   return result;
 }
 
