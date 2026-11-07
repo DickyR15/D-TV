@@ -131,7 +131,7 @@ void main() {
         find.byKey(const ValueKey('advanced-source-password')),
         'source-pass-123',
       );
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
