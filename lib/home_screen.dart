@@ -705,6 +705,29 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  bool _handleGlobalTelevisionBack(KeyEvent event) {
+    if (!mounted ||
+        !AppLayout.isTelevision(context) ||
+        event is! KeyDownEvent ||
+        (event.logicalKey != LogicalKeyboardKey.escape &&
+            event.logicalKey != LogicalKeyboardKey.goBack) ||
+        _playbackRouteActive ||
+        !appNavigationObserver.hasChildRoute) {
+      return false;
+    }
+
+    // HardwareKeyboard runs before focus shortcuts. Pop only the top child
+    // route/dialog; do not intercept playback because the player owns its
+    // two-stage Back behavior.
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    final navigator = focusedContext == null
+        ? null
+        : Navigator.maybeOf(focusedContext, rootNavigator: true);
+    if (navigator == null) return false;
+    unawaited(navigator.maybePop());
+    return true;
+  }
+
   void _onAppNavigationChanged() {
     if (!mounted || !AppLayout.isTelevision(context)) return;
     final change = appNavigationObserver.changes.value;
@@ -887,6 +910,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     appNavigationObserver.changes.addListener(_onAppNavigationChanged);
+    HardwareKeyboard.instance.addHandler(_handleGlobalTelevisionBack);
     _scroll.addListener(_onCatalogScroll);
     _source = SourceSite.byId(widget.store.source);
     _allSources = widget.store.catalogView.allSources;
@@ -1032,6 +1056,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     appNavigationObserver.changes.removeListener(_onAppNavigationChanged);
+    HardwareKeyboard.instance.removeHandler(_handleGlobalTelevisionBack);
     _cancelStartupFocusRetry();
     _appUpdateCheckTimer?.cancel();
     _homePopupUsersFocus.dispose();
