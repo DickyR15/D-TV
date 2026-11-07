@@ -89,7 +89,8 @@ class DialogRouteBackHandler extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Focus(
-    autofocus: true,
+    canRequestFocus: false,
+    skipTraversal: true,
     onKeyEvent: (node, event) {
       if (event is KeyDownEvent &&
           (event.logicalKey == LogicalKeyboardKey.escape ||
@@ -99,6 +100,6 @@ class DialogRouteBackHandler extends StatelessWidget {
       }
       return KeyEventResult.ignored;
     },
-    child: child,
+    child: FocusTraversalGroup(child: child),
   );
 }
