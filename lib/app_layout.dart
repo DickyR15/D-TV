@@ -384,7 +384,14 @@ class AppLayout extends InheritedWidget {
 
     return showDialog<String>(
       context: context,
-      builder: (dialogContext) => SimpleDialog(
+      builder: (dialogContext) => CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              Navigator.of(dialogContext).pop(),
+          const SingleActivator(LogicalKeyboardKey.goBack): () =>
+              Navigator.of(dialogContext).pop(),
+        },
+        child: SimpleDialog(
         title: const Text('介面模式'),
         children: [
           for (final entry in options.entries)
@@ -398,6 +405,7 @@ class AppLayout extends InheritedWidget {
               onTap: () => Navigator.of(dialogContext).pop(entry.key),
             ),
         ],
+        ),
       ),
     );
   }
