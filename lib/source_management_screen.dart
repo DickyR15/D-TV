@@ -165,7 +165,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     focusNode: focusNode,
     contentPadding: EdgeInsets.zero,
     title: Text(uiTraditional(source.name)),
-    subtitle: Text(uiTraditional(source.description)),
+    subtitle: Text(source.id == 'duoduo' ? source.description : uiTraditional(source.description)),
     value: widget.store.sourceEnabled(source.id),
     onChanged: _busy || _busySourceIds.contains(source.id)
         ? null
