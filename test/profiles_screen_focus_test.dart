@@ -109,7 +109,6 @@ void main() {
         name: '訪客',
         sources: const ['hongguo'],
         download: false,
-        pin: 'visitor-password',
       );
       await store.switchProfile('visitor');
 
