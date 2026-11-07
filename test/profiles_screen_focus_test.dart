@@ -98,10 +98,18 @@ void main() {
       final store = testStore(await SharedPreferences.getInstance());
       addTearDown(store.dispose);
       await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'admin-password',
+      );
+      await store.saveProfile(
         id: 'visitor',
         name: '訪客',
         sources: const ['hongguo'],
         download: false,
+        pin: 'visitor-password',
       );
       await store.switchProfile('visitor');
 
