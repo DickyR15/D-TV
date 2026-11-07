@@ -114,7 +114,6 @@ void main() {
       );
       await tester.pump();
 
-      final firstProfile = store.profiles.first;
       final focusable = store.profiles.firstWhere((p) => p.id == 'visitor');
       final row = tester.widget<InkWell>(
         find.byKey(ValueKey('profile-open-${focusable.id}')),
