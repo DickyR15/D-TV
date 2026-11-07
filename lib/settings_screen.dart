@@ -41,6 +41,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final FocusNode _deviceInterconnectFocus =
       FocusNode(debugLabel: 'settings-device-interconnect');
   bool _initialFocusScheduled = false;
+  DateTime? _ignoreTrailingBackUntil;
+
+  @override
+  void initState() {
+    super.initState();
+    appNavigationObserver.changes.addListener(_onNavigationChanged);
+  }
+
+  void _onNavigationChanged() {
+    final event = appNavigationObserver.changes.value?.event;
+    if (event == AppNavigationEvent.pop ||
+        event == AppNavigationEvent.remove ||
+        event == AppNavigationEvent.replace) {
+      // TV remotes can report one physical Back as both a route pop and a
+      // trailing keyboard event. Suppress the duplicate after the first pop.
+      _ignoreTrailingBackUntil = DateTime.now().add(
+        const Duration(milliseconds: 900),
+      );
+    } else if (event == AppNavigationEvent.push) {
+      _ignoreTrailingBackUntil = null;
+    }
+  }
+
+  void _handleSettingsBack() {
+    final now = DateTime.now();
+    final ignoredUntil = _ignoreTrailingBackUntil;
+    if (ignoredUntil != null && now.isBefore(ignoredUntil)) return;
+    // Pop the topmost route. When a subpage/dialog is open this closes that
+    // page first; when Settings is current it returns to Home.
+    _ignoreTrailingBackUntil = now.add(const Duration(milliseconds: 900));
+    Navigator.of(context).pop();
+  }
 
   @override
   void didChangeDependencies() {
@@ -56,6 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    appNavigationObserver.changes.removeListener(_onNavigationChanged);
     _deviceInterconnectFocus.dispose();
     super.dispose();
   }
@@ -450,9 +483,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     ),
   );
-    // HomeScreen owns the single TV Back handler for the root Navigator.
-    // A second shortcut layer here could pop both a child page and Settings.
-    return settings;
+    if (widget.embedded || !AppLayout.isTelevision(context)) {
+      return settings;
+    }
+    return PopScope<Object?>(
+      // The home route's TV PopScope deliberately prevents an implicit
+      // navigator pop. Handle Settings here and pop only the topmost route.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _handleSettingsBack();
+      },
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.goBack): _handleSettingsBack,
+          const SingleActivator(LogicalKeyboardKey.escape): _handleSettingsBack,
+        },
+        child: settings,
+      ),
+    );
   }
 }
 
