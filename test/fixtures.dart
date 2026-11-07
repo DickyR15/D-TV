@@ -24,6 +24,7 @@ class FixtureRepository extends AppRepository {
   final requests = <String>[];
   final pages = <int>[];
   final forced = <bool>[];
+  final sorts = <String>[];
   final cachedPages = <String, CatalogPage>{};
   static const free = Drama(
     id: 'hongguo:100',
@@ -54,10 +55,12 @@ class FixtureRepository extends AppRepository {
     String query = '',
     String category = '',
     bool force = false,
+    String sort = '',
   }) async {
     requests.add(source);
     pages.add(page);
     forced.add(force);
+    sorts.add(sort);
     if (fail) {
       throw AppFailure('合成網路錯誤');
     }
