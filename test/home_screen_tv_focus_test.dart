@@ -280,7 +280,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
 
       expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
-      expect(find.byKey(const ValueKey('home-more-menu')), findsNothing);
+      // The Home route stays mounted below the pushed Settings route.
+      expect(find.byKey(const ValueKey('home-more-menu')), findsOneWidget);
 
       await tester.binding.handlePopRoute();
       await tester.pump();
@@ -566,25 +567,15 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
-      expect(
-        find.descendant(
-          of: find.byType(AppBar).last,
-          matching: find.text('設定與備份'),
-        ),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+      expect(find.text('設定與備份'), findsOneWidget);
 
       // A second delivery from the same physical remote press must not close
       // the Settings route after the playback page has already been dismissed.
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
-      expect(
-        find.descendant(
-          of: find.byType(AppBar).last,
-          matching: find.text('設定與備份'),
-        ),
-        findsOneWidget,
-      );
+      expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+      expect(find.text('設定與備份'), findsOneWidget);
 
       // A distinct system Back after the de-duplication window closes Settings.
       await tester.pump(const Duration(milliseconds: 1000));
