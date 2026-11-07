@@ -324,7 +324,7 @@ func TestDuoduoCatalogSupportsAllRequestedSorts(t *testing.T) {
 				switch request.URL.Path {
 				case "/api.php/web/index/home":
 					return sourceFixtureResponse(request, http.StatusOK,
-						`{"code":200,"data":{"categories":[{"type_id":1,"type_name":"电影"}]}}`), nil
+						`{"code":200,"data":{"categories":[{"type_id":1,"type_name":"电影","videos":[{"vod_id":900,"vod_name":"首頁精選不應插入排序結果"}]}]}}`), nil
 				case "/api.php/web/filter/vod":
 					if got := request.URL.Query().Get("sort"); got != sortValue {
 						t.Fatalf("sort query = %q, want %q", got, sortValue)
