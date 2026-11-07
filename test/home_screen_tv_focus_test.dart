@@ -26,6 +26,15 @@ class _DeferredDetailRepository extends FixtureRepository {
   }
 }
 
+Future<void> _openSettingsFromMoreMenu(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('home-more-menu')));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+  await tester.tap(find.text('設定與備份').first);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -268,10 +277,8 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 350));
 
-      final settingsNavigation = find.byKey(const ValueKey('side-nav-9'));
-      tester.widget<RemoteTarget>(settingsNavigation).onPressed!.call();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 250));
+      await _openSettingsFromMoreMenu(tester);
+      expect(find.byKey(const ValueKey('side-nav-9')), findsNothing);
       expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('theme-setting')));
@@ -282,15 +289,12 @@ void main() {
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
-      expect(appNavigationObserver.hasChildRoute, isFalse);
+      expect(appNavigationObserver.hasChildRoute, isTrue);
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.byType(SimpleDialog), findsNothing);
       expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
-      expect(
-        tester.widget<RemoteTarget>(settingsNavigation).selected,
-        isTrue,
-      );
+      expect(find.text('設定與備份'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
@@ -405,6 +409,105 @@ void main() {
 
       expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
       expect(find.text('設定與備份'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'TV Back from a Settings subpage returns to Settings without popping Home',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appNavigationObserver],
+          home: AppLayout(
+            television: true,
+            formFactor: FormFactor.television,
+            child: HomeScreen(
+              repository: FixtureRepository(),
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+      await _openSettingsFromMoreMenu(tester);
+
+      await tester.tap(find.byKey(const ValueKey('playback-setting')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('播放'), findsOneWidget);
+      expect(find.byKey(const ValueKey('playback-setting')), findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byKey(const ValueKey('playback-setting')), findsOneWidget);
+      expect(find.text('設定與備份'), findsOneWidget);
+
+      // A second delivery from the same physical remote press must not close
+      // the Settings route after the playback page has already been dismissed.
+      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('playback-setting')), findsOneWidget);
+      expect(find.text('設定與備份'), findsOneWidget);
+
+      // A distinct Back after the de-duplication window closes Settings itself.
+      await tester.pump(const Duration(milliseconds: 1000));
+      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.text('設定與備份'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'TV remote can move focus and select a display mode from the More menu',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appNavigationObserver],
+          home: AppLayout(
+            television: true,
+            formFactor: FormFactor.television,
+            child: HomeScreen(
+              repository: FixtureRepository(),
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+
+      await tester.tap(find.byKey(const ValueKey('home-more-menu')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.tap(find.text('介面模式').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byType(SimpleDialog), findsOneWidget);
+      expect(store.displayMode, 'auto');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(store.displayMode, 'television');
+      expect(find.byType(SimpleDialog), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
