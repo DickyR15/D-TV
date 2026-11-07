@@ -1,13 +1,27 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/home_screen.dart';
+import 'package:hgtv/models.dart';
+import 'package:hgtv/playback_launch_screen.dart';
 import 'package:hgtv/app_navigation.dart';
 import 'package:hgtv/remote_widgets.dart';
 
 import 'fixtures.dart';
+
+class _DeferredDetailRepository extends FixtureRepository {
+  final Completer<DramaDetail> detailCompleter = Completer<DramaDetail>();
+
+  @override
+  Future<DramaDetail> detail(Drama drama) {
+    detailCalls++;
+    return detailCompleter.future;
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -327,5 +341,57 @@ void main() {
       await tester.pump();
     },
   );
+
+  testWidgets(
+    'rapid repeated TV poster activation opens one playback launch route',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      final repository = _DeferredDetailRepository();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppLayout(
+            television: true,
+            formFactor: FormFactor.television,
+            child: HomeScreen(
+              repository: repository,
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+
+      final categoryNavigation = tester.widget<RemoteTarget>(
+        find.byKey(const ValueKey('side-nav-8')),
+      );
+      categoryNavigation.onPressed!.call();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final poster = find.ancestor(
+        of: find.text('測試短劇'),
+        matching: find.byType(RemoteTarget),
+      );
+      expect(poster, findsOneWidget);
+      final target = tester.widget<RemoteTarget>(poster);
+
+      // Simulate a fast double-click / two Select deliveries before the
+      // launch route has finished resolving the drama's episodes.
+      target.onPressed!.call();
+      target.onPressed!.call();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+
+      expect(find.byType(PlaybackLaunchScreen), findsOneWidget);
+      expect(repository.detailCalls, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
 
 }
