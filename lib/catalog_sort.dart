@@ -20,25 +20,34 @@ enum CatalogSort {
 class CatalogView {
   const CatalogView({
     this.sort = CatalogSort.date,
+    this.duoduoSort = CatalogSort.popular,
     this.release = '',
     this.allSources = false,
   });
   final CatalogSort sort;
+
+  /// Duoduo's website ordering is independent from every other provider.
+  /// Keep it separate so choosing 最新／評分／年份 never changes another
+  /// source's own default sort.
+  final CatalogSort duoduoSort;
   final String release;
   final bool allSources;
 
   CatalogView copyWith({
     CatalogSort? sort,
+    CatalogSort? duoduoSort,
     String? release,
     bool? allSources,
   }) => CatalogView(
     sort: sort ?? this.sort,
+    duoduoSort: duoduoSort ?? this.duoduoSort,
     release: release ?? this.release,
     allSources: allSources ?? this.allSources,
   );
 
   Map<String, dynamic> toJson() => {
     'sort': sort.name,
+    'duoduoSort': duoduoSort.name,
     'release': release,
     'allSources': allSources,
   };
@@ -49,6 +58,12 @@ class CatalogView {
             .where((sort) => sort.name == value['sort'])
             .firstOrNull ??
         CatalogSort.date,
+    duoduoSort: switch (value['duoduoSort']) {
+      'latest' => CatalogSort.latest,
+      'score' => CatalogSort.score,
+      'year' => CatalogSort.year,
+      _ => CatalogSort.popular,
+    },
     release: {'', 'finished', 'ongoing', 'unknown'}.contains(value['release'])
         ? value['release'] as String
         : '',
