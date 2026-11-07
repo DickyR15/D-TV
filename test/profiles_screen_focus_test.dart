@@ -7,6 +7,8 @@ import 'package:hgtv/local_store.dart';
 import 'package:hgtv/profiles_screen.dart';
 import 'package:hgtv/models.dart';
 
+import 'fixtures.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final platform in [
@@ -178,6 +180,122 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       store.dispose();
+    },
+  );
+
+  testWidgets(
+    'TV admin editor can move between password fields after keyboard is dismissed',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'old-admin-password',
+      );
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          child: MaterialApp(home: ProfilesScreen(store: store)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('profile-edit-default')));
+      await tester.pumpAndSettle();
+
+      final name = tester.widget<TextField>(
+        find.byKey(const ValueKey('profile-editor-name')),
+      );
+      expect(name.focusNode!.hasFocus, isTrue);
+      tester.testTextInput.hide();
+      await tester.pump();
+
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pump();
+      }
+
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-current-pin')),
+        ).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await press(LogicalKeyboardKey.enter);
+      expect(tester.testTextInput.isVisible, isTrue);
+
+      tester.testTextInput.hide();
+      await tester.pump();
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-pin')),
+        ).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-confirm-pin')),
+        ).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'TV new-user editor can navigate fields and reopen the keyboard',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          child: MaterialApp(home: ProfilesScreen(store: store)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('新增使用者'));
+      await tester.pumpAndSettle();
+
+      final name = tester.widget<TextField>(
+        find.byKey(const ValueKey('profile-editor-name')),
+      );
+      expect(name.focusNode!.hasFocus, isTrue);
+      tester.testTextInput.hide();
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-pin')),
+        ).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-confirm-pin')),
+        ).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
     },
   );
 
