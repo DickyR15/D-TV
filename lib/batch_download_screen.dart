@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'batch_downloads.dart';
 import 'core_bridge.dart';
 import 'downloads_screen.dart';
+import 'app_layout.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'widgets.dart';
@@ -96,6 +97,7 @@ class _BatchDownloadScreenState extends State<BatchDownloadScreen> {
                             const SizedBox(height: 12),
                             DropdownButtonFormField<int>(
                               key: const ValueKey('batch-download-quality'),
+                              autofocus: AppLayout.isTelevision(context),
                               initialValue: _batch.quality,
                               isExpanded: true,
                               decoration: const InputDecoration(
