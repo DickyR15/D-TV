@@ -556,6 +556,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
         content: const Text('會同時刪除該使用者的收藏清單與觀看紀錄。'),
         actions: [
           TextButton(
+            autofocus: AppLayout.isTelevision(context),
             onPressed: () => Navigator.pop(context, false),
             child: const Text('取消'),
           ),
