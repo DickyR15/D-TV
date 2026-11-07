@@ -23,6 +23,36 @@ void main() {
       sourceManagementErrorMessage(Exception('連線失敗')),
       contains('連線失敗'),
     );
+    expect(
+      sourceManagementErrorMessage(StateError('Bad state: 密碼不正確')),
+      '密碼不正確',
+    );
+  });
+
+  testWidgets('wrong admin password never displays the Dart Bad state prefix', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: SourceManagementScreen(store: store)),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('advanced-source-password')),
+      'wrong-password',
+    );
+    await tester.tap(find.byKey(const ValueKey('unlock-advanced-sources')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('密碼不正確'), findsOneWidget);
+    expect(find.textContaining('Bad state:'), findsNothing);
   });
 
   testWidgets('three primary sources and guidance are visible in every edition', (
