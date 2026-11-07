@@ -746,7 +746,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return false;
     }
     DiaryService.add('[Navigation] tv_back pop_top_route');
-    unawaited(navigator.maybePop());
+    navigator.pop();
     return true;
   }
 
