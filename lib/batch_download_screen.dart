@@ -32,13 +32,19 @@ class _BatchDownloadScreenState extends State<BatchDownloadScreen> {
   );
   bool _initialFocusScheduled = false;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
+  void _batchChanged() {
+    if (_initialFocusScheduled ||
+        _batch.busy ||
+        !mounted ||
+        !AppLayout.isTelevision(context)) {
+      return;
+    }
     _initialFocusScheduled = true;
+    // The initial catalogue read disables quality changes. Wait until that
+    // work finishes so the dropdown is enabled before requesting TV focus.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _qualityFocus.context != null &&
+      if (mounted &&
+          _qualityFocus.context != null &&
           _qualityFocus.canRequestFocus) {
         _qualityFocus.requestFocus();
       }
@@ -49,11 +55,13 @@ class _BatchDownloadScreenState extends State<BatchDownloadScreen> {
   void initState() {
     super.initState();
     _batch = BatchDownloads(widget.repository, widget.store, widget.dramas);
+    _batch.addListener(_batchChanged);
     unawaited(_batch.prepare());
   }
 
   @override
   void dispose() {
+    _batch.removeListener(_batchChanged);
     _qualityFocus.dispose();
     _batch.dispose();
     super.dispose();
