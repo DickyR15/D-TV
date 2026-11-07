@@ -605,7 +605,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         builder: (dialogContext) => AlertDialog(
           title: const Text('無法開啟手機搜尋'),
           content: Text(
-            '請確認電視已連上 Wi-Fi 或有線網路，並讓手機連到同一個區域網路。\n\n$error',
+            '請確認電視已連上 Wi-Fi 或有線網路，並讓手機連到同一個區域網路。\n\n${uiTraditional(error.toString())}',
           ),
           actions: [
             TextButton(
