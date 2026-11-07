@@ -288,8 +288,7 @@ void main() {
       expect(find.byKey(const ValueKey('home-more-menu')), findsOneWidget);
 
       await tester.binding.handlePopRoute();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('theme-setting')), findsNothing);
       expect(find.byKey(const ValueKey('home-more-menu')), findsOneWidget);
 
@@ -584,8 +583,7 @@ void main() {
       // A distinct system Back after the de-duplication window closes Settings.
       await tester.pump(const Duration(milliseconds: 1000));
       await tester.binding.handlePopRoute();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pumpAndSettle();
       expect(find.text('設定與備份'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
