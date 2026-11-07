@@ -48,9 +48,15 @@ void main() {
       find.byKey(const ValueKey('advanced-source-password')),
       'wrong-password',
     );
-    await tester.tap(find.byKey(const ValueKey('unlock-advanced-sources')));
+    final unlockButton = find.byKey(const ValueKey('unlock-advanced-sources'));
+    await tester.ensureVisible(unlockButton);
+    await tester.pumpAndSettle();
+    await tester.tap(unlockButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
 
+    expect(store.advancedSourcesUnlocked, isFalse);
     expect(find.text('密碼不正確'), findsOneWidget);
     expect(find.textContaining('Bad state:'), findsNothing);
   });
