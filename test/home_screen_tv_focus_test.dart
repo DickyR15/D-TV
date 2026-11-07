@@ -287,7 +287,7 @@ void main() {
       // The Home route stays mounted below the pushed Settings route.
       expect(find.byKey(const ValueKey('home-more-menu')), findsOneWidget);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.binding.handlePopRoute();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       expect(find.byKey(const ValueKey('theme-setting')), findsNothing);
@@ -583,7 +583,7 @@ void main() {
 
       // A distinct system Back after the de-duplication window closes Settings.
       await tester.pump(const Duration(milliseconds: 1000));
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.binding.handlePopRoute();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       expect(find.text('設定與備份'), findsNothing);
