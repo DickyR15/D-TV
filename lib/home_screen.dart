@@ -2817,35 +2817,23 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final entry in entries.take(entries.length - 1))
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 5),
-                            child: buildEntry(
-                              entry,
-                              itemHeight: itemHeight,
-                              iconSize: iconSize,
-                              labelSize: labelSize,
-                              verticalPadding: verticalPadding,
+                  : SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final entry in entries)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 5),
+                              child: buildEntry(
+                                entry,
+                                itemHeight: itemHeight,
+                                iconSize: iconSize,
+                                labelSize: labelSize,
+                                verticalPadding: verticalPadding,
+                              ),
                             ),
-                          ),
-                        const Spacer(),
-                        Divider(
-                          height: 14,
-                          thickness: 1,
-                          color: theme.colorScheme.outlineVariant
-                              .withValues(alpha: 0.65),
-                        ),
-                        buildEntry(
-                          entries.last,
-                          itemHeight: itemHeight,
-                          iconSize: iconSize,
-                          labelSize: labelSize,
-                          verticalPadding: verticalPadding,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
             ),
           ),
