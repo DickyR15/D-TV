@@ -7,8 +7,13 @@ import 'package:flutter/widgets.dart';
 enum AppNavigationEvent { push, pop, replace, remove }
 
 class AppNavigationChange {
-  const AppNavigationChange(this.event);
+  const AppNavigationChange(this.event, {this.topRoute = true});
   final AppNavigationEvent event;
+
+  /// Whether the changed route was the topmost route when Navigator reported it.
+  /// A menu can finish popping after its selection callback has already pushed
+  /// Settings; that late pop must not suppress the next intentional Back.
+  final bool topRoute;
 }
 
 class AppNavigationObserver extends NavigatorObserver {
@@ -19,8 +24,8 @@ class AppNavigationObserver extends NavigatorObserver {
 
   bool get hasChildRoute => _routeStack.length > 1;
 
-  void _publish(AppNavigationEvent event) {
-    changes.value = AppNavigationChange(event);
+  void _publish(AppNavigationEvent event, {bool topRoute = true}) {
+    changes.value = AppNavigationChange(event, topRoute: topRoute);
   }
 
   @override
@@ -40,15 +45,19 @@ class AppNavigationObserver extends NavigatorObserver {
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPop(route, previousRoute);
+    final wasTopRoute =
+        _routeStack.isNotEmpty && identical(_routeStack.last, route);
     _routeStack.remove(route);
-    _publish(AppNavigationEvent.pop);
+    _publish(AppNavigationEvent.pop, topRoute: wasTopRoute);
   }
 
   @override
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
     super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    var wasTopRoute = true;
     if (oldRoute != null) {
       final index = _routeStack.indexOf(oldRoute);
+      wasTopRoute = index >= 0 && index == _routeStack.length - 1;
       if (index >= 0) {
         if (newRoute != null) {
           _routeStack[index] = newRoute;
@@ -61,14 +70,16 @@ class AppNavigationObserver extends NavigatorObserver {
     } else if (newRoute != null) {
       _routeStack.add(newRoute);
     }
-    _publish(AppNavigationEvent.replace);
+    _publish(AppNavigationEvent.replace, topRoute: wasTopRoute);
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didRemove(route, previousRoute);
+    final wasTopRoute =
+        _routeStack.isNotEmpty && identical(_routeStack.last, route);
     _routeStack.remove(route);
-    _publish(AppNavigationEvent.remove);
+    _publish(AppNavigationEvent.remove, topRoute: wasTopRoute);
   }
 }
 
