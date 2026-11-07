@@ -63,11 +63,13 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     } else {
       initialFocus = null;
     }
-    if (initialFocus == null) return;
+    final focusNode = initialFocus;
+    if (focusNode == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && initialFocus.context != null &&
-          initialFocus.canRequestFocus) {
-        initialFocus.requestFocus();
+      if (mounted &&
+          focusNode.context != null &&
+          focusNode.canRequestFocus) {
+        focusNode.requestFocus();
       }
     });
   }
