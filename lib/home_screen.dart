@@ -705,44 +705,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  bool _handleGlobalTelevisionBack(KeyEvent event) {
-    if (!mounted ||
-        !AppLayout.isTelevision(context) ||
-        event is! KeyDownEvent ||
-        (event.logicalKey != LogicalKeyboardKey.escape &&
-            event.logicalKey != LogicalKeyboardKey.goBack)) {
-      return false;
-    }
-    final hasChildRoute = appNavigationObserver.hasChildRoute;
-    DiaryService.add(
-      '[Navigation] tv_back key=${event.logicalKey.keyLabel} child=$hasChildRoute playback=$_playbackRouteActive',
-    );
-    if (_playbackRouteActive || !hasChildRoute) return false;
-
-    final now = DateTime.now();
-    final ignoreUntil = _ignoreExitPromptUntil;
-    if (ignoreUntil != null && now.isBefore(ignoreUntil)) {
-      // Consume the duplicate delivery of the same remote Back press without
-      // popping a second route (for example, dismissing both dialog and Settings).
-      return true;
-    }
-    final previous = _lastHandledBackEventAt;
-    if (previous != null &&
-        now.difference(previous) < const Duration(milliseconds: 250)) {
-      return true;
-    }
-    _lastHandledBackEventAt = now;
-    _ignoreExitPromptUntil = now.add(const Duration(milliseconds: 900));
-
-    // HardwareKeyboard runs before focus shortcuts. Pop only the top child
-    // route/dialog; do not intercept playback because the player owns its
-    // two-stage Back behavior.
-    final navigator = Navigator.of(context, rootNavigator: true);
-    DiaryService.add('[Navigation] tv_back pop_top_route');
-    navigator.pop();
-    return true;
-  }
-
   void _onAppNavigationChanged() {
     if (!mounted || !AppLayout.isTelevision(context)) return;
     final change = appNavigationObserver.changes.value;
@@ -929,7 +891,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     appNavigationObserver.changes.addListener(_onAppNavigationChanged);
-    HardwareKeyboard.instance.addHandler(_handleGlobalTelevisionBack);
     _scroll.addListener(_onCatalogScroll);
     _source = SourceSite.byId(widget.store.source);
     _allSources = widget.store.catalogView.allSources;
@@ -1075,7 +1036,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     appNavigationObserver.changes.removeListener(_onAppNavigationChanged);
-    HardwareKeyboard.instance.removeHandler(_handleGlobalTelevisionBack);
     _cancelStartupFocusRetry();
     _appUpdateCheckTimer?.cancel();
     _homePopupUsersFocus.dispose();
@@ -2190,8 +2150,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   () => _desktopNavigate(6),
               const SingleActivator(LogicalKeyboardKey.digit7, control: true):
                   () => _desktopNavigate(7),
-              const SingleActivator(LogicalKeyboardKey.digit8, control: true):
-                  () => _desktopNavigate(9),
               const SingleActivator(LogicalKeyboardKey.keyF, control: true):
                   _focusDesktopSearch,
               const SingleActivator(LogicalKeyboardKey.keyK, control: true):
@@ -2653,7 +2611,6 @@ class _HomeScreenState extends State<HomeScreen> {
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
       (tab: 8, icon: Icons.category_rounded, label: '分類'),
-      (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     const desktopEntries = <({int tab, IconData icon, String label})>[
       (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
@@ -2663,7 +2620,6 @@ class _HomeScreenState extends State<HomeScreen> {
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
       (tab: 0, icon: Icons.category_rounded, label: '分類'),
-      (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     final television = AppLayout.isTelevision(context);
     final entries = television ? tvEntries : desktopEntries;
