@@ -9,6 +9,7 @@ import 'fixtures.dart';
 
 class CategoryRepository extends FixtureRepository {
   final categoryRequests = <String>[];
+  final sortRequests = <String>[];
   int cachedReads = 0;
   int cachedPreviewReads = 0;
   int categoryLoads = 0;
@@ -96,8 +97,10 @@ class CategoryRepository extends FixtureRepository {
     String query = '',
     String category = '',
     bool force = false,
+    String sort = '',
   }) async {
     categoryRequests.add('$source|$category|$page');
+    sortRequests.add('$source|$sort|$page');
     if (source == 'cloudfront' && failLegacy) throw AppFailure('合成入口失敗');
     return CatalogPage(
       [
@@ -115,6 +118,23 @@ class CategoryRepository extends FixtureRepository {
 }
 
 void main() {
+  test(
+    'Duoduo sort choices are passed to the native catalog requests',
+    () async {
+      final repository = CategoryRepository();
+      final browser = CatalogBrowser(repository);
+      const group = SourceGroup('duoduo', '多多追劇', [SourceSite.duoduo]);
+
+      final latest = await browser.load(group, category: '1', sort: 'time');
+      expect(latest.items, hasLength(1));
+      expect(repository.sortRequests, ['duoduo|time|1']);
+
+      final score = await browser.load(group, category: '1', sort: 'score');
+      expect(score.items, hasLength(1));
+      expect(repository.sortRequests.last, 'duoduo|score|1');
+    },
+  );
+
   test(
     'cached preview paints posters before the full catalog cache finishes reading',
     () async {
