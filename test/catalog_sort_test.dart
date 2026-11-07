@@ -12,6 +12,10 @@ void main() {
     expect(CatalogSort.date.label, '年份（由新到舊）');
     expect(CatalogSort.heat.label, '熱門程度');
     expect(CatalogSort.views.label, '播放次數');
+    expect(CatalogSort.popular.label, '熱門');
+    expect(CatalogSort.latest.label, '最新');
+    expect(CatalogSort.score.label, '評分');
+    expect(CatalogSort.year.label, '年份');
   });
 
   group('catalog year sorting', () {
@@ -112,39 +116,25 @@ void main() {
       );
     });
 
-    test('Duoduo only offers year and heat sorts when those fields exist', () {
+    test('Duoduo offers website sort choices without local metadata', () {
       const rows = [
-        Drama(
-          id: 'duoduo:1',
-          source: 'duoduo',
-          title: '電影甲',
-          onlineDate: '2025',
-          heat: '1.2萬',
-        ),
-        Drama(
-          id: 'duoduo:2',
-          source: 'duoduo',
-          title: '電影乙',
-          onlineDate: '2024',
-          heat: '8000',
-        ),
+        Drama(id: 'duoduo:1', source: 'duoduo', title: '電影甲'),
+        Drama(id: 'duoduo:2', source: 'duoduo', title: '電影乙'),
       ];
       final options = availableCatalogSorts(rows);
-      expect(options, containsAll([
-        CatalogSort.source,
-        CatalogSort.name,
-        CatalogSort.date,
-        CatalogSort.heat,
-      ]));
-      expect(options, isNot(contains(CatalogSort.views)));
-      expect(options, isNot(contains(CatalogSort.season)));
+      expect(options, {
+        CatalogSort.popular,
+        CatalogSort.latest,
+        CatalogSort.score,
+        CatalogSort.year,
+      });
       expect(hasCatalogReleaseStatus(rows), isFalse);
 
       final effective = effectiveCatalogView(
-        const CatalogView(sort: CatalogSort.date, release: 'finished'),
+        const CatalogView(sort: CatalogSort.score, release: 'finished'),
         rows,
       );
-      expect(effective.sort, CatalogSort.date);
+      expect(effective.sort, CatalogSort.score);
       expect(effective.release, isEmpty);
     });
 
@@ -173,7 +163,7 @@ void main() {
   });
 
 
-  testWidgets('sort and filter confirmation button uses Taiwan wording', (
+  testWidgets('selecting a sort applies immediately and closes the sheet', (
     tester,
   ) async {
     CatalogView? result;
@@ -195,12 +185,14 @@ void main() {
     await tester.tap(find.text('開啟排序與篩選'));
     await tester.pumpAndSettle();
 
-    expect(find.text('套用'), findsOneWidget);
+    expect(find.text('套用'), findsNothing);
     expect(find.text('應用'), findsNothing);
-
-    await tester.tap(find.text('套用'));
+    await tester.tap(find.text('片名'));
     await tester.pumpAndSettle();
+
     expect(result, isA<CatalogView>());
+    expect(result!.sort, CatalogSort.name);
+    expect(find.text('排序與篩選'), findsNothing);
   });
 
 }
