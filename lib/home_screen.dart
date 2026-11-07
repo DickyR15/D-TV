@@ -716,6 +716,21 @@ class _HomeScreenState extends State<HomeScreen> {
       return false;
     }
 
+    final now = DateTime.now();
+    final ignoreUntil = _ignoreExitPromptUntil;
+    if (ignoreUntil != null && now.isBefore(ignoreUntil)) {
+      // Consume the duplicate delivery of the same remote Back press without
+      // popping a second route (for example, dismissing both dialog and Settings).
+      return true;
+    }
+    final previous = _lastHandledBackEventAt;
+    if (previous != null &&
+        now.difference(previous) < const Duration(milliseconds: 250)) {
+      return true;
+    }
+    _lastHandledBackEventAt = now;
+    _ignoreExitPromptUntil = now.add(const Duration(milliseconds: 900));
+
     // HardwareKeyboard runs before focus shortcuts. Pop only the top child
     // route/dialog; do not intercept playback because the player owns its
     // two-stage Back behavior.
