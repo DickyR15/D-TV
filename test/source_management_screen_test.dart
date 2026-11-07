@@ -45,6 +45,33 @@ void main() {
   });
 
   testWidgets(
+    'TV standard edition starts on the first available general source control',
+    (tester) async {
+      if (allSourcesEnabled) return;
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: MaterialApp(home: SourceManagementScreen(store: store)),
+        ),
+      );
+      await tester.pump();
+
+      final firstGeneral = tester.widget<SwitchListTile>(
+        find.byKey(const ValueKey('source-switch-hongguo')),
+      );
+      expect(firstGeneral.focusNode!.hasPrimaryFocus, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
     'TV source management focuses setup-password action before password setup',
     (tester) async {
       if (!allSourcesEnabled) return;
