@@ -245,7 +245,15 @@ class CatalogBrowser {
     for (final source in group.sources) {
       for (final category in _menus[source.id] ?? const <CatalogCategory>[]) {
         if (category.id.isEmpty) continue;
-        final name = categoryName(category.name);
+        final rawName = category.name.trim().replaceAll(RegExp(r'\\s+'), '');
+        final name =
+            source.id == 'duoduo' &&
+                (category.id == '3' ||
+                    rawName == '动画' ||
+                    rawName == '動漫' ||
+                    rawName == '动画')
+            ? '動漫'
+            : categoryName(category.name);
         final choice = choices.putIfAbsent(
           name,
           () => _CatalogChoice(CatalogCategory('category:$name', name)),
@@ -279,6 +287,16 @@ class CatalogBrowser {
   _CatalogChoice? _choice(SourceGroup group, String category) => _choices(
     group,
   ).where((choice) => choice.category.id == category).firstOrNull;
+
+  /// Returns the source's native category ID behind a display-only category
+  /// chip ID such as "category:動漫". The upstream ID is required for sorting
+  /// and filtering requests.
+  String sourceCategoryId(
+    SourceGroup group,
+    String displayCategoryId,
+    String sourceId,
+  ) =>
+      _choice(group, displayCategoryId)?.requests[sourceId] ?? '';
 
   static String _searchText(String value) =>
       value.toLowerCase().replaceAll(RegExp(r'\s+'), '');
