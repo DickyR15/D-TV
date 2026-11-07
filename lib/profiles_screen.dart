@@ -50,11 +50,23 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     super.didChangeDependencies();
     if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
     _initialFocusScheduled = true;
-    final initialFocus = widget.store.configurationError != null
-        ? _recoveryFocus
-        : _forceLoginFocus;
+    final FocusNode? initialFocus;
+    if (widget.store.configurationError != null) {
+      initialFocus = _recoveryFocus;
+    } else if (!widget.store.locked && widget.store.profile.admin) {
+      // The force-login switch is only rendered for an unlocked administrator.
+      initialFocus = _forceLoginFocus;
+    } else if (widget.store.profiles.isNotEmpty) {
+      // Locked sessions and non-admin users must start on a real profile row;
+      // the force-login setting is not present in either of those layouts.
+      initialFocus = _profileEntryFocus(widget.store.profiles.first.id);
+    } else {
+      initialFocus = null;
+    }
+    if (initialFocus == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && initialFocus.canRequestFocus) {
+      if (mounted && initialFocus.context != null &&
+          initialFocus.canRequestFocus) {
         initialFocus.requestFocus();
       }
     });
