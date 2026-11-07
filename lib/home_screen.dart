@@ -815,7 +815,11 @@ class _HomeScreenState extends State<HomeScreen> {
     // Always dismiss the top route/dialog first. Settings is also a home tab,
     // so relying only on the home ModalRoute's current flag can mistakenly
     // interpret a chooser's Back as a request to leave the Settings tab.
-    if (navigator.canPop() || !routeIsCurrent) {
+    if (appNavigationObserver.hasChildRoute ||
+        navigator.canPop() ||
+        !routeIsCurrent) {
+      // A tracked child route/dialog is authoritative even if PopScope makes
+      // Navigator.canPop false for the underlying home route.
       // When a chooser dialog is popped, the home route is still not current
       // if Settings itself was pushed from the More menu. Suppress the
       // trailing event before attempting another Navigator.pop, or one
