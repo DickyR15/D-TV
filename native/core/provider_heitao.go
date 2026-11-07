@@ -199,7 +199,7 @@ func parseHeitaoCards(document *html.Node, pageURL string) []Drama {
 		drama := Drama{
 			ID: providerDramaID(sourceHeitao, id), Source: sourceHeitao, SourceID: id,
 			Title: truncate(title, 512), Name: truncate(title, 512),
-			Cover: cover, CoverURL: cover, ChannelName: "黑桃", CategoryName: "短剧", Remark: remark,
+			Cover: cover, CoverURL: cover, ChannelName: "黑桃", CategoryName: "短剧", Remark: remark, Badge: remark,
 		}
 		if count := heitaoEpisodeCount(remark); count > 0 {
 			drama.EpisodeCount, drama.TotalEpisode = count, count
