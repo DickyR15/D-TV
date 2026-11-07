@@ -69,9 +69,7 @@ void main() {
     );
     await tester.pump();
 
-    final quality = tester.widget<DropdownButtonFormField<int>>(
-      find.byKey(const ValueKey('batch-download-quality')),
-    );
+    expect(find.byKey(const ValueKey('batch-download-quality')), findsOneWidget);
     expect(
       FocusManager.instance.primaryFocus?.debugLabel,
       isNot('batch-download-quality'),
