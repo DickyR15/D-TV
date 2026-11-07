@@ -41,49 +41,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final FocusNode _deviceInterconnectFocus =
       FocusNode(debugLabel: 'settings-device-interconnect');
   bool _initialFocusScheduled = false;
-  DateTime? _ignoreTrailingBackUntil;
-
   @override
   void initState() {
     super.initState();
-    appNavigationObserver.changes.addListener(_onNavigationChanged);
-    HardwareKeyboard.instance.addHandler(_handleHardwareBack);
-  }
-
-  void _onNavigationChanged() {
-    final event = appNavigationObserver.changes.value?.event;
-    if (event == AppNavigationEvent.pop ||
-        event == AppNavigationEvent.remove ||
-        event == AppNavigationEvent.replace) {
-      // TV remotes can report one physical Back as both a route pop and a
-      // trailing keyboard event. Suppress the duplicate after the first pop.
-      _ignoreTrailingBackUntil = DateTime.now().add(
-        const Duration(milliseconds: 900),
-      );
-    } else if (event == AppNavigationEvent.push) {
-      _ignoreTrailingBackUntil = null;
-    }
-  }
-
-  bool _handleHardwareBack(KeyEvent event) {
-    if (!mounted || !AppLayout.isTelevision(context)) return false;
-    if (event is! KeyDownEvent ||
-        (event.logicalKey != LogicalKeyboardKey.goBack &&
-            event.logicalKey != LogicalKeyboardKey.escape)) {
-      return false;
-    }
-    _handleSettingsBack();
-    return true;
-  }
-
-  void _handleSettingsBack() {
-    final now = DateTime.now();
-    final ignoredUntil = _ignoreTrailingBackUntil;
-    if (ignoredUntil != null && now.isBefore(ignoredUntil)) return;
-    // Pop the topmost route. When a subpage/dialog is open this closes that
-    // page first; when Settings is current it returns to Home.
-    _ignoreTrailingBackUntil = now.add(const Duration(milliseconds: 900));
-    Navigator.of(context).pop();
   }
 
   @override
@@ -100,8 +60,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_handleHardwareBack);
-    appNavigationObserver.changes.removeListener(_onNavigationChanged);
     _deviceInterconnectFocus.dispose();
     super.dispose();
   }
