@@ -841,13 +841,17 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 	if err != nil || episodeIndex < 1 || episodeIndex > 100000 {
 		return providerMedia{}, errors.New("多多追劇播放集數無效")
 	}
+	// Keep Duoduo on the dedicated stream transport used by the 1.0.1 player.
+	// It pins media requests to HTTP/1.1 and retains the CDN/TLS fallback path;
+	// routing these HLS URLs through the general HTTP client caused Android TV
+	// to fail opening otherwise playable playlists and repeatedly switch lines.
 	// New detail responses contain direct public media URLs. Use that validated
 	// URL immediately instead of querying the aggregate API a second time;
 	// this keeps playback working when the API mirror becomes temporarily busy.
 	if duoduoDirectMediaURL(task.Chapter.VideoURL) {
 		referer := firstNonEmpty(task.Chapter.Referer, d.providerBaseURL(sourceDuoduo)+"/")
 		primary := providerMedia{
-			URL: task.Chapter.VideoURL, Referer: referer, StandardHTTP: true,
+			URL: task.Chapter.VideoURL, Referer: referer, StandardHTTP: false,
 		}
 		seen := map[string]bool{primary.URL: true}
 		for _, address := range task.Chapter.PlaybackVariants {
@@ -856,7 +860,7 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 			}
 			seen[address] = true
 			primary.Variants = append(primary.Variants, providerMedia{
-				URL: address, Referer: referer, StandardHTTP: true,
+				URL: address, Referer: referer, StandardHTTP: false,
 			})
 			if len(primary.Variants) >= 11 {
 				break
@@ -913,7 +917,7 @@ func (d *Downloader) resolveDuoduoMedia(ctx context.Context, task Task) (provide
 		}
 		seen[selected.URL] = true
 		options = append(options, providerMedia{
-			URL: selected.URL, Referer: base + "/", StandardHTTP: true,
+			URL: selected.URL, Referer: base + "/", StandardHTTP: false,
 		})
 		if len(options) >= 12 {
 			break
