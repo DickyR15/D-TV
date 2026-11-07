@@ -100,6 +100,9 @@ void main() {
     expect(uiDramaCategory('duoduo', '动画'), '動漫');
     expect(uiDramaCategory('duoduo', '動漫'), '動漫');
     expect(uiDramaCategory('hongguo', '動畫'), '動畫');
+    // Keep the Taiwan term intact through the shared display conversion too.
+    expect(uiTraditional('動漫'), '動漫');
+    expect(uiTraditional('动漫'), '動漫');
   });
 
   test('source names and descriptions use Taiwan Traditional Chinese', () {
