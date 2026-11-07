@@ -883,7 +883,7 @@ func TestNativeStreamLogsIncompleteTransferByteRange(t *testing.T) {
 	}
 }
 
-func TestDuoduoDirectHLSPlaybackUsesStandardHTTPAndRewritesSegments(t *testing.T) {
+func TestDuoduoDirectHLSPlaybackUsesDedicatedStreamTransportAndRewritesSegments(t *testing.T) {
 	const referer = "https://duoduozhuiju.com/"
 	var upstreamRequests atomic.Int32
 	origin := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -909,15 +909,15 @@ func TestDuoduoDirectHLSPlaybackUsesStandardHTTPAndRewritesSegments(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Duoduo direct media opts into the standard HTTP client. Make the
-	// specialized streaming client fail so this test proves that the proxy
-	// honors that transport choice for both playlists and child segments.
-	engine.downloader.client = origin.Client()
-	engine.downloader.streamClient = &http.Client{
+	// Duoduo must use the dedicated playback transport. Make the general
+	// client fail so both the playlist and child segment prove that this
+	// provider has not opted out of HTTP/1.1 + CDN/TLS fallback behavior.
+	engine.downloader.client = &http.Client{
 		Transport: nativeStreamRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
-			return nil, errors.New("Duoduo unexpectedly used the specialized stream client")
+			return nil, errors.New("Duoduo unexpectedly used the general HTTP client")
 		}),
 	}
+	engine.downloader.streamClient = origin.Client()
 	media, err := engine.downloader.resolveDuoduoMedia(context.Background(), Task{
 		DramaID: "duoduo:78296",
 		Chapter: Chapter{
@@ -931,8 +931,8 @@ func TestDuoduoDirectHLSPlaybackUsesStandardHTTPAndRewritesSegments(t *testing.T
 	if err != nil {
 		t.Fatalf("resolve Duoduo direct media: %v", err)
 	}
-	if !media.StandardHTTP || media.URL != origin.URL+"/movie/index.m3u8" {
-		t.Fatalf("Duoduo direct media did not retain its standard HTTP URL: %+v", media)
+	if media.StandardHTTP || media.URL != origin.URL+"/movie/index.m3u8" {
+		t.Fatalf("Duoduo direct media did not retain its dedicated stream transport URL: %+v", media)
 	}
 
 	stream, err := newNativeStreamServer(engine.downloader)
