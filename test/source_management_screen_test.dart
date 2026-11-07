@@ -82,6 +82,7 @@ void main() {
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
     expect(find.text('多多追劇'), findsOneWidget);
+    expect(find.text('電影 · 電視劇 · 動漫 · 綜藝'), findsOneWidget);
     expect(
       find.textContaining(
         '預設開啟 3 個一般片源：紅果、韓小圈、多多追劇。',
