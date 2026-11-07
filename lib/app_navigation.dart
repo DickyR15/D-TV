@@ -15,6 +15,7 @@ class AppNavigationObserver extends NavigatorObserver {
   final ValueNotifier<AppNavigationChange?> changes =
       ValueNotifier<AppNavigationChange?>(null);
   final List<Route<dynamic>> _routeStack = <Route<dynamic>>[];
+  NavigatorState? _trackedNavigator;
 
   bool get hasChildRoute => _routeStack.length > 1;
 
@@ -25,6 +26,12 @@ class AppNavigationObserver extends NavigatorObserver {
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPush(route, previousRoute);
+    // A shared observer may be attached to a new Navigator in tests or after
+    // an app-root rebuild. Never carry routes from the previous Navigator.
+    if (!identical(_trackedNavigator, navigator)) {
+      _routeStack.clear();
+      _trackedNavigator = navigator;
+    }
     _routeStack.remove(route);
     _routeStack.add(route);
     _publish(AppNavigationEvent.push);
@@ -89,7 +96,13 @@ class AppRouteBackHandler extends StatelessWidget {
       return KeyEventResult.ignored;
     }
 
-    final navigator = Navigator.maybeOf(context, rootNavigator: true);
+    // This handler is installed above MaterialApp's Navigator, so its own
+    // context is intentionally above the Navigator. Resolve from the focused
+    // route widget instead (dialog, settings page, or player content).
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    final navigator = focusedContext == null
+        ? null
+        : Navigator.maybeOf(focusedContext, rootNavigator: true);
     if (navigator == null) return KeyEventResult.ignored;
     unawaited(navigator.maybePop());
     return KeyEventResult.handled;
