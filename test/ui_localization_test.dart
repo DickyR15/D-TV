@@ -30,6 +30,14 @@ void main() {
     );
   });
 
+  test('removes Dart Bad state prefixes from user-visible messages', () {
+    expect(uiTraditional('Bad state: 密碼不正確'), '密碼不正確');
+    expect(uiTraditional('Bad state: Bad state: 密碼不正確'), '密碼不正確');
+    expect(uiTraditional('更新失敗：Bad state: 連線中斷'), '更新失敗：連線中斷');
+  });
+
+
+
   test('normalizes Taiwan terms across settings and system prompts', () {
     expect(
       uiTraditional('默認、用戶、網絡、保存文件、視頻、播放源、文件夾、點擊、搜索、在線'),
