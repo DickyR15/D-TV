@@ -12,6 +12,7 @@ import 'core_bridge.dart';
 import 'catalog_filters.dart';
 import 'catalog_browser.dart';
 import 'catalog_sort.dart';
+import 'catalog_sort_sheet.dart';
 import 'recommendations_screen.dart';
 import 'rankings_screen.dart';
 import 'playback_launch_screen.dart';
@@ -50,7 +51,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const _recommendationCategory = 'app:recommendations';
   static const _manageSourcesMenuValue = '__manage_sources__';
   static const _revealBatch = 60;
@@ -71,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   int _generation = 0;
   int _tab = 0;
-  int _tabBeforeSettings = 4;
   bool _initialTabResolved = false;
   bool _portraitBlurDefaultMigrationRequested = false;
   FormFactor? _lastFormFactor;
@@ -110,6 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _playbackRouteActive = false;
   bool _exitConfirmationShowing = false;
   bool _homePopupOpen = false;
+  bool _hasChildRoute = false;
   final FocusNode _homePopupUsersFocus =
       FocusNode(debugLabel: 'home-more-users');
   final FocusNode _desktopShortcutFocus =
@@ -161,6 +162,25 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String get _category => _categorySelections[_group.id] ?? '';
+  bool get _isDuoduoCatalog =>
+      _group.sources.length == 1 && _group.sources.single.id == 'duoduo';
+  String get _duoduoCategoryId => _isDuoduoCatalog
+      ? _browser.sourceCategoryId(_group, _category, 'duoduo')
+      : '';
+
+  String get _duoduoSort {
+    if (!_isDuoduoCatalog) return '';
+    return switch (widget.store.catalogView.duoduoSort) {
+      CatalogSort.latest => 'time',
+      CatalogSort.score => 'score',
+      // The supplied site URLs use year only for Movies. Series, Anime and
+      // Variety intentionally use the site's score endpoint for this option.
+      CatalogSort.year => _duoduoCategoryId == '1' ? 'year' : 'score',
+      CatalogSort.popular || CatalogSort.source || CatalogSort.date ||
+      CatalogSort.name || CatalogSort.season || CatalogSort.heat ||
+      CatalogSort.views => 'hits',
+    };
+  }
   List<CatalogCategory> get _categories => _browser.categories(_group);
   String get _displayCategory =>
       _showRecommendations ? _recommendationCategory : _category;
@@ -515,7 +535,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 shortcutRow('Ctrl + 5', '真人劇熱播榜'),
                 shortcutRow('Ctrl + 6', 'AI 劇熱播榜'),
                 shortcutRow('Ctrl + 7', '漫劇熱播榜'),
-                shortcutRow('Ctrl + 8', '設定'),
                 shortcutRow('Ctrl + F／Ctrl + K', '搜尋'),
                 const Divider(height: 20),
                 Text('播放中', style: Theme.of(context).textTheme.titleSmall),
@@ -706,17 +725,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onAppNavigationChanged() {
     if (!mounted || !AppLayout.isTelevision(context)) return;
+    final hasChildRoute = appNavigationObserver.hasChildRoute;
+    if (_hasChildRoute != hasChildRoute) {
+      setState(() => _hasChildRoute = hasChildRoute);
+    }
     final change = appNavigationObserver.changes.value;
     if (change == null) return;
     switch (change.event) {
       case AppNavigationEvent.pop:
       case AppNavigationEvent.remove:
       case AppNavigationEvent.replace:
-        // A dialog or child page may close before the TV remote delivers its
-        // trailing Back event. Swallow that event app-wide, not just for menus.
+        // Only a pop of the top route belongs to the current screen. A menu
+        // route can finish popping after its selection callback pushed Settings;
+        // that late, non-top pop must not consume the user's next Back press.
         _resetBackConfirmation(
-          ignoreTrailingBack: true,
-          trailingBackWindow: const Duration(milliseconds: 300),
+          ignoreTrailingBack: change.topRoute,
+          trailingBackWindow: const Duration(milliseconds: 900),
         );
         break;
       case AppNavigationEvent.push:
@@ -765,18 +789,50 @@ class _HomeScreenState extends State<HomeScreen> {
     _resetBackConfirmation(ignoreTrailingBack: true);
   }
 
+  @override
+  Future<bool> didPopRoute() async {
+    if (!mounted || !AppLayout.isTelevision(context)) return false;
+    // PopScope can block a Navigator route pop while the home route is below
+    // Settings or another child route. Handle platform Back at the home shell
+    // and close only the currently visible top route.
+    _televisionBack();
+    return true;
+  }
+
   void _televisionBack() {
     final now = DateTime.now();
+    final navigator = Navigator.of(context);
     final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
 
-    // A child route must always receive Back first. Otherwise a recent
-    // exit-toast suppression window can accidentally swallow a real press.
-    if (!routeIsCurrent) {
+    // Always dismiss the top route/dialog first. Settings is also a home tab,
+    // so relying only on the home ModalRoute's current flag can mistakenly
+    // interpret a chooser's Back as a request to leave the Settings tab.
+    if (appNavigationObserver.hasChildRoute ||
+        navigator.canPop() ||
+        !routeIsCurrent) {
+      // A tracked child route/dialog is authoritative even if PopScope makes
+      // Navigator.canPop false for the underlying home route.
+      // When a chooser dialog is popped, the home route is still not current
+      // if Settings itself was pushed from the More menu. Suppress the
+      // trailing event before attempting another Navigator.pop, or one
+      // physical Back press can close both the dialog and Settings.
+      final ignoreChildBackUntil = _ignoreExitPromptUntil;
+      if (ignoreChildBackUntil != null && now.isBefore(ignoreChildBackUntil)) {
+        _lastBackAt = null;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        return;
+      }
       _lastHandledBackEventAt = now;
       _lastBackAt = null;
-      _ignoreExitPromptUntil = now.add(const Duration(milliseconds: 300));
+      _ignoreExitPromptUntil = now.add(const Duration(milliseconds: 900));
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+      // PopScope on the home route can make canPop report false even though
+      // a dialog or settings page is visibly above it. A non-player child
+      // route must still close. During playback, however, respect the player's
+      // own PopScope so its first Back can hide controls instead of exiting.
+      if (!_playbackRouteActive || navigator.canPop()) {
+        navigator.pop();
+      }
       return;
     }
 
@@ -819,14 +875,6 @@ class _HomeScreenState extends State<HomeScreen> {
     // Settings, source management, dialogs and popup routes must close first.
     // Never show the app-exit prompt while the home route is not on top.
     _ignoreExitPromptUntil = null;
-    if (_tab == 9) {
-      final destination = _tabBeforeSettings == 9 ? 4 : _tabBeforeSettings;
-      _lastBackAt = null;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      _selectNavigationDestination(destination);
-      _navigationFocusNodes[destination]?.requestFocus();
-      return;
-    }
     if (_searchResultsOnCurrentTab) {
       _leaveSearchResults();
       _lastBackAt = null;
@@ -854,64 +902,23 @@ class _HomeScreenState extends State<HomeScreen> {
       _navigationFocusNodes[4]?.requestFocus();
     }
     _lastBackAt = now;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          width: (MediaQuery.sizeOf(context).width - 32)
-              .clamp(260.0, 320.0)
-              .toDouble(),
-          duration: const Duration(seconds: 3),
-          backgroundColor: const Color(0xEE171920),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0x44FFFFFF)),
-          ),
-          content: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _DtvBrandMark(size: 22),
-              SizedBox(width: 10),
-              Text(
-                '再按一次返回鍵退出 D TV',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+    showDtvToast(
+      context,
+      '再按一次返回鍵退出 D TV',
+      duration: const Duration(seconds: 3),
+    );
   }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     appNavigationObserver.changes.addListener(_onAppNavigationChanged);
     _scroll.addListener(_onCatalogScroll);
     _source = SourceSite.byId(widget.store.source);
     _allSources = widget.store.catalogView.allSources;
     _sourceSignature = widget.store.sources.map((site) => site.id).join(',');
     _observedProfileEpoch = widget.store.profileEpoch;
-    final savedCatalogView = widget.store.catalogView;
-    if (savedCatalogView.sort != CatalogSort.date ||
-        savedCatalogView.release.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        unawaited(
-          saveUserChange(
-            context,
-            () => widget.store.setCatalogView(
-              savedCatalogView.copyWith(sort: CatalogSort.date, release: ''),
-            ),
-          ),
-        );
-      });
-    }
     _browser = CatalogBrowser.shared(widget.repository);
     _updater = LibraryUpdater(
       widget.repository,
@@ -1051,6 +1058,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     appNavigationObserver.changes.removeListener(_onAppNavigationChanged);
     _cancelStartupFocusRetry();
     _appUpdateCheckTimer?.cancel();
@@ -1216,6 +1224,7 @@ class _HomeScreenState extends State<HomeScreen> {
         useCache: useCache,
         force: force,
         cacheOnly: cacheOnly,
+        sort: query.isEmpty && _isDuoduoCatalog ? _duoduoSort : '',
         onCached: (result) => accept(result, cached: true),
       );
       accept(result);
@@ -1309,6 +1318,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openDrama(Drama drama, {bool resume = false}) {
+    // A fast double-click / repeated TV Select must not stack two launch
+    // routes. The second route can otherwise leave the viewer on a stale
+    // player page after pressing Back.
+    if (_playbackRouteActive) {
+      DiaryService.add(
+        '[Playback] ignored_duplicate_poster_open drama=${drama.id}',
+      );
+      return;
+    }
     _pauseCatalog();
     CoverRequestScheduler.pauseBackground();
     _playbackRouteActive = true;
@@ -1605,7 +1623,7 @@ class _HomeScreenState extends State<HomeScreen> {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const _DtvBrandMark(size: 42),
+              const DtvBrandMark(size: 42),
               const SizedBox(width: 12),
               const Text('關於 D TV'),
             ],
@@ -1717,6 +1735,56 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _chooseCatalogView() async {
+    final items = _items
+        .where((drama) => widget.store.allowsSource(drama.source))
+        .toList();
+    const duoduoSorts = {
+      CatalogSort.popular,
+      CatalogSort.latest,
+      CatalogSort.score,
+      CatalogSort.year,
+    };
+    final isDuoduo = _isDuoduoCatalog;
+    final savedView = widget.store.catalogView;
+    final current = isDuoduo
+        ? savedView.copyWith(sort: savedView.duoduoSort, release: '')
+        : effectiveCatalogView(savedView, items);
+    final selected = await chooseCatalogView(
+      context,
+      current,
+      availableSorts: isDuoduo
+          ? duoduoSorts
+          : availableCatalogSorts(items),
+      showReleaseFilter: !isDuoduo && hasCatalogReleaseStatus(items),
+      loadedCount: items.length,
+    );
+    if (!mounted || selected == null) return;
+    final remoteSortChanged =
+        isDuoduo && selected.sort != savedView.duoduoSort;
+    final unchanged = isDuoduo
+        ? !remoteSortChanged
+        : selected.sort == savedView.sort &&
+              selected.release == savedView.release &&
+              selected.allSources == savedView.allSources;
+    if (unchanged) return;
+    final nextView = isDuoduo
+        ? savedView.copyWith(duoduoSort: selected.sort)
+        : selected;
+    await saveUserChange(
+      context,
+      () => widget.store.setCatalogView(nextView),
+    );
+    if (!mounted) return;
+    setState(() {
+      _visibleCacheItems = null;
+      _visibleCacheKey = null;
+      if (remoteSortChanged) _items = [];
+    });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    if (remoteSortChanged) await _load(force: true);
+  }
+
   bool get _supportsVipFilter =>
       _group.sources.any((source) => source.id == 'huangdou');
   bool get _hideVip => _supportsVipFilter && widget.store.hideVip;
@@ -1737,6 +1805,10 @@ class _HomeScreenState extends State<HomeScreen> {
       query,
       hideVip,
       onlineSearch,
+      widget.store.catalogView.sort,
+      widget.store.catalogView.duoduoSort,
+      widget.store.catalogView.release,
+      widget.store.catalogView.allSources,
       widget.store.profileEpoch,
     );
     if (identical(_visibleCacheItems, _items) &&
@@ -1744,12 +1816,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return _visibleCache;
     }
 
-    final view = widget.store.catalogView.copyWith(
-      sort: CatalogSort.date,
-      release: '',
-    );
-    final result = sortCatalog(
-      _items.where((drama) {
+    final candidates = _items.where((drama) {
         if (!widget.store.allowsSource(drama.source)) return false;
         if (category.startsWith('local:') &&
             categoryName(drama.category) != category.substring(6)) {
@@ -1759,9 +1826,19 @@ class _HomeScreenState extends State<HomeScreen> {
           return false;
         }
         return onlineSearch || query.isEmpty || matchesDramaQuery(drama, query);
-      }),
-      view,
-    );
+      }).toList();
+    final storedView = widget.store.catalogView;
+    final view = _isDuoduoCatalog
+        ? effectiveCatalogView(
+            storedView.copyWith(
+              sort: storedView.duoduoSort,
+              release: '',
+            ),
+            candidates,
+            fallbackSort: storedView.duoduoSort,
+          )
+        : effectiveCatalogView(storedView, candidates);
+    final result = sortCatalog(candidates, view);
     _visibleCacheItems = _items;
     _visibleCacheKey = cacheKey;
     _visibleCache = result;
@@ -2047,7 +2124,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
                 Expanded(
                   child: (_isCatalogTab ||
-                          (_searchResultsOnCurrentTab && _tab != 9))
+                          _searchResultsOnCurrentTab)
                       ? widget.store.sources.isEmpty
                             ? const StatusPanel(
                                 title: '暫無可用片源',
@@ -2063,12 +2140,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           initialBoardId: _rankingBoardId,
                           embedded: true,
                           onExitLeft: _focusCurrentNavigation,
-                        )
-                      : _tab == 9
-                      ? SettingsScreen(
-                          repository: widget.repository,
-                          store: widget.store,
-                          embedded: true,
                         )
                       : SavedLibrary(
                           key: ValueKey('saved-tab-$_tab'),
@@ -2126,8 +2197,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   () => _desktopNavigate(6),
               const SingleActivator(LogicalKeyboardKey.digit7, control: true):
                   () => _desktopNavigate(7),
-              const SingleActivator(LogicalKeyboardKey.digit8, control: true):
-                  () => _desktopNavigate(9),
               const SingleActivator(LogicalKeyboardKey.keyF, control: true):
                   _focusDesktopSearch,
               const SingleActivator(LogicalKeyboardKey.keyK, control: true):
@@ -2149,7 +2218,10 @@ class _HomeScreenState extends State<HomeScreen> {
             skipTraversal: true,
             onKeyEvent: _handleStartupFocusKey,
             child: PopScope(
-              canPop: !television,
+              // Child routes (settings, subpages, dialogs and menus) must be
+              // allowed to pop normally. Only the root TV home route blocks
+              // Back so it can apply the two-press exit behavior.
+              canPop: !television || _hasChildRoute,
               onPopInvokedWithResult: (didPop, result) {
                 if (!didPop) _televisionBack();
               },
@@ -2304,7 +2376,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _DtvBrandMark(size: height * 0.92),
+          DtvBrandMark(size: height * 0.92),
           const SizedBox(width: 8),
           Flexible(
             child: Text(
@@ -2338,7 +2410,7 @@ class _HomeScreenState extends State<HomeScreen> {
       height: 72,
       child: Row(
         children: [
-          const _DtvBrandMark(size: 50),
+          const DtvBrandMark(size: 50),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -2502,47 +2574,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _selectCatalogTab(int tab) {
-    final returningFromSettings = _tab == 9;
     final wasSearchResults = _searchResultsOnCurrentTab;
-    final shouldReload = !returningFromSettings &&
-        (_catalogNeedsReload ||
-            _items.isEmpty ||
-            wasSearchResults ||
-            _category.isNotEmpty ||
-            _showRecommendations ||
-            _search.text.trim().isNotEmpty ||
-            _submittedQuery.isNotEmpty);
-    final shouldReloadCategories = !returningFromSettings &&
-        (_categoriesError != null || _categories.length <= 1);
+    final shouldReload = _catalogNeedsReload ||
+        _items.isEmpty ||
+        wasSearchResults ||
+        _category.isNotEmpty ||
+        _showRecommendations ||
+        _search.text.trim().isNotEmpty ||
+        _submittedQuery.isNotEmpty;
+    final shouldReloadCategories =
+        _categoriesError != null || _categories.length <= 1;
     final wasInitialized = _catalogInitialized;
     _debounce?.cancel();
     setState(() {
       _tab = tab;
-      // Settings is a temporary destination, not a request to reset the
-      // user's catalog session. Preserve the selected category, search query,
-      // recommendations, and current posters when returning from settings.
-      if (!returningFromSettings) {
-        if (_catalogNeedsReload || wasSearchResults) {
-          _items = [];
-          _hasMore = true;
-        }
-        _searchResultsOnCurrentTab = false;
-        _catalogNeedsReload = false;
-        _showRecommendations = false;
-        _search.clear();
-        _searchVisible = false;
-        _submittedQuery = '';
-        _categorySelections[_group.id] = '';
+      if (_catalogNeedsReload || wasSearchResults) {
+        _items = [];
+        _hasMore = true;
       }
+      _searchResultsOnCurrentTab = false;
+      _catalogNeedsReload = false;
+      _showRecommendations = false;
+      _search.clear();
+      _searchVisible = false;
+      _submittedQuery = '';
+      _categorySelections[_group.id] = '';
       _error = null;
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
     if (!wasInitialized) {
       _ensureCatalogInitialized();
-    } else if (returningFromSettings) {
-      // Returning from the remote-control test should never leave an empty
-      // poster page merely because an earlier request was cancelled on pause.
-      if (_items.isEmpty) _load(useCache: true);
     } else {
       if (shouldReload) _load(useCache: true);
       if (shouldReloadCategories && !_categoriesLoading) {
@@ -2556,17 +2617,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _selectNavigationDestination(int tab) {
-    final returningFromSettings = _tab == 9;
-    if (tab == 9 && _tab != 9) {
-      _tabBeforeSettings = _tab;
-    }
     if (tab == 0 || tab == 8) {
       _selectCatalogTab(tab);
       return;
     }
     _pauseCatalog();
     setState(() {
-      if (_searchResultsOnCurrentTab && !returningFromSettings && tab != 9) {
+      if (_searchResultsOnCurrentTab) {
         _searchResultsOnCurrentTab = false;
         _catalogNeedsReload = true;
         _search.clear();
@@ -2589,7 +2646,6 @@ class _HomeScreenState extends State<HomeScreen> {
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
       (tab: 8, icon: Icons.category_rounded, label: '分類'),
-      (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     const desktopEntries = <({int tab, IconData icon, String label})>[
       (tab: 2, icon: Icons.history_rounded, label: '最近觀看'),
@@ -2599,7 +2655,6 @@ class _HomeScreenState extends State<HomeScreen> {
       (tab: 6, icon: Icons.smart_toy_rounded, label: 'AI熱播榜'),
       (tab: 7, icon: Icons.auto_stories_rounded, label: '漫劇熱播榜'),
       (tab: 0, icon: Icons.category_rounded, label: '分類'),
-      (tab: 9, icon: Icons.settings_rounded, label: '設定'),
     ];
     final television = AppLayout.isTelevision(context);
     final entries = television ? tvEntries : desktopEntries;
@@ -2797,35 +2852,23 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final entry in entries.take(entries.length - 1))
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 5),
-                            child: buildEntry(
-                              entry,
-                              itemHeight: itemHeight,
-                              iconSize: iconSize,
-                              labelSize: labelSize,
-                              verticalPadding: verticalPadding,
+                  : SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final entry in entries)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 5),
+                              child: buildEntry(
+                                entry,
+                                itemHeight: itemHeight,
+                                iconSize: iconSize,
+                                labelSize: labelSize,
+                                verticalPadding: verticalPadding,
+                              ),
                             ),
-                          ),
-                        const Spacer(),
-                        Divider(
-                          height: 14,
-                          thickness: 1,
-                          color: theme.colorScheme.outlineVariant
-                              .withValues(alpha: 0.65),
-                        ),
-                        buildEntry(
-                          entries.last,
-                          itemHeight: itemHeight,
-                          iconSize: iconSize,
-                          labelSize: labelSize,
-                          verticalPadding: verticalPadding,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
             ),
           ),
@@ -2932,6 +2975,12 @@ class _HomeScreenState extends State<HomeScreen> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                IconButton(
+                  key: const ValueKey('catalog-sort-button'),
+                  tooltip: '排序：${effectiveCatalogView(widget.store.catalogView, _items).sort.label}',
+                  onPressed: _chooseCatalogView,
+                  icon: const Icon(Icons.sort_rounded),
+                ),
                 if (_supportsVipFilter)
                   IconButton(
                     tooltip: widget.store.hideVip ? 'VIP：隱藏' : 'VIP：顯示',
@@ -3111,8 +3160,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case FormFactor.pad:
         return (width / 180).floor().clamp(4, 9).toInt();
       case FormFactor.window:
-        final columns = ((width + 18) / 178).floor();
-        return columns < 2 ? 2 : columns;
+        return desktopPosterColumnsForWidth(width);
       case FormFactor.television:
         return width >= 620 ? 5 : width >= 420 ? 3 : 2;
     }
@@ -3214,135 +3262,4 @@ class _DtvBannerBackdropPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DtvBannerBackdropPainter oldDelegate) => false;
-}
-
-/// Reusable D TV mark rendered as vector artwork, so the UI never falls back
-/// to the former HGTV bitmap logo on any theme.
-class _DtvBrandMark extends StatelessWidget {
-  const _DtvBrandMark({this.size = 48});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-        width: size,
-        height: size,
-        child: CustomPaint(painter: const _DtvMarkPainter()),
-      );
-}
-
-class _DtvMarkPainter extends CustomPainter {
-  const _DtvMarkPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final side = size.width < size.height ? size.width : size.height;
-    final dx = (size.width - side) / 2;
-    final dy = (size.height - side) / 2;
-    canvas.save();
-    canvas.translate(dx, dy);
-    final rect = Offset.zero & Size(side, side);
-
-    final outer = Path()
-      ..moveTo(side * .18, side * .10)
-      ..lineTo(side * .50, side * .10)
-      ..cubicTo(side * .81, side * .10, side * .92, side * .30,
-          side * .92, side * .50)
-      ..cubicTo(side * .92, side * .70, side * .81, side * .90,
-          side * .50, side * .90)
-      ..lineTo(side * .18, side * .90)
-      ..cubicTo(side * .14, side * .90, side * .12, side * .87,
-          side * .12, side * .82)
-      ..lineTo(side * .12, side * .18)
-      ..cubicTo(side * .12, side * .13, side * .14, side * .10,
-          side * .18, side * .10)
-      ..close();
-
-    canvas.saveLayer(rect, Paint());
-    canvas.drawPath(
-      outer,
-      Paint()
-        ..color = const Color(0xAA127BC9)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, side * .035),
-    );
-    canvas.drawPath(
-      outer,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFFFFFFF),
-            Color(0xFFE0EAF2),
-            Color(0xFF718CA4),
-            Color(0xFFB5CDE0),
-            Color(0xFFF8FBFF),
-          ],
-          stops: [0.0, .22, .52, .76, 1.0],
-        ).createShader(rect),
-    );
-
-    final inner = Path()
-      ..moveTo(side * .34, side * .27)
-      ..lineTo(side * .49, side * .27)
-      ..cubicTo(side * .65, side * .27, side * .72, side * .38,
-          side * .72, side * .50)
-      ..cubicTo(side * .72, side * .63, side * .65, side * .73,
-          side * .49, side * .73)
-      ..lineTo(side * .34, side * .73)
-      ..close();
-    canvas.drawPath(inner, Paint()..blendMode = BlendMode.clear);
-
-    final bevel = Path()
-      ..moveTo(side * .19, side * .13)
-      ..lineTo(side * .49, side * .13)
-      ..cubicTo(side * .68, side * .13, side * .79, side * .20,
-          side * .85, side * .33);
-    canvas.drawPath(
-      bevel,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = side * .018
-        ..strokeCap = StrokeCap.round
-        ..color = Colors.white.withValues(alpha: .68),
-    );
-
-    final play = Path()
-      ..moveTo(side * .42, side * .38)
-      ..lineTo(side * .42, side * .62)
-      ..lineTo(side * .62, side * .50)
-      ..close();
-    canvas.drawPath(
-      play,
-      Paint()
-        ..color = const Color(0xCC087EFF)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, side * .025),
-    );
-    canvas.drawPath(
-      play,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF53F3FF), Color(0xFF00CFFF), Color(0xFF2787FF)],
-        ).createShader(rect),
-    );
-    final playHighlight = Path()
-      ..moveTo(side * .435, side * .395)
-      ..lineTo(side * .435, side * .51)
-      ..lineTo(side * .535, side * .45);
-    canvas.drawPath(
-      playHighlight,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = side * .012
-        ..strokeCap = StrokeCap.round
-        ..color = Colors.white.withValues(alpha: .62),
-    );
-    canvas.restore();
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _DtvMarkPainter oldDelegate) => false;
 }

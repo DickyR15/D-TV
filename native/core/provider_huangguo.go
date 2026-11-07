@@ -28,17 +28,20 @@ const (
 	sourceYeguo         = "yeguo"
 	sourceDSD           = "dsd"
 	sourceCloudFront    = "cloudfront"
-	sourceGuipian       = "guipian"
-	sourceHanxiaoquan   = "hanxiaoquan"
+	legacyKanmMovieSource = "kanmovie"
+	sourceDuoduo          = "duoduo"
+	sourceHanxiaoquan     = "hanxiaoquan"
+	sourceHeitao          = "heitao"
 
 	providerMaxBodyBytes = 20 * 1024 * 1024
 	providerTimeout      = 12 * time.Second
 )
 
 var (
-	huangguoAIBaseURL     = "https://huangguoai.com"
-	huangguoAIBaseMirrors = []string{"https://huangguoai.com", "https://ttvoij.ediayikma.cc", "https://thu.ediayikma.cc", "https://pku.ediayikma.cc", "https://fdu.ediayikma.cc", "https://thu.agdkczeyx.cc"}
-	huangguoVideoBaseURL  = "https://huangguo.video"
+	huangguoAIBaseURL       = "https://huangguoai.com"
+	huangguoAIBaseMirrors   = []string{"https://huangguoai.com", "https://thu.lbvrhyir.cc", "https://pku.xxbgwypx.cc", "https://ttvoij.ediayikma.cc", "https://thu.ediayikma.cc", "https://pku.ediayikma.cc", "https://fdu.ediayikma.cc", "https://thu.agdkczeyx.cc"}
+	huangguoAIMirrorDomains = []string{"lbvrhyir.cc", "xxbgwypx.cc", "ediayikma.cc", "agdkczeyx.cc"}
+	huangguoVideoBaseURL    = "https://huangguo.video"
 
 	huangguoAISlugs     = []string{"recommend", "newest", "ai-duanju", "ai-manju", "ai-huanlian", "ai-mogai", "ranks/hot"}
 	huangguoAITypeNames = map[string]string{"recommend": "精选推荐", "newest": "最近上新", "ai-duanju": "AI成人短剧", "ai-manju": "AI成人漫剧", "ai-huanlian": "AI换脸", "ai-mogai": "AI魔改", "ranks/hot": "排行榜"}
@@ -82,7 +85,10 @@ func providerChapterID(source, sourceID, chapterKey string) string {
 func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 	source, sourceID, ok = strings.Cut(strings.TrimSpace(id), ":")
 	source = canonicalProviderSource(source)
-	if !ok || strings.TrimSpace(sourceID) == "" || !isHuangguoProviderSource(source) {
+	if !ok || strings.TrimSpace(sourceID) == "" {
+		return "", "", false
+	}
+	if !isHuangguoProviderSource(source) {
 		return "", "", false
 	}
 	return source, strings.TrimSpace(sourceID), true
@@ -90,7 +96,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceGuipian, sourceHanxiaoquan:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceHeitao:
 		return true
 	default:
 		return false
@@ -109,16 +115,20 @@ func canonicalProviderSource(source string) string {
 		return sourceHongguo
 	case "huangju", "huangju.net", "api.huangju.net":
 		return sourceHuangju
-	case "yeguo", "ygdj7.com", "www.ygdj7.com", "ygdj15.com", "www.ygdj15.com", "analyze.buxefaex.cc", "delta.ygrwdsgt.cc", "yeguodj.com", "www.yeguodj.com":
+	case "yeguo", "ygdj7.com", "www.ygdj7.com", "ygdj15.com", "www.ygdj15.com", "analyze.buxefaex.cc", "attract.vgbyziuz.cc", "as.vgbyziuz.cc", "anyway.vgbyziuz.cc", "delta.ygrwdsgt.cc", "yeguodj.com", "www.yeguodj.com":
 		return sourceYeguo
 	case "dsd", "dsd.com.se", "www.dsd.com.se":
 		return sourceDSD
 	case "cloudfront":
 		return sourceCloudFront
-	case "guipian", "guipianwu.com", "www.guipianwu.com":
-		return sourceGuipian
+	case "kanmovie", "kanmovie.com", "www.kanmovie.com":
+		return legacyKanmMovieSource
+	case "duoduo", "duoduozhuiju.com", "323433ssdfd.top", "duoduosdf12223234334.top", "xds2435u23422342342u.top", "dduotv01.top":
+		return sourceDuoduo
 	case "hanxiaoquan", "jennyhow.com", "www.jennyhow.com":
 		return sourceHanxiaoquan
+	case "heitao", "heitaodj.com", "www.heitaodj.com":
+		return sourceHeitao
 	default:
 		return strings.TrimSpace(source)
 	}
@@ -228,11 +238,14 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 	case sourceDSD:
 		drama, chapters, err := d.fetchDSDDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
-	case sourceGuipian:
-		drama, chapters, err := d.fetchGuipianDetail(ctx, sourceID)
+	case sourceDuoduo:
+		drama, chapters, err := d.fetchDuoduoDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
 	case sourceHanxiaoquan:
 		drama, chapters, err := d.fetchHanxiaoquanDetail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
+	case sourceHeitao:
+		drama, chapters, err := d.fetchHeitaoDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
 	case sourceCloudFront:
 		return d.fetchLegacyChapters(ctx, sourceID)
@@ -244,49 +257,6 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 func (d *Downloader) fetchHuangguoAIChapters(ctx context.Context, sourceID string) (string, []Chapter, error) {
 	drama, chapters, err := d.fetchHuangguoAIDetail(ctx, sourceID)
 	return drama.DisplayTitle(), chapters, err
-}
-
-func (d *Downloader) fetchHuangguoAIDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
-	sourceID = strings.Trim(strings.TrimSpace(sourceID), "/")
-	sourceID = strings.TrimPrefix(sourceID, "detail/")
-	if sourceID == "" {
-		return Drama{}, nil, fmt.Errorf("empty huangguoai sourceID")
-	}
-	detailURL := strings.TrimRight(huangguoAIBaseURL, "/") + "/detail/" + url.PathEscape(sourceID) + "/"
-	body, err := d.fetchProviderText(ctx, detailURL, huangguoAIBaseURL+"/")
-	if err != nil {
-		return Drama{}, nil, err
-	}
-	drama := huangguoDetailMetadata(body, detailURL, sourceHuangguoAI, sourceID)
-	title := drama.DisplayTitle()
-	episodes := parseHuangguoAIEpisodes(body, detailURL, sourceID)
-	if len(episodes) == 0 {
-		if media := parseAIVideoURL(body, detailURL); media != "" {
-			episodes = []providerEpisode{{Key: "1", Title: title, URL: detailURL, Index: 1, HLS: media}}
-		}
-	}
-	if len(episodes) == 0 {
-		return drama, nil, nil
-	}
-	var chapters []Chapter
-	for _, ep := range episodes {
-		mediaURL := ep.HLS
-		idx := ep.Index
-		if idx <= 0 {
-			idx = len(chapters) + 1
-		}
-		chapterTitle := strings.TrimSpace(ep.Title)
-		if chapterTitle == "" {
-			chapterTitle = fmt.Sprintf("第%d集", idx)
-		}
-		key := ep.Key
-		if key == "" {
-			key = strconv.Itoa(idx)
-		}
-		chapters = append(chapters, Chapter{ID: providerChapterID(sourceHuangguoAI, sourceID, key), Source: sourceHuangguoAI, Title: chapterTitle, VideoURL: mediaURL, PageURL: ep.URL, CurrentEpisode: rawEpisode(idx)})
-	}
-	sortProviderChapters(chapters)
-	return drama, uniqueChapters(chapters), nil
 }
 
 func (d *Downloader) fetchHuangguoVideoChapters(ctx context.Context, sourceID string) (string, []Chapter, error) {
@@ -390,6 +360,9 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 				req.Header.Set("Referer", referer)
 			}
 			req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
+			if cookie, ok := ctx.Value(providerTextCookieKey{}).(string); ok && cookie != "" {
+				req.Header.Set("Cookie", cookie)
+			}
 			if noCache, _ := ctx.Value(providerTextNoCacheKey{}).(bool); noCache {
 				req.Header.Set("Cache-Control", "no-cache")
 			}
@@ -444,7 +417,7 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 
 func providerURLCandidates(rawURL string) []string {
 	u, err := url.Parse(rawURL)
-	if err != nil || u.Hostname() != "huangguoai.com" {
+	if err != nil || (u.Hostname() != "huangguoai.com" && !isHuangguoAIMirrorHost(strings.ToLower(u.Hostname()))) {
 		return []string{rawURL}
 	}
 	out := make([]string, 0, len(huangguoAIBaseMirrors)+8)
@@ -501,7 +474,7 @@ func generatedHuangguoAIMirrors(seed string, n int) []string {
 			continue
 		}
 		seen[sub] = true
-		out = append(out, "https://"+sub+".ediayikma.cc")
+		out = append(out, "https://"+sub+"."+huangguoAIMirrorDomains[len(out)%len(huangguoAIMirrorDomains)])
 	}
 	return out
 }
@@ -695,6 +668,13 @@ func dramaFromAIMap(m map[string]any, pageURL, category string) (Drama, bool) {
 	cover := resolveProviderURL(pageURL, firstNonEmpty(mapString(m, "cover"), mapString(m, "coverUrl"), mapString(m, "cover_url"), mapString(m, "coverImage"), mapString(m, "cover_image"), mapString(m, "image"), mapString(m, "imageUrl"), mapString(m, "thumbnail"), mapString(m, "poster"), mapString(m, "posterUrl")))
 	desc := firstNonEmpty(mapString(m, "desc"), mapString(m, "description"), mapString(m, "intro"), mapString(m, "summary"))
 	eps := huangguoMapEpisodes(m)
+	status := ""
+	switch strings.ToLower(mapString(m, "is_finished")) {
+	case "true", "1":
+		status = "finished"
+	case "false", "0":
+		status = "ongoing"
+	}
 	remark := firstNonEmpty(mapString(m, "vod_remarks"), mapString(m, "remark"), mapString(m, "remarks"))
 	if remark == "" && eps != "" {
 		if strings.EqualFold(mapString(m, "is_finished"), "true") || mapString(m, "is_finished") == "1" {
@@ -710,7 +690,7 @@ func dramaFromAIMap(m map[string]any, pageURL, category string) (Drama, bool) {
 	views := normalizeViews(firstNonEmpty(mapString(m, "views"), mapString(m, "view_count"), mapString(m, "viewCount"), mapString(m, "view_num"), mapString(m, "viewNum"), mapString(m, "views_text"), mapString(m, "view_count_text"), mapString(m, "play_count"), mapString(m, "playCount"), mapString(m, "play_num"), mapString(m, "playNum"), mapString(m, "play_count_text"), mapString(m, "hits"), mapString(m, "hit_count"), mapString(m, "plays"), mapString(m, "play")))
 	online := providerReleaseDate(firstNonEmpty(mapString(m, "onlineDate"), mapString(m, "online_date"), mapString(m, "online_time"), mapString(m, "onlineTime"), mapString(m, "publish_date"), mapString(m, "publishDate"), mapString(m, "publish_time"), mapString(m, "publishTime"), mapString(m, "release_date"), mapString(m, "releaseDate")))
 	tags := mapStringSlice(m, "tags", "tag", "categories", "category")
-	return Drama{ID: providerDramaID(sourceHuangguoAI, sourceID), Source: sourceHuangguoAI, SourceID: sourceID, Title: title, Name: title, Desc: desc, Intro: desc, Cover: cover, CoverURL: cover, TotalEpisode: eps, EpisodeCount: eps, CategoryName: category, ChannelName: "huangguoai.com", Remark: remark, Score: score, Views: views, OnlineDate: online, Tags: tags}, true
+	return Drama{ID: providerDramaID(sourceHuangguoAI, sourceID), Source: sourceHuangguoAI, SourceID: sourceID, Title: title, Name: title, Desc: desc, Intro: desc, Cover: cover, CoverURL: cover, TotalEpisode: eps, EpisodeCount: eps, CategoryName: category, ChannelName: "huangguoai.com", Remark: remark, Score: score, Views: views, OnlineDate: online, Tags: tags, ReleaseStatus: status}, true
 }
 
 func parseHuangguoVideoCards(rawHTML, pageURL string) []Drama {

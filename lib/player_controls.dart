@@ -7,6 +7,7 @@ import 'lan_controller.dart';
 import 'player_interactions.dart';
 import 'playback_controls_visibility.dart';
 import 'widgets.dart';
+import 'contained_slider.dart';
 import 'video_enhancement.dart';
 
 class PlayerControls extends StatefulWidget {
@@ -29,18 +30,15 @@ class PlayerControls extends StatefulWidget {
     required this.speed,
     required this.qualityLabel,
     required this.onFocusSurface,
-    this.showDanmaku = false,
-    this.danmakuEnabled = false,
-    this.danmakuStatus = '',
     this.swipeEnabled = false,
     this.panelOpen = false,
     this.onSeek,
-    this.onDanmaku,
-    this.onRetryDanmaku,
     this.onPush,
     this.onPictureInPicture,
+    this.pictureInPictureTooltip = '畫中畫',
     this.enhancement,
     this.playbackGeneration = 0,
+    this.onVolumeChanged,
   });
 
   final Player player;
@@ -60,18 +58,15 @@ class PlayerControls extends StatefulWidget {
   final double speed;
   final String qualityLabel;
   final VoidCallback onFocusSurface;
-  final bool showDanmaku;
-  final bool danmakuEnabled;
-  final String danmakuStatus;
   final bool swipeEnabled;
   final bool panelOpen;
   final Future<void> Function(Duration)? onSeek;
-  final Future<void> Function()? onDanmaku;
-  final Future<void> Function()? onRetryDanmaku;
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
+  final String pictureInPictureTooltip;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
+  final ValueChanged<double>? onVolumeChanged;
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -301,7 +296,6 @@ class _PlayerControlsState extends State<PlayerControls> {
                           children: [
                             if (widget.fullscreen || widget.swipeEnabled)
                               _topBar(),
-                            _sideDanmakuControl(),
                             _bottomControls(
                               constraints: constraints,
                               volume: state.volume,
@@ -436,17 +430,6 @@ class _PlayerControlsState extends State<PlayerControls> {
     ]);
   }
 
-  Widget _sideDanmakuControl() {
-    if (!widget.showDanmaku) return const SizedBox.shrink();
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Padding(
-        padding: EdgeInsets.only(right: widget.swipeEnabled ? 0 : 4),
-        child: _danmakuTool(),
-      ),
-    );
-  }
-
   Widget _bottomControls({
     required BoxConstraints constraints,
     required double volume,
@@ -547,7 +530,8 @@ class _PlayerControlsState extends State<PlayerControls> {
                     overlayRadius: 14,
                   ),
                 ),
-                child: Slider(
+                child: ContainedSlider(
+                  slider: Slider(
                   key: const ValueKey('player-progress'),
                   value: (_seekValue ?? position).clamp(
                     0,
@@ -580,7 +564,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                     setState(() => _seekValue = null);
                     _show();
                   },
-                ),
+                )),
               ),
             ),
             SizedBox(
@@ -733,31 +717,6 @@ class _PlayerControlsState extends State<PlayerControls> {
     ],
   );
 
-  Widget _danmakuTool() => _toolButton(
-    key: const ValueKey('player-danmaku-toggle'),
-    tooltip: widget.danmakuStatus.isEmpty
-        ? (widget.danmakuEnabled ? '關閉彈幕' : '開啟彈幕')
-        : widget.danmakuStatus,
-    visualWidth: 36,
-    selected: widget.danmakuEnabled,
-    onPressed: widget.enabled
-        ? () => _panel(widget.onRetryDanmaku ?? widget.onDanmaku!)
-        : null,
-    child: widget.onRetryDanmaku != null
-        ? const Icon(Icons.refresh_rounded, size: 21)
-        : Text(
-            '彈',
-            style: TextStyle(
-              fontSize: 14,
-              height: 1,
-              fontWeight: FontWeight.w800,
-              color: widget.danmakuEnabled
-                  ? Theme.of(context).colorScheme.primary
-                  : Colors.white.withValues(alpha: .86),
-            ),
-          ),
-  );
-
   Widget _desktopControlRow({
     required bool fullscreen,
     required bool showEpisodes,
@@ -807,7 +766,7 @@ class _PlayerControlsState extends State<PlayerControls> {
       if (widget.onPictureInPicture != null)
         _toolIcon(
           key: const ValueKey('player-picture-in-picture'),
-          tooltip: '畫中畫',
+          tooltip: widget.pictureInPictureTooltip,
           icon: Icons.picture_in_picture_alt_rounded,
           onPressed: widget.enabled
               ? () => _panel(widget.onPictureInPicture!)
@@ -856,7 +815,7 @@ class _PlayerControlsState extends State<PlayerControls> {
       if (widget.onPictureInPicture != null)
         _toolIcon(
           key: const ValueKey('player-picture-in-picture'),
-          tooltip: '畫中畫',
+          tooltip: widget.pictureInPictureTooltip,
           icon: Icons.picture_in_picture_alt_rounded,
           onPressed: widget.enabled
               ? () => _panel(widget.onPictureInPicture!)
@@ -907,6 +866,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                               final next = volume == 0 ? 100.0 : 0.0;
                               setState(() => volume = next);
                               unawaited(widget.player.setVolume(next));
+                              widget.onVolumeChanged?.call(next);
                             },
                             icon: Icon(
                               volume == 0
@@ -931,15 +891,17 @@ class _PlayerControlsState extends State<PlayerControls> {
                                     overlayRadius: 14,
                                   ),
                                 ),
-                                child: Slider(
+                                child: ContainedSlider(
+                  slider: Slider(
                                   value: volume,
                                   max: 100,
                                   divisions: 20,
                                   onChanged: (value) {
                                     setState(() => volume = value);
                                     unawaited(widget.player.setVolume(value));
+                                    widget.onVolumeChanged?.call(value);
                                   },
-                                ),
+                                )),
                               ),
                             ),
                           ),

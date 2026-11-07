@@ -5,6 +5,91 @@ import 'package:hgtv/playback_diagnostics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('MPV sync and frame-drop policy matches official 1.0.1 defaults', () {
+    expect(playbackVideoSyncModeFor(android: true), 'audio');
+    expect(playbackVideoSyncModeFor(android: false), isNull);
+    expect(
+      playbackFrameDropModeFor(android: true, television: true),
+      'decoder',
+    );
+    expect(
+      playbackFrameDropModeFor(android: true, television: false),
+      'vo',
+    );
+    expect(
+      playbackFrameDropModeFor(android: false, television: false),
+      isNull,
+    );
+  });
+
+  test('ExoPlayer buffer headroom is measured without changing cache policy', () {
+    expect(
+      playbackBufferedAheadMilliseconds(
+        position: const Duration(seconds: 8),
+        bufferedEnd: const Duration(seconds: 11),
+      ),
+      3000,
+    );
+    expect(
+      playbackBufferedAheadMilliseconds(
+        position: const Duration(seconds: 8),
+        bufferedEnd: null,
+      ),
+      isNull,
+    );
+    expect(
+      playbackBufferedAheadMilliseconds(
+        position: const Duration(seconds: 8),
+        bufferedEnd: const Duration(seconds: 7),
+      ),
+      -1000,
+    );
+  });
+
+  test('expected playback progress follows elapsed time and playback rate', () {
+    expect(
+      playbackExpectedPositionDeltaMilliseconds(
+        elapsed: const Duration(seconds: 2),
+        rate: 1.25,
+      ),
+      2500,
+    );
+    expect(
+      playbackExpectedPositionDeltaMilliseconds(
+        elapsed: const Duration(seconds: 2),
+        rate: 0,
+      ),
+      isNull,
+    );
+    expect(
+      playbackExpectedPositionDeltaMilliseconds(
+        elapsed: const Duration(seconds: 2),
+        rate: double.nan,
+      ),
+      isNull,
+    );
+  });
+
+  test('PlaybackVolumeMemory preserves mute and the latest slider value', () async {
+    final saved = <double>[];
+    final memory = PlaybackVolumeMemory(
+      initial: 42,
+      debounce: const Duration(days: 1),
+      save: (value) async => saved.add(value),
+    );
+    memory.remember(0);
+    expect(memory.value, 0);
+    memory.flush();
+    await Future<void>.delayed(Duration.zero);
+    expect(saved, [0]);
+    memory.remember(25);
+    memory.remember(38);
+    expect(memory.value, 38);
+    memory.dispose();
+    await Future<void>.delayed(Duration.zero);
+    expect(saved, [0, 38]);
+  });
+
   test('localhost session, credentials and query never enter playback logs', () {
     const token = '0123456789abcdef0123456789abcdef0123456789abcdef';
     final safe = playbackDiagnosticUrl(
@@ -131,6 +216,32 @@ void main() {
     );
   });
 
+  test('cache creation and unsupported OSC property errors are diagnostic only', () {
+    const samples = [
+      (level: 'error', prefix: 'lavf', text: 'Failed to create file cache.'),
+      (level: 'error', prefix: 'media_kit', text: 'property not found _setProperty(osc, 1)'),
+    ];
+    for (final sample in samples) {
+      expect(
+        playbackDiagnosticLogRelevant(
+          level: sample.level,
+          prefix: sample.prefix,
+          text: sample.text,
+        ),
+        isTrue,
+      );
+      expect(
+        playbackDiagnosticLogRequiresRecovery(
+          level: sample.level,
+          prefix: sample.prefix,
+          text: sample.text,
+        ),
+        isFalse,
+        reason: 'A diagnostic warning alone must not trigger unnecessary source switching.',
+      );
+    }
+  });
+
   test('mpv warning and network keywords are relevant', () {
     expect(
       playbackDiagnosticLogRelevant(
@@ -183,4 +294,23 @@ void main() {
       expect(DiaryService.entries.last, contains('stream.local_response'));
     },
   );
+  test('frame pacing diagnostic counter deltas handle baselines and resets', () {
+    expect(playbackDiagnosticCounterDelta('4', null), 'baseline');
+    expect(playbackDiagnosticCounterDelta('7', 4), '+3');
+    expect(playbackDiagnosticCounterDelta('7', 7), '+0');
+    expect(playbackDiagnosticCounterDelta('0', 7), 'reset');
+    expect(playbackDiagnosticCounterDelta('n/a', 7), 'n/a');
+  });
+
+  test('MPV frame pacing diagnostics are low overhead and include key signals', () {
+    expect(playbackFramePacingSampleInterval, const Duration(seconds: 5));
+    expect(playbackFramePacingProperties, contains('hwdec-current'));
+    expect(playbackFramePacingProperties, contains('current-vo'));
+    expect(playbackFramePacingProperties, contains('decoder-frame-drop-count'));
+    expect(playbackFramePacingProperties, contains('vo-delayed-frame-count'));
+    expect(playbackFramePacingProperties, contains('demuxer-cache-duration'));
+    expect(playbackFramePacingProperties, isNot(contains('total-avsync-change')));
+    expect(playbackFramePacingProperties, isNot(contains('vsync-ratio')));
+  });
+
 }

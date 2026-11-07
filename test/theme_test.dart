@@ -51,6 +51,7 @@ void main() {
       await store.importBackup(backup);
       expect(store.themeMode, 'light');
       final old = jsonDecode(backup) as Map<String, dynamic>;
+      old.remove('integrity');
       old.remove('themeMode');
       await store.setThemeMode('system');
       await store.importBackup(jsonEncode(old));
@@ -85,6 +86,7 @@ void main() {
     expect(store.themeAccent, 'teal');
 
     final oldBackup = jsonDecode(backup) as Map<String, dynamic>;
+    oldBackup.remove('integrity');
     oldBackup['themeAccent'] = 'brand';
     await store.importBackup(jsonEncode(oldBackup));
     expect(store.themeAccent, 'system');

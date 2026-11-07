@@ -3,13 +3,20 @@ import 'models.dart';
 enum PlaybackRecoveryAction { alternative, refresh, recreatePlayer, stop }
 
 class PlaybackRecovery {
-  PlaybackRecovery({DateTime Function()? now}) : _now = now ?? DateTime.now;
+  PlaybackRecovery({
+    DateTime Function()? now,
+    int? maxAlternativeAttempts,
+  }) : _now = now ?? DateTime.now,
+       _maxAlternativeAttempts =
+           maxAlternativeAttempts ?? PlaybackRecovery.maxAlternativeAttempts;
 
-  // Try a bounded number of provider URLs, then force one fresh resolve.
-  // Signed media URLs and CDN routes can expire or return incomplete MP4 data;
-  // retrying the same session after exhaustion would only reuse stale URLs.
+  // Desktop retains the broader route sweep. Android ExoPlayer gets a short,
+  // bounded sweep so unsupported or consistently failing routes cannot keep
+  // replacing the loading overlay for minutes.
   static const maxAlternativeAttempts = 12;
+  static const androidMaxAlternativeAttempts = 2;
   static const maxRefreshAttempts = 1;
+  final int _maxAlternativeAttempts;
   // A candidate can spend several seconds in DNS/connect/TLS and then wait
   // for response headers. Keep enough time to try the available route list,
   // while still guaranteeing that automatic recovery eventually terminates.
@@ -28,17 +35,22 @@ class PlaybackRecovery {
   PlaybackRecoveryAction next(
     PlaybackPlan plan, {
     bool allowPlayerRecreate = true,
+    int? alternativeAttemptLimit,
+    Duration? recoveryDurationLimit,
   }) {
     final now = _now();
     _startedAt ??= now;
+    final attemptLimit = alternativeAttemptLimit ?? maxAlternativeAttempts;
+    final durationLimit = recoveryDurationLimit ?? maxRecoveryDuration;
     // A route may take up to the player-open timeout to fail. Bound total
     // automatic recovery as well as individual requests so the spinner is
     // eventually replaced by a retryable error instead of cycling forever.
-    if (now.difference(_startedAt!) >= maxRecoveryDuration) {
+    if (now.difference(_startedAt!) >= durationLimit) {
       return PlaybackRecoveryAction.stop;
     }
     if (plan.hasAlternative &&
-        _alternativeAttempts < maxAlternativeAttempts) {
+        _alternativeAttempts < attemptLimit &&
+        _alternativeAttempts < _maxAlternativeAttempts) {
       _alternativeAttempts++;
       return PlaybackRecoveryAction.alternative;
     }
@@ -125,15 +137,17 @@ class PlaybackHealth {
       routeIndex <= 0 ? startupStallTimeout : alternativeStartupStallTimeout;
 
   Duration? _position;
-  Duration? _duration;
-  Duration? _buffer;
+  Duration? _highestBuffer;
   DateTime? _lastProgress;
+  DateTime? _lastPositionProgress;
+  bool _durationDiscovered = false;
 
   void reset() {
     _position = null;
-    _duration = null;
-    _buffer = null;
+    _highestBuffer = null;
     _lastProgress = null;
+    _lastPositionProgress = null;
+    _durationDiscovered = false;
   }
 
   bool stalled({
@@ -147,31 +161,42 @@ class PlaybackHealth {
   }) {
     if (!intendedToPlay || !foreground) {
       _position = position;
-      _duration = duration;
-      _buffer = buffer;
+      _highestBuffer = buffer;
+      _durationDiscovered = duration > Duration.zero;
       _lastProgress = now;
+      _lastPositionProgress = now;
       return false;
     }
 
-    // MPV can still be opening the demuxer while position remains zero.
-    // A changing buffer or discovered duration is meaningful progress and
-    // should not cause a healthy (but slow) stream to be discarded.
-    if (position != _position ||
-        duration != _duration ||
-        buffer != _buffer) {
-      _position = position;
-      _duration = duration;
-      _buffer = buffer;
+    // Only real playback movement, first-time duration discovery, or forward
+    // buffer growth counts as progress. Buffer ranges can shrink/oscillate and
+    // duration metadata can be revised while a stream is stuck; treating every
+    // value change as progress can suppress failover indefinitely.
+    final positionChanged = _position != null && position != _position;
+    final discoveredDuration =
+        !_durationDiscovered && duration > Duration.zero;
+    final bufferAdvanced =
+        _highestBuffer == null || buffer > _highestBuffer!;
+
+    if (positionChanged) _lastPositionProgress = now;
+    if (positionChanged || discoveredDuration || bufferAdvanced) {
       _lastProgress = now;
-      return false;
     }
+    if (discoveredDuration) _durationDiscovered = true;
+    if (_highestBuffer == null || buffer > _highestBuffer!) {
+      _highestBuffer = buffer;
+    }
+    _position = position;
 
     _lastProgress ??= now;
+    _lastPositionProgress ??= now;
+    final noPositionProgress =
+        now.difference(_lastPositionProgress!) >= stallTimeout;
     final waitingForInitialMedia =
         position == Duration.zero && duration == Duration.zero;
     final timeout = waitingForInitialMedia
         ? startupTimeoutForRoute(routeIndex)
         : stallTimeout;
-    return now.difference(_lastProgress!) >= timeout;
+    return noPositionProgress || now.difference(_lastProgress!) >= timeout;
   }
 }

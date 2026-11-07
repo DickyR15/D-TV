@@ -6,9 +6,18 @@ var buildAllSources = "false"
 
 var errNativeBuildSource = errors.New("当前版本不包含此站源")
 
+func nativePrimarySource(source string) bool {
+	switch canonicalProviderSource(source) {
+	case sourceHongguo, sourceHanxiaoquan, sourceDuoduo:
+		return true
+	default:
+		return false
+	}
+}
+
 func nativeSourceAvailable(source string) bool {
 	source = canonicalProviderSource(source)
-	return source == sourceHongguo || buildAllSources == "true" && isHuangguoProviderSource(source)
+	return nativePrimarySource(source) || buildAllSources == "true" && isHuangguoProviderSource(source)
 }
 
 func nativeDramaAvailable(drama nativeDrama) bool {
@@ -37,7 +46,7 @@ func nativeDownloadAvailable(job nativeDownloadJob) bool {
 
 func nativeAuthorizeInput(input nativeInput) error {
 	switch input.Action {
-	case "recommendations", "cachedRecommendations", "suggestions", "danmaku":
+	case "recommendations", "cachedRecommendations", "suggestions":
 		if !nativeSourceAvailable(sourceHongguo) {
 			return errNativeBuildSource
 		}

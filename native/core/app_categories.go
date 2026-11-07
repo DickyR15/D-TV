@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"context"
 	"errors"
 	"fmt"
@@ -63,10 +64,12 @@ func validNativeCategory(source, category string) bool {
 		return validYeguoCategory(category)
 	case sourceDSD:
 		return webProviderNumericID.MatchString(category)
-	case sourceGuipian:
-		return validGuipianCategory(category)
+	case sourceDuoduo:
+		return category == "1" || category == "2" || category == "3" || category == "4"
 	case sourceHanxiaoquan:
 		return validHanxiaoquanCategory(category)
+	case sourceHeitao:
+		return validHeitaoCategory(category)
 	}
 	return false
 }
@@ -127,10 +130,20 @@ func (engine *nativeEngine) nativeCategories(ctx context.Context, source string,
 		if err == nil {
 			all = append(all, categories...)
 		}
-	case sourceGuipian:
-		all = append(all, d.fetchGuipianCategories()...)
+	case sourceDuoduo:
+		var categories []nativeCategory
+		categories, err = d.fetchDuoduoCategories(ctx)
+		if err == nil {
+			all = append(all, categories...)
+		}
 	case sourceHanxiaoquan:
 		all = append(all, d.fetchHanxiaoquanCategories()...)
+	case sourceHeitao:
+		var categories []nativeCategory
+		categories, err = d.fetchHeitaoCategories(ctx)
+		if err == nil {
+			all = append(all, categories...)
+		}
 	default:
 		return nil, errors.New("请选择有效站源")
 	}
@@ -201,10 +214,11 @@ func (d *Downloader) fetchHuangguoAICatalogPage(ctx context.Context, page int, c
 				results[index].err = ctx.Err()
 				return
 			}
-			address := fmt.Sprintf("%s/api/videos/category/%s?sort=hot&page=%d&size=24", d.providerBaseURL(sourceHuangguoAI), url.PathEscape(entry.ID), page)
-			body, err := d.fetchProviderText(ctx, address, d.providerBaseURL(sourceHuangguoAI)+"/"+entry.ID+"/")
+			path := fmt.Sprintf("/api/videos/category/%s?sort=hot&page=%d&size=24", url.PathEscape(entry.ID), page)
+			var body json.RawMessage
+			err := d.huangguoAIAPI(ctx, path, &body)
 			if err == nil {
-				results[index].items = parseHuangguoAIJSONCards([]byte(body), address, entry.Name)
+				results[index].items = parseHuangguoAIJSONCards(body, d.providerBaseURL(sourceHuangguoAI)+"/", entry.Name)
 			}
 			if err != nil {
 				results[index].err = fmt.Errorf("%s: %w", entry.Name, err)

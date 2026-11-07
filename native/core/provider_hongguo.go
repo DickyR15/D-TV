@@ -193,15 +193,15 @@ func parseRouterData(raw string) map[string]any {
 func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (providerMedia, error) {
 	source, seriesID, ok := splitProviderDramaID(task.DramaID)
 	if !ok || source != sourceHongguo {
-		return providerMedia{}, fmt.Errorf("红果章节缺少剧 ID，请刷新剧库后重新加入队列")
+		return providerMedia{}, fmt.Errorf("紅果章節缺少劇集 ID，請重新整理片庫後再試")
 	}
 	videoID := strings.TrimPrefix(task.Chapter.VideoURL, "hongguo-cenc://")
 	if !hongguoNumericID.MatchString(videoID) || !hongguoNumericID.MatchString(seriesID) {
-		return providerMedia{}, fmt.Errorf("红果章节 ID 无效，请重新获取章节")
+		return providerMedia{}, fmt.Errorf("紅果章節 ID 無效，請重新取得章節")
 	}
-	// The public quick-app player can expose an unencrypted media URL. Try it
-	// first so a stale App signature or device registration does not block
-	// otherwise-public episodes.
+	// Use the supported first-party routes only. The retired third-party
+	// playback API was slow and unreliable; do not make users wait for it
+	// after the App and official web routes have already failed.
 	media, quickWebErr := d.resolveHongguoQuickAppMedia(ctx, seriesID, videoID)
 	if quickWebErr == nil {
 		return media, nil
@@ -230,11 +230,13 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if err := ctx.Err(); err != nil {
 		return providerMedia{}, err
 	}
-	media, apiErr := d.resolveHongguoPlaybackAPI(ctx, seriesID, videoID)
-	if apiErr == nil {
-		return media, nil
-	}
-	return providerMedia{}, fmt.Errorf("红果快捷网页取流失败：%v；App 取流失败：%v；多清晰度备用取流失败：%v；官网网页取流失败：%v；最终备用取流失败：%w", publicError(quickWebErr), publicError(nativeErr), publicError(multiModelErr), publicError(pageErr), apiErr)
+	return providerMedia{}, fmt.Errorf(
+		"紅果取流失敗：快捷網頁：%v；App：%v；多清晰度：%v；官網網頁：%w",
+		publicError(quickWebErr),
+		publicError(nativeErr),
+		publicError(multiModelErr),
+		pageErr,
+	)
 }
 
 func (d *Downloader) resolveHongguoQuickAppMedia(ctx context.Context, seriesID, videoID string) (providerMedia, error) {

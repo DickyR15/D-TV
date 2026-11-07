@@ -130,6 +130,16 @@ MediaProbe fixtureProbe({
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('storageSize formats local media using consistent binary units', () {
+    expect(storageSize(0), '0 B');
+    expect(storageSize(1023), '1023 B');
+    expect(storageSize(1024), '1.00 KB');
+    expect(storageSize(1024 * 1024), '1.00 MB');
+    expect(storageSize(1024 * 1024 * 1024), '1.00 GB');
+    expect(storageSize(-10), '0 B');
+  });
+
   test(
     'merge retains every matching video and normalizes only the minority',
     () {

@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -10,11 +11,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +27,37 @@ const nativeCoverMaxBytes = 20 << 20
 const nativeCoverCacheBytes = 256 << 20
 const nativeCoverCacheEntries = 2000
 const nativeCoverTTL = 30 * 24 * time.Hour
+
+const nativeCoverDuoduoFetchBudget = 12 * time.Second
+const nativeCoverDuoduoFallbackBudget = 12 * time.Second
+
+func nativeCoverFetchTimeout(source string) time.Duration {
+	if source == sourceDuoduo {
+		return nativeCoverDuoduoFetchBudget
+	}
+	return 25 * time.Second
+}
+
+func nativeCoverAlternativeTimeout(source, cacheClass string) time.Duration {
+	if source == sourceDuoduo && cacheClass == "provider" {
+		return nativeCoverDuoduoFallbackBudget
+	}
+	return 0
+}
+func nativeCoverAttemptTimeout(source, address string, cacheClass ...string) time.Duration {
+	// External artwork (for example a Douban fallback) is not routed through
+	// Duoduo's provider proxy and must retain the normal download window.
+	if source != sourceDuoduo || len(cacheClass) > 0 && cacheClass[0] != "provider" {
+		return 12 * time.Second
+	}
+	parsed, err := url.Parse(strings.TrimSpace(address))
+	if err == nil && strings.EqualFold(parsed.Hostname(), "wsrv.nl") {
+		return 9 * time.Second
+	}
+	return 2500 * time.Millisecond
+}
+
+const nativeCoverRepairConcurrency = 4
 
 type nativeCoverEntry struct {
 	size      int64
@@ -43,6 +77,7 @@ type nativeCoverCache struct {
 	mu          sync.Mutex
 	entries     map[string]nativeCoverEntry
 	pending     map[string]*nativeCoverCall
+	failures    map[string]time.Time
 	slots       chan struct{}
 	repairSlots chan struct{}
 	repairs     map[string]*nativeCoverRepair
@@ -54,8 +89,10 @@ func newNativeCoverCache(directory string, downloader *Downloader) *nativeCoverC
 	cache := &nativeCoverCache{
 		directory: filepath.Join(directory, "covers-v1"), downloader: downloader,
 		entries: map[string]nativeCoverEntry{}, pending: map[string]*nativeCoverCall{},
-		slots: make(chan struct{}, 4), limit: nativeCoverCacheBytes,
-		repairSlots: make(chan struct{}, 1), repairs: map[string]*nativeCoverRepair{},
+		failures: map[string]time.Time{},
+		// Match the six-request Flutter scheduler for the first visible grid.
+		slots: make(chan struct{}, 6), limit: nativeCoverCacheBytes,
+		repairSlots: make(chan struct{}, nativeCoverRepairConcurrency), repairs: map[string]*nativeCoverRepair{},
 	}
 	files, _ := os.ReadDir(cache.directory)
 	for _, file := range files {
@@ -78,11 +115,39 @@ func newNativeCoverCache(directory string, downloader *Downloader) *nativeCoverC
 		cache.entries[key] = nativeCoverEntry{size: info.Size(), updatedAt: info.ModTime(), usedAt: info.ModTime()}
 		cache.size += info.Size()
 	}
+	cache.loadCoverFailures()
 	cache.prune("")
 	return cache
 }
 
+func nativeCoverOriginReferer(address string) string {
+	parsed, err := url.Parse(strings.TrimSpace(address))
+	if err != nil || parsed == nil {
+		return ""
+	}
+	host := strings.ToLower(parsed.Hostname())
+	switch {
+	case host == "movie.douban.com" || host == "www.douban.com" ||
+		strings.HasSuffix(host, ".doubanio.com"):
+		return "https://movie.douban.com/"
+	case host == "bilibili.com" || strings.HasSuffix(host, ".bilibili.com") ||
+		host == "hdslb.com" || strings.HasSuffix(host, ".hdslb.com"):
+		return "https://www.bilibili.com/"
+	case host == "bgm.tv" || strings.HasSuffix(host, ".bgm.tv"):
+		return "https://bgm.tv/"
+	case host == "k.sinaimg.cn" || strings.HasSuffix(host, ".sinaimg.cn"):
+		return "https://news.sina.com.cn/"
+	case host == "live.ykimg.com" || strings.HasSuffix(host, ".ykimg.com"):
+		return "https://www.youku.com/"
+	default:
+		return ""
+	}
+}
+
 func nativeCoverReferer(downloader *Downloader, source, address string) string {
+	if referer := nativeCoverOriginReferer(address); referer != "" {
+		return referer
+	}
 	if source == sourceCloudFront {
 		if parsed, err := url.Parse(address); err == nil && (strings.HasSuffix(strings.ToLower(parsed.Hostname()), ".zdmhyg.cn") || strings.EqualFold(parsed.Hostname(), "pic.tuafjz.cn")) {
 			return downloader.providerBaseURL(sourceHuangguoAI) + "/"
@@ -103,8 +168,256 @@ func nativeCoverReferer(downloader *Downloader, source, address string) string {
 	return downloader.providerBaseURL(source) + "/"
 }
 
+// Duoduo's image server can require the exact detail page as its Referer.
+// The website shows posters at /play/{id}; a homepage-only Referer may be
+// rejected even though the same image is visible from the official page.
+func nativeCoverRefererForDrama(downloader *Downloader, drama nativeDrama, address string) string {
+	source := canonicalProviderSource(drama.Source)
+	if source == "" {
+		source = sourceFromDramaID(drama.ID)
+	}
+	if source == sourceDuoduo {
+		// Bilibili's CDN requires its own site Referer to avoid returning its
+		// "image hotlink disabled" placeholder. Other original catalogue
+		// images keep Duoduo's exact work page Referer; external fallback
+		// images continue to use their own host-specific Referer below.
+		if parsed, err := url.Parse(strings.TrimSpace(address)); err == nil {
+			host := strings.ToLower(parsed.Hostname())
+			if host == "bilibili.com" || strings.HasSuffix(host, ".bilibili.com") ||
+				host == "hdslb.com" || strings.HasSuffix(host, ".hdslb.com") {
+				return "https://www.bilibili.com/"
+			}
+		}
+		if _, sourceID, valid := splitProviderDramaID(drama.ID); valid && webProviderNumericID.MatchString(sourceID) {
+			base := strings.TrimRight(downloader.providerBaseURL(source), "/")
+			if base == "" {
+				base = strings.TrimRight(duoduoPublicEntryURL, "/")
+			}
+			return base + "/play/" + url.PathEscape(sourceID)
+		}
+	}
+	return nativeCoverReferer(downloader, source, address)
+}
+
+type duoduoPosterAttempt struct {
+	address string
+	referer string
+}
+
+// recordDuoduoPosterAttempt captures origin-vs-edge latency without writing
+// signed image URLs, query strings, or Referer values into exported logs.
+func (cache *nativeCoverCache) recordDuoduoPosterAttempt(
+	drama nativeDrama,
+	attempt duoduoPosterAttempt,
+	number int,
+	started time.Time,
+	data []byte,
+	err error,
+) {
+	if cache == nil || cache.downloader == nil {
+		return
+	}
+	source := canonicalProviderSource(drama.Source)
+	if source == "" {
+		source = sourceFromDramaID(drama.ID)
+	}
+	if source != sourceDuoduo {
+		return
+	}
+	parsed, parseErr := url.Parse(strings.TrimSpace(attempt.address))
+	host := ""
+	if parseErr == nil {
+		host = strings.ToLower(parsed.Hostname())
+	}
+	strategy := "origin"
+	if host == "wsrv.nl" {
+		strategy = "cloudflare_edge"
+	}
+	result := "success"
+	level := "info"
+	if err != nil {
+		level = "warn"
+		result = nativeStreamError(err)
+		if result == "io_error" {
+			message := strings.ToLower(err.Error())
+			if strings.Contains(message, "status") || strings.Contains(message, "content-type") ||
+				strings.Contains(message, "image") {
+				result = "http_or_invalid_image"
+			}
+		}
+	}
+	cache.downloader.recordDiagnostic(diagnosticEvent{
+		Level: level, Event: "cover.attempt", Source: source, DramaID: drama.ID,
+		Host: host, Attempt: number,
+		Message: fmt.Sprintf("strategy=%s elapsed_ms=%d bytes=%d result=%s",
+			strategy, time.Since(started).Milliseconds(), len(data), result),
+	})
+}
+
+// Baidu's gimg endpoint sometimes wraps a real poster URL inside its path,
+// for example /gimg/app=2001&fmt=jpeg&src=https%3A%2F%2Fi0.hdslb.com%2F...png.
+// Keep the original wrapper as the first choice, but expose the embedded
+// source as a separate fallback so a broken proxy does not hide the real file.
+func duoduoBaiduPosterSourceURL(address string) string {
+	parsed, err := url.Parse(strings.TrimSpace(address))
+	if err != nil || !validNativeCoverURL(parsed) {
+		return ""
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if !strings.HasPrefix(host, "gimg") || !strings.HasSuffix(host, ".baidu.com") {
+		return ""
+	}
+	values := url.Values{}
+	if parsed.RawQuery != "" {
+		queryValues, _ := url.ParseQuery(parsed.RawQuery)
+		for key, entries := range queryValues {
+			for _, value := range entries {
+				values.Add(key, value)
+			}
+		}
+	}
+	pathValues, pathErr := url.ParseQuery(strings.TrimPrefix(parsed.Path, "/gimg/"))
+	if pathErr == nil {
+		for key, entries := range pathValues {
+			for _, value := range entries {
+				values.Add(key, value)
+			}
+		}
+	}
+	if values == nil {
+		return ""
+	}
+	candidate := strings.TrimSpace(values.Get("src"))
+	if strings.HasPrefix(candidate, "//") {
+		candidate = "https:" + candidate
+	} else if candidate != "" && !strings.Contains(candidate, "://") {
+		// Baidu's gimg wrapper commonly stores a bare hostname in src,
+		// e.g. src=img.example.com/path/poster.webp.
+		candidate = "https://" + strings.TrimLeft(candidate, "/")
+	}
+	source, err := url.Parse(candidate)
+	if err != nil || !validNativeCoverURL(source) || strings.EqualFold(source.Hostname(), host) {
+		return ""
+	}
+	return source.String()
+}
+
+// Only public DNS hostnames are sent to the third-party image proxy. This
+// avoids turning poster fallback into a proxy for localhost or literal IPs.
+// The full escaped path and query are retained because poster URLs can be
+// signed or can themselves be image-proxy wrappers.
+func duoduoPosterProxyURL(address string) string {
+	parsed, err := url.Parse(strings.TrimSpace(address))
+	if err != nil || !validNativeCoverURL(parsed) {
+		return ""
+	}
+	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	if host == "" || !strings.Contains(host, ".") || strings.Contains(host, "..") ||
+		net.ParseIP(host) != nil || host == "localhost" ||
+		strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") ||
+		strings.HasSuffix(host, ".internal") {
+		return ""
+	}
+	if port := parsed.Port(); port != "" && port != "80" && port != "443" {
+		return ""
+	}
+	parsed.Fragment = ""
+	target := strings.TrimPrefix(parsed.String(), parsed.Scheme+"://")
+
+	// wsrv.nl resizes and caches images behind Cloudflare's global network.
+	// Keep a portrait-safe bounding box and return WebP at poster-card size:
+	// this avoids downloading multi-megapixel originals just to render a 440px
+	// catalogue tile. The original provider URL remains the first attempt.
+	proxy, err := url.Parse("https://wsrv.nl/")
+	if err != nil {
+		return ""
+	}
+	query := proxy.Query()
+	query.Set("url", target)
+	query.Set("w", "440")
+	query.Set("h", "660")
+	query.Set("fit", "inside")
+	query.Set("output", "webp")
+	query.Set("q", "80")
+	proxy.RawQuery = query.Encode()
+	return proxy.String()
+}
+
+func duoduoPosterAttemptsForDrama(address string, downloader *Downloader, drama nativeDrama) []duoduoPosterAttempt {
+	referer := nativeCoverRefererForDrama(downloader, drama, address)
+	attempts := duoduoPosterAttempts(address, referer)
+
+	// Keep the former root-page Referer as a compatibility retry for image
+	// mirrors that only allow the site's origin-level hotlink policy.
+	source := canonicalProviderSource(drama.Source)
+	if source == "" {
+		source = sourceFromDramaID(drama.ID)
+	}
+	rootReferer := nativeCoverReferer(downloader, source, address)
+	if rootReferer != "" && rootReferer != referer {
+		attempts = append(attempts, duoduoPosterAttempts(address, rootReferer)... )
+	}
+
+	seen := make(map[string]bool, len(attempts))
+	unique := make([]duoduoPosterAttempt, 0, len(attempts))
+	for _, attempt := range attempts {
+		key := attempt.address + "\x00" + attempt.referer
+		if attempt.address == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		unique = append(unique, attempt)
+	}
+	return unique
+}
+func duoduoPosterAttempts(address, referer string) []duoduoPosterAttempt {
+	var attempts []duoduoPosterAttempt
+	seen := map[string]bool{}
+	add := func(candidate, candidateReferer string) {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			return
+		}
+		identity := candidate + "\x00" + candidateReferer
+		if seen[identity] {
+			return
+		}
+		seen[identity] = true
+		attempts = append(attempts, duoduoPosterAttempt{
+			address: candidate,
+			referer: firstNonEmpty(candidateReferer, referer),
+		})
+	}
+	add(address, referer)
+	// Give the original poster a short direct attempt, then try the globally
+	// cached, resized WebP variant before slower legacy Referer permutations.
+	if proxyURL := duoduoPosterProxyURL(address); proxyURL != "" {
+		add(proxyURL, "https://wsrv.nl/")
+	}
+	if sourceURL := duoduoBaiduPosterSourceURL(address); sourceURL != "" {
+		add(address, "https://www.baidu.com/")
+		add(sourceURL, "https://www.bilibili.com/")
+		add(sourceURL, "https://www.baidu.com/")
+		if proxyURL := duoduoPosterProxyURL(sourceURL); proxyURL != "" {
+			add(proxyURL, "https://wsrv.nl/")
+		}
+	}
+	return attempts
+}
+
 func validNativeCoverURL(address *url.URL) bool {
-	return address != nil && (address.Scheme == "https" || address.Scheme == "http") && address.Hostname() != "" && address.User == nil
+	if address == nil ||
+		(address.Scheme != "https" && address.Scheme != "http") ||
+		address.Hostname() == "" || address.User != nil {
+		return false
+	}
+	// api.zxki.cn exposes a paid image hotlink-bypass API that requires a
+	// private API key. It is not a public image CDN and must not be treated as
+	// an ordinary poster URL or called without credentials.
+	if strings.EqualFold(address.Hostname(), "api.zxki.cn") {
+		return false
+	}
+	return true
 }
 
 func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDrama, force bool) (string, error) {
@@ -117,7 +430,18 @@ func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDram
 	if source == "" {
 		source = sourceFromDramaID(drama.ID)
 	}
-	referer := nativeCoverReferer(cache.downloader, source, drama.Cover)
+	referer := nativeCoverRefererForDrama(cache.downloader, drama, drama.Cover)
+	if force {
+		// An explicit retry must bypass a previous failure cooldown. For Duoduo,
+		// clear every equivalent URL/Referer attempt, not just the first URL.
+		attempts := []duoduoPosterAttempt{{address: drama.Cover, referer: referer}}
+		if source == sourceDuoduo {
+			attempts = duoduoPosterAttemptsForDrama(drama.Cover, cache.downloader, drama)
+		}
+		for _, attempt := range attempts {
+			cache.clearCoverFailure(attempt.address, attempt.referer)
+		}
+	}
 	digest := sha256.Sum256([]byte(source + "\x00" + drama.Cover + "\x00" + referer))
 	key := hex.EncodeToString(digest[:])
 	path := filepath.Join(cache.directory, key+".img")
@@ -160,13 +484,54 @@ func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDram
 }
 
 func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fallback string, call *nativeCoverCall) {
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	coverSource := canonicalProviderSource(drama.Source)
+	if coverSource == "" {
+		coverSource = sourceFromDramaID(drama.ID)
+	}
+	// Duoduo image mirrors can spend a long time on dead hosts or Referer
+	// retries. Bound the initial poster path so the repair pipeline can start
+	// sooner; other providers retain the existing 25-second budget.
+	ctx, cancel := context.WithTimeout(context.Background(), nativeCoverFetchTimeout(coverSource))
 	defer cancel()
 	var data []byte
 	var err error
 	select {
 	case cache.slots <- struct{}{}:
-		data, err = cache.download(ctx, drama.Cover, referer)
+		attempts := []duoduoPosterAttempt{{address: drama.Cover, referer: referer}}
+		if coverSource == sourceDuoduo {
+			attempts = duoduoPosterAttemptsForDrama(drama.Cover, cache.downloader, drama)
+		}
+		tryAttempts := func(candidates []duoduoPosterAttempt) {
+			for index, attempt := range candidates {
+				if ctx.Err() != nil {
+					err = ctx.Err()
+					return
+				}
+				if cache.coverOnCooldown(attempt.address, attempt.referer) {
+					err = errors.New("海報網址暫時冷卻，略過重複請求")
+					continue
+				}
+				started := time.Now()
+				attemptCtx, attemptCancel := context.WithTimeout(
+					ctx, nativeCoverAttemptTimeout(coverSource, attempt.address),
+				)
+				data, err = cache.download(attemptCtx, attempt.address, attempt.referer)
+				attemptCancel()
+				cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, err)
+				if err == nil {
+					cache.clearCoverFailure(attempt.address, attempt.referer)
+					return
+				}
+				cache.noteCoverFailure(attempt.address, attempt.referer, err)
+			}
+		}
+		tryAttempts(attempts)
+
+		// Provider-detail alternatives are checked once by load() -> repair().
+		// Do not repeat the same detail API request here after the primary
+		// catalogue poster fails; that used to add one full network round trip
+		// before the actual fallback pipeline could even start.
+
 		<-cache.slots
 	case <-ctx.Done():
 		err = ctx.Err()
@@ -199,7 +564,9 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 }
 
 func (cache *nativeCoverCache) download(ctx context.Context, address, referer string) ([]byte, error) {
-	request, err := http.NewRequestWithContext(context.WithValue(ctx, nativeCoverNetworkKey{}, true), http.MethodGet, address, nil)
+	attemptCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(context.WithValue(attemptCtx, nativeCoverNetworkKey{}, true), http.MethodGet, address, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -221,8 +588,11 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 		return nil, err
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("海报请求失败：HTTP %d", response.StatusCode)
+	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusPartialContent {
+		return nil, &nativeCoverHTTPStatusError{StatusCode: response.StatusCode}
+	}
+	if !nativeCoverResponseComplete(response) {
+		return nil, &nativeCoverHTTPStatusError{StatusCode: response.StatusCode}
 	}
 	if response.ContentLength > nativeCoverMaxBytes {
 		return nil, errors.New("海报文件过大")
@@ -241,9 +611,55 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 	return data, nil
 }
 
+func nativeCoverResponseComplete(response *http.Response) bool {
+	if response == nil {
+		return false
+	}
+	if response.StatusCode == http.StatusOK {
+		return true
+	}
+	if response.StatusCode != http.StatusPartialContent {
+		return false
+	}
+	value := strings.TrimSpace(response.Header.Get("Content-Range"))
+	if !strings.HasPrefix(strings.ToLower(value), "bytes ") {
+		return false
+	}
+	rangeAndTotal := strings.TrimSpace(value[len("bytes "):])
+	byteRange, totalValue, found := strings.Cut(rangeAndTotal, "/")
+	if !found {
+		return false
+	}
+	startValue, endValue, found := strings.Cut(strings.TrimSpace(byteRange), "-")
+	if !found {
+		return false
+	}
+	start, startErr := strconv.ParseInt(strings.TrimSpace(startValue), 10, 64)
+	end, endErr := strconv.ParseInt(strings.TrimSpace(endValue), 10, 64)
+	total, totalErr := strconv.ParseInt(strings.TrimSpace(totalValue), 10, 64)
+	return startErr == nil && endErr == nil && totalErr == nil &&
+		start == 0 && total > 0 && end >= 0 && end+1 == total
+}
+
 func nativeDecodeCover(data []byte) []byte {
 	if nativeIsCoverImage(data) {
 		return data
+	}
+	// Some poster CDNs return a gzip-wrapped image body while still labelling
+	// it as image/jpeg or image/png. Go only transparently decompresses HTTP
+	// responses when Content-Encoding is set; unwrap a raw gzip body as a
+	// bounded fallback, then validate the actual image signature.
+	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
+		reader, err := gzip.NewReader(bytes.NewReader(data))
+		if err == nil {
+			decoded, readErr := io.ReadAll(io.LimitReader(reader, nativeCoverMaxBytes+1))
+			closeErr := reader.Close()
+			if readErr == nil && closeErr == nil &&
+				len(decoded) > 0 && len(decoded) <= nativeCoverMaxBytes &&
+				nativeIsCoverImage(decoded) {
+				return decoded
+			}
+		}
 	}
 	encrypted := data
 	if bytes.HasPrefix(encrypted, []byte("Salted__")) && len(encrypted) > 16 {
@@ -276,7 +692,7 @@ func nativeDecodeCover(data []byte) []byte {
 }
 
 func nativeIsCoverImage(data []byte) bool {
-	if isHEICImage(data) {
+	if isHEICImage(data) || isAVIFImage(data) {
 		return true
 	}
 	if bytes.HasPrefix(data, []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}) ||
@@ -284,6 +700,9 @@ func nativeIsCoverImage(data []byte) bool {
 		return true
 	}
 	if len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP" {
+		return true
+	}
+	if len(data) >= 2 && data[0] == 'B' && data[1] == 'M' {
 		return true
 	}
 	if len(data) >= 16 && string(data[4:8]) == "ftyp" {

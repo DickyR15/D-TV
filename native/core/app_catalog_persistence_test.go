@@ -65,6 +65,33 @@ func catalogFixtureEngine(t *testing.T, transport sourceFixtureTransport) *nativ
 	return engine
 }
 
+func TestMigrateNativeDramaReconstructsLegacyPosterIdentity(t *testing.T) {
+	cases := []struct {
+		name string
+		drama nativeDrama
+		want string
+	}{
+		{
+			name: "missing ID uses cached source and source ID",
+			drama: nativeDrama{Source: sourceDuoduo, SourceID: "137937", Title: "撒旦：黑暗"},
+			want: "duoduo:137937",
+		},
+		{
+			name: "canonical composite ID stays authoritative",
+			drama: nativeDrama{ID: "duoduo:137937", Source: "retired-source", SourceID: "999"},
+			want: "duoduo:137937",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := migrateNativeDrama(tc.drama)
+			if got.ID != tc.want || got.Source == "" || got.SourceID == "" {
+				t.Fatalf("migrated identity = %q / %q / %q, want %q", got.ID, got.Source, got.SourceID, tc.want)
+			}
+		})
+	}
+}
+
 func TestNativeHongguoCursorRestartsPerCatalog(t *testing.T) {
 	var calls []nativeHongguoRequest
 	var device, install string
@@ -230,11 +257,14 @@ func TestNativeHongguoStalledCursorKeepsPartialItems(t *testing.T) {
 func TestNativeCatalogPreservesLargeLibraryAndPage501(t *testing.T) {
 	var requested string
 	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
-		if request.URL.Path != "/api/videos/category/ai-duanju" {
+		target := huangguoEdgeTarget(t, request)
+		if target.Path != "/api/videos/category/ai-duanju" {
 			return nil, errors.New("only synthetic catalog metadata is allowed")
 		}
-		requested = request.URL.Query().Get("page")
-		return sourceFixtureResponse(request, 200, `{"data":[{"id":"6001","title":"第6001部"}]}`), nil
+		requested = target.Query().Get("page")
+		return sourceFixtureResponse(request, 200, huangguoEdgeReply(map[string]any{
+			"items": []any{map[string]any{"id": "6001", "title": "第6001部"}},
+		})), nil
 	})
 	items := make([]nativeDrama, 6000)
 	for index := range items {

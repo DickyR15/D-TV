@@ -12,6 +12,7 @@ on:
       - main
     paths:
       - ".github/workflows/cross-platform-build.yml"
+      - ".github/workflows/duoduo-entry-probe.yml"
       - "lib/**"
       - "native/**"
       - "android/**"
@@ -45,7 +46,7 @@ permissions:
   contents: write
 
 env:
-  FLUTTER_VERSION: "3.47.4"
+  FLUTTER_VERSION: "3.47.9"
 
 jobs:
   core-validation:
@@ -70,13 +71,19 @@ jobs:
         run: python scripts/retry_command.py --attempts 3 -- flutter pub get
       - name: Test Flutter suite
         run: flutter test --dart-define=ALL_SOURCES=true
+      - name: Test standard edition primary sources
+        run: >-
+          flutter test --dart-define=ALL_SOURCES=false
+          test/source_switches_test.dart
+          test/app_build_test.dart
+          test/source_management_screen_test.dart
       - name: Test shared Go core
         working-directory: native
         run: python ../scripts/retry_command.py --attempts 3 -- go test ./...
 
   windows-x64:
-    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'windows')
-    name: Windows x64 portable ZIP
+    if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'windows'))
+    name: Windows x64 Portable ZIP
     needs: core-validation
     runs-on: windows-2022
     timeout-minutes: 75
@@ -96,6 +103,43 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - name: Download and verify FFmpegKit Windows x64 bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $assetUrl = "https://github.com/sk3llo/ffmpeg_kit_flutter/releases/download/8.1.2-min-gpl/ffmpeg-kit-windows-x86_64-min-gpl-8.1.2.zip"
+          $expectedSha256 = "c3a69388f32ff86e4622baada470d2acc55d577a51b6ec15b68560c1f1b6e37b"
+          $archive = Join-Path $env:RUNNER_TEMP "ffmpeg-kit-windows-x86_64-min-gpl-8.1.2.zip"
+          $bundleDir = Join-Path $env:RUNNER_TEMP "ffmpeg-kit-windows-x86_64-min-gpl-8.1.2"
+
+          # Download the official pinned release asset outside CMake. CMake's
+          # file(DOWNLOAD) gets an HTTP error on the Windows hosted runner;
+          # curl follows GitHub's release-asset redirect reliably.
+          & curl.exe --fail --location --show-error --silent --retry 3 --retry-all-errors --retry-delay 3 --output $archive $assetUrl
+          if ($LASTEXITCODE -ne 0) {
+            throw "無法下載 FFmpegKit Windows x64 官方套件（curl exit $LASTEXITCODE）。"
+          }
+
+          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "FFmpegKit SHA-256 不符：$actualSha256"
+          }
+
+          if (Test-Path -LiteralPath $bundleDir) {
+            Remove-Item -LiteralPath $bundleDir -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $bundleDir -Force | Out-Null
+          Expand-Archive -LiteralPath $archive -DestinationPath $bundleDir -Force
+
+          $requiredDll = Join-Path $bundleDir "bin/libffmpegkit.dll"
+          if (-not (Test-Path -LiteralPath $requiredDll)) {
+            Get-ChildItem -LiteralPath $bundleDir -Recurse | Select-Object -First 40 FullName
+            throw "FFmpegKit 官方套件缺少 bin/libffmpegkit.dll。"
+          }
+
+          "FFMPEGKIT_LOCAL_DIR=$bundleDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "FFmpegKit verified: $actualSha256"
+          Get-ChildItem -LiteralPath (Join-Path $bundleDir "bin") -Filter "*.dll" | Select-Object Name, Length
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -141,7 +185,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   android-universal:
-    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'android')
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'pull_request') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
     name: Android Universal APK (3 ABIs)
     needs: core-validation
     runs-on: ubuntu-latest
@@ -227,7 +271,7 @@ jobs:
           build_number=$((pubspec_build_number + GITHUB_RUN_NUMBER - 1))
           echo "app_version=$version" >> "$GITHUB_OUTPUT"
           echo "app_version_code=$build_number" >> "$GITHUB_OUTPUT"
-          python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --all-sources --build-name "$version" --build-number "$build_number"
+          python scripts/retry_command.py --attempts 3 -- python scripts/build_android.py --universal --all-sources --player-engine mpv_embed --build-name "$version" --build-number "$build_number"
       - name: Verify Android Universal APK signature, package and ABIs
         shell: bash
         run: |
@@ -253,6 +297,7 @@ jobs:
       - name: Best-effort install and launch on x86_64 Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         continue-on-error: true
+        timeout-minutes: 15
         with:
           api-level: 35
           arch: x86_64
@@ -271,7 +316,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   ios-ipa:
-    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'ios')
+    if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
     name: iOS device IPA and simulator build
     needs: core-validation
     runs-on: macos-26
@@ -322,7 +367,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   macos-universal:
-    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'macos')
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'macos'))
     name: macOS Universal DMG (arm64 + x86_64)
     needs: core-validation
     runs-on: macos-26
@@ -445,17 +490,17 @@ jobs:
           body: |
             ## D TV ${{ steps.release-files.outputs.version }} 正式版
 
-            四個平台的正式建置與必要檢查已全部通過。
+            四個平台的正式建置與必要檢查已全部通過；Windows 提供免安裝 ZIP。
 
             ### 下載檔案
             - Android／Android TV：Universal APK（ARM64、ARMv7、x86_64）
-            - Windows x64：免安裝 ZIP
+            - Windows x64：免安裝 ZIP（解壓後即可執行）
             - macOS：Apple Silicon／Intel Universal DMG
             - iOS：未簽章 IPA，需自行簽署後側載安裝
 
             ### SHA-256 檔案完整性驗證
 
-            以下為四個正式發布附件的 SHA-256 校驗碼。下載後可使用 SHA256SUMS.txt 進行比對。
+            以下為正式發布附件的 SHA-256 校驗碼。下載後可使用 SHA256SUMS.txt 進行比對。
 
             ```text
             ${{ steps.release-files.outputs.checksums }}

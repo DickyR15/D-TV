@@ -13,10 +13,11 @@ class SourceSite {
       id == 'huangju' ||
       id == 'yeguo' ||
       id == 'dsd' ||
-      id == 'guipian' ||
-      id == 'hanxiaoquan';
+      id == 'duoduo' ||
+      id == 'hanxiaoquan' ||
+      id == 'heitao';
   bool get searchSuggestions => id == 'hongguo';
-  // These are three independent providers and must remain separate in
+  // These providers must remain independent in
   // source switching and ranking filters.
   String get groupId => id;
   String get groupName => name;
@@ -37,15 +38,19 @@ class SourceSite {
 
   static const hongguo = SourceSite('hongguo', '紅果', '短劇 · 漫劇 · AI 劇');
   static const dsd = SourceSite('dsd', '帝果', '影片分類 · 線上搜尋');
-  static const guipian = SourceSite('guipian', '鬼片', '恐怖片 · 電視劇 · 動畫');
+  static const duoduo = SourceSite(
+    'duoduo',
+    '多多追劇',
+    '電影 · 電視劇 · 動畫 · 綜藝',
+  );
   static const hanxiaoquan = SourceSite(
     'hanxiaoquan',
     '韓小圈',
     '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
 
-  /// 預設開啟的一般片源：紅果、韓小圈、鬼片。
-  static const primaryValues = [hongguo, hanxiaoquan, guipian];
+  /// 預設開啟的三個一般片源：紅果、韓小圈、多多追劇。
+  static const primaryValues = [hongguo, hanxiaoquan, duoduo];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
@@ -55,11 +60,12 @@ class SourceSite {
     dsd,
     SourceSite('huangguo-video', '黃果影片', '影片與劇集'),
     SourceSite('huangguoai', '黃果 AI', 'AI 短劇'),
+    SourceSite('heitao', '黑桃', '分類短劇 · 線上搜尋'),
     SourceSite('cloudfront', '黃果舊版', '舊版 API 片庫'),
   ];
   static const knownValues = [...primaryValues, ...restrictedValues];
   static const allValues = [...primaryValues, ...restrictedValues];
-  static const values = allSourcesEnabled ? knownValues : [hongguo];
+  static const values = allSourcesEnabled ? knownValues : primaryValues;
   static bool isAvailable(String id) => values.any((site) => site.id == id);
   static bool isKnown(String id) => allValues.any((site) => site.id == id);
   static bool isRestricted(String id) =>
@@ -113,6 +119,7 @@ class Drama {
     this.episodes = 0,
     this.episodesVerified = false,
     this.category = '',
+    this.doubanId = '',
     bool? vip,
     this.heat = '',
     this.views = '',
@@ -123,6 +130,12 @@ class Drama {
   final String id;
   final String source;
   final String sourceId;
+  /// Stable identity for catalog items whose legacy JSON only has source + ID.
+  String get stableId => id.isNotEmpty
+      ? id
+      : source.isNotEmpty && sourceId.isNotEmpty
+      ? '$source:$sourceId'
+      : '';
   final String title;
   final String description;
   final String cover;
@@ -131,6 +144,7 @@ class Drama {
   bool get canShowEpisodeCount =>
       episodes > 0 && (source != 'hongguo' || episodesVerified);
   final String category;
+  final String doubanId;
   final bool? vipStatus;
   bool get vip => vipStatus == true;
   final String heat;
@@ -144,29 +158,39 @@ class Drama {
     _ => '狀態未知',
   };
 
-  factory Drama.fromJson(Map<String, dynamic> json) => Drama(
-    id: json['id'] as String? ?? '',
-    source: json['source'] as String? ?? 'hongguo',
-    sourceId: json['sourceId'] as String? ?? '',
-    title: json['title'] as String? ?? '短劇',
-    description: json['description'] as String? ?? '',
-    cover: json['cover'] as String? ?? '',
-    episodes: intValue(json['episodes']),
-    episodesVerified: json['episodesVerified'] == true,
-    category: json['category'] as String? ?? '',
-    vip: json['vip'] == true
-        ? true
-        : json['vip'] == false &&
-              (json['source'] != 'huangdou' ||
-                  intValue(json['metadataSchema']) >= 1)
-        ? false
-        : null,
-    heat: json['heat']?.toString() ?? '',
-    views: json['views']?.toString() ?? '',
-    onlineDate: json['onlineDate'] as String? ?? '',
-    tags: (json['tags'] as List? ?? const []).whereType<String>().toList(),
-    releaseStatus: json['releaseStatus'] as String? ?? '',
-  );
+
+  factory Drama.fromJson(Map<String, dynamic> json) {
+    final originalId = json['id'] as String? ?? '';
+    final originalSource = json['source'] as String? ?? 'hongguo';
+    final originalSourceId = json['sourceId'] as String? ?? '';
+    return Drama(
+      id: originalId,
+      source: originalSource,
+      sourceId: originalSourceId,
+      title: json['title'] as String? ?? '短劇',
+      description: json['description'] as String? ?? '',
+      cover: json['cover'] as String? ?? '',
+      episodes: intValue(json['episodes']),
+      episodesVerified: json['episodesVerified'] == true,
+      category: originalSource == 'duoduo' &&
+              const {'影視', '影视'}.contains(json['category'])
+          ? ''
+          : json['category'] as String? ?? '',
+      doubanId: json['doubanId'] as String? ?? '',
+      vip: json['vip'] == true
+          ? true
+          : json['vip'] == false &&
+                (originalSource != 'huangdou' ||
+                    intValue(json['metadataSchema']) >= 1)
+          ? false
+          : null,
+      heat: json['heat']?.toString() ?? '',
+      views: json['views']?.toString() ?? '',
+      onlineDate: json['onlineDate'] as String? ?? '',
+      tags: (json['tags'] as List? ?? const []).whereType<String>().toList(),
+      releaseStatus: json['releaseStatus'] as String? ?? '',
+    );
+  }
   Map<String, dynamic> toJson() => {
     'metadataSchema': 1,
     'id': id,
@@ -178,6 +202,7 @@ class Drama {
     'episodes': episodes,
     'episodesVerified': episodesVerified,
     'category': category,
+    'doubanId': doubanId,
     'vip': vipStatus,
     'heat': heat,
     'views': views,
@@ -187,7 +212,7 @@ class Drama {
   };
 
   Drama merge(Drama fresh) {
-    if (id != fresh.id) return fresh;
+    if (stableId != fresh.stableId) return fresh;
     const genericCategories = {
       '短劇',
       '真人劇',
@@ -199,8 +224,12 @@ class Drama {
       'AI漫劇',
       'AI 漫劇',
     };
+    final currentCategory = source == 'duoduo' &&
+            const {'影視', '影视'}.contains(category)
+        ? ''
+        : category;
     return Drama(
-      id: id,
+      id: id.isEmpty ? fresh.id : id,
       source: fresh.source.isEmpty ? source : fresh.source,
       sourceId: fresh.sourceId.isEmpty ? sourceId : fresh.sourceId,
       title: fresh.title.isEmpty || fresh.title == '短劇' ? title : fresh.title,
@@ -214,10 +243,11 @@ class Drama {
       category:
           fresh.category.isEmpty ||
               genericCategories.contains(fresh.category) &&
-                  category.isNotEmpty &&
-                  !genericCategories.contains(category)
-          ? category
+                  currentCategory.isNotEmpty &&
+                  !genericCategories.contains(currentCategory)
+          ? currentCategory
           : fresh.category,
+      doubanId: fresh.doubanId.isEmpty ? doubanId : fresh.doubanId,
       vip: fresh.vipStatus ?? vipStatus,
       heat: fresh.heat.isEmpty ? heat : fresh.heat,
       views: fresh.views.isEmpty ? views : fresh.views,
@@ -239,13 +269,15 @@ class Episode {
           ? intValue(raw['currentEpisode'])
           : fallback,
       vip = raw['vip'] == true,
-      vertical = raw['vertical'] as bool?;
+      vertical = raw['vertical'] as bool?,
+      playLine = raw['playLine'] as String? ?? '';
   final Map<String, dynamic> raw;
   final String id;
   final String title;
   final int number;
   final bool vip;
   final bool? vertical;
+  final String playLine;
 }
 
 class DramaDetail {
@@ -299,7 +331,6 @@ class PlaybackPlan {
     this.quality = 0,
     this.qualities = const [],
     this.session = '',
-    this.danmakuId = '',
     this.prefetchedBytes = 0,
     this.expiresAt = 0,
     this.routeIndex = 0,
@@ -312,7 +343,6 @@ class PlaybackPlan {
   final int quality;
   final List<int> qualities;
   final String session;
-  final String danmakuId;
   final int prefetchedBytes;
   final int expiresAt;
   final int routeIndex;
@@ -330,7 +360,6 @@ class PlaybackPlan {
     qualities: (json['qualities'] as List? ?? []).map(intValue).toSet().toList()
       ..sort((a, b) => b.compareTo(a)),
     session: json['session'] as String? ?? '',
-    danmakuId: json['danmakuId'] as String? ?? '',
     prefetchedBytes: intValue(json['prefetchedBytes']),
     expiresAt: intValue(json['expiresAt']),
     routeIndex: intValue(json['routeIndex']),

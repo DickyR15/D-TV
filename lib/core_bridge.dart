@@ -9,7 +9,6 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import 'models.dart';
-import 'danmaku_models.dart';
 import 'background_downloads.dart';
 import 'local_store.dart';
 import 'app_build.dart';
@@ -100,15 +99,10 @@ abstract class AppRepository {
     int quality = 0,
     bool online = false,
   }) async => null;
-  Future<void> cancelDanmaku() async {}
-  Future<DanmakuPage> danmaku(
-    PlaybackPlan plan, {
-    required int startMs,
-    required int durationMs,
-  }) async => throw AppFailure('目前環境不支援彈幕');
   Future<void> cancelCatalog() async {}
   Future<void> cancelSuggestions() async {}
   Future<void> cancelRecommendations() async {}
+  Future<bool> hongguoDevices({bool register = false}) async => true;
   Future<Drama?> supplementMetadata(Drama drama) async => null;
   Future<Drama> followCheck(Drama drama) async => (await detail(drama)).drama;
   Future<CatalogPage> recommendations(
@@ -192,6 +186,20 @@ abstract class AppRepository {
     String category = '',
     bool force = false,
   });
+  Future<CatalogPage> catalogWithSort(
+    String source, {
+    int page = 1,
+    String query = '',
+    String category = '',
+    bool force = false,
+    String sort = '',
+  }) => catalog(
+    source,
+    page: page,
+    query: query,
+    category: category,
+    force: force,
+  );
   Future<CatalogPage> cached(String source, {String category = ''});
   /// Fast first-screen snapshot. Implementations without a bounded native
   /// cache read may return null and keep using [cached].
@@ -311,9 +319,6 @@ class NativeRepository extends AppRepository {
   }
 
   @override
-  Future<void> cancelDanmaku() => _cancelReads('danmaku');
-
-  @override
   Future<void> cancelPreload() => _cancelReads('preload');
 
   @override
@@ -334,34 +339,20 @@ class NativeRepository extends AppRepository {
   );
 
   @override
-  Future<DanmakuPage> danmaku(
-    PlaybackPlan plan, {
-    required int startMs,
-    required int durationMs,
-  }) async {
-    _authorize('hongguo');
-    if (plan.local || plan.session.isEmpty || plan.danmakuId.isEmpty) {
-      throw AppFailure('本集暫不支援彈幕');
-    }
-    return DanmakuPage.fromJson(
-      await _read('danmaku', {
-        'action': 'danmaku',
-        'playbackSession': plan.session,
-        'startMs': startMs,
-        'durationMs': durationMs,
-      }),
-      episodeId: plan.danmakuId,
-      startMs: startMs,
-      durationMs: durationMs,
-    );
-  }
-
-  @override
   Future<void> cancelCatalog() => _cancelReads('catalog-');
   @override
   Future<void> cancelSuggestions() => _cancelReads('suggestions');
   @override
   Future<void> cancelRecommendations() => _cancelReads('recommendations-');
+
+  @override
+  Future<bool> hongguoDevices({bool register = false}) async {
+    final result = await _call({
+      'action': 'hongguoDevices',
+      'force': register,
+    });
+    return result['ready'] == true;
+  }
 
   @override
   Future<CatalogPage> recommendations(
@@ -587,8 +578,7 @@ class NativeRepository extends AppRepository {
       }
       if (action == 'recommendations' ||
           action == 'cachedRecommendations' ||
-          action == 'suggestions' ||
-          action == 'danmaku') {
+          action == 'suggestions') {
         _authorize('hongguo');
       }
       if ({
@@ -641,8 +631,6 @@ class NativeRepository extends AppRepository {
             Duration(
               seconds: action == 'moveDownloads'
                   ? 620
-                  : action == 'danmaku'
-                  ? 15
                   : action == 'preload'
                   ? 20
                   : 70,
@@ -676,7 +664,6 @@ class NativeRepository extends AppRepository {
             'suggestions',
             'recommendations',
             'metadata',
-            'danmaku',
             'preload',
             'prepareHandoff',
           }.contains(input['action'])) {
@@ -738,6 +725,22 @@ class NativeRepository extends AppRepository {
     String query = '',
     String category = '',
     bool force = false,
+  }) => catalogWithSort(
+    source,
+    page: page,
+    query: query,
+    category: category,
+    force: force,
+  );
+
+  @override
+  Future<CatalogPage> catalogWithSort(
+    String source, {
+    int page = 1,
+    String query = '',
+    String category = '',
+    bool force = false,
+    String sort = '',
   }) async => CatalogPage.fromJson(
     await _read('catalog-$source', {
       'action': 'catalog',
@@ -745,6 +748,7 @@ class NativeRepository extends AppRepository {
       'page': page,
       'query': query,
       'category': category,
+      'sort': sort,
       'force': force,
     }),
   );
@@ -772,11 +776,11 @@ class NativeRepository extends AppRepository {
 
   @override
   bool coverCached(Drama drama) =>
-      _coverPaths.containsKey('${drama.id}\u0000${drama.cover}');
+      _coverPaths.containsKey('${drama.stableId}\u0000${drama.cover}');
 
   @override
   Future<String> cover(Drama drama, {bool force = false}) async {
-    final key = '${drama.id}\u0000${drama.cover}';
+    final key = '${drama.stableId}\u0000${drama.cover}';
     final known = force ? null : _coverPaths[key];
     if (known != null) {
       _authorize(drama.source);
@@ -791,7 +795,9 @@ class NativeRepository extends AppRepository {
     });
     final file = result['path'] as String? ?? '';
     if (file.isEmpty) throw AppFailure('海報暫不可用');
-    if (result['heic'] != true) return _rememberCover(key, file);
+    if (result['heic'] != true && result['avif'] != true) {
+      return _rememberCover(key, file);
+    }
     final converted = await _coverDecoder.convert(
       file,
       () => _call({'action': 'prepareCover', 'drama': drama.toJson()}),

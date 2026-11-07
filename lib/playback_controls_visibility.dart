@@ -10,9 +10,15 @@ enum PlaybackControlsBackAction { exitPlayback, hideControls }
 
 PlaybackControlsBackAction playbackControlsBackAction({
   required bool controlsVisible,
-}) => controlsVisible
-    ? PlaybackControlsBackAction.hideControls
-    : PlaybackControlsBackAction.exitPlayback;
+  bool enabled = true,
+}) {
+  // Loading/error states disable the on-screen controls, but must never
+  // disable the system/remote Back action that exits the playback route.
+  if (!enabled) return PlaybackControlsBackAction.exitPlayback;
+  return controlsVisible
+      ? PlaybackControlsBackAction.hideControls
+      : PlaybackControlsBackAction.exitPlayback;
+}
 
 /// Controls whether playback events may automatically reveal the control overlay.
 ///

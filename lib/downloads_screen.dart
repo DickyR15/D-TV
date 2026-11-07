@@ -9,6 +9,7 @@ import 'core_bridge.dart';
 import 'download_collections.dart';
 import 'local_store.dart';
 import 'local_media_screen.dart';
+import 'media_library.dart';
 import 'models.dart';
 import 'player_screen.dart';
 import 'remote_widgets.dart';

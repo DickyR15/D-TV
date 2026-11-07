@@ -41,6 +41,7 @@ class _DetailScreenState extends State<DetailScreen> {
   bool _loading = true;
   int _generation = 0;
   int _episodePage = 0;
+  String _selectedPlayLine = '';
   bool _expandedDescription = false;
   bool _episodesExpanded = false;
   final _episodeAnchor = GlobalKey();
@@ -104,12 +105,23 @@ class _DetailScreenState extends State<DetailScreen> {
       final merged = widget.repository.catalogUpdates
           .current(widget.drama)
           .merge(detail.drama);
+      final availableLines = _playLineNames(detail.episodes);
+      final selectedLine = availableLines.contains(_selectedPlayLine)
+          ? _selectedPlayLine
+          : availableLines.isEmpty
+          ? ''
+          : availableLines.first;
+      final visibleEpisodes = _episodesForLine(
+        detail.episodes,
+        selectedLine,
+      );
       setState(() {
+        _selectedPlayLine = selectedLine;
         _detail = DramaDetail(merged, detail.episodes, warning: detail.warning);
         _loading = false;
         _episodePage =
             resumeEpisodeIndex(
-              detail.episodes,
+              visibleEpisodes,
               widget.store.watched(merged.id),
             ) ~/
             episodePageSize;
@@ -140,7 +152,7 @@ class _DetailScreenState extends State<DetailScreen> {
           unawaited(
             _play(
               resumeEpisodeIndex(
-                detail.episodes,
+                visibleEpisodes,
                 widget.store.watched(merged.id),
               ),
               resume: true,
@@ -188,13 +200,20 @@ class _DetailScreenState extends State<DetailScreen> {
   Future<void> _play(int index, {bool resume = false}) async {
     final detail = _detail;
     if (detail == null ||
-        index < 0 ||
-        index >= detail.episodes.length ||
         _profileEpoch != widget.store.profileEpoch ||
         !widget.store.allowsSource(detail.drama.source)) {
       return;
     }
-    if (detail.episodes[index].vip &&
+    final episodes = _episodesForLine(detail.episodes);
+    if (index < 0 || index >= episodes.length) {
+      return;
+    }
+    final playDetail = DramaDetail(
+      detail.drama,
+      episodes,
+      warning: detail.warning,
+    );
+    if (episodes[index].vip &&
         detail.drama.source != SourceSite.dsd.id) {
       final accepted = await showDialog<bool>(
         context: context,
@@ -221,7 +240,7 @@ class _DetailScreenState extends State<DetailScreen> {
     final saved = widget.store.watched(detail.drama.id);
     final position =
         resume &&
-            saved?.episode == detail.episodes[index].number &&
+            saved?.episode == episodes[index].number &&
             !saved!.finished
         ? saved.position
         : 0.0;
@@ -231,7 +250,7 @@ class _DetailScreenState extends State<DetailScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PlayerScreen(
-          detail: detail,
+          detail: playDetail,
           initialIndex: index,
           initialPosition: position,
           repository: widget.repository,
@@ -276,7 +295,9 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget build(BuildContext context) {
     final drama = _detail?.drama ?? widget.drama;
     final watched = widget.store.watched(drama.id);
-    final episodes = _detail?.episodes ?? <Episode>[];
+    final allEpisodes = _detail?.episodes ?? <Episode>[];
+    final playLines = _playLineNames(allEpisodes);
+    final episodes = _episodesForLine(allEpisodes);
     // 新劇預設第 1 集；有觀看記錄時使用續播集數（未看完則停在原進度）。
     final resumeIndex = resumeEpisodeIndex(episodes, watched);
     final resumeEpisodeNumber = episodes.isEmpty
@@ -344,6 +365,7 @@ class _DetailScreenState extends State<DetailScreen> {
                               : Column(
                                   children: [
                                     _seriesSelector(drama),
+                                    _playLineSelector(playLines),
                                     Expanded(
                                       child: EpisodeBrowser(
                                         episodes: episodes,
@@ -379,6 +401,7 @@ class _DetailScreenState extends State<DetailScreen> {
                         )
                       else ...[
                         SliverToBoxAdapter(child: _seriesSelector(drama)),
+                        SliverToBoxAdapter(child: _playLineSelector(playLines)),
                         SliverToBoxAdapter(
                           child: _episodeSummary(
                             episodes,
@@ -479,6 +502,86 @@ class _DetailScreenState extends State<DetailScreen> {
                     ],
                   ),
                 ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<String> _playLineNames(List<Episode> episodes) {
+    final seen = <String>{};
+    return [
+      for (final episode in episodes)
+        if (episode.playLine.trim().isNotEmpty &&
+            seen.add(episode.playLine.trim()))
+          episode.playLine.trim(),
+    ];
+  }
+
+  List<Episode> _episodesForLine(
+    List<Episode> episodes, [
+    String? requestedLine,
+  ]) {
+    final lines = _playLineNames(episodes);
+    if (lines.isEmpty) return episodes;
+    final selected = requestedLine ?? _selectedPlayLine;
+    final activeLine = lines.contains(selected) ? selected : lines.first;
+    return episodes
+        .where((episode) => episode.playLine.trim() == activeLine)
+        .toList();
+  }
+
+  void _selectPlayLine(String? line) {
+    if (line == null || line == _selectedPlayLine || _detail == null) return;
+    final episodes = _episodesForLine(_detail!.episodes, line);
+    setState(() {
+      _selectedPlayLine = line;
+      _episodePage =
+          resumeEpisodeIndex(
+            episodes,
+            widget.store.watched(_detail!.drama.id),
+          ) ~/
+          episodePageSize;
+    });
+  }
+
+  Widget _playLineSelector(List<String> lines) {
+    if (lines.length < 2) return const SizedBox.shrink();
+    final selected = lines.contains(_selectedPlayLine)
+        ? _selectedPlayLine
+        : lines.first;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: InputDecorator(
+            decoration: const InputDecoration(
+              labelText: '播放線路',
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 4,
+              ),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: selected,
+                isExpanded: true,
+                items: [
+                  for (final line in lines)
+                    DropdownMenuItem<String>(
+                      value: line,
+                      child: Text(
+                        uiTraditional(line),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: _loading ? null : _selectPlayLine,
               ),
             ),
           ),

@@ -11,8 +11,8 @@ import (
 )
 
 func TestNativeBuildAuthorization(t *testing.T) {
-	for _, source := range []string{sourceHongguo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, "unknown"} {
-		allowed := source == sourceHongguo || buildAllSources == "true" && source != "unknown"
+	for _, source := range []string{sourceHongguo, sourceHanxiaoquan, "guipian", sourceDuoduo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, "unknown"} {
+		allowed := nativePrimarySource(source) || buildAllSources == "true" && isHuangguoProviderSource(source)
 		for _, action := range []string{"catalog", "cached", "sourceStatus", "sourceJob", "cancelSourceJob", "detail", "followCheck", "cover", "resolve", "enqueueDownloads", "localPlayback"} {
 			input := nativeInput{Action: action, Source: source, Drama: nativeDrama{ID: source + ":123", Source: source}}
 			err := nativeAuthorizeInput(input)
@@ -41,7 +41,7 @@ func TestNativeBuildAuthorization(t *testing.T) {
 func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *testing.T) {
 	manager := downloadTestManager(t)
 	records := []*nativeDownloadRecord{}
-	for index, source := range []string{sourceHongguo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD} {
+	for index, source := range []string{sourceHongguo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, sourceHanxiaoquan, "guipian", sourceDuoduo} {
 		drama := nativeDrama{ID: source + ":123", Source: source, Title: "合成下载"}
 		record := &nativeDownloadRecord{nativeDownloadJob: nativeDownloadJob{
 			ID: nativeDownloadID(drama.ID, 1), Drama: drama, Index: 1,
@@ -59,9 +59,9 @@ func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *tes
 	reopened := newNativeDownloads(manager.engine)
 	t.Cleanup(reopened.close)
 	jobs, err := reopened.snapshot()
-	expected := 1
+	expected := 3
 	if buildAllSources == "true" {
-		expected = 6
+		expected = 8
 	}
 	if err != nil || len(jobs) != expected {
 		t.Fatalf("wrong visible downloads: %v, %v", jobs, err)
@@ -78,10 +78,9 @@ func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *tes
 	if err := reopened.control("", "resumeAll"); err != nil {
 		t.Fatal(err)
 	}
-	workers := 1
-	if buildAllSources == "true" {
-		workers = 2
-	}
+	// The native downloader has two workers in both editions. The standard
+	// edition may schedule any two of its three permitted primary sources.
+	workers := 2
 	seen := map[string]bool{}
 	for index := 0; index < workers; index++ {
 		select {
@@ -91,17 +90,33 @@ func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *tes
 			t.Fatal("allowed download did not start")
 		}
 	}
-	if !seen[sourceHongguo] || buildAllSources == "true" && !seen[sourceHuangdou] {
+	expectedSecondSource := sourceHanxiaoquan
+	if buildAllSources == "true" {
+		expectedSecondSource = sourceHuangdou
+	}
+	if !seen[sourceHongguo] || !seen[expectedSecondSource] {
 		t.Fatalf("wrong sources scheduled: %v", seen)
 	}
 	if buildAllSources != "true" {
 		reopened.mu.Lock()
-		active := len(reopened.active)
-		reopened.mu.Unlock()
-		if active != 1 {
-			t.Fatal("foreign-source task was scheduled")
+		activeIDs := make([]string, 0, len(reopened.active))
+		for id := range reopened.active {
+			activeIDs = append(activeIDs, id)
 		}
-		for _, record := range records[1:] {
+		reopened.mu.Unlock()
+		if len(activeIDs) != 2 {
+			t.Fatalf("expected two permitted downloads to be active, got %d", len(activeIDs))
+		}
+		for _, id := range activeIDs {
+			job := reopened.jobs[id]
+			if job == nil || !nativePrimarySource(job.Drama.Source) {
+				t.Fatalf("restricted foreign-source task was scheduled: %s", id)
+			}
+		}
+		for _, record := range records {
+			if nativePrimarySource(record.Drama.Source) {
+				continue
+			}
 			if err := reopened.control(record.ID, "remove"); !errors.Is(err, errNativeBuildSource) {
 				t.Fatalf("foreign task could be removed: %v", err)
 			}
@@ -125,7 +140,7 @@ func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *tes
 			t.Fatal(err)
 		}
 		var saved []nativeDownloadRecord
-		if err := json.Unmarshal(stored, &saved); err != nil || len(saved) != 6 {
+		if err := json.Unmarshal(stored, &saved); err != nil || len(saved) != len(records) {
 			t.Fatalf("saved hidden downloads lost: %v", err)
 		}
 	}

@@ -272,14 +272,19 @@ func (d *Downloader) fetchRankingPage(ctx context.Context, board rankingBoard, p
 		return parseHuangdouRanking(decoded, page)
 	case sourceHuangguoAI:
 		if page != 1 {
-			return rankingPage{}, errors.New("该榜单只有一页")
+			return rankingPage{}, errors.New("該榜單只有一頁")
 		}
-		pageURL := d.providerBaseURL(sourceHuangguoAI) + "/ranks/" + board.path + "/"
-		body, err := d.fetchProviderText(ctx, pageURL, d.providerBaseURL(sourceHuangguoAI)+"/")
-		if err != nil {
+		var ranking struct {
+			Items []map[string]any `json:"items"`
+		}
+		if err := d.huangguoAIAPI(ctx, "/api/ranks/"+board.path, &ranking); err != nil {
 			return rankingPage{}, err
 		}
-		return parseHuangguoRanking(body, board)
+		result, err := parseHuangguoAIRankingRows(ranking.Items, d.providerBaseURL(sourceHuangguoAI)+"/")
+		if err != nil {
+			return rankingPage{}, fmt.Errorf("%s: %w", board.Name, err)
+		}
+		return result, nil
 	case sourceHuangju, sourceYeguo, sourceDSD:
 		return d.fetchCatalogRankingPage(ctx, board, page)
 	default:

@@ -9,6 +9,7 @@ import 'fixtures.dart';
 
 class CategoryRepository extends FixtureRepository {
   final categoryRequests = <String>[];
+  final sortRequests = <String>[];
   int cachedReads = 0;
   int cachedPreviewReads = 0;
   int categoryLoads = 0;
@@ -72,8 +73,40 @@ class CategoryRepository extends FixtureRepository {
       CatalogCategory.all,
       CatalogCategory('old-short', 'AI成人短劇'),
     ],
+    'duoduo' => const [
+      CatalogCategory.all,
+      CatalogCategory('1', '電影'),
+      CatalogCategory('2', '劇集'),
+      CatalogCategory('3', '動畫'),
+      CatalogCategory('4', '綜藝'),
+    ],
+    'hanxiaoquan' => const [
+      CatalogCategory.all,
+      CatalogCategory('1', '最新韓劇'),
+      CatalogCategory('2', '韓國電影'),
+      CatalogCategory('3', '韓國綜藝'),
+    ],
     _ => const [CatalogCategory.all],
     };
+  }
+
+  @override
+  Future<CatalogPage> catalogWithSort(
+    String source, {
+    int page = 1,
+    String query = '',
+    String category = '',
+    bool force = false,
+    String sort = '',
+  }) async {
+    sortRequests.add('$source|$sort|$page');
+    return catalog(
+      source,
+      page: page,
+      query: query,
+      category: category,
+      force: force,
+    );
   }
 
   @override
@@ -102,6 +135,40 @@ class CategoryRepository extends FixtureRepository {
 }
 
 void main() {
+  test(
+    'Duoduo sort choices are passed to the native catalog requests',
+    () async {
+      final repository = CategoryRepository();
+      final browser = CatalogBrowser(repository);
+      const group = SourceGroup('duoduo', '多多追劇', [SourceSite.duoduo]);
+
+      await browser.loadCategories(group);
+      final anime = browser.categories(group).singleWhere(
+        (category) => category.name == '動漫',
+      );
+      expect(anime.id, 'category:動漫');
+      expect(browser.sourceCategoryId(group, anime.id, 'duoduo'), '3');
+
+      final latest = await browser.load(
+        group,
+        category: anime.id,
+        sort: 'time',
+      );
+      expect(latest.items, hasLength(1));
+      expect(repository.sortRequests, ['duoduo|time|1']);
+      expect(repository.categoryRequests.last, 'duoduo|3|1');
+
+      final score = await browser.load(
+        group,
+        category: anime.id,
+        sort: 'score',
+      );
+      expect(score.items, hasLength(1));
+      expect(repository.sortRequests.last, 'duoduo|score|1');
+      expect(repository.categoryRequests.last, 'duoduo|3|1');
+    },
+  );
+
   test(
     'cached preview paints posters before the full catalog cache finishes reading',
     () async {
@@ -438,5 +505,55 @@ void main() {
       expect(ids, contains('hongguo:ranking-cache-match'));
     },
   );
+
+
+  test('official provider menus do not mix in cached free-form categories', () async {
+    final repository = CategoryRepository();
+    repository.cachedPages['duoduo'] = CatalogPage(const [
+      Drama(
+        id: 'duoduo:1',
+        source: 'duoduo',
+        title: '舊快取資料',
+        category: '影視',
+      ),
+      Drama(
+        id: 'duoduo:2',
+        source: 'duoduo',
+        title: '另一筆舊快取資料',
+        category: '院線',
+      ),
+    ]);
+    repository.cachedPages['hanxiaoquan'] = CatalogPage(const [
+      Drama(
+        id: 'hanxiaoquan:1',
+        source: 'hanxiaoquan',
+        title: '韓劇快取',
+        category: '自訂舊分類',
+      ),
+    ]);
+    final browser = CatalogBrowser(repository);
+    const duoduo = SourceGroup('duoduo', '多多追劇', [SourceSite.duoduo]);
+    const hanxiaoquan = SourceGroup(
+      'hanxiaoquan',
+      '韓小圈',
+      [SourceSite.hanxiaoquan],
+    );
+
+    await browser.loadCategories(duoduo);
+    await browser.loadCategories(hanxiaoquan);
+
+    expect(
+      browser.categories(duoduo).map((category) => category.name),
+      ['全部', '電影', '劇集', '動漫', '綜藝'],
+    );
+    expect(
+      browser.categories(hanxiaoquan).map((category) => category.name),
+      ['全部', '最新韓劇', '韓國電影', '韓國綜藝'],
+    );
+    expect(
+      browser.categories(duoduo).map((category) => category.name),
+      isNot(contains('影視')),
+    );
+  });
 
 }

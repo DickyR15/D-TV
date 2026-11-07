@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -133,9 +134,9 @@ class DramaCover extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           placeholder,
-          if (!imagesDisabled && drama.id.isNotEmpty)
+          if (!imagesDisabled && drama.stableId.isNotEmpty)
             CachedCoverImage(
-              key: ValueKey('${drama.id}\u0000${drama.cover}'),
+              key: ValueKey('${drama.stableId}\u0000${drama.cover}'),
               drama: drama,
               repository: repository,
               placeholder: placeholder,
@@ -212,11 +213,13 @@ class CachedCoverImage extends StatefulWidget {
 /// Coordinates poster downloads so background grids do not compete with
 /// detail-page navigation and playback. Priority covers may still load while
 /// background requests are paused.
+typedef _CoverRequest = ({VoidCallback start, bool priority});
+
 class CoverRequestScheduler {
   // Match the official app's six-way poster loading so the first visible
   // screen is not unnecessarily serialized on slower Android TV hardware.
   static const _limit = 6;
-  static final _waiting = <({VoidCallback start, bool priority})>[];
+  static final Queue<_CoverRequest> _waiting = Queue<_CoverRequest>();
   static var _running = 0;
   static var _backgroundPauseCount = 0;
 
@@ -232,12 +235,35 @@ class CoverRequestScheduler {
   }
 
   static void add(VoidCallback start, {bool priority = false}) {
-    _waiting.add((start: start, priority: priority));
+    _waiting.addLast((start: start, priority: priority));
     _drain();
   }
 
-  static void remove(VoidCallback start) =>
-      _waiting.removeWhere((entry) => entry.start == start);
+  static void remove(VoidCallback start) {
+    if (_waiting.isEmpty) return;
+    final retained = _waiting.where((entry) => entry.start != start).toList();
+    _waiting
+      ..clear()
+      ..addAll(retained);
+  }
+
+  static _CoverRequest? _takeNext() {
+    if (_waiting.isEmpty) return null;
+    if (_backgroundPauseCount == 0) return _waiting.removeFirst();
+
+    // While playback/detail is active, preserve FIFO order among priority
+    // requests but leave ordinary background work queued until playback ends.
+    _CoverRequest? nextPriority;
+    for (final entry in _waiting) {
+      if (entry.priority) {
+        nextPriority = entry;
+        break;
+      }
+    }
+    if (nextPriority == null) return null;
+    _waiting.remove(nextPriority);
+    return nextPriority;
+  }
 
   static Future<String> run(Future<String> Function() request) async {
     try {
@@ -250,22 +276,8 @@ class CoverRequestScheduler {
 
   static void _drain() {
     while (_running < _limit && _waiting.isNotEmpty) {
-      // Newer requests are most likely to belong to the currently visible
-      // viewport after scrolling. Pop from the end in the normal path so
-      // dequeuing a large poster backlog stays O(1), matching the upstream
-      // app's visible-poster prioritization.
-      var index = _waiting.length - 1;
-      if (_backgroundPauseCount > 0) {
-        // While playback/detail is active, only start priority work; scan from
-        // the end to avoid repeatedly shifting the entire waiting list.
-        while (index >= 0 && !_waiting[index].priority) {
-          index--;
-        }
-        if (index < 0) return;
-      }
-      final entry = index == _waiting.length - 1
-          ? _waiting.removeLast()
-          : _waiting.removeAt(index);
+      final entry = _takeNext();
+      if (entry == null) return;
       _running++;
       entry.start();
     }
@@ -281,11 +293,13 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
   bool _retryQueued = false;
   String? _failedPath;
 
+  String get _dramaId => widget.drama.stableId;
+
   @override
   void initState() {
     super.initState();
     _coverRevision = widget.repository.catalogUpdates.coverRevision(
-      widget.drama.id,
+      _dramaId,
     );
     widget.repository.catalogUpdates.addListener(_metadataChanged);
     _request();
@@ -329,13 +343,13 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
       widget.repository.catalogUpdates.addListener(_metadataChanged);
     }
     if (oldWidget.repository != widget.repository ||
-        oldWidget.drama.id != widget.drama.id ||
+        oldWidget.drama.stableId != widget.drama.stableId ||
         oldWidget.drama.cover != widget.drama.cover ||
         oldWidget.drama.source != widget.drama.source) {
       _coverFailed = _retryOnFailure = false;
       _failedPath = null;
       _coverRevision = widget.repository.catalogUpdates.coverRevision(
-        widget.drama.id,
+        _dramaId,
       );
       _request();
     }
@@ -343,7 +357,7 @@ class _CachedCoverImageState extends State<CachedCoverImage> {
 
   void _metadataChanged() {
     final revision = widget.repository.catalogUpdates.coverRevision(
-      widget.drama.id,
+      _dramaId,
     );
     if (revision == _coverRevision) return;
     _coverRevision = revision;
@@ -706,4 +720,185 @@ SliverGridDelegate dramaGridDelegate(BuildContext context, double width) {
 String formatPosition(double seconds) {
   final value = seconds.isFinite ? seconds.toInt().clamp(0, 999999) : 0;
   return '${value ~/ 60}:${(value % 60).toString().padLeft(2, '0')}';
+}
+
+
+/// Bottom-centred D-TV branded message used by the TV exit prompt and settings.
+void showDtvToast(
+  BuildContext context,
+  String message, {
+  Duration duration = const Duration(seconds: 2),
+}) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  final width = ((MediaQuery.maybeOf(context)?.size.width ?? 320).toDouble())
+      .clamp(260.0, 320.0)
+      .toDouble();
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        key: const ValueKey<String>('dtv-brand-toast'),
+        behavior: SnackBarBehavior.floating,
+        width: width,
+        duration: duration,
+        backgroundColor: const Color(0xEE171920),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: Color(0x44FFFFFF)),
+        ),
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const DtvBrandMark(
+              key: ValueKey<String>('dtv-brand-mark'),
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                message,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+}
+
+class DtvBrandMark extends StatelessWidget {
+  const DtvBrandMark({super.key, this.size = 48});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(painter: const _DtvBrandMarkPainter()),
+      );
+}
+
+class _DtvBrandMarkPainter extends CustomPainter {
+  const _DtvBrandMarkPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final side = size.width < size.height ? size.width : size.height;
+    final dx = (size.width - side) / 2;
+    final dy = (size.height - side) / 2;
+    canvas.save();
+    canvas.translate(dx, dy);
+    final rect = Offset.zero & Size(side, side);
+
+    final outer = Path()
+      ..moveTo(side * .18, side * .10)
+      ..lineTo(side * .50, side * .10)
+      ..cubicTo(side * .81, side * .10, side * .92, side * .30,
+          side * .92, side * .50)
+      ..cubicTo(side * .92, side * .70, side * .81, side * .90,
+          side * .50, side * .90)
+      ..lineTo(side * .18, side * .90)
+      ..cubicTo(side * .14, side * .90, side * .12, side * .87,
+          side * .12, side * .82)
+      ..lineTo(side * .12, side * .18)
+      ..cubicTo(side * .12, side * .13, side * .14, side * .10,
+          side * .18, side * .10)
+      ..close();
+
+    canvas.saveLayer(rect, Paint());
+    canvas.drawPath(
+      outer,
+      Paint()
+        ..color = const Color(0xAA127BC9)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, side * .035),
+    );
+    canvas.drawPath(
+      outer,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFFFFF),
+            Color(0xFFE0EAF2),
+            Color(0xFF718CA4),
+            Color(0xFFB5CDE0),
+            Color(0xFFF8FBFF),
+          ],
+          stops: [0.0, .22, .52, .76, 1.0],
+        ).createShader(rect),
+    );
+
+    final inner = Path()
+      ..moveTo(side * .34, side * .27)
+      ..lineTo(side * .49, side * .27)
+      ..cubicTo(side * .65, side * .27, side * .72, side * .38,
+          side * .72, side * .50)
+      ..cubicTo(side * .72, side * .63, side * .65, side * .73,
+          side * .49, side * .73)
+      ..lineTo(side * .34, side * .73)
+      ..close();
+    canvas.drawPath(inner, Paint()..blendMode = BlendMode.clear);
+
+    final bevel = Path()
+      ..moveTo(side * .19, side * .13)
+      ..lineTo(side * .49, side * .13)
+      ..cubicTo(side * .68, side * .13, side * .79, side * .20,
+          side * .85, side * .33);
+    canvas.drawPath(
+      bevel,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = side * .018
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: .68),
+    );
+
+    final play = Path()
+      ..moveTo(side * .42, side * .38)
+      ..lineTo(side * .42, side * .62)
+      ..lineTo(side * .62, side * .50)
+      ..close();
+    canvas.drawPath(
+      play,
+      Paint()
+        ..color = const Color(0xCC087EFF)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, side * .025),
+    );
+    canvas.drawPath(
+      play,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF53F3FF), Color(0xFF00CFFF), Color(0xFF2787FF)],
+        ).createShader(rect),
+    );
+    final playHighlight = Path()
+      ..moveTo(side * .435, side * .395)
+      ..lineTo(side * .435, side * .51)
+      ..lineTo(side * .535, side * .45);
+    canvas.drawPath(
+      playHighlight,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = side * .012
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: .62),
+    );
+    canvas.restore();
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _DtvBrandMarkPainter oldDelegate) => false;
 }

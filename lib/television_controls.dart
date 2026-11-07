@@ -12,6 +12,7 @@ import 'video_enhancement_settings.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
 import 'diary_service.dart';
+import 'contained_slider.dart';
 import 'playback_controls_visibility.dart';
 
 class TelevisionControls extends StatefulWidget {
@@ -28,6 +29,7 @@ class TelevisionControls extends StatefulWidget {
     required this.onEpisodes,
     required this.onSettings,
     required this.onBack,
+    this.onPictureInPicture,
     this.enhancement,
     this.playbackGeneration = 0,
   });
@@ -36,12 +38,13 @@ class TelevisionControls extends StatefulWidget {
   final bool enabled;
   final bool showOnPlaybackReady;
   final VoidCallback onTogglePlayback;
-  final ValueChanged<int> onSeek;
+  final Future<void> Function(Duration) onSeek;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
   final Future<void> Function() onEpisodes;
   final Future<void> Function() onSettings;
   final VoidCallback onBack;
+  final Future<void> Function()? onPictureInPicture;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
 
@@ -55,6 +58,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
   final _play = FocusNode(debugLabel: 'tv-player-play');
   final _episodes = FocusNode(debugLabel: 'tv-player-episodes');
   final _diary = FocusNode(debugLabel: 'tv-player-diary');
+  final _pictureInPicture = FocusNode(debugLabel: 'tv-player-picture-in-picture');
   final _settings = FocusNode(debugLabel: 'tv-player-settings');
   final _progress = FocusNode(debugLabel: 'tv-player-progress');
   final _subscriptions = <StreamSubscription<dynamic>>[];
@@ -63,6 +67,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
   bool _visible = true;
   bool _panelOpen = false;
   bool _seekHint = false;
+  double? _seekPreview;
   final PlaybackControlsVisibility _controlsVisibility = PlaybackControlsVisibility();
 
   @override
@@ -165,8 +170,11 @@ class TelevisionControlsState extends State<TelevisionControls> {
 
   /// Hidden controls: Back exits playback. Visible controls: Back hides them.
   void handleBack() {
-    if (!widget.enabled || _panelOpen) return;
-    final action = playbackControlsBackAction(controlsVisible: _visible);
+    if (_panelOpen) return;
+    final action = playbackControlsBackAction(
+      controlsVisible: _visible,
+      enabled: widget.enabled,
+    );
     if (action == PlaybackControlsBackAction.hideControls) {
       setState(() => _visible = false);
       _hideTimer?.cancel();
@@ -191,11 +199,28 @@ class TelevisionControlsState extends State<TelevisionControls> {
   }
 
   void _seek(int seconds) {
-    widget.onSeek(seconds);
-    setState(() => _seekHint = true);
+    final current =
+        _seekPreview ?? widget.player.state.position.inMilliseconds / 1000;
+    _seekToSeconds(current + seconds);
+  }
+
+  void _seekToSeconds(double seconds) {
+    final duration = widget.player.state.duration.inMilliseconds / 1000;
+    if (duration <= 0) return;
+    final target = seconds.clamp(0.0, duration).toDouble();
+    setState(() {
+      _seekPreview = target;
+      _seekHint = true;
+    });
+    unawaited(widget.onSeek(Duration(milliseconds: (target * 1000).round())));
     _seekTimer?.cancel();
     _seekTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _seekHint = false);
+      if (mounted) {
+        setState(() {
+          _seekHint = false;
+          _seekPreview = null;
+        });
+      }
     });
     _scheduleHide();
   }
@@ -230,19 +255,22 @@ class TelevisionControlsState extends State<TelevisionControls> {
     }
     final key = event.logicalKey;
     _scheduleHide();
-    // The exit action sits in the top-left corner; make it reachable from
-    // any focused playback control with one Up press.
-    if (_visible &&
-        key == LogicalKeyboardKey.arrowUp &&
-        !_exit.hasFocus) {
-      _focus(_exit);
+    // Keep the progress row reachable with a remote: bottom controls ↕
+    // progress ↕ exit. Left/right on the focused progress row performs a
+    // ten-second seek.
+    if (_visible && key == LogicalKeyboardKey.arrowUp) {
+      _focus(_progress.hasFocus ? _exit : _progress);
       return KeyEventResult.handled;
     }
-    if (_visible &&
-        key == LogicalKeyboardKey.arrowDown &&
-        _exit.hasFocus) {
-      _focus(_play);
-      return KeyEventResult.handled;
+    if (_visible && key == LogicalKeyboardKey.arrowDown) {
+      if (_exit.hasFocus) {
+        _focus(_progress);
+        return KeyEventResult.handled;
+      }
+      if (_progress.hasFocus) {
+        _focus(_play);
+        return KeyEventResult.handled;
+      }
     }
     if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
       if (event is KeyDownEvent) {
@@ -301,6 +329,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
       _play,
       _episodes,
       _diary,
+      _pictureInPicture,
       _settings,
       _progress,
     ]) {
@@ -313,7 +342,13 @@ class TelevisionControlsState extends State<TelevisionControls> {
   Widget build(BuildContext context) {
     final state = widget.player.state;
     final duration = state.duration.inMilliseconds / 1000;
-    final position = state.position.inMilliseconds / 1000;
+    final currentPosition = state.position.inMilliseconds / 1000;
+    final position = (_seekPreview ?? currentPosition)
+        .clamp(0.0, duration > 0 ? duration : 1.0)
+        .toDouble();
+    final buffered = (state.buffer.inMilliseconds / 1000)
+        .clamp(0.0, duration > 0 ? duration : 1.0)
+        .toDouble();
     return ExcludeFocus(
       excluding: !widget.enabled,
       child: Focus(
@@ -400,27 +435,36 @@ class TelevisionControlsState extends State<TelevisionControls> {
                         onPressed: widget.onTogglePlayback,
                         child: Column(
                           children: [
-                            Stack(
-                              children: [
-                                LinearProgressIndicator(
-                                  value: duration > 0
-                                      ? (state.buffer.inMilliseconds /
-                                                1000 /
-                                                duration)
-                                            .clamp(0, 1)
-                                      : 0,
-                                  minHeight: 5,
-                                  color: Colors.white38,
-                                  backgroundColor: Colors.white24,
+                            SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 5,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 8,
                                 ),
-                                LinearProgressIndicator(
-                                  value: duration > 0
-                                      ? (position / duration).clamp(0, 1)
-                                      : 0,
-                                  minHeight: 5,
-                                  backgroundColor: Colors.transparent,
+                                overlayShape: const RoundSliderOverlayShape(
+                                  overlayRadius: 18,
                                 ),
-                              ],
+                                secondaryActiveTrackColor: Colors.white38,
+                              ),
+                              child: ContainedSlider(
+                  slider: Slider(
+                                key: const ValueKey('tv-player-seek-slider'),
+                                value: position,
+                                max: duration > 0 ? duration : 1,
+                                secondaryTrackValue: buffered,
+                                semanticFormatterCallback: formatPosition,
+                                onChangeStart: widget.enabled && duration > 0
+                                    ? (_) => _hideTimer?.cancel()
+                                    : null,
+                                onChanged: widget.enabled && duration > 0
+                                    ? (value) {
+                                        setState(() => _seekPreview = value);
+                                      }
+                                    : null,
+                                onChangeEnd: widget.enabled && duration > 0
+                                    ? _seekToSeconds
+                                    : null,
+                              )),
                             ),
                             Row(
                               children: [
@@ -518,6 +562,17 @@ class TelevisionControlsState extends State<TelevisionControls> {
                                   );
                                 },
                               ),
+                            if (widget.onPictureInPicture != null)
+                              RemoteButton(
+                                key: const ValueKey('tv-picture-in-picture'),
+                                label: '畫中畫',
+                                icon: Icons.picture_in_picture_alt_rounded,
+                                focusNode: _pictureInPicture,
+                                onPressed: () => _openPanel(
+                                  widget.onPictureInPicture!,
+                                  _pictureInPicture,
+                                ),
+                              ),
                             RemoteButton(
                               key: const ValueKey('tv-settings'),
                               label: '播放設定',
@@ -595,7 +650,6 @@ class TelevisionPlaybackSetting {
     this.speed,
     this.quality,
     this.autoAdvance,
-    this.danmaku,
     this.preload,
     this.enhancement,
     this.decoder,
@@ -604,7 +658,6 @@ class TelevisionPlaybackSetting {
   final double? speed;
   final int? quality;
   final bool? autoAdvance;
-  final bool? danmaku;
   final bool? preload;
   final VideoEnhancementPreferences? enhancement;
   final TelevisionDecoder? decoder;
@@ -620,10 +673,6 @@ class TelevisionSettingsDialog extends StatelessWidget {
     required this.favorite,
     required this.onFavorite,
     this.autoAdvance = true,
-    this.danmaku = true,
-    this.showDanmaku = false,
-    this.danmakuStatus = '',
-    this.onRetryDanmaku,
     this.preload = true,
     this.preloadStatus = '',
     this.enhancement,
@@ -637,10 +686,6 @@ class TelevisionSettingsDialog extends StatelessWidget {
   final bool favorite;
   final VoidCallback onFavorite;
   final bool autoAdvance;
-  final bool danmaku;
-  final bool showDanmaku;
-  final String danmakuStatus;
-  final VoidCallback? onRetryDanmaku;
   final bool preload;
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
@@ -755,25 +800,6 @@ class TelevisionSettingsDialog extends StatelessWidget {
                 ),
                 onCompare: onCompareEnhancement ?? () {},
               ),
-            if (showDanmaku) ...[
-              RemoteButton(
-                key: const ValueKey('tv-danmaku-enabled'),
-                label: danmaku ? '彈幕：開' : '彈幕：關',
-                onPressed: () => Navigator.pop(
-                  context,
-                  TelevisionPlaybackSetting(danmaku: !danmaku),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(danmakuStatus, style: const TextStyle(fontSize: 14)),
-              if (onRetryDanmaku != null)
-                RemoteButton(
-                  key: const ValueKey('tv-danmaku-retry'),
-                  label: '重試彈幕',
-                  onPressed: onRetryDanmaku,
-                ),
-              const SizedBox(height: 20),
-            ],
             RemoteButton(
               key: const ValueKey('tv-auto-advance'),
               label: autoAdvance ? '自動連播：開' : '自動連播：關',

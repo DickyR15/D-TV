@@ -52,9 +52,31 @@ extension LocalStoreSync on LocalStore {
       document.reconcile(
         previous: const {},
         favorites: _favorites,
-        states: _followStates,
+        states: {
+          for (final entry in _followStates.entries)
+            entry.key: _history[entry.key] == null
+                ? entry.value
+                : entry.value.afterPlayback(_history[entry.key]!),
+        },
         history: _history,
         oldHistory: const {},
+      );
+    } else {
+      final oldHistory = {
+        for (final record in document.records.values)
+          if (record.watch case final watch?) record.id: watch,
+      };
+      document.reconcile(
+        previous: _favorites,
+        favorites: _favorites,
+        states: {
+          for (final entry in _followStates.entries)
+            entry.key: _history[entry.key] == null
+                ? entry.value
+                : entry.value.afterPlayback(_history[entry.key]!),
+        },
+        history: _history,
+        oldHistory: oldHistory,
       );
     }
     _lanDocumentCache = document;
@@ -111,9 +133,12 @@ extension LocalStoreSync on LocalStore {
       jsonDecode(values[_key('followStates')] as String? ?? '{}'),
     );
     for (final drama in favorites.values) {
-      states[drama.id] = rawStates[drama.id] == null
+      final savedState = rawStates[drama.id] == null
           ? FollowState.initial(drama, history[drama.id])
           : FollowState.fromJson(lanMap(rawStates[drama.id]));
+      states[drama.id] = history[drama.id] == null
+          ? savedState
+          : savedState.afterPlayback(history[drama.id]!);
     }
     document.reconcile(
       previous: _favorites,

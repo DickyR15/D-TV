@@ -11,8 +11,6 @@ import (
 )
 
 type nativePlaybackChoice struct {
-	danmakuSeries    string
-	danmakuVideo     string
 	media            []providerMedia
 	index            int
 	qualities        []int
@@ -80,7 +78,6 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 		return nativePlan{}, errors.New("无法初始化播放会话")
 	}
 	plan := nativePlan{
-		DanmakuID: choice.danmakuVideo,
 		URL:       media.URL, Headers: map[string]string{"User-Agent": userAgent, "Referer": media.Referer},
 		Key: hex.EncodeToString(media.CENCKey), Quality: media.Quality, Qualities: choice.qualities,
 		RouteIndex: choice.index, RouteCount: len(choice.media), Session: hex.EncodeToString(tokenBytes),
@@ -217,8 +214,6 @@ func (engine *nativeEngine) nativeRefreshPlaybackAfterFailures(
 		task:             previous.task,
 		requestedQuality: previous.requestedQuality,
 		earlyRefreshUsed: true,
-		danmakuSeries:    previous.danmakuSeries,
-		danmakuVideo:     previous.danmakuVideo,
 		qualities:        append([]int(nil), previous.qualities...),
 	}
 	freshCount := 0
@@ -229,8 +224,6 @@ func (engine *nativeEngine) nativeRefreshPlaybackAfterFailures(
 		freshChoice.task = previous.task
 		freshChoice.requestedQuality = previous.requestedQuality
 		freshChoice.earlyRefreshUsed = true
-		freshChoice.danmakuSeries = previous.danmakuSeries
-		freshChoice.danmakuVideo = previous.danmakuVideo
 		freshChoice.media = nativeExcludeAttemptedPlaybackRoutes(freshChoice.media, attempted)
 		freshChoice.qualities = nativeMergePlaybackQualities(freshChoice.qualities, previous.qualities)
 		freshCount = len(freshChoice.media)
@@ -251,8 +244,6 @@ func (engine *nativeEngine) nativeRefreshPlaybackAfterFailures(
 			task:             previous.task,
 			requestedQuality: previous.requestedQuality,
 			earlyRefreshUsed: true,
-			danmakuSeries:    previous.danmakuSeries,
-			danmakuVideo:     previous.danmakuVideo,
 		}
 		freshChoice = engine.rankNativePlaybackRoutes(ctx, fallbackChoice, previous.task)
 	}
@@ -348,8 +339,6 @@ func nativeMergeRefreshedPlaybackChoice(
 	fresh.task = previous.task
 	fresh.requestedQuality = previous.requestedQuality
 	fresh.earlyRefreshUsed = true
-	fresh.danmakuSeries = previous.danmakuSeries
-	fresh.danmakuVideo = previous.danmakuVideo
 	fresh.index = 0
 	fresh.streamSession = ""
 	fresh.created = time.Time{}

@@ -32,12 +32,34 @@ String? playbackHwdecFor({
   return null;
 }
 
+/// Whether the current Android device exposes the system Picture-in-Picture API.
+bool supportsPictureInPicture({
+  required bool android,
+  required bool systemSupported,
+  bool television = false,
+}) => android && !television && systemSupported;
+
+/// PiP auto-entry is only enabled while a supported Android player is running.
+bool shouldAutoEnterPictureInPicture({
+  required bool android,
+  required bool systemSupported,
+  required bool playing,
+  required bool enabled,
+  bool television = false,
+}) =>
+    supportsPictureInPicture(
+      android: android,
+      systemSupported: systemSupported,
+      television: television,
+    ) &&
+    playing &&
+    enabled;
+
 class PlaybackPreferences {
   const PlaybackPreferences({
     this.speed = 1,
     this.quality = 0,
     this.autoAdvance = true,
-    this.danmaku = false,
     this.preload,
     this.enhancement = const VideoEnhancementPreferences(),
     this.portraitBlurBackground = false,
@@ -48,7 +70,6 @@ class PlaybackPreferences {
   final double speed;
   final int quality;
   final bool autoAdvance;
-  final bool danmaku;
   final bool? preload;
   final VideoEnhancementPreferences enhancement;
   final bool portraitBlurBackground;
@@ -63,7 +84,6 @@ class PlaybackPreferences {
     double? speed,
     int? quality,
     bool? autoAdvance,
-    bool? danmaku,
     bool? preload,
     VideoEnhancementPreferences? enhancement,
     bool? portraitBlurBackground,
@@ -73,7 +93,6 @@ class PlaybackPreferences {
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
     autoAdvance: autoAdvance ?? this.autoAdvance,
-    danmaku: danmaku ?? this.danmaku,
     preload: preload ?? this.preload,
     enhancement: enhancement ?? this.enhancement,
     portraitBlurBackground: portraitBlurBackground ?? this.portraitBlurBackground,
@@ -85,7 +104,6 @@ class PlaybackPreferences {
     'speed': speed,
     'quality': quality,
     'autoAdvance': autoAdvance,
-    'danmaku': danmaku,
     if (preload != null) 'preopenNextEpisode': preload,
     'enhancement': enhancement.toJson(),
     'portraitBlurBackground': portraitBlurBackground,
@@ -97,7 +115,6 @@ class PlaybackPreferences {
     final speed = (value['speed'] as num? ?? 1).toDouble();
     final quality = value['quality'] as int? ?? 0;
     final autoAdvance = value['autoAdvance'] as bool? ?? true;
-    final danmaku = value['danmaku'] as bool? ?? false;
     // The old 'preload' value was forced on by 1.0.0 playback code.
     // Read only the new key so older installations receive device-aware defaults.
     final preload = value['preopenNextEpisode'] as bool?;
@@ -113,7 +130,6 @@ class PlaybackPreferences {
       speed: speed,
       quality: quality,
       autoAdvance: autoAdvance,
-      danmaku: danmaku,
       preload: preload,
       enhancement: VideoEnhancementPreferences.fromJson(value['enhancement']),
       portraitBlurBackground: value['portraitBlurBackground'] as bool? ?? false,

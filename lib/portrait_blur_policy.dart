@@ -1,3 +1,14 @@
+/// Select ExoPlayer only for Android TV when the native player has not
+/// been replaced by a test/custom player. Phones and desktop keep their
+/// existing playback engines.
+bool shouldUseExoPlayerForAndroidPlayback({
+  required bool android,
+  required bool television,
+  required bool exoConfigured,
+  required bool customPlayer,
+}) =>
+    android && television && exoConfigured && !customPlayer;
+
 bool shouldUseMpvEmbedForPlayback({
   required bool android,
   required bool television,

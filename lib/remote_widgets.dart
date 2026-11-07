@@ -6,27 +6,95 @@ import 'package:flutter/services.dart';
 import 'app_layout.dart';
 import 'ui_localization.dart';
 
-class RemoteTextInput extends StatelessWidget {
+class RemoteTextInput extends StatefulWidget {
   const RemoteTextInput({super.key, required this.child});
   final Widget child;
 
-  KeyEventResult _key(FocusNode node, KeyEvent event) {
+  @override
+  State<RemoteTextInput> createState() => _RemoteTextInputState();
+}
+
+class _RemoteTextInputState extends State<RemoteTextInput> {
+  final FocusNode _scopeFocus = FocusNode(
+    debugLabel: 'remote-text-input-scope',
+  );
+  FocusNode? _lastEditableFocus;
+
+  EditableTextState? _editableState(FocusNode? focus) =>
+      focus?.context?.findAncestorStateOfType<EditableTextState>();
+
+  bool _belongsToScope(FocusNode? focus) {
+    var current = focus;
+    while (current != null) {
+      if (identical(current, _scopeFocus)) return true;
+      current = current.parent;
+    }
+    return false;
+  }
+
+  void _rememberEditableFocus() {
     final focus = FocusManager.instance.primaryFocus;
-    final editable = focus?.context
-        ?.findAncestorStateOfType<EditableTextState>();
-    if (editable == null ||
-        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+    if (_editableState(focus) != null) _lastEditableFocus = focus;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addListener(_rememberEditableFocus);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeListener(_rememberEditableFocus);
+    _scopeFocus.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _key(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+
+    final primary = FocusManager.instance.primaryFocus;
+    final editable = _editableState(primary);
+    if (editable != null) _lastEditableFocus = primary;
+
+    // Do not steal D-pad navigation from buttons/checkboxes in the editor.
+    // When Android closes its IME and leaves focus on this scope, restore the
+    // last text field so the user can still move to another field or reopen it.
+    if (primary != null &&
+        !_belongsToScope(primary)) {
+      return KeyEventResult.ignored;
+    }
+    if (primary != null &&
+        primary != _scopeFocus &&
+        editable == null) {
+      return KeyEventResult.ignored;
+    }
+
+    final focus = editable != null ? primary : _lastEditableFocus;
+    if (focus == null) return KeyEventResult.ignored;
+
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowUp) {
-      focus!.focusInDirection(TraversalDirection.up);
-    } else if (key == LogicalKeyboardKey.arrowDown) {
-      focus!.focusInDirection(TraversalDirection.down);
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown) {
+      final direction = key == LogicalKeyboardKey.arrowUp
+          ? TraversalDirection.up
+          : TraversalDirection.down;
+      if (focus.hasFocus) {
+        focus.focusInDirection(direction);
+      } else {
+        focus.requestFocus();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && focus.context != null) {
+            focus.focusInDirection(direction);
+          }
+        });
+      }
     } else if (key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.goBack) {
       if (event is KeyDownEvent &&
-          !focus!.focusInDirection(TraversalDirection.down) &&
+          !focus.focusInDirection(TraversalDirection.down) &&
           !focus.focusInDirection(TraversalDirection.up)) {
         return KeyEventResult.ignored;
       }
@@ -36,7 +104,14 @@ class RemoteTextInput extends StatelessWidget {
           LogicalKeyboardKey.enter,
           LogicalKeyboardKey.numpadEnter,
         ].contains(key)) {
-      editable.requestKeyboard();
+      if (editable != null) {
+        editable.requestKeyboard();
+      } else {
+        focus.requestFocus();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _editableState(focus)?.requestKeyboard();
+        });
+      }
     } else {
       return KeyEventResult.ignored;
     }
@@ -46,12 +121,13 @@ class RemoteTextInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppLayout.isTelevision(context)
       ? Focus(
+          focusNode: _scopeFocus,
           canRequestFocus: false,
           skipTraversal: true,
           onKeyEvent: _key,
-          child: child,
+          child: widget.child,
         )
-      : child;
+      : widget.child;
 }
 
 /// Prevents the key that opened a TV long-press menu from activating

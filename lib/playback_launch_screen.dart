@@ -19,15 +19,23 @@ Future<void> openPlaybackDirectly(
   if (!context.mounted) return;
   // Acknowledge the tap immediately. The launch page resolves metadata and
   // replaces itself with the player, instead of waiting on the catalog page.
-  await Navigator.of(context).push<void>(
-    MaterialPageRoute<void>(
-      builder: (_) => PlaybackLaunchScreen(
-        drama: drama,
-        repository: repository,
-        store: store,
+  final completion = Completer<void>();
+  unawaited(
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => PlaybackLaunchScreen(
+          drama: drama,
+          repository: repository,
+          store: store,
+          completion: completion,
+        ),
       ),
     ),
   );
+  // The launch route is replaced when the player opens. Do not treat that
+  // replacement as the end of playback; completion is signalled after the
+  // player itself closes (or the launch screen is dismissed).
+  await completion.future;
 }
 
 class PlaybackLaunchScreen extends StatefulWidget {
@@ -36,11 +44,13 @@ class PlaybackLaunchScreen extends StatefulWidget {
     required this.drama,
     required this.repository,
     required this.store,
+    required this.completion,
   });
 
   final Drama drama;
   final AppRepository repository;
   final LocalStore store;
+  final Completer<void> completion;
 
   @override
   State<PlaybackLaunchScreen> createState() => _PlaybackLaunchScreenState();
@@ -52,6 +62,7 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
   String? _error;
   bool _loading = true;
   bool _showLoadingIndicator = false;
+  bool _transferringToPlayer = false;
   Timer? _loadingTimer;
 
   @override
@@ -80,6 +91,11 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
   void dispose() {
     _generation++;
     _loadingTimer?.cancel();
+    // Back/cancel while resolving metadata completes the caller immediately.
+    // During pushReplacement the caller remains pending until Player returns.
+    if (!_transferringToPlayer && !widget.completion.isCompleted) {
+      widget.completion.complete();
+    }
     super.dispose();
   }
 
@@ -167,17 +183,24 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
         _loading = false;
         _showLoadingIndicator = false;
       });
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => PlayerScreen(
-            detail: merged,
-            initialIndex: index,
-            initialPosition: position,
-            repository: widget.repository,
-            store: widget.store,
+      _transferringToPlayer = true;
+      try {
+        await Navigator.of(context).pushReplacement<void, void>(
+          MaterialPageRoute<void>(
+            builder: (_) => PlayerScreen(
+              detail: merged,
+              initialIndex: index,
+              initialPosition: position,
+              repository: widget.repository,
+              store: widget.store,
+            ),
           ),
-        ),
-      );
+        );
+      } finally {
+        if (!widget.completion.isCompleted) {
+          widget.completion.complete();
+        }
+      }
     } catch (error) {
       if (!mounted || generation != _generation) return;
       _loadingTimer?.cancel();

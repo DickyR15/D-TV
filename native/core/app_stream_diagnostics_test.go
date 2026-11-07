@@ -20,6 +20,12 @@ import (
 	"time"
 )
 
+type nativeStreamRoundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (roundTrip nativeStreamRoundTripperFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
 func streamDiagnosticEvents(t *testing.T, stream *nativeStreamServer) ([]diagnosticEvent, string) {
 	t.Helper()
 	data, err := os.ReadFile(stream.downloader.diagnostics.path)
@@ -143,7 +149,7 @@ func TestNativeStreamDoesNotClearHostCooldownAtHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := stream.nativeRequest(request)
+	response, err := stream.nativeRequest(request, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,14 +240,33 @@ func TestNativeStreamDiagnosticsHLSAssetsAndPrivacy(t *testing.T) {
 			t.Errorf("missing diagnostic %s", marker)
 		}
 	}
+	// The HTTP client can observe the final response body before the
+	// server handler's deferred local_response diagnostic has finished
+	// appending its log line. Wait briefly for that synchronous write instead
+	// of making this test depend on runner scheduling (notably Windows).
 	count := 0
-	for _, event := range events {
-		if event.Event == "stream.local_response" && event.HTTPStatus == 200 {
-			count++
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		count = 0
+		for _, event := range events {
+			if event.Event == "stream.local_response" && event.HTTPStatus == 200 {
+				count++
+			}
 		}
+		if count >= 6 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+		events, text = streamDiagnosticEvents(t, stream)
 	}
 	if count != 6 {
-		t.Fatalf("logged %d completed responses, want 6", count)
+		var summary []string
+		for _, event := range events {
+			if event.Event == "stream.local_response" {
+				summary = append(summary, fmt.Sprintf("asset=%s status=%d method=%s", event.Message, event.HTTPStatus, event.Client))
+			}
+		}
+		t.Fatalf("logged %d completed responses, want 6; local response events: %s", count, strings.Join(summary, " | "))
 	}
 }
 
@@ -333,7 +358,16 @@ func TestNativeStreamMP4ResponseDoesNotWaitForLargePeek(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer stream.server.Close()
+	defer func() {
+		// Closing the local response cancels the in-flight upstream read. Wait
+		// for the handler to finish writing its final diagnostics before TempDir
+		// cleanup removes the logs directory.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := stream.server.Shutdown(ctx); err != nil {
+			_ = stream.server.Close()
+		}
+	}()
 	address, token := stream.nativeOpen(providerMedia{URL: upstream.URL + "/video.mp4"})
 	defer stream.nativeRelease(token)
 
@@ -425,6 +459,7 @@ func TestNativeStreamResumesMP4AfterIdleTimeout(t *testing.T) {
 		response,
 		nativeStreamIdleTimeoutReader{},
 		nativeStreamDiagnostic{request: 1, session: "idle-resume", asset: "media", method: http.MethodGet, started: time.Now()},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("idle-timeout resume failed after %d bytes: %v", written, err)
@@ -440,6 +475,89 @@ func TestNativeStreamResumesMP4AfterIdleTimeout(t *testing.T) {
 		if !strings.Contains(diagnosticText, marker) {
 			t.Errorf("missing diagnostic event %q", marker)
 		}
+	}
+}
+
+func TestNativeStreamResumePreservesStandardHTTPTransportAndHeaders(t *testing.T) {
+	payload := []byte("abcdef")
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := newNativeStreamServer(engine.downloader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.server.Close()
+
+	var standardCalls, streamCalls atomic.Int32
+	engine.downloader.client = &http.Client{Transport: nativeStreamRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		standardCalls.Add(1)
+		if got := request.Header.Get("User-Agent"); got != userAgent {
+			return nil, fmt.Errorf("resume User-Agent = %q, want the configured User-Agent", got)
+		}
+		if got := request.Header.Get("Referer"); got != "https://cdn.example.test/" {
+			return nil, fmt.Errorf("resume Referer = %q, want the configured Referer", got)
+		}
+		if got := request.Header.Get("Range"); got != "bytes=0-5" {
+			return nil, fmt.Errorf("resume Range = %q, want bytes=0-5", got)
+		}
+		header := make(http.Header)
+		header.Set("Content-Type", "video/mp4")
+		header.Set("Accept-Ranges", "bytes")
+		header.Set("Content-Range", "bytes 0-5/6")
+		header.Set("Content-Length", "6")
+		return &http.Response{
+			StatusCode:    http.StatusPartialContent,
+			Header:        header,
+			Body:          io.NopCloser(bytes.NewReader(payload)),
+			ContentLength: int64(len(payload)),
+			Request:       request,
+		}, nil
+	})}
+	engine.downloader.streamClient = &http.Client{Transport: nativeStreamRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		streamCalls.Add(1)
+		return nil, errors.New("standard HTTP resume unexpectedly used native stream transport")
+	})}
+
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://cdn.example.test/video.mp4", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("User-Agent", userAgent)
+	request.Header.Set("Referer", "https://cdn.example.test/")
+	header := make(http.Header)
+	header.Set("Content-Type", "video/mp4")
+	header.Set("Accept-Ranges", "bytes")
+	header.Set("Content-Range", "bytes 0-5/6")
+	header.Set("Content-Length", "6")
+	response := &http.Response{
+		StatusCode:    http.StatusPartialContent,
+		Header:        header,
+		ContentLength: int64(len(payload)),
+		Body:          io.NopCloser(strings.NewReader("")),
+		Request:       request,
+	}
+
+	var destination bytes.Buffer
+	written, err := stream.nativeCopyMediaWithResume(
+		context.Background(),
+		&destination,
+		request,
+		request.URL.String(),
+		response,
+		nativeStreamIdleTimeoutReader{},
+		nativeStreamDiagnostic{request: 88, session: "standard-http-resume", asset: "media", method: http.MethodGet, started: time.Now()},
+		true,
+	)
+	if err != nil {
+		t.Fatalf("standard HTTP resume failed after %d bytes: %v", written, err)
+	}
+	if !bytes.Equal(destination.Bytes(), payload) {
+		t.Fatalf("resumed body = %q, want %q", destination.Bytes(), payload)
+	}
+	if standardCalls.Load() != 1 || streamCalls.Load() != 0 {
+		t.Fatalf("resume transport calls: standard=%d native-stream=%d, want 1/0", standardCalls.Load(), streamCalls.Load())
 	}
 }
 
@@ -740,6 +858,7 @@ func TestNativeStreamLogsIncompleteTransferByteRange(t *testing.T) {
 		response,
 		nativeStreamIdleTimeoutReader{},
 		nativeStreamDiagnostic{request: 77, session: "transfer-test", asset: "media", method: http.MethodGet, started: time.Now()},
+		false,
 	)
 	if !errors.Is(err, errNativeStreamIdleTimeout) || written != 0 {
 		t.Fatalf("written=%d error=%v, want zero bytes and idle timeout", written, err)
@@ -763,3 +882,107 @@ func TestNativeStreamLogsIncompleteTransferByteRange(t *testing.T) {
 		t.Fatal("transfer diagnostics leaked a signed media URL")
 	}
 }
+
+func TestDuoduoDirectHLSPlaybackUsesDedicatedStreamTransportAndRewritesSegments(t *testing.T) {
+	const referer = "https://duoduozhuiju.com/"
+	var upstreamRequests atomic.Int32
+	origin := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		upstreamRequests.Add(1)
+		if got := request.Header.Get("Referer"); got != referer {
+			http.Error(writer, "unexpected Referer: "+got, http.StatusForbidden)
+			return
+		}
+		switch request.URL.Path {
+		case "/movie/index.m3u8":
+			writer.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = io.WriteString(writer, "#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:4.0,\nsegment.ts\n#EXT-X-ENDLIST\n")
+		case "/movie/segment.ts":
+			writer.Header().Set("Content-Type", "video/mp2t")
+			_, _ = writer.Write([]byte("duoduo-segment-bytes"))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer origin.Close()
+
+	engine, err := newNativeEngine(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Duoduo must use the dedicated playback transport. Make the general
+	// client fail so both the playlist and child segment prove that this
+	// provider has not opted out of HTTP/1.1 + CDN/TLS fallback behavior.
+	engine.downloader.client = &http.Client{
+		Transport: nativeStreamRoundTripperFunc(func(request *http.Request) (*http.Response, error) {
+			return nil, errors.New("Duoduo unexpectedly used the general HTTP client")
+		}),
+	}
+	engine.downloader.streamClient = origin.Client()
+	media, err := engine.downloader.resolveDuoduoMedia(context.Background(), Task{
+		DramaID: "duoduo:78296",
+		Chapter: Chapter{
+			ID: providerChapterID(sourceDuoduo, "78296", "1-1"),
+			Source: sourceDuoduo,
+			Title: "第1集",
+			VideoURL: origin.URL + "/movie/index.m3u8",
+			Referer: referer,
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolve Duoduo direct media: %v", err)
+	}
+	if media.StandardHTTP || media.URL != origin.URL+"/movie/index.m3u8" {
+		t.Fatalf("Duoduo direct media did not retain its dedicated stream transport URL: %+v", media)
+	}
+
+	stream, err := newNativeStreamServer(engine.downloader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.server.Close()
+	localURL, token := stream.nativeOpen(media)
+	defer stream.nativeRelease(token)
+
+	playlistResponse, err := http.Get(localURL)
+	if err != nil {
+		t.Fatalf("open proxied HLS playlist: %v", err)
+	}
+	playlist, readErr := io.ReadAll(playlistResponse.Body)
+	_ = playlistResponse.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read proxied HLS playlist: %v", readErr)
+	}
+	if playlistResponse.StatusCode != http.StatusOK ||
+		!strings.Contains(playlistResponse.Header.Get("Content-Type"), "mpegurl") {
+		t.Fatalf("proxied playlist response = HTTP %d, type=%q, body=%q",
+			playlistResponse.StatusCode, playlistResponse.Header.Get("Content-Type"), playlist)
+	}
+	var segmentURL string
+	for _, line := range strings.Split(string(playlist), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") {
+			segmentURL = line
+			break
+		}
+	}
+	if segmentURL == "" || !strings.HasPrefix(segmentURL, stream.address+"/") {
+		t.Fatalf("HLS segment was not rewritten to the local proxy: %q", playlist)
+	}
+
+	segmentResponse, err := http.Get(segmentURL)
+	if err != nil {
+		t.Fatalf("open proxied HLS segment: %v", err)
+	}
+	segment, readErr := io.ReadAll(segmentResponse.Body)
+	_ = segmentResponse.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read proxied HLS segment: %v", readErr)
+	}
+	if segmentResponse.StatusCode != http.StatusOK || string(segment) != "duoduo-segment-bytes" {
+		t.Fatalf("proxied segment response = HTTP %d, body=%q", segmentResponse.StatusCode, segment)
+	}
+	if upstreamRequests.Load() != 2 {
+		t.Fatalf("upstream requests = %d, want playlist and one segment", upstreamRequests.Load())
+	}
+}
+

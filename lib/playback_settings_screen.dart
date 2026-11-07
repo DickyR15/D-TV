@@ -7,6 +7,7 @@ import 'app_layout.dart';
 import 'local_store.dart';
 import 'playback_preferences.dart';
 import 'portrait_blur_policy.dart';
+import 'widgets.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
@@ -39,11 +40,13 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       supportsPortraitBlurBackground(
         android: Platform.isAndroid,
         windows: Platform.isWindows,
-        androidMpvConfigured: _androidPlayerEngine != 'exo',
+        androidMpvConfigured:
+            _androidPlayerEngine != 'exo' || !AppLayout.isTelevisionDevice(context),
       );
   late bool _preloadEnabled;
   late bool _autoAdvance;
   late bool _autoPictureInPicture;
+  bool _pictureInPictureSupported = false;
   bool _playbackValuesInitialized = false;
   bool? _compatibleRendering;
   final FocusNode _speedFocus = FocusNode(debugLabel: 'playback-default-speed');
@@ -52,6 +55,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   void initState() {
     super.initState();
     _loadCompatibleRendering();
+    _loadPictureInPictureSupport();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && AppLayout.isTelevision(context)) {
         _speedFocus.requestFocus();
@@ -86,6 +90,20 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
     super.dispose();
   }
 
+  Future<void> _loadPictureInPictureSupport() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final status = await AppDevice.channel.invokeMapMethod<String, dynamic>(
+        'pictureInPictureStatus',
+      );
+      if (mounted) {
+        setState(() => _pictureInPictureSupported = status?['supported'] == true);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _pictureInPictureSupported = false);
+    }
+  }
+
   Future<void> _loadCompatibleRendering() async {
     if (!Platform.isAndroid) {
       if (mounted) setState(() => _compatibleRendering = false);
@@ -95,7 +113,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
     if (mounted) setState(() => _compatibleRendering = value);
   }
 
-  Future<void> _persistPreferences() async {
+  Future<void> _persistPreferences({VoidCallback? onSaved}) async {
     try {
       final current = widget.store.playbackPreferences;
       await widget.store.setPlaybackPreferences(
@@ -109,6 +127,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           autoPictureInPicture: _autoPictureInPicture,
         ),
       );
+      if (mounted) onSaved?.call();
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -130,7 +149,16 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateDecoder(TelevisionDecoder value) {
     setState(() => _decoder = value);
-    unawaited(_persistPreferences());
+    unawaited(
+      _persistPreferences(
+        onSaved: () {
+          showDtvToast(
+            context,
+            '解碼方式已儲存；重新進入播放頁面即可套用，無須重啟 D TV。',
+          );
+        },
+      ),
+    );
   }
 
   void _updatePortraitBlurBackground(bool value) {
@@ -156,23 +184,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   Future<void> _setCompatibleRendering(bool enabled) async {
     final accepted = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(enabled ? '開啟相容渲染模式？' : '關閉相容渲染模式？'),
-        content: const Text(
-          '需要重新啟動 App 才會生效，播放會中斷。Android TV 預設使用 Skia 相容渲染以避免部分電視盒黑屏；手機預設使用 Impeller。你也可以手動切換後重啟測試。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            autofocus: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('立即重啟'),
-          ),
-        ],
-      ),
+      builder: (_) => CompatibleRenderingRestartDialog(enabled: enabled),
     );
     if (accepted != true || !mounted) return;
     final saved = await AppDevice.setCompatibleRendering(enabled);
@@ -250,29 +262,33 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               initialValue: _decoder,
               decoration: const InputDecoration(
                 labelText: '解碼方式',
-                helperText: '有聲音沒畫面或卡頓時，可切換相容方式；下次開啟影片時生效',
+                helperText: '自動依裝置選擇解碼方式；也可手動指定硬體解碼或軟體解碼。變更後重新進入播放頁面生效，無須重啟 D TV。',
               ),
               items: const [
                 DropdownMenuItem(
                   value: TelevisionDecoder.automatic,
-                  child: Text('預設'),
+                  child: Text('自動'),
                 ),
                 DropdownMenuItem(
                   value: TelevisionDecoder.hardware,
-                  child: Text('硬解（相容）'),
+                  child: Text('硬體解碼'),
                 ),
                 DropdownMenuItem(
                   value: TelevisionDecoder.software,
-                  child: Text('軟解（相容）'),
+                  child: Text('軟體解碼'),
                 ),
               ],
-              onChanged: Platform.isAndroid && _androidPlayerEngine == 'exo'
+              onChanged: Platform.isAndroid &&
+                      AppLayout.isTelevisionDevice(context) &&
+                      _androidPlayerEngine == 'exo'
                   ? null
                   : (value) {
                       if (value != null) _updateDecoder(value);
                     },
             ),
-            if (Platform.isAndroid && _androidPlayerEngine == 'exo')
+            if (Platform.isAndroid &&
+                AppLayout.isTelevisionDevice(context) &&
+                _androidPlayerEngine == 'exo')
               const Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text('目前使用 ExoPlayer，解碼方式由 Android 管理，無法手動切換。'),
@@ -308,12 +324,16 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               value: _autoAdvance,
               onChanged: _updateAutoAdvance,
             ),
-            if (Platform.isAndroid && !AppLayout.isTelevision(context))
+            if (supportsPictureInPicture(
+              android: Platform.isAndroid,
+              systemSupported: _pictureInPictureSupported,
+              television: AppLayout.isTelevisionDevice(context),
+            ))
               SwitchListTile(
                 key: const ValueKey('playback-auto-picture-in-picture'),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('離開應用時自動小窗'),
-                subtitle: const Text('播放中返回桌面或切換其他應用時進入系統畫中畫'),
+                title: const Text('離開應用程式時自動進入子母畫面'),
+                subtitle: const Text('播放中離開應用程式或切換其他應用時進入系統子母畫面；也可在播放控制列手動開啟'),
                 value: _autoPictureInPicture,
                 onChanged: _updateAutoPictureInPicture,
               ),
@@ -346,4 +366,75 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       ),
     ),
   );
+}
+
+
+class CompatibleRenderingRestartDialog extends StatefulWidget {
+  const CompatibleRenderingRestartDialog({super.key, required this.enabled});
+
+  final bool enabled;
+
+  @override
+  State<CompatibleRenderingRestartDialog> createState() =>
+      _CompatibleRenderingRestartDialogState();
+}
+
+class _CompatibleRenderingRestartDialogState
+    extends State<CompatibleRenderingRestartDialog> {
+  final FocusNode _cancelFocus =
+      FocusNode(debugLabel: 'compatible-rendering-cancel');
+  final FocusNode _restartFocus =
+      FocusNode(debugLabel: 'compatible-rendering-restart');
+  bool _initialFocusRequested = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialFocusRequested) return;
+    _initialFocusRequested = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _cancelFocus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _cancelFocus.dispose();
+    _restartFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: AlertDialog(
+          title: Text(
+            widget.enabled ? '開啟相容渲染模式？' : '關閉相容渲染模式？',
+          ),
+          content: const Text(
+            '需要重新啟動 App 才會生效，播放會中斷。Android TV 預設使用 Skia 相容渲染以避免部分電視盒黑屏；手機預設使用 Impeller。你也可以手動切換後重啟測試。',
+          ),
+          actions: [
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(1),
+              child: TextButton(
+                key: const ValueKey('compatible-rendering-cancel'),
+                focusNode: _cancelFocus,
+                autofocus: true,
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+            ),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(2),
+              child: FilledButton(
+                key: const ValueKey('compatible-rendering-restart'),
+                focusNode: _restartFocus,
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('立即重啟'),
+              ),
+            ),
+          ],
+        ),
+      );
 }

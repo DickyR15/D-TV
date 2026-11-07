@@ -245,7 +245,15 @@ class CatalogBrowser {
     for (final source in group.sources) {
       for (final category in _menus[source.id] ?? const <CatalogCategory>[]) {
         if (category.id.isEmpty) continue;
-        final name = categoryName(category.name);
+        final rawName = category.name.trim().replaceAll(RegExp(r'\s+'), '');
+        final name =
+            source.id == 'duoduo' &&
+                (category.id == '3' ||
+                    rawName == '动画' ||
+                    rawName == '動漫' ||
+                    rawName == '动画')
+            ? '動漫'
+            : categoryName(category.name);
         final choice = choices.putIfAbsent(
           name,
           () => _CatalogChoice(CatalogCategory('category:$name', name)),
@@ -255,7 +263,10 @@ class CatalogBrowser {
     }
     final names = {
       for (final source in group.sources)
-        ...?_localCategoryNames[source.id],
+        if ((source.id != 'duoduo' && source.id != 'hanxiaoquan') ||
+            !(_menus[source.id] ?? const <CatalogCategory>[])
+                .any((category) => category.id.isNotEmpty))
+          ...?_localCategoryNames[source.id],
     }.toList()..sort();
     for (final name in names) {
       choices.putIfAbsent(
@@ -277,6 +288,16 @@ class CatalogBrowser {
     group,
   ).where((choice) => choice.category.id == category).firstOrNull;
 
+  /// Returns the source's native category ID behind a display-only category
+  /// chip ID such as "category:動漫". The upstream ID is required for sorting
+  /// and filtering requests.
+  String sourceCategoryId(
+    SourceGroup group,
+    String displayCategoryId,
+    String sourceId,
+  ) =>
+      _choice(group, displayCategoryId)?.requests[sourceId] ?? '';
+
   static String _searchText(String value) =>
       value.toLowerCase().replaceAll(RegExp(r'\s+'), '');
 
@@ -291,6 +312,7 @@ class CatalogBrowser {
     SourceGroup group, {
     String category = '',
     String query = '',
+    String sort = '',
     bool more = false,
     bool force = false,
     bool useCache = false,
@@ -314,7 +336,7 @@ class CatalogBrowser {
         : {for (final source in group.sources) source.id: ''};
     final key =
         '${group.sources.map((s) => s.id).join(',')}|'
-        '${choice?.category.local == false ? category : ''}|$query';
+        '${choice?.category.local == false ? category : ''}|$query|$sort';
     final session = _sessions.putIfAbsent(key, _CatalogSession.new);
     final generation = ++session.generation;
     final failures = <String, String>{};
@@ -324,6 +346,12 @@ class CatalogBrowser {
     }
 
     final queryText = _searchText(query);
+    final bypassDefaultDuoduoCache =
+        queryText.isEmpty &&
+        sort.isNotEmpty &&
+        sort != 'hits' &&
+        group.sources.length == 1 &&
+        group.sources.single.id == 'duoduo';
 
     CatalogPage snapshot() {
       final rows = sourceOrder
@@ -440,7 +468,11 @@ class CatalogBrowser {
       if (hasFreshEntries) return memorySnapshot;
     }
 
-    if ((useCache || cacheOnly) && !force && !more && query.isEmpty) {
+    if ((useCache || cacheOnly) &&
+        !force &&
+        !more &&
+        query.isEmpty &&
+        !bypassDefaultDuoduoCache) {
       if (useCache && !cacheOnly) {
         await _each(sourceOrder, (source) async {
           try {
@@ -523,13 +555,22 @@ class CatalogBrowser {
       if (useCache && !force && !more && entry.fresh) return;
       final page = more ? entry.nextPage : 1;
       try {
-        final result = await repository.catalog(
-          source,
-          category: requests[source]!,
-          query: query,
-          page: page,
-          force: force,
-        );
+        final result = source == 'duoduo' && sort.isNotEmpty
+            ? await repository.catalogWithSort(
+                source,
+                category: requests[source]!,
+                query: query,
+                page: page,
+                force: force,
+                sort: sort,
+              )
+            : await repository.catalog(
+                source,
+                category: requests[source]!,
+                query: query,
+                page: page,
+                force: force,
+              );
         if (generation != session.generation) return;
         final items = <String, Drama>{
           if (more)
