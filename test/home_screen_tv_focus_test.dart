@@ -395,9 +395,9 @@ void main() {
       // the same physical Back as a GoBack keyboard event.
       await tester.binding.handlePopRoute();
       await tester.pump();
-      expect(appNavigationObserver.hasChildRoute, isFalse);
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(SimpleDialog), findsNothing);
+      expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
