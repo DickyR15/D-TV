@@ -50,10 +50,6 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           navigatorObservers: [appNavigationObserver],
-          builder: (context, child) => AppRouteBackHandler(
-            television: true,
-            child: child!,
-          ),
           home: AppLayout(
             television: true,
             formFactor: formFactor,
@@ -169,10 +165,6 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           navigatorObservers: [appNavigationObserver],
-          builder: (context, child) => AppRouteBackHandler(
-            television: true,
-            child: child!,
-          ),
           home: AppLayout(
             television: true,
             formFactor: FormFactor.television,
@@ -222,10 +214,6 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           navigatorObservers: [appNavigationObserver],
-          builder: (context, child) => AppRouteBackHandler(
-            television: true,
-            child: child!,
-          ),
           home: AppLayout(
             television: true,
             formFactor: FormFactor.television,
@@ -268,10 +256,6 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           navigatorObservers: [appNavigationObserver],
-          builder: (context, child) => AppRouteBackHandler(
-            television: true,
-            child: child!,
-          ),
           home: AppLayout(
             television: true,
             formFactor: FormFactor.television,
@@ -433,10 +417,6 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           navigatorObservers: [appNavigationObserver],
-          builder: (context, child) => AppRouteBackHandler(
-            television: true,
-            child: child!,
-          ),
           home: AppLayout(
             television: true,
             formFactor: FormFactor.television,
