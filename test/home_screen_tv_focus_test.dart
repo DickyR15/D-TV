@@ -280,6 +280,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 350));
 
       expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'settings-device-interconnect',
+      );
       // The Home route stays mounted below the pushed Settings route.
       expect(find.byKey(const ValueKey('home-more-menu')), findsOneWidget);
 
