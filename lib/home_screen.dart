@@ -737,14 +737,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // HardwareKeyboard runs before focus shortcuts. Pop only the top child
     // route/dialog; do not intercept playback because the player owns its
     // two-stage Back behavior.
-    final focusedContext = FocusManager.instance.primaryFocus?.context;
-    final navigator = focusedContext == null
-        ? null
-        : Navigator.maybeOf(focusedContext, rootNavigator: true);
-    if (navigator == null) {
-      DiaryService.add('[Navigation] tv_back no_focused_navigator');
-      return false;
-    }
+    final navigator = Navigator.of(context, rootNavigator: true);
     DiaryService.add('[Navigation] tv_back pop_top_route');
     navigator.pop();
     return true;
