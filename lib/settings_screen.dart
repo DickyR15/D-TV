@@ -112,7 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await widget.store.setThemeMode(selected);
       if (mounted) setState(() => _message = null);
     } catch (error) {
-      if (mounted) setState(() => _message = '外觀主題切換失敗：$error');
+      if (mounted) setState(() => _message = '外觀主題切換失敗：${uiTraditional(error.toString())}');
     }
   }
 
@@ -157,7 +157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await widget.store.setThemeAccent(selected);
       if (mounted) setState(() => _message = null);
     } catch (error) {
-      if (mounted) setState(() => _message = '介面配色切換失敗：$error');
+      if (mounted) setState(() => _message = '介面配色切換失敗：${uiTraditional(error.toString())}');
     }
   }
 
@@ -254,12 +254,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _message = error.toString());
+        setState(() => _message = uiTraditional(error.toString()));
         await showDialog<void>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(restore ? '還原設定備份失敗' : '匯出設定備份失敗'),
-            content: SelectableText(error.toString()),
+            content: SelectableText(uiTraditional(error.toString())),
             actions: [
               FilledButton(
                 autofocus: true,
