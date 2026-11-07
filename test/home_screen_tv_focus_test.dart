@@ -282,7 +282,8 @@ void main() {
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 150));
+      expect(appNavigationObserver.hasChildRoute, isFalse);
+      await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.byType(SimpleDialog), findsNothing);
       expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
@@ -339,7 +340,8 @@ void main() {
 
         await tester.sendKeyEvent(LogicalKeyboardKey.escape);
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 150));
+        expect(appNavigationObserver.hasChildRoute, isFalse);
+        await tester.pump(const Duration(milliseconds: 400));
 
         expect(find.byType(SimpleDialog), findsNothing);
         expect(settingFinder, findsOneWidget);
@@ -393,7 +395,8 @@ void main() {
       // the same physical Back as a GoBack keyboard event.
       await tester.binding.handlePopRoute();
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 150));
+      expect(appNavigationObserver.hasChildRoute, isFalse);
+      await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(SimpleDialog), findsNothing);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
