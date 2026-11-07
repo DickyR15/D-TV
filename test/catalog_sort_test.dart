@@ -36,6 +36,14 @@ void main() {
     expect(legacy.sort, CatalogSort.heat);
     expect(legacy.duoduoSort, CatalogSort.popular);
 
+    final previousDuoduoPreference = CatalogView.fromJson({
+      'sort': 'latest',
+      'release': '',
+      'allSources': false,
+    });
+    expect(previousDuoduoPreference.sort, CatalogSort.date);
+    expect(previousDuoduoPreference.duoduoSort, CatalogSort.latest);
+
     const rows = [
       Drama(
         id: 'hongguo:1',
