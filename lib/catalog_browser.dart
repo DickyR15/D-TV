@@ -294,6 +294,7 @@ class CatalogBrowser {
     SourceGroup group, {
     String category = '',
     String query = '',
+    String sort = '',
     bool more = false,
     bool force = false,
     bool useCache = false,
@@ -317,7 +318,7 @@ class CatalogBrowser {
         : {for (final source in group.sources) source.id: ''};
     final key =
         '${group.sources.map((s) => s.id).join(',')}|'
-        '${choice?.category.local == false ? category : ''}|$query';
+        '${choice?.category.local == false ? category : ''}|$query|$sort';
     final session = _sessions.putIfAbsent(key, _CatalogSession.new);
     final generation = ++session.generation;
     final failures = <String, String>{};
@@ -327,6 +328,12 @@ class CatalogBrowser {
     }
 
     final queryText = _searchText(query);
+    final bypassDefaultDuoduoCache =
+        queryText.isEmpty &&
+        sort.isNotEmpty &&
+        sort != 'hits' &&
+        group.sources.length == 1 &&
+        group.sources.single.id == 'duoduo';
 
     CatalogPage snapshot() {
       final rows = sourceOrder
@@ -443,7 +450,11 @@ class CatalogBrowser {
       if (hasFreshEntries) return memorySnapshot;
     }
 
-    if ((useCache || cacheOnly) && !force && !more && query.isEmpty) {
+    if ((useCache || cacheOnly) &&
+        !force &&
+        !more &&
+        query.isEmpty &&
+        !bypassDefaultDuoduoCache) {
       if (useCache && !cacheOnly) {
         await _each(sourceOrder, (source) async {
           try {
@@ -526,13 +537,22 @@ class CatalogBrowser {
       if (useCache && !force && !more && entry.fresh) return;
       final page = more ? entry.nextPage : 1;
       try {
-        final result = await repository.catalog(
-          source,
-          category: requests[source]!,
-          query: query,
-          page: page,
-          force: force,
-        );
+        final result = source == 'duoduo' && sort.isNotEmpty
+            ? await repository.catalog(
+                source,
+                category: requests[source]!,
+                query: query,
+                page: page,
+                force: force,
+                sort: sort,
+              )
+            : await repository.catalog(
+                source,
+                category: requests[source]!,
+                query: query,
+                page: page,
+                force: force,
+              );
         if (generation != session.generation) return;
         final items = <String, Drama>{
           if (more)
