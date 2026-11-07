@@ -34,6 +34,26 @@ void main() {
     expect(merged.stableId, 'duoduo:137937');
   });
 
+  test('Drama keeps provider poster badges through JSON and merge', () {
+    final cached = Drama.fromJson({
+      'id': 'heitao:123',
+      'source': 'heitao',
+      'sourceId': '123',
+      'title': '測試短劇',
+      'badge': '完整版',
+    });
+    const refreshed = Drama(
+      id: 'heitao:123',
+      source: 'heitao',
+      sourceId: '123',
+      title: '測試短劇',
+    );
+
+    expect(cached.badge, '完整版');
+    expect(cached.toJson()['badge'], '完整版');
+    expect(cached.merge(refreshed).badge, '完整版');
+  });
+
   test('Drama preserves Douban ID for later poster recovery', () {
     final drama = Drama.fromJson({
       'id': 'duoduo:54635',
