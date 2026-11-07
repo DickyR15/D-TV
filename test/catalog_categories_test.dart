@@ -91,7 +91,7 @@ class CategoryRepository extends FixtureRepository {
   }
 
   @override
-  Future<CatalogPage> catalog(
+  Future<CatalogPage> catalogWithSort(
     String source, {
     int page = 1,
     String query = '',
@@ -99,8 +99,25 @@ class CategoryRepository extends FixtureRepository {
     bool force = false,
     String sort = '',
   }) async {
-    categoryRequests.add('$source|$category|$page');
     sortRequests.add('$source|$sort|$page');
+    return catalog(
+      source,
+      page: page,
+      query: query,
+      category: category,
+      force: force,
+    );
+  }
+
+  @override
+  Future<CatalogPage> catalog(
+    String source, {
+    int page = 1,
+    String query = '',
+    String category = '',
+    bool force = false,
+  }) async {
+    categoryRequests.add('$source|$category|$page');
     if (source == 'cloudfront' && failLegacy) throw AppFailure('合成入口失敗');
     return CatalogPage(
       [
