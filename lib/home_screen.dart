@@ -771,11 +771,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _televisionBack() {
     final now = DateTime.now();
+    final navigator = Navigator.of(context);
     final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
 
-    // A child route must always receive Back first. Otherwise a recent
-    // exit-toast suppression window can accidentally swallow a real press.
-    if (!routeIsCurrent) {
+    // Always dismiss the top route/dialog first. Settings is also a home tab,
+    // so relying only on the home ModalRoute's current flag can mistakenly
+    // interpret a chooser's Back as a request to leave the Settings tab.
+    if (navigator.canPop() || !routeIsCurrent) {
       // When a chooser dialog is popped, the home route is still not current
       // if Settings itself was pushed from the More menu. Suppress the
       // trailing event before attempting another Navigator.pop, or one
@@ -790,7 +792,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _lastBackAt = null;
       _ignoreExitPromptUntil = now.add(const Duration(milliseconds: 900));
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+      if (navigator.canPop()) navigator.pop();
       return;
     }
 
