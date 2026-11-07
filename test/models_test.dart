@@ -54,6 +54,27 @@ void main() {
     expect(cached.merge(refreshed).badge, '完整版');
   });
 
+  test('playback view visibility ignores zero values in current and legacy caches', () {
+    // Keep this assertion close to Drama's metadata contract: raw values may
+    // come from fresh source responses or older persisted JSON.
+    for (final value in ['', '0', '0.0', ' 0 ', '0次播放']) {
+      final drama = Drama.fromJson({
+        'id': 'huangdou:zero-$value',
+        'source': 'huangdou',
+        'title': '零播放量測試',
+        'views': value,
+      });
+      expect(drama.views, value);
+    }
+    final positive = Drama.fromJson({
+      'id': 'huangdou:positive',
+      'source': 'huangdou',
+      'title': '有播放量測試',
+      'views': '128次播放',
+    });
+    expect(positive.views, '128次播放');
+  });
+
   test('Drama preserves Douban ID for later poster recovery', () {
     final drama = Drama.fromJson({
       'id': 'duoduo:54635',
