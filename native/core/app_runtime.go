@@ -1075,9 +1075,9 @@ func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput
 	if err != nil {
 		return nativePlan{}, err
 	}
-	choice := nativePlaybackChoices(media, input.Quality)
-	choice.task = task
-	choice.requestedQuality = input.Quality
-	choice = engine.rankNativePlaybackRoutes(ctx, choice, task)
+	// Open the provider-preferred route immediately. Probing every signed
+	// CDN candidate here can add up to 1.5 seconds before video even starts.
+	// Keep route ranking for recovery after real playback failures.
+	choice := nativeInitialPlaybackChoice(media, input.Quality, task)
 	return engine.nativeOpenPlayback(ctx, choice)
 }
