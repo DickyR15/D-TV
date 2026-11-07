@@ -436,7 +436,13 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('playback-setting')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('播放'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar).last,
+          matching: find.text('播放'),
+        ),
+        findsOneWidget,
+      );
       expect(find.byKey(const ValueKey('playback-setting')), findsNothing);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
