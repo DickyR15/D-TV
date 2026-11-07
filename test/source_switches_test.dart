@@ -84,6 +84,15 @@ void main() {
     expect(drama.sourceId, 'bfzy.tv~12345');
   });
 
+  test('Heitao is registered as an advanced searchable source', () {
+    const heitao = SourceSite.byId('heitao');
+    expect(SourceSite.isKnown('heitao'), isTrue);
+    expect(SourceSite.isRestricted('heitao'), isTrue);
+    expect(heitao.name, '黑桃');
+    expect(heitao.pagedSearch, isTrue);
+    expect(heitao.onlineSearch, isTrue);
+  });
+
   test('three primary sources start enabled and restricted sources start switched off', () async {
     final store = await create();
     expect(
