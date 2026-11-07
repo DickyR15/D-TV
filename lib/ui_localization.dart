@@ -697,7 +697,7 @@ String uiTraditional(String value) {
   // Dart's StateError.toString() prepends "Bad state:". Never expose this
   // implementation detail in user-facing labels, errors, or status text.
   final displayValue = value.replaceAll(
-    RegExp(r'Bad state:\\s*', caseSensitive: false),
+    RegExp(r'Bad state:\s*', caseSensitive: false),
     '',
   );
   final cached = _conversionCache.remove(displayValue);
