@@ -329,10 +329,8 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 350));
 
-        final settingsNavigation = find.byKey(const ValueKey('side-nav-9'));
-        tester.widget<RemoteTarget>(settingsNavigation).onPressed!.call();
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 250));
+        await _openSettingsFromMoreMenu(tester);
+        expect(find.byKey(const ValueKey('side-nav-9')), findsNothing);
 
         final settingFinder = find.byKey(ValueKey(setting.key));
         expect(settingFinder, findsOneWidget);
@@ -344,15 +342,12 @@ void main() {
 
         await tester.sendKeyEvent(LogicalKeyboardKey.escape);
         await tester.pump();
-        expect(appNavigationObserver.hasChildRoute, isFalse);
+        expect(appNavigationObserver.hasChildRoute, isTrue);
         await tester.pump(const Duration(milliseconds: 400));
 
         expect(find.byType(SimpleDialog), findsNothing);
         expect(settingFinder, findsOneWidget);
-        expect(
-          tester.widget<RemoteTarget>(settingsNavigation).selected,
-          isTrue,
-        );
+        expect(find.text('設定與備份'), findsOneWidget);
 
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
