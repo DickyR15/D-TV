@@ -25,6 +25,9 @@ class SourceManagementScreen extends StatefulWidget {
 
 class _SourceManagementScreenState extends State<SourceManagementScreen> {
   final _password = TextEditingController();
+  final _firstGeneralFocus = FocusNode(
+    debugLabel: 'source-management-first-general-source',
+  );
   final _setupPasswordFocus = FocusNode(
     debugLabel: 'source-management-setup-password',
   );
@@ -45,12 +48,17 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     super.didChangeDependencies();
     if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
     _initialFocusScheduled = true;
+    if (widget.store.locked || !widget.store.profile.admin) return;
+    final hasAdvancedSources = SourceSite.restrictedValues.any(
+      (source) => SourceSite.isAvailable(source.id),
+    );
+    final target = !hasAdvancedSources
+        ? _firstGeneralFocus
+        : widget.store.administratorPasswordConfigured
+        ? _passwordFocus
+        : _setupPasswordFocus;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final target = widget.store.administratorPasswordConfigured
-          ? _passwordFocus
-          : _setupPasswordFocus;
-      if (target.context != null && target.canRequestFocus) {
+      if (mounted && target.context != null && target.canRequestFocus) {
         target.requestFocus();
       }
     });
@@ -60,6 +68,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   void dispose() {
     widget.store.lockAdvancedSources();
     _password.dispose();
+    _firstGeneralFocus.dispose();
     _setupPasswordFocus.dispose();
     _passwordFocus.dispose();
     _firstAdvancedFocus.dispose();
@@ -258,7 +267,11 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                       '預設開啟 ${general.length} 個一般片源：$generalNames。關閉片源只會將其隱藏，不會刪除收藏及觀看紀錄。',
                     ),
                     const SizedBox(height: 8),
-                    for (final source in general) _sourceTile(source),
+                    for (var index = 0; index < general.length; index++)
+                      _sourceTile(
+                        general[index],
+                        focusNode: index == 0 ? _firstGeneralFocus : null,
+                      ),
                     if (advanced.isNotEmpty) ...[
                       const Divider(height: 28),
                       if (unlocked) ...[
