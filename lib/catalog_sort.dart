@@ -7,7 +7,11 @@ enum CatalogSort {
   season('季數'),
   date('年份（由新到舊）'),
   heat('熱門程度'),
-  views('播放次數');
+  views('播放次數'),
+  popular('熱門'),
+  latest('最新'),
+  score('評分'),
+  year('年份');
 
   const CatalogSort(this.label);
   final String label;
@@ -177,6 +181,14 @@ int _descending(num? a, num? b) => a == null
 /// actually contain the metadata required to make that sort meaningful.
 Set<CatalogSort> availableCatalogSorts(Iterable<Drama> rows) {
   final items = rows.toList(growable: false);
+  if (items.isNotEmpty && items.every((drama) => drama.source == 'duoduo')) {
+    return const {
+      CatalogSort.popular,
+      CatalogSort.latest,
+      CatalogSort.score,
+      CatalogSort.year,
+    };
+  }
   return {
     CatalogSort.source,
     CatalogSort.name,
@@ -201,11 +213,15 @@ bool hasCatalogReleaseStatus(Iterable<Drama> rows) => rows.any(
 );
 
 /// Avoid stale global filters hiding every item after changing providers.
-CatalogView effectiveCatalogView(CatalogView requested, Iterable<Drama> rows) {
+CatalogView effectiveCatalogView(
+  CatalogView requested,
+  Iterable<Drama> rows, {
+  CatalogSort fallbackSort = CatalogSort.source,
+}) {
   final items = rows.toList(growable: false);
   final sorts = availableCatalogSorts(items);
   return requested.copyWith(
-    sort: sorts.contains(requested.sort) ? requested.sort : CatalogSort.source,
+    sort: sorts.contains(requested.sort) ? requested.sort : fallbackSort,
     release: hasCatalogReleaseStatus(items) ? requested.release : '',
   );
 }
@@ -220,7 +236,16 @@ List<Drama> sortCatalog(Iterable<Drama> rows, CatalogView view) {
         ? release.isEmpty || release == 'unknown'
         : release == view.release;
   }).toList();
-  if (view.sort == CatalogSort.source) return items;
+  if (view.sort == CatalogSort.source ||
+      const {
+        CatalogSort.popular,
+        CatalogSort.latest,
+        CatalogSort.score,
+        CatalogSort.year,
+      }.contains(view.sort)) {
+    // Duoduo returns these rankings from its own API; keep that source order.
+    return items;
+  }
   final positions = {for (final entry in items.indexed) entry.$2.id: entry.$1};
   final metrics = <String, num?>{
     for (final drama in items)
