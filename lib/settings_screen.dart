@@ -486,10 +486,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (widget.embedded || !AppLayout.isTelevision(context)) {
       return settings;
     }
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.goBack): _handleSettingsBack,
-        const SingleActivator(LogicalKeyboardKey.escape): _handleSettingsBack,
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.goBack ||
+                event.logicalKey == LogicalKeyboardKey.escape)) {
+          _handleSettingsBack();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
       },
       child: settings,
     );
