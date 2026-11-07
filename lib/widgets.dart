@@ -580,7 +580,7 @@ class DramaTile extends StatelessWidget {
           child: SizedBox(
             height: subtitleHeight(context),
             child: Text(
-              subtitle != null ? uiTraditional(subtitle!) : uiTraditional(drama.category),
+              subtitle != null ? uiTraditional(subtitle!) : uiDramaCategory(drama.source, drama.category),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
