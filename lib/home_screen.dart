@@ -710,11 +710,14 @@ class _HomeScreenState extends State<HomeScreen> {
         !AppLayout.isTelevision(context) ||
         event is! KeyDownEvent ||
         (event.logicalKey != LogicalKeyboardKey.escape &&
-            event.logicalKey != LogicalKeyboardKey.goBack) ||
-        _playbackRouteActive ||
-        !appNavigationObserver.hasChildRoute) {
+            event.logicalKey != LogicalKeyboardKey.goBack)) {
       return false;
     }
+    final hasChildRoute = appNavigationObserver.hasChildRoute;
+    DiaryService.add(
+      '[Navigation] tv_back key=${event.logicalKey.keyLabel} child=$hasChildRoute playback=$_playbackRouteActive',
+    );
+    if (_playbackRouteActive || !hasChildRoute) return false;
 
     final now = DateTime.now();
     final ignoreUntil = _ignoreExitPromptUntil;
@@ -738,7 +741,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final navigator = focusedContext == null
         ? null
         : Navigator.maybeOf(focusedContext, rootNavigator: true);
-    if (navigator == null) return false;
+    if (navigator == null) {
+      DiaryService.add('[Navigation] tv_back no_focused_navigator');
+      return false;
+    }
+    DiaryService.add('[Navigation] tv_back pop_top_route');
     unawaited(navigator.maybePop());
     return true;
   }
