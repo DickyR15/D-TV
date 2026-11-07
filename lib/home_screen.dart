@@ -163,17 +163,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   String get _category => _categorySelections[_group.id] ?? '';
   bool get _isDuoduoCatalog =>
-      _group.sources.length == 1 &&
-      _group.sources.single.id == 'duoduo' &&
-      const {'1', '2', '3', '4'}.contains(_category);
+      _group.sources.length == 1 && _group.sources.single.id == 'duoduo';
+  String get _duoduoCategoryId => _isDuoduoCatalog
+      ? _browser.sourceCategoryId(_group, _category, 'duoduo')
+      : '';
 
   String get _duoduoSort {
     if (!_isDuoduoCatalog) return '';
-    return switch (widget.store.catalogView.sort) {
+    return switch (widget.store.catalogView.duoduoSort) {
       CatalogSort.latest => 'time',
       CatalogSort.score => 'score',
-      // The supplied site URLs use the score order for types 2–4.
-      CatalogSort.year => _category == '1' ? 'year' : 'score',
+      // The supplied site URLs use year only for Movies. Series, Anime and
+      // Variety intentionally use the site's score endpoint for this option.
+      CatalogSort.year => _duoduoCategoryId == '1' ? 'year' : 'score',
       CatalogSort.popular || CatalogSort.source || CatalogSort.date ||
       CatalogSort.name || CatalogSort.season || CatalogSort.heat ||
       CatalogSort.views => 'hits',
@@ -1222,7 +1224,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         useCache: useCache,
         force: force,
         cacheOnly: cacheOnly,
-        sort: query.isEmpty ? _duoduoSort : '',
+        sort: query.isEmpty && _isDuoduoCatalog ? _duoduoSort : '',
         onCached: (result) => accept(result, cached: true),
       );
       accept(result);
@@ -1743,40 +1745,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       CatalogSort.score,
       CatalogSort.year,
     };
+    final isDuoduo = _isDuoduoCatalog;
     final savedView = widget.store.catalogView;
-    final current = _isDuoduoCatalog
-        ? savedView.copyWith(
-            sort: duoduoSorts.contains(savedView.sort)
-                ? savedView.sort
-                : CatalogSort.popular,
-            release: '',
-          )
+    final current = isDuoduo
+        ? savedView.copyWith(sort: savedView.duoduoSort, release: '')
         : effectiveCatalogView(savedView, items);
     final selected = await chooseCatalogView(
       context,
       current,
-      availableSorts: _isDuoduoCatalog
-          ? const {
-              CatalogSort.popular,
-              CatalogSort.latest,
-              CatalogSort.score,
-              CatalogSort.year,
-            }
+      availableSorts: isDuoduo
+          ? duoduoSorts
           : availableCatalogSorts(items),
-      showReleaseFilter: !_isDuoduoCatalog && hasCatalogReleaseStatus(items),
+      showReleaseFilter: !isDuoduo && hasCatalogReleaseStatus(items),
       loadedCount: items.length,
     );
     if (!mounted || selected == null) return;
-    if (selected.sort == widget.store.catalogView.sort &&
-        selected.release == widget.store.catalogView.release &&
-        selected.allSources == widget.store.catalogView.allSources) {
-      return;
-    }
     final remoteSortChanged =
-        _isDuoduoCatalog && selected.sort != widget.store.catalogView.sort;
+        isDuoduo && selected.sort != savedView.duoduoSort;
+    final unchanged = isDuoduo
+        ? !remoteSortChanged
+        : selected.sort == savedView.sort &&
+              selected.release == savedView.release &&
+              selected.allSources == savedView.allSources;
+    if (unchanged) return;
+    final nextView = isDuoduo
+        ? savedView.copyWith(duoduoSort: selected.sort)
+        : selected;
     await saveUserChange(
       context,
-      () => widget.store.setCatalogView(selected),
+      () => widget.store.setCatalogView(nextView),
     );
     if (!mounted) return;
     setState(() {
@@ -1809,6 +1806,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       hideVip,
       onlineSearch,
       widget.store.catalogView.sort,
+      widget.store.catalogView.duoduoSort,
       widget.store.catalogView.release,
       widget.store.catalogView.allSources,
       widget.store.profileEpoch,
@@ -1829,11 +1827,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
         return onlineSearch || query.isEmpty || matchesDramaQuery(drama, query);
       }).toList();
-    final view = effectiveCatalogView(
-      widget.store.catalogView,
-      candidates,
-      fallbackSort: _isDuoduoCatalog ? CatalogSort.popular : CatalogSort.source,
-    );
+    final storedView = widget.store.catalogView;
+    final view = _isDuoduoCatalog
+        ? effectiveCatalogView(
+            storedView.copyWith(
+              sort: storedView.duoduoSort,
+              release: '',
+            ),
+            candidates,
+            fallbackSort: storedView.duoduoSort,
+          )
+        : effectiveCatalogView(storedView, candidates);
     final result = sortCatalog(candidates, view);
     _visibleCacheItems = _items;
     _visibleCacheKey = cacheKey;
