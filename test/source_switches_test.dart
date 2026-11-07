@@ -85,7 +85,7 @@ void main() {
   });
 
   test('Heitao is registered as an advanced searchable source', () {
-    const heitao = SourceSite.byId('heitao');
+    final heitao = SourceSite.byId('heitao');
     expect(SourceSite.isKnown('heitao'), isTrue);
     expect(SourceSite.isRestricted('heitao'), isTrue);
     expect(heitao.name, '黑桃');
