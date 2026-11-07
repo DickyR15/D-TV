@@ -47,6 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     appNavigationObserver.changes.addListener(_onNavigationChanged);
+    HardwareKeyboard.instance.addHandler(_handleHardwareBack);
   }
 
   void _onNavigationChanged() {
@@ -62,6 +63,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } else if (event == AppNavigationEvent.push) {
       _ignoreTrailingBackUntil = null;
     }
+  }
+
+  bool _handleHardwareBack(KeyEvent event) {
+    if (!mounted || !AppLayout.isTelevision(context)) return false;
+    if (event is! KeyDownEvent ||
+        (event.logicalKey != LogicalKeyboardKey.goBack &&
+            event.logicalKey != LogicalKeyboardKey.escape)) {
+      return false;
+    }
+    _handleSettingsBack();
+    return true;
   }
 
   void _handleSettingsBack() {
@@ -88,6 +100,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleHardwareBack);
     appNavigationObserver.changes.removeListener(_onNavigationChanged);
     _deviceInterconnectFocus.dispose();
     super.dispose();
@@ -486,20 +499,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (widget.embedded || !AppLayout.isTelevision(context)) {
       return settings;
     }
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.goBack ||
-                event.logicalKey == LogicalKeyboardKey.escape)) {
-          _handleSettingsBack();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: settings,
-    );
+    return settings;
   }
 }
 
