@@ -342,8 +342,19 @@ func TestDuoduoCatalogSupportsAllRequestedSorts(t *testing.T) {
 			items, _, err := d.fetchDuoduoCatalogPage(
 				context.Background(), 1, "1", "", sortValue,
 			)
-			if err != nil || len(items) != 1 {
-				t.Fatalf("sorted Duoduo page failed: items=%+v err=%v", items, err)
+			wantCount := 1
+			if sortValue == "hits" {
+				// The Hot list intentionally includes the site's curated
+				// homepage rows; other rankings must preserve API order only.
+				wantCount = 2
+			}
+			if err != nil || len(items) != wantCount {
+				t.Fatalf(
+					"sorted Duoduo page failed: sort=%s items=%+v err=%v",
+					sortValue,
+					items,
+					err,
+				)
 			}
 		})
 	}
