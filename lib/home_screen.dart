@@ -1739,11 +1739,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final items = _items
         .where((drama) => widget.store.allowsSource(drama.source))
         .toList();
-    final current = effectiveCatalogView(
-      widget.store.catalogView,
-      items,
-      fallbackSort: _isDuoduoCatalog ? CatalogSort.popular : CatalogSort.source,
-    );
+    const duoduoSorts = {
+      CatalogSort.popular,
+      CatalogSort.latest,
+      CatalogSort.score,
+      CatalogSort.year,
+    };
+    final savedView = widget.store.catalogView;
+    final current = _isDuoduoCatalog
+        ? savedView.copyWith(
+            sort: duoduoSorts.contains(savedView.sort)
+                ? savedView.sort
+                : CatalogSort.popular,
+            release: '',
+          )
+        : effectiveCatalogView(savedView, items);
     final selected = await chooseCatalogView(
       context,
       current,
