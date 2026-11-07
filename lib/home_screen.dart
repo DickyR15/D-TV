@@ -110,6 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _playbackRouteActive = false;
   bool _exitConfirmationShowing = false;
   bool _homePopupOpen = false;
+  bool _hasChildRoute = false;
   final FocusNode _homePopupUsersFocus =
       FocusNode(debugLabel: 'home-more-users');
   final FocusNode _desktopShortcutFocus =
@@ -722,6 +723,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onAppNavigationChanged() {
     if (!mounted || !AppLayout.isTelevision(context)) return;
+    final hasChildRoute = appNavigationObserver.hasChildRoute;
+    if (_hasChildRoute != hasChildRoute) {
+      setState(() => _hasChildRoute = hasChildRoute);
+    }
     final change = appNavigationObserver.changes.value;
     if (change == null) return;
     switch (change.event) {
@@ -2189,7 +2194,10 @@ class _HomeScreenState extends State<HomeScreen> {
             skipTraversal: true,
             onKeyEvent: _handleStartupFocusKey,
             child: PopScope(
-              canPop: !television,
+              // Child routes (settings, subpages, dialogs and menus) must be
+              // allowed to pop normally. Only the root TV home route blocks
+              // Back so it can apply the two-press exit behavior.
+              canPop: !television || _hasChildRoute,
               onPopInvokedWithResult: (didPop, result) {
                 if (!didPop) _televisionBack();
               },
