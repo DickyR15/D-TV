@@ -486,20 +486,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (widget.embedded || !AppLayout.isTelevision(context)) {
       return settings;
     }
-    return PopScope<Object?>(
-      // The home route's TV PopScope deliberately prevents an implicit
-      // navigator pop. Handle Settings here and pop only the topmost route.
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) _handleSettingsBack();
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.goBack): _handleSettingsBack,
+        const SingleActivator(LogicalKeyboardKey.escape): _handleSettingsBack,
       },
-      child: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.goBack): _handleSettingsBack,
-          const SingleActivator(LogicalKeyboardKey.escape): _handleSettingsBack,
-        },
-        child: settings,
-      ),
+      child: settings,
     );
   }
 }
