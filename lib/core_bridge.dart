@@ -185,8 +185,21 @@ abstract class AppRepository {
     String query = '',
     String category = '',
     bool force = false,
-    String sort = '',
   });
+  Future<CatalogPage> catalogWithSort(
+    String source, {
+    int page = 1,
+    String query = '',
+    String category = '',
+    bool force = false,
+    String sort = '',
+  }) => catalog(
+    source,
+    page: page,
+    query: query,
+    category: category,
+    force: force,
+  );
   Future<CatalogPage> cached(String source, {String category = ''});
   /// Fast first-screen snapshot. Implementations without a bounded native
   /// cache read may return null and keep using [cached].
@@ -707,6 +720,21 @@ class NativeRepository extends AppRepository {
 
   @override
   Future<CatalogPage> catalog(
+    String source, {
+    int page = 1,
+    String query = '',
+    String category = '',
+    bool force = false,
+  }) => catalogWithSort(
+    source,
+    page: page,
+    query: query,
+    category: category,
+    force: force,
+  );
+
+  @override
+  Future<CatalogPage> catalogWithSort(
     String source, {
     int page = 1,
     String query = '',
