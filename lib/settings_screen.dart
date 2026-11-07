@@ -257,6 +257,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             actions: [
               TextButton(
+                autofocus: AppLayout.isTelevision(context),
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('取消'),
               ),
