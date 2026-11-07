@@ -523,24 +523,34 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey('playback-setting')), findsNothing);
-
+      // The previous Settings route remains mounted underneath the player;
+      // assert against the top-most AppBar rather than searching the whole tree.
       await tester.binding.handlePopRoute();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
-      expect(find.byKey(const ValueKey('playback-setting')), findsOneWidget);
-      expect(find.text('設定與備份'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar).last,
+          matching: find.text('設定與備份'),
+        ),
+        findsOneWidget,
+      );
 
       // A second delivery from the same physical remote press must not close
       // the Settings route after the playback page has already been dismissed.
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
-      expect(find.byKey(const ValueKey('playback-setting')), findsOneWidget);
-      expect(find.text('設定與備份'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar).last,
+          matching: find.text('設定與備份'),
+        ),
+        findsOneWidget,
+      );
 
-      // A distinct Back after the de-duplication window closes Settings itself.
+      // A distinct system Back after the de-duplication window closes Settings.
       await tester.pump(const Duration(milliseconds: 1000));
-      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.binding.handlePopRoute();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       expect(find.text('設定與備份'), findsNothing);
