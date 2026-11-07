@@ -9,7 +9,6 @@ import 'package:flutter/services.dart';
 import 'core_bridge.dart';
 import 'app_theme.dart';
 import 'app_navigation.dart';
-import 'app_navigation.dart';
 import 'app_layout.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
