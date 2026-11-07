@@ -17,6 +17,9 @@ class _DeferredDetailRepository extends FixtureRepository {
   final Completer<DramaDetail> detailCompleter = Completer<DramaDetail>();
 
   @override
+  Future<String> cover(Drama drama, {bool force = false}) async => '';
+
+  @override
   Future<DramaDetail> detail(Drama drama) {
     detailCalls++;
     return detailCompleter.future;
@@ -272,7 +275,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
       expect(find.byType(SimpleDialog), findsOneWidget);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 150));
 
@@ -330,7 +333,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 150));
       expect(find.byType(SimpleDialog), findsNothing);
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 150));
 
