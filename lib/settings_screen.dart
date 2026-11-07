@@ -38,7 +38,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   String? _message;
-  DateTime? _ignoreTrailingBackUntil;
   final FocusNode _deviceInterconnectFocus =
       FocusNode(debugLabel: 'settings-device-interconnect');
   bool _initialFocusScheduled = false;
@@ -56,29 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    appNavigationObserver.changes.addListener(_onNavigationChanged);
-  }
-
-  void _onNavigationChanged() {
-    final event = appNavigationObserver.changes.value?.event;
-    if (event == AppNavigationEvent.pop ||
-        event == AppNavigationEvent.remove ||
-        event == AppNavigationEvent.replace) {
-      // TV remotes may report one physical Back as both a route pop and a
-      // trailing GoBack key. Keep Settings open for that duplicate event.
-      _ignoreTrailingBackUntil = DateTime.now().add(
-        const Duration(milliseconds: 900),
-      );
-    } else if (event == AppNavigationEvent.push) {
-      _ignoreTrailingBackUntil = null;
-    }
-  }
-
-  @override
   void dispose() {
-    appNavigationObserver.changes.removeListener(_onNavigationChanged);
     _deviceInterconnectFocus.dispose();
     super.dispose();
   }
@@ -473,33 +450,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     ),
   );
-    if (widget.embedded || !AppLayout.isTelevision(context)) {
-      return settings;
-    }
-
-    void closeSettings() {
-      final now = DateTime.now();
-      final ignoredUntil = _ignoreTrailingBackUntil;
-      if (ignoredUntil != null && now.isBefore(ignoredUntil)) return;
-      final navigator = Navigator.of(context);
-      if (!navigator.canPop()) return;
-      // If a chooser/subpage is on top, its own route handles the first Back.
-      // Once it closes, the observer suppresses the duplicate delivery here.
-      if (!(ModalRoute.of(context)?.isCurrent ?? true)) {
-        _ignoreTrailingBackUntil = now.add(
-          const Duration(milliseconds: 900),
-        );
-      }
-      navigator.pop();
-    }
-
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.goBack): closeSettings,
-        const SingleActivator(LogicalKeyboardKey.escape): closeSettings,
-      },
-      child: settings,
-    );
+    // HomeScreen owns the single TV Back handler for the root Navigator.
+    // A second shortcut layer here could pop both a child page and Settings.
+    return settings;
   }
 }
 
