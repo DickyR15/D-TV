@@ -717,7 +717,10 @@ class _HomeScreenState extends State<HomeScreen> {
         // trailing Back event. Swallow that event app-wide, not just for menus.
         _resetBackConfirmation(
           ignoreTrailingBack: true,
-          trailingBackWindow: const Duration(milliseconds: 300),
+          // Some TV remotes deliver the same Back press after the dialog has
+          // already closed. Keep Settings selected instead of treating that
+          // trailing event as a request to leave Settings.
+          trailingBackWindow: const Duration(milliseconds: 900),
         );
         break;
       case AppNavigationEvent.push:
@@ -775,7 +778,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!routeIsCurrent) {
       _lastHandledBackEventAt = now;
       _lastBackAt = null;
-      _ignoreExitPromptUntil = now.add(const Duration(milliseconds: 300));
+      _ignoreExitPromptUntil = now.add(const Duration(milliseconds: 900));
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       if (Navigator.of(context).canPop()) Navigator.of(context).pop();
       return;
@@ -1268,6 +1271,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openDrama(Drama drama, {bool resume = false}) {
+    // A fast double-click / repeated TV Select must not stack two launch
+    // routes. The second route can otherwise leave the viewer on a stale
+    // player page after pressing Back.
+    if (_playbackRouteActive) {
+      DiaryService.add(
+        '[Playback] ignored_duplicate_poster_open drama=${drama.id}',
+      );
+      return;
+    }
     _pauseCatalog();
     CoverRequestScheduler.pauseBackground();
     _playbackRouteActive = true;
