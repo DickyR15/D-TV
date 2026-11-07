@@ -424,7 +424,6 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         ),
       ),
     ),
-    ),
   );
 }
 
@@ -712,6 +711,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
           ),
         ),
       ),
+    ),
     ),
   );
 }
