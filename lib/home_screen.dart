@@ -776,6 +776,16 @@ class _HomeScreenState extends State<HomeScreen> {
     // A child route must always receive Back first. Otherwise a recent
     // exit-toast suppression window can accidentally swallow a real press.
     if (!routeIsCurrent) {
+      // When a chooser dialog is popped, the home route is still not current
+      // if Settings itself was pushed from the More menu. Suppress the
+      // trailing event before attempting another Navigator.pop, or one
+      // physical Back press can close both the dialog and Settings.
+      final ignoreChildBackUntil = _ignoreExitPromptUntil;
+      if (ignoreChildBackUntil != null && now.isBefore(ignoreChildBackUntil)) {
+        _lastBackAt = null;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        return;
+      }
       _lastHandledBackEventAt = now;
       _lastBackAt = null;
       _ignoreExitPromptUntil = now.add(const Duration(milliseconds: 900));
