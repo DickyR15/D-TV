@@ -77,7 +77,7 @@ class CategoryRepository extends FixtureRepository {
       CatalogCategory.all,
       CatalogCategory('1', '電影'),
       CatalogCategory('2', '劇集'),
-      CatalogCategory('3', '動漫'),
+      CatalogCategory('3', '動畫'),
       CatalogCategory('4', '綜藝'),
     ],
     'hanxiaoquan' => const [
@@ -142,13 +142,30 @@ void main() {
       final browser = CatalogBrowser(repository);
       const group = SourceGroup('duoduo', '多多追劇', [SourceSite.duoduo]);
 
-      final latest = await browser.load(group, category: '1', sort: 'time');
+      await browser.loadCategories(group);
+      final anime = browser.categories(group).singleWhere(
+        (category) => category.name == '動漫',
+      );
+      expect(anime.id, 'category:動漫');
+      expect(browser.sourceCategoryId(group, anime.id, 'duoduo'), '3');
+
+      final latest = await browser.load(
+        group,
+        category: anime.id,
+        sort: 'time',
+      );
       expect(latest.items, hasLength(1));
       expect(repository.sortRequests, ['duoduo|time|1']);
+      expect(repository.categoryRequests.last, 'duoduo|3|1');
 
-      final score = await browser.load(group, category: '1', sort: 'score');
+      final score = await browser.load(
+        group,
+        category: anime.id,
+        sort: 'score',
+      );
       expect(score.items, hasLength(1));
       expect(repository.sortRequests.last, 'duoduo|score|1');
+      expect(repository.categoryRequests.last, 'duoduo|3|1');
     },
   );
 
