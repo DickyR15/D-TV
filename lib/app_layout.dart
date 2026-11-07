@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'app_navigation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 export 'app_build.dart';
@@ -384,13 +386,8 @@ class AppLayout extends InheritedWidget {
 
     return showDialog<String>(
       context: context,
-      builder: (dialogContext) => CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () =>
-              Navigator.of(dialogContext).pop(),
-          const SingleActivator(LogicalKeyboardKey.goBack): () =>
-              Navigator.of(dialogContext).pop(),
-        },
+      builder: (dialogContext) => DialogRouteBackHandler(
+        onBack: () => Navigator.of(dialogContext).pop(),
         child: SimpleDialog(
         title: const Text('介面模式'),
         children: [
