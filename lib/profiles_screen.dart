@@ -56,12 +56,14 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     } else if (!widget.store.locked && widget.store.profile.admin) {
       // The force-login switch is only rendered for an unlocked administrator.
       initialFocus = _forceLoginFocus;
-    } else if (widget.store.profiles.isNotEmpty) {
-      // Locked sessions and non-admin users must start on a real profile row;
-      // the force-login setting is not present in either of those layouts.
+    } else if (widget.locked && widget.store.profiles.isNotEmpty) {
+      // On the login screen, start at the first available account.
       initialFocus = _profileEntryFocus(widget.store.profiles.first.id);
     } else {
-      initialFocus = null;
+      // An unlocked non-admin can manage their own session but cannot edit
+      // admin settings; focus their own selectable profile row, not the first
+      // (often non-focusable) administrator row.
+      initialFocus = _profileEntryFocus(widget.store.profile.id);
     }
     final focusNode = initialFocus;
     if (focusNode == null) return;
