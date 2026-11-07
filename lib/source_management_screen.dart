@@ -43,6 +43,10 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   final Set<String> _busySourceIds = <String>{};
   String? _error;
 
+  String _errorMessage(Object error) => uiTraditional(
+    error.toString().replaceFirst(RegExp(r'^Bad state:\\s*'), ''),
+  );
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -95,7 +99,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         }
       });
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _errorMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
