@@ -101,7 +101,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final current = widget.store.themeMode;
     final selected = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => SimpleDialog(
+      builder: (dialogContext) => CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              Navigator.of(dialogContext).pop(),
+          const SingleActivator(LogicalKeyboardKey.goBack): () =>
+              Navigator.of(dialogContext).pop(),
+        },
+        child: SimpleDialog(
         title: const Text('外觀主題'),
         children: [
           for (final mode in ['light', 'dark', 'system'])
@@ -120,6 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.of(dialogContext).pop(mode),
             ),
         ],
+        ),
       ),
     );
     if (selected == null || !mounted || selected == widget.store.themeMode) {
@@ -136,7 +144,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _chooseThemeAccent() async {
     final selected = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => SimpleDialog(
+      builder: (dialogContext) => CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.escape): () =>
+              Navigator.of(dialogContext).pop(),
+          const SingleActivator(LogicalKeyboardKey.goBack): () =>
+              Navigator.of(dialogContext).pop(),
+        },
+        child: SimpleDialog(
         title: const Text('介面配色'),
         children: [
           for (final tone in AppTheme.accentOptions)
@@ -162,6 +177,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.of(dialogContext).pop(tone),
             ),
         ],
+        ),
       ),
     );
     if (selected == null || !mounted || selected == widget.store.themeAccent) {
