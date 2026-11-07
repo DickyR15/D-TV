@@ -116,6 +116,7 @@ class _BatchDownloadScreenState extends State<BatchDownloadScreen> {
                             DropdownButtonFormField<int>(
                               key: const ValueKey('batch-download-quality'),
                               focusNode: _qualityFocus,
+                              autofocus: AppLayout.isTelevision(context),
                               initialValue: _batch.quality,
                               isExpanded: true,
                               decoration: const InputDecoration(
