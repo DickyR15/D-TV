@@ -245,7 +245,7 @@ class CatalogBrowser {
     for (final source in group.sources) {
       for (final category in _menus[source.id] ?? const <CatalogCategory>[]) {
         if (category.id.isEmpty) continue;
-        final rawName = category.name.trim().replaceAll(RegExp(r'\\s+'), '');
+        final rawName = category.name.trim().replaceAll(RegExp(r'\s+'), '');
         final name =
             source.id == 'duoduo' &&
                 (category.id == '3' ||
