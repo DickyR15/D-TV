@@ -424,6 +424,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         ),
       ),
     ),
+    ),
   );
 }
 
