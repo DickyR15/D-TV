@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/home_screen.dart';
+import 'package:hgtv/app_navigation.dart';
 import 'package:hgtv/remote_widgets.dart';
 
 import 'fixtures.dart';
@@ -282,6 +283,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          navigatorObservers: [appNavigationObserver],
           home: AppLayout(
             television: true,
             formFactor: FormFactor.television,
