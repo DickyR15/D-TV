@@ -49,6 +49,24 @@ func TestHongguoBackupAddressesAndCodecAlternatives(t *testing.T) {
 	}
 }
 
+func TestNativeInitialPlaybackChoiceKeepsProviderPreferredRoute(t *testing.T) {
+	media := providerMedia{
+		URL: "https://provider-first.test/episode.mp4",
+		Quality: 1080,
+		Variants: []providerMedia{
+			{URL: "https://provider-backup.test/episode.mp4", Quality: 1080},
+		},
+	}
+	task := Task{DramaID: "hongguo:fixture", DramaTitle: "startup fixture", Index: 1}
+	choice := nativeInitialPlaybackChoice(media, 0, task)
+	if len(choice.media) != 2 || choice.media[0].URL != media.URL {
+		t.Fatalf("initial playback should retain provider-preferred route first: %+v", choice.media)
+	}
+	if choice.task.DramaID != task.DramaID || choice.requestedQuality != 0 {
+		t.Fatalf("initial playback context was not preserved: %+v", choice)
+	}
+}
+
 func TestNativePlaybackFallbackPreservesKeysAndReleasesOnlyOldSession(t *testing.T) {
 	engine, err := newNativeEngine(t.TempDir())
 	if err != nil {
