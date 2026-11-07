@@ -51,7 +51,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const _recommendationCategory = 'app:recommendations';
   static const _manageSourcesMenuValue = '__manage_sources__';
   static const _revealBatch = 60;
@@ -789,6 +789,16 @@ class _HomeScreenState extends State<HomeScreen> {
     _resetBackConfirmation(ignoreTrailingBack: true);
   }
 
+  @override
+  Future<bool> didPopRoute() async {
+    if (!mounted || !AppLayout.isTelevision(context)) return false;
+    // PopScope can block a Navigator route pop while the home route is below
+    // Settings or another child route. Handle platform Back at the home shell
+    // and close only the currently visible top route.
+    _televisionBack();
+    return true;
+  }
+
   void _televisionBack() {
     final now = DateTime.now();
     final navigator = Navigator.of(context);
@@ -902,6 +912,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     appNavigationObserver.changes.addListener(_onAppNavigationChanged);
     _scroll.addListener(_onCatalogScroll);
     _source = SourceSite.byId(widget.store.source);
@@ -1047,6 +1058,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     appNavigationObserver.changes.removeListener(_onAppNavigationChanged);
     _cancelStartupFocusRetry();
     _appUpdateCheckTimer?.cancel();
