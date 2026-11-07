@@ -256,6 +256,44 @@ void main() {
 
 
   testWidgets(
+    'Settings is opened from the More menu, not a navigation destination',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        _tvAppWithNavigatorLayout(
+          home: HomeScreen(repository: FixtureRepository(), store: store),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.byKey(const ValueKey('side-nav-9')), findsNothing);
+      expect(find.text('設定與備份'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('home-more-menu')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.tap(find.text('設定與備份').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+      expect(find.byKey(const ValueKey('home-more-menu')), findsNothing);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.byKey(const ValueKey('theme-setting')), findsNothing);
+      expect(find.byKey(const ValueKey('home-more-menu')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
     'TV Back from a theme chooser returns to Settings, not Home',
     (tester) async {
       SharedPreferences.setMockInitialValues({
