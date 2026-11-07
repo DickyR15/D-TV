@@ -151,7 +151,14 @@ void main() {
         ),
       ];
       final options = availableCatalogSorts(rows);
-      expect(options, containsAll(CatalogSort.values));
+      expect(options, containsAll({
+        CatalogSort.source,
+        CatalogSort.name,
+        CatalogSort.season,
+        CatalogSort.date,
+        CatalogSort.heat,
+        CatalogSort.views,
+      }));
       expect(hasCatalogReleaseStatus(rows), isTrue);
       final effective = effectiveCatalogView(
         const CatalogView(sort: CatalogSort.season, release: 'ongoing'),
