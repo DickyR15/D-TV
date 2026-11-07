@@ -9,7 +9,7 @@ import 'profiles_screen.dart';
 import 'ui_localization.dart';
 
 String sourceManagementErrorMessage(Object error) => uiTraditional(
-  error.toString().replaceFirst(RegExp(r'^Bad state:\s*'), ''),
+  error.toString().replaceFirst(RegExp(r'^(?:Bad state:\s*)+', caseSensitive: false), ''),
 );
 
 class SourceManagementScreen extends StatefulWidget {
@@ -134,7 +134,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
       final update = widget.updateSourceEnabled ?? widget.store.setSourceEnabled;
       await update(source.id, enabled);
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = sourceManagementErrorMessage(error));
     } finally {
       if (mounted) {
         setState(() => _busySourceIds.remove(source.id));
