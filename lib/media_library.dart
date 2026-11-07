@@ -16,6 +16,19 @@ part 'media_merge_queue.dart';
 part 'media_merge.dart';
 part 'media_exports.dart';
 
+/// Formats local media sizes consistently across download and media screens.
+String storageSize(int bytes) {
+  const units = <String>['B', 'KB', 'MB', 'GB', 'TB'];
+  var value = bytes < 0 ? 0.0 : bytes.toDouble();
+  var unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  final digits = unit == 0 ? 0 : value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return '${value.toStringAsFixed(digits)} ${units[unit]}';
+}
+
 class LocalMediaItem {
   LocalMediaItem({
     required this.id,
