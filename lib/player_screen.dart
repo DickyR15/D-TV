@@ -1825,11 +1825,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         final setupClock = Stopwatch()..start();
         final platform = _player.platform;
         if (platform is NativePlayer) {
-          final videoSyncMode = playbackVideoSyncModeFor(
-            windows: Platform.isWindows,
-            android: Platform.isAndroid,
-            television: _television,
-          );
           if (Platform.isWindows) {
             // The Windows log repeatedly reports file-cache creation failures.
             // Keep short-form streaming cache in RAM and use display-clock pacing.
@@ -1841,8 +1836,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 '[MPV] cache_on_disk_setting_failed=${error.runtimeType}',
               );
             }
-            await _setPlaybackProperty(platform, 'video-sync', videoSyncMode);
-            await _setPlaybackProperty(platform, 'framedrop', 'vo');
           }
           final hwdec = playbackHwdecFor(
             decoder: _televisionDecoder,
@@ -1929,10 +1922,19 @@ class _PlayerScreenState extends State<PlayerScreen>
               await _setPlaybackProperty(platform, 'vd-lavc-threads', '4');
             }
             await _setPlaybackProperty(platform, 'vd-lavc-fast', 'yes');
-            await _setPlaybackProperty(platform, 'video-sync', videoSyncMode);
-            // Decoder-based dropping can create uneven cadence even when
-            // decoding keeps up; let the video output discard late frames.
-            await _setPlaybackProperty(platform, 'framedrop', 'vo');
+            final videoSyncMode = playbackVideoSyncModeFor(
+              android: Platform.isAndroid,
+            );
+            if (videoSyncMode != null) {
+              await _setPlaybackProperty(platform, 'video-sync', videoSyncMode);
+            }
+            final frameDropMode = playbackFrameDropModeFor(
+              android: Platform.isAndroid,
+              television: _television,
+            );
+            if (frameDropMode != null) {
+              await _setPlaybackProperty(platform, 'framedrop', frameDropMode);
+            }
           }
           await _setPlaybackProperty(
             platform,
