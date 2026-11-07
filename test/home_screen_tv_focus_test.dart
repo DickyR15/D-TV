@@ -294,6 +294,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 250));
       expect(find.byType(SimpleDialog), findsOneWidget);
+      expect(appNavigationObserver.hasChildRoute, isTrue);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
