@@ -44,7 +44,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   String? _error;
 
   String _errorMessage(Object error) => uiTraditional(
-    error.toString().replaceFirst(RegExp(r'^Bad state:\\s*'), ''),
+    error.toString().replaceFirst(RegExp(r'^Bad state:\s*'), ''),
   );
 
   @override
