@@ -41,7 +41,7 @@ class SourceSite {
   static const duoduo = SourceSite(
     'duoduo',
     '多多追劇',
-    '電影 · 電視劇 · 動畫 · 綜藝',
+    '電影 · 電視劇 · 動漫 · 綜藝',
   );
   static const hanxiaoquan = SourceSite(
     'hanxiaoquan',
