@@ -538,7 +538,7 @@ class CatalogBrowser {
       final page = more ? entry.nextPage : 1;
       try {
         final result = source == 'duoduo' && sort.isNotEmpty
-            ? await repository.catalog(
+            ? await repository.catalogWithSort(
                 source,
                 category: requests[source]!,
                 query: query,
