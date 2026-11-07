@@ -291,6 +291,62 @@ void main() {
     },
   );
 
+  for (final setting in const <({String key, String label})>[
+    (key: 'theme-accent-setting', label: '介面配色'),
+    (key: 'display-mode-setting', label: '介面模式'),
+  ]) {
+    testWidgets(
+      'TV Back from ${setting.label} chooser returns to Settings',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({
+          'sourceSwitches': '{"hongguo": false}',
+        });
+        final store = testStore(await SharedPreferences.getInstance());
+        addTearDown(store.dispose);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: AppLayout(
+              television: true,
+              formFactor: FormFactor.television,
+              child: HomeScreen(
+                repository: FixtureRepository(),
+                store: store,
+              ),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 350));
+
+        final settingsNavigation = find.byKey(const ValueKey('side-nav-9'));
+        tester.widget<RemoteTarget>(settingsNavigation).onPressed!.call();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+
+        final settingFinder = find.byKey(ValueKey(setting.key));
+        expect(settingFinder, findsOneWidget);
+        await tester.tap(settingFinder);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(find.byType(SimpleDialog), findsOneWidget);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 150));
+
+        expect(find.byType(SimpleDialog), findsNothing);
+        expect(settingFinder, findsOneWidget);
+        expect(
+          tester.widget<RemoteTarget>(settingsNavigation).selected,
+          isTrue,
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      },
+    );
+  }
+
   testWidgets(
     'TV Back duplicate after closing a theme chooser does not pop Settings page',
     (tester) async {
