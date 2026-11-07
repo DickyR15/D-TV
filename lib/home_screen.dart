@@ -733,13 +733,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       case AppNavigationEvent.pop:
       case AppNavigationEvent.remove:
       case AppNavigationEvent.replace:
-        // A dialog or child page may close before the TV remote delivers its
-        // trailing Back event. Swallow that event app-wide, not just for menus.
+        // Only a pop of the top route belongs to the current screen. A menu
+        // route can finish popping after its selection callback pushed Settings;
+        // that late, non-top pop must not consume the user's next Back press.
         _resetBackConfirmation(
-          ignoreTrailingBack: true,
-          // Some TV remotes deliver the same Back press after the dialog has
-          // already closed. Keep Settings selected instead of treating that
-          // trailing event as a request to leave Settings.
+          ignoreTrailingBack: change.topRoute,
           trailingBackWindow: const Duration(milliseconds: 900),
         );
         break;
