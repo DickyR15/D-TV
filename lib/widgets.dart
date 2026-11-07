@@ -159,12 +159,15 @@ class DramaCover extends StatelessWidget {
               ),
             ),
           ),
-          if (showEpisodeBadge && (drama.badge.isNotEmpty || drama.canShowEpisodeCount))
+          if (showEpisodeBadge &&
+              (drama.badge.isNotEmpty || drama.canShowEpisodeCount))
             Positioned(
               left: 9,
               bottom: 9,
               child: Text(
-                drama.badge.isNotEmpty ? uiTraditional(drama.badge) : '共 ${drama.episodes} 集',
+                drama.badge.isNotEmpty
+                    ? uiTraditional(drama.badge)
+                    : '共 ${drama.episodes} 集',
                 style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ),
