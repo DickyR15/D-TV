@@ -103,6 +103,8 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nat
 		fresh, _, err = d.fetchDSDDetail(ctx, id)
 	case sourceHanxiaoquan:
 		fresh, _, err = d.fetchHanxiaoquanDetail(ctx, id)
+	case sourceHeitao:
+		fresh, _, err = d.fetchHeitaoDetail(ctx, id)
 	case sourceDuoduo:
 		fresh, _, _, _, err = d.fetchDuoduoDetailRow(ctx, id)
 	case sourceCloudFront:
