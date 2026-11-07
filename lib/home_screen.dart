@@ -793,9 +793,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _ignoreExitPromptUntil = now.add(const Duration(milliseconds: 900));
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       // PopScope on the home route can make canPop report false even though
-      // a dialog or child page is visibly above it. ModalRoute state is the
-      // reliable signal that there is another route to close.
-      if (!routeIsCurrent || navigator.canPop()) {
+      // a dialog or settings page is visibly above it. A non-player child
+      // route must still close. During playback, however, respect the player's
+      // own PopScope so its first Back can hide controls instead of exiting.
+      if (!_playbackRouteActive || navigator.canPop()) {
         navigator.pop();
       }
       return;
