@@ -95,12 +95,19 @@ void main() {
     expect(uiTraditional('清晰度、其他清晰度、高清'), '畫質、其他畫質選項、高畫質');
   });
 
+  test('Duoduo anime category is displayed as 動漫 without changing other sources', () {
+    expect(uiDramaCategory('duoduo', '動畫'), '動漫');
+    expect(uiDramaCategory('duoduo', '动画'), '動漫');
+    expect(uiDramaCategory('duoduo', '動漫'), '動漫');
+    expect(uiDramaCategory('hongguo', '動畫'), '動畫');
+  });
+
   test('source names and descriptions use Taiwan Traditional Chinese', () {
     expect(
       SourceSite.allValues.map((source) => source.name).toList(),
       ['紅果', '韓小圈', '多多追劇', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黑桃', '黃果舊版'],
     );
-    expect(SourceSite.duoduo.description, '電影 · 電視劇 · 動畫 · 綜藝');
+    expect(SourceSite.duoduo.description, '電影 · 電視劇 · 動漫 · 綜藝');
     expect(SourceSite.hanxiaoquan.description, '韓劇 · 韓國電影 · 綜藝節目 · 動畫');
   });
 
