@@ -50,6 +50,87 @@ void main() {
 
 
   testWidgets(
+    'TV locked profile selector starts on the first selectable profile',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'locked-admin-password',
+      );
+      store.lock();
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: MaterialApp(
+            home: ProfilesScreen(store: store, locked: true),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final firstProfile = store.profiles.first;
+      final row = tester.widget<InkWell>(
+        find.byKey(ValueKey('profile-open-${firstProfile.id}')),
+      );
+      expect(row.focusNode!.hasPrimaryFocus, isTrue);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'profile-entry-${firstProfile.id}',
+      );
+      expect(row.onTap, isNotNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'TV non-admin profile manager starts on the first selectable profile',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await store.saveProfile(
+        id: 'visitor',
+        name: '訪客',
+        sources: const ['hongguo'],
+        download: false,
+      );
+      await store.switchProfile('visitor');
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: MaterialApp(home: ProfilesScreen(store: store)),
+        ),
+      );
+      await tester.pump();
+
+      final firstProfile = store.profiles.first;
+      final focusable = store.profiles.firstWhere((p) => p.id == 'visitor');
+      final row = tester.widget<InkWell>(
+        find.byKey(ValueKey('profile-open-${focusable.id}')),
+      );
+      expect(row.canRequestFocus, isTrue);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'profile-entry-${focusable.id}',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
     'admin profile editor exposes editable fields and a focused save action',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
