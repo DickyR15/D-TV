@@ -411,6 +411,140 @@ void main() {
   );
 
   testWidgets(
+    'TV remote selects the appearance theme from Settings',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appNavigationObserver],
+          home: AppLayout(
+            television: true,
+            formFactor: FormFactor.television,
+            child: HomeScreen(
+              repository: FixtureRepository(),
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+      await _openSettingsFromMoreMenu(tester);
+
+      await tester.tap(find.byKey(const ValueKey('theme-setting')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byType(SimpleDialog), findsOneWidget);
+      expect(store.themeMode, 'system');
+
+      // The current option receives initial focus; move to 深色 and confirm.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(store.themeMode, 'dark');
+      expect(find.byType(SimpleDialog), findsNothing);
+      expect(find.byKey(const ValueKey('theme-setting')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'TV remote selects the interface accent color from Settings',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appNavigationObserver],
+          home: AppLayout(
+            television: true,
+            formFactor: FormFactor.television,
+            child: HomeScreen(
+              repository: FixtureRepository(),
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+      await _openSettingsFromMoreMenu(tester);
+
+      await tester.tap(find.byKey(const ValueKey('theme-accent-setting')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byType(SimpleDialog), findsOneWidget);
+      expect(store.themeAccent, 'system');
+
+      // The first option (跟隨系統色彩) is focused; select 暖橙.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(store.themeAccent, 'warmOrange');
+      expect(find.byType(SimpleDialog), findsNothing);
+      expect(find.byKey(const ValueKey('theme-accent-setting')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'TV Back from direct More menu display mode closes only the chooser',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorObservers: [appNavigationObserver],
+          home: AppLayout(
+            television: true,
+            formFactor: FormFactor.television,
+            child: HomeScreen(
+              repository: FixtureRepository(),
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+
+      await tester.tap(find.byKey(const ValueKey('home-more-menu')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.tap(find.text('介面模式').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byType(SimpleDialog), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.goBack);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+
+      expect(find.byType(SimpleDialog), findsNothing);
+      expect(find.byKey(const ValueKey('home-more-menu')), findsOneWidget);
+      expect(find.text('設定與備份'), findsNothing);
+      expect(store.displayMode, 'auto');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
     'TV Back from a Settings subpage returns to Settings without popping Home',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
