@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
+import 'app_layout.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'profiles_screen.dart';
@@ -24,15 +25,44 @@ class SourceManagementScreen extends StatefulWidget {
 
 class _SourceManagementScreenState extends State<SourceManagementScreen> {
   final _password = TextEditingController();
+  final _setupPasswordFocus = FocusNode(
+    debugLabel: 'source-management-setup-password',
+  );
+  final _passwordFocus = FocusNode(
+    debugLabel: 'source-management-password',
+  );
+  final _firstAdvancedFocus = FocusNode(
+    debugLabel: 'source-management-first-advanced-source',
+  );
   bool _unlocked = false;
   bool _busy = false;
+  bool _initialFocusScheduled = false;
   final Set<String> _busySourceIds = <String>{};
   String? _error;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
+    _initialFocusScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final target = widget.store.administratorPasswordConfigured
+          ? _passwordFocus
+          : _setupPasswordFocus;
+      if (target.context != null && target.canRequestFocus) {
+        target.requestFocus();
+      }
+    });
+  }
 
   @override
   void dispose() {
     widget.store.lockAdvancedSources();
     _password.dispose();
+    _setupPasswordFocus.dispose();
+    _passwordFocus.dispose();
+    _firstAdvancedFocus.dispose();
     super.dispose();
   }
 
@@ -49,6 +79,12 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         _unlocked = true;
         _password.clear();
       });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _firstAdvancedFocus.context != null &&
+            _firstAdvancedFocus.canRequestFocus) {
+          _firstAdvancedFocus.requestFocus();
+        }
+      });
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
@@ -64,7 +100,15 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         builder: (_) => ProfileEditor(store: widget.store, profile: admin),
       ),
     );
-    if (mounted) setState(() => _error = null);
+    if (mounted) {
+      setState(() => _error = null);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _passwordFocus.context != null &&
+            _passwordFocus.canRequestFocus) {
+          _passwordFocus.requestFocus();
+        }
+      });
+    }
   }
 
   Future<void> _toggle(SourceSite source, bool enabled) async {
@@ -92,10 +136,20 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
       _unlocked = false;
       _error = null;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _passwordFocus.context != null &&
+          _passwordFocus.canRequestFocus) {
+        _passwordFocus.requestFocus();
+      }
+    });
   }
 
-  Widget _sourceTile(SourceSite source) => SwitchListTile(
+  Widget _sourceTile(
+    SourceSite source, {
+    FocusNode? focusNode,
+  }) => SwitchListTile(
     key: ValueKey('source-switch-${source.id}'),
+    focusNode: focusNode,
     contentPadding: EdgeInsets.zero,
     title: Text(uiTraditional(source.name)),
     subtitle: Text(uiTraditional(source.description)),
@@ -119,6 +173,8 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 key: const ValueKey('configure-admin-source-password'),
+                focusNode: _setupPasswordFocus,
+                autofocus: AppLayout.isTelevision(context),
                 onPressed: _busy ? null : _setupPassword,
                 icon: const Icon(Icons.admin_panel_settings_outlined),
                 label: const Text('設定管理員密碼'),
@@ -141,7 +197,8 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
             TextField(
               key: const ValueKey('advanced-source-password'),
               controller: _password,
-              autofocus: true,
+              focusNode: _passwordFocus,
+              autofocus: AppLayout.isTelevision(context),
               enabled: !_busy,
               obscureText: true,
               textInputAction: TextInputAction.done,
@@ -210,7 +267,11 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         const SizedBox(height: 8),
-                        for (final source in advanced) _sourceTile(source),
+                        for (var index = 0; index < advanced.length; index++)
+                          _sourceTile(
+                            advanced[index],
+                            focusNode: index == 0 ? _firstAdvancedFocus : null,
+                          ),
                         Align(
                           alignment: Alignment.centerLeft,
                           child: TextButton.icon(
