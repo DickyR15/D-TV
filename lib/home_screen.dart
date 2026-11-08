@@ -2977,7 +2977,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               children: [
                 IconButton(
                   key: const ValueKey('catalog-sort-button'),
-                  tooltip: '排序：${effectiveCatalogView(widget.store.catalogView, _items).sort.label}',
+                  tooltip: catalogSortButtonTooltip(widget.store.catalogView, _items, duoduoCatalog: _isDuoduoCatalog),
                   onPressed: _chooseCatalogView,
                   icon: const Icon(Icons.sort_rounded),
                 ),
