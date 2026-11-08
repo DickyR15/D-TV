@@ -78,3 +78,16 @@ class SourceStatus {
         .clamp(0, 3600);
   }
 }
+
+/// Returns only currently enabled sources for the diagnostic screen.
+/// Restricted sources are hidden when no administrator password exists,
+/// including stale switch preferences left by older app versions.
+List<SourceSite> sourceDiagnosticsSources({
+  required Iterable<SourceSite> enabledSources,
+  required bool administratorPasswordConfigured,
+}) => [
+  for (final source in enabledSources)
+    if (!SourceSite.isRestricted(source.id) ||
+        administratorPasswordConfigured)
+      source,
+];

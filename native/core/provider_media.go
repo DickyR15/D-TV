@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"context"
 	"fmt"
 	"net/url"
@@ -13,6 +14,7 @@ type providerMedia struct {
 	credentials *providerMediaCredentials
 	URL         string
 	Referer     string
+	StandardHTTP bool
 	Duration    time.Duration
 	Playlist    string
 	HLSKey      []byte
@@ -39,10 +41,15 @@ func (d *Downloader) providerBaseURL(source string) string {
 		configured, fallback = d.cfg.YeguoURL, yeguoBaseURL
 	case sourceDSD:
 		configured, fallback = d.cfg.DSDURL, dsdBaseURL
-	case sourceGuipian:
-		configured, fallback = d.cfg.GuipianURL, guipianSiteBaseURL
+	case sourceDuoduo:
+		d.providerMu.Lock()
+		configured = strings.TrimRight(d.providerHosts[sourceDuoduo], "/")
+		d.providerMu.Unlock()
+		fallback = "https://323433ssdfd.top"
 	case sourceHanxiaoquan:
 		configured, fallback = d.cfg.HanxiaoquanURL, hanxiaoquanSiteBaseURL
+	case sourceHeitao:
+		configured, fallback = d.cfg.HeitaoURL, heitaoBaseURL
 	default:
 		fallback = "https://d2pypzndaqisk.cloudfront.net"
 	}
@@ -56,11 +63,11 @@ func providerSourceForURL(raw string) string {
 	}
 	host := strings.ToLower(parsed.Hostname())
 	switch {
-	case host == "huangguoai.com" || strings.HasSuffix(host, ".ediayikma.cc") || strings.HasSuffix(host, ".agdkczeyx.cc"):
+	case host == "huangguoai.com" || isHuangguoAIMirrorHost(host):
 		return sourceHuangguoAI
 	case host == "huangguo.video":
 		return sourceHuangguoVideo
-	case host == "tideember.cc" || host == "xqjurgek.top":
+	case isHuangdouHost(host):
 		return sourceHuangdou
 	case host == "hongguoduanju.com" || host == "www.hongguoduanju.com":
 		return sourceHongguo
@@ -68,18 +75,27 @@ func providerSourceForURL(raw string) string {
 		return sourceHuangju
 	case host == "ygdj7.com" || host == "www.ygdj7.com" || host == "ygdj15.com" || host == "www.ygdj15.com" ||
 		host == "analyze.buxefaex.cc" || strings.HasSuffix(host, ".buxefaex.cc") ||
-		strings.HasSuffix(host, ".fzchosdi.cc") || strings.HasSuffix(host, ".lwblvxvy.cc") ||
+		strings.HasSuffix(host, ".fzchosdi.cc") || strings.HasSuffix(host, ".lwblvxvy.cc") || strings.HasSuffix(host, ".vgbyziuz.cc") ||
 		host == "delta.ygrwdsgt.cc" || host == "yeguodj.com" || host == "www.yeguodj.com":
 		return sourceYeguo
 	case host == "dsd.com.se" || host == "www.dsd.com.se":
 		return sourceDSD
-	case host == "guipianwu.com" || host == "www.guipianwu.com":
-		return sourceGuipian
 	case host == "jennyhow.com" || host == "www.jennyhow.com":
 		return sourceHanxiaoquan
+	case host == "heitaodj.com" || host == "www.heitaodj.com":
+		return sourceHeitao
 	default:
 		return ""
 	}
+}
+
+func isHuangguoAIMirrorHost(host string) bool {
+	for _, domain := range huangguoAIMirrorDomains {
+		if strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *Downloader) providerURLCandidates(raw string) []string {
@@ -102,12 +118,9 @@ func (d *Downloader) providerURLCandidates(raw string) []string {
 	add(rehostProviderURL(parsed, preferred))
 	configured := d.providerBaseURL(source)
 	add(rehostProviderURL(parsed, configured))
-	if providerSourceForURL(configured) == "" {
-		return candidates
-	}
-	for _, candidate := range providerURLCandidates(raw) {
-		add(candidate)
-	}
+	// Candidate generation is intentionally non-recursive: this function is
+	// already resolving a source URL, and re-entering it for the same URL would
+	// recurse forever whenever the configured host is recognized as that source.
 	return candidates
 }
 
@@ -129,11 +142,14 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 	if chapter.Source == sourceDSD {
 		return d.resolveDSDMedia(ctx, task)
 	}
-	if chapter.Source == sourceGuipian {
-		return d.resolveGuipianMedia(ctx, task)
+	if chapter.Source == sourceDuoduo {
+		return d.resolveDuoduoMedia(ctx, task)
 	}
 	if chapter.Source == sourceHanxiaoquan {
 		return d.resolveHanxiaoquanMedia(ctx, task)
+	}
+	if chapter.Source == sourceHeitao {
+		return d.resolveHeitaoMedia(ctx, task)
 	}
 	if strings.HasPrefix(chapter.VideoURL, "hongguo-cenc://") {
 		return d.resolveHongguoMedia(ctx, task)
@@ -173,7 +189,18 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 			media.Referer = client.host + "/home"
 		}
 	}
-	if chapter.PageURL != "" && (chapter.Source == sourceHuangguoAI || chapter.Source == sourceHuangguoVideo) {
+	if chapter.Source == sourceHuangguoAI {
+		_, sourceID, valid := splitProviderDramaID(task.DramaID)
+		if !valid {
+			return providerMedia{}, errors.New("黃果劇集資訊無效")
+		}
+		address, err := d.fetchHuangguoAIPlayURL(ctx, sourceID, chapterEpisodeNumber(chapter, task.Index))
+		if err != nil {
+			return providerMedia{}, err
+		}
+		media.URL = address
+	}
+	if chapter.PageURL != "" && chapter.Source == sourceHuangguoVideo {
 		responses := &playbackResponseURLs{}
 		pageContext := context.WithValue(ctx, playbackResponseURLsKey{}, responses)
 		body, err := d.fetchProviderText(pageContext, chapter.PageURL, media.Referer)
@@ -184,11 +211,7 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 		if actual, ok := responses.values.Load(chapter.PageURL); ok {
 			pageURL = actual.(string)
 		}
-		if chapter.Source == sourceHuangguoAI {
-			media.URL = parseAIVideoURL(body, pageURL)
-		} else {
-			media.URL = parseDataHLS(body, pageURL)
-		}
+		media.URL = parseDataHLS(body, pageURL)
 		media.Referer = pageURL
 	}
 	if !isProviderHTTPMediaURL(media.URL) {

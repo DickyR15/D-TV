@@ -30,6 +30,22 @@ void main() {
     );
   });
 
+  test('removes Dart Bad state prefixes from user-visible messages', () {
+    expect(uiTraditional('Bad state: 密碼不正確'), '密碼不正確');
+    expect(uiTraditional('Bad state: Bad state: 密碼不正確'), '密碼不正確');
+    expect(uiTraditional('更新失敗：Bad state: 連線中斷'), '更新失敗：連線中斷');
+  });
+
+
+
+  test('normalizes Taiwan terms across settings and system prompts', () {
+    expect(
+      uiTraditional('默認、用戶、網絡、保存文件、視頻、播放源、文件夾、點擊、搜索、在線'),
+      '預設、使用者、網路、儲存檔案、影片、播放來源、資料夾、點選、搜尋、線上',
+    );
+    expect(uiTraditional('自動識別設備'), '自動偵測裝置');
+  });
+
   test('Traditional input can find a Simplified source title', () {
     const drama = Drama(
       id: 'test-drama',
@@ -87,12 +103,26 @@ void main() {
     expect(uiTraditional('清晰度、其他清晰度、高清'), '畫質、其他畫質選項、高畫質');
   });
 
+  test('Duoduo anime category is displayed as 動漫 without changing other sources', () {
+    expect(uiDramaCategory('duoduo', '動畫'), '動漫');
+    expect(uiDramaCategory('duoduo', '动画'), '動漫');
+    expect(uiDramaCategory('duoduo', '動漫'), '動漫');
+    expect(uiDramaCategory('hongguo', '動畫'), '動畫');
+  });
+
+  test('Duoduo category chip keeps 動漫 through focus label conversion', () {
+    expect(uiTraditional('動漫'), '動畫'); // General wording remains unchanged.
+    expect(uiCatalogCategoryLabel('動漫'), '動漫');
+    expect(uiCatalogCategoryLabel('動畫'), '動畫');
+    expect(uiCatalogCategoryLabel('电影'), '電影');
+  });
+
   test('source names and descriptions use Taiwan Traditional Chinese', () {
     expect(
       SourceSite.allValues.map((source) => source.name).toList(),
-      ['紅果', '韓小圈', '鬼片', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黃果舊版'],
+      ['紅果', '韓小圈', '多多追劇', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', '黑桃', '黃果舊版'],
     );
-    expect(SourceSite.guipian.description, '恐怖片 · 電視劇 · 動畫');
+    expect(SourceSite.duoduo.description, '電影 · 電視劇 · 動漫 · 綜藝');
     expect(SourceSite.hanxiaoquan.description, '韓劇 · 韓國電影 · 綜藝節目 · 動畫');
   });
 

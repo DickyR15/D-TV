@@ -113,10 +113,14 @@ class CoverDecoder {
     Future<Map<String, dynamic>> Function() prepare,
   ) async {
     final prepared = await prepare();
-    if (prepared['heic'] != true) {
+    final heic = prepared['heic'] == true;
+    final avif = prepared['avif'] == true;
+    if (!heic && !avif) {
       return prepared['path'] as String? ?? original;
     }
-    final input = prepared['input'] as String? ?? '';
+    // HEIC is extracted to a raw HEVC bitstream by Go. AVIF remains an
+    // ISO-BMFF container and is decoded directly by the bundled FFmpeg build.
+    final input = heic ? prepared['input'] as String? ?? '' : original;
     if (input.isEmpty) throw AppFailure('海報格式轉換失敗，請重試');
     final intermediate = File('${target.path}.part');
     final executor = _createExecutor();
@@ -133,8 +137,7 @@ class CoverDecoder {
         '67108864',
         '-threads',
         '1',
-        '-f',
-        'hevc',
+        if (heic) ...['-f', 'hevc'] else if (avif) ...['-f', 'mov'],
         '-i',
         input,
         '-frames:v',

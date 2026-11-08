@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -88,4 +89,118 @@ bool playbackDiagnosticLogRequiresRecovery({
     r'hit eof while reading senc|partial file|failed to open|'
     r'moov atom not found|invalid data found when processing input',
   ).hasMatch(message);
+}
+
+
+/// Formats the change in a cumulative MPV frame counter between two samples.
+/// A missing first sample is a baseline; a decreasing value means MPV reset it.
+String playbackDiagnosticCounterDelta(String currentValue, int? previousValue) {
+  final current = int.tryParse(currentValue.trim());
+  if (current == null) return 'n/a';
+  if (previousValue == null) return 'baseline';
+  if (current < previousValue) return 'reset';
+  return '+${current - previousValue}';
+}
+
+/// Preserve the official 1.0.1 MPV synchronization policy: Android uses
+/// audio-clock sync, while desktop platforms retain MPV's native defaults.
+String? playbackVideoSyncModeFor({required bool android}) =>
+    android ? 'audio' : null;
+
+/// Preserve 1.0.1's Android late-frame policy. Android TV uses decoder dropping
+/// to reduce late frames before the embedded video output; phones use VO drop.
+String? playbackFrameDropModeFor({
+  required bool android,
+  required bool television,
+}) => android ? (television ? 'decoder' : 'vo') : null;
+
+/// Low-overhead MPV properties sampled during native playback. Query only
+/// signals that distinguish decoder drops, output drops, display cadence and
+/// network cache starvation; avoid polling at near-render frequency.
+const playbackFramePacingSampleInterval = Duration(seconds: 5);
+
+const playbackFramePacingProperties = <String>[
+  'hwdec-current',
+  'current-vo',
+  'estimated-vf-fps',
+  'display-fps',
+  'display-sync-active',
+  'vo-delayed-frame-count',
+  'decoder-frame-drop-count',
+  'demuxer-cache-duration',
+  'paused-for-cache',
+];
+
+const playbackFramePacingCounterProperties = <String>{
+  'vo-delayed-frame-count',
+  'frame-drop-count',
+  'decoder-frame-drop-count',
+};
+
+
+/// Debounces persisted volume changes while keeping the latest requested value
+/// available immediately for episode replacement. Zero is an intentional mute.
+class PlaybackVolumeMemory {
+  PlaybackVolumeMemory({
+    required this.save,
+    double initial = 100,
+    this.debounce = const Duration(milliseconds: 500),
+  }) : _value = initial.isFinite
+           ? initial.clamp(0.0, 100.0).toDouble()
+           : 100.0;
+
+  final Future<void> Function(double value) save;
+  final Duration debounce;
+
+  Timer? _timer;
+  double _value;
+  double? _pending;
+  bool _disposed = false;
+
+  double get value => _value;
+
+  void remember(double value) {
+    if (_disposed || !value.isFinite) return;
+    _value = value.clamp(0.0, 100.0).toDouble();
+    _pending = _value;
+    _timer?.cancel();
+    _timer = Timer(debounce, flush);
+  }
+
+  void flush() {
+    _timer?.cancel();
+    _timer = null;
+    final pending = _pending;
+    _pending = null;
+    if (pending == null) return;
+    try {
+      unawaited(save(pending).catchError((Object _) {}));
+    } catch (_) {}
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    flush();
+    _disposed = true;
+  }
+}
+
+/// Buffered media time ahead of the current position, used by ExoPlayer
+/// diagnostics to separate network starvation from decode/frame pacing.
+int? playbackBufferedAheadMilliseconds({
+  required Duration position,
+  required Duration? bufferedEnd,
+}) {
+  if (bufferedEnd == null) return null;
+  return (bufferedEnd - position).inMilliseconds;
+}
+
+/// Estimates how much media time should advance during a wall-clock sample.
+/// Returns null when the player rate is unavailable or invalid.
+int? playbackExpectedPositionDeltaMilliseconds({
+  required Duration elapsed,
+  required double rate,
+}) {
+  if (!rate.isFinite || rate <= 0) return null;
+  return (elapsed.inMilliseconds * rate).round();
 }

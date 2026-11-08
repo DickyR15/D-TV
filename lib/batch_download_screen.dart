@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'batch_downloads.dart';
 import 'core_bridge.dart';
 import 'downloads_screen.dart';
+import 'app_layout.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'widgets.dart';
@@ -26,16 +27,42 @@ class BatchDownloadScreen extends StatefulWidget {
 
 class _BatchDownloadScreenState extends State<BatchDownloadScreen> {
   late final BatchDownloads _batch;
+  final FocusNode _qualityFocus = FocusNode(
+    debugLabel: 'batch-download-quality',
+  );
+  bool _initialFocusScheduled = false;
+
+  void _batchChanged() {
+    if (_initialFocusScheduled ||
+        _batch.busy ||
+        !mounted ||
+        !AppLayout.isTelevision(context)) {
+      return;
+    }
+    _initialFocusScheduled = true;
+    // The initial catalogue read disables quality changes. Wait until that
+    // work finishes so the dropdown is enabled before requesting TV focus.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          _qualityFocus.context != null &&
+          _qualityFocus.canRequestFocus) {
+        _qualityFocus.requestFocus();
+      }
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     _batch = BatchDownloads(widget.repository, widget.store, widget.dramas);
+    _batch.addListener(_batchChanged);
     unawaited(_batch.prepare());
   }
 
   @override
   void dispose() {
+    _batch.removeListener(_batchChanged);
+    _qualityFocus.dispose();
     _batch.dispose();
     super.dispose();
   }
@@ -96,6 +123,8 @@ class _BatchDownloadScreenState extends State<BatchDownloadScreen> {
                             const SizedBox(height: 12),
                             DropdownButtonFormField<int>(
                               key: const ValueKey('batch-download-quality'),
+                              focusNode: _qualityFocus,
+                              autofocus: AppLayout.isTelevision(context),
                               initialValue: _batch.quality,
                               isExpanded: true,
                               decoration: const InputDecoration(

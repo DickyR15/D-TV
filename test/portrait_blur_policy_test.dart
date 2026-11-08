@@ -65,6 +65,26 @@ void main() {
     );
   });
 
+  test('Android TV uses ExoPlayer by default while phones and custom players keep their own route', () {
+    bool exo({
+      bool android = true,
+      bool television = true,
+      bool configured = true,
+      bool customPlayer = false,
+    }) => shouldUseExoPlayerForAndroidPlayback(
+      android: android,
+      television: television,
+      exoConfigured: configured,
+      customPlayer: customPlayer,
+    );
+
+    expect(exo(), isTrue);
+    expect(exo(television: false), isFalse);
+    expect(exo(android: false), isFalse);
+    expect(exo(configured: false), isFalse);
+    expect(exo(customPlayer: true), isFalse);
+  });
+
   test('Android TV keeps MPV Embed while Flutter composites portrait blur', () {
     bool embed({
       bool android = true,

@@ -1,0 +1,155 @@
+name: Kankanya public site probe
+
+on:
+  push:
+    branches:
+      - feat/independent-maccms-sources-ci
+    paths:
+      - ".github/workflows/kankanya-public-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    name: Public homepage, metadata and frontend route inspection
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Inspect public pages without bypassing access controls
+        shell: bash
+        run: |
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.error import HTTPError, URLError
+          from urllib.parse import urljoin, urlsplit
+          from urllib.request import Request, urlopen
+          import json
+          import re
+          import ssl
+
+          ROOTS = ["https://www.kankanya.me/", "https://kankanya.me/"]
+          UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+          TLS = ssl.create_default_context()
+          CHALLENGE_MARKERS = (
+              "正在进行人机识别", "人机验证", "checking your browser",
+              "just a moment", "cf-chl-", "challenge-platform",
+              "/cdn-cgi/challenge-platform/",
+          )
+
+          class PageParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title = []
+                  self.in_title = False
+                  self.scripts = []
+                  self.links = []
+                  self.meta = {}
+              def handle_starttag(self, tag, attrs):
+                  a = dict(attrs)
+                  if tag.lower() == "title":
+                      self.in_title = True
+                  if tag.lower() == "script" and a.get("src"):
+                      self.scripts.append(a["src"])
+                  if tag.lower() == "a" and a.get("href"):
+                      self.links.append((a["href"], a.get("title", "")))
+                  if tag.lower() == "meta" and a.get("name") and a.get("content"):
+                      self.meta[a["name"].lower()] = a["content"]
+              def handle_endtag(self, tag):
+                  if tag.lower() == "title":
+                      self.in_title = False
+              def handle_data(self, data):
+                  if self.in_title and data.strip():
+                      self.title.append(data.strip())
+
+          def fetch(url, limit=1_500_000, timeout=15):
+              req = Request(url, headers={
+                  "User-Agent": UA,
+                  "Accept": "text/html,application/javascript,application/json,application/xml,*/*",
+                  "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+              })
+              with urlopen(req, timeout=timeout, context=TLS) as response:
+                  body = response.read(limit)
+                  return response.status, response.geturl(), response.headers.get("Content-Type", ""), body
+
+          report = {"target": "https://www.kankanya.me/", "checks": []}
+          success = False
+          for root in ROOTS:
+              item = {"url": root}
+              try:
+                  status, final_url, content_type, body = fetch(root)
+                  html = body.decode("utf-8", errors="replace")
+                  parser = PageParser()
+                  parser.feed(html)
+                  title = " ".join(parser.title)
+                  lower = html.lower()
+                  challenge = any(marker.lower() in lower for marker in CHALLENGE_MARKERS)
+                  item.update({
+                      "http_status": status,
+                      "final_host": urlsplit(final_url).hostname,
+                      "content_type": content_type,
+                      "bytes": len(body),
+                      "title": title[:180],
+                      "challenge_detected": challenge,
+                      "description": parser.meta.get("description", "")[:300],
+                      "same_origin_script_count": len(parser.scripts),
+                      "same_origin_links_sample": [
+                          urljoin(final_url, href) for href, _ in parser.links[:20]
+                          if urlsplit(urljoin(final_url, href)).hostname == urlsplit(final_url).hostname
+                      ],
+                  })
+                  if challenge:
+                      item["result"] = "ACCESS_CHALLENGE"
+                      item["note"] = "公開入口回傳人機驗證頁；未嘗試繞過驗證。"
+                  else:
+                      success = True
+                      routes = set()
+                      script_reports = []
+                      for src in parser.scripts[:12]:
+                          script_url = urljoin(final_url, src)
+                          if urlsplit(script_url).hostname != urlsplit(final_url).hostname:
+                              continue
+                          try:
+                              js_status, js_final, js_type, js_body = fetch(script_url, limit=2_000_000)
+                              js = js_body.decode("utf-8", errors="replace")
+                              matches = re.findall(
+                                  r"""(?:['"])(/[^'"\\s]{1,140}(?:api|search|detail|vod|play|video|player|parse)[^'"\\s]{0,100})(?:['"])""",
+                                  js, flags=re.I
+                              )
+                              routes.update(matches)
+                              script_reports.append({
+                                  "host": urlsplit(js_final).hostname,
+                                  "status": js_status,
+                                  "bytes": len(js_body),
+                                  "api_route_candidates": sorted(set(matches))[:40],
+                              })
+                          except Exception as exc:
+                              script_reports.append({"url_path": urlsplit(script_url).path, "error": type(exc).__name__ + ": " + str(exc)[:120]})
+                      item["scripts"] = script_reports
+                      item["route_candidates"] = sorted(routes)[:80]
+                      item["result"] = "HOMEPAGE_REACHABLE"
+                  report["checks"].append(item)
+              except HTTPError as exc:
+                  body = exc.read(2048).decode("utf-8", errors="replace")
+                  report["checks"].append({"url": root, "http_status": exc.code, "result": "HTTP_ERROR", "body_excerpt": body[:500]})
+              except Exception as exc:
+                  report["checks"].append({"url": root, "result": "NETWORK_ERROR", "error": type(exc).__name__ + ": " + str(exc)[:180]})
+
+          for path in ("/robots.txt", "/sitemap.xml"):
+              try:
+                  status, final_url, content_type, body = fetch("https://www.kankanya.me" + path, limit=500_000)
+                  excerpt = body.decode("utf-8", errors="replace")[:1200]
+                  report["checks"].append({
+                      "path": path, "http_status": status, "content_type": content_type,
+                      "bytes": len(body), "excerpt": excerpt,
+                  })
+              except Exception as exc:
+                  report["checks"].append({"path": path, "result": "UNAVAILABLE", "error": type(exc).__name__ + ": " + str(exc)[:140]})
+
+          print(json.dumps(report, ensure_ascii=False, indent=2))
+          if not success:
+              print("RESULT: Kankanya site content could not be inspected through ordinary public HTTP requests.")
+          else:
+              print("RESULT: Kankanya homepage is reachable; inspect route candidates before attempting detail/playback integration.")
+          PY

@@ -4,12 +4,13 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestHongguoAppBaseURLMatchesUpstreamFallbackHost(t *testing.T) {
-	const want = "https://api5-normal-sinfonlinea.fqnovel.com"
+	const want = "https://api5-normal-sinfonlineb.fqnovel.com"
 	if hongguoAppBaseURL != want {
 		t.Fatalf("Hongguo App API host = %q, want upstream fallback host %q", hongguoAppBaseURL, want)
 	}
@@ -107,18 +108,96 @@ func TestHongguoTabRejectionKeepsDevice(t *testing.T) {
 	}
 }
 
-func TestHongguoRegisterFailurePausesAndKeepsOldDevice(t *testing.T) {
-	d, requests := hongguoDeviceFixture(t, nil, true)
-	for range 2 {
-		if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
-			t.Fatal("failed registration reported success")
+func TestHongguoTransientRegistrationFailureCanRetryImmediately(t *testing.T) {
+	requests := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return nil, context.DeadlineExceeded
 		}
+		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
+	})
+	client := d.hongguoClient()
+	client.state.DeviceID, client.state.InstallID, client.state.Registered = "7", "8", false
+	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
+		t.Fatal("first transient registration failure was hidden")
 	}
-	if state := d.hongguoCatalogSnapshot(); state.DeviceID != "7" || state.Registered {
-		t.Fatal("failed registration changed the device", state)
+	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+		t.Fatalf("transient failure must retry immediately: %v", err)
 	}
-	if got := *requests; len(got) != 1 || got[0] != "register" {
-		t.Fatal("registration was not paused after failure", got)
+	if requests != 2 {
+		t.Fatalf("registration requests = %d, want 2", requests)
+	}
+	if state := d.hongguoCatalogSnapshot(); !state.Registered || state.DeviceID != "1001" {
+		t.Fatalf("retry did not register device: %#v", state)
+	}
+}
+
+// Rate limits and upstream 5xx responses are transient, not evidence of a device ban.
+func TestHongguoTemporaryHTTPRegistrationFailuresCanRetryWithoutDeviceCooldown(t *testing.T) {
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			requests := 0
+			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+				requests++
+				if requests == 1 {
+					return sourceFixtureResponse(request, status, `{"message":"temporary upstream failure"}`), nil
+				}
+				return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
+			})
+			client := d.hongguoClient()
+			client.state.DeviceID, client.state.InstallID, client.state.Registered = "7", "8", false
+			if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
+				t.Fatal("first temporary registration failure was hidden")
+			}
+
+			// HTTP 429 must keep the host-level Retry-After backoff, but must not
+			// create the separate ten-minute device-rejection cooldown. Expire the
+			// host backoff here to test the next eligible registration attempt
+			// without sleeping for the server's full default one-minute window.
+			if status == http.StatusTooManyRequests {
+				client.deviceMu.Lock()
+				paused := client.registerPausedUntil
+				client.deviceMu.Unlock()
+				if !paused.IsZero() {
+					t.Fatalf("HTTP 429 incorrectly created device cooldown until %v", paused)
+				}
+				d.limiter.mu.Lock()
+				backoff := d.limiter.backoffs["log.snssdk.com"]
+				if backoff == nil || backoff.status != http.StatusTooManyRequests {
+					d.limiter.mu.Unlock()
+					t.Fatal("HTTP 429 Retry-After backoff was not preserved")
+				}
+				backoff.until = time.Now().Add(-time.Second)
+				d.limiter.mu.Unlock()
+			}
+
+			if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+				t.Fatalf("temporary HTTP %d must be retryable after any host Retry-After: %v", status, err)
+			}
+			if requests != 2 {
+				t.Fatalf("registration requests = %d, want 2", requests)
+			}
+		})
+	}
+}
+
+func TestHongguoExplicitRegistrationRejectionIsPausedWithReason(t *testing.T) {
+	requests := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		requests++
+		return sourceFixtureResponse(request, http.StatusForbidden, `{"message":"device blocked by policy"}`), nil
+	})
+	client := d.hongguoClient()
+	client.state.DeviceID, client.state.InstallID, client.state.Registered = "7", "8", false
+	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "HTTP 403") {
+		t.Fatalf("missing explicit rejection reason: %v", err)
+	}
+	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "遭拒絕") {
+		t.Fatalf("missing paused rejection message: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("rejected registration should be paused, requests=%d", requests)
 	}
 }
 
@@ -179,5 +258,39 @@ func TestHongguoDeviceRotationClearsOnlyForbiddenHostCooldown(t *testing.T) {
 	}
 	if _, ok := limiter.backoffs["blocked.example.test"]; !ok {
 		t.Fatal("device rotation cleared a browser challenge")
+	}
+}
+
+
+func TestHongguoPlaybackDoesNotCallRetiredThirdPartyAPI(t *testing.T) {
+	var requested []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		requested = append(requested, request.URL.Host+request.URL.Path)
+		switch request.URL.Host {
+		case "novelquickapp.com":
+			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
+		case "api5-normal-sinfonlinea.fqnovel.com":
+			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
+		case "hongguoduanju.com":
+			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
+		case "djapi.999888456.xyz":
+			t.Fatal("retired third-party playback API must not be called")
+		}
+		return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
+	})
+	_, err := d.resolveHongguoMedia(context.Background(), Task{
+		DramaID: "hongguo:100",
+		Chapter: Chapter{VideoURL: "hongguo-cenc://200"},
+	})
+	if err == nil {
+		t.Fatal("expected first-party route failures")
+	}
+	for _, host := range requested {
+		if strings.Contains(host, "djapi.999888456.xyz") {
+			t.Fatal("retired third-party API was requested")
+		}
+	}
+	if !strings.Contains(err.Error(), "官網網頁") || strings.Contains(err.Error(), "最終備用取流") {
+		t.Fatalf("unexpected user-facing error: %v", err)
 	}
 }

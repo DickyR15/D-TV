@@ -11,6 +11,7 @@ type Drama struct {
 	ID                string             `json:"id"`
 	Source            string             `json:"source,omitempty"`
 	SourceID          string             `json:"sourceId,omitempty"`
+	DoubanID          string             `json:"doubanId,omitempty"`
 	Title             string             `json:"title"`
 	Name              string             `json:"name"`
 	Desc              string             `json:"desc"`
@@ -46,6 +47,7 @@ type Drama struct {
 	SortName          string             `json:"sortName"`
 	SortNameSnake     string             `json:"sort_name"`
 	Remark            string             `json:"remark,omitempty"`
+	Badge             string             `json:"badge,omitempty"`
 	Score             string             `json:"score,omitempty"`
 	Views             string             `json:"views,omitempty"`
 	Heat              string             `json:"heat,omitempty"`
@@ -75,6 +77,8 @@ type Chapter struct {
 	MediaSize      int64           `json:"mediaSize"`
 	PageURL        string          `json:"pageUrl,omitempty"`
 	Referer        string          `json:"referer,omitempty"`
+	PlayLine       string          `json:"playLine,omitempty"`
+	PlaybackVariants []string       `json:"playbackVariants,omitempty"`
 	Vertical       *bool           `json:"vertical,omitempty"`
 }
 

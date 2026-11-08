@@ -7,16 +7,19 @@ class CatalogUpdates extends ChangeNotifier {
   final _coverRetries = <String, int>{};
   Drama? latest;
 
-  Drama current(Drama drama) =>
-      _items[drama.id] == null ? drama : drama.merge(_items[drama.id]!);
+  Drama current(Drama drama) {
+    final key = drama.stableId;
+    return _items[key] == null ? drama : drama.merge(_items[key]!);
+  }
 
   int coverRevision(String id) => _coverRetries[id] ?? 0;
 
   void publish(Drama drama, {bool retryCover = false}) {
-    final previous = _items[drama.id];
+    final key = drama.stableId;
+    final previous = _items[key];
     latest = previous?.merge(drama) ?? drama;
-    _items[drama.id] = latest!;
-    if (retryCover) _coverRetries[drama.id] = coverRevision(drama.id) + 1;
+    _items[key] = latest!;
+    if (retryCover) _coverRetries[key] = coverRevision(key) + 1;
     notifyListeners();
   }
 }

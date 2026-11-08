@@ -144,14 +144,17 @@ func TestSourceHistoryPagingUsesSingleRemotePageForHongguo(t *testing.T) {
 
 func TestSourceUpdatesPreservePagesOtherSourcesAndMetadata(t *testing.T) {
 	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
-		if !strings.Contains(request.URL.Path, "/api/videos/category/") {
-			return nil, errors.New("only catalog text is allowed")
+		target := huangguoEdgeTarget(t, request)
+		if !strings.Contains(target.Path, "/api/videos/category/") {
+			return nil, errors.New("only catalog API requests are allowed")
 		}
 		id := "new"
-		if request.URL.Query().Get("page") == "3" {
+		if target.Query().Get("page") == "3" {
 			id = "continued"
 		}
-		return sourceFixtureResponse(request, 200, fmt.Sprintf(`{"data":[{"id":%q,"title":"合成短剧","desc":"完整资料","totalEpisode":2}]}`, id)), nil
+		return sourceFixtureResponse(request, 200, huangguoEdgeReply(map[string]any{
+			"items": []any{map[string]any{"id": id, "title": "合成短劇", "description": "完整資料", "episode_count": 2}},
+		})), nil
 	})
 	engine.catalogs[sourceHuangguoAI] = []nativeDrama{{ID: "huangguoai:old", Source: sourceHuangguoAI, Title: "原有短剧", Description: "保留资料", Episodes: 2}}
 	engine.catalogStates[sourceHuangguoAI] = nativeCatalogState{Page: 2, HasMore: true}

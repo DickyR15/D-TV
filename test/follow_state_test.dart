@@ -228,6 +228,8 @@ void main() {
       expect(store.history.single.position, 12);
       expect(store.preferences.getString('plugin_private'), 'preserve');
       final older = jsonDecode(backup) as Map<String, dynamic>;
+      // This fixture represents a schema-1 backup created before integrity metadata.
+      older.remove('integrity');
       ((older['libraries'] as Map)['default'] as Map).remove('followStates');
       await store.importBackup(jsonEncode(older));
       expect(store.following('hongguo:follow')!.manuallyWatched, isFalse);

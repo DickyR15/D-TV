@@ -67,10 +67,13 @@ func TestProviderSourceParsesTextFixturesAndRejectsMismatchedIdentity(t *testing
 }
 
 func TestYeguoDomainAliasesAndDefaultEndpoint(t *testing.T) {
-	if got := (&Downloader{cfg: defaultConfig()}).providerBaseURL(sourceYeguo); got != "https://analyze.buxefaex.cc" {
+	if got := (&Downloader{cfg: defaultConfig()}).providerBaseURL(sourceYeguo); got != "https://attract.vgbyziuz.cc" {
 		t.Fatalf("unexpected default yeguo endpoint: %s", got)
 	}
 	for _, address := range []string{
+		"https://attract.vgbyziuz.cc/",
+		"https://as.vgbyziuz.cc/",
+		"https://anyway.vgbyziuz.cc/",
 		"https://analyze.buxefaex.cc/",
 		"https://some-line.buxefaex.cc/drama/video/1/",
 		"https://some-backup.fzchosdi.cc/drama/video/1/",
@@ -85,6 +88,9 @@ func TestYeguoDomainAliasesAndDefaultEndpoint(t *testing.T) {
 		}
 	}
 	for _, alias := range []string{
+		"attract.vgbyziuz.cc",
+		"as.vgbyziuz.cc",
+		"anyway.vgbyziuz.cc",
 		"analyze.buxefaex.cc",
 		"delta.ygrwdsgt.cc",
 		"yeguodj.com",
@@ -323,5 +329,53 @@ func TestProviderDSDMediaSigningPropagatesFetchErrors(t *testing.T) {
 	}
 	if path := dsdVplayerMediaPath("https://media.example.test/video/index.m3u8?token=a%2Fb"); path != "/video/index.m3u8?token=a%2Fb" {
 		t.Fatal("dsd media path changed", path)
+	}
+}
+
+func TestHuangguoAIPublishedMirrorLinesAreRecognizedAndRotated(t *testing.T) {
+	addresses := []string{
+		"https://huangguoai.com/api/edge/request",
+		"https://thu.lbvrhyir.cc/api/edge/request",
+		"https://pku.xxbgwypx.cc/api/edge/request",
+		"https://ttvoij.ediayikma.cc/api/edge/request",
+		"https://thu.ediayikma.cc/api/edge/request",
+		"https://pku.ediayikma.cc/api/edge/request",
+		"https://fdu.ediayikma.cc/api/edge/request",
+		"https://thu.agdkczeyx.cc/api/edge/request",
+	}
+	for _, address := range addresses {
+		if got := providerSourceForURL(address); got != sourceHuangguoAI {
+			t.Fatalf("黄果 AI 发布线路未识别：%s -> %s", address, got)
+		}
+	}
+	candidates := providerURLCandidates(addresses[0])
+	if len(candidates) < len(huangguoAIBaseMirrors) || candidates[0] != addresses[0] {
+		t.Fatalf("黃果 AI 未先試主線或缺少備援線路：%v", candidates)
+	}
+	for _, candidate := range candidates {
+		if providerSourceForURL(candidate) != sourceHuangguoAI {
+			t.Fatalf("黃果 AI 備援候選未識別：%s", candidate)
+		}
+	}
+	generated := generatedHuangguoAIMirrors("https://huangguoai.com/api/edge/request", 8)
+	seen := map[string]bool{}
+	for _, mirror := range generated {
+		parsed, err := url.Parse(mirror)
+		if err != nil || parsed.Hostname() == "" || providerSourceForURL(mirror) != sourceHuangguoAI {
+			t.Fatalf("生成的镜像线路无效：%s", mirror)
+		}
+		for _, domain := range huangguoAIMirrorDomains {
+			if strings.HasSuffix(parsed.Hostname(), "."+domain) {
+				seen[domain] = true
+			}
+		}
+	}
+	if len(seen) != len(huangguoAIMirrorDomains) {
+		t.Fatalf("随机备用线路未轮替全部域名：%v", seen)
+	}
+	for _, address := range []string{"https://evil-lbvrhyir.cc/", "https://lbvrhyir.cc.example.test/"} {
+		if got := providerSourceForURL(address); got != "" {
+			t.Fatalf("不相關網域被誤判為黃果 AI：%s -> %s", address, got)
+		}
 	}
 }

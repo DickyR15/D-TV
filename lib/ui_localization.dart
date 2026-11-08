@@ -6,6 +6,14 @@ import 'package:flutter/services.dart';
 /// 將來源站提供的簡體中文轉為台灣常用繁體中文。
 /// 僅處理畫面顯示文字；API 的分類 ID、查詢參數與原始資料不修改。
 const Map<String, String> _twPhrases = {
+'網絡': '網路',
+  '在线': '線上',
+  '在線': '線上',
+  '自動識別設備': '自動偵測裝置',
+  // OpenCC converts 設備 to 裝置 before Taiwan-specific phrase replacements.
+  '自動識別裝置': '自動偵測裝置',
+'播放源': '播放來源',
+  '播放來源': '播放來源',
   // 來源文字先經正體化，再依台灣慣用語調整。
   // 來源資料先經 OpenCC 正體化，這裡同時涵蓋正體化後的台灣用語。
   '劇場版動畫': '劇場版動畫',
@@ -23,6 +31,8 @@ const Map<String, String> _twPhrases = {
   '退出登錄': '登出',
   '賬號': '帳號',
   '用戶名': '使用者名稱',
+  '用户': '使用者',
+  '用戶': '使用者',
   '連接': '連線',
   '連接失敗': '連線失敗',
   '安裝包': '安裝檔',
@@ -37,6 +47,8 @@ const Map<String, String> _twPhrases = {
   '鼠标': '滑鼠',
   '訊息提示': '訊息提示',
   '保存': '儲存',
+  '保存文件': '儲存檔案',
+  '保存檔案': '儲存檔案',
   '保存成功': '儲存成功',
   '存儲': '儲存',
   '存储': '儲存',
@@ -146,10 +158,9 @@ const Map<String, String> _twPhrases = {
   '观看记录': '觀看紀錄',
   '收藏夹': '收藏',
   '搜索': '搜尋',
-  '设置': '設定',
-  '用户': '使用者',
-  '网络': '網路',
   '视频': '影片',
+  '设置': '設定',
+  '网络': '網路',
   '剧集': '劇集',
   '详情': '詳情',
   '简介': '簡介',
@@ -223,7 +234,6 @@ const Map<String, String> _twPhrases = {
   '后续': '後續',
   '皇宫': '皇宮',
   '里面的': '裡面的',
-  '在线': '線上',
   '下载': '下載',
   '网页': '網頁',
   '两代人': '兩代人',
@@ -684,9 +694,15 @@ String _convertOpenCc(String input, _OpenCcNode root) {
 /// Convert source-site text to Taiwan Traditional Chinese for display only.
 /// API identifiers, category IDs, request arguments, and raw records stay intact.
 String uiTraditional(String value) {
-  final cached = _conversionCache.remove(value);
+  // Dart's StateError.toString() prepends "Bad state:". Never expose this
+  // implementation detail in user-facing labels, errors, or status text.
+  final displayValue = value.replaceAll(
+    RegExp(r'Bad state:\s*', caseSensitive: false),
+    '',
+  );
+  final cached = _conversionCache.remove(displayValue);
   if (cached != null) {
-    _conversionCache[value] = cached;
+    _conversionCache[displayValue] = cached;
     return cached;
   }
 
@@ -694,9 +710,9 @@ String uiTraditional(String value) {
   final taiwan = _openCcTaiwan;
   late final String result;
   if (!_openCcReady || s2t == null || taiwan == null) {
-    result = _uiTraditionalFallback(value);
+    result = _uiTraditionalFallback(displayValue);
   } else {
-    var converted = _convertOpenCc(value, s2t);
+    var converted = _convertOpenCc(displayValue, s2t);
     converted = _convertOpenCc(converted, taiwan);
     // D TV 專用詞彙，補足 OpenCC 未涵蓋的台灣用語。
     for (final entry in _twPhrases.entries) {
@@ -727,6 +743,28 @@ String uiTraditional(String value) {
   if (_conversionCache.length >= _conversionCacheLimit) {
     _conversionCache.remove(_conversionCache.keys.first);
   }
-  _conversionCache[value] = result;
+  _conversionCache[displayValue] = result;
   return result;
+}
+
+
+
+/// 依片源調整作品分類顯示名稱；不修改站源原始分類或 API 參數。
+String uiDramaCategory(String source, String category) {
+  final compact = category.trim().replaceAll(RegExp(r'\s+'), '');
+  if (source == 'duoduo' &&
+      const {'動畫', '动画', '動漫', '动漫'}.contains(compact)) {
+    return '動漫';
+  }
+  return uiTraditional(category);
+}
+
+
+/// Category chips may already contain source-specific Taiwan terminology.
+/// Keep 動漫 intact instead of allowing generic phrase conversion to turn it
+/// back into 動畫 when the category receives keyboard/remote focus.
+String uiCatalogCategoryLabel(String category) {
+  final compact = category.trim().replaceAll(RegExp(r'\s+'), '');
+  if (compact == '動漫') return '動漫';
+  return uiTraditional(category);
 }

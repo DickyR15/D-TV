@@ -2,12 +2,16 @@ import 'models.dart';
 import 'ui_localization.dart';
 
 enum CatalogSort {
-  source('預設順序'),
-  name('名稱'),
-  season('自然季號'),
-  date('上線日期'),
-  heat('熱度'),
-  views('播放量');
+  source('預設排序'),
+  name('片名'),
+  season('季數'),
+  date('年份（由新到舊）'),
+  heat('熱門程度'),
+  views('播放次數'),
+  popular('熱門'),
+  latest('最新'),
+  score('評分'),
+  year('年份');
 
   const CatalogSort(this.label);
   final String label;
@@ -16,40 +20,74 @@ enum CatalogSort {
 class CatalogView {
   const CatalogView({
     this.sort = CatalogSort.date,
+    this.duoduoSort = CatalogSort.popular,
     this.release = '',
     this.allSources = false,
   });
   final CatalogSort sort;
+
+  /// Duoduo's website ordering is independent from every other provider.
+  /// Keep it separate so choosing 最新／評分／年份 never changes another
+  /// source's own default sort.
+  final CatalogSort duoduoSort;
   final String release;
   final bool allSources;
 
   CatalogView copyWith({
     CatalogSort? sort,
+    CatalogSort? duoduoSort,
     String? release,
     bool? allSources,
   }) => CatalogView(
     sort: sort ?? this.sort,
+    duoduoSort: duoduoSort ?? this.duoduoSort,
     release: release ?? this.release,
     allSources: allSources ?? this.allSources,
   );
 
   Map<String, dynamic> toJson() => {
     'sort': sort.name,
+    'duoduoSort': duoduoSort.name,
     'release': release,
     'allSources': allSources,
   };
 
-  factory CatalogView.fromJson(Map<String, dynamic> value) => CatalogView(
-    sort:
+  factory CatalogView.fromJson(Map<String, dynamic> value) {
+    final savedSort =
         CatalogSort.values
             .where((sort) => sort.name == value['sort'])
             .firstOrNull ??
-        CatalogSort.date,
-    release: {'', 'finished', 'ongoing', 'unknown'}.contains(value['release'])
-        ? value['release'] as String
-        : '',
-    allSources: value['allSources'] == true,
-  );
+        CatalogSort.date;
+    const duoduoSorts = {
+      CatalogSort.popular,
+      CatalogSort.latest,
+      CatalogSort.score,
+      CatalogSort.year,
+    };
+    final hasSeparateDuoduoSort = value.containsKey('duoduoSort');
+    final duoduoSort = switch (value['duoduoSort']) {
+      'latest' => CatalogSort.latest,
+      'score' => CatalogSort.score,
+      'year' => CatalogSort.year,
+      'popular' => CatalogSort.popular,
+      _ => hasSeparateDuoduoSort || !duoduoSorts.contains(savedSort)
+          ? CatalogSort.popular
+          : savedSort,
+    };
+    return CatalogView(
+      // Migrate the previous global Duoduo sort out of the shared provider
+      // preference. Other sources return to the normal year/source setting.
+      sort: !hasSeparateDuoduoSort && duoduoSorts.contains(savedSort)
+          ? CatalogSort.date
+          : savedSort,
+      duoduoSort: duoduoSort,
+      release:
+          {'', 'finished', 'ongoing', 'unknown'}.contains(value['release'])
+          ? value['release'] as String
+          : '',
+      allSources: value['allSources'] == true,
+    );
+  }
 }
 
 String normalizedSearchText(String text) {
@@ -75,6 +113,16 @@ bool matchesDramaQuery(Drama drama, String query) {
       .map(normalizedSearchText)
       .where((word) => word.isNotEmpty);
   return terms.every(fields.contains);
+}
+
+int? catalogYear(String value) {
+  final match = RegExp(
+    r'(?:^|[^\d])((?:19|20)\d{2})(?!\d)',
+  ).firstMatch(value.trim());
+  if (match == null) return null;
+  final year = int.tryParse(match[1]!);
+  if (year == null || year < 1900 || year > 2099) return null;
+  return year;
 }
 
 double? catalogMetric(String text) {
@@ -162,6 +210,69 @@ int _descending(num? a, num? b) => a == null
     ? -1
     : b.compareTo(a);
 
+
+/// Sort options are offered only when the currently loaded source records
+/// actually contain the metadata required to make that sort meaningful.
+Set<CatalogSort> availableCatalogSorts(Iterable<Drama> rows) {
+  final items = rows.toList(growable: false);
+  if (items.isNotEmpty && items.every((drama) => drama.source == 'duoduo')) {
+    return const {
+      CatalogSort.popular,
+      CatalogSort.latest,
+      CatalogSort.score,
+      CatalogSort.year,
+    };
+  }
+  return {
+    CatalogSort.source,
+    CatalogSort.name,
+    if (items.any(
+      (drama) => RegExp(
+        r'第[0-9零〇一二兩三四五六七八九十百]+[季部]',
+      ).hasMatch(uiTraditional(drama.title)),
+    ))
+      CatalogSort.season,
+    if (items.any((drama) => catalogYear(drama.onlineDate) != null))
+      CatalogSort.date,
+    if (items.any((drama) => catalogMetric(uiTraditional(drama.heat)) != null))
+      CatalogSort.heat,
+    if (items.any((drama) => catalogMetric(uiTraditional(drama.views)) != null))
+      CatalogSort.views,
+  };
+}
+
+bool hasCatalogReleaseStatus(Iterable<Drama> rows) => rows.any(
+  (drama) => const {'finished', 'completed', 'ongoing', 'unknown'}
+      .contains(drama.releaseStatus),
+);
+
+/// Avoid stale global filters hiding every item after changing providers.
+CatalogView effectiveCatalogView(
+  CatalogView requested,
+  Iterable<Drama> rows, {
+  CatalogSort fallbackSort = CatalogSort.source,
+}) {
+  final items = rows.toList(growable: false);
+  final sorts = availableCatalogSorts(items);
+  return requested.copyWith(
+    sort: sorts.contains(requested.sort) ? requested.sort : fallbackSort,
+    release: hasCatalogReleaseStatus(items) ? requested.release : '',
+  );
+}
+
+/// The sort button must reflect the independent website sort selected for
+/// Duoduo, not the shared provider sort used by other sources.
+String catalogSortButtonTooltip(
+  CatalogView requested,
+  Iterable<Drama> rows, {
+  required bool duoduoCatalog,
+}) {
+  final selected = duoduoCatalog
+      ? requested.duoduoSort
+      : effectiveCatalogView(requested, rows).sort;
+  return '排序：${selected.label}';
+}
+
 List<Drama> sortCatalog(Iterable<Drama> rows, CatalogView view) {
   final items = rows.where((drama) {
     if (view.release.isEmpty) return true;
@@ -172,16 +283,23 @@ List<Drama> sortCatalog(Iterable<Drama> rows, CatalogView view) {
         ? release.isEmpty || release == 'unknown'
         : release == view.release;
   }).toList();
-  if (view.sort == CatalogSort.source) return items;
+  if (view.sort == CatalogSort.source ||
+      const {
+        CatalogSort.popular,
+        CatalogSort.latest,
+        CatalogSort.score,
+        CatalogSort.year,
+      }.contains(view.sort)) {
+    // Duoduo returns these rankings from its own API; keep that source order.
+    return items;
+  }
   final positions = {for (final entry in items.indexed) entry.$2.id: entry.$1};
   final metrics = <String, num?>{
     for (final drama in items)
       drama.id: switch (view.sort) {
         CatalogSort.heat => catalogMetric(uiTraditional(drama.heat)),
         CatalogSort.views => catalogMetric(uiTraditional(drama.views)),
-        CatalogSort.date => DateTime.tryParse(
-          drama.onlineDate,
-        )?.millisecondsSinceEpoch,
+        CatalogSort.date => catalogYear(drama.onlineDate),
         _ => null,
       },
   };
@@ -194,9 +312,14 @@ List<Drama> sortCatalog(Iterable<Drama> rows, CatalogView view) {
       CatalogSort.season => naturalTitleCompare(a.title, b.title),
       _ => _descending(metrics[a.id], metrics[b.id]),
     };
-    return comparison != 0
-        ? comparison
-        : positions[a.id]!.compareTo(positions[b.id]!);
+    if (comparison != 0) return comparison;
+    if (view.sort == CatalogSort.date) {
+      final leftDate = DateTime.tryParse(a.onlineDate)?.millisecondsSinceEpoch;
+      final rightDate = DateTime.tryParse(b.onlineDate)?.millisecondsSinceEpoch;
+      final dateComparison = _descending(leftDate, rightDate);
+      if (dateComparison != 0) return dateComparison;
+    }
+    return positions[a.id]!.compareTo(positions[b.id]!);
   });
   return items;
 }

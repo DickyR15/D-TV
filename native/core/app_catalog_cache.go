@@ -84,6 +84,25 @@ func (engine *nativeEngine) loadCatalogCache() {
 }
 
 func migrateNativeDrama(drama nativeDrama) nativeDrama {
+	// Repair old catalog snapshots that stored source/sourceId separately or
+	// left ID as a raw provider ID. Cached tiles must receive the same canonical
+	// identity as freshly normalized catalog rows, otherwise DramaCover skips
+	// the poster request permanently.
+	if source, sourceID, valid := splitProviderDramaID(drama.ID); valid {
+		drama.ID, drama.Source, drama.SourceID = providerDramaID(source, sourceID), source, sourceID
+	} else {
+		source := canonicalProviderSource(drama.Source)
+		sourceID := strings.TrimSpace(drama.SourceID)
+		if sourceID == "" {
+			sourceID = strings.TrimSpace(drama.ID)
+		}
+		if isHuangguoProviderSource(source) && sourceID != "" {
+			drama.ID, drama.Source, drama.SourceID = providerDramaID(source, sourceID), source, sourceID
+		}
+	}
+  if drama.Source == sourceDuoduo && (drama.Category == "影視" || drama.Category == "影视") {
+    drama.Category = ""
+  }
 	if drama.MetadataSchema == 0 && drama.Source == sourceHuangdou && drama.VIP != nil && !*drama.VIP {
 		drama.VIP = nil
 	}
@@ -182,14 +201,39 @@ func mergeNativeDrama(previous, fresh nativeDrama) nativeDrama {
 	if fresh.SourceID == "" {
 		fresh.SourceID = previous.SourceID
 	}
+	if fresh.DoubanID == "" {
+		fresh.DoubanID = previous.DoubanID
+	}
 	if fresh.Title == "" || fresh.Title == "短剧" {
 		fresh.Title = previous.Title
+	} else if fresh.Title == "片名取得失敗" || fresh.Title == "片名获取失败" {
+		if previous.Title != "" && previous.Title != "短剧" &&
+			previous.Title != "片名取得失敗" && previous.Title != "片名获取失败" {
+			fresh.Title = previous.Title
+		}
 	}
 	if fresh.Description == "" {
 		fresh.Description = previous.Description
 	}
 	if fresh.Cover == "" {
 		fresh.Cover = previous.Cover
+	}
+	candidateAddresses := append([]string{}, fresh.CoverCandidates...)
+	if previous.Cover != "" && previous.Cover != fresh.Cover {
+		candidateAddresses = append(candidateAddresses, previous.Cover)
+	}
+	candidateAddresses = append(candidateAddresses, previous.CoverCandidates...)
+	fresh.CoverCandidates = nil
+	for _, address := range nativeUniqueCoverAddresses(candidateAddresses...) {
+		if address != fresh.Cover {
+			fresh.CoverCandidates = append(fresh.CoverCandidates, address)
+		}
+	}
+	if fresh.FallbackCover == "" {
+		fresh.FallbackCover = previous.FallbackCover
+	}
+	if fresh.ProviderFallbackCover == "" {
+		fresh.ProviderFallbackCover = previous.ProviderFallbackCover
 	}
 	if fresh.Category == "" || nativeGenericCategory(fresh.Category) && previous.Category != "" && !nativeGenericCategory(previous.Category) {
 		fresh.Category = previous.Category
@@ -214,6 +258,9 @@ func mergeNativeDrama(previous, fresh nativeDrama) nativeDrama {
 	}
 	if fresh.ReleaseStatus == "" || fresh.ReleaseStatus == "unknown" {
 		fresh.ReleaseStatus = previous.ReleaseStatus
+	}
+	if fresh.Badge == "" {
+		fresh.Badge = previous.Badge
 	}
 	return fresh
 }

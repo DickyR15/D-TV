@@ -263,8 +263,11 @@ class _SourcesScreenState extends State<SourcesScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
     builder: (context, _) {
-      final sources = widget.store.permittedSources
-        ..sort((a, b) {
+      final sources = sourceDiagnosticsSources(
+        enabledSources: widget.store.sources,
+        administratorPasswordConfigured:
+            widget.store.administratorPasswordConfigured,
+      )..sort((a, b) {
           final aFirst = a.id == widget.initialSource ? 0 : 1;
           final bFirst = b.id == widget.initialSource ? 0 : 1;
           return aFirst.compareTo(bFirst);

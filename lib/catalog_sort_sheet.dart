@@ -2,15 +2,24 @@ import 'package:flutter/material.dart';
 
 import 'catalog_sort.dart';
 
+String _formatLoadedCount(int count) => count.toString().replaceAllMapped(
+  RegExp(r'\B(?=(\d{3})+(?!\d))'),
+  (_) => ',',
+);
+
 Future<CatalogView?> chooseCatalogView(
   BuildContext context,
-  CatalogView current,
-) => showModalBottomSheet<CatalogView>(
+  CatalogView current, {
+  Set<CatalogSort>? availableSorts,
+  bool showReleaseFilter = true,
+  int? loadedCount,
+}) => showModalBottomSheet<CatalogView>(
   context: context,
   showDragHandle: true,
   isScrollControlled: true,
   useSafeArea: true,
   builder: (context) {
+    final sorts = availableSorts ?? CatalogSort.values.toSet();
     var selected = current;
     return StatefulBuilder(
       builder: (context, update) => SingleChildScrollView(
@@ -25,55 +34,60 @@ Future<CatalogView?> chooseCatalogView(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('排序與篩選', style: Theme.of(context).textTheme.titleLarge),
+            if (loadedCount != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                '目前已載入 ${_formatLoadedCount(loadedCount)} 部',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final sort in CatalogSort.values)
+                for (final sort in CatalogSort.values.where(sorts.contains))
                   ChoiceChip(
                     label: Text(sort.label),
                     selected: selected.sort == sort,
-                    onSelected: (_) =>
-                        update(() => selected = selected.copyWith(sort: sort)),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            const Text('劇集狀態'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final entry in const {
-                  '': '全部',
-                  'ongoing': '連載中',
-                  'finished': '已完結',
-                  'unknown': '狀態未知',
-                }.entries)
-                  ChoiceChip(
-                    label: Text(entry.value),
-                    selected: selected.release == entry.key,
-                    onSelected: (_) => update(
-                      () => selected = selected.copyWith(release: entry.key),
+                    onSelected: (_) => Navigator.pop(
+                      context,
+                      selected.copyWith(sort: sort),
                     ),
                   ),
               ],
             ),
+            if (showReleaseFilter) ...[
+              const SizedBox(height: 24),
+              const Text('連載狀態'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                for (final entry in const {
+                  '': '全部',
+                  'ongoing': '連載中',
+                  'finished': '已完結',
+                  'unknown': '未知',
+                }.entries)
+                  ChoiceChip(
+                    label: Text(entry.value),
+                    selected: selected.release == entry.key,
+                    onSelected: (_) => Navigator.pop(
+                      context,
+                      selected.copyWith(release: entry.key),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
             Text(
-              '排序和篩選作用於已載入的劇集；缺少排序資料的條目排在最後。',
+              '選取排序或篩選後會立即套用並關閉選單；沒有對應資料的選項不會顯示。',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () => Navigator.pop(context, selected),
-                child: const Text('應用'),
-              ),
-            ),
+            const SizedBox(height: 12),
           ],
         ),
       ),

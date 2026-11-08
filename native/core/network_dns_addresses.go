@@ -8,6 +8,8 @@ import (
 )
 
 var nonPublicCDNNetworks = []netip.Prefix{
+	// TWNIC DNS-RPZ landing address: this is a block-notice endpoint, not a CDN.
+	netip.MustParsePrefix("182.173.0.181/32"),
 	netip.MustParsePrefix("0.0.0.0/8"), netip.MustParsePrefix("100.64.0.0/10"),
 	netip.MustParsePrefix("192.0.0.0/24"), netip.MustParsePrefix("192.0.2.0/24"),
 	netip.MustParsePrefix("198.18.0.0/15"), netip.MustParsePrefix("198.51.100.0/24"),

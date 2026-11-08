@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'app_navigation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 export 'app_build.dart';
@@ -22,11 +24,11 @@ enum FormFactor { phone, pad, window, television }
 typedef SystemAccentColors = ({Color? light, Color? dark});
 
 const _displayModeLabels = <String, String>{
-  'auto': '自動識別設備',
+  'auto': '自動偵測裝置',
   'television': '電視',
   'phone': '手機',
   'pad': '平板',
-  'window': '視窗',
+  'window': '電腦',
 };
 
 ThemeData televisionTheme(ThemeData theme) {
@@ -246,10 +248,19 @@ class AppDevice {
   }
 }
 
+/// Keeps desktop poster cards readable on wide and ultrawide monitors.
+int desktopPosterColumnsForWidth(double width) {
+  if (!width.isFinite || width <= 0) return 2;
+  // A 214 px minimum rhythm (about 200 px tile width after grid spacing)
+  // prevents 21:9 displays from squeezing text into overly narrow posters.
+  return ((width + 18) / 214).floor().clamp(2, 16).toInt();
+}
+
 class AppLayout extends InheritedWidget {
   const AppLayout({
     super.key,
     required this.television,
+    this.detectedTelevision,
     this.formFactor,
     this.version = appVersion,
     required super.child,
@@ -258,6 +269,8 @@ class AppLayout extends InheritedWidget {
   /// Kept for older call sites and tests. New app entry points should pass
   /// [formFactor] so all screens use the same explicit layout decision.
   final bool television;
+  /// Physical device classification, independent of the user-selected layout.
+  final bool? detectedTelevision;
   final FormFactor? formFactor;
   final String version;
 
@@ -330,6 +343,11 @@ class AppLayout extends InheritedWidget {
 
   static bool isTelevision(BuildContext context) =>
       formFactorOf(context) == FormFactor.television;
+
+  static bool isTelevisionDevice(BuildContext context) {
+    final layout = context.dependOnInheritedWidgetOfExactType<AppLayout>();
+    return layout?.detectedTelevision ?? layout?.television ?? false;
+  }
   static bool isPhone(BuildContext context) =>
       formFactorOf(context) == FormFactor.phone;
   static bool isPad(BuildContext context) =>
@@ -343,10 +361,12 @@ class AppLayout extends InheritedWidget {
   static String displayModeLabel(
     String mode, {
     FormFactor? currentFactor,
+    bool? desktopPlatform,
   }) {
+    final desktop = desktopPlatform ?? isDesktopPlatform;
     final key = mode == 'standard'
         ? currentFactor?.name ?? 'auto'
-        : mode == 'window' && !isDesktopPlatform
+        : mode == 'window' && !desktop
         ? 'pad'
         : mode;
     return _displayModeLabels[key] ?? _displayModeLabels['auto']!;
@@ -366,7 +386,9 @@ class AppLayout extends InheritedWidget {
 
     return showDialog<String>(
       context: context,
-      builder: (dialogContext) => SimpleDialog(
+      builder: (dialogContext) => DialogRouteBackHandler(
+        onBack: () => Navigator.of(dialogContext).pop(),
+        child: SimpleDialog(
         title: const Text('介面模式'),
         children: [
           for (final entry in options.entries)
@@ -380,6 +402,7 @@ class AppLayout extends InheritedWidget {
               onTap: () => Navigator.of(dialogContext).pop(entry.key),
             ),
         ],
+        ),
       ),
     );
   }
@@ -391,6 +414,7 @@ class AppLayout extends InheritedWidget {
   @override
   bool updateShouldNotify(AppLayout oldWidget) =>
       television != oldWidget.television ||
+      detectedTelevision != oldWidget.detectedTelevision ||
       formFactor != oldWidget.formFactor ||
       version != oldWidget.version;
 }

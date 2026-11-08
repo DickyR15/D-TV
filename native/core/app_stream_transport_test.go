@@ -51,6 +51,19 @@ func TestNativeStreamDialContextFallsBackToIPv6(t *testing.T) {
 	}
 	defer listener.Close()
 
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Some CI kernels create dual-stack tcp6 sockets unless IPV6_V6ONLY is
+	// explicitly requested. In that environment an IPv4 connection is valid
+	// and this test cannot isolate the fallback behavior.
+	probe, probeErr := net.DialTimeout("tcp4", net.JoinHostPort("127.0.0.1", port), 100*time.Millisecond)
+	if probeErr == nil {
+		_ = probe.Close()
+		t.Skip("tcp6 loopback listener also accepts IPv4 on this runner")
+	}
+
 	accepted := make(chan net.Conn, 1)
 	go func() {
 		conn, acceptErr := listener.Accept()
@@ -62,10 +75,6 @@ func TestNativeStreamDialContextFallsBackToIPv6(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	dial := nativeStreamDialContext(&net.Dialer{Timeout: nativeStreamDialTimeout})
-	_, port, err := net.SplitHostPort(listener.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
 	// localhost resolves to both families on standard CI runners. The IPv4
 	// loopback port has no listener, so this exercises the IPv6 fallback.
 	conn, err := dial(ctx, "tcp", net.JoinHostPort("localhost", port))

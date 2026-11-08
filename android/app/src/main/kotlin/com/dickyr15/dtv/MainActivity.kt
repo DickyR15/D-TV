@@ -71,6 +71,18 @@ open class MainActivity : FlutterActivity() {
     }
 
     @Suppress("DEPRECATION")
+    private fun displayDiagnosticInfo(): Map<String, Any> {
+        val display = windowManager.defaultDisplay
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) display.mode else null
+        return mapOf(
+            "refreshRateHz" to display.refreshRate.toDouble(),
+            "modeId" to (mode?.modeId ?: -1),
+            "width" to display.width,
+            "height" to display.height
+        )
+    }
+
+    @Suppress("DEPRECATION")
     private fun isTelevisionDevice(): Boolean {
         val configuration = resources.configuration
         val mode = (getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager)?.currentModeType
@@ -535,6 +547,9 @@ open class MainActivity : FlutterActivity() {
                                     "version" to displayVersion
                                 )
                             )
+                        }
+                        "displayInfo" -> {
+                            result.success(displayDiagnosticInfo())
                         }
                         "openExternalUrl" -> {
                             val rawUrl = call.argument<String>("url")

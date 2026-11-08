@@ -31,16 +31,78 @@ void main() {
     await expectLater(store.setSourceEnabled('sorani', true), throwsStateError);
   });
 
-  test('restricted sources start switched off', () async {
+  test('Guipian and KANMovie are retired and stale switches are ignored', () async {
+    final store = await create({
+      'sourceSwitches': jsonEncode({'guipian': true, 'kanmovie': true}),
+    });
+    expect(SourceSite.isKnown('guipian'), isFalse);
+    expect(SourceSite.isAvailable('guipian'), isFalse);
+    expect(SourceSite.isKnown('kanmovie'), isFalse);
+    expect(store.sourceEnabled('duoduo'), isTrue);
+    expect(store.allowsSource('baofeng'), isFalse);
+    expect(store.allowsSource('jisu'), isFalse);
+    expect(store.allowsSource('360'), isFalse);
+    expect(store.allowsSource('huya'), isFalse);
+    expect(store.sourceEnabled('guipian'), isFalse);
+    expect(store.allowsSource('guipian'), isFalse);
+    expect(store.allowsSource('kanmovie'), isFalse);
+  });
+
+  test('old aggregate profile permissions migrate to Duoduo', () async {
+    final store = await create({
+      'profiles': jsonEncode([
+        LocalProfile(
+          id: 'default',
+          name: '管理員',
+          admin: true,
+          salt: '0' * 32,
+          pinHash: '1' * 64,
+        ).toJson(),
+        const LocalProfile(
+          id: 'viewer',
+          name: '普通使用者',
+          sources: ['guipian', 'kanmovie'],
+        ).toJson(),
+      ]),
+      'activeProfile': 'viewer',
+    });
+    expect(store.configurationError, isNull);
+    expect(store.profile.sources, ['duoduo']);
+    expect(store.profile.allows('duoduo'), isTrue);
+    expect(store.profile.allows('guipian'), isFalse);
+  });
+
+  test('saved KANMovie records are not remapped to unrelated sources', () {
+    final drama = Drama.fromJson({
+      'id': 'kanmovie:bfzy.tv~12345',
+      'source': 'kanmovie',
+      'sourceId': 'bfzy.tv~12345',
+      'title': '舊收藏影片',
+    });
+    expect(drama.id, 'kanmovie:bfzy.tv~12345');
+    expect(drama.source, 'kanmovie');
+    expect(drama.sourceId, 'bfzy.tv~12345');
+  });
+
+  test('Heitao is registered as an advanced searchable source', () {
+    final heitao = SourceSite.byId('heitao');
+    expect(SourceSite.isKnown('heitao'), isTrue);
+    expect(SourceSite.isRestricted('heitao'), isTrue);
+    expect(heitao.name, '黑桃');
+    expect(heitao.pagedSearch, isTrue);
+    expect(heitao.onlineSearch, isTrue);
+  });
+
+  test('three primary sources start enabled and restricted sources start switched off', () async {
     final store = await create();
     expect(
       store.sources.map((site) => site.id),
-      allSourcesEnabled
-          ? ['hongguo', 'hanxiaoquan', 'guipian']
-          : ['hongguo'],
+      ['hongguo', 'hanxiaoquan', 'duoduo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);
     expect(store.sourceEnabled('hongguo'), isTrue);
+    expect(store.sourceEnabled('hanxiaoquan'), isTrue);
+    expect(store.sourceEnabled('duoduo'), isTrue);
     expect(store.sourceEnabled('huangdou'), isFalse);
     expect(store.allowsSource('huangdou'), isFalse);
   });
@@ -188,6 +250,27 @@ void main() {
       true,
       false,
     ]);
+  });
+
+  test('new-user save is rejected without admin password and preserves existing profiles', () async {
+    final store = await create();
+    final before = store.profiles
+        .map((profile) => jsonEncode(profile.toJson()))
+        .toList();
+    await expectLater(
+      store.saveProfile(
+        name: '一般使用者',
+        sources: SourceSite.values.map((source) => source.id).toList(),
+        download: false,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(store.administratorPasswordConfigured, isFalse);
+    expect(
+      store.profiles.map((profile) => jsonEncode(profile.toJson())).toList(),
+      before,
+    );
+    expect(store.profiles, hasLength(1));
   });
 
 }

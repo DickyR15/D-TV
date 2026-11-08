@@ -10,6 +10,22 @@ void main() {
     expect(formatAppVersion(''), '1.0.0');
   });
 
+  group('desktop poster density', () {
+    test('keeps poster cards readable from HD to ultrawide widths', () {
+      expect(desktopPosterColumnsForWidth(1366), 6);
+      expect(desktopPosterColumnsForWidth(1920), 9);
+      expect(desktopPosterColumnsForWidth(2560), 12);
+      expect(desktopPosterColumnsForWidth(3440), 16);
+    });
+
+    test('caps extreme desktop widths and handles invalid constraints', () {
+      expect(desktopPosterColumnsForWidth(5120), 16);
+      expect(desktopPosterColumnsForWidth(double.infinity), 2);
+      expect(desktopPosterColumnsForWidth(double.nan), 2);
+      expect(desktopPosterColumnsForWidth(0), 2);
+    });
+  });
+
   group('interface mode resolution', () {
     test('auto selects TV before screen-size rules', () {
       expect(
@@ -51,7 +67,7 @@ void main() {
       );
     });
 
-    test('auto distinguishes phone, pad and desktop window', () {
+    test('auto distinguishes phone, pad and desktop computer', () {
       expect(
         AppLayout.resolveFormFactor(
           mode: 'auto',
@@ -103,7 +119,7 @@ void main() {
       }
     });
 
-    test('window falls back to pad off desktop; legacy standard suppresses TV', () {
+    test('computer mode falls back to pad off desktop; legacy standard suppresses TV', () {
       expect(
         AppLayout.resolveFormFactor(
           mode: 'window',
@@ -124,7 +140,7 @@ void main() {
       );
     });
 
-    test('window option is only shown on desktop platforms', () {
+    test('computer option is only shown on desktop platforms', () {
       final mobileOptions = AppLayout.availableDisplayModes(
         desktopPlatform: false,
       );
@@ -133,10 +149,39 @@ void main() {
         containsAll(['auto', 'television', 'phone', 'pad']),
       );
       expect(mobileOptions.containsKey('window'), isFalse);
+      final desktopOptions = AppLayout.availableDisplayModes(desktopPlatform: true);
+      expect(desktopOptions.containsKey('window'), isTrue);
+      expect(desktopOptions['window'], '電腦');
       expect(
-        AppLayout.availableDisplayModes(desktopPlatform: true).containsKey('window'),
-        isTrue,
+        AppLayout.displayModeLabel(
+          'window',
+          currentFactor: FormFactor.window,
+          desktopPlatform: true,
+        ),
+        '電腦',
       );
     });
   });
+  testWidgets('physical TV detection is retained when the user selects phone layout', (
+    tester,
+  ) async {
+    var detectedTelevision = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppLayout(
+          television: false,
+          detectedTelevision: true,
+          formFactor: FormFactor.phone,
+          child: Builder(
+            builder: (context) {
+              detectedTelevision = AppLayout.isTelevisionDevice(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+    expect(detectedTelevision, isTrue);
+  });
+
 }

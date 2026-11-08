@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import 'core_bridge.dart';
 import 'app_theme.dart';
+import 'app_navigation.dart';
 import 'app_layout.dart';
 import 'local_store.dart';
 import 'profiles_screen.dart';
@@ -40,6 +41,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final FocusNode _deviceInterconnectFocus =
       FocusNode(debugLabel: 'settings-device-interconnect');
   bool _initialFocusScheduled = false;
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void didChangeDependencies() {
@@ -76,7 +81,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final current = widget.store.themeMode;
     final selected = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => SimpleDialog(
+      builder: (dialogContext) => DialogRouteBackHandler(
+        onBack: () => Navigator.of(dialogContext).pop(),
+        child: SimpleDialog(
         title: const Text('外觀主題'),
         children: [
           for (final mode in ['light', 'dark', 'system'])
@@ -95,6 +102,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.of(dialogContext).pop(mode),
             ),
         ],
+        ),
       ),
     );
     if (selected == null || !mounted || selected == widget.store.themeMode) {
@@ -104,14 +112,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await widget.store.setThemeMode(selected);
       if (mounted) setState(() => _message = null);
     } catch (error) {
-      if (mounted) setState(() => _message = '外觀主題切換失敗：$error');
+      if (mounted) setState(() => _message = '外觀主題切換失敗：${uiTraditional(error.toString())}');
     }
   }
 
   Future<void> _chooseThemeAccent() async {
     final selected = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => SimpleDialog(
+      builder: (dialogContext) => DialogRouteBackHandler(
+        onBack: () => Navigator.of(dialogContext).pop(),
+        child: SimpleDialog(
         title: const Text('介面配色'),
         children: [
           for (final tone in AppTheme.accentOptions)
@@ -137,6 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => Navigator.of(dialogContext).pop(tone),
             ),
         ],
+        ),
       ),
     );
     if (selected == null || !mounted || selected == widget.store.themeAccent) {
@@ -146,7 +157,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await widget.store.setThemeAccent(selected);
       if (mounted) setState(() => _message = null);
     } catch (error) {
-      if (mounted) setState(() => _message = '介面配色切換失敗：$error');
+      if (mounted) setState(() => _message = '介面配色切換失敗：${uiTraditional(error.toString())}');
     }
   }
 
@@ -226,6 +237,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             actions: [
               TextButton(
+                autofocus: AppLayout.isTelevision(context),
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('取消'),
               ),
@@ -242,12 +254,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _message = error.toString());
+        setState(() => _message = uiTraditional(error.toString()));
         await showDialog<void>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: Text(restore ? '還原設定備份失敗' : '匯出設定備份失敗'),
-            content: SelectableText(error.toString()),
+            content: SelectableText(uiTraditional(error.toString())),
             actions: [
               FilledButton(
                 autofocus: true,
@@ -408,7 +420,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.backup_outlined),
                   title: const Text('匯出設定備份'),
-                  subtitle: const Text('包含本機使用者、收藏清單、觀看紀錄與設定'),
+                  subtitle: const Text('包含本機使用者、收藏清單、觀看紀錄與設定；備份附完整性檢查'),
                   onTap: _busy ? null : () => _backup(false),
                 ),
                 ListTile(
@@ -416,7 +428,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   leading: const Icon(Icons.restore),
                   title: const Text('還原設定備份'),
                   subtitle: const Text(
-                    '取代本機使用者、收藏清單、觀看紀錄與偏好設定',
+                    '還原前會檢查備份完整性，並取代本機使用者、收藏清單、觀看紀錄與偏好設定',
                   ),
                   onTap: _busy ? null : () => _backup(true),
                 ),
@@ -445,17 +457,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (widget.embedded || !AppLayout.isTelevision(context)) {
       return settings;
     }
-    void closeSettings() {
-      final navigator = Navigator.of(context);
-      if (navigator.canPop()) navigator.pop();
-    }
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.goBack): closeSettings,
-        const SingleActivator(LogicalKeyboardKey.escape): closeSettings,
-      },
-      child: settings,
-    );
+    return settings;
   }
 }
 

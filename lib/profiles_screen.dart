@@ -12,6 +12,7 @@ import 'local_store.dart';
 import 'ui_localization.dart';
 import 'models.dart';
 import 'app_build.dart';
+import 'remote_widgets.dart';
 
 class ProfilesScreen extends StatefulWidget {
   const ProfilesScreen({super.key, required this.store, this.locked = false});
@@ -49,12 +50,28 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     super.didChangeDependencies();
     if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
     _initialFocusScheduled = true;
-    final initialFocus = widget.store.configurationError != null
-        ? _recoveryFocus
-        : _forceLoginFocus;
+    final FocusNode? initialFocus;
+    if (widget.store.configurationError != null) {
+      initialFocus = _recoveryFocus;
+    } else if (!widget.store.locked && widget.store.profile.admin) {
+      // The force-login switch is only rendered for an unlocked administrator.
+      initialFocus = _forceLoginFocus;
+    } else if (widget.locked && widget.store.profiles.isNotEmpty) {
+      // On the login screen, start at the first available account.
+      initialFocus = _profileEntryFocus(widget.store.profiles.first.id);
+    } else {
+      // An unlocked non-admin can manage their own session but cannot edit
+      // admin settings; focus their own selectable profile row, not the first
+      // (often non-focusable) administrator row.
+      initialFocus = _profileEntryFocus(widget.store.profile.id);
+    }
+    final focusNode = initialFocus;
+    if (focusNode == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && initialFocus.canRequestFocus) {
-        initialFocus.requestFocus();
+      if (mounted &&
+          focusNode.context != null &&
+          focusNode.canRequestFocus) {
+        focusNode.requestFocus();
       }
     });
   }
@@ -81,7 +98,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       if (reload) {
         await widget.store.reload();
       } else if (export) {
-        final recoveryData = widget.store.exportRecoveryData();
+        final recoveryData = await widget.store.exportRecoveryData();
         if (Platform.isAndroid) {
           // Android TV images may not include a document-picker activity.
           // Export directly through MediaStore, matching the normal settings backup.
@@ -476,6 +493,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
   late final _name = TextEditingController(text: widget.profile?.name ?? '');
   final _pin = TextEditingController(), _confirm = TextEditingController();
   final _currentPin = TextEditingController();
+  final _nameFocus = FocusNode(debugLabel: 'profile-editor-name');
+  final _currentPinFocus = FocusNode(debugLabel: 'profile-editor-current-pin');
+  final _pinFocus = FocusNode(debugLabel: 'profile-editor-pin');
+  final _confirmPinFocus = FocusNode(debugLabel: 'profile-editor-confirm-pin');
   late final _sources =
       (widget.profile?.sources ??
               widget.store.sources.map((s) => s.id).toList())
@@ -489,7 +510,15 @@ class _ProfileEditorState extends State<ProfileEditor> {
     _pin.dispose();
     _confirm.dispose();
     _currentPin.dispose();
+    _nameFocus.dispose();
+    _currentPinFocus.dispose();
+    _pinFocus.dispose();
+    _confirmPinFocus.dispose();
     super.dispose();
+  }
+
+  void _focusEditorField(FocusNode node) {
+    if (node.canRequestFocus) node.requestFocus();
   }
 
   Future<void> _save() async {
@@ -527,6 +556,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
         content: const Text('會同時刪除該使用者的收藏清單與觀看紀錄。'),
         actions: [
           TextButton(
+            autofocus: AppLayout.isTelevision(context),
             onPressed: () => Navigator.pop(context, false),
             child: const Text('取消'),
           ),
@@ -549,52 +579,87 @@ class _ProfileEditorState extends State<ProfileEditor> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(widget.profile == null ? '新增使用者' : '編輯使用者')),
-    body: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640),
-        child: ListView(
+    body: RemoteTextInput(
+      child: FocusTraversalGroup(
+        policy: OrderedTraversalPolicy(),
+        child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            TextField(
-              key: const ValueKey('profile-editor-name'),
-              controller: _name,
-              maxLength: 40,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: '使用者名稱'),
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(1),
+              child: TextField(
+                key: const ValueKey('profile-editor-name'),
+                controller: _name,
+                focusNode: _nameFocus,
+                autofocus: AppLayout.isTelevision(context),
+                maxLength: 40,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _focusEditorField(
+                  widget.profile?.admin == true && widget.profile?.protected == true
+                      ? _currentPinFocus
+                      : _pinFocus,
+                ),
+                decoration: const InputDecoration(labelText: '使用者名稱'),
+              ),
             ),
             if (widget.profile?.admin == true && widget.profile?.protected == true) ...[
-              TextField(
-                key: const ValueKey('profile-editor-current-pin'),
-                controller: _currentPin,
-                obscureText: true,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: '目前管理員密碼',
-                  helperText: '變更管理員密碼前，請先輸入目前密碼',
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(2),
+                child: TextField(
+                  key: const ValueKey('profile-editor-current-pin'),
+                  controller: _currentPin,
+                  focusNode: _currentPinFocus,
+                  obscureText: true,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => _focusEditorField(_pinFocus),
+                  decoration: const InputDecoration(
+                    labelText: '目前管理員密碼',
+                    helperText: '變更管理員密碼前，請先輸入目前密碼',
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
             ],
-            TextField(
-              key: const ValueKey('profile-editor-pin'),
-              controller: _pin,
-              obscureText: true,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: '設定密碼（至少 6 位）',
-                helperText: '留空保留原密碼',
+            FocusTraversalOrder(
+              order: NumericFocusOrder(
+                widget.profile?.admin == true && widget.profile?.protected == true
+                    ? 3
+                    : 2,
+              ),
+              child: TextField(
+                key: const ValueKey('profile-editor-pin'),
+                controller: _pin,
+                focusNode: _pinFocus,
+                obscureText: true,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _focusEditorField(_confirmPinFocus),
+                decoration: const InputDecoration(
+                  labelText: '設定密碼（至少 6 位）',
+                  helperText: '留空保留原密碼',
+                ),
               ),
             ),
             const SizedBox(height: 12),
-            TextField(
-              key: const ValueKey('profile-editor-confirm-pin'),
-              controller: _confirm,
-              obscureText: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) {
-                if (!_busy) _save();
-              },
-              decoration: const InputDecoration(labelText: '再次輸入密碼'),
+            FocusTraversalOrder(
+              order: NumericFocusOrder(
+                widget.profile?.admin == true && widget.profile?.protected == true
+                    ? 4
+                    : 3,
+              ),
+              child: TextField(
+                key: const ValueKey('profile-editor-confirm-pin'),
+                controller: _confirm,
+                focusNode: _confirmPinFocus,
+                obscureText: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) {
+                  if (!_busy) _save();
+                },
+                decoration: const InputDecoration(labelText: '再次輸入密碼'),
+              ),
             ),
             if (widget.profile?.protected == true &&
                 widget.profile?.admin != true)
@@ -613,8 +678,11 @@ class _ProfileEditorState extends State<ProfileEditor> {
             const SizedBox(height: 20),
             if (widget.profile?.admin != true) ...[
               Text('允許使用的片源', style: Theme.of(context).textTheme.titleMedium),
-              for (final source in SourceSite.values)
+              for (final source in (widget.store.administratorPasswordConfigured
+                  ? SourceSite.values
+                  : SourceSite.primaryValues))
                 CheckboxListTile(
+                  key: ValueKey('profile-source-${source.id}'),
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
                   title: Text(uiTraditional(source.name)),
@@ -629,6 +697,11 @@ class _ProfileEditorState extends State<ProfileEditor> {
                     });
                   },
                 ),
+              if (!widget.store.administratorPasswordConfigured)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('設定管理員密碼後，才能將進階片源授予其他使用者。'),
+                ),
             ] else
               const Text('管理員可存取所有片源及功能。建立其他使用者前，請先設定管理員密碼。'),
             if (_error != null)
@@ -642,7 +715,7 @@ class _ProfileEditorState extends State<ProfileEditor> {
             const SizedBox(height: 24),
             FilledButton(
               key: const ValueKey('profile-editor-save'),
-              autofocus: true,
+              autofocus: false,
               onPressed: _busy ? null : _save,
               child: Text(_busy ? '正在儲存…' : '儲存'),
             ),
@@ -652,8 +725,10 @@ class _ProfileEditorState extends State<ProfileEditor> {
                 child: const Text('刪除使用者'),
               ),
           ],
+          ),
         ),
       ),
+    ),
     ),
   );
 }

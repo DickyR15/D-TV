@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -15,10 +16,9 @@ import 'player_fullscreen_layout_policy.dart';
 import 'app_theme.dart';
 import 'back_safe_dialog.dart';
 import 'core_bridge.dart';
+import 'desktop_mini_player_bridge.dart';
 import 'diary_service.dart';
 import 'playback_diagnostics.dart';
-import 'danmaku_controller.dart';
-import 'danmaku_overlay.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'playback_loader.dart';
@@ -26,6 +26,7 @@ import 'playback_preloader.dart';
 import 'playback_recovery.dart';
 import 'playback_controls_visibility.dart';
 import 'playback_preferences.dart';
+import 'playback_lifecycle_policy.dart';
 import 'portrait_blur_policy.dart';
 import 'luna_exo_player.dart';
 import 'player_controls.dart';
@@ -42,7 +43,8 @@ import 'video_output_size.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
-  // Prefer the Android native Surface route verified on Onn. 4K Pro.
+  // Keep the previously validated Android TV backend: MPV Embed + MediaCodec.
+  // ExoPlayer remains available for controlled A/B testing.
   defaultValue: 'mpv_embed',
 );
 
@@ -70,6 +72,9 @@ class PlayerScreen extends StatefulWidget {
     this.videoBuilder,
     this.handoff,
     this.recoveryRestarted = false,
+    this.desktopMiniPlayer = false,
+    this.onBackOverride,
+    this.onProgress,
   });
   final DramaDetail detail;
   final int initialIndex;
@@ -80,6 +85,12 @@ class PlayerScreen extends StatefulWidget {
   final AppRepository repository;
   final LocalStore store;
   final LanIncomingPlayback? handoff;
+  /// True when this screen is hosted in the independent desktop mini-player.
+  final bool desktopMiniPlayer;
+  /// Allows the mini-player host to restore the paused main window.
+  final VoidCallback? onBackOverride;
+  /// Reports the current episode and playback position to the paired window.
+  final void Function(int index, double position)? onProgress;
   /// True after the one automatic clean-player restart has already been used.
   final bool recoveryRestarted;
   @visibleForTesting
@@ -98,9 +109,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final PlaybackLoader _loader;
   late final PlaybackPreloader _preloader;
   bool _preloadEnabled = true;
-  late final DanmakuController _danmaku;
   int _seekSequence = 0;
-  bool _danmakuEnabled = true;
   late final PlayerInteractions _interactions;
   final _playerFocus = FocusNode(debugLabel: 'player-surface');
   final _videoPaneKey = GlobalKey();
@@ -119,9 +128,19 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? _saveTimer;
   Timer? _healthTimer;
   Timer? _syncDiagnosticTimer;
+  Timer? _framePacingDiagnosticTimer;
+  bool _framePacingDiagnosticBusy = false;
+  final Map<String, int> _framePacingLastCounters = {};
+  DateTime? _framePacingLastSampleAt;
+  Duration? _framePacingLastPosition;
+  bool? _framePacingLastBuffering;
+  bool? _lastPlaybackBuffering;
   Timer? _loadingOverlayTimer;
   bool _showLoadingOverlay = false;
   Timer? _errorTimer;
+  bool _suppressVolumePersistence = false;
+  late final PlaybackVolumeMemory _volumeMemory;
+  Future<void> _initialVolumeReady = Future<void>.value();
   Timer? _pictureInPictureExitTimer;
   Future<void> _operations = Future<void>.value();
   late int _index;
@@ -179,13 +198,24 @@ class _PlayerScreenState extends State<PlayerScreen>
       Platform.isAndroid && _television && _player.platform is NativePlayer;
   bool get _televisionRenderingApplies =>
       Platform.isAndroid && _television && _player.platform is NativePlayer;
+  bool get _displaySyncDiagnosticsApplies =>
+      Platform.isWindows || _televisionDecoderApplies;
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
       _pictureInPictureActive || _pictureInPictureRequested;
-  bool get _canUsePictureInPicture =>
-      !_television &&
-      defaultTargetPlatform == TargetPlatform.android &&
-      _pictureInPictureSupported;
+  bool get _desktopMiniPlayerSupported =>
+      !widget.desktopMiniPlayer && (Platform.isWindows || Platform.isMacOS);
+  final WindowMethodChannel _desktopMiniChannel = desktopMiniPlayerChannel;
+  WindowController? _desktopMiniWindow;
+  Completer<void>? _desktopMiniReady;
+  bool _desktopMiniActive = false;
+  int _desktopMiniEpisodeIndex = 0;
+  double _desktopMiniPosition = 0;
+  bool get _canUsePictureInPicture => supportsPictureInPicture(
+    android: defaultTargetPlatform == TargetPlatform.android,
+    systemSupported: _pictureInPictureSupported,
+    television: _television,
+  );
   bool get _mobile => _formFactor == FormFactor.phone;
   VideoEnhancementController? get _enhancementForUi =>
       _enhancement.supported ? _enhancement : null;
@@ -193,7 +223,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     speed: _speed,
     quality: _requestedQuality,
     autoAdvance: _autoAdvance,
-    danmaku: _danmakuEnabled,
     preload: _preloadEnabled,
     enhancement: _enhancement.preferences,
     portraitBlurBackground: _portraitBlurBackground,
@@ -217,26 +246,31 @@ class _PlayerScreenState extends State<PlayerScreen>
     WidgetsBinding.instance.addObserver(this);
     _index = widget.initialIndex;
     _profileEpoch = widget.handoff?.profileEpoch ?? widget.store.profileEpoch;
-    final preferences = widget.store.playbackPreferences;
-    final migrateDanmakuDefault =
-        widget.store.needsDanmakuDefaultOffMigration;
-    if (migrateDanmakuDefault) {
-      unawaited(widget.store.migrateDanmakuDefaultOff());
+    _volumeMemory = PlaybackVolumeMemory(
+      initial: widget.store.playerVolume,
+      save: widget.store.setPlayerVolume,
+    );
+    if (_desktopMiniPlayerSupported) {
+      unawaited(
+        _desktopMiniChannel.setMethodCallHandler(_handleDesktopMiniMessage)
+            .catchError((Object _) {}),
+      );
     }
+    final preferences = widget.store.playbackPreferences;
     _speed = preferences.speed;
     _requestedQuality = preferences.quality;
     _autoAdvance = preferences.autoAdvance;
-    _danmakuEnabled = migrateDanmakuDefault ? false : preferences.danmaku;
-    _preloadEnabled = preferences.preloads(television: false);
     _televisionDecoder = preferences.televisionDecoder;
-    // Android TV uses the previously validated MPV Embed + MediaCodec
-    // surface path for automatic and hardware modes. Software mode stays on
-    // the regular GPU path; phones/tablets use the regular MPV view.
+    // Preserve the previously validated Android TV MPV Embed + MediaCodec path.
+    // ExoPlayer remains opt-in through DTV_ANDROID_PLAYER=exo for A/B tests.
     final inheritedLayout = context.getInheritedWidgetOfExactType<AppLayout>();
     final isTelevisionLayout =
         inheritedLayout?.formFactor == FormFactor.television ||
         (inheritedLayout?.formFactor == null &&
             inheritedLayout?.television == true);
+    _preloadEnabled = preferences.preloads(
+      television: isTelevisionLayout,
+    );
     // Keep MPV Embed + MediaCodec for Android TV even when blur is enabled.
     // The blur is composed from the same Flutter Texture Registry output;
     // it must never force the mediacodec-copy path that caused TV A/V drift.
@@ -251,16 +285,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
-    _danmaku = DanmakuController(widget.repository)
-      ..setEnabled(_danmakuEnabled);
     widget.store.addListener(_accessChanged);
     final useMpvEmbed = _mpvEmbedBackend;
-    final useExoPlayer =
-        Platform.isAndroid &&
-        _androidPlayerEngine == 'exo' &&
-        widget.videoBuilder == null &&
-        widget.playerFactory == null &&
-        !useMpvEmbed;
+    final useExoPlayer = shouldUseExoPlayerForAndroidPlayback(
+      android: Platform.isAndroid,
+      television: isTelevisionLayout,
+      exoConfigured: _androidPlayerEngine == 'exo',
+      customPlayer: widget.videoBuilder != null || widget.playerFactory != null,
+    );
     _player =
         widget.playerFactory?.call() ??
         (useExoPlayer
@@ -271,6 +303,14 @@ class _PlayerScreenState extends State<PlayerScreen>
                   logLevel: MPVLogLevel.error,
                 ),
               ));
+    _initialVolumeReady = _television
+        ? Future<void>.value()
+        : _player.setVolume(widget.store.playerVolume);
+    if (!_television) {
+      _subscriptions.add(
+        _player.stream.volume.listen(_rememberVolume),
+      );
+    }
     final exoPlayer = _player is LunaExoPlayer;
     DiaryService.add(
       '[Player] backend=${exoPlayer
@@ -395,8 +435,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       _player.stream.position.listen((position) {
         if (!_closed && _openedIndex == _index && position > Duration.zero) {
           _resumePosition = position.inMilliseconds / 1000;
+          widget.onProgress?.call(_index, _resumePosition);
         }
-        _syncDanmaku();
         _syncPreload();
         _acknowledgeHandoff();
       }),
@@ -411,12 +451,37 @@ class _PlayerScreenState extends State<PlayerScreen>
     ]) {
       _subscriptions.add(
         stream.listen((_) {
-          _syncDanmaku();
           _syncPreload();
           _acknowledgeHandoff();
         }),
       );
     }
+    _subscriptions.add(
+      _player.stream.buffering.listen((buffering) {
+        if (_closed || _loading || _openedIndex != _index ||
+            _lastPlaybackBuffering == buffering) {
+          return;
+        }
+        _lastPlaybackBuffering = buffering;
+        final state = _player.state;
+        final bufferedAhead = playbackBufferedAheadMilliseconds(
+          position: state.position,
+          bufferedEnd: state.buffer > Duration.zero ? state.buffer : null,
+        );
+        final backend = _player is LunaExoPlayer
+            ? 'exo'
+            : _mpvEmbedBackend
+            ? 'mpv_embed'
+            : 'mpv';
+        DiaryService.add(
+          '[PlaybackBuffer] backend=$backend generation=$_generation '
+          'episode=$_index buffering=$buffering playing=${state.playing} '
+          'positionMs=${state.position.inMilliseconds} '
+          'bufferEndMs=${state.buffer.inMilliseconds} '
+          'bufferedAheadMs=${bufferedAhead ?? 'n/a'}',
+        );
+      }),
+    );
     _subscriptions.add(
       _player.stream.videoParams.listen((parameters) {
         final size = videoDisplaySize(parameters);
@@ -524,6 +589,18 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _accessChanged() {
+    final sessionChanged =
+        widget.store.profileEpoch != _profileEpoch || widget.store.locked;
+    if (sessionChanged && _desktopMiniActive) {
+      // Never let a child engine continue using a profile after its parent
+      // session is locked or switched to another user.
+      _desktopMiniActive = false;
+      _desktopMiniReady = null;
+      _desktopMiniWindow = null;
+      unawaited(
+        _desktopMiniChannel.invokeMethod<void>('close').catchError((Object _) {}),
+      );
+    }
     if (!_closed && mounted) {
       final blurEnabled =
           widget.store.playbackPreferences.portraitBlurBackground;
@@ -544,7 +621,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         (widget.store.profileEpoch != _profileEpoch ||
             widget.store.locked ||
             !widget.store.allowsSource('hongguo'))) {
-      _danmaku.setPlan(null);
     }
   }
 
@@ -602,8 +678,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     final playing = !_loading && _error == null && _player.state.playing;
     final hasPrevious = _index > 0;
     final hasNext = _index + 1 < widget.detail.episodes.length;
-    final autoEnter = playing && !_television &&
-        widget.store.playbackPreferences.autoPictureInPicture;
+    final autoEnter = shouldAutoEnterPictureInPicture(
+      android: defaultTargetPlatform == TargetPlatform.android,
+      systemSupported: _pictureInPictureSupported,
+      playing: playing,
+      enabled: widget.store.playbackPreferences.autoPictureInPicture,
+      television: _television,
+    );
     final signature = '$width:$height:$playing:$hasPrevious:$hasNext:$autoEnter';
     if (_pictureInPictureStateSignature == signature) return;
     _pictureInPictureStateSignature = signature;
@@ -685,29 +766,125 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _applyLifecycleVisibility({bool pauseWhenHidden = true}) {
-    final treatAsVisible = Platform.isWindows
-        ? (AppLifecycleState.resumed == _lifecycleState ||
-              AppLifecycleState.inactive == _lifecycleState)
-        : _lifecycleState == AppLifecycleState.resumed;
-    final visible = treatAsVisible || _pictureInPictureVisible;
+    final visible =
+        playbackLifecycleVisible(_lifecycleState) || _pictureInPictureVisible;
     _foreground = visible;
     _enhancement.setForeground(_foreground);
-    _syncDanmaku();
     _syncPreload();
     _health.reset();
     if (!visible) _interactions.cancel();
     if (pauseWhenHidden &&
         !visible &&
-        (_lifecycleState == AppLifecycleState.paused ||
-            (!Platform.isWindows &&
-                _lifecycleState == AppLifecycleState.inactive) ||
-            _lifecycleState == AppLifecycleState.hidden)) {
+        playbackLifecycleShouldPause(_lifecycleState)) {
       _playIntent = false;
       unawaited(_player.pause());
       unawaited(_saveProgress(flush: true));
     }
     if (visible && _pendingError) {
       _queueRecovery(reason: 'foreground_pending_error');
+    }
+  }
+
+  Future<dynamic> _handleDesktopMiniMessage(MethodCall call) async {
+    switch (call.method) {
+      case 'mini_ready':
+        final ready = _desktopMiniReady;
+        if (ready != null && !ready.isCompleted) ready.complete();
+        return true;
+      case 'mini_progress':
+        final values = call.arguments;
+        if (values is Map) {
+          _desktopMiniEpisodeIndex = intValue(values['index']);
+          final position = (values['position'] as num?)?.toDouble();
+          if (position != null && position.isFinite && position >= 0) {
+            _desktopMiniPosition = position;
+          }
+        }
+        return true;
+      case 'mini_error':
+        final message = call.arguments is Map
+            ? (call.arguments['message']?.toString() ?? '小窗播放器初始化失敗')
+            : '小窗播放器初始化失敗';
+        final ready = _desktopMiniReady;
+        if (ready != null && !ready.isCompleted) {
+          ready.completeError(StateError(message));
+        }
+        return true;
+      case 'mini_closed':
+        final values = call.arguments;
+        var index = _desktopMiniEpisodeIndex;
+        var position = _desktopMiniPosition;
+        if (values is Map) {
+          index = intValue(values['index']);
+          final reported = (values['position'] as num?)?.toDouble();
+          if (reported != null && reported.isFinite && reported >= 0) {
+            position = reported;
+          }
+        }
+        final wasActive = _desktopMiniActive;
+        _desktopMiniActive = false;
+        _desktopMiniWindow = null;
+        _desktopMiniReady = null;
+        if (wasActive && mounted && !_closed) {
+          await _play(
+            index.clamp(0, widget.detail.episodes.length - 1).toInt(),
+            position: position,
+          );
+        }
+        return true;
+      default:
+        return null;
+    }
+  }
+
+  Future<void> _openDesktopMiniPlayer() async {
+    if (!_desktopMiniPlayerSupported ||
+        _desktopMiniActive ||
+        _closed ||
+        _loading ||
+        _error != null ||
+        _panelOpen ||
+        widget.store.locked ||
+        widget.detail.episodes.isEmpty) {
+      return;
+    }
+
+    _desktopMiniEpisodeIndex = _index;
+    _desktopMiniPosition = _currentPosition;
+    final ready = Completer<void>();
+    _desktopMiniReady = ready;
+
+    try {
+      // Save the last checkpoint before pausing the main-window engine.
+      await _saveProgress(flush: true);
+      await _desktopMiniChannel.setMethodCallHandler(
+        _handleDesktopMiniMessage,
+      );
+      _desktopMiniActive = true;
+      await _player.pause();
+      _desktopMiniWindow = await createDesktopMiniPlayerWindow(
+        detail: widget.detail,
+        index: _index,
+        position: _currentPosition,
+        authorizedSession: !widget.store.locked,
+      );
+      await ready.future.timeout(const Duration(seconds: 12));
+    } catch (error) {
+      _desktopMiniActive = false;
+      _desktopMiniReady = null;
+      final controller = _desktopMiniWindow;
+      _desktopMiniWindow = null;
+      if (controller != null) {
+        try {
+          await _desktopMiniChannel.invokeMethod<void>('close');
+        } catch (_) {}
+      }
+      if (!_closed && mounted) {
+        try {
+          await _player.play();
+        } catch (_) {}
+        _notice('無法開啟桌面小窗：$error');
+      }
     }
   }
 
@@ -946,27 +1123,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  void _syncDanmaku({bool discontinuity = false}) {
-    if (_closed) return;
-    final state = _player.state;
-    _danmaku.update(
-      position: state.position,
-      duration: state.duration,
-      speed: state.rate,
-      playing: state.playing && _playIntent && !state.completed,
-      buffering: state.buffering,
-      foreground: _foreground,
-      available:
-          !_loading &&
-          _error == null &&
-          _openedIndex == _index &&
-          widget.store.profileEpoch == _profileEpoch &&
-          !widget.store.locked &&
-          widget.store.allowsSource('hongguo'),
-      discontinuity: discontinuity,
-    );
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -1126,7 +1282,18 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final previous = _lifecycleState;
     _lifecycleState = state;
+    if (state != AppLifecycleState.resumed) _volumeMemory.flush();
+    final playerState = _player.state;
+    DiaryService.add(
+      '[PlaybackLifecycle] from=${previous.name} to=${state.name} '
+      'generation=$_generation foreground=$_foreground intended=$_playIntent '
+      'playing=${playerState.playing} buffering=${playerState.buffering} '
+      'positionMs=${playerState.position.inMilliseconds} '
+      'route=${_plan?.routeIndex ?? -1}/${_plan?.routeCount ?? 0} '
+      'session=${_plan == null ? 'none' : playbackDiagnosticId(_plan!.session)}',
+    );
     _applyLifecycleVisibility();
   }
 
@@ -1264,19 +1431,27 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     _acceptErrors = false;
-    _danmaku.setPlan(null);
     _errorTimer?.cancel();
     _pendingError = false;
     final position = _currentPosition;
+    final androidRedFruit = Platform.isAndroid &&
+        const {'hongguo', 'redfruit'}.contains(widget.detail.drama.source);
     final action = current.local
         ? PlaybackRecoveryAction.stop
         : _recovery.next(
             current,
-            allowPlayerRecreate:
+            // Android's ExoPlayer must not serially retry a long list of Red
+            // Fruit routes and then recreate itself into another retry loop.
+            // Try two alternates, refresh once, then surface a retryable error.
+            allowPlayerRecreate: !androidRedFruit &&
                 !widget.recoveryRestarted &&
                 widget.handoff == null &&
                 widget.playerFactory == null &&
                 widget.videoBuilder == null,
+            alternativeAttemptLimit: androidRedFruit ? 2 : null,
+            recoveryDurationLimit: androidRedFruit
+                ? const Duration(seconds: 75)
+                : null,
           );
     DiaryService.add(
       '[Recovery] start reason=$reason action=${action.name} generation=$_generation route=${current.routeIndex}/${current.routeCount} session=${playbackDiagnosticId(current.session)} position=${_player.state.position.inMilliseconds} duration=${_player.state.duration.inMilliseconds} buffering=${_player.state.buffering}',
@@ -1346,7 +1521,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         _openedIndex = -1;
         await _stopPlayerForPlayback(reason: 'recreate_player');
         if (identical(_plan, current)) _plan = null;
-        _danmaku.setPlan(null);
         await _releasePlayback(current.session, 'recovery_recreate_player');
       });
     } catch (error) {
@@ -1401,10 +1575,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     unawaited(_player.playOrPause());
     if (!_playIntent) unawaited(_saveProgress(flush: true));
-    _syncDanmaku();
   }
 
   Future<void> _saveProgress({bool flush = false}) async {
+    // The main engine is paused while the independent desktop window owns
+    // playback. The mini engine writes the newer watch position itself.
+    if (_desktopMiniActive) return;
     if (_openedIndex < 0 || widget.store.profileEpoch != _profileEpoch) {
       return;
     }
@@ -1467,6 +1643,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         index >= widget.detail.episodes.length) {
       return;
     }
+    await _initialVolumeReady;
+    final volumeBeforeOpen = _television ? null : _volumeMemory.value;
     final playClock = Stopwatch()..start();
     var cleanupMs = 0;
     var resolveMs = 0;
@@ -1494,10 +1672,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     final ticket = ++_generation;
     _enhancement.suspend();
     _seekSequence++;
-    _danmaku.setPlan(null);
     _acceptErrors = false;
     _syncDiagnosticTimer?.cancel();
     _syncDiagnosticTimer = null;
+    _framePacingDiagnosticTimer?.cancel();
+    _framePacingDiagnosticTimer = null;
+    _framePacingLastCounters.clear();
+    _framePacingLastSampleAt = null;
+    _framePacingLastPosition = null;
+    _framePacingLastBuffering = null;
+    _lastPlaybackBuffering = null;
     _pendingError = false;
     _errorTimer?.cancel();
     _loadingOverlayTimer?.cancel();
@@ -1511,6 +1695,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       _playIntent = playWhenReady;
     }
     _resumePosition = position;
+    // The independent mini-player must report an episode change immediately,
+    // even before the new stream emits its first non-zero position.
+    widget.onProgress?.call(index, position);
     _showControlsOnPlaybackReady = showControlsOnReady;
     setState(() {
       _index = index;
@@ -1619,12 +1806,37 @@ class _PlayerScreenState extends State<PlayerScreen>
           await _releasePlayback(plan.session, 'stale_generation');
           return;
         }
+        // A fallback plan no longer depends on the previous native stream
+        // session. Retire it before opening the new URL so late HLS requests
+        // and MPV errors from the old playlist cannot be mistaken for errors
+        // from the replacement route.
+        if (retained != null) {
+          final previous = retained!;
+          retained = null;
+          await _releasePlayback(
+            previous.session,
+            'fallback_previous_before_open',
+          );
+          if (_closed || ticket != _generation) return;
+        }
         if (plan.url.isEmpty) {
           throw AppFailure('片源未提供播放網址，請重試');
         }
         final setupClock = Stopwatch()..start();
         final platform = _player.platform;
         if (platform is NativePlayer) {
+          if (Platform.isWindows) {
+            // The Windows log repeatedly reports file-cache creation failures.
+            // Keep short-form streaming cache in RAM and use display-clock pacing.
+            try {
+              await _setPlaybackProperty(platform, 'cache-on-disk', 'no');
+              DiaryService.add('[MPV] cache_on_disk=no');
+            } catch (error) {
+              DiaryService.add(
+                '[MPV] cache_on_disk_setting_failed=${error.runtimeType}',
+              );
+            }
+          }
           final hwdec = playbackHwdecFor(
             decoder: _televisionDecoder,
             android: Platform.isAndroid,
@@ -1710,15 +1922,19 @@ class _PlayerScreenState extends State<PlayerScreen>
               await _setPlaybackProperty(platform, 'vd-lavc-threads', '4');
             }
             await _setPlaybackProperty(platform, 'vd-lavc-fast', 'yes');
-            await _setPlaybackProperty(platform, 'video-sync', 'audio');
-            // The Onn. 4K Pro log showed VO frame drops but zero decoder
-            // drops while video lagged audio by nearly four seconds.
-            // Drop late TV frames at the decoder stage to reduce GPU work.
-            await _setPlaybackProperty(
-              platform,
-              'framedrop',
-              _television ? 'decoder' : 'vo',
+            final videoSyncMode = playbackVideoSyncModeFor(
+              android: Platform.isAndroid,
             );
+            if (videoSyncMode != null) {
+              await _setPlaybackProperty(platform, 'video-sync', videoSyncMode);
+            }
+            final frameDropMode = playbackFrameDropModeFor(
+              android: Platform.isAndroid,
+              television: _television,
+            );
+            if (frameDropMode != null) {
+              await _setPlaybackProperty(platform, 'framedrop', frameDropMode);
+            }
           }
           await _setPlaybackProperty(
             platform,
@@ -1739,12 +1955,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         setupMs = setupClock.elapsedMilliseconds;
         _plan = plan;
         installed = true;
-        _acceptErrors = true;
         DiaryService.add(
           '[Play] open generation=$ticket route=${plan.routeIndex}/${plan.routeCount} session=${playbackDiagnosticId(plan.session)} url=${playbackDiagnosticUrl(plan.url)} headers=${plan.headers.keys.toList()}',
         );
         final openClock = Stopwatch()..start();
-        await _player
+        _suppressVolumePersistence = !_television;
+        try {
+          await _player
             .open(
               Media(
                 plan.url,
@@ -1771,6 +1988,17 @@ class _PlayerScreenState extends State<PlayerScreen>
                 );
               },
             );
+          if (volumeBeforeOpen != null && !_closed && ticket == _generation) {
+            await _player.setVolume(volumeBeforeOpen);
+          }
+          // Ignore delayed errors from the previous MPV/HLS session until the
+          // replacement media has completed its open operation. A genuine
+          // startup failure is still covered by the open timeout and health
+          // watchdog below.
+          _acceptErrors = true;
+        } finally {
+          _suppressVolumePersistence = false;
+        }
         openMs = openClock.elapsedMilliseconds;
         if (_closed || ticket != _generation) {
           return;
@@ -1804,8 +2032,6 @@ class _PlayerScreenState extends State<PlayerScreen>
             _loading = false;
             _showLoadingOverlay = false;
           });
-          _danmaku.setPlan(plan);
-          _syncDanmaku();
           _acknowledgeHandoff();
           _menuRevision.value++;
         }
@@ -1863,22 +2089,44 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _startSyncDiagnostics() {
     _syncDiagnosticTimer?.cancel();
-    if (!_televisionDecoderApplies || _player.platform is! NativePlayer) {
+    _framePacingDiagnosticTimer?.cancel();
+    _framePacingLastCounters.clear();
+    _framePacingLastSampleAt = null;
+    if (_player is LunaExoPlayer) {
+      if (Platform.isAndroid && _television) {
+        unawaited(_logExoPlaybackEnvironment());
+      }
+      return;
+    }
+    if (!_displaySyncDiagnosticsApplies || _player.platform is! NativePlayer) {
       return;
     }
     unawaited(_logPlaybackSyncHealth());
+    unawaited(_logFramePacingDiagnostics());
     _syncDiagnosticTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (!_closed && _acceptErrors && _foreground && _player.state.playing) {
         unawaited(_logPlaybackSyncHealth());
       }
     });
+    // Sample cumulative frame counters and timing properties frequently enough
+    // to expose short stalls that a 15-second health snapshot can miss.
+    // This only reads MPV properties; it does not write player settings.
+    _framePacingDiagnosticTimer = Timer.periodic(
+      playbackFramePacingSampleInterval,
+      (_) {
+        if (!_closed && _acceptErrors && _foreground && _player.state.playing) {
+          unawaited(_logFramePacingDiagnostics());
+        }
+      },
+    );
   }
 
   Future<void> _logPlaybackSyncHealth() async {
     final platform = _player.platform;
-    if (_closed || !_televisionDecoderApplies || platform is! NativePlayer) {
+    if (_closed || !_displaySyncDiagnosticsApplies || platform is! NativePlayer) {
       return;
     }
+    final generation = _generation;
     const properties = <String>[
       'avsync',
       'total-avsync-change',
@@ -1890,10 +2138,19 @@ class _PlayerScreenState extends State<PlayerScreen>
       'hwdec',
       'hwdec-current',
       'current-vo',
+      'current-gpu-context',
       'opengl-pbo',
       'video-latency-hacks',
       'demuxer-readahead-secs',
       'container-fps',
+      'estimated-vf-fps',
+      'display-fps',
+      'estimated-display-fps',
+      'display-sync-active',
+      'vsync-ratio',
+      'vo-delayed-frame-count',
+      'demuxer-cache-duration',
+      'paused-for-cache',
     ];
     final values = <String>[];
     for (final property in properties) {
@@ -1903,12 +2160,126 @@ class _PlayerScreenState extends State<PlayerScreen>
       } catch (_) {
         values.add('$property=n/a');
       }
+      if (_closed || generation != _generation) return;
     }
+    final displaySummary = await _readAndroidDisplaySummary();
+    if (_closed || generation != _generation) return;
+    DiaryService.add(
+      '[Sync] generation=$generation decoder=${_televisionDecoder.name} '
+      '${values.join(' ')} $displaySummary',
+    );
+  }
+
+  Future<void> _logExoPlaybackEnvironment() async {
+    final displaySummary = await _readAndroidDisplaySummary();
     if (_closed) return;
     DiaryService.add(
-      '[Sync] generation=$_generation decoder=${_televisionDecoder.name} '
-      '${values.join(' ')}',
+      '[ExoPlayerEnvironment] $displaySummary '
+      'frame-drop-counters=not-exposed-by-video_player '
+      'decoder=platform-managed buffer-control=plugin-default',
     );
+  }
+
+  Future<String> _readAndroidDisplaySummary() async {
+    if (!Platform.isAndroid) return 'android-display=n/a';
+    try {
+      final info = await AppDevice.channel
+          .invokeMapMethod<String, dynamic>('displayInfo')
+          .timeout(const Duration(milliseconds: 750));
+      if (info == null) return 'android-display=n/a';
+      final refresh = info['refreshRateHz'] ?? 'n/a';
+      final mode = info['modeId'] ?? 'n/a';
+      final width = info['width'] ?? 'n/a';
+      final height = info['height'] ?? 'n/a';
+      return 'android-display-refresh-hz=$refresh '
+          'android-display-mode=$mode android-display-size=${width}x$height';
+    } catch (_) {
+      return 'android-display=n/a';
+    }
+  }
+
+  Future<void> _logFramePacingDiagnostics() async {
+    if (_framePacingDiagnosticBusy ||
+        _closed ||
+        !_acceptErrors ||
+        !_foreground ||
+        !_player.state.playing ||
+        !_displaySyncDiagnosticsApplies) {
+      return;
+    }
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+
+    _framePacingDiagnosticBusy = true;
+    final generation = _generation;
+    final sampledAt = DateTime.now();
+    final previousAt = _framePacingLastSampleAt;
+    _framePacingLastSampleAt = sampledAt;
+    final intervalMs = previousAt == null
+        ? 0
+        : sampledAt.difference(previousAt).inMilliseconds;
+    final state = _player.state;
+    final previousPosition = _framePacingLastPosition;
+    final positionDeltaMs = previousPosition == null
+        ? 'baseline'
+        : (state.position - previousPosition).inMilliseconds.toString();
+    final expectedDeltaMs = playbackExpectedPositionDeltaMilliseconds(
+      elapsed: Duration(milliseconds: intervalMs),
+      rate: state.rate,
+    );
+    final bufferedAheadMs = playbackBufferedAheadMilliseconds(
+      position: state.position,
+      bufferedEnd: state.buffer > Duration.zero ? state.buffer : null,
+    );
+    final bufferingTransition = _framePacingLastBuffering != null &&
+        _framePacingLastBuffering != state.buffering;
+    _framePacingLastPosition = state.position;
+    _framePacingLastBuffering = state.buffering;
+    final values = <String>[];
+    try {
+      for (final property in playbackFramePacingProperties) {
+        String value;
+        try {
+          value = await platform.getProperty(property);
+        } catch (_) {
+          value = 'n/a';
+        }
+        if (_closed || generation != _generation) return;
+        values.add('$property=$value');
+        if (playbackFramePacingCounterProperties.contains(property)) {
+          final previous = _framePacingLastCounters[property];
+          values.add(
+            '$property-delta=${playbackDiagnosticCounterDelta(value, previous)}',
+          );
+          final current = int.tryParse(value.trim());
+          if (current != null) _framePacingLastCounters[property] = current;
+        }
+      }
+      if (_closed || generation != _generation) return;
+      final backend = _player is LunaExoPlayer
+          ? 'exo'
+          : _mpvEmbedBackend
+          ? 'mpv_embed'
+          : 'mpv';
+      DiaryService.add(
+        '[FramePacing] backend=$backend generation=$generation '
+        'intervalMs=$intervalMs positionMs=${state.position.inMilliseconds} '
+        'positionDeltaMs=$positionDeltaMs expectedDeltaMs=${expectedDeltaMs ?? 'n/a'} '
+        'bufferEndMs=${state.buffer.inMilliseconds} '
+        'bufferedAheadMs=${bufferedAheadMs ?? 'n/a'} '
+        'buffering=${state.buffering} bufferingTransition=$bufferingTransition '
+        'playing=${state.playing} rate=${state.rate} '
+        '${values.join(' ')}',
+      );
+    } catch (error) {
+      if (!_closed && generation == _generation) {
+        DiaryService.add(
+          '[FramePacing] generation=$generation sample_error=${error.runtimeType}',
+        );
+      }
+    } finally {
+      _framePacingDiagnosticBusy = false;
+    }
   }
 
   Future<void> _logVideoOutput(VideoParams parameters) async {
@@ -2003,7 +2374,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (!mounted || _closed) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ).showSnackBar(SnackBar(content: Text(uiTraditional(message))));
   }
 
   Future<void> _setPreferences(PlaybackPreferences preferences) async {
@@ -2024,13 +2395,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       _speed = nextPreferences.speed;
       _requestedQuality = nextPreferences.quality;
       _autoAdvance = nextPreferences.autoAdvance;
-      _danmakuEnabled = nextPreferences.danmaku;
       _preloadEnabled = nextPreferences.preload ?? _preloadEnabled;
       _portraitBlurBackground = nextPreferences.portraitBlurBackground;
       _televisionDecoder = nextPreferences.televisionDecoder;
     });
-    _danmaku.setEnabled(_danmakuEnabled);
-    _syncDanmaku();
     if (qualityChanged) _preloader.clear();
     _syncPreload();
     _menuRevision.value++;
@@ -2049,24 +2417,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (mounted && !_closed) setState(() {});
     } catch (_) {
       _notice('收藏記錄未能儲存，請檢查儲存空間後重試');
-    }
-  }
-
-  Future<void> _toggleDanmaku() async {
-    if (widget.detail.drama.source != 'hongguo') return;
-    try {
-      await _setPreferences(_preferences.copyWith(danmaku: !_danmakuEnabled));
-    } catch (_) {
-      _notice('彈幕偏好未能儲存，請重試');
-    }
-  }
-
-  Future<void> _retryDanmakuFromControls() async {
-    try {
-      _danmaku.retry();
-      _menuRevision.value++;
-    } catch (_) {
-      _notice('彈幕重試失敗，請稍後再試');
     }
   }
 
@@ -2092,7 +2442,6 @@ class _PlayerScreenState extends State<PlayerScreen>
           animation: Listenable.merge([
             _menuRevision,
             widget.store,
-            _danmaku,
             _preloader,
           ]),
           builder: (_, _) => Theme(
@@ -2109,9 +2458,6 @@ class _PlayerScreenState extends State<PlayerScreen>
               mobile: _mobile,
               onEpisode: (index) => Navigator.pop(menuContext, index),
               onPreferences: _setPreferences,
-              showDanmaku: widget.detail.drama.source == 'hongguo',
-              danmakuStatus: _danmaku.status,
-              onRetryDanmaku: _danmaku.canRetry ? _danmaku.retry : null,
               preloadStatus: _preloader.status,
               enhancement: _enhancementForUi,
               onCompareEnhancement: () {
@@ -2142,7 +2488,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     widget.handoff?.fail('接收端已調整播放位置');
     final ticket = ++_seekSequence;
     final generation = _generation;
-    _danmaku.beginSeek();
     _enhancement.ignorePerformance();
     var succeeded = false;
     try {
@@ -2152,20 +2497,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       _notice('跳轉失敗，請重試');
     } finally {
       if (!_closed && ticket == _seekSequence && generation == _generation) {
-        _danmaku.endSeek(succeeded ? target : _player.state.position);
       }
     }
-  }
-
-  void _seek(int seconds) {
-    final desired = _player.state.position + Duration(seconds: seconds);
-    final maxDuration = _player.state.duration;
-    final target = desired < Duration.zero
-        ? Duration.zero
-        : maxDuration > Duration.zero && desired > maxDuration
-        ? maxDuration
-        : desired;
-    unawaited(_seekTo(target));
   }
 
   Future<void> _televisionEpisodes(BuildContext context) async {
@@ -2206,7 +2539,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         context: context,
         builder: (menuContext) => _guardPlayerDialog(
           AnimatedBuilder(
-          animation: Listenable.merge([_danmaku, _preloader]),
+          animation: _preloader,
           builder: (_, _) => Theme(
             data: televisionTheme(AppTheme.dark),
             child: TelevisionSettingsDialog(
@@ -2216,10 +2549,6 @@ class _PlayerScreenState extends State<PlayerScreen>
               favorite: widget.store.isFavorite(widget.detail.drama.id),
               onFavorite: _toggleFavorite,
               autoAdvance: _autoAdvance,
-              danmaku: _danmakuEnabled,
-              showDanmaku: widget.detail.drama.source == 'hongguo',
-              danmakuStatus: _danmaku.status,
-              onRetryDanmaku: _danmaku.canRetry ? _danmaku.retry : null,
               preload: _preloadEnabled,
               preloadStatus: _preloader.status,
               enhancement: _enhancementForUi,
@@ -2251,12 +2580,14 @@ class _PlayerScreenState extends State<PlayerScreen>
           speed: selection.speed,
           quality: selection.quality,
           autoAdvance: selection.autoAdvance ?? _autoAdvance,
-          danmaku: selection.danmaku,
           preload: selection.preload ?? _preloadEnabled,
           enhancement: selection.enhancement,
           televisionDecoder: selection.decoder,
         ),
       );
+      if (selection.decoder != null && mounted && !_closed) {
+        showDtvToast(context, '解碼方式已變更，已重新載入影片。');
+      }
     } catch (_) {
       _notice('播放偏好未能儲存，請重試');
     }
@@ -2292,12 +2623,25 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  void _exitPlayback() {
+    final override = widget.onBackOverride;
+    if (override != null) {
+      override();
+      return;
+    }
+    if (_panelOpen) return;
+    Navigator.of(context).pop();
+  }
+
   void _handlePlaybackBack() {
-    // The TV controls are disabled while the playback-error panel is visible.
-    // PopScope still intercepts remote Back, so bypass the disabled controls
-    // and apply the normal route/dialog back behavior directly.
-    if (_error != null) {
-      _back();
+    // Loading/recovery disables the playback control row. Back must remain
+    // available in this state, otherwise ExoPlayer route retries can trap the
+    // viewer on Android TV. Exit the playback route directly.
+    if (playbackBackShouldExitImmediately(
+      loading: _loading,
+      hasError: _error != null,
+    )) {
+      _exitPlayback();
       return;
     }
     if (_television) {
@@ -2308,6 +2652,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _back() {
+    final override = widget.onBackOverride;
+    if (override != null) {
+      override();
+      return;
+    }
     final now = DateTime.now();
     final lastNestedPop = _lastNestedRoutePopAt;
     if (lastNestedPop != null &&
@@ -2335,14 +2684,27 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  void _rememberVolume(double value) {
+    if (_television || _closed || _suppressVolumePersistence) return;
+    _volumeMemory.remember(value);
+  }
+
   @override
   void dispose() {
     _closed = true;
+    _volumeMemory.dispose();
+    if (_desktopMiniPlayerSupported) {
+      if (_desktopMiniActive) {
+        unawaited(
+          _desktopMiniChannel.invokeMethod<void>('close').catchError((Object _) {}),
+        );
+      }
+      unawaited(_desktopMiniChannel.setMethodCallHandler(null));
+    }
     final enhancementClosed = _enhancement.close();
     LanController.current?.detachPlayback(_lanIdentity);
     widget.handoff?.fail('接收端已退出播放');
     widget.store.removeListener(_accessChanged);
-    _danmaku.dispose();
     _preloader.dispose();
     _generation++;
     WidgetsBinding.instance.removeObserver(this);
@@ -2350,6 +2712,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _healthTimer?.cancel();
     _loadingOverlayTimer?.cancel();
     _syncDiagnosticTimer?.cancel();
+    _framePacingDiagnosticTimer?.cancel();
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
     if (_pictureInPictureHandlerInstalled) {
@@ -2422,8 +2785,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
     return PopScope(
-      // Android TV Back is consumed by the playback controls, never the video route.
-      canPop: !_television && !fullscreen,
+      // A failed playback must always allow an explicit return to the detail page.
+      // Android TV continues to consume remote Back through its playback controls.
+      canPop: _error != null ? !_television : !_television && !fullscreen,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_television) {
@@ -2642,13 +3006,18 @@ class _PlayerScreenState extends State<PlayerScreen>
             ),
             enhancement: _enhancementForUi,
             onTogglePlayback: _togglePlayback,
-            onSeek: _seek,
+            onSeek: _seekTo,
             onPrevious: _index > 0 ? () => _play(_index - 1) : null,
             onNext: _index + 1 < widget.detail.episodes.length
                 ? () => _play(_index + 1)
                 : null,
             onEpisodes: () => _televisionEpisodes(context),
             onSettings: () => _televisionSettings(context),
+            onPictureInPicture: _canUsePictureInPicture
+                ? _enterPictureInPicture
+                : _desktopMiniPlayerSupported
+                ? _openDesktopMiniPlayer
+                : null,
             onBack: _back,
           )
         : PlayerControls(
@@ -2667,24 +3036,21 @@ class _PlayerScreenState extends State<PlayerScreen>
             onBack: _back,
             onFocusSurface: _playerFocus.requestFocus,
             onSeek: _seekTo,
+            onVolumeChanged: Platform.isWindows ? _rememberVolume : null,
             speed: _speed,
             qualityLabel: _qualityLabel,
-            showDanmaku: widget.detail.drama.source == 'hongguo',
-            danmakuEnabled: _danmakuEnabled,
-            danmakuStatus: _danmaku.status,
             onEpisodes: () => _openPanel(PlayerMenuSection.episodes),
             onSpeed: () => _openPanel(PlayerMenuSection.speed),
             onQuality: () => _openPanel(PlayerMenuSection.quality),
-            onDanmaku: widget.detail.drama.source == 'hongguo'
-                ? _toggleDanmaku
+            onPush: widget.mediaId == null && !widget.desktopMiniPlayer
+                ? _pushToDevice
                 : null,
-            onRetryDanmaku: _danmaku.canRetry
-                ? _retryDanmakuFromControls
-                : null,
-            onPush: widget.mediaId == null ? _pushToDevice : null,
             onPictureInPicture: _canUsePictureInPicture
                 ? _enterPictureInPicture
+                : _desktopMiniPlayerSupported
+                ? _openDesktopMiniPlayer
                 : null,
+            pictureInPictureTooltip: _desktopMiniPlayerSupported ? '小窗' : '畫中畫',
             onPrevious: _index > 0 ? () => _play(_index - 1) : null,
             onNext: _index + 1 < widget.detail.episodes.length
                 ? () => _play(_index + 1)
@@ -2694,7 +3060,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       fit: StackFit.expand,
       children: [
         if (!hideOverlayForPictureInPicture)
-          DanmakuOverlay(controller: _danmaku, aspectRatio: _aspectRatio),
         controls,
       ],
     );
@@ -2794,8 +3159,13 @@ class _PlayerScreenState extends State<PlayerScreen>
                     child: Row(
                       children: [
                         IconButton(
-                          tooltip: '退出全屏',
-                          onPressed: _rotate,
+                          tooltip: _error != null ? '返回上一頁' : '退出全螢幕',
+                          onPressed: _error != null ? _exitPlayback : _rotate,
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.white.withValues(alpha: .18),
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(44, 44),
+                          ),
                           icon: const Icon(Icons.arrow_back_rounded),
                         ),
                         const Spacer(),

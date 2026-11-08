@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'app_layout.dart';
+
 import 'core_bridge.dart';
 import 'local_store.dart';
 import 'media_library.dart';
@@ -67,6 +69,9 @@ class _MergeQueueScreenState extends State<MergeQueueScreen> {
         }
       }
       final selected = <String>{};
+      final firstSelectableIndex = rows.indexWhere(
+        (row) => !errors.containsKey(row.key),
+      );
       var cleanup = false;
       final accepted = await showDialog<bool>(
         context: context,
@@ -90,6 +95,8 @@ class _MergeQueueScreenState extends State<MergeQueueScreen> {
                               final row = rows[index];
                               return CheckboxListTile(
                                 contentPadding: EdgeInsets.zero,
+                                autofocus: AppLayout.isTelevision(context) &&
+                                    index == firstSelectableIndex,
                                 value: selected.contains(row.key),
                                 title: Text(row.value.first.drama.title),
                                 subtitle: Text(
@@ -122,6 +129,8 @@ class _MergeQueueScreenState extends State<MergeQueueScreen> {
             ),
             actions: [
               TextButton(
+                autofocus: AppLayout.isTelevision(context) &&
+                    firstSelectableIndex < 0,
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('取消'),
               ),

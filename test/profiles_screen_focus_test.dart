@@ -5,6 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/local_store.dart';
 import 'package:hgtv/profiles_screen.dart';
+import 'package:hgtv/models.dart';
+
+import 'fixtures.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +50,96 @@ void main() {
 
 
   testWidgets(
+    'TV locked profile selector starts on the first selectable profile',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'locked-admin-password',
+      );
+      store.lock();
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: MaterialApp(
+            home: ProfilesScreen(store: store, locked: true),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final firstProfile = store.profiles.first;
+      final row = tester.widget<InkWell>(
+        find.byKey(ValueKey('profile-open-${firstProfile.id}')),
+      );
+      expect(row.focusNode!.hasPrimaryFocus, isTrue);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'profile-entry-${firstProfile.id}',
+      );
+      expect(row.onTap, isNotNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'TV non-admin profile manager starts on the first selectable profile',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'admin-password',
+      );
+      await store.saveProfile(
+        id: 'visitor',
+        name: '訪客',
+        sources: const ['hongguo'],
+        download: false,
+      );
+      final visitor = store.profiles.firstWhere(
+        (profile) => profile.name == '訪客',
+      );
+      await store.switchProfile(visitor.id);
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: MaterialApp(home: ProfilesScreen(store: store)),
+        ),
+      );
+      await tester.pump();
+
+      final focusable = store.profile;
+      final row = tester.widget<InkWell>(
+        find.byKey(ValueKey('profile-open-${focusable.id}')),
+      );
+      expect(row.canRequestFocus, isTrue);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'profile-entry-${focusable.id}',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
     'admin profile editor exposes editable fields and a focused save action',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
@@ -81,7 +174,18 @@ void main() {
       );
       final save = find.byKey(const ValueKey('profile-editor-save'));
       expect(save, findsOneWidget);
-      expect(tester.widget<FilledButton>(save).autofocus, isTrue);
+      expect(tester.widget<FilledButton>(save).autofocus, isFalse);
+      final nameField = tester.widget<TextField>(
+        find.byKey(const ValueKey('profile-editor-name')),
+      );
+      expect(nameField.autofocus, isTrue);
+      expect(nameField.focusNode!.canRequestFocus, isTrue);
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-pin')),
+        ).focusNode!.canRequestFocus,
+        isTrue,
+      );
 
       await tester.enterText(
         find.byKey(const ValueKey('profile-editor-name')),
@@ -138,4 +242,151 @@ void main() {
       store.dispose();
     },
   );
+
+  testWidgets(
+    'new user editor hides advanced source permissions before admin password setup',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = LocalStore(await SharedPreferences.getInstance());
+      await tester.pumpWidget(
+        MaterialApp(home: ProfilesScreen(store: store)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('新增使用者'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('profile-source-hongguo')), findsOneWidget);
+      expect(find.byKey(const ValueKey('profile-source-hanxiaoquan')), findsOneWidget);
+      expect(find.byKey(const ValueKey('profile-source-duoduo')), findsOneWidget);
+      for (final source in SourceSite.restrictedValues) {
+        expect(
+          find.byKey(ValueKey('profile-source-${source.id}')),
+          findsNothing,
+          reason: '進階片源 ${source.name} must stay hidden until an admin password exists',
+        );
+      }
+      expect(find.textContaining('設定管理員密碼後'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      store.dispose();
+    },
+  );
+
+  testWidgets(
+    'TV admin editor can move between password fields after keyboard is dismissed',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'old-admin-password',
+      );
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          child: MaterialApp(home: ProfilesScreen(store: store)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('profile-edit-default')));
+      await tester.pumpAndSettle();
+
+      final name = tester.widget<TextField>(
+        find.byKey(const ValueKey('profile-editor-name')),
+      );
+      expect(name.focusNode!.hasFocus, isTrue);
+      tester.testTextInput.hide();
+      await tester.pump();
+
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pump();
+      }
+
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-current-pin')),
+        ).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await press(LogicalKeyboardKey.enter);
+      expect(tester.testTextInput.isVisible, isTrue);
+
+      tester.testTextInput.hide();
+      await tester.pump();
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-pin')),
+        ).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await press(LogicalKeyboardKey.arrowDown);
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-confirm-pin')),
+        ).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    'TV new-user editor can navigate fields and reopen the keyboard',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          child: MaterialApp(home: ProfilesScreen(store: store)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('新增使用者'));
+      await tester.pumpAndSettle();
+
+      final name = tester.widget<TextField>(
+        find.byKey(const ValueKey('profile-editor-name')),
+      );
+      expect(name.focusNode!.hasFocus, isTrue);
+      tester.testTextInput.hide();
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-pin')),
+        ).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(
+          find.byKey(const ValueKey('profile-editor-confirm-pin')),
+        ).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"net/url"
 	"regexp"
 	"sort"
@@ -88,7 +89,7 @@ func hanxiaoquanClean(text string) string {
 		return ""
 	}
 	text = reHanxiaoquanTag.ReplaceAllString(text, "")
-	text = guipianUnescape(text)
+	text = html.UnescapeString(text)
 	text = strings.ReplaceAll(text, "\u3000", " ")
 	return strings.Join(strings.Fields(text), " ")
 }

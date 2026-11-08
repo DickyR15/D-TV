@@ -56,7 +56,7 @@ void main() {
       }
     });
   }
-  testWidgets('desktop sidebar is compact, aligned, and pins Settings to bottom', (
+  testWidgets('desktop sidebar is compact and omits Settings', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -79,7 +79,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 350));
 
-    final tabs = [2, 1, 4, 5, 6, 7, 0, 9];
+    final tabs = [2, 1, 4, 5, 6, 7, 0];
     final rects = [
       for (final tab in tabs)
         tester.getRect(find.byKey(ValueKey('side-nav-$tab'))),
@@ -95,10 +95,9 @@ void main() {
       expect(rects[index].top, greaterThan(rects[index - 1].bottom));
       expect(rects[index].top - rects[index - 1].bottom, lessThan(20));
     }
-    expect(rects.last.top, greaterThan(rects[6].bottom));
-    expect(rects.last.bottom, greaterThan(840));
     expect(find.text('最近觀看'), findsOneWidget);
-    expect(find.text('設定'), findsOneWidget);
+    expect(find.text('設定'), findsNothing);
+    expect(find.byKey(const ValueKey('side-nav-9')), findsNothing);
   });
 
   testWidgets('desktop source menu opens source management directly', (

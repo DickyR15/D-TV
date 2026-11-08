@@ -1,10 +1,21 @@
 import 'dart:math';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
 import 'models.dart';
 import 'ui_localization.dart';
+
+class CatalogFilterScrollBehavior extends MaterialScrollBehavior {
+  const CatalogFilterScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    ...super.dragDevices,
+    PointerDeviceKind.mouse,
+  };
+}
 
 class CatalogFilters extends StatefulWidget {
   const CatalogFilters({
@@ -58,19 +69,21 @@ class _CatalogFiltersState extends State<CatalogFilters> {
       child: Row(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              key: const ValueKey('catalog-categories'),
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
+            child: ScrollConfiguration(
+              behavior: const CatalogFilterScrollBehavior(),
+              child: SingleChildScrollView(
+                key: const ValueKey('catalog-categories'),
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
                   for (final entry in widget.categories)
                     Padding(
                       key: _anchors.putIfAbsent(entry.id, GlobalKey.new),
                       padding: const EdgeInsets.only(right: 6),
                       child: ChoiceChip(
                         key: ValueKey('category-${entry.id}'),
-                        label: Text(uiTraditional(entry.name)),
+                        label: Text(uiCatalogCategoryLabel(entry.name)),
                         selected: entry.id == widget.category,
                         showCheckmark: true,
                         side: television
@@ -97,7 +110,8 @@ class _CatalogFiltersState extends State<CatalogFilters> {
                         onSelected: (_) => widget.onCategory(entry.id),
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

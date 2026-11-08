@@ -77,7 +77,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.f1);
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('桌面快捷鍵'), findsOneWidget);
-      expect(find.text('Ctrl + 8'), findsOneWidget);
+      expect(find.text('Ctrl + 8'), findsNothing);
       expect(find.text('Space'), findsOneWidget);
 
       await tester.tap(find.text('關閉'));

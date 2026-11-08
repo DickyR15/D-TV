@@ -387,6 +387,7 @@ func TestRankingConcurrentRequestsShareFetch(t *testing.T) {
 	}
 }
 
+
 func TestCachedRankingTop100ReturnsLocalPagesImmediately(t *testing.T) {
 	board, _ := findRankingBoard("hongguo-hot")
 	d := &Downloader{}

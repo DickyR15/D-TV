@@ -2,13 +2,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/playback_preferences.dart';
 
 void main() {
+  test('legacy danmaku preference is ignored and omitted from saved settings', () {
+    final restored = PlaybackPreferences.fromJson(const {'danmaku': true});
+    expect(restored.toJson().containsKey('danmaku'), isFalse);
+  });
+
   test('next episode preload defaults on for phones and TVs', () {
     final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
     expect(defaults.preload, isNull);
     expect(defaults.preloads(television: false), isTrue);
     expect(defaults.preloads(television: true), isTrue);
 
-    // A user's explicit choice remains authoritative on every device.
+    // Explicit choices remain authoritative on every device.
     expect(
       PlaybackPreferences.fromJson(const {'preopenNextEpisode': false})
           .preloads(television: false),
@@ -18,6 +23,11 @@ void main() {
       PlaybackPreferences.fromJson(const {'preopenNextEpisode': false})
           .preloads(television: true),
       isFalse,
+    );
+    expect(
+      PlaybackPreferences.fromJson(const {'preopenNextEpisode': true})
+          .preloads(television: true),
+      isTrue,
     );
   });
 
@@ -113,4 +123,65 @@ void main() {
     expect(hwdec(TelevisionDecoder.automatic, ios: true), isNull);
   });
 
+
+  test('Picture-in-Picture is available on supported Android phones but not TVs', () {
+    expect(
+      supportsPictureInPicture(android: true, systemSupported: true),
+      isTrue,
+    );
+    expect(
+      supportsPictureInPicture(
+        android: true,
+        systemSupported: true,
+        television: true,
+      ),
+      isFalse,
+    );
+    expect(
+      supportsPictureInPicture(android: false, systemSupported: true),
+      isFalse,
+    );
+    expect(
+      supportsPictureInPicture(android: true, systemSupported: false),
+      isFalse,
+    );
+  });
+
+  test('automatic PiP requires a supported Android device, playback and opt-in', () {
+    expect(
+      shouldAutoEnterPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldAutoEnterPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+        television: true,
+      ),
+      isFalse,
+    );
+    for (final values in [
+      (android: false, systemSupported: true, playing: true, enabled: true),
+      (android: true, systemSupported: false, playing: true, enabled: true),
+      (android: true, systemSupported: true, playing: false, enabled: true),
+      (android: true, systemSupported: true, playing: true, enabled: false),
+    ]) {
+      expect(
+        shouldAutoEnterPictureInPicture(
+          android: values.android,
+          systemSupported: values.systemSupported,
+          playing: values.playing,
+          enabled: values.enabled,
+        ),
+        isFalse,
+      );
+    }
+  });
 }

@@ -43,6 +43,36 @@ func TestNativeCategoryAliasesAndDetailPersistence(t *testing.T) {
 	}
 }
 
+func TestNativeNormalizeReconstructsCanonicalProviderIdentity(t *testing.T) {
+	cases := []struct {
+		name string
+		drama Drama
+		want string
+	}{
+		{
+			name: "raw numeric ID is namespaced by source",
+			drama: Drama{ID: "137937", Source: sourceDuoduo, Title: "撒旦：黑暗"},
+			want: "duoduo:137937",
+		},
+		{
+			name: "canonical ID remains authoritative",
+			drama: Drama{ID: "duoduo:137937", Source: "retired-source", SourceID: "999", Title: "撒旦：黑暗"},
+			want: "duoduo:137937",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := nativeNormalize(tc.drama)
+			if got.ID != tc.want {
+				t.Fatalf("normalized ID = %q, want %q", got.ID, tc.want)
+			}
+			if got.Source == "" || got.SourceID == "" {
+				t.Fatalf("normalized provider identity is incomplete: %+v", got)
+			}
+		})
+	}
+}
+
 func TestNativeRankingPermissionsAndPersistentCache(t *testing.T) {
 	for _, board := range rankingBoards {
 		err := nativeAuthorizeInput(nativeInput{Action: "rankings", Board: board.ID, Source: sourceHongguo})
