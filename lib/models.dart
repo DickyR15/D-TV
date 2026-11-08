@@ -108,6 +108,28 @@ class CatalogCategory {
 int intValue(Object? value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
+bool _isZeroMetric(String value) {
+  var normalized = value.trim().replaceAll(RegExp(r'[,，\\s]'), '');
+  if (normalized.isEmpty) return true;
+
+  // Provider data may append localized units to a bare numeric value.
+  const suffixes = [
+    '次播放', '播放量', '播放', '人次', '次', '人', '萬', '万', '億', '亿',
+  ];
+  var changed = true;
+  while (changed) {
+    changed = false;
+    for (final suffix in suffixes) {
+      if (normalized.endsWith(suffix)) {
+        normalized = normalized.substring(0, normalized.length - suffix.length);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return double.tryParse(normalized) == 0;
+}
+
 class Drama {
   const Drama({
     required this.id,
@@ -150,6 +172,11 @@ class Drama {
   bool get vip => vipStatus == true;
   final String heat;
   final String views;
+  /// Returns the playback count only when it contains a non-zero value.
+  /// Older cache files may store this field as either a number or a string;
+  /// [Drama.fromJson] normalizes both forms to text before this check.
+  String get displayViews => _isZeroMetric(views) ? '' : views;
+
   final String onlineDate;
   final List<String> tags;
   final String releaseStatus;
