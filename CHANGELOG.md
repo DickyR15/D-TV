@@ -1,6 +1,6 @@
 # 更新日誌
 
-## 1.0.2（開發中）
+## 1.0.2（正式發佈建置中）
 
 ### 片源與片庫
 - 多多追劇成為預設一般片源；補入官網首頁推薦內容，修正分類篩選與分頁續載，並依影片 ID 去除重複項目。
@@ -42,7 +42,7 @@
 - 擴充 Flutter／Go 回歸測試，涵蓋片庫、分集合併、備援線路、海報補齊及串流傳輸。
 - Windows x64、Android Universal、macOS Universal 與 iOS IPA 維持同一跨平台發布流程。
 
-> 本版本仍在開發與驗收中；海報抽樣仍有上游圖片失效案例，且 Windows／Android TV 實機播放與遙控器操作尚待確認。完成全部驗收前，請以 1.0.1 為最新正式版。
+> 1.0.2 程式碼已合併至 main；建立 `v1.0.2` 標籤後會執行 Android／Android TV、Windows、macOS、iOS 四平台正式建置。全部建置、檔案檢查與 SHA-256 驗證通過後，GitHub Actions 會自動公開正式 Release。Windows／Android TV 實機完整播放驗收仍未完成，屬已知風險；四項另行評估的 PAC、播放量 0、桌面連播控制列及 PlaybackSession 雙播放器項目不納入本版。
 
 ---
 
