@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - feat/phase5-cross-platform-universal
-      - main
+      - release/v1.0.2
     tags:
       - "v*"
   pull_request:
@@ -51,7 +51,6 @@ env:
 
 jobs:
   core-validation:
-    if: github.event_name != 'push' || github.ref != 'refs/heads/main' || github.event.head_commit.message == 'release: trigger D TV 1.0.2 four-platform publish'
     name: Shared Go and Flutter validation
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -84,7 +83,7 @@ jobs:
         run: python ../scripts/retry_command.py --attempts 3 -- go test ./...
 
   windows-x64:
-    if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'release: trigger D TV 1.0.2 four-platform publish') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'windows'))
+    if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'windows'))
     name: Windows x64 Portable ZIP
     needs: core-validation
     runs-on: windows-2022
@@ -187,7 +186,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   android-universal:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'release: trigger D TV 1.0.2 four-platform publish') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
     name: Android Universal APK (3 ABIs)
     needs: core-validation
     runs-on: ubuntu-latest
@@ -318,7 +317,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   ios-ipa:
-    if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'release: trigger D TV 1.0.2 four-platform publish') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
+    if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
     name: iOS device IPA and simulator build
     needs: core-validation
     runs-on: macos-26
@@ -369,7 +368,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   macos-universal:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'release: trigger D TV 1.0.2 four-platform publish') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'macos'))
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'macos'))
     name: macOS Universal DMG (arm64 + x86_64)
     needs: core-validation
     runs-on: macos-26
@@ -405,8 +404,8 @@ jobs:
           retention-days: 14
 
   draft-release:
-    name: Prepare verified Draft Release
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'release: trigger D TV 1.0.2 four-platform publish')
+    name: Publish verified four-platform Release
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2')
     needs:
       - core-validation
       - windows-x64
@@ -429,12 +428,12 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             tag="$GITHUB_REF_NAME"
             version="${tag#v}"
-          elif [[ "$GITHUB_REF" == "refs/heads/main" && "$GITHUB_EVENT_NAME" == "push" ]]; then
+          elif [[ "$GITHUB_REF" == "refs/heads/release/v1.0.2" && "$GITHUB_EVENT_NAME" == "push" ]]; then
             full_version="$(awk '$1 == "version:" {print $2; exit}' pubspec.yaml)"
             version="${full_version%%+*}"
             tag="v$version"
           else
-            echo "只接受 v 開頭的正式版本標籤，或指定的 main 分支 1.0.2 發布觸發。" >&2
+            echo "只接受 v 開頭的正式版本標籤，或指定的 release/v1.0.2 發布分支。" >&2
             exit 1
           fi
           if [[ "$tag" != v* || -z "$version" ]]; then
