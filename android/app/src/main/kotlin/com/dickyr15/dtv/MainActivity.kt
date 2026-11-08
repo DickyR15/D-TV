@@ -32,6 +32,7 @@ import android.view.InputDevice
 import android.view.WindowManager
 import android.provider.MediaStore
 import android.provider.Settings
+import android.widget.Toast
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -65,9 +66,64 @@ open class MainActivity : FlutterActivity() {
     private var pendingExportPlaybackLogResult: MethodChannel.Result? = null
     private var pendingExportSettingsBackupContent: String? = null
     private var pendingExportSettingsBackupResult: MethodChannel.Result? = null
+    private var pendingApkInstallPath: String? = null
 
     companion object {
         private const val EXPORT_PLAYBACK_LOG_PERMISSION_REQUEST = 7412
+        private const val INSTALL_APK_PERMISSION_REQUEST = 7413
+    }
+
+    private fun canInstallApkPackages(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            packageManager.canRequestPackageInstalls()
+
+    private fun launchApkInstaller(apk: File) {
+        val uri = FileProvider.getUriForFile(
+            this,
+            "$packageName.fileprovider",
+            apk
+        )
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        startActivity(intent)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != INSTALL_APK_PERMISSION_REQUEST) return
+
+        val apkPath = pendingApkInstallPath
+        pendingApkInstallPath = null
+        val apk = apkPath?.let { File(it) }
+        if (apk == null || !apk.isFile) {
+            Toast.makeText(this, "更新 APK 不存在，請重新下載。", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!canInstallApkPackages()) {
+            Toast.makeText(
+                this,
+                "尚未允許 D TV 安裝應用程式；允許後返回即可接續安裝。",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        runCatching { launchApkInstaller(apk) }.onFailure { error ->
+            Toast.makeText(
+                this,
+                "無法開啟 Android 安裝程式：${error.message ?: "未知錯誤"}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -586,25 +642,28 @@ open class MainActivity : FlutterActivity() {
                                 result.error("invalid_apk", "下載的 APK 檔案無效", null)
                             } else {
                                 runCatching {
-                                    val uri = FileProvider.getUriForFile(
-                                        this,
-                                        "$packageName.fileprovider",
-                                        apk
-                                    )
-                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(
-                                            uri,
-                                            "application/vnd.android.package-archive"
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                                        !canInstallApkPackages()
+                                    ) {
+                                        // Android 8+ requires a per-app "install unknown apps"
+                                        // grant. Keep the downloaded APK in cache and resume the
+                                        // installer when the user returns from system settings.
+                                        pendingApkInstallPath = apk.absolutePath
+                                        val permissionIntent = Intent(
+                                            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                            Uri.parse("package:$packageName")
                                         )
-                                        addFlags(
-                                            Intent.FLAG_ACTIVITY_NEW_TASK or
-                                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                        startActivityForResult(
+                                            permissionIntent,
+                                            INSTALL_APK_PERMISSION_REQUEST
                                         )
+                                    } else {
+                                        launchApkInstaller(apk)
                                     }
-                                    startActivity(intent)
                                 }.onSuccess {
                                     result.success(null)
                                 }.onFailure { error ->
+                                    pendingApkInstallPath = null
                                     result.error(
                                         "apk_install_failed",
                                         error.message ?: "無法開啟 Android 安裝程式",
