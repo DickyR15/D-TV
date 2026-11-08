@@ -429,8 +429,10 @@ jobs:
             tag="$GITHUB_REF_NAME"
             version="${tag#v}"
           elif [[ "$GITHUB_REF" == "refs/heads/release/v1.0.2" && "$GITHUB_EVENT_NAME" == "push" ]]; then
-            full_version="$(awk '$1 == "version:" {print $2; exit}' pubspec.yaml)"
-            version="${full_version%%+*}"
+            # The release assembly job downloads build artifacts only; it does
+            # not check out the source tree. Keep this one-shot release branch
+            # explicitly pinned to the version it was created for.
+            version="1.0.2"
             tag="v$version"
           else
             echo "只接受 v 開頭的正式版本標籤，或指定的 release/v1.0.2 發布分支。" >&2
