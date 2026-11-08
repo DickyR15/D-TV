@@ -31,6 +31,7 @@ const nativeLANLimit = 768 << 10
 
 var nativeLANID = regexp.MustCompile("^[a-f0-9]{32}$")
 var nativeLANPin = regexp.MustCompile("^[a-f0-9]{64}$")
+var nativeLANProfileID = regexp.MustCompile("^[a-zA-Z0-9_-]{1,64}$")
 
 type nativeLANIdentity struct {
 	ID          string `json:"id"`
@@ -39,12 +40,13 @@ type nativeLANIdentity struct {
 }
 
 type nativeLANConfig struct {
-	Name     string   `json:"name"`
-	Kind     string   `json:"kind"`
-	Account  string   `json:"account"`
-	User     string   `json:"user"`
-	Sources  []string `json:"sources"`
-	AutoSync bool     `json:"autoSync"`
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`
+	Account   string   `json:"account"`
+	User      string   `json:"user"`
+	ProfileID string   `json:"profileId,omitempty"`
+	Sources   []string `json:"sources"`
+	AutoSync  bool     `json:"autoSync"`
 }
 
 type nativeLANInput struct {
@@ -194,6 +196,7 @@ func nativeLANFingerprint(cert *x509.Certificate) string {
 func nativeLANValidateConfig(config nativeLANConfig) error {
 	if strings.TrimSpace(config.Name) == "" || len(config.Name) > 240 ||
 		len(config.User) > 240 || !nativeLANID.MatchString(config.Account) ||
+		(config.ProfileID != "" && !nativeLANProfileID.MatchString(config.ProfileID)) ||
 		len(config.Sources) > 32 ||
 		(config.Kind != "phone" && config.Kind != "computer" && config.Kind != "tv") {
 		return errors.New("设备互联配置无效")
@@ -295,6 +298,7 @@ func (link *nativeLANServer) info(private bool) map[string]any {
 	if private {
 		result["generation"], result["addresses"] = link.generation, addresses
 		result["account"], result["user"] = link.config.Account, link.config.User
+		result["profileId"] = link.config.ProfileID
 		result["sources"], result["autoSync"] = link.config.Sources, link.config.AutoSync
 	}
 	return result
