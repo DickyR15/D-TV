@@ -280,6 +280,13 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                         subtitle: Text(
                           remote == null
                               ? '僅發現一臺裝置時自動連線，多臺時由發起端選擇'
+                              : !lanProfileIdentityMatches(
+                                  remote.profileId,
+                                  link.store.profile.id,
+                                )
+                              ? remote.profileId == null
+                                    ? '對方版本較舊，尚無法確認使用者身分；已暫停同步'
+                                    : '兩端使用者帳號不同；已暫停同步'
                               : '對方使用者 · ${remote.user}',
                         ),
                         trailing: remote == null

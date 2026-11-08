@@ -118,7 +118,12 @@ extension LanSynchronization on LanController {
 
   Future<void> synchronize({bool automatic = false}) async {
     if (automatic &&
-        (_manual || !autoSync || connection?.autoSync != true || syncing)) {
+        (_manual ||
+            !autoSync ||
+            connection?.autoSync != true ||
+            connection == null ||
+            !_sameProfile(connection!) ||
+            syncing)) {
       return;
     }
     await _syncOperation((ticket) async {
@@ -134,6 +139,7 @@ extension LanSynchronization on LanController {
   Future<LanPreview> _planSync(LanSyncMode mode, int ticket) async {
     final remote = connection;
     if (remote == null) throw StateError('請先連線裝置');
+    if (!_sameProfile(remote)) throw StateError(_profileMismatchMessage(remote));
     final sources = _scope(remote);
     if (sources.isEmpty) throw StateError('兩端當前使用者沒有共同可用的站源');
     _checkSync(ticket, remote);
