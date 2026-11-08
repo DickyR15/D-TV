@@ -126,4 +126,54 @@ void main() {
     );
     expect(cached.merge(refreshed).category, isEmpty);
   });
+
+  test('zero playback counts from current and legacy caches are hidden', () {
+    for (final value in ['0', '0.0', '0.00萬', '0次', '0次播放', ' 0 播放量 ']) {
+      final drama = Drama.fromJson({
+        'id': 'huangdou:zero',
+        'source': 'huangdou',
+        'title': '零播放量',
+        'views': value,
+      });
+      expect(drama.displayViews, isEmpty, reason: 'value=$value');
+    }
+
+    final numericLegacyCache = Drama.fromJson({
+      'id': 'huangdou:legacy-zero',
+      'source': 'huangdou',
+      'title': '舊快取零播放量',
+      'views': 0,
+    });
+    expect(numericLegacyCache.displayViews, isEmpty);
+    expect(Drama.fromJson(numericLegacyCache.toJson()).displayViews, isEmpty);
+  });
+
+  test('positive and non-numeric provider playback labels remain visible', () {
+    for (final value in ['1', '15,200', '1.2萬', '少量播放']) {
+      final drama = Drama(
+        id: 'huangdou:positive',
+        source: 'huangdou',
+        title: '有播放量',
+        views: value,
+      );
+      expect(drama.displayViews, value);
+    }
+  });
+
+  test('a refreshed zero count hides the old cached display value', () {
+    const cached = Drama(
+      id: 'huangdou:refresh',
+      source: 'huangdou',
+      title: '播放量更新',
+      views: '1.2萬',
+    );
+    const refreshed = Drama(
+      id: 'huangdou:refresh',
+      source: 'huangdou',
+      title: '播放量更新',
+      views: '0',
+    );
+    expect(cached.merge(refreshed).displayViews, isEmpty);
+  });
+
 }
