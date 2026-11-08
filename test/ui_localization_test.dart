@@ -110,6 +110,13 @@ void main() {
     expect(uiDramaCategory('hongguo', '動畫'), '動畫');
   });
 
+  test('Duoduo category chip keeps 動漫 through focus label conversion', () {
+    expect(uiTraditional('動漫'), '動畫'); // General wording remains unchanged.
+    expect(uiCatalogCategoryLabel('動漫'), '動漫');
+    expect(uiCatalogCategoryLabel('動畫'), '動畫');
+    expect(uiCatalogCategoryLabel('电影'), '電影');
+  });
+
   test('source names and descriptions use Taiwan Traditional Chinese', () {
     expect(
       SourceSite.allValues.map((source) => source.name).toList(),
