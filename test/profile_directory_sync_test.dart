@@ -88,6 +88,14 @@ void main() {
     final store = LocalStore(await SharedPreferences.getInstance());
     addTearDown(store.dispose);
 
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'admin-pin-123',
+    );
+
     const salt = '33333333333333333333333333333333';
     final pinHash = await hashProfilePin('guest-pin-123', salt);
     final updatedAt = DateTime.now().toUtc().millisecondsSinceEpoch;
