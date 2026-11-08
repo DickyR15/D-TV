@@ -120,7 +120,13 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  bool get enabled => !store.locked && settings['enabled'] == true;
+  // Treat the two legacy flags as one effective master switch. This also
+  // prevents older installations with enabled=true / autoSync=false from
+  // starting a LAN listener after upgrading to the single-switch interface.
+  bool get enabled =>
+      !store.locked &&
+      settings['enabled'] == true &&
+      settings['autoSync'] != false;
   bool get autoSync => !store.locked && settings['autoSync'] != false;
   bool get receiving =>
       _generation.isNotEmpty &&
