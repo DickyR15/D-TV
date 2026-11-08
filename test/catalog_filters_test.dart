@@ -57,4 +57,25 @@ void main() {
     expect(find.byKey(const ValueKey('catalog-categories')), findsOneWidget);
 
   });
+
+  testWidgets('Duoduo anime category chip stays 動漫 when focused', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CatalogFilters(
+            categories: const [
+              CatalogCategory.all,
+              CatalogCategory('category:動漫', '動漫'),
+            ],
+            category: 'category:動漫',
+            onCategory: (_) {},
+            onRetry: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('動漫'), findsOneWidget);
+    expect(find.text('動畫'), findsNothing);
+  });
 }
