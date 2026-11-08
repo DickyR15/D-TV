@@ -831,7 +831,8 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
             'playing': playbackHost?.title ?? '',
             'hash': hash,
           };
-        } else if (path is String && path.startsWith('sync/')) {
+        } else if (path is String &&
+            (path.startsWith('sync/') || path.startsWith('profiles/'))) {
           final completer = Completer<Object?>();
           _inboundWrites = _inboundWrites.catchError((Object _) {}).then((
             _,

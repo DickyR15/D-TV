@@ -127,6 +127,13 @@ extension LanSynchronization on LanController {
       return;
     }
     await _syncOperation((ticket) async {
+      final remote = connection;
+      if (remote != null &&
+          store.profile.admin &&
+          remote.profileId == 'default' &&
+          _sameProfile(remote)) {
+        await _syncProfileDirectory(ticket, remote);
+      }
       final preview = await _planSync(LanSyncMode.merge, ticket);
       await _commitSync(preview, ticket, automatic: automatic);
     });
@@ -135,6 +142,38 @@ extension LanSynchronization on LanController {
   Future<void> applyPreview(LanPreview preview) => _syncOperation(
     (ticket) => _commitSync(preview, ticket, automatic: false),
   );
+
+  Future<void> _syncProfileDirectory(
+    int ticket,
+    LanConnection remote,
+  ) async {
+    _checkSync(ticket, remote);
+    if (!store.profile.admin ||
+        remote.profileId != 'default' ||
+        !_sameProfile(remote)) {
+      return;
+    }
+    syncMessage = '正在同步使用者帳號與密碼驗證資料';
+    _notify();
+    final remoteResult = await _request(
+      'profiles/snapshot',
+      const {},
+      owner: 'sync',
+    );
+    _checkSync(ticket, remote);
+    final remoteSnapshot = lanMap(remoteResult['snapshot']);
+    final mergedLocal = await store.mergeProfileSyncSnapshot(remoteSnapshot);
+    _checkSync(ticket, remote);
+    final applied = await _request(
+      'profiles/merge',
+      {'snapshot': mergedLocal},
+      owner: 'sync',
+    );
+    _checkSync(ticket, remote);
+    final mergedRemote = lanMap(applied['snapshot']);
+    await store.mergeProfileSyncSnapshot(mergedRemote);
+    _checkSync(ticket, remote);
+  }
 
   Future<LanPreview> _planSync(LanSyncMode mode, int ticket) async {
     final remote = connection;
@@ -424,6 +463,14 @@ extension LanSynchronization on LanController {
     Map<String, dynamic> body,
     LanConnection remote,
   ) async {
+    if (path == 'profiles/snapshot') {
+      return {'snapshot': await store.exportProfileSyncSnapshot()};
+    }
+    if (path == 'profiles/merge') {
+      return {
+        'snapshot': await store.mergeProfileSyncSnapshot(body['snapshot']),
+      };
+    }
     final document = store.lanDocument;
     if (path == 'sync/summary') {
       final sources = _receiveScope(body, remote);

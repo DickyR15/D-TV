@@ -76,3 +76,11 @@ func TestNativeLANInfoAdvertisesProfileIDOnlyInPrivatePayload(t *testing.T) {
 		t.Fatalf("private device response profileId = %v, want default", got)
 	}
 }
+
+func TestNativeLANPathAllowsPrivateProfileDirectoryOperations(t *testing.T) {
+	for _, path := range []string{"profiles/snapshot", "profiles/merge"} {
+		if !nativeLANPath(path) {
+			t.Fatalf("expected %s to be allowed on the paired LAN channel", path)
+		}
+	}
+}

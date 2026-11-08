@@ -240,7 +240,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                         focusNode: _interconnectFocus,
                         title: const Text('區域網路自動同步'),
                         subtitle: const Text(
-                          '開啟後，已授權裝置會自動同步收藏、觀看紀錄與播放進度',
+                          '開啟後自動同步帳號驗證資料、收藏、觀看紀錄與播放進度；帳號清單由管理員登入時同步',
                         ),
                         value: link.enabled && link.autoSync,
                         onChanged: controlsEnabled
