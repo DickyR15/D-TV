@@ -635,7 +635,12 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   bool _sameProfile(LanConnection remote) =>
-      lanProfileIdentityMatches(remote.profileId, store.profile.id);
+      lanProfileIdentityMatches(
+        remoteProfileId: remote.profileId,
+        localProfileId: store.profile.id,
+        remoteUser: remote.user,
+        localUser: store.profile.name,
+      );
 
   String _profileMismatchMessage(LanConnection remote) =>
       remote.profileId == null
