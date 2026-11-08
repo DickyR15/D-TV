@@ -118,6 +118,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Timer? _startupFocusRetry;
   Timer? _appUpdateCheckTimer;
   bool _updateDialogOpen = false;
+  DateTime? _lastAppUpdateCheckAt;
   PhoneSearchServer? _phoneSearchServer;
   StreamSubscription<String>? _phoneSearchSubscription;
   Future<PhoneSearchServer>? _phoneSearchServerStarting;
@@ -960,6 +961,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed ||
+        !kReleaseMode ||
+        !widget.store.checkForUpdatesOnStartup) {
+      return;
+    }
+    final lastCheck = _lastAppUpdateCheckAt;
+    if (lastCheck != null &&
+        DateTime.now().difference(lastCheck) < const Duration(minutes: 10)) {
+      return;
+    }
+    // Some TV launchers keep the splash/login route active during the initial
+    // startup delay. Retry once the app returns to the foreground so an
+    // update prompt is not silently lost behind another route.
+    _appUpdateCheckTimer?.cancel();
+    _appUpdateCheckTimer = Timer(
+      const Duration(seconds: 3),
+      () => unawaited(_checkForAppUpdate()),
+    );
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final formFactor = AppLayout.formFactorOf(context);
@@ -1421,6 +1444,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted || _updateDialogOpen) return;
     if (!manual && !widget.store.checkForUpdatesOnStartup) return;
     _updateDialogOpen = true;
+    _lastAppUpdateCheckAt = DateTime.now();
     try {
       final update = await const AppUpdateService().checkForUpdate();
       if (!mounted) return;
@@ -1529,10 +1553,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await _downloadAndInstallUpdate(update);
       }
     } catch (error) {
-      DiaryService.add('[Update] check_failed=' + error.runtimeType.toString());
-      if (manual && mounted) {
+      DiaryService.add('[Update] check_failed=' + error.toString());
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('檢查更新失敗，請確認網路連線後再試。')),
+          SnackBar(
+            content: Text(
+              manual
+                  ? '檢查更新失敗：${uiTraditional(error.toString())}'
+                  : '無法連線檢查 D TV 更新，請稍後至「關於 D TV」手動檢查。',
+            ),
+          ),
         );
       }
     } finally {
@@ -1582,7 +1612,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await AppDevice.installApk(file.path);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('更新檔已下載，請依 Android 安裝畫面完成更新。')),
+            const SnackBar(content: Text('更新檔已下載；如系統要求權限，請允許 D TV 安裝應用程式，返回後會接續開啟安裝畫面。')),
           );
         }
       } else if (Platform.isWindows) {
@@ -1605,10 +1635,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         Navigator.of(context, rootNavigator: true).maybePop();
         progressDialogOpen = false;
       }
-      DiaryService.add('[Update] download_failed=' + error.runtimeType.toString());
+      DiaryService.add('[Update] download_failed=' + error.toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('下載或啟動更新失敗，請稍後重試。')),
+          SnackBar(content: Text('下載或啟動更新失敗：${uiTraditional(error.toString())}')),
         );
       }
     }
