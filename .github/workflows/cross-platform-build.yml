@@ -426,7 +426,7 @@ jobs:
 
   draft-release:
     name: Publish verified four-platform Release
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release-dtv-1.0.3'))
+    if: (startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release-dtv-1.0.3'))
     needs:
       - core-validation
       - windows-x64
@@ -457,9 +457,9 @@ jobs:
             tag="v$version"
           elif [[ "$GITHUB_REF" == "refs/heads/main" && "$GITHUB_EVENT_NAME" == "push" ]]; then
             # A merge commit titled "release-dtv-1.0.3" is the explicit
-            # one-time publication signal on main. Keep the tag aligned with
-            # the version declared by the source tree.
-            version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml | cut -d+ -f1)"
+            # one-time publication signal on main. This assembly job only
+            # downloads artifacts, so pin this one-time release version here.
+            version="1.0.3"
             tag="v$version"
           else
             echo "只接受 v 開頭的正式版本標籤，或指定的 release/v1.0.2 發布分支。" >&2
