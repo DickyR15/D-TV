@@ -109,7 +109,7 @@ int intValue(Object? value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
 bool _isZeroMetric(String value) {
-  var normalized = value.trim().replaceAll(RegExp(r'[,，\\s]'), '');
+  var normalized = value.trim().replaceAll(RegExp(r'[,，\s]'), '');
   if (normalized.isEmpty) return true;
 
   // Provider data may append localized units to a bare numeric value.
