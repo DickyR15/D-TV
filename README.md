@@ -26,7 +26,7 @@
 
 ## 下載正式版
 
-目前最新正式版仍為 **1.0.1**。**1.0.2 正在開發與驗收中，尚未發布下載檔案**；請以本節列出的正式版連結為準。
+目前已上架的最新正式版仍為 **1.0.1**。**D TV 1.0.2 已合併至 main，正在準備四平台正式建置**；建立 `v1.0.2` 標籤後，GitHub Actions 會建置 Android／Android TV、Windows、macOS、iOS，並在四平台檔案及 SHA-256 檢查全部成功後自動公開正式 Release。在 1.0.2 Release 上架前，請先使用下方 1.0.1 下載檔案。
 
 前往 [D TV 1.0.1 正式版 Releases](https://github.com/DickyR15/D-TV/releases/tag/v1.0.1)，依照裝置選擇對應檔案：
 
