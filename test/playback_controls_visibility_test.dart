@@ -104,4 +104,29 @@ void main() {
     );
   });
 
+
+  test('auto-advance hides controls only after a completed episode with a next episode', () {
+    expect(
+      playbackControlsShouldHideForAutoAdvance(
+        autoAdvanceAvailable: true,
+        completed: true,
+      ),
+      isTrue,
+    );
+    expect(
+      playbackControlsShouldHideForAutoAdvance(
+        autoAdvanceAvailable: true,
+        completed: false,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackControlsShouldHideForAutoAdvance(
+        autoAdvanceAvailable: false,
+        completed: true,
+      ),
+      isFalse,
+    );
+  });
+
 }
