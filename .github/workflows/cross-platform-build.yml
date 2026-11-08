@@ -484,7 +484,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: D TV ${{ steps.release-files.outputs.version }} 正式版
-          draft: true
+          draft: false
           prerelease: false
           fail_on_unmatched_files: true
           body: |
@@ -506,7 +506,7 @@ jobs:
             ${{ steps.release-files.outputs.checksums }}
             ```
 
-            請確認附件、校驗碼與版本資訊後，再手動發布此 Draft Release。
+            此版本已在四平台建置、檔案檢查及 SHA-256 校驗全部成功後自動正式發布。
           files: |
             release-files/DTV-${{ steps.release-files.outputs.version }}-Android.apk
             release-files/DTV-${{ steps.release-files.outputs.version }}-Windows-Portable.zip
