@@ -205,6 +205,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         store.profileEpoch,
         store.locked,
         enabled,
+        autoSync,
         store.locked ? '' : deviceName,
         store.sources.map((source) => source.id).toList(),
         _foreground,
@@ -247,19 +248,22 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> setEnabled(bool value) async {
-    final values = _checkedSettings;
-    await store.saveLanSettings({...values, 'enabled': value});
-    await _lifecycle;
-  }
+  /// The public LAN switch is intentionally a single master control.
+  /// Keep this compatibility method mapped to the same setting so internal
+  /// callers cannot enable discovery without also enabling automatic sync.
+  Future<void> setEnabled(bool value) => setAutoSync(value);
 
   Future<void> setAutoSync(bool value) async {
     final epoch = store.profileEpoch;
     await cancelSync();
     _checkUser(epoch);
-    await store.saveLanSettings({..._checkedSettings, 'autoSync': value});
+    await store.saveLanSettings({
+      ..._checkedSettings,
+      'enabled': value,
+      'autoSync': value,
+    });
     _checkUser(epoch);
-    if (receiving) await _native('configure', {'config': _config()});
+    await _lifecycle;
     _notify();
     if (value) flush();
   }
@@ -274,7 +278,9 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> ensureEnabled() async {
     final epoch = store.profileEpoch;
     _checkUser(epoch);
-    if (!enabled) await setEnabled(true);
+    if (!enabled || !autoSync) {
+      throw StateError('請先開啟「區域網路自動同步」');
+    }
     await _lifecycle;
     _checkUser(epoch);
     if (!receiving) {

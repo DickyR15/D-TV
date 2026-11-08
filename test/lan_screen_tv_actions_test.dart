@@ -53,6 +53,14 @@ void main() {
 
       final syncNow = find.byKey(const ValueKey('lan-sync-now'));
       final manualSync = find.byKey(const ValueKey('lan-manual-sync'));
+      final autoSyncSwitch = find.byKey(const ValueKey('lan-auto-sync'));
+      expect(autoSyncSwitch, findsOneWidget);
+      expect(find.byKey(const ValueKey('lan-enabled')), findsNothing);
+      expect(find.text('區域網路自動同步'), findsOneWidget);
+      expect(
+        tester.widget<SwitchListTile>(autoSyncSwitch).value,
+        isFalse,
+      );
       expect(syncNow, findsOneWidget);
       expect(manualSync, findsOneWidget);
       expect(find.text('立即同步'), findsOneWidget);

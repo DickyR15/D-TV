@@ -236,14 +236,17 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                   child: Column(
                     children: [
                       SwitchListTile.adaptive(
-                        key: const ValueKey('lan-enabled'),
+                        key: const ValueKey('lan-auto-sync'),
                         focusNode: _interconnectFocus,
-                        title: const Text('裝置互聯'),
-                        subtitle: const Text('同一區域網直連，接收端無需點選確認'),
-                        value: link.enabled,
-                        onChanged: _busy || link.store.locked
-                            ? null
-                            : (value) => _perform(() => link.setEnabled(value)),
+                        title: const Text('區域網路自動同步'),
+                        subtitle: const Text(
+                          '開啟後，已授權裝置會自動同步收藏、觀看紀錄與播放進度',
+                        ),
+                        value: link.enabled && link.autoSync,
+                        onChanged: controlsEnabled
+                            ? (value) =>
+                                  _perform(() => link.setAutoSync(value))
+                            : null,
                       ),
                       ListTile(
                         leading: Icon(lanDeviceIcon(link.kind)),
@@ -322,15 +325,6 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SwitchListTile.adaptive(
-                        key: const ValueKey('lan-auto-sync'),
-                        title: const Text('自動同步'),
-                        subtitle: const Text('同步收藏、觀看狀態和這些劇目的續播進度'),
-                        value: link.autoSync,
-                        onChanged: controlsEnabled
-                            ? (value) => _perform(() => link.setAutoSync(value))
-                            : null,
-                      ),
                       Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -439,7 +433,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                     childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     children: [
                       const Text(
-                        '兩臺裝置都需開啟裝置互聯並保持前臺。發現失敗時，可在另一端輸入下列地址；Windows 需允許本應用透過專用網路防火牆。',
+                        '兩臺裝置都需開啟「區域網路自動同步」並保持應用在前景。發現失敗時，可在另一端輸入下列地址；Windows 需允許本應用透過專用網路防火牆。',
                       ),
                       for (final address in link.local!.addresses)
                         ListTile(
