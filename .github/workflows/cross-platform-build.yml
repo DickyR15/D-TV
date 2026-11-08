@@ -355,7 +355,7 @@ jobs:
             echo "::error::需要 iOS 27.2 SDK，目前為 $sdk_version。"
             exit 1
           fi
-          device_id="$(xcrun simctl list devices available | sed -nE 's/.*iPhone Duo \\(([A-F0-9-]{36})\\).*/\\1/p' | head -n1)"
+          device_id="$(xcrun simctl list devices available | sed -nE 's/.*iPhone Duo \(([A-F0-9-]{36})\).*/\1/p' | head -n1)"
           if [[ -z "$device_id" ]]; then
             echo "::error::Xcode 27.2 runner 未提供可用的 iPhone Duo 模擬器。"
             xcrun simctl list devices available
