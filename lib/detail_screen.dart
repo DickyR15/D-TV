@@ -19,13 +19,6 @@ import 'sources_screen.dart';
 import 'episode_browser.dart';
 import 'hongguo_series.dart';
 
-bool _hasPlaybackViews(String value) {
-  final normalized = value.trim().replaceAll(RegExp(r'[,，\\s]'), '');
-  if (normalized.isEmpty) return false;
-  final match = RegExp(r'^(?:播放\\s*)?(-?\\d+(?:\\.\\d+)?)').firstMatch(normalized);
-  if (match != null && double.tryParse(match.group(1)!) == 0) return false;
-  return normalized != '0次播放';
-}
 
 class DetailScreen extends StatefulWidget {
   const DetailScreen({
@@ -786,7 +779,7 @@ class _DetailScreenState extends State<DetailScreen> {
               [
                 if (drama.onlineDate.isNotEmpty) '${uiTraditional(drama.onlineDate)} 上線',
                 if (drama.heat.isNotEmpty) '熱度 ${uiTraditional(drama.heat)}',
-                if (_hasPlaybackViews(drama.views)) '播放 ${uiTraditional(drama.views)}',
+                if (drama.views.isNotEmpty) '播放 ${uiTraditional(drama.views)}',
               ].join(' · '),
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
             ),
