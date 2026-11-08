@@ -4,10 +4,10 @@ import 'package:hgtv/app_layout.dart';
 
 void main() {
   test('user-facing app version excludes the internal build number', () {
-    expect(appVersion, '1.0.0');
-    expect(formatAppVersion('1.0.0'), '1.0.0');
-    expect(formatAppVersion(' 1.0.0 '), '1.0.0');
-    expect(formatAppVersion(''), '1.0.0');
+    expect(appVersion, '1.0.3');
+    expect(formatAppVersion('1.0.3'), '1.0.3');
+    expect(formatAppVersion(' 1.0.3 '), '1.0.3');
+    expect(formatAppVersion(''), '1.0.3');
   });
 
   group('desktop poster density', () {

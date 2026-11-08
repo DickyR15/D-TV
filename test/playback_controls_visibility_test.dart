@@ -129,4 +129,78 @@ void main() {
     );
   });
 
+
+  test('auto-next gate handles pause before completion and transient resume', () {
+    final gate = PlaybackAutoAdvanceVisibility();
+    gate.synchronize(generation: 1, enabled: true);
+    gate.onPlayingChanged(false);
+    expect(gate.pauseTransitionPending, isTrue);
+    expect(gate.suppressOverlay, isTrue);
+
+    gate.onPlayingChanged(true);
+    expect(gate.pauseTransitionPending, isTrue);
+    expect(gate.suppressOverlay, isTrue);
+
+    gate.onCompletedChanged(true);
+    expect(gate.completionObserved, isTrue);
+    expect(gate.suppressOverlay, isTrue);
+    gate.resolvePauseTransition();
+    gate.revealFromUser();
+    expect(gate.suppressOverlay, isTrue);
+  });
+
+  test('a genuine pause restores controls if completion never arrives', () {
+    final gate = PlaybackAutoAdvanceVisibility();
+    gate.synchronize(generation: 4, enabled: true);
+    gate.onPlayingChanged(false);
+    expect(gate.suppressOverlay, isTrue);
+    gate.resolvePauseTransition();
+    expect(gate.pauseTransitionPending, isFalse);
+    expect(gate.suppressOverlay, isFalse);
+  });
+
+  test('auto-next gate resets when a new playback generation starts', () {
+    final gate = PlaybackAutoAdvanceVisibility();
+    gate.synchronize(generation: 7, enabled: true);
+    gate.onCompletedChanged(true);
+    expect(gate.suppressOverlay, isTrue);
+    gate.synchronize(generation: 8, enabled: true);
+    expect(gate.completionObserved, isFalse);
+    expect(gate.pauseTransitionPending, isFalse);
+    expect(gate.suppressOverlay, isFalse);
+  });
+
+  test('auto-next gate is inert when there is no next episode', () {
+    final gate = PlaybackAutoAdvanceVisibility();
+    gate.synchronize(generation: 1, enabled: false);
+    gate.onPlayingChanged(false);
+    gate.onCompletedChanged(true);
+    expect(gate.suppressOverlay, isFalse);
+  });
+
+  test('overlay does not infer pause controls during automatic advance', () {
+    expect(
+      playbackControlsOverlayVisible(
+        requested: true,
+        playing: false,
+        buffering: false,
+        automaticRevealSuppressed: false,
+        panelOpen: false,
+        autoAdvanceSuppressed: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackControlsOverlayVisible(
+        requested: false,
+        playing: false,
+        buffering: false,
+        automaticRevealSuppressed: false,
+        panelOpen: false,
+        autoAdvanceSuppressed: false,
+      ),
+      isTrue,
+    );
+  });
+
 }
