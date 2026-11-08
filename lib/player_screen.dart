@@ -3029,6 +3029,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             panelOpen: _panelOpen,
             fullscreen: _showFullscreen,
             showOnPlaybackReady: _showControlsOnPlaybackReady,
+            hideOnAutoAdvanceComplete:
+                Platform.isWindows &&
+                _autoAdvance &&
+                _index + 1 < widget.detail.episodes.length,
             title: title,
             onTogglePlayback: _togglePlayback,
             swipeEnabled: _mobile,

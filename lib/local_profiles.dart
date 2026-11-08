@@ -15,6 +15,7 @@ class LocalProfile {
     this.download = true,
     this.salt = '',
     this.pinHash = '',
+    this.updatedAt = 0,
   });
   final String id;
   final String name;
@@ -23,6 +24,9 @@ class LocalProfile {
   final bool download;
   final String salt;
   final String pinHash;
+  /// Unix epoch milliseconds of the last profile or PIN change.
+  /// Zero denotes a legacy record that predates profile-directory sync.
+  final int updatedAt;
   bool get protected => salt.isNotEmpty && pinHash.isNotEmpty;
   bool allows(String source) => admin || sources.contains(source);
 
@@ -30,10 +34,11 @@ class LocalProfile {
     'id': id,
     'name': name,
     'admin': admin,
-    'sources': sources,
+    'sources': (sources.toSet().toList()..sort()),
     'download': download,
     'salt': salt,
     'pinHash': pinHash,
+    'updatedAt': updatedAt,
   };
 
   factory LocalProfile.fromJson(Map<String, dynamic> value) {
@@ -51,7 +56,11 @@ class LocalProfile {
     }
     final salt = value['salt'] as String? ?? '';
     final hash = value['pinHash'] as String? ?? '';
-    if (!RegExp(r'^[a-zA-Z0-9_-]{1,64}$').hasMatch(id) ||
+    final rawUpdatedAt = value['updatedAt'];
+    final updatedAt = rawUpdatedAt is int ? rawUpdatedAt : 0;
+    if ((value.containsKey('updatedAt') &&
+            (value['updatedAt'] is! int || updatedAt < 0)) ||
+        !RegExp(r'^[a-zA-Z0-9_-]{1,64}$').hasMatch(id) ||
         value['admin'] is! bool ||
         (value.containsKey('download') && value['download'] is! bool) ||
         name.isEmpty ||
@@ -72,6 +81,7 @@ class LocalProfile {
       download: value['download'] != false,
       salt: salt,
       pinHash: hash,
+      updatedAt: updatedAt,
     );
   }
 }

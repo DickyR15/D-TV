@@ -118,10 +118,22 @@ extension LanSynchronization on LanController {
 
   Future<void> synchronize({bool automatic = false}) async {
     if (automatic &&
-        (_manual || !autoSync || connection?.autoSync != true || syncing)) {
+        (_manual ||
+            !autoSync ||
+            connection?.autoSync != true ||
+            connection == null ||
+            !_sameProfile(connection!) ||
+            syncing)) {
       return;
     }
     await _syncOperation((ticket) async {
+      final remote = connection;
+      if (remote != null &&
+          store.profile.admin &&
+          remote.profileId == 'default' &&
+          _sameProfile(remote)) {
+        await _syncProfileDirectory(ticket, remote);
+      }
       final preview = await _planSync(LanSyncMode.merge, ticket);
       await _commitSync(preview, ticket, automatic: automatic);
     });
@@ -131,9 +143,43 @@ extension LanSynchronization on LanController {
     (ticket) => _commitSync(preview, ticket, automatic: false),
   );
 
+  Future<void> _syncProfileDirectory(
+    int ticket,
+    LanConnection remote,
+  ) async {
+    _checkSync(ticket, remote);
+    if (!store.profile.admin ||
+        remote.profileId != 'default' ||
+        !_sameProfile(remote)) {
+      return;
+    }
+    syncMessage = '正在同步使用者帳號與密碼驗證資料';
+    _notify();
+    final remoteResult = await _request(
+      'profiles/snapshot',
+      const {},
+      owner: 'sync',
+    );
+    _checkSync(ticket, remote);
+    final remoteSnapshot = lanMap(remoteResult['snapshot']);
+    await store.mergeProfileSyncSnapshot(remoteSnapshot);
+    _checkSync(ticket, remote);
+    final mergedLocal = await store.exportProfileSyncSnapshot();
+    final applied = await _request(
+      'profiles/merge',
+      {'snapshot': mergedLocal},
+      owner: 'sync',
+    );
+    _checkSync(ticket, remote);
+    final mergedRemote = lanMap(applied['snapshot']);
+    await store.mergeProfileSyncSnapshot(mergedRemote);
+    _checkSync(ticket, remote);
+  }
+
   Future<LanPreview> _planSync(LanSyncMode mode, int ticket) async {
     final remote = connection;
     if (remote == null) throw StateError('請先連線裝置');
+    if (!_sameProfile(remote)) throw StateError(_profileMismatchMessage(remote));
     final sources = _scope(remote);
     if (sources.isEmpty) throw StateError('兩端當前使用者沒有共同可用的站源');
     _checkSync(ticket, remote);
@@ -418,6 +464,13 @@ extension LanSynchronization on LanController {
     Map<String, dynamic> body,
     LanConnection remote,
   ) async {
+    if (path == 'profiles/snapshot') {
+      return {'snapshot': await store.exportProfileSyncSnapshot()};
+    }
+    if (path == 'profiles/merge') {
+      await store.mergeProfileSyncSnapshot(body['snapshot']);
+      return {'snapshot': await store.exportProfileSyncSnapshot()};
+    }
     final document = store.lanDocument;
     if (path == 'sync/summary') {
       final sources = _receiveScope(body, remote);

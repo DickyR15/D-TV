@@ -120,7 +120,13 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  bool get enabled => !store.locked && settings['enabled'] == true;
+  // Treat the two legacy flags as one effective master switch. This also
+  // prevents older installations with enabled=true / autoSync=false from
+  // starting a LAN listener after upgrading to the single-switch interface.
+  bool get enabled =>
+      !store.locked &&
+      settings['enabled'] == true &&
+      settings['autoSync'] != false;
   bool get autoSync => !store.locked && settings['autoSync'] != false;
   bool get receiving =>
       _generation.isNotEmpty &&
@@ -185,6 +191,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     'kind': kind,
     'account': store.lanDocument.replica,
     'user': store.profile.name,
+    'profileId': store.profile.id,
     'sources': store.sources.map((source) => source.id).toList(),
     'autoSync': autoSync,
   };
@@ -205,6 +212,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         store.profileEpoch,
         store.locked,
         enabled,
+        autoSync,
         store.locked ? '' : deviceName,
         store.sources.map((source) => source.id).toList(),
         _foreground,
@@ -247,19 +255,22 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> setEnabled(bool value) async {
-    final values = _checkedSettings;
-    await store.saveLanSettings({...values, 'enabled': value});
-    await _lifecycle;
-  }
+  /// The public LAN switch is intentionally a single master control.
+  /// Keep this compatibility method mapped to the same setting so internal
+  /// callers cannot enable discovery without also enabling automatic sync.
+  Future<void> setEnabled(bool value) => setAutoSync(value);
 
   Future<void> setAutoSync(bool value) async {
     final epoch = store.profileEpoch;
     await cancelSync();
     _checkUser(epoch);
-    await store.saveLanSettings({..._checkedSettings, 'autoSync': value});
+    await store.saveLanSettings({
+      ..._checkedSettings,
+      'enabled': value,
+      'autoSync': value,
+    });
     _checkUser(epoch);
-    if (receiving) await _native('configure', {'config': _config()});
+    await _lifecycle;
     _notify();
     if (value) flush();
   }
@@ -274,7 +285,9 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> ensureEnabled() async {
     final epoch = store.profileEpoch;
     _checkUser(epoch);
-    if (!enabled) await setEnabled(true);
+    if (!enabled || !autoSync) {
+      throw StateError('請先開啟「區域網路自動同步」');
+    }
     await _lifecycle;
     _checkUser(epoch);
     if (!receiving) {
@@ -587,7 +600,9 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
             throw StateError('連線已取消');
           }
           connection = remote;
-          syncMessage = autoSync && remote.autoSync
+          syncMessage = !_sameProfile(remote)
+              ? _profileMismatchMessage(remote)
+              : autoSync && remote.autoSync
               ? '已連線，等待同步'
               : '已連線，自動同步已暫停';
           _retryAt = DateTime(2000);
@@ -619,6 +634,19 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  bool _sameProfile(LanConnection remote) =>
+      lanProfileIdentityMatches(
+        remoteProfileId: remote.profileId,
+        localProfileId: store.profile.id,
+        remoteUser: remote.user,
+        localUser: store.profile.name,
+      );
+
+  String _profileMismatchMessage(LanConnection remote) =>
+      remote.profileId == null
+          ? '對方版本未提供使用者識別，為避免跨使用者同步，請先更新至 1.0.3'
+          : '兩端登入的使用者帳號不同，已暫停同步；請切換至相同使用者';
+
   LanConnection _connection(
     LanPeer peer,
     String address,
@@ -626,6 +654,12 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   ) {
     final token = lanText(data['token'], 64);
     final account = lanText(data['account'], 32);
+    final rawProfileId = data['profileId'];
+    if (rawProfileId != null &&
+        (rawProfileId is! String ||
+            !RegExp(r'^[a-zA-Z0-9_-]{1,64}$').hasMatch(rawProfileId))) {
+      throw const FormatException('對方使用者識別無效');
+    }
     if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(token) ||
         !RegExp(r'^[a-f0-9]{32}$').hasMatch(account)) {
       throw const FormatException('連線會話無效');
@@ -641,6 +675,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         advertised: true,
       ),
       autoSync: data['autoSync'] == true,
+      profileId: rawProfileId as String?,
     );
   }
 
@@ -721,7 +756,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     connection = reverse;
     _selected = peer.id;
     _lastAutomatic = DateTime(2000);
-    syncMessage = autoSync && reverse.autoSync ? '已連線，等待同步' : '已連線，自動同步已暫停';
+    syncMessage = !_sameProfile(reverse)
+        ? _profileMismatchMessage(reverse)
+        : autoSync && reverse.autoSync
+        ? '已連線，等待同步'
+        : '已連線，自動同步已暫停';
     _notify();
     _urgent?.cancel();
     _urgent = Timer(const Duration(seconds: 1), flush);
@@ -769,6 +808,9 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
             remote.peer.pin != event['pin']) {
           throw StateError('請先連線此裝置');
         }
+        if (!_sameProfile(remote)) {
+          throw StateError(_profileMismatchMessage(remote));
+        }
         final body = lanMap(event['payload']);
         if (path == 'status') {
           if (body['flush'] == true) _queueAutomatic();
@@ -789,7 +831,8 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
             'playing': playbackHost?.title ?? '',
             'hash': hash,
           };
-        } else if (path is String && path.startsWith('sync/')) {
+        } else if (path is String &&
+            (path.startsWith('sync/') || path.startsWith('profiles/'))) {
           final completer = Completer<Object?>();
           _inboundWrites = _inboundWrites.catchError((Object _) {}).then((
             _,
@@ -830,6 +873,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     final remote = connection;
     if (remote == null || !receiving) throw StateError('請先連線裝置');
+    if (!_sameProfile(remote)) throw StateError(_profileMismatchMessage(remote));
     final run = _run;
     final request = lanID();
     final requests = owner == 'sync'
@@ -861,7 +905,13 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void flush() {
-    if (_disposed || !receiving || connection == null || !autoSync) return;
+    if (_disposed ||
+        !receiving ||
+        connection == null ||
+        !autoSync ||
+        !_sameProfile(connection!)) {
+      return;
+    }
     if (_leader) {
       _queueAutomatic();
     } else {

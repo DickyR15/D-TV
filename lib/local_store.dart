@@ -283,6 +283,175 @@ class LocalStore extends ChangeNotifier {
     });
   }
 
+  static Map<String, int> _parseProfileTombstones(Object? value) {
+    if (value == null) return {};
+    if (value is! Map || value.length > 2000) {
+      throw const FormatException('使用者刪除記錄無效');
+    }
+    final result = <String, int>{};
+    for (final entry in value.entries) {
+      if (entry.key is! String) {
+        throw const FormatException('使用者刪除記錄無效');
+      }
+      final id = entry.key as String;
+      final validId = id.isNotEmpty &&
+          id.length <= 64 &&
+          RegExp(r'^[a-zA-Z0-9_-]+').matchAsPrefix(id)?.end == id.length;
+      if (!validId ||
+          id == 'default' ||
+          entry.value is! int ||
+          (entry.value as int) < 0) {
+        throw const FormatException('使用者刪除記錄無效');
+      }
+      result[id] = entry.value as int;
+    }
+    return result;
+  }
+
+  Map<String, int> _readProfileTombstones() {
+    final raw = _string('profileTombstones');
+    if (raw == null || raw.isEmpty) return {};
+    return _parseProfileTombstones(jsonDecode(raw));
+  }
+
+  Future<Map<String, dynamic>> exportProfileSyncSnapshot() async {
+    await _writes.catchError((Object _) {});
+    _requireAdmin();
+    return {
+      'schema': 1,
+      'profiles': _profiles.map((profile) => profile.toJson()).toList(),
+      'tombstones': _readProfileTombstones(),
+    };
+  }
+
+  Future<void> mergeProfileSyncSnapshot(Object? value) =>
+      _queue(() async {
+        _requireAdmin();
+        if (_current != 'default' || value is! Map) {
+          throw StateError('請以管理員身分執行使用者同步');
+        }
+        final snapshot = Map<String, dynamic>.from(value);
+        if (snapshot['schema'] != 1 || snapshot['profiles'] is! List) {
+          throw const FormatException('不支援的使用者同步格式');
+        }
+        final incoming = _readProfiles(snapshot['profiles']);
+        final localAdmin = _profiles.firstWhere((profile) => profile.admin);
+        final remoteAdmin = incoming.firstWhere((profile) => profile.admin);
+        if (localAdmin.name.trim().toLowerCase() !=
+            remoteAdmin.name.trim().toLowerCase()) {
+          throw StateError('兩端管理員帳號不一致，已保留原有帳號資料');
+        }
+
+        final tombstones = _readProfileTombstones();
+        for (final entry
+            in _parseProfileTombstones(snapshot['tombstones']).entries) {
+          final existing = tombstones[entry.key] ?? 0;
+          tombstones[entry.key] =
+              entry.value > existing ? entry.value : existing;
+        }
+        final localById = {
+          for (final profile in _profiles) profile.id: profile,
+        };
+        final remoteById = {
+          for (final profile in incoming) profile.id: profile,
+        };
+        final merged = <String, LocalProfile>{};
+        final removed = <String>{};
+
+        for (final id in {...localById.keys, ...remoteById.keys}) {
+          final local = localById[id];
+          final remote = remoteById[id];
+
+          if (id == 'default') {
+            if (local == null || remote == null) {
+              throw StateError('同步資料缺少管理員帳號');
+            }
+            if (local.updatedAt == remote.updatedAt &&
+                (local.salt != remote.salt ||
+                    local.pinHash != remote.pinHash)) {
+              throw StateError('兩端管理員密碼同時變更，請先確認使用相同密碼');
+            }
+            final chosen = remote.updatedAt > local.updatedAt
+                ? remote
+                : local;
+            merged[id] = LocalProfile(
+              id: 'default',
+              name: local.name,
+              admin: true,
+              sources: local.sources,
+              download: local.download,
+              salt: chosen.salt,
+              pinHash: chosen.pinHash,
+              updatedAt: local.updatedAt > remote.updatedAt
+                  ? local.updatedAt
+                  : remote.updatedAt,
+            );
+            continue;
+          }
+
+          final LocalProfile? profile;
+          if (local == null) {
+            profile = remote;
+          } else if (remote == null) {
+            profile = local;
+          } else if (remote.updatedAt > local.updatedAt) {
+            profile = remote;
+          } else if (local.updatedAt > remote.updatedAt) {
+            profile = local;
+          } else if (jsonEncode(local.toJson()) ==
+              jsonEncode(remote.toJson())) {
+            profile = local;
+          } else {
+            throw StateError(
+              '使用者「${local.name}」在兩端同時修改，請先確認帳號資料',
+            );
+          }
+
+          // IDs are random and never reused; a tombstone permanently deletes
+          // that profile on every paired device.
+          if (tombstones.containsKey(id)) {
+            if (local != null) removed.add(id);
+            continue;
+          }
+          merged[id] = profile!;
+        }
+
+        if (!merged.containsKey('default') || merged.length > 20) {
+          throw StateError('同步後的使用者數量無效或超過 20 人');
+        }
+        final result = merged.values.toList()
+          ..sort((a, b) => a.admin
+              ? -1
+              : b.admin
+              ? 1
+              : a.name.compareTo(b.name));
+
+        final sameProfiles =
+            jsonEncode(_profiles.map((profile) => profile.toJson()).toList()) ==
+            jsonEncode(result.map((profile) => profile.toJson()).toList());
+        final sameTombstones =
+            jsonEncode(_readProfileTombstones()) == jsonEncode(tombstones);
+        if (!sameProfiles || !sameTombstones || removed.isNotEmpty) {
+          final removeKeys = removed
+              .expand(
+                (id) => LocalSnapshot.libraryKeys.map((key) => _key(key, id)),
+              )
+              .toList();
+          await _commit({
+            'profiles': jsonEncode(
+              result.map((profile) => profile.toJson()).toList(),
+            ),
+            'profileTombstones': jsonEncode(tombstones),
+          }, remove: removeKeys, trackSync: false);
+          _profiles = result;
+          for (final id in removed) {
+            await preferences.remove(_seriesKey(id));
+            await preferences.remove(_followChecksKey(id));
+          }
+          _notify();
+        }
+      });
+
   String? get configurationError => _configurationError;
   List<LocalProfile> get profiles => List.unmodifiable(_profiles);
   LocalProfile get profile =>
@@ -791,7 +960,9 @@ class LocalStore extends ChangeNotifier {
             (key) =>
                 key == _key('favorites') ||
                 key == _key('history') ||
-                key == _key('followStates'),
+                key == _key('followStates') ||
+                key == 'profiles' ||
+                key == 'profileTombstones',
           )) {
         _lanRevision++;
         if (syncUrgent) _lanUrgentRevision++;
@@ -1306,6 +1477,11 @@ class LocalStore extends ChangeNotifier {
       download: download,
       salt: salt,
       pinHash: hash,
+      updatedAt: () {
+        final now = DateTime.now().toUtc().millisecondsSinceEpoch;
+        final previous = old?.updatedAt ?? 0;
+        return now > previous ? now : previous + 1;
+      }(),
     );
     final profiles =
         [
@@ -1335,10 +1511,13 @@ class LocalStore extends ChangeNotifier {
     _requireAdmin();
     if (id == 'default') throw StateError('不能刪除管理員');
     final profiles = _profiles.where((profile) => profile.id != id).toList();
+    final tombstones = _readProfileTombstones()
+      ..[id] = DateTime.now().toUtc().millisecondsSinceEpoch;
     await _commit({
       'profiles': jsonEncode(
         profiles.map((profile) => profile.toJson()).toList(),
       ),
+      'profileTombstones': jsonEncode(tombstones),
     }, remove: LocalSnapshot.libraryKeys.map((key) => _key(key, id)));
     await preferences.remove(_seriesKey(id));
     await preferences.remove(_followChecksKey(id));
@@ -1354,6 +1533,7 @@ class LocalStore extends ChangeNotifier {
       'schema': 1,
       'app': 'dtv',
       'profiles': _profiles.map((profile) => profile.toJson()).toList(),
+      'profileTombstones': _readProfileTombstones(),
       'displayMode': displayMode,
       'themeMode': themeMode,
       'themeAccent': themeAccent,
@@ -1458,6 +1638,7 @@ class LocalStore extends ChangeNotifier {
     }
 
     final profiles = _readProfiles(data['profiles']);
+    _parseProfileTombstones(data['profileTombstones']);
     if (data.containsKey('themeMode') &&
         !{'light', 'dark', 'system'}.contains(data['themeMode'])) {
       throw const FormatException('備份主題設定無效');
@@ -1551,6 +1732,9 @@ class LocalStore extends ChangeNotifier {
     final values = <String, Object>{
       'profiles': jsonEncode(
         profiles.map((profile) => profile.toJson()).toList(),
+      ),
+      'profileTombstones': jsonEncode(
+        _parseProfileTombstones(data['profileTombstones']),
       ),
       'activeProfile': profiles.firstWhere((profile) => profile.admin).id,
       'displayMode':

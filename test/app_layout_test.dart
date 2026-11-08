@@ -4,10 +4,10 @@ import 'package:hgtv/app_layout.dart';
 
 void main() {
   test('user-facing app version excludes the internal build number', () {
-    expect(appVersion, '1.0.0');
-    expect(formatAppVersion('1.0.0'), '1.0.0');
-    expect(formatAppVersion(' 1.0.0 '), '1.0.0');
-    expect(formatAppVersion(''), '1.0.0');
+    expect(appVersion, '1.0.3');
+    expect(formatAppVersion('1.0.3'), '1.0.3');
+    expect(formatAppVersion(' 1.0.3 '), '1.0.3');
+    expect(formatAppVersion(''), '1.0.3');
   });
 
   group('desktop poster density', () {
@@ -65,6 +65,24 @@ void main() {
         ),
         FormFactor.phone,
       );
+    });
+
+    test('auto adapts from a compact outer screen to a wide inner screen', () {
+      final outerScreen = AppLayout.resolveFormFactor(
+        mode: 'auto',
+        detectedTelevision: false,
+        screenSize: const Size(402, 874),
+        desktopPlatform: false,
+      );
+      final innerScreen = AppLayout.resolveFormFactor(
+        mode: 'auto',
+        detectedTelevision: false,
+        screenSize: const Size(760, 1040),
+        desktopPlatform: false,
+      );
+
+      expect(outerScreen, FormFactor.phone);
+      expect(innerScreen, FormFactor.pad);
     });
 
     test('auto distinguishes phone, pad and desktop computer', () {

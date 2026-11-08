@@ -73,12 +73,36 @@ class LanConnection {
     required this.user,
     required this.sources,
     required this.autoSync,
+    this.profileId,
   });
   final LanPeer peer;
   final String address, token, account, user;
   final Set<String> sources;
+  /// Stable local-profile ID advertised by the peer. Null means a legacy
+  /// peer that cannot be safely matched to a local user profile.
+  final String? profileId;
   bool autoSync;
 }
+
+/// Prevents accidental cross-profile data exchange. The ID is preserved
+/// when the same profile is restored from a backup on another device; the
+/// display name is also checked because the built-in admin ID is always
+/// "default" on every installation.
+bool lanProfileIdentityMatches({
+  required String? remoteProfileId,
+  required String localProfileId,
+  required String remoteUser,
+  required String localUser,
+}) {
+  final remoteName = remoteUser.trim().toLowerCase();
+  final localName = localUser.trim().toLowerCase();
+  return remoteProfileId != null &&
+      remoteProfileId.isNotEmpty &&
+      remoteProfileId == localProfileId &&
+      remoteName.isNotEmpty &&
+      remoteName == localName;
+}
+
 
 const lanLegacySources = {
   'hongguo',

@@ -772,14 +772,14 @@ class _DetailScreenState extends State<DetailScreen> {
         _followingControls(drama),
         if (drama.onlineDate.isNotEmpty ||
             drama.heat.isNotEmpty ||
-            drama.views.isNotEmpty)
+            drama.displayViews.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: Text(
               [
                 if (drama.onlineDate.isNotEmpty) '${uiTraditional(drama.onlineDate)} 上線',
                 if (drama.heat.isNotEmpty) '熱度 ${uiTraditional(drama.heat)}',
-                if (drama.views.isNotEmpty) '播放 ${uiTraditional(drama.views)}',
+                if (drama.displayViews.isNotEmpty) '播放 ${uiTraditional(drama.displayViews)}',
               ].join(' · '),
               style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
             ),

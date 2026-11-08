@@ -151,7 +151,7 @@ func (link *nativeLANServer) request(parent context.Context, input nativeLANInpu
 
 func nativeLANPath(path string) bool {
 	switch path {
-	case "hello", "pair", "status", "sync/summary", "sync/records", "sync/begin",
+	case "hello", "pair", "status", "profiles/snapshot", "profiles/merge", "sync/summary", "sync/records", "sync/begin",
 		"sync/chunk", "sync/commit", "sync/cancel", "sync/receipt",
 		"play/prepare", "play/start", "play/status", "play/cancel":
 		return true

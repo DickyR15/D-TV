@@ -290,6 +290,7 @@ void main() {
       'app': backup['app'],
       'schema': backup['schema'],
       'profiles': backup['profiles'],
+      'profileTombstones': backup['profileTombstones'],
       'displayMode': backup['displayMode'],
       'themeMode': backup['themeMode'],
       'themeAccent': backup['themeAccent'],

@@ -42,6 +42,7 @@ class LocalSnapshot {
   };
   static const globalKeys = {
     'profiles',
+    'profileTombstones',
     'activeProfile',
     'displayMode',
     'themeMode',
