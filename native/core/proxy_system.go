@@ -58,6 +58,18 @@ func (router *proxyRouter) systemSettings() nativeSystemProxy {
 	return router.system
 }
 
+// sameNativeSystemProxy compares every Windows system-proxy input that can
+// change proxy resolution. PACURL must be included: changing the PAC script
+// while the PAC-enabled flag remains true must invalidate the previous
+// in-memory system-proxy snapshot.
+func sameNativeSystemProxy(left, right nativeSystemProxy) bool {
+	return left.HTTP == right.HTTP &&
+		left.HTTPS == right.HTTPS &&
+		left.PAC == right.PAC &&
+		left.PACURL == right.PACURL &&
+		slices.Equal(left.Bypass, right.Bypass)
+}
+
 func (engine *nativeEngine) updateSystemProxy(proxy nativeSystemProxy) error {
 	for _, address := range []string{proxy.HTTP, proxy.HTTPS} {
 		if address == "" {
@@ -74,8 +86,7 @@ func (engine *nativeEngine) updateSystemProxy(proxy nativeSystemProxy) error {
 	}
 	router := engine.downloader.proxyRouter
 	router.mu.Lock()
-	if router.systemOverride && router.system.HTTP == proxy.HTTP && router.system.HTTPS == proxy.HTTPS &&
-		router.system.PAC == proxy.PAC && slices.Equal(router.system.Bypass, proxy.Bypass) {
+	if router.systemOverride && sameNativeSystemProxy(router.system, proxy) {
 		router.mu.Unlock()
 		return nil
 	}
