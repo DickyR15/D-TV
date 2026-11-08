@@ -726,12 +726,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _onAppNavigationChanged() {
-    if (!mounted || !AppLayout.isTelevision(context)) return;
+    if (!mounted) return;
+    final change = appNavigationObserver.changes.value;
+    if (_retryAppUpdateWhenResumed &&
+        change != null &&
+        (change.event == AppNavigationEvent.pop ||
+            change.event == AppNavigationEvent.remove ||
+            change.event == AppNavigationEvent.replace) &&
+        ModalRoute.of(context)?.isCurrent != false) {
+      _retryAppUpdateWhenResumed = false;
+      _appUpdateCheckTimer?.cancel();
+      _appUpdateCheckTimer = Timer(
+        const Duration(seconds: 3),
+        () => unawaited(_checkForAppUpdate()),
+      );
+    }
+    if (!AppLayout.isTelevision(context)) return;
     final hasChildRoute = appNavigationObserver.hasChildRoute;
     if (_hasChildRoute != hasChildRoute) {
       setState(() => _hasChildRoute = hasChildRoute);
     }
-    final change = appNavigationObserver.changes.value;
     if (change == null) return;
     switch (change.event) {
       case AppNavigationEvent.pop:
