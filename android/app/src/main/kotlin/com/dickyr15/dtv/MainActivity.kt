@@ -112,7 +112,7 @@ open class MainActivity : FlutterActivity() {
         if (!canInstallApkPackages()) {
             Toast.makeText(
                 this,
-                "尚未允許 D TV 安裝應用程式；允許後請重新按一次更新。",
+                "尚未允許 D TV 安裝應用程式；允許後返回即可接續安裝。",
                 Toast.LENGTH_LONG
             ).show()
             return
