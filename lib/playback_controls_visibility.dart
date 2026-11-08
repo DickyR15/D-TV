@@ -49,3 +49,11 @@ class PlaybackControlsVisibility {
     _suppressAutomaticReveal = false;
   }
 }
+
+/// Keeps the desktop control overlay hidden at the end of an episode when
+/// automatic advance is about to replace the media. The next episode receives
+/// its own playback generation and normal visibility policy.
+bool playbackControlsShouldHideForAutoAdvance({
+  required bool autoAdvanceAvailable,
+  required bool completed,
+}) => autoAdvanceAvailable && completed;
