@@ -18,6 +18,37 @@ void main() {
     expect(CatalogSort.year.label, '年份');
   });
 
+  test('catalog sort tooltip reflects the active Duoduo website sort', () {
+    final rows = [
+      const Drama(id: 'duoduo:1', source: 'duoduo', title: '短劇甲'),
+      const Drama(id: 'duoduo:2', source: 'duoduo', title: '短劇乙'),
+    ];
+    for (final sort in [
+      CatalogSort.popular,
+      CatalogSort.latest,
+      CatalogSort.score,
+      CatalogSort.year,
+    ]) {
+      final view = CatalogView(duoduoSort: sort);
+      expect(
+        catalogSortButtonTooltip(view, rows, duoduoCatalog: true),
+        '排序：${sort.label}',
+      );
+    }
+
+    const otherRows = [
+      Drama(id: 'hongguo:1', source: 'hongguo', title: '新劇', onlineDate: '2026'),
+    ];
+    expect(
+      catalogSortButtonTooltip(
+        const CatalogView(sort: CatalogSort.date, duoduoSort: CatalogSort.latest),
+        otherRows,
+        duoduoCatalog: false,
+      ),
+      '排序：年份（由新到舊）',
+    );
+  });
+
   test('Duoduo sort preference is isolated from provider default sorting', () {
     final saved = const CatalogView(
       sort: CatalogSort.date,
