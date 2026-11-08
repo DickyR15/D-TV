@@ -39,6 +39,7 @@ class PlayerControls extends StatefulWidget {
     this.enhancement,
     this.playbackGeneration = 0,
     this.onVolumeChanged,
+    this.hideOnAutoAdvanceComplete = false,
   });
 
   final Player player;
@@ -67,6 +68,9 @@ class PlayerControls extends StatefulWidget {
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
   final ValueChanged<double>? onVolumeChanged;
+  /// Suppresses the old episode's control overlay while Windows auto-advance
+  /// replaces a completed episode with the next one.
+  final bool hideOnAutoAdvanceComplete;
 
   @override
   State<PlayerControls> createState() => _PlayerControlsState();
@@ -75,10 +79,17 @@ class PlayerControls extends StatefulWidget {
 class _PlayerControlsState extends State<PlayerControls> {
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   Timer? _hideTimer;
+  Timer? _autoAdvancePauseTimer;
   bool _visible = true;
   final PlaybackControlsVisibility _controlsVisibility = PlaybackControlsVisibility();
   bool _lastPlaying = false;
   double? _seekValue;
+
+  bool get _hideForCompletedAutoAdvance =>
+      playbackControlsShouldHideForAutoAdvance(
+        autoAdvanceAvailable: widget.hideOnAutoAdvanceComplete,
+        completed: widget.player.state.completed,
+      );
 
   @override
   void initState() {
@@ -104,13 +115,51 @@ class _PlayerControlsState extends State<PlayerControls> {
       );
     }
     _subscriptions.add(
+      widget.player.stream.completed.listen((completed) {
+        if (!mounted ||
+            !playbackControlsShouldHideForAutoAdvance(
+              autoAdvanceAvailable: widget.hideOnAutoAdvanceComplete,
+              completed: completed,
+            )) {
+          return;
+        }
+        _autoAdvancePauseTimer?.cancel();
+        _hideTimer?.cancel();
+        if (_visible) setState(() => _visible = false);
+      }),
+    );
+    _subscriptions.add(
       widget.player.stream.playing.listen((playing) {
         final wasPlaying = _lastPlaying;
         _lastPlaying = playing;
         if (!mounted || !widget.enabled) return;
         if (!playing) {
-          if (!_controlsVisibility.suppressAutomaticReveal) _show();
+          if (_hideForCompletedAutoAdvance) {
+            _autoAdvancePauseTimer?.cancel();
+            _hideTimer?.cancel();
+            if (_visible) setState(() => _visible = false);
+          } else if (widget.hideOnAutoAdvanceComplete) {
+            // On Windows, MPV may publish "playing=false" just before its
+            // completed event. Briefly defer the pause overlay so an auto-next
+            // transition cannot flash the old episode's pause/play icon.
+            _autoAdvancePauseTimer?.cancel();
+            _autoAdvancePauseTimer = Timer(
+              const Duration(milliseconds: 120),
+              () {
+                if (!mounted || !widget.enabled) return;
+                if (_hideForCompletedAutoAdvance) {
+                  _hideTimer?.cancel();
+                  if (_visible) setState(() => _visible = false);
+                } else if (!_controlsVisibility.suppressAutomaticReveal) {
+                  _show();
+                }
+              },
+            );
+          } else if (!_controlsVisibility.suppressAutomaticReveal) {
+            _show();
+          }
         } else if (!wasPlaying) {
+          _autoAdvancePauseTimer?.cancel();
           // A replacement URL can briefly report playing before failing again.
           // Never reveal controls during recovery until the user interacts.
           if (_controlsVisibility.suppressAutomaticReveal) {
@@ -139,6 +188,8 @@ class _PlayerControlsState extends State<PlayerControls> {
     if (widget.enabled != oldWidget.enabled ||
         widget.panelOpen != oldWidget.panelOpen ||
         widget.fullscreen != oldWidget.fullscreen ||
+        widget.hideOnAutoAdvanceComplete !=
+            oldWidget.hideOnAutoAdvanceComplete ||
         readinessChanged ||
         playbackChanged) {
       _seekValue = null;
@@ -166,6 +217,7 @@ class _PlayerControlsState extends State<PlayerControls> {
     _hideTimer?.cancel();
     if (!widget.enabled ||
         widget.panelOpen ||
+        _hideForCompletedAutoAdvance ||
         !widget.player.state.playing ||
         _seekValue != null) {
       return;
@@ -184,14 +236,14 @@ class _PlayerControlsState extends State<PlayerControls> {
   }
 
   void _show() {
-    if (!mounted) return;
+    if (!mounted || _hideForCompletedAutoAdvance) return;
     _controlsVisibility.revealFromUser();
     if (!_visible) setState(() => _visible = true);
     _scheduleHide();
   }
 
   void _tap() {
-    if (widget.interactions.suppressTap) return;
+    if (_hideForCompletedAutoAdvance || widget.interactions.suppressTap) return;
     _controlsVisibility.revealFromUser();
     widget.onFocusSurface();
     setState(() => _visible = !_visible);
@@ -208,6 +260,7 @@ class _PlayerControlsState extends State<PlayerControls> {
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _autoAdvancePauseTimer?.cancel();
     widget.interactions.removeListener(_interactionChanged);
     for (final subscription in _subscriptions) {
       subscription.cancel();
@@ -222,10 +275,11 @@ class _PlayerControlsState extends State<PlayerControls> {
     final position = state.position.inMilliseconds / 1000;
     final buffered = state.buffer.inMilliseconds / 1000;
     final visible =
-        _visible ||
-        (!state.playing && !_controlsVisibility.suppressAutomaticReveal) ||
-        (state.buffering && !_controlsVisibility.suppressAutomaticReveal) ||
-        widget.panelOpen;
+        !_hideForCompletedAutoAdvance &&
+        (_visible ||
+            (!state.playing && !_controlsVisibility.suppressAutomaticReveal) ||
+            (state.buffering && !_controlsVisibility.suppressAutomaticReveal) ||
+            widget.panelOpen);
     return MouseRegion(
       onHover: (_) => _show(),
       cursor: visible ? SystemMouseCursors.basic : SystemMouseCursors.none,
