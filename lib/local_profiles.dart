@@ -56,7 +56,8 @@ class LocalProfile {
     }
     final salt = value['salt'] as String? ?? '';
     final hash = value['pinHash'] as String? ?? '';
-    final updatedAt = value['updatedAt'] as int? ?? 0;
+    final rawUpdatedAt = value['updatedAt'];
+    final updatedAt = rawUpdatedAt is int ? rawUpdatedAt : 0;
     if ((value.containsKey('updatedAt') &&
             (value['updatedAt'] is! int || updatedAt < 0)) ||
         !RegExp(r'^[a-zA-Z0-9_-]{1,64}$').hasMatch(id) ||

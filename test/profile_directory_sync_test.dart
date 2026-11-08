@@ -41,7 +41,8 @@ void main() {
       'tombstones': <String, int>{},
     };
 
-    final merged1 = await store.mergeProfileSyncSnapshot(firstSnapshot);
+    await store.mergeProfileSyncSnapshot(firstSnapshot);
+    final merged1 = await store.exportProfileSyncSnapshot();
     final storedGuest1 = store.profiles.singleWhere((p) => p.id == guestId);
     expect(storedGuest1.pinHash, hash1);
     expect(storedGuest1.salt, salt1);
@@ -76,9 +77,10 @@ void main() {
       'profiles': [store.profiles.first.toJson()],
       'tombstones': {guestId: guest2.updatedAt + 1},
     };
-    final finalSnapshot = await store.mergeProfileSyncSnapshot(deleteSnapshot);
+    await store.mergeProfileSyncSnapshot(deleteSnapshot);
+    final finalSnapshot = await store.exportProfileSyncSnapshot();
     expect(store.profiles.any((p) => p.id == guestId), isFalse);
-    expect(finalSnapshot['tombstones'][guestId], guest2.updatedAt + 1);
+    expect((finalSnapshot['tombstones'] as Map)[guestId], guest2.updatedAt + 1);
   });
 
   test('conflicting simultaneous profile edits are not silently overwritten', () async {

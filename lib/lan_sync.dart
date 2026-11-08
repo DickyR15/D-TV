@@ -162,8 +162,9 @@ extension LanSynchronization on LanController {
     );
     _checkSync(ticket, remote);
     final remoteSnapshot = lanMap(remoteResult['snapshot']);
-    final mergedLocal = await store.mergeProfileSyncSnapshot(remoteSnapshot);
+    await store.mergeProfileSyncSnapshot(remoteSnapshot);
     _checkSync(ticket, remote);
+    final mergedLocal = await store.exportProfileSyncSnapshot();
     final applied = await _request(
       'profiles/merge',
       {'snapshot': mergedLocal},
@@ -467,9 +468,8 @@ extension LanSynchronization on LanController {
       return {'snapshot': await store.exportProfileSyncSnapshot()};
     }
     if (path == 'profiles/merge') {
-      return {
-        'snapshot': await store.mergeProfileSyncSnapshot(body['snapshot']),
-      };
+      await store.mergeProfileSyncSnapshot(body['snapshot']);
+      return {'snapshot': await store.exportProfileSyncSnapshot()};
     }
     final document = store.lanDocument;
     if (path == 'sync/summary') {
