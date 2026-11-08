@@ -67,6 +67,24 @@ void main() {
       );
     });
 
+    test('auto adapts from a compact outer screen to a wide inner screen', () {
+      final outerScreen = AppLayout.resolveFormFactor(
+        mode: 'auto',
+        detectedTelevision: false,
+        screenSize: const Size(402, 874),
+        desktopPlatform: false,
+      );
+      final innerScreen = AppLayout.resolveFormFactor(
+        mode: 'auto',
+        detectedTelevision: false,
+        screenSize: const Size(760, 1040),
+        desktopPlatform: false,
+      );
+
+      expect(outerScreen, FormFactor.phone);
+      expect(innerScreen, FormFactor.pad);
+    });
+
     test('auto distinguishes phone, pad and desktop computer', () {
       expect(
         AppLayout.resolveFormFactor(
