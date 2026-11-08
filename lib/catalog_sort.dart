@@ -260,6 +260,19 @@ CatalogView effectiveCatalogView(
   );
 }
 
+/// The sort button must reflect the independent website sort selected for
+/// Duoduo, not the shared provider sort used by other sources.
+String catalogSortButtonTooltip(
+  CatalogView requested,
+  Iterable<Drama> rows, {
+  required bool duoduoCatalog,
+}) {
+  final selected = duoduoCatalog
+      ? requested.duoduoSort
+      : effectiveCatalogView(requested, rows).sort;
+  return '排序：${selected.label}';
+}
+
 List<Drama> sortCatalog(Iterable<Drama> rows, CatalogView view) {
   final items = rows.where((drama) {
     if (view.release.isEmpty) return true;
