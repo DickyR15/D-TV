@@ -459,8 +459,7 @@ jobs:
             # A merge commit titled "release: D TV 1.0.3" is the explicit
             # one-time publication signal on main. Keep the tag aligned with
             # the version declared by the source tree.
-            full_version="$(sed -n 's/^version: *[\x27\"]\?\([^\x27\" ]*\)[\x27\"]\?$/\1/p' pubspec.yaml | head -n1)"
-            version="${full_version%%+*}"
+            version="$(awk '/^version:/ {print $2; exit}' pubspec.yaml | cut -d+ -f1)"
             tag="v$version"
           else
             echo "只接受 v 開頭的正式版本標籤，或指定的 release/v1.0.2 發布分支。" >&2
