@@ -758,3 +758,13 @@ String uiDramaCategory(String source, String category) {
   }
   return uiTraditional(category);
 }
+
+
+/// Category chips may already contain source-specific Taiwan terminology.
+/// Keep 動漫 intact instead of allowing generic phrase conversion to turn it
+/// back into 動畫 when the category receives keyboard/remote focus.
+String uiCatalogCategoryLabel(String category) {
+  final compact = category.trim().replaceAll(RegExp(r'\s+'), '');
+  if (compact == '動漫') return '動漫';
+  return uiTraditional(category);
+}
