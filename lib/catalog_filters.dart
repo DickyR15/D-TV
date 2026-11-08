@@ -83,7 +83,7 @@ class _CatalogFiltersState extends State<CatalogFilters> {
                       padding: const EdgeInsets.only(right: 6),
                       child: ChoiceChip(
                         key: ValueKey('category-${entry.id}'),
-                        label: Text(uiTraditional(entry.name)),
+                        label: Text(uiCatalogCategoryLabel(entry.name)),
                         selected: entry.id == widget.category,
                         showCheckmark: true,
                         side: television
