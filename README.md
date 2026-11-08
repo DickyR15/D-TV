@@ -26,16 +26,16 @@
 
 ## 下載正式版
 
-目前已上架的最新正式版仍為 **1.0.1**。**D TV 1.0.2 已合併至 main，正在準備四平台正式建置**；建立 `v1.0.2` 標籤後，GitHub Actions 會建置 Android／Android TV、Windows、macOS、iOS，並在四平台檔案及 SHA-256 檢查全部成功後自動公開正式 Release。在 1.0.2 Release 上架前，請先使用下方 1.0.1 下載檔案。
+最新正式版為 **D TV 1.0.2（2026-11-08）**，支援 Android／Android TV、Windows x64、macOS 與 iOS。請前往 [D TV 1.0.2 正式版 Releases](https://github.com/DickyR15/D-TV/releases/tag/v1.0.2)，依照裝置下載對應檔案：
 
-前往 [D TV 1.0.1 正式版 Releases](https://github.com/DickyR15/D-TV/releases/tag/v1.0.1)，依照裝置選擇對應檔案：
+- **Android／Android TV**：`DTV-1.0.2-Android.apk`（單一 Universal APK，包含 ARM64、ARMv7 與 x86_64）
+- **Windows x64**：`DTV-1.0.2-Windows-Portable.zip`（解壓縮後執行，無須安裝）
+- **macOS**：`DTV-1.0.2-macOS.dmg`（支援 Apple Silicon 與 Intel）
+- **iOS**：`DTV-1.0.2-iOS.ipa`（未簽章，需使用 AltStore、Sideloadly 等工具自行簽署後側載安裝）
 
-- **Android／Android TV**：`DTV-1.0.1-Android.apk`
-- **Windows x64**：`DTV-1.0.1-Windows-Portable.zip`
-- **macOS**：`DTV-1.0.1-macOS.dmg`
-- **iOS**：`DTV-1.0.1-iOS.ipa`（未簽章，需使用 AltStore、Sideloadly 等方式自行簽署後安裝）
+Releases 同時提供 `SHA256SUMS.txt`，可用來核對下載檔案的 SHA-256 完整性。Android Universal APK 包含 `arm64-v8a`、`armeabi-v7a` 與 `x86_64` 三種 ABI，更新時使用正式簽署金鑰；若安裝時出現簽章不相容，請勿先移除舊版，以免遺失本機資料，應先確認安裝檔來源及簽署憑證。
 
-Android Universal APK 包含 `arm64-v8a`、`armeabi-v7a` 與 `x86_64` 三種 ABI。Android 更新時使用相同正式簽署金鑰；若安裝時出現簽章不相容，請勿先移除舊版，以免遺失本機資料，應先確認安裝檔來源及簽署憑證。
+本版自動化建置與封裝檢查已通過；這不代表所有裝置的完整播放均已完成實機驗收。Windows 與 Android TV 的實機播放仍需持續測試。完整更新內容請參閱 [CHANGELOG](CHANGELOG.md)。
 
 ## 開發與建置
 
