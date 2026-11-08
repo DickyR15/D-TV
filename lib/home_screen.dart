@@ -119,6 +119,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Timer? _appUpdateCheckTimer;
   bool _updateDialogOpen = false;
   DateTime? _lastAppUpdateCheckAt;
+  bool _retryAppUpdateWhenResumed = false;
   PhoneSearchServer? _phoneSearchServer;
   StreamSubscription<String>? _phoneSearchSubscription;
   Future<PhoneSearchServer>? _phoneSearchServerStarting;
@@ -968,10 +969,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return;
     }
     final lastCheck = _lastAppUpdateCheckAt;
-    if (lastCheck != null &&
+    if (!_retryAppUpdateWhenResumed &&
+        lastCheck != null &&
         DateTime.now().difference(lastCheck) < const Duration(minutes: 10)) {
       return;
     }
+    _retryAppUpdateWhenResumed = false;
     // Some TV launchers keep the splash/login route active during the initial
     // startup delay. Retry once the app returns to the foreground so an
     // update prompt is not silently lost behind another route.
@@ -1467,7 +1470,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           )) {
         return;
       }
-      if (ModalRoute.of(context)?.isCurrent == false) return;
+      if (ModalRoute.of(context)?.isCurrent == false) {
+        // The check can finish while a startup/login route is still covering
+        // HomeScreen. Retry after HomeScreen returns to the foreground.
+        _retryAppUpdateWhenResumed = true;
+        return;
+      }
 
       final asset = update.assetForPlatform(Platform.operatingSystem);
       final platformNote = switch (Platform.operatingSystem) {
