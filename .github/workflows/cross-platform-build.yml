@@ -2,14 +2,11 @@ name: D TV Cross-platform Release Build
 # Rebuild latest cross-platform branch head after Taiwan terminology updates.
 
 on:
+  # Official platform builds run only when a version tag is pushed.
   push:
-    branches:
-      - feat/phase5-cross-platform-universal
-      - release/v1.0.2
-      - dev/v1.0.3
-      - main
     tags:
       - "v*"
+      - "!v1.0.3"
   pull_request:
     branches:
       - main
@@ -85,7 +82,7 @@ jobs:
         run: python ../scripts/retry_command.py --attempts 3 -- go test ./...
 
   windows-x64:
-    if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || (github.event_name == 'push' && github.ref == 'refs/heads/dev/v1.0.3') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'windows'))
+    if: (startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'windows'))
     name: Windows x64 Portable ZIP
     needs: core-validation
     runs-on: windows-2022
@@ -186,9 +183,9 @@ jobs:
           name: DTV-${{ steps.windows-version.outputs.app_version }}-Windows-Portable
           path: build/windows/x64/runner/Release/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
   android-universal:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || (github.event_name == 'push' && github.ref == 'refs/heads/dev/v1.0.3') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
+    if: (startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
     name: Android Universal APK (3 ABIs)
     needs: core-validation
     runs-on: ubuntu-latest
@@ -318,9 +315,9 @@ jobs:
           name: DTV-Android-APK
           path: dist/android/DTV-*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
   ios-ipa:
-    if: (github.event_name == 'pull_request') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || (github.event_name == 'push' && github.ref == 'refs/heads/dev/v1.0.3') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
+    if: (startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios'))
     name: iOS device IPA and iPhone Duo simulator build
     needs: core-validation
     runs-on: xcode-27
@@ -387,9 +384,9 @@ jobs:
           name: DTV-iOS-IPA
           path: dist/ios/DTV-*.ipa
           if-no-files-found: error
-          retention-days: 14
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
   macos-universal:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/feat/phase5-cross-platform-universal') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || (github.event_name == 'push' && github.ref == 'refs/heads/dev/v1.0.3') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'macos'))
+    if: (startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'macos'))
     name: macOS Universal DMG (arm64 + x86_64)
     needs: core-validation
     runs-on: macos-26
@@ -422,11 +419,11 @@ jobs:
           name: DTV-macOS-DMG
           path: dist/macos/DTV-*.dmg
           if-no-files-found: error
-          retention-days: 14
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
 
   draft-release:
     name: Publish verified four-platform Release
-    if: (startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3') || (github.event_name == 'push' && github.ref == 'refs/heads/release/v1.0.2') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release-dtv-1.0.4'))
+    if: startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3'
     needs:
       - core-validation
       - windows-x64
@@ -446,27 +443,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            tag="$GITHUB_REF_NAME"
-            version="${tag#v}"
-          elif [[ "$GITHUB_REF" == "refs/heads/release/v1.0.2" && "$GITHUB_EVENT_NAME" == "push" ]]; then
-            # The release assembly job downloads build artifacts only; it does
-            # not check out the source tree. Keep this legacy one-shot branch
-            # explicitly pinned to the version it was created for.
-            version="1.0.2"
-            tag="v$version"
-          elif [[ "$GITHUB_REF" == "refs/heads/main" && "$GITHUB_EVENT_NAME" == "push" ]]; then
-            # A merge commit titled "release-dtv-1.0.4" is the explicit
-            # 1.0.4 publication signal on main. This assembly job only
-            # downloads artifacts, so pin this release version here.
-            version="1.0.4"
-            tag="v$version"
-          else
-            echo "只接受 v 開頭的正式版本標籤，或指定的 release/v1.0.2 發布分支。" >&2
+          if [[ "$GITHUB_REF" != refs/tags/v* ]]; then
+            echo "正式 Release 僅接受 v 開頭的版本標籤。" >&2
             exit 1
           fi
-          if [[ "$tag" != v* || -z "$version" ]]; then
-            echo "正式版本標籤無效：$tag" >&2
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+          if [[ -z "$version" || "$tag" == "v1.0.3" ]]; then
+            echo "正式版本標籤無效或已排除：$tag" >&2
             exit 1
           fi
 
