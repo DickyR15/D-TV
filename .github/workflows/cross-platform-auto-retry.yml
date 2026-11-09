@@ -34,7 +34,7 @@ jobs:
           result-encoding: string
           script: |
             const run = context.payload.workflow_run;
-            const isTag = run.event === "push" && run.head_branch.startsWith("v");
+            const isTag = (run.event === "push" || run.event === "workflow_dispatch") && (run.head_branch || "").startsWith("v");
             const refName = (isTag ? "tags/" : "heads/") + run.head_branch;
             const ref = await github.rest.git.getRef({
               owner: context.repo.owner,
