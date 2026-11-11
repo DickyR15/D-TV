@@ -213,9 +213,19 @@ int _descending(num? a, num? b) => a == null
 
 /// Sort options are offered only when the currently loaded source records
 /// actually contain the metadata required to make that sort meaningful.
-Set<CatalogSort> availableCatalogSorts(Iterable<Drama> rows) {
+Set<CatalogSort> availableCatalogSorts(
+  Iterable<Drama> rows, {
+  bool? duoduoCatalog,
+}) {
   final items = rows.toList(growable: false);
-  if (items.isNotEmpty && items.every((drama) => drama.source == 'duoduo')) {
+  // Whether to use Duoduo's remote website sorting is determined by the
+  // selected source group, not by the currently loaded rows. In an
+  // all-sources category, the results may temporarily contain only Duoduo
+  // items even though the user is browsing the combined catalog.
+  final useDuoduoSort =
+      duoduoCatalog ??
+      (items.isNotEmpty && items.every((drama) => drama.source == 'duoduo'));
+  if (useDuoduoSort) {
     return const {
       CatalogSort.popular,
       CatalogSort.latest,
@@ -251,9 +261,13 @@ CatalogView effectiveCatalogView(
   CatalogView requested,
   Iterable<Drama> rows, {
   CatalogSort fallbackSort = CatalogSort.source,
+  bool? duoduoCatalog,
 }) {
   final items = rows.toList(growable: false);
-  final sorts = availableCatalogSorts(items);
+  final sorts = availableCatalogSorts(
+    items,
+    duoduoCatalog: duoduoCatalog,
+  );
   return requested.copyWith(
     sort: sorts.contains(requested.sort) ? requested.sort : fallbackSort,
     release: hasCatalogReleaseStatus(items) ? requested.release : '',
@@ -269,7 +283,11 @@ String catalogSortButtonTooltip(
 }) {
   final selected = duoduoCatalog
       ? requested.duoduoSort
-      : effectiveCatalogView(requested, rows).sort;
+      : effectiveCatalogView(
+          requested,
+          rows,
+          duoduoCatalog: false,
+        ).sort;
   return '排序：${selected.label}';
 }
 
