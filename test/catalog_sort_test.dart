@@ -48,9 +48,21 @@ void main() {
       '排序：年份（由新到舊）',
     );
 
+    // Combined-source categories can temporarily return only Duoduo rows.
+    // Include local date metadata so the shared year sort is actually available.
     const combinedCategoryRows = [
-      Drama(id: 'duoduo:1', source: 'duoduo', title: '電影甲'),
-      Drama(id: 'duoduo:2', source: 'duoduo', title: '電影乙'),
+      Drama(
+        id: 'duoduo:1',
+        source: 'duoduo',
+        title: '電影甲',
+        onlineDate: '2024-01-01',
+      ),
+      Drama(
+        id: 'duoduo:2',
+        source: 'duoduo',
+        title: '電影乙',
+        onlineDate: '2026-01-01',
+      ),
     ];
     expect(
       catalogSortButtonTooltip(
