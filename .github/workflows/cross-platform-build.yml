@@ -149,8 +149,24 @@ jobs:
           "FFMPEGKIT_LOCAL_DIR=$bundleDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "FFmpegKit verified: $actualSha256"
           Get-ChildItem -LiteralPath (Join-Path $bundleDir "bin") -Filter "*.dll" | Select-Object Name, Length
+      - name: Prefer the official primary MSYS2 package server
+        shell: pwsh
+        run: |
+          $mirrorFiles = @(
+            "C:\msys64\etc\pacman.d\mirrorlist.mingw",
+            "C:\msys64\etc\pacman.d\mirrorlist.msys"
+          )
+          foreach ($file in $mirrorFiles) {
+            if (-not (Test-Path -LiteralPath $file)) {
+              throw "找不到 GitHub Windows Runner 預載的 MSYS2 mirror list：$file"
+            }
+            $content = [System.IO.File]::ReadAllText($file)
+            $content = $content.Replace("https://mirror.msys2.org/", "https://repo.msys2.org/")
+            [System.IO.File]::WriteAllText($file, $content, [System.Text.UTF8Encoding]::new($false))
+          }
       - uses: msys2/setup-msys2@v2
         with:
+          release: false
           msystem: MINGW64
           update: true
           install: mingw-w64-x86_64-gcc
