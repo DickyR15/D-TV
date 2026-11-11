@@ -547,7 +547,9 @@ jobs:
             ${{ steps.release-files.outputs.checksums }}
             ```
 
-            此版本已通過四平台建置、檔案檢查及 SHA-256 校驗。\n\n完整更新內容與使用說明請參閱 [README](https://github.com/DickyR15/D-TV#) 及 [CHANGELOG](https://github.com/DickyR15/D-TV/blob/main/CHANGELOG.md)。
+            此版本已通過四平台建置、檔案檢查及 SHA-256 校驗。
+
+完整更新內容與使用說明請參閱 [README](https://github.com/DickyR15/D-TV#) 及 [CHANGELOG](https://github.com/DickyR15/D-TV/blob/main/CHANGELOG.md)。
           files: |
             release-files/DTV-${{ steps.release-files.outputs.version }}-Android.apk
             release-files/DTV-${{ steps.release-files.outputs.version }}-Windows-Portable.zip
