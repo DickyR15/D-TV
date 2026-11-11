@@ -47,6 +47,22 @@ void main() {
       ),
       '排序：年份（由新到舊）',
     );
+
+    const combinedCategoryRows = [
+      Drama(id: 'duoduo:1', source: 'duoduo', title: '電影甲'),
+      Drama(id: 'duoduo:2', source: 'duoduo', title: '電影乙'),
+    ];
+    expect(
+      catalogSortButtonTooltip(
+        const CatalogView(
+          sort: CatalogSort.date,
+          duoduoSort: CatalogSort.latest,
+        ),
+        combinedCategoryRows,
+        duoduoCatalog: false,
+      ),
+      '排序：年份（由新到舊）',
+    );
   });
 
   test('Duoduo sort preference is isolated from provider default sorting', () {
