@@ -40,6 +40,12 @@ void main() {
                 'https://github.com/DickyR15/D-TV/releases/download/v1.0.1/DTV-1.0.1-macOS.dmg',
             'size': 4096,
           },
+          {
+            'name': 'DTV-1.0.1-iOS.ipa',
+            'browser_download_url':
+                'https://github.com/DickyR15/D-TV/releases/download/v1.0.1/DTV-1.0.1-iOS.ipa',
+            'size': 3072,
+          },
         ],
       },
       currentVersion: '1.0.0+340',
@@ -54,7 +60,7 @@ void main() {
     expect(info.assetForPlatform('android')?.name, 'DTV-1.0.1-Android.apk');
     expect(info.assetForPlatform('windows')?.name, 'DTV-1.0.1-Windows-Portable.zip');
     expect(info.assetForPlatform('macos')?.name, 'DTV-1.0.1-macOS.dmg');
-    expect(info.assetForPlatform('ios'), isNull);
+    expect(info.assetForPlatform('ios')?.name, 'DTV-1.0.1-iOS.ipa');
   });
 
   test('same version, prerelease, draft or external URL never trigger notice', () {

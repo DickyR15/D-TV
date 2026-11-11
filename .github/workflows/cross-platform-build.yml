@@ -12,6 +12,10 @@ on:
       - "pubspec.yaml"
       - "lib/catalog_sort.dart"
       - "lib/home_screen.dart"
+      - "lib/app_update_service.dart"
+      - "lib/app_layout.dart"
+      - "ios/Runner/AppDelegate.swift"
+      - "test/app_update_service_test.dart"
       - "test/catalog_sort_test.dart"
     tags:
       - "v*"
@@ -544,6 +548,7 @@ jobs:
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
+          overwrite_files: true
           body: |
             ## D TV ${{ steps.release-files.outputs.version }}
 

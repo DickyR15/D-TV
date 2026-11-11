@@ -56,6 +56,35 @@ import CFNetwork
           result(["http": http, "https": https.isEmpty ? http : https,
                   "bypass": settings["ExceptionsList"] as? [String] ?? [],
                   "pac": (settings["ProxyAutoConfigEnable"] as? NSNumber)?.boolValue == true])
+        case "openExternalUrl":
+          guard
+            let arguments = call.arguments as? [String: Any],
+            let rawURL = arguments["url"] as? String,
+            let url = URL(string: rawURL),
+            let scheme = url.scheme?.lowercased(),
+            (scheme == "https" || scheme == "http"),
+            url.host != nil
+          else {
+            result(FlutterError(
+              code: "invalid_url",
+              message: "更新網址無效",
+              details: nil
+            ))
+            return
+          }
+          DispatchQueue.main.async {
+            UIApplication.shared.open(url, options: [:]) { opened in
+              if opened {
+                result(nil)
+              } else {
+                result(FlutterError(
+                  code: "open_url_failed",
+                  message: "無法開啟外部瀏覽器",
+                  details: rawURL
+                ))
+              }
+            }
+          }
         default:
           result(FlutterMethodNotImplemented)
         }

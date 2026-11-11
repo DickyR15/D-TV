@@ -1496,7 +1496,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         'android' => '將下載 APK，接著由 Android 系統安裝程式確認更新。',
         'windows' => '將下載免安裝 ZIP，關閉 D TV 後自動替換檔案並重新啟動。',
         'macos' => '將下載 DMG 並開啟安裝映像檔，請將新版 D TV 拖曳至「應用程式」替換。',
-        'ios' => 'iOS 版需使用 IPA 手動安裝，按下更新後會開啟版本下載頁面。',
+        'ios' => '將開啟 Safari（或系統預設瀏覽器）直接下載 IPA；下載後請使用側載工具安裝。',
         _ => '將依目前裝置提供可用的更新檔案。',
       };
       final contentText = [
@@ -1507,7 +1507,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ? '有新版本可供下載。'
             : update.notes.trim().characters.take(1500).toString(),
         '',
-        asset == null && !Platform.isIOS
+        asset == null
             ? '目前尚未找到此平台的安裝檔，將開啟版本頁面供手動下載。'
             : platformNote,
       ].join('\n');
@@ -1595,6 +1595,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _downloadAndInstallUpdate(AppUpdateInfo update) async {
     final service = const AppUpdateService();
     final asset = update.assetForPlatform(Platform.operatingSystem);
+    if (Platform.isIOS) {
+      // iOS cannot install an IPA from inside the app. Open the release asset
+      // in Safari/the system browser so the user can save the IPA to Files.
+      await AppDevice.openExternalUrl(asset?.downloadUrl ?? update.releaseUrl);
+      return;
+    }
     if (asset == null) {
       await AppDevice.openExternalUrl(update.releaseUrl);
       return;

@@ -143,6 +143,12 @@ class AppDevice {
       });
       return;
     }
+    if (Platform.isIOS) {
+      await channel.invokeMethod<void>('openExternalUrl', {
+        'url': uri.toString(),
+      });
+      return;
+    }
     if (Platform.isWindows) {
       await Process.start(
         'cmd',
