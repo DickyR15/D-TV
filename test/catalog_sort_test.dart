@@ -260,7 +260,10 @@ void main() {
         Drama(id: 'duoduo:1', source: 'duoduo', title: '電影甲'),
         Drama(id: 'duoduo:2', source: 'duoduo', title: '電影乙'),
       ];
-      final options = availableCatalogSorts(rows);
+      final options = availableCatalogSorts(
+        rows,
+        duoduoCatalog: true,
+      );
       expect(options, {
         CatalogSort.popular,
         CatalogSort.latest,
@@ -272,6 +275,7 @@ void main() {
       final effective = effectiveCatalogView(
         const CatalogView(sort: CatalogSort.score, release: 'finished'),
         rows,
+        duoduoCatalog: true,
       );
       expect(effective.sort, CatalogSort.score);
       expect(effective.release, isEmpty);
