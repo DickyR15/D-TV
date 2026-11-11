@@ -195,6 +195,66 @@ void main() {
       );
     });
 
+    test(
+      'combined-source categories use local sorting even when all rows are Duoduo',
+      () {
+        const rows = [
+          Drama(
+            id: 'duoduo:older',
+            source: 'duoduo',
+            title: '乙片',
+            onlineDate: '2024-01-01',
+            releaseStatus: 'ongoing',
+          ),
+          Drama(
+            id: 'duoduo:newer',
+            source: 'duoduo',
+            title: '甲片',
+            onlineDate: '2026-01-01',
+            releaseStatus: 'finished',
+          ),
+        ];
+
+        final options = availableCatalogSorts(rows, duoduoCatalog: false);
+        expect(options, containsAll({
+          CatalogSort.source,
+          CatalogSort.name,
+          CatalogSort.date,
+        }));
+        expect(options, isNot(contains(CatalogSort.popular)));
+        expect(options, isNot(contains(CatalogSort.latest)));
+        expect(hasCatalogReleaseStatus(rows), isTrue);
+
+        final effective = effectiveCatalogView(
+          const CatalogView(sort: CatalogSort.name, release: 'finished'),
+          rows,
+          duoduoCatalog: false,
+        );
+        expect(effective.sort, CatalogSort.name);
+        expect(effective.release, 'finished');
+        expect(
+          sortCatalog(rows, effective).map((drama) => drama.id),
+          ['duoduo:newer'],
+        );
+      },
+    );
+
+    test('Duoduo website sorting remains available for its own source group', () {
+      const rows = [
+        Drama(id: 'duoduo:1', source: 'duoduo', title: '電影甲'),
+        Drama(id: 'duoduo:2', source: 'duoduo', title: '電影乙'),
+      ];
+      expect(
+        availableCatalogSorts(rows, duoduoCatalog: true),
+        {
+          CatalogSort.popular,
+          CatalogSort.latest,
+          CatalogSort.score,
+          CatalogSort.year,
+        },
+      );
+    });
+
     test('Duoduo offers website sort choices without local metadata', () {
       const rows = [
         Drama(id: 'duoduo:1', source: 'duoduo', title: '電影甲'),
