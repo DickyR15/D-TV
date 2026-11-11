@@ -1,12 +1,15 @@
 name: D TV Cross-platform Release Build
-# Release builds are tag-driven; ordinary test builds are started manually per platform.
+# Version-tag pushes publish releases. Main-branch release commits use the [release] marker.
 
 on:
-  # Official platform builds run only when a version tag is pushed.
+  # Run a complete cross-platform build when release metadata or related source files change.
   push:
     branches:
       - main
     paths:
+      - ".github/workflows/cross-platform-build.yml"
+      - "CHANGELOG.md"
+      - "pubspec.yaml"
       - "lib/catalog_sort.dart"
       - "lib/home_screen.dart"
       - "test/catalog_sort_test.dart"
@@ -429,7 +432,7 @@ jobs:
 
   draft-release:
     name: Publish verified four-platform Release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3'
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]'))
     needs:
       - core-validation
       - windows-x64
@@ -449,14 +452,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_REF" != refs/tags/v* ]]; then
-            echo "正式 Release 僅接受 v 開頭的版本標籤。" >&2
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tag="$GITHUB_REF_NAME"
+            version="${tag#v}"
+          elif [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+            version="$(awk '$1 == "version:" { split($2, parts, "+"); print parts[1]; exit }' pubspec.yaml)"
+            tag="v$version"
+          else
+            echo "不支援的發布來源：$GITHUB_REF" >&2
             exit 1
           fi
-          tag="$GITHUB_REF_NAME"
-          version="${tag#v}"
           if [[ -z "$version" || "$tag" == "v1.0.3" ]]; then
-            echo "正式版本標籤無效或已排除：$tag" >&2
+            echo "版本標籤無效或已排除：$tag" >&2
             exit 1
           fi
 
@@ -514,14 +521,14 @@ jobs:
         with:
           tag_name: ${{ steps.release-files.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: D TV ${{ steps.release-files.outputs.version }} 正式版
+          name: D TV ${{ steps.release-files.outputs.version }}
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
           body: |
-            ## D TV ${{ steps.release-files.outputs.version }} 正式版
+            ## D TV ${{ steps.release-files.outputs.version }}
 
-            四個平台的正式建置與必要檢查已全部通過；Windows 提供免安裝 ZIP。
+            四個平台的建置與必要檢查已全部通過；Windows 提供免安裝 ZIP。
 
             ### 下載檔案
             - Android／Android TV：Universal APK（ARM64、ARMv7、x86_64）
@@ -531,13 +538,13 @@ jobs:
 
             ### SHA-256 檔案完整性驗證
 
-            以下為正式發布附件的 SHA-256 校驗碼。下載後可使用 SHA256SUMS.txt 進行比對。
+            以下為本次發布附件的 SHA-256 校驗碼。下載後可使用 SHA256SUMS.txt 進行比對。
 
             ```text
             ${{ steps.release-files.outputs.checksums }}
             ```
 
-            此版本已在四平台建置、檔案檢查及 SHA-256 校驗全部成功後自動正式發布。
+            此版本已通過四平台建置、檔案檢查及 SHA-256 校驗。\n\n完整更新內容與使用說明請參閱 [README](https://github.com/DickyR15/D-TV#) 及 [CHANGELOG](https://github.com/DickyR15/D-TV/blob/main/CHANGELOG.md)。
           files: |
             release-files/DTV-${{ steps.release-files.outputs.version }}-Android.apk
             release-files/DTV-${{ steps.release-files.outputs.version }}-Windows-Portable.zip
