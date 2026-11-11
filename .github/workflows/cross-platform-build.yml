@@ -442,6 +442,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Check out repository for release version metadata
+        uses: actions/checkout@v4
+
       - name: Download platform build artifacts
         uses: actions/download-artifact@v4
         with:
