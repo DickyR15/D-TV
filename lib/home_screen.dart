@@ -1801,13 +1801,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final savedView = widget.store.catalogView;
     final current = isDuoduo
         ? savedView.copyWith(sort: savedView.duoduoSort, release: '')
-        : effectiveCatalogView(savedView, items);
+        : effectiveCatalogView(
+            savedView,
+            items,
+            duoduoCatalog: false,
+          );
     final selected = await chooseCatalogView(
       context,
       current,
       availableSorts: isDuoduo
           ? duoduoSorts
-          : availableCatalogSorts(items),
+          : availableCatalogSorts(
+              items,
+              duoduoCatalog: false,
+            ),
       showReleaseFilter: !isDuoduo && hasCatalogReleaseStatus(items),
       loadedCount: items.length,
     );
@@ -1888,8 +1895,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
             candidates,
             fallbackSort: storedView.duoduoSort,
+            duoduoCatalog: true,
           )
-        : effectiveCatalogView(storedView, candidates);
+        : effectiveCatalogView(
+            storedView,
+            candidates,
+            duoduoCatalog: false,
+          );
     final result = sortCatalog(candidates, view);
     _visibleCacheItems = _items;
     _visibleCacheKey = cacheKey;
