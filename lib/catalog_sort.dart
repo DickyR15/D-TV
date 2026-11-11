@@ -213,6 +213,7 @@ int _descending(num? a, num? b) => a == null
 
 /// Sort options are offered only when the currently loaded source records
 /// actually contain the metadata required to make that sort meaningful.
+// Test-build trigger: combined-source sorting regression coverage.
 Set<CatalogSort> availableCatalogSorts(
   Iterable<Drama> rows, {
   bool duoduoCatalog = false,
