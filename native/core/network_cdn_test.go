@@ -474,21 +474,52 @@ func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testi
 }
 
 func TestHostDoHTransportDoesNotHandleOtherHostsOrProxyTraffic(t *testing.T) {
-	var direct,lookups atomic.Int32
-	base:=http.DefaultTransport.(*http.Transport).Clone()
-	base.Proxy=nil
-	base.DialContext=func(ctx context.Context,network,address string)(net.Conn,error){direct.Add(1);return nil,io.EOF}
-	resolver:=newDNSResolver(base)
-	resolver.endpoints=[]string{"https://dns.example.test/resolve"}
-	resolver.client.Transport=sourceFixtureTransport(func(request *http.Request)(*http.Response,error){lookups.Add(1);return sourceFixtureResponse(request,http.StatusOK,`{"Status":0,"Answer":[]}`),nil})
-	proxyCalls:=atomic.Int32{}
-	router:=&proxyRouter{}
-	router.system=nativeSystemProxy{HTTPS:"http://proxy.example.test:8080"}
-	router.systemOverride=true
-	transport:=&hostDoHTransport{base:base,resolver:resolver,router:router,host:"log.snssdk.com"}
-	request,_:=http.NewRequest(http.MethodPost,"https://example.test/register",strings.NewReader("body"))
-	_,_=transport.RoundTrip(request)
-	if lookups.Load()!=0{t.Fatalf("unrelated host triggered DoH: %d",lookups.Load())}
-	_ = proxyCalls
-	if hostDoHTransport{base:base,resolver:resolver,router:router,host:"log.snssdk.com"} == nil { t.Fatal("transport missing") }
+	var direct, lookups atomic.Int32
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.Proxy = nil
+	base.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		direct.Add(1)
+		return nil, io.EOF
+	}
+	resolver := newDNSResolver(base)
+	resolver.endpoints = []string{"https://dns.example.test/resolve"}
+	resolver.client.Transport = sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		lookups.Add(1)
+		return sourceFixtureResponse(request, http.StatusOK, `{"Status":0,"Answer":[]}`), nil
+	})
+	transport := &hostDoHTransport{base: base, resolver: resolver, host: "log.snssdk.com"}
+	request, _ := http.NewRequest(http.MethodPost, "https://example.test/register", strings.NewReader("body"))
+	if _, err := transport.RoundTrip(request); err == nil {
+		t.Fatal("unrelated host unexpectedly succeeded")
+	}
+	if direct.Load() != 1 || lookups.Load() != 0 {
+		t.Fatalf("unrelated host triggered DoH: direct=%d lookup=%d", direct.Load(), lookups.Load())
+	}
+
+	proxyRouter := &proxyRouter{}
+	proxyRouter.system = nativeSystemProxy{HTTPS: "http://proxy.example.test:8080"}
+	proxyRouter.systemOverride = true
+	proxyBase := http.DefaultTransport.(*http.Transport).Clone()
+	proxyCalls := atomic.Int32{}
+	proxyBase.Proxy = func(request *http.Request) (*url.URL, error) {
+		proxyCalls.Add(1)
+		return url.Parse("http://proxy.example.test:8080")
+	}
+	proxyBase.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		return nil, io.EOF
+	}
+	proxyResolver := newDNSResolver(proxyBase)
+	proxyResolver.endpoints = []string{"https://dns.example.test/resolve"}
+	proxyResolver.client.Transport = sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		t.Error("proxy request must not bypass the configured proxy through DoH")
+		return sourceFixtureResponse(request, http.StatusBadRequest, "{}"), nil
+	})
+	proxyTransport := &hostDoHTransport{base: proxyBase, resolver: proxyResolver, router: proxyRouter, host: "log.snssdk.com"}
+	proxyRequest, _ := http.NewRequest(http.MethodPost, "https://log.snssdk.com/service/2/device_register/", strings.NewReader("body"))
+	if _, err := proxyTransport.RoundTrip(proxyRequest); err == nil {
+		t.Fatal("proxy fixture unexpectedly succeeded")
+	}
+	if proxyCalls.Load() != 1 {
+		t.Fatalf("system proxy was not used: calls=%d", proxyCalls.Load())
+	}
 }
