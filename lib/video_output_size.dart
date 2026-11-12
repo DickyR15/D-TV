@@ -6,20 +6,44 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
-Size? videoDisplaySize(VideoParams parameters) {
-  final width = (parameters.dw ?? 0) > 0 ? parameters.dw! : parameters.w ?? 0;
-  final height = (parameters.dh ?? 0) > 0 ? parameters.dh! : parameters.h ?? 0;
-  if (width <= 0 || height <= 0) return null;
-  final rotation = (parameters.rotate ?? 0) % 180;
-  return rotation == 90
-      ? Size(height.toDouble(), width.toDouble())
-      : Size(width.toDouble(), height.toDouble());
+/// Converts coded/display dimensions and rotation into the visible frame size.
+Size? videoDisplaySizeForSource({
+  required Size? codedSize,
+  Size? displaySize,
+  int rotation = 0,
+}) {
+  final base = displaySize != null &&
+          displaySize.width > 0 &&
+          displaySize.height > 0
+      ? displaySize
+      : codedSize;
+  if (base == null ||
+      !base.width.isFinite ||
+      !base.height.isFinite ||
+      base.width <= 0 ||
+      base.height <= 0) {
+    return null;
+  }
+  return rotation.abs() % 180 == 90
+      ? Size(base.height, base.width)
+      : base;
 }
+
+Size? videoDisplaySize(VideoParams parameters) =>
+    videoDisplaySizeForSource(
+      codedSize: Size(
+        (parameters.w ?? 0).toDouble(),
+        (parameters.h ?? 0).toDouble(),
+      ),
+      displaySize: (parameters.dw ?? 0) > 0 && (parameters.dh ?? 0) > 0
+          ? Size(parameters.dw!.toDouble(), parameters.dh!.toDouble())
+          : null,
+      rotation: parameters.rotate ?? 0,
+    );
 
 /// Calculates an aspect-preserving MPV output size for the visible viewport.
 /// The result never exceeds source dimensions, avoiding wasteful upscaling.
-Size? videoOutputSizeForViewport(VideoParams parameters, Size viewport) {
-  final source = videoDisplaySize(parameters);
+Size? videoOutputSizeForSource(Size? source, Size viewport) {
   if (source == null ||
       !viewport.width.isFinite ||
       !viewport.height.isFinite ||
@@ -118,8 +142,8 @@ class VideoOutputSizeAdapter {
       }
       return;
     }
-    final desired = videoOutputSizeForViewport(
-      video.player.state.videoParams,
+    final desired = videoOutputSizeForSource(
+      videoDisplaySize(video.player.state.videoParams),
       target,
     );
     if (desired == null || desired == _lastWindowsSize) return;
