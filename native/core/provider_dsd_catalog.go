@@ -201,7 +201,7 @@ func dsdPagination(document *html.Node, pageURL, category, query string, page in
 		}
 	}
 	if activePage != page {
-		return 0, errors.New("帝果返回的页码与请求不符")
+		return 0, errors.New("帝果回傳的頁碼與要求不符")
 	}
 	pages := page
 	for _, anchor := range providerHTMLNodes(pagination, func(node *html.Node) bool { return node.Data == "a" }) {
