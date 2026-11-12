@@ -335,7 +335,7 @@ func (d *Downloader) fetchHeitaoDetail(ctx context.Context, sourceID string) (Dr
 		}
 	}
 	if name == "" {
-		return Drama{}, nil, errors.New("黑桃详情缺少剧名")
+		return Drama{}, nil, errors.New("黑桃詳情缺少劇名")
 	}
 	chapters := heitaoChapters(document, site, sourceID)
 	if len(chapters) == 0 {
@@ -395,7 +395,7 @@ func heitaoReadPlayerConfig(body string) (heitaoPlayerEntry, error) {
 	var entry heitaoPlayerEntry
 	index := strings.Index(body, "player_aaaa")
 	if index < 0 {
-		return entry, errors.New("黑桃播放器未返回配置")
+		return entry, errors.New("黑桃播放器未提供設定")
 	}
 	text := body[index:]
 	open := strings.Index(text, "{")
