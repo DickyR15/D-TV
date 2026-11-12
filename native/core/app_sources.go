@@ -98,11 +98,11 @@ func (engine *nativeEngine) loadSourceRecords() {
 		if record.Running {
 			record.Running = false
 			record.Stage = "任务已中断"
-			record.Error = "上次任务未完成，已保留已更新内容，可重新开始"
+			record.Error = "上次任務未完成，已保留更新內容，可重新開始"
 		}
 		if record.NeedsSave {
 			record.NeedsSave = false
-			record.Stage = "上次保存未完成"
+			record.Stage = "上次儲存未完成"
 			record.Error = "已恢復可讀取的快取，請重新更新"
 			for key, state := range engine.catalogStates {
 				if key == source || strings.HasPrefix(key, source+"|") {
@@ -123,7 +123,7 @@ func (engine *nativeEngine) saveSourceRecordsLocked() error {
 	if err == nil {
 		err = writeNativeCacheFile(filepath.Join(engine.directory, "sources.json"), body)
 	}
-	engine.sourceSaveError = nativeSaveError("站源任务记录", err)
+	engine.sourceSaveError = nativeSaveError("片源任務紀錄", err)
 	return engine.sourceSaveError
 }
 
@@ -148,7 +148,7 @@ func (engine *nativeEngine) sourceStatusLocked(source string) nativeSourceStatus
 		}
 	}
 	if warning != "" && !record.Running && stage == "已完成" {
-		stage = "等待保存"
+		stage = "等待儲存"
 	}
 	return nativeSourceStatus{Source: source, Count: len(engine.catalogs[source]), UnknownVIP: unknownVIP, Page: max(1, state.Page), HasMore: !found || state.HasMore,
 		UpdatedAt: state.UpdatedAt, Operation: record.Operation, Running: record.Running, Stage: stage,
@@ -203,7 +203,7 @@ func (engine *nativeEngine) startSourceTask(source, operation string, drama nati
 	previous := engine.sourceRecords[source]
 	if time.Now().Before(previous.RetryAt) {
 		engine.mu.Unlock()
-		return nativeSourceStatus{}, fmt.Errorf("站源暂时暂停请求，请在 %d 秒后重试", max(1, int(time.Until(previous.RetryAt).Seconds()+.999)))
+		return nativeSourceStatus{}, fmt.Errorf("片源暫時停止接受要求，請在 %d 秒後重試", max(1, int(time.Until(previous.RetryAt).Seconds()+.999)))
 	}
 	timeout := 3 * time.Minute
 	if canonicalProviderSource(source) == sourceHongguo && (operation == "update" || operation == "metadata") {
@@ -272,13 +272,13 @@ func (engine *nativeEngine) runSourceTask(ctx context.Context, source, operation
 			var persistence *nativePersistenceError
 			if errors.As(err, &persistence) {
 				record.NeedsSave, record.Error = engine.catalogSaveError != nil, ""
-				record.Stage = "已保存，可继续更新"
+				record.Stage = "已儲存，可繼續更新"
 				if record.NeedsSave {
-					record.Stage = "等待保存"
+					record.Stage = "等待儲存"
 				}
 			}
 			if errors.Is(err, context.Canceled) {
-				record.Stage, record.Error = "已停止", "已保留更新内容，可稍后继续"
+				record.Stage, record.Error = "已停止", "已保留更新內容，可稍後繼續"
 			}
 			if errors.Is(err, context.DeadlineExceeded) &&
 				errors.Is(taskContextErr, context.DeadlineExceeded) {
@@ -695,7 +695,7 @@ func (engine *nativeEngine) loadMoreSourceCatalogPages(ctx context.Context, sour
 			page = 1
 		}
 		if page > 1000000 {
-			return errors.New("站源分页已达到接口范围，已保留目录位置")
+			return errors.New("片源分頁已達介面範圍，已保留目錄位置")
 		}
 		if err := engine.loadSourceCatalogPage(ctx, source, page); err != nil {
 			return err
