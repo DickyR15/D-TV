@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"encoding/json"
 	"net/http"
 	"reflect"
@@ -164,4 +165,15 @@ func mustJSONTestString(t *testing.T, value string) string {
 		t.Fatal(err)
 	}
 	return string(encoded)
+}
+
+
+func TestSelectHongguoAppMediaReportsH266OnlyForHelperFallback(t *testing.T) {
+	model := map[string]any{"video_list": []any{
+		map[string]any{"main_url":"https://media.test/h266.mp4","video_meta":map[string]any{"codec_type":"bytevc2","definition":"1080p"}},
+	}}
+	_, err := selectHongguoAppMedia(model)
+	if !errors.Is(err, errHongguoH266Only) {
+		t.Fatalf("H.266-only response error = %v, want errHongguoH266Only", err)
+	}
 }
