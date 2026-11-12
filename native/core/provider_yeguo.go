@@ -55,7 +55,7 @@ func (d *Downloader) fetchYeguoCategories(ctx context.Context) ([]nativeCategory
 	}
 	filters, valid := data["video_filter"].(map[string]any)
 	if !valid {
-		return nil, errors.New("野果分类数据格式无效")
+		return nil, errors.New("野果分類資料格式無效")
 	}
 	var categories []nativeCategory
 	seen := map[string]bool{}
@@ -73,7 +73,7 @@ func (d *Downloader) fetchYeguoCategories(ctx context.Context) ([]nativeCategory
 			}
 			id := field + ":" + value
 			if !validYeguoCategory(id) || name == "" || len([]rune(name)) > 48 || seen[id] {
-				return nil, errors.New("野果分类数据包含无效或重复条目")
+				return nil, errors.New("野果分類資料包含無效或重複項目")
 			}
 			seen[id] = true
 			categories = append(categories, nativeCategory{ID: id, Name: name})
@@ -131,7 +131,7 @@ func yeguoDramaFromMap(row map[string]any, site string) (Drama, error) {
 
 func (d *Downloader) fetchYeguoCatalogPage(ctx context.Context, page int, category, query string) ([]Drama, bool, error) {
 	if page < 1 || page > 1000000 || len(query) > 1024 || category != "" && !validYeguoCategory(category) {
-		return nil, false, errors.New("野果目录查询参数无效")
+		return nil, false, errors.New("野果目錄查詢參數無效")
 	}
 	route := "/api/theater/exploreList"
 	values := url.Values{"page": {strconv.Itoa(page)}, "limit": {"20"}}
@@ -149,10 +149,10 @@ func (d *Downloader) fetchYeguoCatalogPage(ctx context.Context, page int, catego
 	}
 	rows, valid := data["list"].([]any)
 	if !valid || len(rows) > 500 {
-		return nil, false, errors.New("野果目录格式无效")
+		return nil, false, errors.New("野果目錄格式無效")
 	}
 	if actualPage, pageValid := webProviderInteger(firstPresent(data, "page", "page_num", "pageNum", "current_page", "currentPage"), 1000000); pageValid && actualPage != page {
-		return nil, false, errors.New("野果分页信息无效，请重试")
+		return nil, false, errors.New("野果分頁資訊無效，請重試")
 	}
 	limit, limitValid := webProviderInteger(firstPresent(data, "limit", "page_size", "pageSize", "per_page", "perPage"), 500)
 	if !limitValid || limit < 1 || limit < len(rows) {
@@ -169,12 +169,12 @@ func (d *Downloader) fetchYeguoCatalogPage(ctx context.Context, page int, catego
 	if data["has_more"] != nil {
 		more, valid := yeguoFlag(data["has_more"])
 		if !valid {
-			return nil, false, errors.New("野果分页信息无效，请重试")
+			return nil, false, errors.New("野果分頁資訊無效，請重試")
 		}
 		hasMore = more
 	}
 	if hasMore && len(rows) == 0 {
-		return nil, false, errors.New("野果未返回应有的目录页，请重试")
+		return nil, false, errors.New("野果未提供預期的目錄頁，請重試")
 	}
 	items := make([]Drama, 0, len(rows))
 	seen := map[string]bool{}
@@ -185,7 +185,7 @@ func (d *Downloader) fetchYeguoCatalogPage(ctx context.Context, page int, catego
 			return nil, false, err
 		}
 		if seen[drama.ID] {
-			return nil, false, errors.New("野果目录包含重复剧集")
+			return nil, false, errors.New("野果目錄包含重複集數")
 		}
 		seen[drama.ID] = true
 		items = append(items, drama)
@@ -221,7 +221,7 @@ func (d *Downloader) fetchYeguoDetail(ctx context.Context, sourceID string) (Dra
 	}
 	episodes, valid := row["episodes"].([]any)
 	if !valid || len(episodes) > 10000 {
-		return Drama{}, nil, errors.New("野果分集目录格式无效")
+		return Drama{}, nil, errors.New("野果分集目錄格式無效")
 	}
 	chapters := make([]Chapter, 0, len(episodes))
 	seenIDs, seenNumbers := map[string]bool{}, map[int]bool{}
@@ -266,11 +266,11 @@ func (d *Downloader) resolveYeguoMedia(ctx context.Context, task Task) (provider
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
 	prefix := providerChapterID(sourceYeguo, sourceID, "")
 	if !valid || source != sourceYeguo || !webProviderNumericID.MatchString(sourceID) || !strings.HasPrefix(task.Chapter.ID, prefix) {
-		return providerMedia{}, errors.New("野果播放分集信息无效，请刷新详情")
+		return providerMedia{}, errors.New("野果播放集數資訊無效，請重新整理詳情")
 	}
 	episodeID := strings.TrimPrefix(task.Chapter.ID, prefix)
 	if !webProviderNumericID.MatchString(episodeID) {
-		return providerMedia{}, errors.New("野果播放分集 ID 无效")
+		return providerMedia{}, errors.New("野果播放集數 ID 無效")
 	}
 	row, err := d.yeguoClient().call(ctx, "/api/playlet/play", url.Values{
 		"playlet_id": {sourceID}, "video_id": {sourceID}, "episode_id": {episodeID},
@@ -279,14 +279,14 @@ func (d *Downloader) resolveYeguoMedia(ctx context.Context, task Task) (provider
 		return providerMedia{}, err
 	}
 	if mapString(row, "playlet_id") != sourceID || mapString(row, "id") != episodeID {
-		return providerMedia{}, errors.New("野果返回的播放地址与请求分集不符")
+		return providerMedia{}, errors.New("野果回傳的播放網址與要求的集數不符")
 	}
 	if advertisement, _ := yeguoFlag(row["is_adv"]); advertisement {
 		return providerMedia{}, errors.New("野果未返回该集正片，请重试")
 	}
 	number, valid := webProviderInteger(row["episode_sort"], 100000)
 	if !valid || number < 1 {
-		return providerMedia{}, errors.New("野果播放分集编号无效")
+		return providerMedia{}, errors.New("野果播放集數編號無效")
 	}
 	referer := yeguoEpisodePage(d.yeguoClient().siteURL(), sourceID, number)
 	quality := yeguoMediaQuality(mapString(row, "resolution"))
@@ -309,7 +309,7 @@ func (d *Downloader) resolveYeguoMedia(ctx context.Context, task Task) (provider
 		options = append(options, media)
 	}
 	if len(options) == 0 {
-		return providerMedia{}, errors.New("野果未提供该集播放地址，请重试或确认站源权限")
+		return providerMedia{}, errors.New("野果未提供此集播放網址，請重試或確認片源權限")
 	}
 	media := options[0]
 	media.Variants = options
