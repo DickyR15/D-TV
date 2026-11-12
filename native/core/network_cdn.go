@@ -62,6 +62,82 @@ func newHTTP1NoALPNTransport(base *http.Transport) *http.Transport {
 	return transport
 }
 
+// hostDoHTransport retries only one HTTPS host through verified DoH.
+// It preserves the request hostname for Host/SNI/certificate verification.
+type hostDoHTransport struct {
+	base *http.Transport
+	resolver *dnsResolver
+	router *proxyRouter
+	host string
+	mu sync.Mutex
+	preferred cdnRoute
+}
+
+func (transport *hostDoHTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if !strings.EqualFold(request.URL.Hostname(), transport.host) || request.URL.Scheme != "https" {
+		return transport.base.RoundTrip(request)
+	}
+	if transport.router != nil {
+		proxy, proxyErr := transport.router.proxy(request)
+		if proxyErr != nil || proxy != nil {
+			return transport.base.RoundTrip(request)
+		}
+	}
+	transport.mu.Lock()
+	preferred := transport.preferred
+	transport.mu.Unlock()
+	if preferred.address != "" && time.Now().Before(preferred.expires) {
+		response, err := transport.roundTripAddress(request, preferred.address)
+		if err == nil { return response, nil }
+		if request.Context().Err() != nil { return nil, request.Context().Err() }
+	}
+	response, err := transport.base.RoundTrip(request)
+	if err == nil { return response, nil }
+	if request.Context().Err() != nil { return nil, request.Context().Err() }
+	entry, lookupErr := transport.resolver.lookupEntry(request.Context(), request.URL.Hostname(), "")
+	if lookupErr != nil {
+		return nil, fmt.Errorf("紅果設備註冊 DNS 解析失敗：%w", publicError(errors.Join(err, lookupErr)))
+	}
+	lastErr := err
+	for _, address := range entry.addresses {
+		response, retryErr := transport.roundTripAddress(request, address)
+		if retryErr == nil {
+			transport.mu.Lock()
+			transport.preferred = cdnRoute{address: address, expires: entry.expires}
+			transport.mu.Unlock()
+			return response, nil
+		}
+		if request.Context().Err() != nil { return nil, request.Context().Err() }
+		lastErr = retryErr
+	}
+	return nil, fmt.Errorf("紅果設備註冊 %s 連線失敗（已嘗試備用 DNS）: %w", request.URL.Hostname(), publicError(lastErr))
+}
+
+func (transport *hostDoHTransport) roundTripAddress(request *http.Request, address string) (*http.Response, error) {
+	clone := transport.base.Clone()
+	previousDial := transport.base.DialContext
+	if previousDial == nil {
+		previousDial = (&net.Dialer{Timeout: 30*time.Second, KeepAlive: 30*time.Second}).DialContext
+	}
+	clone.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return previousDial(ctx, network, net.JoinHostPort(address, "443"))
+	}
+	attempt := request.Clone(request.Context())
+	if request.Body != nil {
+		if request.GetBody == nil {
+			return nil, errors.New("紅果註冊請求不支援安全重試")
+		}
+		body, err := request.GetBody()
+		if err != nil { return nil, err }
+		attempt.Body = body
+	}
+	return clone.RoundTrip(attempt)
+}
+
+func (transport *hostDoHTransport) CloseIdleConnections() {
+	transport.base.CloseIdleConnections()
+}
+
 type cdnTransport struct {
 	base                        *http.Transport
 	resolver                    *dnsResolver
