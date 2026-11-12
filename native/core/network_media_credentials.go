@@ -61,7 +61,7 @@ func (credentials *providerMediaCredentials) client(client *http.Client) *http.C
 	previousRedirect := client.CheckRedirect
 	scoped.CheckRedirect = func(request *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
-			return errors.New("媒体重定向过多")
+			return errors.New("媒體重新導向次數過多")
 		}
 		if previousRedirect != nil {
 			if err := previousRedirect(request, via); err != nil {
