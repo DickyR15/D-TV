@@ -199,10 +199,10 @@ func (manager *nativeDownloads) saveLocked() error {
 		return err
 	}
 	if len(data) > 32<<20 {
-		return errors.New("下载记录超过保存上限，原索引已保留")
+		return errors.New("下載紀錄超過儲存上限，原索引已保留")
 	}
 	if err = nativeDownloadWrite(filepath.Join(manager.root, "index.json"), data); err != nil {
-		return errors.New("保存下载记录失败，请检查剩余存储空间")
+		return errors.New("儲存下載紀錄失敗，請檢查剩餘儲存空間")
 	}
 	manager.lastSaved = time.Now()
 	return nil
@@ -241,20 +241,20 @@ func (manager *nativeDownloads) enqueueContext(ctx context.Context, input native
 		return 0, errors.New("劇集資訊無效")
 	}
 	if len(input.Entries) == 0 || len(input.Entries) > 500 {
-		return 0, errors.New("请选择 1 至 500 集加入下载")
+		return 0, errors.New("請選取 1 至 500 集加入下載")
 	}
 	for _, entry := range input.Entries {
 		if !nativeChapterAvailable(input.Drama, entry.Chapter) {
 			return 0, errNativeBuildSource
 		}
 		if entry.Index < 1 || entry.Index > 100000 {
-			return 0, errors.New("下载集数无效")
+			return 0, errors.New("下載集數無效")
 		}
 	}
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	if manager.closed || manager.moving {
-		return 0, errors.New("下载目录正在迁移或队列已关闭，请稍后重试")
+		return 0, errors.New("下載目錄正在搬移或佇列已關閉，請稍後重試")
 	}
 	if manager.loadErr != nil {
 		return 0, manager.loadErr
@@ -288,7 +288,7 @@ func (manager *nativeDownloads) enqueueContext(ctx context.Context, input native
 				if existing.Archived {
 					if tasks >= 5000 {
 						rollback()
-						return 0, errors.New("下载任务已满，请先清理已完成任务")
+						return 0, errors.New("下載任務已達上限，請先清理已完成的任務")
 					}
 					tasks++
 				}
@@ -300,7 +300,7 @@ func (manager *nativeDownloads) enqueueContext(ctx context.Context, input native
 		}
 		if tasks >= 5000 {
 			rollback()
-			return 0, errors.New("下载记录已满，请清理不再需要的任务")
+			return 0, errors.New("下載紀錄已達上限，請清理不再需要的任務")
 		}
 		manager.jobs[id] = &nativeDownloadRecord{nativeDownloadJob: nativeDownloadJob{
 			ID: id, Drama: input.Drama, Chapter: entry.Chapter, Index: entry.Index,
@@ -330,7 +330,7 @@ func (manager *nativeDownloads) controlExpected(id, action, version string) erro
 		return manager.loadErr
 	}
 	if manager.closed || manager.moving {
-		return errors.New("下载目录正在迁移或队列已关闭，请稍后重试")
+		return errors.New("下載目錄正在搬移或佇列已關閉，請稍後重試")
 	}
 	if action == "remove" && manager.mediaBusy {
 		return errors.New("请等待合并或导出完成后再删除分集")
@@ -366,7 +366,7 @@ func (manager *nativeDownloads) controlExpected(id, action, version string) erro
 	case "pause", "resume", "remove", "archive", "restore":
 		job := manager.jobs[id]
 		if job == nil {
-			return errors.New("下载任务不存在，请刷新列表")
+			return errors.New("下載任務不存在，請重新整理清單")
 		}
 		if !nativeDownloadAvailable(job.nativeDownloadJob) {
 			return errNativeBuildSource
@@ -375,7 +375,7 @@ func (manager *nativeDownloads) controlExpected(id, action, version string) erro
 		switch action {
 		case "archive", "restore":
 			if job.State != "completed" {
-				return errors.New("只能清理已完成的下载任务，未完成的分集请先暂停或取消")
+				return errors.New("僅能清理已完成的下載任務；未完成的集數請先暫停或取消")
 			}
 			if action == "restore" && job.Archived && manager.unarchivedCountLocked() >= 5000 {
 				return errors.New("下載任務已達上限，請先清理其他已完成任務；影片仍會保留")
@@ -395,7 +395,7 @@ func (manager *nativeDownloads) controlExpected(id, action, version string) erro
 			cancelIDs = append(cancelIDs, id)
 		}
 	default:
-		return errors.New("不支持的下载操作")
+		return errors.New("不支援的下載操作")
 	}
 	if err := manager.saveLocked(); err != nil {
 		for key, value := range previous {
