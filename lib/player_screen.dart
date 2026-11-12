@@ -1619,7 +1619,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       await Future<void>.value();
       if (store.profileEpoch != _profileEpoch) return;
       if (widget.mediaId == null) {
-        await store.saveWatch(entry);
+        await store.saveWatch(entry, notify: flush);
         if (flush) LanController.current?.flush();
       } else {
         await store.saveMediaWatch(widget.mediaId!, entry);
