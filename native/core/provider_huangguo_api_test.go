@@ -34,7 +34,7 @@ func huangguoEdgeReply(data any) string {
 	return string(body)
 }
 
-func TestHuangguoAIDetailAndPlaybackUseEdgeAPI(t *testing.T) {
+func TestHuangguoAIDetailUsesEdgeAPI(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		if request.URL.Hostname() != "huangguoai.com" {
 			return nil, errors.New("only synthetic huangguoai requests are allowed")
@@ -46,11 +46,6 @@ func TestHuangguoAIDetailAndPlaybackUseEdgeAPI(t *testing.T) {
 				"id": 12, "title": "合成劇", "description": "合成簡介", "cover": "/covers/12.jpg", "episode_count": 2, "is_finished": false,
 				"episodes": []any{map[string]any{"ep_num": 2, "title": "第2集"}, map[string]any{"ep_num": 1, "title": ""}},
 			})), nil
-		case "/api/videos/12/play":
-			if target.Query().Get("ep") != "2" {
-				t.Errorf("requested the wrong episode: %s", target)
-			}
-			return sourceFixtureResponse(request, 200, huangguoEdgeReply(map[string]any{"video_url": "https://media.example.test/12/2.mp4?auth_key=synthetic"})), nil
 		}
 		return sourceFixtureResponse(request, 200, `{"status":0,"msg":"合成劇集不存在"}`), nil
 	})
@@ -64,26 +59,8 @@ func TestHuangguoAIDetailAndPlaybackUseEdgeAPI(t *testing.T) {
 	if chapterEpisodeNumber(chapters[0], 0) != 1 || chapterEpisodeNumber(chapters[1], 0) != 2 {
 		t.Fatal("episode numbers could not be recovered from the API chapter metadata", chapters)
 	}
-	media, err := d.resolveProviderMedia(context.Background(), Task{DramaID: drama.ID, Chapter: chapters[1], Index: 2})
-	if err != nil || media.URL != "https://media.example.test/12/2.mp4?auth_key=synthetic" {
-		t.Fatal("playback did not use the play API", err, media)
-	}
 	if _, _, err := d.fetchHuangguoAIDetail(context.Background(), "13"); err == nil || !strings.Contains(err.Error(), "合成劇集不存在") {
 		t.Fatal("upstream failure message was discarded", err)
-	}
-}
-
-func TestHuangguoAIPlayURLRejectsEmptyResponse(t *testing.T) {
-	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
-		target := huangguoEdgeTarget(t, request)
-		if target.Path != "/api/videos/12/play" || target.Query().Get("ep") != "2" {
-			return nil, errors.New("unexpected synthetic playback endpoint")
-		}
-		return sourceFixtureResponse(request, 200, huangguoEdgeReply(map[string]any{"video_url": ""})), nil
-	})
-	if address, err := d.fetchHuangguoAIPlayURL(context.Background(), "12", 2); err == nil || address != "" ||
-		!strings.Contains(err.Error(), "黃果 AI 播放介面未提供有效的播放網址") {
-		t.Fatalf("empty play response should return a specific source error: address=%q err=%v", address, err)
 	}
 }
 

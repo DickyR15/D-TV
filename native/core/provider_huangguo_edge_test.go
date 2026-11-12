@@ -32,7 +32,9 @@ func huangguoEdgeTestResponse(request *http.Request, status int, payload any) (*
 	}, nil
 }
 
-func TestHuangguoAIEncryptedPlaybackUsesNewEdgeProtocol(t *testing.T) {
+func newHuangguoEdgePlaybackTestDownloader(t *testing.T, playbackData map[string]any) *Downloader {
+	t.Helper()
+
 	serverPrivate, err := ecdh.P256().GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +98,10 @@ func TestHuangguoAIEncryptedPlaybackUsesNewEdgeProtocol(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		requestGCM, _ := huangguoEdgeNewGCM(requestKey)
+		requestGCM, err := huangguoEdgeNewGCM(requestKey)
+		if err != nil {
+			t.Fatal(err)
+		}
 		plain, err := requestGCM.Open(nil, huangguoEdgeNonce(seq), ciphertext,
 			huangguoEdgeAAD(info, "req", seq, timestamp))
 		if err != nil {
@@ -107,25 +112,31 @@ func TestHuangguoAIEncryptedPlaybackUsesNewEdgeProtocol(t *testing.T) {
 			t.Fatal(err)
 		}
 		innerRequest := packet["request"].(map[string]any)
-		decodedBody, _ := base64.StdEncoding.DecodeString(innerRequest["body"].(string))
+		decodedBody, err := base64.StdEncoding.DecodeString(innerRequest["body"].(string))
+		if err != nil {
+			t.Fatal(err)
+		}
 		if innerRequest["method"] != http.MethodPost ||
 			innerRequest["path"] != "/api/videos/123/episodes/2/playback" ||
 			string(decodedBody) != "{}" || len(innerRequest["visitor_id"].(string)) != 32 {
 			t.Fatalf("wrong encrypted business request: %#v", innerRequest)
 		}
 
-		responseBody, _ := json.Marshal(map[string]any{
-			"data": map[string]any{
-				"streams": map[string]any{
-					"main": "https://media.example.test/123/2/index.m3u8",
-				},
-			},
-		})
-		inner, _ := json.Marshal(map[string]any{
+		responseBody, err := json.Marshal(playbackData)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inner, err := json.Marshal(map[string]any{
 			"status": http.StatusOK,
 			"body": base64.StdEncoding.EncodeToString(responseBody),
 		})
-		responseGCM, _ := huangguoEdgeNewGCM(responseKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		responseGCM, err := huangguoEdgeNewGCM(responseKey)
+		if err != nil {
+			t.Fatal(err)
+		}
 		encrypted := responseGCM.Seal(nil, huangguoEdgeNonce(seq), inner,
 			huangguoEdgeAAD(info, "res", seq, timestamp))
 		result := map[string]any{
@@ -135,6 +146,17 @@ func TestHuangguoAIEncryptedPlaybackUsesNewEdgeProtocol(t *testing.T) {
 		}
 		return huangguoEdgeTestResponse(request, http.StatusOK, result)
 	})}
+	return d
+}
+
+func TestHuangguoAIEncryptedPlaybackUsesNewEdgeProtocol(t *testing.T) {
+	d := newHuangguoEdgePlaybackTestDownloader(t, map[string]any{
+		"data": map[string]any{
+			"streams": map[string]any{
+				"main": "https://media.example.test/123/2/index.m3u8",
+			},
+		},
+	})
 
 	address, err := d.fetchHuangguoAIPlayURL(context.Background(), "123", 2)
 	if err != nil {
@@ -142,5 +164,21 @@ func TestHuangguoAIEncryptedPlaybackUsesNewEdgeProtocol(t *testing.T) {
 	}
 	if address != "https://media.example.test/123/2/index.m3u8" {
 		t.Fatalf("unexpected playback address: %q", address)
+	}
+}
+
+func TestHuangguoAIEncryptedPlaybackRejectsEmptyStreams(t *testing.T) {
+	d := newHuangguoEdgePlaybackTestDownloader(t, map[string]any{
+		"data": map[string]any{
+			"streams": map[string]any{
+				"main": "", "preview": "", "hevc": "",
+			},
+		},
+	})
+
+	address, err := d.fetchHuangguoAIPlayURL(context.Background(), "123", 2)
+	if err == nil || address != "" ||
+		!strings.Contains(err.Error(), "黃果 AI 新版播放接口未提供有效的串流位址") {
+		t.Fatalf("empty encrypted play response should return a specific source error: address=%q err=%v", address, err)
 	}
 }
