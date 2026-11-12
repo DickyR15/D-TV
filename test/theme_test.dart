@@ -256,7 +256,7 @@ void main() {
     expect(find.text('設定與備份'), findsNothing);
     expect(find.byKey(const ValueKey('open-settings-route')), findsOneWidget);
   });
-}
+
   test('pure black dark theme uses black OLED surfaces', () {
     final theme = AppTheme.darkFor(null, pureBlack: true);
     expect(theme.brightness, Brightness.dark);
