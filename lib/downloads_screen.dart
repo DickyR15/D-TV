@@ -358,7 +358,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   List<Widget> _titleActions(List<DownloadCollection> collections) => [
     if (_selecting) ...[
       IconButton(
-        tooltip: '全選當前',
+        tooltip: '全選目前',
         onPressed: _busy
             ? null
             : () => _select(collections.expand((c) => c.jobs)),
