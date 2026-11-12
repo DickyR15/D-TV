@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -15,15 +16,40 @@ Size? videoDisplaySize(VideoParams parameters) {
       : Size(width.toDouble(), height.toDouble());
 }
 
+/// Calculates an aspect-preserving MPV output size for the visible viewport.
+/// The result never exceeds source dimensions, avoiding wasteful upscaling.
+Size? videoOutputSizeForViewport(VideoParams parameters, Size viewport) {
+  final source = videoDisplaySize(parameters);
+  if (source == null ||
+      !viewport.width.isFinite ||
+      !viewport.height.isFinite ||
+      viewport.width <= 0 ||
+      viewport.height <= 0) {
+    return null;
+  }
+  final scale = math.min(
+    1.0,
+    math.min(viewport.width / source.width, viewport.height / source.height),
+  );
+  return Size(
+    math.max(1, (source.width * scale).round()).toDouble(),
+    math.max(1, (source.height * scale).round()).toDouble(),
+  );
+}
+
 class VideoOutputSizeAdapter {
   VideoOutputSizeAdapter(this.video, {required this.onFailure});
 
   static const _channel = MethodChannel('com.alexmercerind/media_kit_video');
+  static const _windowsResizeDelay = Duration(milliseconds: 300);
+
   final VideoController video;
   final void Function() onFailure;
   Future<void>? _initialization;
   StreamSubscription<VideoParams>? _subscription;
+  Timer? _windowsResizeTimer;
   Size? _target;
+  Size? _lastWindowsSize;
   bool _closed = false;
 
   Size? get actualSize => video.rect.value?.size;
@@ -33,14 +59,18 @@ class VideoOutputSizeAdapter {
   Future<void> _initialize() async {
     await video.platform.future;
     if (_closed) return;
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isWindows) {
       _subscription = video.player.stream.videoParams.listen((_) {
         if (_closed || _target == null) return;
-        unawaited(
-          _resizeAndroid().catchError((Object _) {
-            if (!_closed) onFailure();
-          }),
-        );
+        if (Platform.isAndroid) {
+          unawaited(
+            _resizeAndroid().catchError((Object _) {
+              if (!_closed) onFailure();
+            }),
+          );
+        } else {
+          _scheduleWindowsResize();
+        }
       });
     }
   }
@@ -55,12 +85,50 @@ class VideoOutputSizeAdapter {
     _target = normalized;
     if (Platform.isAndroid) {
       await _resizeAndroid();
+    } else if (Platform.isWindows) {
+      if (changed || normalized == null) _scheduleWindowsResize();
     } else if (changed || normalized == null) {
       await video.setSize(
         width: normalized?.width.toInt(),
         height: normalized?.height.toInt(),
       );
     }
+  }
+
+  void _scheduleWindowsResize() {
+    if (_closed) return;
+    _windowsResizeTimer?.cancel();
+    _windowsResizeTimer = Timer(_windowsResizeDelay, () {
+      _windowsResizeTimer = null;
+      unawaited(
+        _resizeWindows().catchError((Object _) {
+          if (!_closed) onFailure();
+        }),
+      );
+    });
+  }
+
+  Future<void> _resizeWindows() async {
+    if (_closed) return;
+    final target = _target;
+    if (target == null) {
+      if (_lastWindowsSize != null) {
+        await video.setSize(width: null, height: null);
+        _lastWindowsSize = null;
+      }
+      return;
+    }
+    final desired = videoOutputSizeForViewport(
+      video.player.state.videoParams,
+      target,
+    );
+    if (desired == null || desired == _lastWindowsSize) return;
+    await video.setSize(
+      width: desired.width.round(),
+      height: desired.height.round(),
+    );
+    if (_closed) return;
+    _lastWindowsSize = desired;
   }
 
   Future<void> _resizeAndroid() async {
@@ -85,6 +153,8 @@ class VideoOutputSizeAdapter {
 
   Future<void> close() async {
     _closed = true;
+    _windowsResizeTimer?.cancel();
+    _windowsResizeTimer = null;
     await _initialization;
     await _subscription?.cancel();
   }
