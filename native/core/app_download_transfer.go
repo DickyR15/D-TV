@@ -42,7 +42,7 @@ func (manager *nativeDownloads) transferMedia(ctx context.Context, job nativeDow
 	bundle := nativeDownloadBundle{quality: media.Quality, playlists: map[string][]byte{}}
 	parsed, err := url.Parse(media.URL)
 	if err != nil || !isProviderHTTPMediaURL(media.URL) {
-		return nativeDownloadResult{}, errors.New("下载地址无效")
+		return nativeDownloadResult{}, errors.New("下載網址無效")
 	}
 	hls := media.Playlist != "" || strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8")
 	entry := "media.mp4"
@@ -69,11 +69,11 @@ func (manager *nativeDownloads) transferMedia(ctx context.Context, job nativeDow
 	previous, _ := os.ReadFile(marker)
 	if len(previous) > 0 && string(previous) != hex.EncodeToString(fingerprint[:]) {
 		if err := os.RemoveAll(directory); err != nil {
-			return nativeDownloadResult{}, errors.New("无法替换旧的下载文件")
+			return nativeDownloadResult{}, errors.New("無法取代舊的下載檔案")
 		}
 	}
 	if err := os.MkdirAll(directory, 0700); err != nil {
-		return nativeDownloadResult{}, errors.New("无法创建下载文件，请检查存储空间")
+		return nativeDownloadResult{}, errors.New("無法建立下載檔案，請檢查儲存空間")
 	}
 	if err := nativeDownloadWrite(marker, []byte(hex.EncodeToString(fingerprint[:]))); err != nil {
 		return nativeDownloadResult{}, err
@@ -170,12 +170,12 @@ func (manager *nativeDownloads) downloadFile(ctx context.Context, address, refer
 		}
 		offset, metadata = 0, nativeDownloadFileState{}
 	}
-	return 0, errors.New("服务器无法恢复下载，请重试")
+	return 0, errors.New("伺服器無法接續下載，請重試")
 }
 
 func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address, referer, target string, key bool, offset int64, old nativeDownloadFileState, progress func(int64, int64)) (int64, bool, error) {
 	if !isProviderHTTPMediaURL(address) {
-		return 0, false, errors.New("媒体下载地址无效")
+		return 0, false, errors.New("媒体下載網址無效")
 	}
 	requestCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -196,7 +196,7 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 	client.Timeout = 0
 	response, err := manager.engine.downloader.doMediaRequestWithClient(request, &client)
 	if err != nil {
-		return 0, false, errors.New("下载连接中断，请检查网络后继续")
+		return 0, false, errors.New("下載連線中斷，請檢查網路後繼續")
 	}
 	defer response.Body.Close()
 	if offset > 0 && (response.StatusCode == http.StatusRequestedRangeNotSatisfiable || response.StatusCode == http.StatusPreconditionFailed) {
@@ -213,7 +213,7 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 	}
 	contentType := strings.ToLower(response.Header.Get("Content-Type"))
 	if !key && (strings.Contains(contentType, "text/html") || strings.Contains(contentType, "application/json")) {
-		return 0, false, errors.New("站源返回了错误页面，请刷新下载地址后重试")
+		return 0, false, errors.New("片源回傳錯誤頁面，請重新整理下載網址後重試")
 	}
 	total := response.ContentLength
 	validator := nativeDownloadValidator(response.Header)
@@ -228,7 +228,7 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 		total = full
 	}
 	if key && (total > 64 || offset > 0) {
-		return 0, false, errors.New("视频密钥格式无效")
+		return 0, false, errors.New("影片金鑰格式無效")
 	}
 	metadata := nativeDownloadFileState{URL: address, Validator: validator, Total: total}
 	encoded, _ := json.Marshal(metadata)
@@ -243,7 +243,7 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 	}
 	file, err := os.OpenFile(target+".part", flags, 0600)
 	if err != nil {
-		return 0, false, errors.New("无法写入下载文件，请检查存储空间")
+		return 0, false, errors.New("無法寫入下載檔案，請檢查儲存空間")
 	}
 	received := offset
 	buffer := make([]byte, 64<<10)
@@ -251,13 +251,13 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 		n, readErr := response.Body.Read(buffer)
 		if n > 0 {
 			if key && received+int64(n) > 64 {
-				err = errors.New("视频密钥过大")
+				err = errors.New("影片金鑰過大")
 				break
 			}
 			written, writeErr := file.Write(buffer[:n])
 			received += int64(written)
 			if writeErr != nil || written != n {
-				err = errors.New("写入下载文件失败，请检查剩余空间")
+				err = errors.New("寫入下載檔案失敗，請檢查剩餘空間")
 				break
 			}
 			inactivity.Reset(30 * time.Second)
@@ -265,7 +265,7 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 		}
 		if readErr != nil {
 			if readErr != io.EOF {
-				err = errors.New("媒体文件未接收完整，点击继续下载")
+				err = errors.New("媒體檔案尚未完整接收，請選取「繼續下載」")
 			}
 			break
 		}
@@ -274,10 +274,10 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 		err = requestCtx.Err()
 	}
 	if err == nil && (received == 0 || (total >= 0 && received != total)) {
-		err = errors.New("媒体文件未接收完整，点击继续下载")
+		err = errors.New("媒體檔案尚未完整接收，請選取「繼續下載」")
 	}
 	if err == nil && key && received != 16 {
-		err = errors.New("视频密钥长度无效")
+		err = errors.New("影片金鑰長度無效")
 	}
 	if err == nil {
 		err = file.Sync()
