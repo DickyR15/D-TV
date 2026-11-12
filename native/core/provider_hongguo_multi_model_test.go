@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"errors"
 	"encoding/json"
 	"net/http"
 	"reflect"
@@ -176,4 +177,49 @@ func TestSelectHongguoAppMediaReportsH266OnlyForHelperFallback(t *testing.T) {
 	if !errors.Is(err, errHongguoH266Only) {
 		t.Fatalf("H.266-only response error = %v, want errHongguoH266Only", err)
 	}
+}
+
+
+func TestResolveHongguoHelperMediaUsesH265OnlyForHelperDevice(t *testing.T) {
+	const videoID = "123456"
+	var calls []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		deviceID := request.URL.Query().Get("device_id")
+		calls = append(calls, request.URL.Path+"@"+deviceID)
+		if request.URL.Path == hongguoDeviceRegisterURL {
+			return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"9001","install_id_str":"90019"}`), nil
+		}
+		if request.URL.Path == "/novel/player/video_model/v1/" {
+			if deviceID == "9001" {
+				model := `{"video_list":[{"main_url":"https://media.test/helper-h265.mp4","video_meta":{"codec_type":"h264","definition":"1080p"}}]}`
+				return sourceFixtureResponse(request, http.StatusOK, `{"code":0,"data":{"video_model":`+mustJSONTestString(t,model)+`}}`),nil
+			}
+			return sourceFixtureResponse(request,http.StatusForbidden,`{}`),nil
+		}
+		return sourceFixtureResponse(request,http.StatusNotFound,`{}`),nil
+	})
+	d.cfg.Retries = 1
+	client := d.hongguoClient()
+	client.state.DeviceID,client.state.InstallID,client.state.Registered = "8001","80019",true
+	media,err := d.resolveHongguoHelperMedia(context.Background(),"123","123456")
+	if err != nil { t.Fatal(err) }
+	if media.URL!="https://media.test/helper-h265.mp4" { t.Fatalf("helper URL = %q",media.URL) }
+	if !client.state.HelperRegistered || client.state.HelperDeviceID!="9001" { t.Fatalf("helper device not registered: %#v",client.state) }
+	if len(calls)<2 || calls[0] != "/service/2/device_register/@8001" && calls[0] != "/service/2/device_register/@" {
+		// A helper registration request must be present; the request itself intentionally omits device_id.
+		found:=false
+		for _,call:=range calls { if call=="/service/2/device_register/@" { found=true } }
+		if !found { t.Fatalf("helper device registration missing: %#v",calls) }
+	}
+}
+
+func TestHongguoMediaSelectionDistinguishesH266FromOtherUnavailableMedia(t *testing.T) {
+	_,err:=selectHongguoAppMedia(map[string]any{"video_list":[]any{
+		map[string]any{"main_url":"https://media.test/a.mp4","video_meta":map[string]any{"codec_type":"bytevc2"}},
+	}})
+	if !errors.Is(err,errHongguoH266Only){t.Fatalf("H266 result = %v",err)}
+	_,err=selectHongguoAppMedia(map[string]any{"video_list":[]any{
+		map[string]any{"video_meta":map[string]any{"codec_type":"h264"}},
+	}})
+	if errors.Is(err,errHongguoH266Only){t.Fatalf("missing-address result must not look like H266: %v",err)}
 }
