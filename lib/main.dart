@@ -493,7 +493,9 @@ class DuanjuApp extends StatelessWidget {
         store?.themeAccent ?? 'system',
         systemAccent: systemAccentColors.dark,
       ),
-      pureBlack: store?.pureBlackTheme ?? false,
+      pureBlack: (store?.themeMode == 'dark' ||
+          (store?.themeMode == 'system' && systemAccentColors.dark != null)) &&
+          (store?.pureBlackTheme ?? false),
     ),
     themeMode: store == null ? ThemeMode.dark : AppTheme.mode(store?.themeMode ?? 'system'),
     builder: (context, child) {
