@@ -156,7 +156,7 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nat
 		fresh.ID, fresh.Source, fresh.SourceID = providerDramaID(source, id), source, id
 	}
 	if normalized := nativeNormalize(fresh); normalized.ID != drama.ID {
-		return nil, strings.TrimSpace(drama.DoubanID), errors.New("站源詳情與請求劇集不符")
+		return nil, strings.TrimSpace(drama.DoubanID), errors.New("片源詳情與要求的劇集不符")
 	}
 	addresses := nativeMergeCoverRecoveryMetadata(drama, fresh)
 	return addresses, strings.TrimSpace(drama.DoubanID), nil
@@ -314,7 +314,7 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 		fresh, err := parseHuangguoSortDetail(body, pageURL, Drama{ID: drama.ID, Source: source, SourceID: id})
 		return nativeCoverAddressesFromDrama(fresh), err
 	}
-	return nil, errors.New("該站源暫無封面補齊介面")
+	return nil, errors.New("此片源目前不支援補齊海報")
 }
 
 func providerCoverAddress(value any, pageURL string) string {
