@@ -1120,7 +1120,7 @@ class LocalStore extends ChangeNotifier {
     });
   }
 
-  Future<void> saveWatch(WatchEntry entry) {
+  Future<void> saveWatch(WatchEntry entry, {bool notify = true}) {
     final epoch = _epoch;
     return _queue(() async {
       if (!allowsSource(entry.drama.source) || epoch != _epoch) return;
@@ -1148,7 +1148,7 @@ class LocalStore extends ChangeNotifier {
         // the LAN snapshot during playback; it is persisted on sync/startup.
         _lanRevision++;
       }
-      _notify();
+      if (notify) _notify();
     });
   }
 
