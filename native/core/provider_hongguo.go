@@ -223,6 +223,13 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if err := ctx.Err(); err != nil {
 		return providerMedia{}, err
 	}
+	if errors.Is(nativeErr, errHongguoH266Only) || errors.Is(multiModelErr, errHongguoH266Only) {
+		helperMedia, helperErr := d.resolveHongguoHelperMedia(ctx, seriesID, videoID)
+		if helperErr == nil {
+			return helperMedia, nil
+		}
+		multiModelErr = fmt.Errorf("%w；輔助設備 H.265 備援失敗：%v", errHongguoH266Only, publicError(helperErr))
+	}
 	media, pageErr := d.resolveHongguoWebMedia(ctx, seriesID, videoID)
 	if pageErr == nil {
 		return media, nil
