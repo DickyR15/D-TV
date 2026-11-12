@@ -120,7 +120,7 @@ func (d *Downloader) fetchHuangdouChapters(ctx context.Context, sourceID string)
 		count = len(episodes)
 	}
 	if count <= 0 || count > 10000 {
-		return title, nil, fmt.Errorf("黄豆返回了无效集数: %d", count)
+		return title, nil, fmt.Errorf("黃豆回傳無效的集數：%d", count)
 	}
 	chapters := make([]Chapter, 0, count)
 	if len(episodes) > 0 {
@@ -166,7 +166,7 @@ func (d *Downloader) resolveHuangdouPlayback(ctx context.Context, client *huangd
 	if rawKey := mapString(data, "hls_key"); rawKey != "" {
 		key, err := hex.DecodeString(rawKey)
 		if err != nil || len(key) != aes.BlockSize {
-			return providerMedia{}, errors.New("黄豆返回了无效的 HLS 密钥")
+			return providerMedia{}, errors.New("黃豆回傳的 HLS 金鑰無效")
 		}
 		result.HLSKey = key
 	}
