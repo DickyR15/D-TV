@@ -414,7 +414,7 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 		return nil
 	}
 	registerDoH := &hostDoHTransport{base: transport, resolver: newDNSResolver(transport), router: router, host: "log.snssdk.com"}
-	d.hongguoRegisterClient = &http.Client{Transport: newHuangguoBrowserTransport(registerDoH, d), Timeout: 25 * time.Second, CheckRedirect: checkRedirect}
+	d.hongguoRegisterClient = &http.Client{Transport: registerDoH, Timeout: 25 * time.Second, CheckRedirect: checkRedirect}
 	d.client = &http.Client{
 		Transport: newHuangguoBrowserTransport(providerTransport, d),
 		Timeout: 45 * time.Second,
