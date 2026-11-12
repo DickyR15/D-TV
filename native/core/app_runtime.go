@@ -55,6 +55,8 @@ type Downloader struct {
 	huangdouDetailPending map[string]*huangdouDetailCall
 	providerMu            sync.Mutex
 	providerHosts         map[string]string
+	huangguoEdgeMu        sync.Mutex
+	huangguoEdgeSession   *huangguoEdgeSession
 	limiter               *requestLimiter
 	proxyRouter           *proxyRouter
 	hongguoOnce           sync.Once

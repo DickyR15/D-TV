@@ -194,20 +194,24 @@ func (d *Downloader) fetchHuangguoAIPlayURL(ctx context.Context, sourceID string
 	if !rankingSourceID.MatchString(sourceID) || episode < 1 {
 		return "", errors.New("黃果集數無效")
 	}
-	var play struct {
-		VideoURL string `json:"video_url"`
-	}
-	path := fmt.Sprintf("/api/videos/%s/play?ep=%d&page_texts=0", url.PathEscape(sourceID), episode)
-	if err := d.huangguoAIAPI(ctx, path, &play); err != nil {
+	path := fmt.Sprintf("/api/videos/%s/episodes/%d/playback", url.PathEscape(sourceID), episode)
+	body, err := d.huangguoAIEncryptedCall(ctx, path, map[string]any{})
+	if err != nil {
 		return "", err
 	}
-	address := normalizeProviderMediaURL(d.providerBaseURL(sourceHuangguoAI)+"/", play.VideoURL)
+	var play map[string]any
+	if err := json.Unmarshal(body, &play); err != nil {
+		return "", fmt.Errorf("黃果 AI 播放資料格式無效：%w", err)
+	}
+	data, _ := play["data"].(map[string]any)
+	streams, _ := data["streams"].(map[string]any)
+	address := normalizeProviderMediaURL(d.providerBaseURL(sourceHuangguoAI)+"/",
+		firstNonEmpty(mapString(streams, "main"), mapString(streams, "preview"), mapString(streams, "hevc")))
 	if address == "" {
-		return "", errors.New("黃果 AI 播放介面未提供有效的播放網址；可能是站點取流介面已更新，請重新整理分集後再試")
+		return "", errors.New("黃果 AI 新版播放接口未提供有效的串流位址")
 	}
 	return address, nil
 }
-
 func (d *Downloader) searchHuangguoAI(ctx context.Context, page int, query string) ([]Drama, bool, error) {
 	query = strings.TrimSpace(query)
 	if query == "" || len(query) > 256 {
