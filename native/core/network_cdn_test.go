@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 )
@@ -413,4 +415,80 @@ func TestCDNTransportRetriesUnknownAuthorityThroughVerifiedDoHForMediaHosts(t *t
 	if base.TLSClientConfig == nil || base.TLSClientConfig.InsecureSkipVerify {
 		t.Fatal("DNS recovery must not disable normal TLS certificate verification")
 	}
+}
+
+
+func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testing.T) {
+	const host = "log.snssdk.com"
+	const fallbackIP = "93.184.216.34"
+	var directAttempts, dohLookups, recoveredRequests atomic.Int32
+	var receivedBody string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Host != host || request.TLS == nil || request.TLS.ServerName != host {
+			t.Errorf("registration retry changed Host or TLS SNI: host=%q tls=%+v", request.Host, request.TLS)
+		}
+		if request.Method != http.MethodPost || request.URL.Path != "/service/2/device_register/" {
+			t.Errorf("unexpected registration request: %s %s", request.Method, request.URL)
+		}
+		body, err := io.ReadAll(request.Body)
+		if err != nil { t.Fatal(err) }
+		receivedBody = string(body)
+		recoveredRequests.Add(1)
+		_, _ = writer.Write([]byte(`{"device_id_str":"1001","install_id_str":"10019"}`))
+	}))
+	defer server.Close()
+	_, port, err := net.SplitHostPort(server.Listener.Addr().String())
+	if err != nil { t.Fatal(err) }
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.Proxy = nil
+	base.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: x509.NewCertPool()}
+	base.TLSClientConfig.RootCAs.AddCert(server.Certificate())
+	base.DialContext = func(ctx context.Context, network, address string) (net.Conn,error) {
+		if address == net.JoinHostPort(host,port) {
+			directAttempts.Add(1)
+			return nil, io.EOF
+		}
+		if address != net.JoinHostPort(fallbackIP,port) { t.Errorf("unexpected fallback destination %s",address); return nil,io.EOF }
+		return (&net.Dialer{}).DialContext(ctx,network,server.Listener.Addr().String())
+	}
+	resolver:=newDNSResolver(base)
+	resolver.endpoints=[]string{"https://dns.example.test/resolve"}
+	resolver.client.Transport=sourceFixtureTransport(func(request *http.Request)(*http.Response,error){
+		dohLookups.Add(1)
+		if request.URL.Query().Get("name")!=host { t.Errorf("DoH queried unexpected host %s",request.URL) }
+		return sourceFixtureResponse(request,http.StatusOK,`{"Status":0,"Answer":[{"type":1,"TTL":120,"data":"93.184.216.34"}]}`),nil
+	})
+	transport:=&hostDoHTransport{base:base,resolver:resolver,host:host}
+	client:=&http.Client{Transport:transport}
+	body:=[]byte(`{"magic_tag":"ss_app_log","header":{"aid":8662}}`)
+	request,err:=http.NewRequest(http.MethodPost,"https://"+host+":"+port+"/service/2/device_register/",bytes.NewReader(body))
+	if err!=nil{t.Fatal(err)}
+	request.Header.Set("Content-Type","application/json")
+	response,err:=client.Do(request)
+	if err!=nil{t.Fatal(err)}
+	responseBody,readErr:=io.ReadAll(response.Body);response.Body.Close()
+	if readErr!=nil||response.StatusCode!=http.StatusOK||!strings.Contains(string(responseBody),`"device_id_str":"1001"`){t.Fatalf("unexpected registration response: %s err=%v",responseBody,readErr)}
+	if receivedBody!=string(body){t.Fatalf("POST body changed after DNS retry: %q",receivedBody)}
+	if directAttempts.Load()!=1||dohLookups.Load()!=1||recoveredRequests.Load()!=1{t.Fatalf("unexpected attempts: system=%d doh=%d recovered=%d",directAttempts.Load(),dohLookups.Load(),recoveredRequests.Load())}
+	if base.TLSClientConfig.InsecureSkipVerify {t.Fatal("DoH fallback disabled TLS verification")}
+}
+
+func TestHostDoHTransportDoesNotHandleOtherHostsOrProxyTraffic(t *testing.T) {
+	var direct,lookups atomic.Int32
+	base:=http.DefaultTransport.(*http.Transport).Clone()
+	base.Proxy=nil
+	base.DialContext=func(ctx context.Context,network,address string)(net.Conn,error){direct.Add(1);return nil,io.EOF}
+	resolver:=newDNSResolver(base)
+	resolver.endpoints=[]string{"https://dns.example.test/resolve"}
+	resolver.client.Transport=sourceFixtureTransport(func(request *http.Request)(*http.Response,error){lookups.Add(1);return sourceFixtureResponse(request,http.StatusOK,`{"Status":0,"Answer":[]}`),nil})
+	proxyCalls:=atomic.Int32{}
+	router:=&proxyRouter{}
+	router.system=nativeSystemProxy{HTTPS:"http://proxy.example.test:8080"}
+	router.systemOverride=true
+	transport:=&hostDoHTransport{base:base,resolver:resolver,router:router,host:"log.snssdk.com"}
+	request,_:=http.NewRequest(http.MethodPost,"https://example.test/register",strings.NewReader("body"))
+	_,_=transport.RoundTrip(request)
+	if lookups.Load()!=0{t.Fatalf("unrelated host triggered DoH: %d",lookups.Load())}
+	_ = proxyCalls
+	if hostDoHTransport{base:base,resolver:resolver,router:router,host:"log.snssdk.com"} == nil { t.Fatal("transport missing") }
 }
