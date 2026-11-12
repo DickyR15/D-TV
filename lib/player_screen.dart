@@ -3104,8 +3104,11 @@ class _PlayerScreenState extends State<PlayerScreen>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_closed) {
               _enhancement.setViewport(pixels, television: _television);
-              if (Platform.isWindows && _videoOutputSize != null && pixels.width > 0 && pixels.height > 0) {
-                unawaited(_videoOutputSize!.setTarget(pixels).catchError((Object error) {
+              if (Platform.isWindows && _videoOutputSize != null) {
+                final target = pixels.width > 0 && pixels.height > 0
+                    ? pixels
+                    : null;
+                unawaited(_videoOutputSize!.setTarget(target).catchError((Object error) {
                   DiaryService.add('[MPV] output-size-update=failed error=$error');
                 }));
               }
