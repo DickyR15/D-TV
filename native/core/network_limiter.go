@@ -29,7 +29,7 @@ func (backoff *requestBackoff) Error() string {
 		reason = "：" + backoff.reason
 	}
 	seconds := max(1, int(time.Until(backoff.until).Seconds()+0.999))
-	return fmt.Sprintf("%s HTTP %d%s，请在 %d 秒后重试", backoff.host, backoff.status, reason, seconds)
+	return fmt.Sprintf("%s HTTP %d%s，請在 %d 秒後重試", backoff.host, backoff.status, reason, seconds)
 }
 
 func catalogResponseBlockReason(response *http.Response, body []byte) string {
