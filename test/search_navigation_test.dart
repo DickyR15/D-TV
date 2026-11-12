@@ -162,7 +162,9 @@ void main() {
       expect(find.byType(RankingsScreen), findsOneWidget);
       expect(find.text('保留的榜單項目'), findsOneWidget);
 
-      // The next Back removes only the ranking route and returns to Home.
+      // A physically separate Back after the duplicate-event guard window
+      // removes only the ranking route and returns to Home.
+      await tester.pump(const Duration(milliseconds: 950));
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(RankingsScreen), findsNothing);
