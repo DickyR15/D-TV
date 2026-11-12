@@ -116,7 +116,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 content: SelectableText(
                   '已儲存原始設定：\n$path\n\n'
                   '請從檔案管理器開啟 Download/D-TV 資料夾，'
-                  '將 JSON 檔案複製到電腦保存。',
+                  '將 JSON 檔案複製到電腦儲存。',
                 ),
                 actions: [
                   TextButton(
@@ -313,7 +313,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     title: const Text('啟動時需要登入'),
                     subtitle: Text(
                       widget.store.forceLogin
-                          ? '每次開啟應用先解鎖當前受保護使用者'
+                          ? '每次開啟應用程式時，先解鎖目前受保護的使用者'
                           : '保留密碼，僅切換使用者或手動鎖定時驗證',
                     ),
                     value: widget.store.forceLogin,
@@ -433,7 +433,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                     widget.store.lock();
                   },
                   icon: const Icon(Icons.lock_outline),
-                  label: const Text('鎖定當前使用者'),
+                  label: const Text('鎖定目前使用者'),
                 ),
             ],
           ),
