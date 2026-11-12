@@ -81,7 +81,7 @@ func parseDSDCategories(document *html.Node, pageURL string) ([]nativeCategory, 
 		categories = append(categories, nativeCategory{ID: id, Name: name})
 	}
 	if len(categories) == 0 || len(categories) > 32 {
-		return nil, errors.New("帝果未返回有效的内容分类")
+		return nil, errors.New("帝果未提供有效的內容分類")
 	}
 	return categories, nil
 }
@@ -177,7 +177,7 @@ func parseDSDCards(document *html.Node, pageURL, category string) ([]Drama, erro
 		}
 		items = append(items, drama)
 		if len(items) > 500 {
-			return nil, errors.New("帝果目录条目过多")
+			return nil, errors.New("帝果目錄項目過多")
 		}
 	}
 	return items, nil
@@ -187,7 +187,7 @@ func dsdPagination(document *html.Node, pageURL, category, query string, page in
 	pagination := providerHTMLFirstClass(document, "el-pagination", "pagination", "mac_pages")
 	if pagination == nil {
 		if page != 1 {
-			return 0, errors.New("帝果未返回请求页码，请重试")
+			return 0, errors.New("帝果未提供要求的頁碼，請重試")
 		}
 		return 1, nil
 	}
@@ -258,7 +258,7 @@ func (d *Downloader) fetchDSDPage(ctx context.Context, page int, category native
 		return nil, false, err
 	}
 	if len(items) == 0 && providerHTMLFirstClass(document, "video-contaner", "nvyou-wrap", "van-list", "search-page", "lists") == nil {
-		return nil, false, errors.New("帝果未返回内容列表，页面可能已变化")
+		return nil, false, errors.New("帝果未提供內容清單，頁面可能已變更")
 	}
 	pages, err := dsdPagination(document, address, category.ID, query, page)
 	if err != nil {
