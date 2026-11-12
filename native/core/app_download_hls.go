@@ -131,7 +131,7 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 		}
 		body = strings.TrimSpace(strings.TrimPrefix(body, "\ufeff"))
 		if !strings.HasPrefix(body, "#EXTM3U") || len(body) > 4<<20 {
-			return "", errors.New("下载播放列表无效")
+			return "", errors.New("下載播放清單無效")
 		}
 		lines, height, master := nativeHLSSelect(strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n"), quality)
 		if depth == 0 && height > 0 {
@@ -142,12 +142,12 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 		}
 		parsed, err := url.Parse(base)
 		if err != nil {
-			return "", errors.New("播放列表地址无效")
+			return "", errors.New("播放清單網址無效")
 		}
 		rewrite := func(reference string, playlist, key bool) (string, error) {
 			relative, err := url.Parse(reference)
 			if err != nil {
-				return "", errors.New("分片地址无效")
+				return "", errors.New("分段網址無效")
 			}
 			resolved := parsed.ResolveReference(relative).String()
 			if playlist {
@@ -159,7 +159,7 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 			} else if strings.HasPrefix(resolved, "data:") && key {
 				fields := strings.SplitN(resolved, ",", 2)
 				if len(fields) != 2 {
-					return "", errors.New("内嵌视频密钥无效")
+					return "", errors.New("內嵌影片金鑰無效")
 				}
 				if strings.HasSuffix(fields[0], ";base64") {
 					data, err = base64.StdEncoding.DecodeString(fields[1])
@@ -169,10 +169,10 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 					data = []byte(text)
 				}
 				if err != nil || len(data) != 16 {
-					return "", errors.New("内嵌视频密钥无效")
+					return "", errors.New("內嵌影片金鑰無效")
 				}
 			} else if !isProviderHTTPMediaURL(resolved) {
-				return "", errors.New("分片地址不支持下载")
+				return "", errors.New("分段網址不支援下載")
 			}
 			extension := strings.ToLower(path.Ext(relative.Path))
 			switch extension {
@@ -186,7 +186,7 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 			file := nativeDownloadAssetName(resolved, extension)
 			if !assets[file] {
 				if len(assets) >= 20000 {
-					return "", errors.New("视频分片数量过多")
+					return "", errors.New("影片分段數量過多")
 				}
 				assets[file] = true
 				bundle.assets = append(bundle.assets, nativeDownloadAsset{address: resolved, name: file, data: data, key: key})
@@ -198,16 +198,16 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 		for _, line := range lines {
 			text := strings.TrimSpace(line)
 			if strings.HasPrefix(text, "#EXT-X-DEFINE:") || strings.Contains(text, "{$") {
-				return "", errors.New("暂不支持下载使用变量地址的播放列表")
+				return "", errors.New("目前不支援下載使用變數網址的播放清單")
 			}
 			key := strings.HasPrefix(text, "#EXT-X-KEY:") || strings.HasPrefix(text, "#EXT-X-SESSION-KEY:")
 			if key {
 				attributes := nativeHLSAttributes(text)
 				if method := attributes["METHOD"]; method != "AES-128" && method != "NONE" {
-					return "", errors.New("暂不支持离线保存该视频的加密方式")
+					return "", errors.New("目前不支援離線儲存此影片使用的加密方式")
 				}
 				if format := attributes["KEYFORMAT"]; format != "" && format != "identity" {
-					return "", errors.New("该视频需要源站授权，暂不支持离线保存")
+					return "", errors.New("此影片需要來源站授權，目前不支援離線儲存")
 				}
 			}
 			if text != "" && !strings.HasPrefix(text, "#") {
