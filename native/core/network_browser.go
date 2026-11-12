@@ -151,7 +151,7 @@ func (transport *huangguoBrowserTransport) RoundTrip(request *http.Request) (*ht
 	}
 	client, err := transport.client(request)
 	if err != nil {
-		return nil, fmt.Errorf("黄果浏览器客户端初始化失败：%w", publicError(err))
+		return nil, fmt.Errorf("黃果瀏覽器用戶端初始化失敗：%w", publicError(err))
 	}
 	upstream, err := fhttp.NewRequestWithContext(request.Context(), request.Method, request.URL.String(), request.Body)
 	if err != nil {
