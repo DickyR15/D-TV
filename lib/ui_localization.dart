@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 const Map<String, String> _twPhrases = {
   // Product UI wording is intentionally distinct from API/source vocabulary.
   '消息推送': '訊息推播',
+  '訊息推送': '訊息推播',
   '推送通知': '推播通知',
   '推送播放': '傳送播放內容',
   '未返回有效播放地址': '未提供有效的播放網址',
