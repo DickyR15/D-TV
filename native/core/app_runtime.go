@@ -47,6 +47,7 @@ type Downloader struct {
 	rankings              rankingCache
 	cfg                   Config
 	client                *http.Client
+	hongguoRegisterClient *http.Client
 	streamClient          *http.Client
 	streamHostMu          sync.Mutex
 	streamHostFailures    map[string]nativeStreamHostFailureState
@@ -403,6 +404,8 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	// provider route. The retired third-party Hongguo playback host no longer
 	// needs a dedicated HTTP/1.1 ALPN fallback.
 	providerTransport := cdn
+	registerDoH := &hostDoHTransport{base: transport, resolver: newDNSResolver(transport), router: router, host: "log.snssdk.com"}
+	d.hongguoRegisterClient = &http.Client{Transport: newHuangguoBrowserTransport(registerDoH, d), Timeout: 25 * time.Second, CheckRedirect: checkRedirect}
 	checkRedirect := func(request *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return errors.New("站源重定向次数过多")
