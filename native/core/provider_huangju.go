@@ -110,7 +110,7 @@ func huangjuDramaFromMap(row map[string]any, site, sourceID string) (Drama, erro
 		ID: providerDramaID(sourceHuangju, sourceID), Source: sourceHuangju, SourceID: sourceID,
 		Title: truncate(title, 256), Name: truncate(title, 256), Desc: truncate(description, 12000), Intro: truncate(description, 12000),
 		Cover: cover, CoverURL: cover, TotalEpisode: episodes, EpisodeCount: episodes,
-		Category: category, ChannelName: "劇果", Tags: tags, ReleaseStatus: status, Score: score,
+		Category: category, ChannelName: "剧果", Tags: tags, ReleaseStatus: status, Score: score,
 	}, nil
 }
 
