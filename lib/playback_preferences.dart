@@ -28,9 +28,12 @@ BoxFit playbackAspectRatioFit(PlaybackAspectRatio value) => switch (value) {
   PlaybackAspectRatio.original => BoxFit.none,
 };
 
-double? playbackAspectRatioValue(PlaybackAspectRatio value) => switch (value) {
-  PlaybackAspectRatio.ratio4x3 => 4 / 3,
-  PlaybackAspectRatio.ratio16x9 => 16 / 9,
+double? playbackAspectRatioValue(
+  PlaybackAspectRatio value, {
+  double sourceAspectRatio = 16 / 9,
+}) => switch (value) {
+  PlaybackAspectRatio.ratio4x3 => sourceAspectRatio < 1 ? 3 / 4 : 4 / 3,
+  PlaybackAspectRatio.ratio16x9 => sourceAspectRatio < 1 ? 9 / 16 : 16 / 9,
   _ => null,
 };
 
