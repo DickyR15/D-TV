@@ -201,7 +201,11 @@ func (d *Downloader) fetchHuangguoAIPlayURL(ctx context.Context, sourceID string
 	if err := d.huangguoAIAPI(ctx, path, &play); err != nil {
 		return "", err
 	}
-	return normalizeProviderMediaURL(d.providerBaseURL(sourceHuangguoAI)+"/", play.VideoURL), nil
+	address := normalizeProviderMediaURL(d.providerBaseURL(sourceHuangguoAI)+"/", play.VideoURL)
+	if address == "" {
+		return "", errors.New("黃果 AI 播放介面未提供有效的播放網址；可能是站點取流介面已更新，請重新整理分集後再試")
+	}
+	return address, nil
 }
 
 func (d *Downloader) searchHuangguoAI(ctx context.Context, page int, query string) ([]Drama, bool, error) {
