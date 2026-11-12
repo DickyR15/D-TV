@@ -424,7 +424,7 @@ func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDram
 	drama.Cover = repairLegacyCoverURL(drama)
 	address, err := url.Parse(drama.Cover)
 	if err != nil || !validNativeCoverURL(address) {
-		return "", errors.New("海报地址无效")
+		return "", errors.New("海報網址無效")
 	}
 	source := canonicalProviderSource(drama.Source)
 	if source == "" {
@@ -578,7 +578,7 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 	client := *cache.downloader.client
 	client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
 		if len(via) >= 5 || !validNativeCoverURL(request.URL) {
-			return errors.New("海报重定向地址无效")
+			return errors.New("海報重新導向位址無效")
 		}
 		request.Header.Set("Referer", referer)
 		return nil
@@ -595,14 +595,14 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 		return nil, &nativeCoverHTTPStatusError{StatusCode: response.StatusCode}
 	}
 	if response.ContentLength > nativeCoverMaxBytes {
-		return nil, errors.New("海报文件过大")
+		return nil, errors.New("海報檔案過大")
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, nativeCoverMaxBytes+1))
 	if err != nil {
 		return nil, err
 	}
 	if len(data) > nativeCoverMaxBytes {
-		return nil, errors.New("海报文件过大")
+		return nil, errors.New("海報檔案過大")
 	}
 	data = nativeDecodeCover(data)
 	if !nativeIsCoverImage(data) {
