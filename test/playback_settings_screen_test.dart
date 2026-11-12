@@ -40,6 +40,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('playback-default-speed')), findsOneWidget);
+    expect(find.byKey(const ValueKey('playback-aspect-ratio')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-default-quality')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-decoder')), findsOneWidget);
     expect(find.byKey(const ValueKey('playback-preopen-next-episode')), findsOneWidget);
