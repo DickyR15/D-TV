@@ -203,9 +203,6 @@ void main() {
     );
   });
 
-}
-
-
   group('playback progress repaint policy', playbackProgressRefreshTests);
 }
 
@@ -248,3 +245,8 @@ void playbackProgressRefreshTests() {
     );
   });
 }
+
+}
+
+
+
