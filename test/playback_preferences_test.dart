@@ -188,15 +188,10 @@ void main() {
     final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
     expect(defaults.aspectRatio, PlaybackAspectRatio.automatic);
     for (final mode in PlaybackAspectRatio.values) {
-      final restored = PlaybackPreferences.fromJson(
-        PlaybackPreferences(aspectRatio: mode).toJson(),
-      );
+      final restored = PlaybackPreferences.fromJson(PlaybackPreferences(aspectRatio: mode).toJson());
       expect(restored.aspectRatio, mode);
     }
-    expect(
-      PlaybackPreferences.fromJson(const {'speed': 1.0}).aspectRatio,
-      PlaybackAspectRatio.automatic,
-    );
+    expect(PlaybackPreferences.fromJson(const {'speed': 1.0}).aspectRatio, PlaybackAspectRatio.automatic);
   });
 
   test('fixed aspect ratios return the expected target ratio', () {
@@ -204,8 +199,4 @@ void main() {
     expect(playbackAspectRatioValue(PlaybackAspectRatio.ratio16x9), closeTo(16 / 9, .0001));
     expect(playbackAspectRatioValue(PlaybackAspectRatio.automatic), isNull);
   });
-
 }
-
-
-
