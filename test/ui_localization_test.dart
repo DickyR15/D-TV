@@ -42,6 +42,7 @@ void main() {
   });
 
   test('uses Taiwan terminology for notifications and device playback handoff', () {
+    expect(uiTraditional('站點存取權限'), '片源存取權限');
     expect(
       uiTraditional('消息推送、推送通知、推送播放、本機地址、播放地址、獲取播放地址'),
       '訊息推播、推播通知、傳送播放內容、本機位址、播放網址、取得播放網址',
