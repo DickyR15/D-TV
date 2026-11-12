@@ -81,7 +81,7 @@ func (client *huangjuAPIClient) guestToken(ctx context.Context) (string, error) 
 		var identifier [16]byte
 		if _, err := rand.Read(identifier[:]); err != nil {
 			client.mu.Unlock()
-			return "", errors.New("无法初始化剧果访客会话")
+			return "", errors.New("無法初始化劇果訪客工作階段")
 		}
 		identifier[6] = identifier[6]&0x0f | 0x40
 		identifier[8] = identifier[8]&0x3f | 0x80
@@ -104,7 +104,7 @@ func (client *huangjuAPIClient) guestToken(ctx context.Context) (string, error) 
 		}
 		if token == "" || len(token) > 8192 || strings.IndexFunc(token, func(r rune) bool { return r <= 32 || r >= 127 }) >= 0 {
 			token = ""
-			err = errors.New("剧果未返回有效的访客授权")
+			err = errors.New("劇果未提供有效的訪客授權")
 		}
 	}
 	client.mu.Lock()
