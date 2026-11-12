@@ -2994,7 +2994,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _applyAspectRatio(Widget child) {
-    final ratio = playbackAspectRatioValue(_playbackAspectRatio);
+    final ratio = playbackAspectRatioValue(
+      _playbackAspectRatio,
+      sourceAspectRatio: _aspectRatio,
+    );
     if (ratio == null) return child;
     return Center(
       child: AspectRatio(
