@@ -426,8 +426,9 @@ func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testi
 	var directAttempts, dohLookups, recoveredRequests atomic.Int32
 	var receivedBody string
 	server := newUntrustedTLSServer(t, host, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Host != host+":"+request.URL.Port() || request.TLS == nil || request.TLS.ServerName != host {
-			t.Errorf("registration retry changed Host or TLS SNI: host=%q tls=%+v", request.Host, request.TLS)
+		requestHost, requestPort, hostErr := net.SplitHostPort(request.Host)
+		if hostErr != nil || requestHost != host || requestPort == "" || request.TLS == nil || request.TLS.ServerName != host {
+			t.Errorf("registration retry changed Host or TLS SNI: host=%q tls=%+v err=%v", request.Host, request.TLS, hostErr)
 		}
 		if request.Method != http.MethodPost || request.URL.Path != "/service/2/device_register/" {
 			t.Errorf("unexpected registration request: %s %s", request.Method, request.URL)
