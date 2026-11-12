@@ -342,7 +342,7 @@ func TestNativeCatalogSaveFailureRetriesWithoutAdvancing(t *testing.T) {
 	if cursor := restarted.downloader.hongguoCatalogSnapshot().Feeds["category:short_play"]; cursor.Offset != 18 || len(restarted.catalogs["hongguo|short_play"]) != 2 {
 		t.Fatal("restart resumed an offset whose data had not been saved")
 	}
-	if status := restarted.sourceStatus(sourceHongguo); status.Stage != "上次保存未完成" || restarted.nativeCached("hongguo|short_play").Fresh {
+	if status := restarted.sourceStatus(sourceHongguo); status.Stage != "上次儲存未完成" || restarted.nativeCached("hongguo|short_play").Fresh {
 		t.Fatal("restart hid the interrupted save", status)
 	}
 	status, err := engine.startSourceTask(sourceHongguo, "retrySave", nativeDrama{})
