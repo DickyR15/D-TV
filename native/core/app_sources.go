@@ -103,7 +103,7 @@ func (engine *nativeEngine) loadSourceRecords() {
 		if record.NeedsSave {
 			record.NeedsSave = false
 			record.Stage = "上次保存未完成"
-			record.Error = "已恢复可读取的缓存，请重新更新"
+			record.Error = "已恢復可讀取的快取，請重新更新"
 			for key, state := range engine.catalogStates {
 				if key == source || strings.HasPrefix(key, source+"|") {
 					state.UpdatedAt = time.Time{}
@@ -177,10 +177,10 @@ func (engine *nativeEngine) startSourceTask(source, operation string, drama nati
 	switch operation {
 	case "update", "more", "metadata", "vipMetadata", "check", "checkCatalog", "retrySave":
 	default:
-		return nativeSourceStatus{}, errors.New("无效的站源操作")
+		return nativeSourceStatus{}, errors.New("無效的片源操作")
 	}
 	if operation == "vipMetadata" && source != sourceHuangdou {
-		return nativeSourceStatus{}, errors.New("当前站源不需要补齐 VIP 资料")
+		return nativeSourceStatus{}, errors.New("目前片源不需要補齊 VIP 資料")
 	}
 	if drama.ID != "" && (!nativeDramaAvailable(drama) || sourceFromDramaID(drama.ID) != source) {
 		return nativeSourceStatus{}, errNativeBuildSource
@@ -257,7 +257,7 @@ func (engine *nativeEngine) runSourceTask(ctx context.Context, source, operation
 	var err error
 	defer func() {
 		if recover() != nil {
-			err = errors.New("站源任务处理失败，已保留缓存")
+			err = errors.New("片源任務處理失敗，已保留快取")
 		}
 		taskContextErr := ctx.Err()
 		task.cancel()
