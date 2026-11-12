@@ -65,4 +65,5 @@ D TV 中由 DickyR15 創作的原創修改及新增內容，其著作權由相�
 - [著作權與授權說明](COPYRIGHT.md)
 - [上游來源與修改聲明](UPSTREAM-NOTICE.md)
 - [OpenCC 字典來源與授權](OPENCC-NOTICE.md)
+- [台灣繁體中文在地化規範](docs/LOCALIZATION-TW.md)
 - [片源管理說明](docs/SOURCE-MANAGEMENT.md)
