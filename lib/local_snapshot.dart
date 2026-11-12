@@ -47,10 +47,12 @@ class LocalSnapshot {
     'displayMode',
     'themeMode',
     'themeAccent',
+    'pureBlackTheme',
     'sourceSwitches',
     'forceLogin',
     'ignoredUpdateVersion',
     'checkForUpdatesOnStartup',
+    'pureBlackTheme',
   };
   static const _retiredKeys = {
     'sourceGateEnabled',
@@ -97,6 +99,7 @@ class LocalSnapshot {
     'hideVip',
     'forceLogin',
     'checkForUpdatesOnStartup',
+    'pureBlackTheme',
     'tvDecoderSafePresetV1',
     'portraitBlurLandscapeDefaultV1',
     'danmakuDefaultOffV1',
@@ -182,6 +185,7 @@ class LocalSnapshot {
       'displayMode',
       'themeMode',
       'themeAccent',
+      'pureBlackTheme',
       'sourceSwitches',
       'ignoredUpdateVersion',
       'checkForUpdatesOnStartup',
