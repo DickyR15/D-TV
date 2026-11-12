@@ -2993,6 +2993,17 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  Widget _applyAspectRatio(Widget child) {
+    final ratio = playbackAspectRatioValue(_playbackAspectRatio);
+    if (ratio == null) return child;
+    return Center(
+      child: AspectRatio(
+        aspectRatio: ratio,
+        child: ClipRect(child: child),
+      ),
+    );
+  }
+
   Widget _videoPane(BuildContext context) {
     final videoTheme = _television
         ? televisionTheme(AppTheme.dark)
@@ -3107,15 +3118,17 @@ class _PlayerScreenState extends State<PlayerScreen>
               if (widget.videoBuilder != null)
                 widget.videoBuilder!(layeredControls)
               else
-                _videoOutput(
-                  fit: _playbackAspectRatio == PlaybackAspectRatio.automatic
-                      ? playerVideoFit(
-                          ios: Platform.isIOS,
-                          fullscreen: _showFullscreen,
-                          aspectRatio: _aspectRatio,
-                        )
-                      : playbackAspectRatioFit(_playbackAspectRatio),
-                  controls: layeredControls,
+                _applyAspectRatio(
+                  _videoOutput(
+                    fit: _playbackAspectRatio == PlaybackAspectRatio.automatic
+                        ? playerVideoFit(
+                            ios: Platform.isIOS,
+                            fullscreen: _showFullscreen,
+                            aspectRatio: _aspectRatio,
+                          )
+                        : playbackAspectRatioFit(_playbackAspectRatio),
+                    controls: layeredControls,
+                  ),
                 ),
               if (_loading &&
                   _showLoadingOverlay &&
