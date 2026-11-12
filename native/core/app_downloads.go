@@ -579,5 +579,5 @@ func (manager *nativeDownloads) close() {
 }
 
 func nativeDownloadError(status int) error {
-	return fmt.Errorf("媒体服务器返回 HTTP %d，请稍后重试", status)
+	return fmt.Errorf("媒體伺服器回傳 HTTP %d，請稍後重試", status)
 }
