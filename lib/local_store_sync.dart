@@ -41,7 +41,7 @@ extension LocalStoreSync on LocalStore {
   }
 
   LanDocument get lanDocument {
-    if (locked) throw StateError('請先解鎖當前使用者');
+    if (locked) throw StateError('請先解鎖目前使用者');
     final cached = _lanDocumentCache;
     if (cached != null) return cached.copy();
     final raw = _string(_key('lanRecords'));
@@ -94,7 +94,7 @@ extension LocalStoreSync on LocalStore {
   Future<void> ensureLanRecords() {
     final epoch = _epoch;
     return _queue(() async {
-      if (locked || epoch != _epoch) throw StateError('當前使用者已變更');
+      if (locked || epoch != _epoch) throw StateError('目前使用者已變更');
       final document = lanDocument;
       await _commit({
         _key('lanRecords'): jsonEncode(document.toJson()),
@@ -171,7 +171,7 @@ extension LocalStoreSync on LocalStore {
           isCurrent?.call() == false ||
           sources.isEmpty ||
           !sources.every(allowsSource)) {
-        throw StateError('當前使用者或站源許可權已變更，請重新連線');
+        throw StateError('目前使用者或片源權限已變更，請重新連線');
       }
       if (lanReceipt(operation) != null) return;
       final document = lanDocument;
@@ -246,7 +246,7 @@ extension LocalStoreSync on LocalStore {
   ) {
     final epoch = _epoch;
     return _queue(() async {
-      if (locked || epoch != _epoch) throw StateError('當前使用者已變更');
+      if (locked || epoch != _epoch) throw StateError('目前使用者已變更');
       final document = lanDocument;
       final record = document.records[id];
       final cell = record?.fields[field];
