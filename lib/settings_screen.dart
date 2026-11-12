@@ -116,6 +116,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _choosePureBlackTheme() async {
+    final selected = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => DialogRouteBackHandler(
+        onBack: () => Navigator.of(dialogContext).pop(),
+        child: SimpleDialog(
+          title: const Text('純黑深色模式'),
+          children: [
+            ListTile(
+              autofocus: widget.store.pureBlackTheme && AppLayout.isTelevision(context),
+              selected: widget.store.pureBlackTheme,
+              leading: Icon(widget.store.pureBlackTheme ? Icons.check_circle : Icons.circle_outlined),
+              title: const Text('開啟純黑背景'),
+              subtitle: const Text('適合 OLED 螢幕；僅在深色主題時生效'),
+              onTap: () => Navigator.of(dialogContext).pop(true),
+            ),
+            ListTile(
+              autofocus: !widget.store.pureBlackTheme && AppLayout.isTelevision(context),
+              selected: !widget.store.pureBlackTheme,
+              leading: Icon(!widget.store.pureBlackTheme ? Icons.check_circle : Icons.circle_outlined),
+              title: const Text('關閉（預設）'),
+              onTap: () => Navigator.of(dialogContext).pop(false),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted || selected == widget.store.pureBlackTheme) return;
+    try {
+      await widget.store.setPureBlackTheme(selected);
+      if (mounted) setState(() => _message = null);
+    } catch (error) {
+      if (mounted) setState(() => _message = '純黑深色模式設定失敗：${uiTraditional(error.toString())}');
+    }
+  }
+
   Future<void> _chooseThemeAccent() async {
     final selected = await showDialog<String>(
       context: context,
@@ -333,6 +369,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: Text(AppTheme.label(widget.store.themeMode)),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: _chooseTheme,
+              ),
+              ListTile(
+                key: const ValueKey('pure-black-theme-setting'),
+                leading: const Icon(Icons.brightness_2_outlined),
+                title: const Text('純黑深色模式'),
+                subtitle: Text(widget.store.pureBlackTheme ? '已開啟（OLED）' : '關閉'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: _choosePureBlackTheme,
               ),
               ListTile(
                 key: const ValueKey('theme-accent-setting'),
