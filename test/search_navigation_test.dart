@@ -151,6 +151,24 @@ void main() {
       expect(find.byType(RankingsScreen), findsOneWidget);
       expect(find.text('保留的榜單項目'), findsOneWidget);
       expect(find.text('搜尋命中短劇'), findsNothing);
+
+      // A single Android TV Back closes only the top dialog first.
+      await tester.tap(find.byKey(const ValueKey('tv-search-trigger')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tv-drama-search-input')), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tv-drama-search-input')), findsNothing);
+      expect(find.byType(RankingsScreen), findsOneWidget);
+      expect(find.text('保留的榜單項目'), findsOneWidget);
+
+      // The next Back removes only the ranking route and returns to Home.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(RankingsScreen), findsNothing);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(find.text('保留的榜單項目'), findsNothing);
+      expect(find.text('再按一次返回鍵退出 D TV'), findsNothing);
     },
   );
 }
