@@ -149,7 +149,7 @@ func parseDSDDetail(document *html.Node, pageURL, sourceID, site string) (Drama,
 	addEpisode(mapString(player, "link_pre"), "")
 	addEpisode(mapString(player, "link_next"), "")
 	if len(chapters) > 10000 {
-		return Drama{}, nil, errors.New("帝果分集目录过大")
+		return Drama{}, nil, errors.New("帝果集數目錄過大")
 	}
 	sort.SliceStable(chapters, func(i, j int) bool {
 		left, _ := strconv.Atoi(chapters[i].EpisodeString(i + 1))
