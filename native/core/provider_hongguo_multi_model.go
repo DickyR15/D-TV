@@ -98,7 +98,6 @@ func (downloader *Downloader) resolveHongguoHelperMedia(ctx context.Context, ser
 	if err := downloader.ensureHongguoHelperDevice(ctx); err != nil {
 		return providerMedia{}, err
 	}
-	helperCtx := context.WithValue(ctx, hongguoHelperDeviceKey{}, true)
 	payload := map[string]any{
 		"video_id": videoID,
 		"content_type": 1,
