@@ -785,8 +785,8 @@ class _PlayerControlsState extends State<PlayerControls> {
       builder: (context, _) => _toolButton(
         key: key,
         tooltip: link.connection == null
-            ? '推送'
-            : '推送到 ${link.connection!.peer.name}',
+            ? '傳送播放'
+            : '傳送播放至 ${link.connection!.peer.name}',
         onPressed: widget.enabled ? () => _panel(widget.onPush!) : null,
         child: link.pushing
             ? const SizedBox(
