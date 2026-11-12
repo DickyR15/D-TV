@@ -28,10 +28,10 @@ class PlaybackPreloader extends ChangeNotifier {
           ? '下一集已下載'
           : bytes > 0
           ? '下一集已準備 · 預取 ${(bytes / 1024).ceil()} KB'
-          : '下一集播放地址已準備';
+          : '下一集播放網址已準備';
     }
     if (loading || _delay != null) return '正在準備下一集';
-    return error.isNotEmpty ? '下一集預載入暫不可用，切集時會重新獲取' : '播放後段提前準備下一集';
+    return error.isNotEmpty ? '下一集預載入暫不可用，切換集數時會重新取得' : '播放後段會提前準備下一集';
   }
 
   String _key(Drama drama, Episode episode, int quality, bool online) =>
