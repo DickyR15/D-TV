@@ -24,7 +24,7 @@ type hongguoDetailCall struct {
 
 func (downloader *Downloader) hongguoAppDetail(ctx context.Context, seriesID string) (hongguoDetailEntry, error) {
 	if !hongguoNumericID.MatchString(seriesID) {
-		return hongguoDetailEntry{}, errors.New("红果剧集 ID 无效")
+		return hongguoDetailEntry{}, errors.New("紅果劇集 ID 無效")
 	}
 	client := downloader.hongguoClient()
 	client.mu.Lock()
@@ -81,7 +81,7 @@ func parseHongguoAppDetail(result map[string]any, seriesID string) (hongguoDetai
 		videoID := mapString(video, "vid")
 		index, err := strconv.Atoi(mapString(video, "vid_index"))
 		if err != nil || index < 1 || !hongguoNumericID.MatchString(videoID) {
-			return entry, errors.New("红果 App 分集编号或视频 ID 无效")
+			return entry, errors.New("紅果 App 集數編號或影片 ID 無效")
 		}
 		if identifier := mapString(video, "series_id"); identifier != "" && identifier != seriesID {
 			return entry, errors.New("红果 App 返回了其他剧集的分集")
