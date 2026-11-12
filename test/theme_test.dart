@@ -258,7 +258,7 @@ void main() {
   });
 }
 
-
+}
   test('pure black dark theme uses black OLED surfaces', () {
     final theme = AppTheme.darkFor(null, pureBlack: true);
     expect(theme.brightness, Brightness.dark);
@@ -268,7 +268,7 @@ void main() {
     expect(AppTheme.darkFor(null, pureBlack: false).scaffoldBackgroundColor, isNot(Colors.black));
   });
 
-  test('pure black background option is accessible from settings', () async {
+  testWidgets('pure black background option is accessible from settings', (tester) async {
     final store = await localStore();
     addTearDown(store.dispose);
     await tester.pumpWidget(
