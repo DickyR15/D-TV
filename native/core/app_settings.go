@@ -40,13 +40,13 @@ func (settings nativeResourceSettings) validate() error {
 	}
 	if settings.ProxyMode == "manual" || settings.ProxyURL != "" {
 		if len(settings.ProxyURL) > 2048 {
-			return errors.New("代理地址过长")
+			return errors.New("代理伺服器位址過長")
 		}
 		parsed, err := url.Parse(settings.ProxyURL)
 		if err != nil || parsed.Hostname() == "" || parsed.Fragment != "" || parsed.RawQuery != "" ||
 			(parsed.Path != "" && parsed.Path != "/") ||
 			(parsed.Scheme != "http" && parsed.Scheme != "https" && parsed.Scheme != "socks5" && parsed.Scheme != "socks5h") {
-			return errors.New("请输入有效的 HTTP、HTTPS 或 SOCKS5 代理地址")
+			return errors.New("請輸入有效的 HTTP、HTTPS 或 SOCKS5 代理伺服器位址")
 		}
 		if port := parsed.Port(); port != "" {
 			number, err := strconv.Atoi(port)
@@ -93,13 +93,13 @@ func (engine *nativeEngine) loadResourceSettings() {
 			if data, readErr := os.ReadFile(file); readErr == nil && json.Unmarshal(data, &stored) == nil && stored.validate() == nil {
 				settings = stored
 			} else {
-				settings.Warning = "网络与资源设置无法读取，已使用默认值，请重新保存设置"
+				settings.Warning = "網路與資源設定無法讀取，已使用預設值，請重新儲存設定"
 			}
 		} else {
-			settings.Warning = "网络与资源设置无效，已使用默认值，请重新保存设置"
+			settings.Warning = "網路與資源設定無效，已使用預設值，請重新儲存設定"
 		}
 	} else if !os.IsNotExist(err) {
-		settings.Warning = "网络与资源设置无法读取，已使用默认值，请重新保存设置"
+		settings.Warning = "網路與資源設定無法讀取，已使用預設值，請重新儲存設定"
 	}
 	engine.settings = settings
 	engine.applyResourceSettings(settings)
@@ -152,7 +152,7 @@ func (engine *nativeEngine) saveResourceSettings(settings nativeResourceSettings
 		err = nativeDownloadWrite(filepath.Join(engine.directory, "resource-settings.json"), data)
 	}
 	if err != nil {
-		return nativeResourceSettings{}, errors.New("未能保存网络与资源设置，原设置保持不变")
+		return nativeResourceSettings{}, errors.New("未能儲存網路與資源設定，原設定保持不變")
 	}
 	engine.settings = settings
 	engine.applyResourceSettings(settings)
