@@ -52,7 +52,6 @@ class LocalSnapshot {
     'forceLogin',
     'ignoredUpdateVersion',
     'checkForUpdatesOnStartup',
-    'pureBlackTheme',
   };
   static const _retiredKeys = {
     'sourceGateEnabled',
@@ -272,6 +271,7 @@ class LocalSnapshot {
       'displayMode',
       'themeMode',
       'themeAccent',
+      'pureBlackTheme',
       'sourceSwitches',
       'ignoredUpdateVersion',
       'checkForUpdatesOnStartup',
