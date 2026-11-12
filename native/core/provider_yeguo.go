@@ -203,7 +203,7 @@ func yeguoEpisodePage(site, id string, episode int) string {
 
 func (d *Downloader) fetchYeguoDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
 	if !webProviderNumericID.MatchString(sourceID) {
-		return Drama{}, nil, errors.New("野果剧集 ID 无效")
+		return Drama{}, nil, errors.New("野果劇集 ID 無效")
 	}
 	row, err := d.yeguoClient().call(ctx, "/api/playlet/detail", url.Values{
 		"video_id": {sourceID}, "id": {sourceID}, "episode_id": {"0"}, "related_limit": {"0"},
@@ -233,7 +233,7 @@ func (d *Downloader) fetchYeguoDetail(ctx context.Context, sourceID string) (Dra
 		id := mapString(episode, "id")
 		number, valid := webProviderInteger(episode["sort"], 100000)
 		if !webProviderNumericID.MatchString(id) || !valid || number < 1 || seenIDs[id] || seenNumbers[number] {
-			return Drama{}, nil, errors.New("野果分集编号无效或重复，请刷新详情")
+			return Drama{}, nil, errors.New("野果集數編號無效或重複，請重新整理詳情")
 		}
 		seenIDs[id], seenNumbers[number] = true, true
 		title := firstNonEmpty(mapString(episode, "title"), fmt.Sprintf("第 %d 集", number))
