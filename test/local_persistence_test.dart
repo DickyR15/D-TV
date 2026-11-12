@@ -294,6 +294,7 @@ void main() {
       'displayMode': backup['displayMode'],
       'themeMode': backup['themeMode'],
       'themeAccent': backup['themeAccent'],
+      'pureBlackTheme': backup['pureBlackTheme'],
       'forceLogin': backup['forceLogin'],
       'ignoredUpdateVersion': backup['ignoredUpdateVersion'],
       'checkForUpdatesOnStartup': backup['checkForUpdatesOnStartup'],
