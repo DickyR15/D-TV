@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 // resolveHongguoMultiModelMedia is a second, official App playback path. It is
 // tried only when the current video_model/v1 path fails, keeping successful
 // play starts fast while adding the multi_video_model + fallback_api route.
+var errHongguoH266Only = errors.New("紅果目前只回傳 H.266（bytevc2）媒體")
+
 func (downloader *Downloader) resolveHongguoMultiModelMedia(ctx context.Context, videoID string) (providerMedia, error) {
 	if !hongguoNumericID.MatchString(videoID) {
 		return providerMedia{}, errors.New("紅果備用播放 ID 無效")
