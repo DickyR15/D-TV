@@ -186,7 +186,7 @@ class _MergeQueueScreenState extends State<MergeQueueScreen> {
           ],
         ),
         body: !_allowed
-            ? const StatusPanel(title: '當前使用者已切換', message: '請返回後重新開啟合併佇列。')
+            ? const StatusPanel(title: '目前使用者已切換', message: '請返回後重新開啟合併佇列。')
             : _loading
             ? const Center(child: CircularProgressIndicator())
             : Column(
