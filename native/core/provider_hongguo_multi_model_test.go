@@ -185,7 +185,7 @@ func TestResolveHongguoHelperMediaUsesH265OnlyForHelperDevice(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		deviceID := request.URL.Query().Get("device_id")
 		calls = append(calls, request.URL.Path+"@"+deviceID)
-		if request.URL.Path == hongguoDeviceRegisterURL {
+		if request.URL.Path == "/service/2/device_register/" {
 			return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"9001","install_id_str":"90019"}`), nil
 		}
 		if request.URL.Path == "/novel/player/video_model/v1/" {
