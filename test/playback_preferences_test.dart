@@ -196,7 +196,9 @@ void main() {
 
   test('fixed aspect ratios return the expected target ratio', () {
     expect(playbackAspectRatioValue(PlaybackAspectRatio.ratio4x3), closeTo(4 / 3, .0001));
+    expect(playbackAspectRatioValue(PlaybackAspectRatio.ratio4x3, sourceAspectRatio: 9 / 16), closeTo(3 / 4, .0001));
     expect(playbackAspectRatioValue(PlaybackAspectRatio.ratio16x9), closeTo(16 / 9, .0001));
+    expect(playbackAspectRatioValue(PlaybackAspectRatio.ratio16x9, sourceAspectRatio: 9 / 16), closeTo(9 / 16, .0001));
     expect(playbackAspectRatioValue(PlaybackAspectRatio.automatic), isNull);
   });
 }
