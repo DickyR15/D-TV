@@ -138,7 +138,7 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 			bundle.quality = height
 		}
 		if !master && !strings.Contains(body, "#EXT-X-ENDLIST") {
-			return "", errors.New("暂不支持下载直播或尚未结束的播放列表")
+			return "", errors.New("目前不支援下載直播或尚未結束的播放清單")
 		}
 		parsed, err := url.Parse(base)
 		if err != nil {
@@ -240,7 +240,7 @@ func (manager *nativeDownloads) downloadBundle(ctx context.Context, media provid
 		return bundle, err
 	}
 	if len(bundle.assets) == 0 {
-		return bundle, errors.New("播放列表没有可下载的媒体")
+		return bundle, errors.New("播放清單沒有可下載的媒體")
 	}
 	return bundle, nil
 }
