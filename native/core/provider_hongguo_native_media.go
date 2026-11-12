@@ -14,7 +14,7 @@ import (
 
 func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoID string) (providerMedia, error) {
 	if !hongguoNumericID.MatchString(videoID) {
-		return providerMedia{}, errors.New("红果视频 ID 无效")
+		return providerMedia{}, errors.New("紅果影片 ID 無效")
 	}
 	payload := map[string]any{
 		"video_id": videoID, "content_type": 1,
@@ -33,7 +33,7 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 		decoder := json.NewDecoder(strings.NewReader(encoded))
 		decoder.UseNumber()
 		if err := decoder.Decode(&model); err != nil {
-			return providerMedia{}, errors.New("红果 App 播放信息格式异常")
+			return providerMedia{}, errors.New("紅果 App 播放資訊格式異常")
 		}
 	}
 	if len(model) == 0 {
@@ -116,12 +116,12 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 		return selected, nil
 	}
 	if keyErr != nil {
-		return providerMedia{}, fmt.Errorf("红果 App 媒体密钥不可用: %w", keyErr)
+		return providerMedia{}, fmt.Errorf("紅果 App 媒體金鑰無法使用：%w", keyErr)
 	}
 	if hasH266Variant {
 		return providerMedia{}, errHongguoH266Only
 	}
-	return providerMedia{}, errors.New("红果 App 未返回兼容的媒体，已跳过不支持的编码")
+	return providerMedia{}, errors.New("紅果 App 未提供相容的媒體，已略過不支援的編碼")
 }
 
 func hongguoMediaAddresses(info map[string]any) []string {
