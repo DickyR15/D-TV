@@ -215,7 +215,7 @@ func (engine *nativeEngine) startSourceTask(source, operation string, drama nati
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	task := &nativeSourceTask{cancel: cancel}
 	engine.sourceTasks[source] = task
-	previous.Operation, previous.Running, previous.Stage = operation, true, "准备中"
+	previous.Operation, previous.Running, previous.Stage = operation, true, "準備中"
 	previous.Completed, previous.Total, previous.Added = 0, 0, 0
 	previous.NeedsSave = false
 	previous.Error, previous.StartedAt, previous.FinishedAt, previous.RetryAt = "", time.Now(), time.Time{}, time.Time{}
