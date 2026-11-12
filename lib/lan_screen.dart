@@ -1076,8 +1076,8 @@ class LanPushButton extends StatelessWidget {
       animation: link,
       builder: (context, _) => IconButton(
         tooltip: link.connection == null
-            ? '推送'
-            : '推送到 ${link.connection!.peer.name}',
+            ? '傳送播放'
+            : '傳送播放至 ${link.connection!.peer.name}',
         onPressed: onPressed,
         constraints: const BoxConstraints.tightFor(width: 36, height: 36),
         padding: EdgeInsets.zero,
@@ -1158,7 +1158,7 @@ class _LanPushPanelState extends State<_LanPushPanel> {
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('切換對方正在播放的內容？'),
-                  content: Text('對方正在播放“$title”，繼續後將接續本機目前集數。'),
+                  content: Text('對方正在播放「$title」，繼續後會接續本機目前的集數。'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context, false),
@@ -1166,7 +1166,7 @@ class _LanPushPanelState extends State<_LanPushPanel> {
                     ),
                     FilledButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: const Text('推送播放'),
+                      child: const Text('傳送播放內容'),
                     ),
                   ],
                 ),
@@ -1244,7 +1244,7 @@ class _LanPushPanelState extends State<_LanPushPanel> {
                 if (!_done) await widget.controller.cancelPush();
                 if (context.mounted) Navigator.pop(context);
               },
-              child: Text(_done ? '完成' : '取消推送'),
+              child: Text(_done ? '完成' : '取消傳送'),
             ),
           ),
         ],
