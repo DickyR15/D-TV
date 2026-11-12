@@ -444,7 +444,11 @@ func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testi
 	base := http.DefaultTransport.(*http.Transport).Clone()
 	base.Proxy = nil
 	roots := x509.NewCertPool()
-	roots.AddCert(server.TLS.Certificates[0].Leaf)
+	leaf, parseErr := x509.ParseCertificate(server.TLS.Certificates[0].Certificate[0])
+	if parseErr != nil {
+		t.Fatal(parseErr)
+	}
+	roots.AddCert(leaf)
 	base.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
 	base.DialContext = func(ctx context.Context, network, address string) (net.Conn,error) {
 		if address == net.JoinHostPort(host,port) {
