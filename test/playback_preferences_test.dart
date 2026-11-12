@@ -184,9 +184,6 @@ void main() {
       );
     }
   });
-}
-
-
   test('playback aspect ratio settings persist and old settings default to automatic', () {
     final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
     expect(defaults.aspectRatio, PlaybackAspectRatio.automatic);
@@ -207,3 +204,8 @@ void main() {
     expect(playbackAspectRatioValue(PlaybackAspectRatio.ratio16x9), closeTo(16 / 9, .0001));
     expect(playbackAspectRatioValue(PlaybackAspectRatio.automatic), isNull);
   });
+
+}
+
+
+
