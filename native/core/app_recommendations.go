@@ -24,7 +24,7 @@ func (engine *nativeEngine) cachedRecommendations(genre string) (nativeCatalogRe
 	engine.mu.Unlock()
 	if !found && len(result.Items) > 0 {
 		result.Fresh, result.HasMore = false, false
-		result.Warning = joinNativeWarnings(result.Warning, "推荐位置已失效，请刷新推荐")
+		result.Warning = joinNativeWarnings(result.Warning, "推薦位置已失效，請重新整理推薦")
 	}
 	return result, nil
 }
@@ -100,7 +100,7 @@ func (engine *nativeEngine) nativeRecommendations(ctx context.Context, input nat
 		}
 	}
 	if len(fresh) == 0 && page.HasMore {
-		return nativeCatalogResult{}, errors.New("暂时没有新的推荐，已保留上次位置；可重试或刷新推荐")
+		return nativeCatalogResult{}, errors.New("暫時沒有新的推薦，已保留上次位置；可重試或重新整理推薦")
 	}
 	items := mergeNativeCatalog(previous, fresh)
 	identifiers := make([]string, 0, min(540, len(items)))
