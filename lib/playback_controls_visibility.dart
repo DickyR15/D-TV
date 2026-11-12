@@ -114,3 +114,12 @@ bool playbackControlsOverlayVisible({
       (buffering && !automaticRevealSuppressed) ||
       panelOpen;
 }
+
+
+/// Hidden playback controls should not rebuild their progress UI for every
+/// position/buffer event. Buffering and transient seek hints remain visible.
+bool playbackProgressRefreshAllowed({
+  required bool controlsVisible,
+  required bool buffering,
+  bool transientSeekHint = false,
+}) => controlsVisible || buffering || transientSeekHint;
