@@ -69,14 +69,14 @@ func huangjuDramaFromMap(row map[string]any, site, sourceID string) (Drama, erro
 		sourceID = slug + "-" + id
 	}
 	if !validHuangjuID(sourceID) || !strings.HasSuffix(sourceID, "-"+id) {
-		return Drama{}, errors.New("剧果详情与请求剧集不符")
+		return Drama{}, errors.New("劇果詳情與要求的劇集不符")
 	}
 	episodes := 0
 	if row["totalEpisodes"] != nil {
 		var valid bool
 		episodes, valid = huangjuInteger(row["totalEpisodes"], 100000)
 		if !valid {
-			return Drama{}, errors.New("剧果集数格式无效")
+			return Drama{}, errors.New("劇果集數格式無效")
 		}
 	}
 	categories := huangjuCategoryNames(row)
@@ -110,7 +110,7 @@ func huangjuDramaFromMap(row map[string]any, site, sourceID string) (Drama, erro
 		ID: providerDramaID(sourceHuangju, sourceID), Source: sourceHuangju, SourceID: sourceID,
 		Title: truncate(title, 256), Name: truncate(title, 256), Desc: truncate(description, 12000), Intro: truncate(description, 12000),
 		Cover: cover, CoverURL: cover, TotalEpisode: episodes, EpisodeCount: episodes,
-		Category: category, ChannelName: "剧果", Tags: tags, ReleaseStatus: status, Score: score,
+		Category: category, ChannelName: "劇果", Tags: tags, ReleaseStatus: status, Score: score,
 	}, nil
 }
 
@@ -174,7 +174,7 @@ func (d *Downloader) fetchHuangjuCatalogPage(ctx context.Context, page int, cate
 	if row["page"] != nil {
 		actualPage, valid := huangjuInteger(row["page"], 1000000)
 		if !valid || actualPage != page {
-			return nil, false, errors.New("剧果返回的页码与请求不符")
+			return nil, false, errors.New("劇果回傳的頁碼與要求不符")
 		}
 	}
 	if len(rows) > pageSize {
@@ -184,7 +184,7 @@ func (d *Downloader) fetchHuangjuCatalogPage(ctx context.Context, page int, cate
 	if row["total"] != nil {
 		total, valid := huangjuInteger(row["total"], 100000000)
 		if !valid || total < len(rows) {
-			return nil, false, errors.New("剧果分页总数无效")
+			return nil, false, errors.New("劇果分頁總數無效")
 		}
 		hasMore = page < (total+pageSize-1)/pageSize
 	}
@@ -241,7 +241,7 @@ func (d *Downloader) fetchHuangjuDetail(ctx context.Context, sourceID string) (D
 			var valid bool
 			number, valid = huangjuInteger(episode["epNo"], 100000)
 			if !valid {
-				return Drama{}, nil, errors.New("剧果分集编号无效")
+				return Drama{}, nil, errors.New("劇果集數編號無效")
 			}
 			if number == 0 {
 				number = index + 1
@@ -307,7 +307,7 @@ func huangjuMediaCredentials(headers http.Header, address, site string, expirati
 	for _, name := range []string{"CloudFront-Policy", "CloudFront-Signature", "CloudFront-Key-Pair-Id"} {
 		value := cookies[name]
 		if value == "" || len(value) > 8192 || strings.ContainsAny(value, ",;\"\\") || strings.IndexFunc(value, func(r rune) bool { return r <= 32 || r >= 127 }) >= 0 {
-			return nil, errors.New("剧果未返回完整的媒体凭证，请重试")
+			return nil, errors.New("劇果未提供完整的媒體憑證，請重試")
 		}
 		values = append(values, name+"="+value)
 	}
