@@ -435,27 +435,27 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                 if (link.local != null)
                   ExpansionTile(
                     leading: const Icon(Icons.info_outline_rounded),
-                    title: const Text('本機地址與連線幫助'),
+                    title: const Text('本機位址與連線說明'),
                     onExpansionChanged: (expanded) {
                       if (expanded) _revealConnectionHelpBottom();
                     },
                     childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     children: [
                       const Text(
-                        '兩臺裝置都需開啟「區域網路自動同步」並保持應用在前景。發現失敗時，可在另一端輸入下列地址；Windows 需允許本應用透過專用網路防火牆。',
+                        '兩臺裝置都需開啟「區域網路自動同步」並保持應用在前景。發現失敗時，可在另一端輸入下列位址；Windows 需允許本應用透過專用網路防火牆。',
                       ),
                       for (final address in link.local!.addresses)
                         ListTile(
                           title: SelectableText(address),
                           trailing: IconButton(
-                            tooltip: '複製地址',
+                            tooltip: '複製位址',
                             icon: const Icon(Icons.copy_rounded),
                             onPressed: () =>
                                 Clipboard.setData(ClipboardData(text: address)),
                           ),
                         ),
                       if (link.local!.addresses.isEmpty)
-                        const Text('尚未取得區域網地址，請檢查 Wi-Fi 或網線連線。'),
+                        const Text('尚未取得區域網路位址，請檢查 Wi-Fi 或網路線是否連線。'),
                       SizedBox(key: _connectionHelpBottomKey, height: 1),
                     ],
                   ),
@@ -694,7 +694,7 @@ class _LanDevicesState extends State<_LanDevices> {
                 TextButton.icon(
                   onPressed: () => setState(() => _manual = !_manual),
                   icon: const Icon(Icons.keyboard_rounded),
-                  label: const Text('輸入地址連線'),
+                  label: const Text('輸入位址連線'),
                 ),
                 if (_manual) ...[
                   TextField(
@@ -702,7 +702,7 @@ class _LanDevicesState extends State<_LanDevices> {
                     autocorrect: false,
                     enableSuggestions: false,
                     decoration: const InputDecoration(
-                      labelText: '對方顯示的本機地址',
+                      labelText: '對方顯示的本機位址',
                       hintText: '192.168.1.8:53120',
                     ),
                     onSubmitted: (_) => _connect(null),
@@ -1191,7 +1191,7 @@ class _LanPushPanelState extends State<_LanPushPanel> {
         children: [
           Padding(
             padding: const EdgeInsets.all(20),
-            child: Text('推送播放', style: Theme.of(context).textTheme.titleLarge),
+            child: Text('傳送播放內容', style: Theme.of(context).textTheme.titleLarge),
           ),
           Expanded(
             child: SingleChildScrollView(
