@@ -204,3 +204,47 @@ void main() {
   });
 
 }
+
+
+  group('playback progress repaint policy', playbackProgressRefreshTests);
+}
+
+void playbackProgressRefreshTests() {
+  test('hidden progress controls skip position and buffer repaint', () {
+    expect(
+      playbackProgressRefreshAllowed(
+        controlsVisible: false,
+        buffering: false,
+      ),
+      isFalse,
+    );
+  });
+
+  test('visible controls continue to refresh progress', () {
+    expect(
+      playbackProgressRefreshAllowed(
+        controlsVisible: true,
+        buffering: false,
+      ),
+      isTrue,
+    );
+  });
+
+  test('buffering and transient seek hint remain refreshable while hidden', () {
+    expect(
+      playbackProgressRefreshAllowed(
+        controlsVisible: false,
+        buffering: true,
+      ),
+      isTrue,
+    );
+    expect(
+      playbackProgressRefreshAllowed(
+        controlsVisible: false,
+        buffering: false,
+        transientSeekHint: true,
+      ),
+      isTrue,
+    );
+  });
+}
