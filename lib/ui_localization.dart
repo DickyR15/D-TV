@@ -734,6 +734,9 @@ String uiTraditional(String value) {
     for (final entry in _twPhrases.entries) {
       converted = converted.replaceAll(entry.key, entry.value);
     }
+    // Keep this source-permission phrase normalized even when OpenCC changes
+    // neighboring words before the Taiwan phrase pass.
+    converted = converted.replaceAll('站點存取權限', '片源存取權限');
     const restorations = {
       '皇後': '皇后',
       '太後': '太后',
