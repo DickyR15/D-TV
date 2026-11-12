@@ -241,7 +241,7 @@ class MergeQueue {
     final selections = groups.map(continuousMergeJobs).toList();
     for (final jobs in selections) {
       if (!library.store.allowsSource(jobs.first.drama.source)) {
-        throw AppFailure('當前使用者無權合併此站源內容');
+        throw AppFailure('目前使用者無權合併此片源內容');
       }
     }
     await load();
@@ -292,11 +292,11 @@ class MergeQueue {
     await load();
     final job = _find(id);
     if (job == null || !items.any((job) => job.id == id)) {
-      throw AppFailure('合併任務不存在或當前使用者無權操作');
+      throw AppFailure('合併任務不存在，或目前使用者無權操作');
     }
     final epoch = library.store.profileEpoch;
     if (command == 'resume' && _running == id) {
-      throw AppFailure('正在結束當前步驟，請稍後繼續');
+      throw AppFailure('正在完成目前步驟，請稍後繼續');
     }
     await _change(() {
       if (epoch != library.store.profileEpoch) throw AppFailure('使用者已切換，請重新操作');
