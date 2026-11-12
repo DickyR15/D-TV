@@ -507,7 +507,7 @@ func TestNativeSourceRecordSaveFailureAndRetryDuringBackoff(t *testing.T) {
 		record.Health = &nativeSourceHealth{State: "catalogOnly", Sample: "新诊断"}
 	})
 	status, err := engine.startSourceTask(sourceHongguo, "retrySave", nativeDrama{})
-	if err != nil || status.StorageError == "" || status.Stage != "等待保存" || status.Health.Sample != "新诊断" || requests.Load() != 0 {
+	if err != nil || status.StorageError == "" || status.Stage != "等待儲存" || status.Health.Sample != "新诊断" || requests.Load() != 0 {
 		t.Fatal("failed task persistence was hidden or blocked by network cooldown", err, status)
 	}
 	if err := os.Rename(path, path+".blocked"); err != nil {
