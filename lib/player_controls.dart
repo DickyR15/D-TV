@@ -123,20 +123,31 @@ class _PlayerControlsState extends State<PlayerControls> {
       enabled: widget.hideOnAutoAdvanceComplete,
     );
     _lastPlaying = widget.player.state.playing;
-    for (final stream in [
-      widget.player.stream.position,
-      widget.player.stream.duration,
-      widget.player.stream.buffer,
-      widget.player.stream.playing,
-      widget.player.stream.buffering,
-      widget.player.stream.volume,
-    ]) {
-      _subscriptions.add(
-        stream.listen((_) {
-          if (mounted) setState(() {});
-        }),
+    void refreshProgressIfVisible() {
+      if (!mounted) return;
+      final allowed = playbackProgressRefreshAllowed(
+        controlsVisible: _visible && !_autoAdvanceVisibility.suppressOverlay,
+        buffering: widget.player.state.buffering &&
+            !_autoAdvanceVisibility.suppressOverlay,
       );
+      if (allowed) setState(() {});
     }
+
+    _subscriptions.add(widget.player.stream.position.listen((_) {
+      refreshProgressIfVisible();
+    }));
+    _subscriptions.add(widget.player.stream.duration.listen((_) {
+      refreshProgressIfVisible();
+    }));
+    _subscriptions.add(widget.player.stream.buffer.listen((_) {
+      refreshProgressIfVisible();
+    }));
+    _subscriptions.add(widget.player.stream.volume.listen((_) {
+      if (mounted && _visible) setState(() {});
+    }));
+    _subscriptions.add(widget.player.stream.buffering.listen((_) {
+      refreshProgressIfVisible();
+    }));
     _subscriptions.add(
       widget.player.stream.completed.listen((completed) {
         if (!mounted || !widget.enabled) return;
