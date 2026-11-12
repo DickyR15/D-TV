@@ -36,7 +36,7 @@ func (settings nativeResourceSettings) validate() error {
 		return errors.New("并发应为 1 至 6，请求间隔应为 0 至 5000 毫秒")
 	}
 	if settings.ProxyMode != "auto" && settings.ProxyMode != "direct" && settings.ProxyMode != "manual" {
-		return errors.New("代理模式无效")
+		return errors.New("代理模式無效")
 	}
 	if settings.ProxyMode == "manual" || settings.ProxyURL != "" {
 		if len(settings.ProxyURL) > 2048 {
@@ -51,7 +51,7 @@ func (settings nativeResourceSettings) validate() error {
 		if port := parsed.Port(); port != "" {
 			number, err := strconv.Atoi(port)
 			if err != nil || number < 1 || number > 65535 {
-				return errors.New("代理端口无效")
+				return errors.New("代理連接埠無效")
 			}
 		}
 	}
