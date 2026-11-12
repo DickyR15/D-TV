@@ -150,7 +150,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 	}
 	var media providerMedia
 	var keyURL, segmentURL string
-	if !run("播放地址与播放列表", func() (string, error) {
+	if !run("播放網址與播放清單", func() (string, error) {
 		var err error
 		media, err = engine.downloader.resolveProviderMedia(ctx, Task{DramaID: drama.ID, Chapter: chapter, Index: 1})
 		if err != nil {
@@ -158,7 +158,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		}
 		ctx = providerMediaContext(ctx, media.credentials)
 		keyURL, segmentURL, err = engine.downloader.sourceProbeResources(ctx, media)
-		return "已取得可识别的播放地址", err
+		return "已取得可辨識的播放網址", err
 	}) {
 		return failure
 	}
@@ -185,12 +185,12 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 	}) {
 		return failure
 	}
-	run("媒体连接", func() (string, error) {
+	run("媒體連線", func() (string, error) {
 		body, err := engine.downloader.sourceProbeBytes(ctx, segmentURL, media.Referer, false)
 		if err == nil && len(body) == 0 {
 			err = errors.New("媒體伺服器回傳空內容")
 		}
-		return "已读取媒体开头；实际播放效果请在播放器确认", err
+		return "已讀取媒體開頭；實際播放效果請在播放器中確認", err
 	})
 	engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Completed = len(report.Steps) })
 	return failure
