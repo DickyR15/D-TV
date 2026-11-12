@@ -136,7 +136,11 @@ func (transport *hostDoHTransport) roundTripAddress(request *http.Request, addre
 		previousDial = (&net.Dialer{Timeout: 30*time.Second, KeepAlive: 30*time.Second}).DialContext
 	}
 	clone.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
-		return previousDial(ctx, network, net.JoinHostPort(address, "443"))
+		port := request.URL.Port()
+		if port == "" {
+			port = "443"
+		}
+		return previousDial(ctx, network, net.JoinHostPort(address, port))
 	}
 	attempt := request.Clone(request.Context())
 	if request.Body != nil {
