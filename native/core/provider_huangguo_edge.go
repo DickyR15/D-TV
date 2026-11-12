@@ -194,7 +194,9 @@ func (d *Downloader) openHuangguoEdgeSession(ctx context.Context) (*huangguoEdge
 			"v": 1, "type": "hello",
 			"client_pub": base64.RawURLEncoding.EncodeToString(privateKey.PublicKey().Bytes()),
 		}
-		raw, status, err := d.huangguoEdgePost(ctx, candidate, helloRequest)
+		attemptCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		raw, status, err := d.huangguoEdgePost(attemptCtx, candidate, helloRequest)
+		cancel()
 		if err != nil {
 			lastErr = err
 			continue

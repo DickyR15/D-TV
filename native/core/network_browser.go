@@ -44,7 +44,8 @@ func newHuangguoBrowserTransport(base http.RoundTripper, downloader *Downloader)
 }
 
 func (transport *huangguoBrowserTransport) matches(request *http.Request) bool {
-	if request.Method == http.MethodPost && request.URL.Path == "/api/playback/request" {
+	if request.Method == http.MethodPost && request.URL.Path == "/api/playback/request" &&
+		(request.URL.Scheme == "http" || request.URL.Scheme == "https") {
 		host := strings.ToLower(request.URL.Hostname())
 		if host == "huangguoai.com" || host == "huangguoai.io" {
 			return true
