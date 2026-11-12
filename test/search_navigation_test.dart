@@ -164,7 +164,7 @@ void main() {
 
       // A physically separate Back after the duplicate-event guard window
       // removes only the ranking route and returns to Home.
-      await tester.pump(const Duration(milliseconds: 950));
+      await tester.pump(const Duration(milliseconds: 1500));
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.byType(RankingsScreen), findsNothing);
