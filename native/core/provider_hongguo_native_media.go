@@ -118,6 +118,9 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 	if keyErr != nil {
 		return providerMedia{}, fmt.Errorf("红果 App 媒体密钥不可用: %w", keyErr)
 	}
+	if hasH266Variant {
+		return providerMedia{}, errHongguoH266Only
+	}
 	return providerMedia{}, errors.New("红果 App 未返回兼容的媒体，已跳过不支持的编码")
 }
 
