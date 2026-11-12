@@ -1,8 +1,38 @@
+import 'package:flutter/painting.dart';
+
 import 'video_enhancement_preferences.dart';
 
 const playbackSpeeds = [.5, .75, 1.0, 1.25, 1.5, 2.0, 3.0];
 
 enum TelevisionDecoder { automatic, optimized, hardware, software }
+
+enum PlaybackAspectRatio { automatic, stretch, crop, fitWidth, fitHeight, original, ratio4x3, ratio16x9 }
+
+String playbackAspectRatioLabel(PlaybackAspectRatio value) => switch (value) {
+  PlaybackAspectRatio.automatic => '自動',
+  PlaybackAspectRatio.stretch => '拉伸',
+  PlaybackAspectRatio.crop => '裁切',
+  PlaybackAspectRatio.fitWidth => '等寬',
+  PlaybackAspectRatio.fitHeight => '等高',
+  PlaybackAspectRatio.original => '原始',
+  PlaybackAspectRatio.ratio4x3 => '4:3',
+  PlaybackAspectRatio.ratio16x9 => '16:9',
+};
+
+BoxFit playbackAspectRatioFit(PlaybackAspectRatio value) => switch (value) {
+  PlaybackAspectRatio.automatic || PlaybackAspectRatio.ratio4x3 || PlaybackAspectRatio.ratio16x9 => BoxFit.contain,
+  PlaybackAspectRatio.stretch => BoxFit.fill,
+  PlaybackAspectRatio.crop => BoxFit.cover,
+  PlaybackAspectRatio.fitWidth => BoxFit.fitWidth,
+  PlaybackAspectRatio.fitHeight => BoxFit.fitHeight,
+  PlaybackAspectRatio.original => BoxFit.none,
+};
+
+double? playbackAspectRatioValue(PlaybackAspectRatio value) => switch (value) {
+  PlaybackAspectRatio.ratio4x3 => 4 / 3,
+  PlaybackAspectRatio.ratio16x9 => 16 / 9,
+  _ => null,
+};
 
 /// Maps the shared decoder preference to the native MPV decoder backend.
 /// This follows the upstream default / hardware-compatible / software-compatible
@@ -65,6 +95,7 @@ class PlaybackPreferences {
     this.portraitBlurBackground = false,
     this.televisionDecoder = TelevisionDecoder.automatic,
     this.autoPictureInPicture = false,
+    this.aspectRatio = PlaybackAspectRatio.automatic,
   });
 
   final double speed;
@@ -75,6 +106,7 @@ class PlaybackPreferences {
   final bool portraitBlurBackground;
   final TelevisionDecoder televisionDecoder;
   final bool autoPictureInPicture;
+  final PlaybackAspectRatio aspectRatio;
 
   // Fresh installs enable next-episode preloading on phones and TVs.
   // A saved explicit choice (including false) always takes precedence.
@@ -89,6 +121,7 @@ class PlaybackPreferences {
     bool? portraitBlurBackground,
     TelevisionDecoder? televisionDecoder,
     bool? autoPictureInPicture,
+    PlaybackAspectRatio? aspectRatio,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
@@ -98,6 +131,7 @@ class PlaybackPreferences {
     portraitBlurBackground: portraitBlurBackground ?? this.portraitBlurBackground,
     televisionDecoder: televisionDecoder ?? this.televisionDecoder,
     autoPictureInPicture: autoPictureInPicture ?? this.autoPictureInPicture,
+    aspectRatio: aspectRatio ?? this.aspectRatio,
   );
 
   Map<String, dynamic> toJson() => {
@@ -109,6 +143,7 @@ class PlaybackPreferences {
     'portraitBlurBackground': portraitBlurBackground,
     'televisionDecoderMode': televisionDecoder.name,
     'autoPictureInPicture': autoPictureInPicture,
+    'aspectRatioMode': aspectRatio.name,
   };
 
   factory PlaybackPreferences.fromJson(Map<String, dynamic> value) {
@@ -120,6 +155,8 @@ class PlaybackPreferences {
     final preload = value['preopenNextEpisode'] as bool?;
     final savedDecoder =
         TelevisionDecoder.values.asNameMap()[value['televisionDecoderMode']];
+    final savedAspectRatio = PlaybackAspectRatio.values.asNameMap()[value['aspectRatioMode']];
+    final aspectRatio = savedAspectRatio ?? PlaybackAspectRatio.automatic;
     final decoder = savedDecoder == TelevisionDecoder.optimized
         ? TelevisionDecoder.hardware
         : savedDecoder ?? TelevisionDecoder.automatic;
@@ -135,6 +172,7 @@ class PlaybackPreferences {
       portraitBlurBackground: value['portraitBlurBackground'] as bool? ?? false,
       televisionDecoder: decoder,
       autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
+      aspectRatio: aspectRatio,
     );
   }
 }
