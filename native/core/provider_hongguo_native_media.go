@@ -62,6 +62,7 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 	}
 	duration, _ := strconv.ParseFloat(mapString(model, "video_duration", "duration"), 64)
 	var keyErr error
+	hasH266Variant := false
 	type scoredMedia struct {
 		media providerMedia
 		score int
@@ -72,6 +73,7 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 		meta := nestedMap(variant, "video_meta")
 		codec := strings.ToLower(mapString(meta, "codec_type"))
 		if codec == "bytevc2" || strings.Contains(strings.ToLower(mapString(variant, "gear_des_key")), "bytevc2") {
+			hasH266Variant = true
 			continue
 		}
 		addresses := hongguoMediaAddresses(variant)
