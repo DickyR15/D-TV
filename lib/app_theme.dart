@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 abstract final class AppTheme {
   static final light = _theme(Brightness.light);
   static final dark = _theme(Brightness.dark);
+  static final pureBlackDark = _theme(Brightness.dark, pureBlack: true);
 
   /// D TV 品牌色：低飽和青藍搭配石墨灰與銀白色。
   static const brandAccent = Color(0xFF55BDCA);
@@ -57,8 +58,8 @@ abstract final class AppTheme {
   static ThemeData lightFor(Color? accent) =>
       accent == null ? light : _theme(Brightness.light, accent: accent);
 
-  static ThemeData darkFor(Color? accent) =>
-      accent == null ? dark : _theme(Brightness.dark, accent: accent);
+  static ThemeData darkFor(Color? accent, {bool pureBlack = false}) =>
+      _theme(Brightness.dark, accent: accent, pureBlack: pureBlack);
 
   static ThemeMode mode(String preference) => switch (preference) {
     'light' => ThemeMode.light,
@@ -250,11 +251,12 @@ abstract final class AppTheme {
     }),
   );
 
-  static ThemeData _theme(Brightness brightness, {Color? accent}) {
+  static ThemeData _theme(Brightness brightness, {Color? accent, bool pureBlack = false}) {
     final dark = brightness == Brightness.dark;
     // Neutral graphite surfaces keep the TV interface calm during long sessions.
+    final blackMode = dark && pureBlack;
     final background = dark
-        ? const Color(0xFF101318)
+        ? (blackMode ? Colors.black : const Color(0xFF101318))
         : const Color(0xFFF3F6F8);
     final scheme = ColorScheme.fromSeed(
       seedColor: accent ?? brandAccent,
@@ -285,7 +287,7 @@ abstract final class AppTheme {
           ? (dark ? const Color(0xFFA9B4CB) : const Color(0xFF495B7D))
           : null,
       surface: dark
-          ? const Color(0xFF191D23)
+          ? (blackMode ? Colors.black : const Color(0xFF191D23))
           : Colors.white,
       onSurface: dark
           ? const Color(0xFFEEF2F5)
@@ -300,19 +302,19 @@ abstract final class AppTheme {
           ? const Color(0xFF3A454F)
           : const Color(0xFFD5DEE4),
       surfaceContainerLowest: dark
-          ? const Color(0xFF14181D)
+          ? (blackMode ? Colors.black : const Color(0xFF14181D))
           : Colors.white,
       surfaceContainerLow: dark
-          ? const Color(0xFF1A2026)
+          ? (blackMode ? const Color(0xFF080808) : const Color(0xFF1A2026))
           : const Color(0xFFF5F8FA),
       surfaceContainer: dark
-          ? const Color(0xFF222A31)
+          ? (blackMode ? const Color(0xFF101010) : const Color(0xFF222A31))
           : const Color(0xFFECF1F4),
       surfaceContainerHigh: dark
-          ? const Color(0xFF2B343D)
+          ? (blackMode ? const Color(0xFF181818) : const Color(0xFF2B343D))
           : const Color(0xFFE3EAEF),
       surfaceContainerHighest: dark
-          ? const Color(0xFF343E48)
+          ? (blackMode ? const Color(0xFF202020) : const Color(0xFF343E48))
           : const Color(0xFFD8E2E8),
       surfaceTint: Colors.transparent,
     );
