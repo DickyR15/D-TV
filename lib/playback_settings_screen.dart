@@ -31,6 +31,7 @@ class PlaybackSettingsScreen extends StatefulWidget {
 class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late double _speed = widget.store.playbackPreferences.speed;
   late int _quality = widget.store.playbackPreferences.quality;
+  late PlaybackAspectRatio _aspectRatio = widget.store.playbackPreferences.aspectRatio;
   late TelevisionDecoder _decoder =
       widget.store.playbackPreferences.televisionDecoder;
   late bool _portraitBlurBackground =
@@ -121,6 +122,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           speed: _speed,
           quality: _quality,
           televisionDecoder: _decoder,
+          aspectRatio: _aspectRatio,
           portraitBlurBackground: _portraitBlurBackground,
           preload: _preloadEnabled,
           autoAdvance: _autoAdvance,
@@ -135,6 +137,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
         );
       }
     }
+  }
+
+  void _updateAspectRatio(PlaybackAspectRatio value) {
+    setState(() => _aspectRatio = value);
+    unawaited(_persistPreferences());
   }
 
   void _updateSpeed(double value) {
@@ -257,6 +264,25 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               },
             ),
             const SizedBox(height: 20),
+            DropdownButtonFormField<PlaybackAspectRatio>(
+              key: const ValueKey('playback-aspect-ratio'),
+              initialValue: _aspectRatio,
+              decoration: const InputDecoration(
+                labelText: '畫面比例',
+                helperText: '決定影片在播放區域的顯示方式，不會改變來源清晰度',
+              ),
+              items: [
+                for (final value in PlaybackAspectRatio.values)
+                  DropdownMenuItem(
+                    value: value,
+                    child: Text(playbackAspectRatioLabel(value)),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) _updateAspectRatio(value);
+              },
+            ),
+            const SizedBox(height: 20),
             DropdownButtonFormField<TelevisionDecoder>(
               key: const ValueKey('playback-decoder'),
               initialValue: _decoder,
@@ -359,7 +385,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、清晰度、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
+              '倍速、清晰度、畫面比例、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
             ),
           ],
         ),
