@@ -168,6 +168,11 @@ func clientDeviceIDs(client *hongguoAppClient) (string, string, bool) {
 	return client.state.DeviceID, client.state.InstallID, client.state.Registered
 }
 
+func (downloader *Downloader) hongguoHelperAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
+	helperCtx := context.WithValue(ctx, hongguoHelperDeviceKey{}, true)
+	return downloader.hongguoAppRequest(helperCtx, method, path, extra, payload)
+}
+
 func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
 	client := downloader.hongguoClient()
 	helper, _ := ctx.Value(hongguoHelperDeviceKey{}).(bool)
