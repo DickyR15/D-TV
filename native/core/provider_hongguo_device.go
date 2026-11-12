@@ -113,10 +113,10 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 	request.Header.Set("User-Agent", hongguoAppUserAgent)
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json; charset=utf-8")
-	response, err := downloader.doPreparedCatalogRequest(request, 20*time.Second, func(prepared *http.Request) {
+	response, err := downloader.doPreparedCatalogRequestWithClient(request, 20*time.Second, func(prepared *http.Request) {
 		query.Set("_rticket", strconv.FormatInt(time.Now().UnixMilli(), 10))
 		prepared.URL.RawQuery = query.Encode()
-	})
+	}, downloader.hongguoRegisterClient)
 	if err != nil {
 		return "", "", err
 	}
