@@ -358,7 +358,7 @@ func (d *Downloader) exchangeHuangguoEdge(ctx context.Context, session *huangguo
 	if err := json.Unmarshal(decrypted, &inner); err != nil {
 		return nil, fmt.Errorf("黃果 AI 內層回應格式無效：%w", err)
 	}
-	innerStatus := huangguoEdgeNumber(inner, "status")
+	innerStatus := huangguoEdgeMapNumber(inner, "status")
 	innerBody := huangguoEdgeString(inner, "body")
 	if innerStatus != http.StatusOK {
 		if decoded, decodeErr := base64.StdEncoding.DecodeString(innerBody); decodeErr == nil &&
