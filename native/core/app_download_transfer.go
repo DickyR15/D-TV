@@ -175,7 +175,7 @@ func (manager *nativeDownloads) downloadFile(ctx context.Context, address, refer
 
 func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address, referer, target string, key bool, offset int64, old nativeDownloadFileState, progress func(int64, int64)) (int64, bool, error) {
 	if !isProviderHTTPMediaURL(address) {
-		return 0, false, errors.New("媒体下載網址無效")
+		return 0, false, errors.New("媒體下載網址無效")
 	}
 	requestCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -209,7 +209,7 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 		offset = 0
 	}
 	if encoding := response.Header.Get("Content-Encoding"); encoding != "" && encoding != "identity" {
-		return 0, false, errors.New("服务器返回了压缩媒体响应，无法安全续传")
+		return 0, false, errors.New("伺服器回傳壓縮媒體回應，無法安全地接續下載")
 	}
 	contentType := strings.ToLower(response.Header.Get("Content-Type"))
 	if !key && (strings.Contains(contentType, "text/html") || strings.Contains(contentType, "application/json")) {
@@ -220,7 +220,7 @@ func (manager *nativeDownloads) downloadFileAttempt(ctx context.Context, address
 	if response.StatusCode == http.StatusPartialContent {
 		start, end, full, valid := nativeDownloadRange(response.Header.Get("Content-Range"))
 		if !valid || start != offset || (response.ContentLength >= 0 && response.ContentLength != end-start+1) {
-			return 0, false, errors.New("服务器返回的续传范围不正确，已停止下载")
+			return 0, false, errors.New("伺服器回傳的續傳範圍不正確，已停止下載")
 		}
 		if offset > 0 && ((validator != "" && validator != old.Validator) || (old.Total > 0 && old.Total != full)) {
 			return 0, true, nil
