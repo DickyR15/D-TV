@@ -39,9 +39,9 @@ func catalogResponseBlockReason(response *http.Response, body []byte) string {
 	page := strings.ToLower(string(body))
 	reason := ""
 	if strings.Contains(page, "cloudflare") && (strings.Contains(page, "sorry, you have been blocked") || strings.Contains(page, "you are unable to access")) {
-		reason = "Cloudflare 拒绝了当前请求"
+		reason = "Cloudflare 拒絕了目前的要求"
 	} else if strings.EqualFold(response.Header.Get("Cf-Mitigated"), "challenge") || strings.Contains(page, "_cf_chl_opt") || strings.Contains(page, "<title>just a moment") && strings.Contains(page, "cloudflare") {
-		reason = "站点要求浏览器验证，当前请求无法通过"
+		reason = "片源要求瀏覽器驗證，目前的要求無法通過"
 	}
 	return reason
 }
