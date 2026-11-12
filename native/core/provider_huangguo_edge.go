@@ -68,6 +68,10 @@ func huangguoEdgeString(values map[string]any, key string) string {
 	return strings.TrimSpace(value)
 }
 
+func huangguoEdgeMapNumber(values map[string]any, key string) int64 {
+	return huangguoEdgeNumber(values[key])
+}
+
 func huangguoEdgeTokenValid(value string, min, max int) bool {
 	if len(value) < min || len(value) > max {
 		return false
@@ -216,8 +220,8 @@ func (d *Downloader) openHuangguoEdgeSession(ctx context.Context) (*huangguoEdge
 		}
 		kid, sid := huangguoEdgeString(hello, "kid"), huangguoEdgeString(hello, "sid")
 		site := huangguoEdgeString(hello, "site")
-		serverTime, expiresAt := huangguoEdgeNumber(hello, "server_time"), huangguoEdgeNumber(hello, "expires_at")
-		if huangguoEdgeNumber(hello, "v") != 1 ||
+		serverTime, expiresAt := huangguoEdgeMapNumber(hello, "server_time"), huangguoEdgeMapNumber(hello, "expires_at")
+		if huangguoEdgeMapNumber(hello, "v") != 1 ||
 			huangguoEdgeString(hello, "type") != "hello" ||
 			!huangguoEdgeTokenValid(kid, 1, 64) ||
 			!huangguoEdgeTokenValid(sid, 16, 128) ||
@@ -327,12 +331,12 @@ func (d *Downloader) exchangeHuangguoEdge(ctx context.Context, session *huangguo
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("黃果 AI 加密回應無法解析：%w", err)
 	}
-	if huangguoEdgeNumber(result, "v") != 1 ||
+	if huangguoEdgeMapNumber(result, "v") != 1 ||
 		huangguoEdgeString(result, "type") != "result" ||
 		huangguoEdgeString(result, "kid") != session.kid ||
 		huangguoEdgeString(result, "sid") != session.sid ||
-		uint32(huangguoEdgeNumber(result, "seq")) != sequence ||
-		huangguoEdgeNumber(result, "ts") != timestamp {
+		uint32(huangguoEdgeMapNumber(result, "seq")) != sequence ||
+		huangguoEdgeMapNumber(result, "ts") != timestamp {
 		if strings.Contains(string(raw), "session_expired") {
 			return nil, errHuangguoEdgeSessionExpired
 		}

@@ -90,8 +90,8 @@ func TestHuangguoAIEncryptedPlaybackUsesNewEdgeProtocol(t *testing.T) {
 			return huangguoEdgeTestResponse(request, http.StatusOK, hello)
 		}
 
-		seq := uint32(huangguoEdgeNumber(outer, "seq"))
-		timestamp := huangguoEdgeNumber(outer, "ts")
+		seq := uint32(huangguoEdgeMapNumber(outer, "seq"))
+		timestamp := huangguoEdgeMapNumber(outer, "ts")
 		ciphertext, err := base64.RawURLEncoding.DecodeString(outer["ciphertext"].(string))
 		if err != nil {
 			t.Fatal(err)
