@@ -380,7 +380,7 @@ func nativeDramaCategory(drama Drama) string {
 
 func newNativeEngine(directory string) (*nativeEngine, error) {
 	if !filepath.IsAbs(directory) {
-		return nil, errors.New("应用数据目录无效")
+		return nil, errors.New("應用程式資料目錄無效")
 	}
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return nil, err
@@ -406,7 +406,7 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	providerTransport := cdn
 	checkRedirect := func(request *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
-			return errors.New("站源重定向次数过多")
+			return errors.New("片源重新導向次數過多")
 		}
 		if len(via) > 0 && !strings.EqualFold(request.URL.Host, via[0].URL.Host) {
 			request.Header.Del("X-Preview-Token")
@@ -441,12 +441,12 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 func NativeRequest(raw string) (result string) {
 	defer func() {
 		if recover() != nil {
-			result = `{"ok":false,"error":"本地核心处理失败，请重试"}`
+			result = `{"ok":false,"error":"本機核心處理失敗，請重試"}`
 		}
 	}()
 	var input nativeInput
 	if len(raw) > 1<<20 || json.Unmarshal([]byte(raw), &input) != nil {
-		return `{"ok":false,"error":"请求格式无效"}`
+		return `{"ok":false,"error":"要求格式無效"}`
 	}
 	data, err := nativeDispatch(input)
 	envelope := map[string]any{"ok": err == nil}
@@ -475,7 +475,7 @@ func NativeRequest(raw string) (result string) {
 						record.RetryAt = backoff.until
 					}
 					if !record.Running {
-						record.Stage, record.FinishedAt = "访问失败", time.Now()
+						record.Stage, record.FinishedAt = "存取失敗", time.Now()
 					}
 				})
 			}
@@ -485,7 +485,7 @@ func NativeRequest(raw string) (result string) {
 	}
 	body, marshalErr := json.Marshal(envelope)
 	if marshalErr != nil {
-		return `{"ok":false,"error":"无法读取站源返回的数据"}`
+		return `{"ok":false,"error":"無法讀取片源回傳的資料"}`
 	}
 	return string(body)
 }
@@ -593,12 +593,12 @@ func nativeDispatch(input nativeInput) (any, error) {
 		return engine.nativeCatalog(ctx, input)
 	case "cached":
 		if !validNativeCategory(canonicalProviderSource(input.Source), input.Category) {
-			return nil, errors.New("内容分类无效")
+			return nil, errors.New("內容分類無效")
 		}
 		return engine.nativeCached(nativeCatalogKey(input.Source, input.Category)), nil
 	case "cachedPreview":
 		if !validNativeCategory(canonicalProviderSource(input.Source), input.Category) {
-			return nil, errors.New("内容分类无效")
+			return nil, errors.New("內容分類無效")
 		}
 		return engine.nativeCachedPreview(nativeCatalogKey(input.Source, input.Category)), nil
 	case "categories":
@@ -644,11 +644,11 @@ func nativeDispatch(input nativeInput) (any, error) {
 func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput) (nativeCatalogResult, error) {
 	source := canonicalProviderSource(input.Source)
 	if !isHuangguoProviderSource(source) {
-		return nativeCatalogResult{}, errors.New("请选择有效站源")
+		return nativeCatalogResult{}, errors.New("請選擇有效的片源")
 	}
 	category := strings.TrimSpace(input.Category)
 	if !validNativeCategory(source, category) {
-		return nativeCatalogResult{}, errors.New("内容分类无效")
+		return nativeCatalogResult{}, errors.New("內容分類無效")
 	}
 	cacheKey := nativeCatalogKey(source, category)
 	if err := ctx.Err(); err != nil {
@@ -882,7 +882,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		return result, err
 	}
 	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && source != sourceDuoduo && source != sourceHanxiaoquan && source != sourceHeitao {
-		return result, errors.New("站源暂未返回剧集，请稍后刷新")
+		return result, errors.New("片源尚未提供劇集，請稍後重新整理")
 	}
 	if err != nil {
 		result.Warning = publicError(err).Error()
