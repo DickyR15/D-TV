@@ -66,12 +66,12 @@ func (engine *nativeEngine) nativeRanking(ctx context.Context, input nativeInput
 	var err error
 	if input.CacheOnly {
 		if input.Page != 0 {
-			return nil, errors.New("缓存榜单请求无效")
+			return nil, errors.New("快取榜單要求無效")
 		}
 		page = engine.downloader.cachedRankingTop100(board)
 	} else {
 		if input.Page < 1 || input.Page > 500 {
-			return nil, errors.New("榜单页码无效")
+			return nil, errors.New("榜單頁碼無效")
 		}
 		page, err = engine.downloader.loadRankingPage(ctx, board, input.Page, input.Force)
 		if err != nil {

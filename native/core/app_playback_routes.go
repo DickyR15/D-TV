@@ -75,16 +75,16 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 		return nativePlan{}, err
 	}
 	if choice.index < 0 || choice.index >= len(choice.media) {
-		return nativePlan{}, errors.New("该集没有其他可用的播放线路")
+		return nativePlan{}, errors.New("此集沒有其他可用的播放路線")
 	}
 	media := choice.media[choice.index]
 	var err error
 	if !isProviderHTTPMediaURL(media.URL) {
-		return nativePlan{}, errors.New("站源未返回有效的播放地址")
+		return nativePlan{}, errors.New("片源未提供有效的播放網址")
 	}
 	tokenBytes := make([]byte, 24)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		return nativePlan{}, errors.New("无法初始化播放会话")
+		return nativePlan{}, errors.New("無法初始化播放工作階段")
 	}
 	plan := nativePlan{
 		URL:       media.URL, Headers: map[string]string{"User-Agent": userAgent, "Referer": media.Referer},
@@ -93,7 +93,7 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 	}
 	if media.credentials != nil && !media.credentials.expires.IsZero() {
 		if !time.Now().Before(media.credentials.expires) {
-			return nativePlan{}, errors.New("播放凭证已过期，请重新解析播放")
+			return nativePlan{}, errors.New("播放憑證已過期，請重新解析播放")
 		}
 		plan.ExpiresAt = media.credentials.expires.UnixMilli()
 	}
@@ -172,7 +172,7 @@ func (engine *nativeEngine) nativeNextPlayback(ctx context.Context, session stri
 	choice, exists := engine.playbacks[session]
 	engine.mu.Unlock()
 	if !exists {
-		return nativePlan{}, errors.New("播放线路已失效，请重新解析播放")
+		return nativePlan{}, errors.New("播放路線已失效，請重新解析播放")
 	}
 	// A repeated open/demux failure is often caused by an expired signed URL
 	// set, not by the TV decoder. Refresh after a few failures rather than making
@@ -258,7 +258,7 @@ func (engine *nativeEngine) nativeRefreshPlaybackAfterFailures(
 	}
 	freshChoice = nativeMergeRefreshedPlaybackChoice(previous, freshChoice, remaining)
 	if len(freshChoice.media) == 0 {
-		return nativePlan{}, errors.New("该集没有其他可用的播放线路")
+		return nativePlan{}, errors.New("此集沒有其他可用的播放路線")
 	}
 	engine.downloader.recordDiagnostic(diagnosticEvent{
 		Level:      "info",

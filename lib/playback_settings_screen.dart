@@ -249,7 +249,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               key: const ValueKey('playback-default-quality'),
               initialValue: _quality,
               decoration: const InputDecoration(
-                labelText: '預設清晰度',
+                labelText: '預設畫質',
                 helperText: '自動模式會依片源可用畫質選擇',
               ),
               items: [
@@ -269,7 +269,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               initialValue: _aspectRatio,
               decoration: const InputDecoration(
                 labelText: '畫面比例',
-                helperText: '決定影片在播放區域的顯示方式，不會改變來源清晰度',
+                helperText: '決定影片在播放區域的顯示方式，不會改變片源畫質',
               ),
               items: [
                 for (final value in PlaybackAspectRatio.values)
@@ -385,7 +385,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、清晰度、畫面比例、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
+              '倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
             ),
           ],
         ),

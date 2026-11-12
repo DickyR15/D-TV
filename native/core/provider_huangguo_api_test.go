@@ -73,6 +73,20 @@ func TestHuangguoAIDetailAndPlaybackUseEdgeAPI(t *testing.T) {
 	}
 }
 
+func TestHuangguoAIPlayURLRejectsEmptyResponse(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		target := huangguoEdgeTarget(t, request)
+		if target.Path != "/api/videos/12/play" || target.Query().Get("ep") != "2" {
+			return nil, errors.New("unexpected synthetic playback endpoint")
+		}
+		return sourceFixtureResponse(request, 200, huangguoEdgeReply(map[string]any{"video_url": ""})), nil
+	})
+	if address, err := d.fetchHuangguoAIPlayURL(context.Background(), "12", 2); err == nil || address != "" ||
+		!strings.Contains(err.Error(), "黃果 AI 播放介面未提供有效的播放網址") {
+		t.Fatalf("empty play response should return a specific source error: address=%q err=%v", address, err)
+	}
+}
+
 func TestHuangguoAISearchUsesSitePagination(t *testing.T) {
 	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
 		target := huangguoEdgeTarget(t, request)

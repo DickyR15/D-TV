@@ -270,7 +270,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 					attempt--
 					continue
 				}
-				lastErr = fmt.Errorf("%w（設備註冊失敗：%v）", lastErr, registerErr)
+				lastErr = fmt.Errorf("%w（裝置註冊失敗：%v）", lastErr, registerErr)
 			}
 			if response.StatusCode >= 400 && response.StatusCode < 500 {
 				return nil, lastErr
@@ -290,12 +290,12 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				}
 			}
 			if registerErr != nil {
-				lastErr = fmt.Errorf("紅果 App 接口未返回有效資料（設備註冊失敗：%v）", registerErr)
+				lastErr = fmt.Errorf("紅果 App 介面未提供有效資料（裝置註冊失敗：%v）", registerErr)
 			}
 			continue
 		}
 		if len(content) > providerMaxBodyBytes {
-			return nil, errors.New("红果 App 接口未返回有效数据")
+			return nil, errors.New("紅果 App 介面未提供有效資料")
 		}
 		var result map[string]any
 		decoder := json.NewDecoder(bytes.NewReader(content))

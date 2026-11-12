@@ -223,7 +223,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 content: SelectableText(
                   '已儲存設定備份：\n$path\n\n'
                   '請從檔案管理器開啟 Download/D TV 資料夾，'
-                  '將 JSON 備份檔複製到電腦保存。',
+                  '將 JSON 備份檔複製到電腦儲存。',
                 ),
                 actions: [
                   TextButton(
@@ -358,7 +358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 focusNode: _deviceInterconnectFocus,
                 leading: const Icon(Icons.devices_rounded),
                 title: const Text('裝置互聯'),
-                subtitle: const Text('區域網路自動同步收藏與推送播放'),
+                subtitle: const Text('透過區域網路同步收藏，並傳送播放內容至其他裝置'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => openLanSync(context),
               ),

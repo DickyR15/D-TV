@@ -192,7 +192,7 @@ func (downloader *Downloader) fetchHongguoAppCatalogCategory(ctx context.Context
 			}
 		}
 		if len(genres) == 0 {
-			return nil, errors.New("红果分类无效")
+			return nil, errors.New("紅果分類無效")
 		}
 	}
 	feedKey := func(key string) string {
@@ -350,7 +350,7 @@ func parseHongguoCatalogPage(result map[string]any, cursor hongguoCatalogCursor,
 	data := nestedMap(result, "data")
 	rows, valid := data["video_data"].([]any)
 	if !valid {
-		return nil, cursor, errors.New("App 分类数据格式异常")
+		return nil, cursor, errors.New("App 分類資料格式異常")
 	}
 	items := make([]Drama, 0, len(rows))
 	ids := make([]string, 0, len(rows))
@@ -371,7 +371,7 @@ func parseHongguoCatalogPage(result map[string]any, cursor hongguoCatalogCursor,
 	next, parseErr := strconv.Atoi(mapString(data, "next_offset"))
 	hasMore, paginationOK := data["has_more"].(bool)
 	if !paginationOK || hasMore && parseErr != nil {
-		return items, cursor, errors.New("App 分页标记无效，已保留上次位置")
+		return items, cursor, errors.New("App 分頁標記無效，已保留上次位置")
 	}
 	if parseErr != nil {
 		next = cursor.Offset + len(rows)
@@ -390,7 +390,7 @@ func parseHongguoCatalogPage(result map[string]any, cursor hongguoCatalogCursor,
 	}
 	session := mapString(data, "session_id")
 	if len(session) > 4096 || strings.ContainsAny(session, "\r\n\x00") {
-		return items, cursor, errors.New("App 分页会话无效，已保留上次位置")
+		return items, cursor, errors.New("App 分頁工作階段無效，已保留上次位置")
 	}
 	cursor.Exhausted = !hasMore
 	cursor.Initialized = true

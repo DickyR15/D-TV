@@ -200,8 +200,8 @@ class LunaExoPlayer implements Player {
 
     final uri = Uri.tryParse(url);
     if (uri == null && !url.startsWith('/')) {
-      DiaryService.add('[ExoPlayer] 錯誤: 無效的播放地址 $url');
-      throw Exception('無效的播放地址: $url');
+      DiaryService.add('[ExoPlayer] 錯誤: 無效的播放網址 $url');
+      throw Exception('無效的播放網址: $url');
     }
 
     final normalizedHeaders = headers.entries

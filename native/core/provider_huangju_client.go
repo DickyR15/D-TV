@@ -141,7 +141,7 @@ func (client *huangjuAPIClient) get(ctx context.Context, route string, query url
 func (client *huangjuAPIClient) request(ctx context.Context, method, route string, query url.Values, body []byte, token string, retryAuth bool, limit int64) (huangjuAPIResponse, error) {
 	base, err := url.Parse(client.base)
 	if err != nil || !isProviderHTTPMediaURL(client.base) || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
-		return huangjuAPIResponse{}, errors.New("剧果接口地址无效")
+		return huangjuAPIResponse{}, errors.New("劇果介面網址無效")
 	}
 	timeout := 15 * time.Second
 	if background, _ := ctx.Value(backgroundCatalogKey{}).(bool); background {
@@ -181,7 +181,7 @@ func (client *huangjuAPIClient) request(ctx context.Context, method, route strin
 	previousRedirect := transport.CheckRedirect
 	transport.CheckRedirect = func(next *http.Request, via []*http.Request) error {
 		if len(via) >= 5 || providerMediaOrigin(next.URL) != providerMediaOrigin(base) {
-			return errors.New("剧果接口重定向地址异常")
+			return errors.New("劇果介面重新導向網址異常")
 		}
 		if previousRedirect != nil {
 			return previousRedirect(next, via)
@@ -190,7 +190,7 @@ func (client *huangjuAPIClient) request(ctx context.Context, method, route strin
 	}
 	response, err := transport.Do(request)
 	if err != nil {
-		return huangjuAPIResponse{}, fmt.Errorf("剧果连接失败：%w", publicError(err))
+		return huangjuAPIResponse{}, fmt.Errorf("劇果連線失敗：%w", publicError(err))
 	}
 	defer response.Body.Close()
 	data, readErr := io.ReadAll(io.LimitReader(response.Body, limit+1))
@@ -207,16 +207,16 @@ func (client *huangjuAPIClient) request(ctx context.Context, method, route strin
 		return huangjuAPIResponse{}, d.catalogResponseError(request, response, data)
 	}
 	if readErr != nil || int64(len(data)) > limit {
-		return huangjuAPIResponse{}, errors.New("剧果返回的数据过大或读取失败")
+		return huangjuAPIResponse{}, errors.New("劇果回傳的資料過大或讀取失敗")
 	}
 	var decoded any
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	if decoder.Decode(&decoded) != nil {
-		return huangjuAPIResponse{}, errors.New("剧果返回的数据格式无效")
+		return huangjuAPIResponse{}, errors.New("劇果回傳的資料格式無效")
 	}
 	if decoder.Decode(new(any)) != io.EOF {
-		return huangjuAPIResponse{}, errors.New("剧果返回的数据格式无效")
+		return huangjuAPIResponse{}, errors.New("劇果回傳的資料格式無效")
 	}
 	return huangjuAPIResponse{value: decoded, headers: response.Header.Clone()}, nil
 }

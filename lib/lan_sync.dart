@@ -181,7 +181,7 @@ extension LanSynchronization on LanController {
     if (remote == null) throw StateError('請先連線裝置');
     if (!_sameProfile(remote)) throw StateError(_profileMismatchMessage(remote));
     final sources = _scope(remote);
-    if (sources.isEmpty) throw StateError('兩端當前使用者沒有共同可用的站源');
+    if (sources.isEmpty) throw StateError('兩端目前使用者沒有共同可用的片源');
     _checkSync(ticket, remote);
     final localDocument = store.lanDocument;
     final localBase = localDocument.hashFor(sources);
@@ -454,7 +454,7 @@ extension LanSynchronization on LanController {
   Set<String> _receiveScope(Map<String, dynamic> body, LanConnection remote) {
     final sources = lanSources(body['sources']);
     if (sources.isEmpty || !_scope(remote).containsAll(sources)) {
-      throw StateError('同步範圍超出雙方當前站源許可權');
+      throw StateError('同步範圍超出雙方目前的片源權限');
     }
     return sources;
   }

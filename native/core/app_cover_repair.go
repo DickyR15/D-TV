@@ -152,7 +152,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 			return "", ctx.Err()
 		}
 	}
-	primaryErr := errors.New("站源尚未提供原始海報網址")
+	primaryErr := errors.New("片源尚未提供原始海報網址")
 
 	// Reuse verified local images before contacting remote hosts. For any
 	// record that has already been repaired, its external fallback was saved
@@ -718,7 +718,7 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 				}
 			}
 			if providerAddress == "" && providerErr == nil {
-				providerErr = errors.New("站源詳情沒有可用的備用海報")
+				providerErr = errors.New("片源詳情沒有可用的備用海報")
 			}
 
 			// An official/provider detail poster always outranks external matches.

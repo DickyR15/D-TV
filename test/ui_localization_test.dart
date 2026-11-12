@@ -30,6 +30,28 @@ void main() {
     );
   });
 
+  test('normalizes Taiwan push and playback URL terminology', () {
+    expect(
+      uiTraditional('消息推送、推送通知、推送播放、本機地址、對方的本機地址、播放地址、獲取播放地址、登錄憑證'),
+      '訊息推播、推播通知、傳送播放內容、本機位址、對方的本機位址、播放網址、取得播放網址、登入憑證',
+    );
+    expect(
+      uiTraditional('未返回有效播放地址，請刷新章節或確認站點存取權限'),
+      '未提供有效的播放網址，請重新整理分集或確認片源存取權限',
+    );
+  });
+
+  test('uses Taiwan terminology for notifications and device playback handoff', () {
+    expect(
+      uiTraditional('消息推送、推送通知、推送播放、本機地址、播放地址、獲取播放地址'),
+      '訊息推播、推播通知、傳送播放內容、本機位址、播放網址、取得播放網址',
+    );
+    expect(
+      uiTraditional('當前使用者、許可權、網絡、視頻、搜索、缓存、文件夹、默认'),
+      '目前使用者、權限、網路、影片、搜尋、快取、資料夾、預設',
+    );
+  });
+
   test('removes Dart Bad state prefixes from user-visible messages', () {
     expect(uiTraditional('Bad state: 密碼不正確'), '密碼不正確');
     expect(uiTraditional('Bad state: Bad state: 密碼不正確'), '密碼不正確');

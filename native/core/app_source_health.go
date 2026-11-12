@@ -150,7 +150,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 	}
 	var media providerMedia
 	var keyURL, segmentURL string
-	if !run("播放地址与播放列表", func() (string, error) {
+	if !run("播放網址與播放清單", func() (string, error) {
 		var err error
 		media, err = engine.downloader.resolveProviderMedia(ctx, Task{DramaID: drama.ID, Chapter: chapter, Index: 1})
 		if err != nil {
@@ -158,7 +158,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		}
 		ctx = providerMediaContext(ctx, media.credentials)
 		keyURL, segmentURL, err = engine.downloader.sourceProbeResources(ctx, media)
-		return "已取得可识别的播放地址", err
+		return "已取得可辨識的播放網址", err
 	}) {
 		return failure
 	}
@@ -167,30 +167,30 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 			return "密钥长度有效", nil
 		}
 		if keyURL == "" {
-			return "当前媒体无需额外密钥", nil
+			return "目前媒體不需要額外金鑰", nil
 		}
 		if strings.HasPrefix(keyURL, "data:") {
 			_, encoded, found := strings.Cut(keyURL, ",")
 			decoded, err := base64.StdEncoding.DecodeString(encoded)
 			if !found || err != nil || len(decoded) != 16 {
-				return "", errors.New("内嵌密钥格式无效")
+				return "", errors.New("內嵌金鑰格式無效")
 			}
 			return "内嵌密钥有效", nil
 		}
 		body, err := engine.downloader.sourceProbeBytes(ctx, keyURL, media.Referer, true)
 		if err == nil && len(body) != 16 {
-			err = errors.New("返回的播放密钥不是 16 字节")
+			err = errors.New("回傳的播放金鑰不是 16 位元組")
 		}
 		return "密钥可达且长度有效", err
 	}) {
 		return failure
 	}
-	run("媒体连接", func() (string, error) {
+	run("媒體連線", func() (string, error) {
 		body, err := engine.downloader.sourceProbeBytes(ctx, segmentURL, media.Referer, false)
 		if err == nil && len(body) == 0 {
-			err = errors.New("媒体服务器返回空内容")
+			err = errors.New("媒體伺服器回傳空內容")
 		}
-		return "已读取媒体开头；实际播放效果请在播放器确认", err
+		return "已讀取媒體開頭；實際播放效果請在播放器中確認", err
 	})
 	engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Completed = len(report.Steps) })
 	return failure
@@ -223,7 +223,7 @@ func (d *Downloader) sourceProbeResources(ctx context.Context, media providerMed
 				if attributes["METHOD"] == "AES-128" {
 					key = resolve(attributes["URI"])
 				} else if attributes["METHOD"] != "NONE" {
-					return "", "", errors.New("当前密钥格式不支持健康检测")
+					return "", "", errors.New("目前的金鑰格式不支援健康檢查")
 				}
 			}
 			if line != "" && !strings.HasPrefix(line, "#") {
@@ -232,7 +232,7 @@ func (d *Downloader) sourceProbeResources(ctx context.Context, media providerMed
 			}
 		}
 		if !isProviderHTTPMediaURL(segment) {
-			return "", "", errors.New("播放列表缺少有效媒体地址")
+			return "", "", errors.New("播放清單缺少有效的媒體網址")
 		}
 		if !master {
 			return key, segment, nil
@@ -242,12 +242,12 @@ func (d *Downloader) sourceProbeResources(ctx context.Context, media providerMed
 			return "", "", err
 		}
 	}
-	return "", "", errors.New("播放列表嵌套过多")
+	return "", "", errors.New("播放清單巢狀層級過多")
 }
 
 func (d *Downloader) sourceProbeBytes(ctx context.Context, address, referer string, key bool) ([]byte, error) {
 	if !isProviderHTTPMediaURL(address) {
-		return nil, errors.New("媒体地址无效")
+		return nil, errors.New("媒體網址無效")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -277,7 +277,7 @@ func (d *Downloader) sourceProbeBytes(ctx context.Context, address, referer stri
 		if catalogResponseBlockReason(response, body) != "" {
 			return nil, d.catalogResponseError(request, response, body)
 		}
-		return nil, errors.New("媒体接口返回了网页或错误信息")
+		return nil, errors.New("媒體介面回傳網頁或錯誤資訊")
 	}
 	return io.ReadAll(io.LimitReader(response.Body, limit))
 }

@@ -317,7 +317,7 @@ class MediaLibrary extends ChangeNotifier {
     if (busy) throw AppFailure('已有本地媒體任務正在處理');
     if (!store.canDownload ||
         sources.any((source) => !store.allowsSource(source))) {
-      throw AppFailure('當前使用者沒有媒體處理許可權');
+      throw AppFailure('目前使用者沒有媒體處理權限');
     }
     _taskEpoch = store.profileEpoch;
     _taskSources = sources;

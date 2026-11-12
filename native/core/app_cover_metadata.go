@@ -288,7 +288,7 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 			raw.Img, raw.Pic, raw.Picture, raw.Poster, raw.Thumb, raw.Thumbnail,
 		)
 		if len(addresses) == 0 {
-			return nil, errors.New("詳情暫未返回海報地址")
+			return nil, errors.New("詳情暫未提供海報網址")
 		}
 		return addresses, nil
 	case sourceHuangguoAI, sourceHuangguoVideo:

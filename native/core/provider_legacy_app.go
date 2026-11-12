@@ -68,7 +68,7 @@ func (d *Downloader) fetchLegacyCatalogCategoryPage(ctx context.Context, page in
 			found = found || tab.ID == category
 		}
 		if !found {
-			return nil, false, errors.New("此分类已调整，请刷新分类列表")
+			return nil, false, errors.New("此分類已調整，請重新整理分類清單")
 		}
 	}
 	return items, hasMore, errors.Join(failures...)
@@ -119,7 +119,7 @@ func (d *Downloader) fetchLegacyDetail(ctx context.Context, sourceID string) (Dr
 
 func (d *Downloader) resolveLegacyMedia(ctx context.Context, task Task) (providerMedia, error) {
 	if task.Chapter.VideoURL == "" {
-		return providerMedia{}, errors.New("此分集没有可用的播放地址")
+		return providerMedia{}, errors.New("此集沒有可用的播放網址")
 	}
 	var key []byte
 	if d.cfg.AESKeyHex != "" {

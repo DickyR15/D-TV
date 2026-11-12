@@ -353,7 +353,7 @@ class _AppBootstrapState extends State<AppBootstrap>
                 !link.receiving ||
                 store!.profileEpoch != epoch ||
                 !store!.allowsSource(request.detail.drama.source)) {
-              throw StateError('當前使用者不能接收播放');
+              throw StateError('目前使用者無法接收播放內容');
             }
             await link.playbackHost?.stop();
             if (request.cancelled ||

@@ -187,7 +187,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             widget.local
                 ? '本集正在播放本地原畫，畫質偏好用於後續線上播放。'
                 : widget.actualQuality > 0
-                ? '當前播放 ${widget.actualQuality}P'
+                ? '目前播放畫質 ${widget.actualQuality}P'
                 : '使用源站可用畫質',
             style: helperStyle,
           ),
@@ -253,7 +253,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             key: const ValueKey('player-auto-advance'),
             contentPadding: EdgeInsets.zero,
             title: const Text('自動連播'),
-            subtitle: const Text('關閉後，播放結束停在當前集'),
+            subtitle: const Text('關閉後，播放結束後停留在目前集數'),
             value: preferences.autoAdvance,
             onChanged: _busy
                 ? null

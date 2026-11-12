@@ -4,7 +4,7 @@ import "errors"
 
 var buildAllSources = "false"
 
-var errNativeBuildSource = errors.New("当前版本不包含此站源")
+var errNativeBuildSource = errors.New("目前版本不包含此片源")
 
 func nativePrimarySource(source string) bool {
 	switch canonicalProviderSource(source) {

@@ -423,7 +423,7 @@ func (stream *nativeStreamServer) nativeRewrite(token string, session *nativeStr
 			line = rewrite(text, false, contentType)
 			nextPlaylist = false
 			if line == "" {
-				return "", errors.New("播放列表中的媒体地址无效")
+				return "", errors.New("播放清單中的媒體網址無效")
 			}
 		} else if strings.Contains(text, "URI=") {
 			invalid := false
@@ -446,7 +446,7 @@ func (stream *nativeStreamServer) nativeRewrite(token string, session *nativeStr
 				return "URI=\"" + updated + "\""
 			})
 			if invalid {
-				return "", errors.New("播放列表中的附属地址无效")
+				return "", errors.New("播放清單中的附屬網址無效")
 			}
 		}
 		if strings.HasPrefix(text, "#EXT-X-STREAM-INF:") {
@@ -486,7 +486,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 	}
 	stream.mu.Unlock()
 	if session == nil {
-		http.Error(writer, "播放已结束", http.StatusGone)
+		http.Error(writer, "播放已結束", http.StatusGone)
 		return
 	}
 	session.mu.Lock()
@@ -534,7 +534,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 	}
 	upstream, err := http.NewRequestWithContext(ctx, request.Method, asset.address, nil)
 	if err != nil {
-		http.Error(writer, "媒体地址无效", http.StatusBadGateway)
+		http.Error(writer, "媒體網址無效", http.StatusBadGateway)
 		return
 	}
 	upstream.Header.Set("User-Agent", userAgent)
@@ -546,7 +546,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 	}
 	response, err := stream.nativeRequest(upstream, session.standardHTTP)
 	if err != nil {
-		http.Error(writer, "读取媒体失败，请重试", http.StatusBadGateway)
+		http.Error(writer, "讀取媒體失敗，請重試", http.StatusBadGateway)
 		return
 	}
 	defer response.Body.Close()
@@ -589,13 +589,13 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 		body, err := io.ReadAll(io.LimitReader(reader, 4<<20+1))
 		if err != nil || len(body) > 4<<20 {
 			stream.nativeLog(info, "playlist_read_failed", finalURL.String(), "error="+nativeStreamError(err), 0, contentType)
-			http.Error(writer, "播放列表过大或读取失败", http.StatusBadGateway)
+			http.Error(writer, "播放清單過大或讀取失敗", http.StatusBadGateway)
 			return
 		}
 		text := strings.TrimSpace(strings.TrimPrefix(string(body), "\ufeff"))
 		if !strings.HasPrefix(text, "#EXTM3U") {
 			stream.nativeLog(info, "playlist_invalid", finalURL.String(), "", 0, contentType)
-			http.Error(writer, "播放列表无效", http.StatusBadGateway)
+			http.Error(writer, "播放清單無效", http.StatusBadGateway)
 			return
 		}
 		rewritten, err := stream.nativeRewrite(parts[0], session, text, finalURL.String())

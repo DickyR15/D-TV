@@ -256,7 +256,7 @@ func (transport *cdnTransport) RoundTrip(request *http.Request) (*http.Response,
 			lastErr = err
 		}
 	}
-	return nil, fmt.Errorf("资源 %s 连接失败（已尝试备用 DNS 地址）: %w", request.URL.Hostname(), publicError(lastErr))
+	return nil, fmt.Errorf("資源 %s 連線失敗（已嘗試備援 DNS 位址）：%w", request.URL.Hostname(), publicError(lastErr))
 }
 
 func isUnknownAuthorityError(err error) bool {

@@ -225,7 +225,7 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
                                     )
                                   : TextButton(
                                       onPressed: () => _load(force: true),
-                                      child: const Text('本輪推薦已看完，重新整理獲取新推薦'),
+                                      child: const Text('本輪推薦已看完，重新整理以取得新推薦'),
                                     ),
                             ),
                           ),

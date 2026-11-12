@@ -108,7 +108,7 @@ type nativeLANServer struct {
 func nativeLANRandom(size int) (string, error) {
 	value := make([]byte, size)
 	if _, err := rand.Read(value); err != nil {
-		return "", errors.New("无法创建设备连接身份")
+		return "", errors.New("無法建立裝置連線身分")
 	}
 	return hex.EncodeToString(value), nil
 }
@@ -119,7 +119,7 @@ func nativeLANCertificate(directory string) (nativeLANIdentity, tls.Certificate,
 	data, err := os.ReadFile(file)
 	if err == nil {
 		if len(data) > 32768 || json.Unmarshal(data, &identity) != nil || !nativeLANID.MatchString(identity.ID) {
-			return identity, tls.Certificate{}, errors.New("设备互联身份损坏，原身份文件已保留")
+			return identity, tls.Certificate{}, errors.New("裝置互聯身分資料損毀，原始身分檔案已保留")
 		}
 		cert, loadErr := tls.X509KeyPair([]byte(identity.Certificate), []byte(identity.Key))
 		if loadErr != nil {
@@ -199,7 +199,7 @@ func nativeLANValidateConfig(config nativeLANConfig) error {
 		(config.ProfileID != "" && !nativeLANProfileID.MatchString(config.ProfileID)) ||
 		len(config.Sources) > 32 ||
 		(config.Kind != "phone" && config.Kind != "computer" && config.Kind != "tv") {
-		return errors.New("设备互联配置无效")
+		return errors.New("裝置互聯設定無效")
 	}
 	seen := map[string]bool{}
 	for _, source := range config.Sources {
@@ -225,7 +225,7 @@ func newNativeLANServer(directory string, config nativeLANConfig) (*nativeLANSer
 	}
 	if leaf.Subject.CommonName != identity.ID || time.Now().Before(leaf.NotBefore) || time.Now().After(leaf.NotAfter) ||
 		leaf.CheckSignature(leaf.SignatureAlgorithm, leaf.RawTBSCertificate, leaf.Signature) != nil {
-		return nil, errors.New("设备互联证书失效，原身份文件已保留")
+		return nil, errors.New("裝置互聯憑證已失效，原始身分檔案已保留")
 	}
 	generation, err := nativeLANRandom(16)
 	if err != nil {
@@ -307,7 +307,7 @@ func (link *nativeLANServer) info(private bool) map[string]any {
 func (engine *nativeEngine) nativeLAN(ctx context.Context, command string, raw json.RawMessage) (any, error) {
 	var input nativeLANInput
 	if len(raw) > nativeLANLimit || json.Unmarshal(raw, &input) != nil {
-		return nil, errors.New("设备连接请求无效")
+		return nil, errors.New("裝置連線要求無效")
 	}
 	engine.lanMu.Lock()
 	if command == "stop" {
@@ -334,7 +334,7 @@ func (engine *nativeEngine) nativeLAN(ctx context.Context, command string, raw j
 	link := engine.lan
 	engine.lanMu.Unlock()
 	if link == nil || input.Generation != link.generation {
-		return nil, errors.New("设备连接已失效，请重新连接")
+		return nil, errors.New("裝置連線已失效，請重新連線")
 	}
 	switch command {
 	case "configure":
@@ -344,14 +344,14 @@ func (engine *nativeEngine) nativeLAN(ctx context.Context, command string, raw j
 		link.mu.Lock()
 		if input.Config.Account != link.config.Account {
 			link.mu.Unlock()
-			return nil, errors.New("当前用户已变更，请重新连接")
+			return nil, errors.New("目前使用者已變更，請重新連線")
 		}
 		link.config = input.Config
 		link.mu.Unlock()
 		return true, nil
 	case "allow":
 		if !nativeLANID.MatchString(input.DeviceID) || !nativeLANPin.MatchString(input.Pin) || input.DeviceID == link.identity.ID {
-			return nil, errors.New("目标设备身份无效")
+			return nil, errors.New("目標裝置身分無效")
 		}
 		link.mu.Lock()
 		defer link.mu.Unlock()
@@ -397,7 +397,7 @@ func (engine *nativeEngine) nativeLAN(ctx context.Context, command string, raw j
 		case reply <- nativeLANReply{input.Payload, input.Error}:
 			return map[string]bool{"accepted": true}, nil
 		default:
-			return nil, errors.New("连接请求已结束")
+			return nil, errors.New("連線要求已結束")
 		}
 	case "cancel":
 		link.mu.Lock()
@@ -409,6 +409,6 @@ func (engine *nativeEngine) nativeLAN(ctx context.Context, command string, raw j
 	case "request", "probe":
 		return link.request(ctx, input, command == "probe")
 	default:
-		return nil, errors.New("设备互联操作无效")
+		return nil, errors.New("裝置互聯操作無效")
 	}
 }

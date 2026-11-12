@@ -574,7 +574,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     if (_profileEpoch != widget.store.profileEpoch ||
         handoff?.cancelled == true) {
-      handoff?.fail('接收使用者已變更，推送已取消');
+      handoff?.fail('接收端使用者已變更，傳送已取消');
       if (handoff != null) {
         unawaited(_releasePlayback(handoff.plan.session, 'handoff_discarded'));
       }
@@ -1337,7 +1337,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       await _saveProgress(flush: flush).timeout(
         _playbackCleanupTimeout,
         onTimeout: () => throw TimeoutException(
-          '保存觀看進度逾時（$reason）',
+          '儲存觀看進度逾時（$reason）',
           _playbackCleanupTimeout,
         ),
       );
@@ -1719,7 +1719,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _localFailure = false;
       _loadingMessage = switch (recoveryAction) {
         PlaybackRecoveryAction.alternative => '正在切換備用線路',
-        PlaybackRecoveryAction.refresh => '正在重新獲取播放地址',
+        PlaybackRecoveryAction.refresh => '正在重新取得播放網址',
         _ => '正在準備播放',
       };
     });

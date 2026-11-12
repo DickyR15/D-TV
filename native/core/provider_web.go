@@ -99,7 +99,7 @@ func (d *Downloader) fetchProviderPage(ctx context.Context, address, referer, ag
 		return nil, "", err
 	}
 	if len(body) > 4<<20 {
-		return nil, "", errors.New("站源页面过大")
+		return nil, "", errors.New("片源頁面過大")
 	}
 	if actual, found := responses.values.Load(address); found {
 		address = actual.(string)
@@ -111,7 +111,7 @@ func (d *Downloader) fetchProviderPage(ctx context.Context, address, referer, ag
 func (d *Downloader) prepareWebProviderMedia(ctx context.Context, media providerMedia, sourceName string) (providerMedia, error) {
 	address, err := url.Parse(media.URL)
 	if err != nil || !isProviderHTTPMediaURL(media.URL) || address.User != nil {
-		return providerMedia{}, fmt.Errorf("%s未返回有效播放地址，请刷新详情后重试", sourceName)
+		return providerMedia{}, fmt.Errorf("%s未提供有效的播放網址，請重新整理詳情後重試", sourceName)
 	}
 	if strings.HasSuffix(strings.ToLower(address.Path), ".m3u8") {
 		if media.credentials != nil {
@@ -119,10 +119,10 @@ func (d *Downloader) prepareWebProviderMedia(ctx context.Context, media provider
 		}
 		media.Playlist, media.URL, err = d.fetchMediaPlaylist(ctx, media.URL, media.Referer)
 		if err != nil {
-			return providerMedia{}, fmt.Errorf("获取%s播放列表失败：%w", sourceName, err)
+			return providerMedia{}, fmt.Errorf("取得%s播放清單失敗：%w", sourceName, err)
 		}
 		if !strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(media.Playlist, "\ufeff")), "#EXTM3U") {
-			return providerMedia{}, fmt.Errorf("%s播放列表无效，请重新解析播放", sourceName)
+			return providerMedia{}, fmt.Errorf("%s播放清單無效，請重新解析播放", sourceName)
 		}
 		if duration := m3u8Duration(media.Playlist); duration > 0 {
 			media.Duration = duration
