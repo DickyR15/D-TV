@@ -77,7 +77,7 @@ func (d *Downloader) hongguoSearchSuggestions(ctx context.Context, query string)
 		}
 		if len(client.suggestPending) >= hongguoSuggestionPendingLimit {
 			client.mu.Unlock()
-			return nil, errors.New("红果搜索联想请求较多，请稍后重试")
+			return nil, errors.New("紅果搜尋聯想要求過多，請稍後重試")
 		}
 		pending := &hongguoSuggestionCall{done: make(chan struct{})}
 		client.suggestPending[query] = pending
@@ -159,7 +159,7 @@ func (d *Downloader) fetchHongguoSuggestionRecords(ctx context.Context, query st
 		return nil, err
 	}
 	if len(body) > hongguoSuggestionBodyLimit {
-		return nil, errors.New("红果搜索联想响应过大")
+		return nil, errors.New("紅果搜尋聯想回應資料過大")
 	}
 	if response.StatusCode != http.StatusOK || catalogResponseBlockReason(response, body) != "" {
 		return nil, d.catalogResponseError(request, response, body)
@@ -173,16 +173,16 @@ func (d *Downloader) fetchHongguoSuggestionRecords(ctx context.Context, query st
 	decoder := json.NewDecoder(strings.NewReader(string(body)))
 	decoder.UseNumber()
 	if err := decoder.Decode(&result); err != nil {
-		return nil, errors.New("红果搜索联想未返回有效数据")
+		return nil, errors.New("紅果搜尋聯想未提供有效資料")
 	}
 	if result.Items == nil {
 		result.Items = result.Data.Items
 	}
 	if result.Items == nil {
-		return nil, errors.New("红果搜索联想未返回有效数据")
+		return nil, errors.New("紅果搜尋聯想未提供有效資料")
 	}
 	if decoder.Decode(new(any)) != io.EOF {
-		return nil, errors.New("红果搜索联想未返回有效数据")
+		return nil, errors.New("紅果搜尋聯想未提供有效資料")
 	}
 	return result.Items, nil
 }
