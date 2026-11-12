@@ -424,8 +424,8 @@ func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testi
 	const fallbackIP = "93.184.216.34"
 	var directAttempts, dohLookups, recoveredRequests atomic.Int32
 	var receivedBody string
-	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.Host != host || request.TLS == nil || request.TLS.ServerName != host {
+	server := newUntrustedTLSServer(t, host, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Host != host+":"+request.URL.Port() || request.TLS == nil || request.TLS.ServerName != host {
 			t.Errorf("registration retry changed Host or TLS SNI: host=%q tls=%+v", request.Host, request.TLS)
 		}
 		if request.Method != http.MethodPost || request.URL.Path != "/service/2/device_register/" {
@@ -442,12 +442,13 @@ func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testi
 	if err != nil { t.Fatal(err) }
 	base := http.DefaultTransport.(*http.Transport).Clone()
 	base.Proxy = nil
-	base.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: x509.NewCertPool()}
-	base.TLSClientConfig.RootCAs.AddCert(server.Certificate())
+	roots := x509.NewCertPool()
+	roots.AddCert(server.TLS.Certificates[0].Leaf)
+	base.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
 	base.DialContext = func(ctx context.Context, network, address string) (net.Conn,error) {
 		if address == net.JoinHostPort(host,port) {
 			directAttempts.Add(1)
-			return nil, io.EOF
+			return nil, &net.DNSError{Err:"no such host",Name:host,IsNotFound:true}
 		}
 		if address != net.JoinHostPort(fallbackIP,port) { t.Errorf("unexpected fallback destination %s",address); return nil,io.EOF }
 		return (&net.Dialer{}).DialContext(ctx,network,server.Listener.Addr().String())
