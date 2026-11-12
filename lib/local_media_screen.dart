@@ -390,7 +390,7 @@ class _LocalFileRepository extends AppRepository {
   final String file;
   Future<PlaybackPlan> _plan() async {
     if (!store.canDownload || !store.allowsSource(item.drama.source)) {
-      throw AppFailure('當前使用者無權讀取此影片');
+      throw AppFailure('目前使用者無權讀取此影片');
     }
     if (!await File(file).exists() || await File(file).length() == 0) {
       throw AppFailure('本地成品檔案缺失，請重新生成。', code: 'local_media');
