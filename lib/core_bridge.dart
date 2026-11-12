@@ -19,6 +19,7 @@ import 'catalog_updates.dart';
 import 'download_collections.dart';
 import 'resource_settings.dart';
 import 'diary_service.dart';
+import 'ui_localization.dart';
 
 typedef _NativeRequest = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _DartRequest = Pointer<Utf8> Function(Pointer<Utf8>);
@@ -69,7 +70,8 @@ String _nativeRequest(String body) {
 }
 
 class AppFailure implements Exception {
-  AppFailure(this.message, {this.code = ''});
+  AppFailure(String message, {this.code = ''})
+    : message = uiTraditional(message);
   final String message;
   final String code;
   @override
