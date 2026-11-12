@@ -90,6 +90,81 @@ func (downloader *Downloader) resolveHongguoMultiModelMedia(ctx context.Context,
 	return media, preloadParseErr
 }
 
+
+func (downloader *Downloader) resolveHongguoHelperMedia(ctx context.Context, seriesID, videoID string) (providerMedia, error) {
+	if !hongguoNumericID.MatchString(seriesID) || !hongguoNumericID.MatchString(videoID) {
+		return providerMedia{}, errors.New("紅果輔助設備劇集 ID 無效")
+	}
+	if err := downloader.ensureHongguoHelperDevice(ctx); err != nil {
+		return providerMedia{}, err
+	}
+	helperCtx := context.WithValue(ctx, hongguoHelperDeviceKey{}, true)
+	payload := map[string]any{
+		"video_id": videoID,
+		"content_type": 1,
+		"biz_param": map[string]any{"need_all_video_definition": true, "video_platform": 3},
+	}
+	result, err := downloader.hongguoHelperAppRequest(ctx, http.MethodPost, "/novel/player/video_model/v1/", nil, payload)
+	if err == nil {
+		model := hongguoVideoModelFromAppResult(result)
+		media, parseErr := selectHongguoAppMedia(model)
+		if parseErr == nil {
+			return media, nil
+		}
+		err = parseErr
+	}
+	if ctx.Err() != nil {
+		return providerMedia{}, ctx.Err()
+	}
+	multiPayload := map[string]any{
+		"biz_param": map[string]any{
+			"detail_page_version": 0,
+			"device_level": 3,
+			"disable_digg_stat": false,
+			"disable_video_relate_book": false,
+			"need_all_video_definition": true,
+			"need_mp4_align": false,
+			"use_os_player": false,
+			"use_server_dns": false,
+			"video_platform": 1024,
+		},
+		"mixed_video_id_map": map[string]any{"1": []string{videoID}},
+	}
+	multiResult, multiErr := downloader.hongguoHelperAppRequest(ctx, http.MethodPost, "/novel/player/multi_video_model/v1/", nil, multiPayload)
+	if multiErr == nil {
+		media, parseErr := downloader.resolveHongguoMultiModelResult(ctx, multiResult, videoID)
+		if parseErr == nil {
+			return media, nil
+		}
+		multiErr = parseErr
+	}
+	if errors.Is(err, errHongguoH266Only) && errors.Is(multiErr, errHongguoH266Only) {
+		return providerMedia{}, errHongguoH266Only
+	}
+	return providerMedia{}, fmt.Errorf("紅果輔助設備取流失敗：主 App 路徑：%v；多影片模型：%w", publicError(err), multiErr)
+}
+
+func hongguoVideoModelFromAppResult(result map[string]any) map[string]any {
+	data := nestedMap(result, "data")
+	model, _ := data["video_model"].(map[string]any)
+	if encoded, ok := data["video_model"].(string); ok && encoded != "" {
+		if decoded, decodeErr := decodeHongguoBase64(encoded); decodeErr == nil && len(decoded) > 0 {
+			encoded = string(decoded)
+		}
+		decoder := json.NewDecoder(strings.NewReader(encoded))
+		decoder.UseNumber()
+		_ = decoder.Decode(&model)
+	}
+	if len(model) == 0 && hongguoHasVideoList(data["video_list"]) {
+		model = map[string]any{
+			"video_list": data["video_list"],
+			"video_duration": data["video_duration"],
+			"duration": data["duration"],
+		}
+	}
+	return model
+}
+
 func (downloader *Downloader) resolveHongguoMultiModelResult(
 	ctx context.Context, result map[string]any, videoID string,
 ) (providerMedia, error) {
