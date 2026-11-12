@@ -148,7 +148,7 @@ func (d *Downloader) fetchHeitaoCategories(ctx context.Context) ([]nativeCategor
 		}
 	}
 	if len(categories) == 0 {
-		return nil, errors.New("黑桃未返回有效的内容分类")
+		return nil, errors.New("黑桃未提供有效的內容分類")
 	}
 	return categories, nil
 }
@@ -251,7 +251,7 @@ func heitaoCatalogAddress(site string, page int, category, query string) string 
 func (d *Downloader) fetchHeitaoCatalogPage(ctx context.Context, page int, category, query string) ([]Drama, bool, error) {
 	query = strings.TrimSpace(query)
 	if page < 1 || page > 100000 || len(query) > 256 || !validHeitaoCategory(category) {
-		return nil, false, errors.New("黑桃目录查询参数无效")
+		return nil, false, errors.New("黑桃目錄查詢參數無效")
 	}
 	site := d.providerBaseURL(sourceHeitao)
 	address := heitaoCatalogAddress(site, page, category, query)
@@ -319,7 +319,7 @@ func heitaoChapters(document *html.Node, site, sourceID string) []Chapter {
 
 func (d *Downloader) fetchHeitaoDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
 	if !webProviderNumericID.MatchString(sourceID) {
-		return Drama{}, nil, errors.New("黑桃视频 ID 无效")
+		return Drama{}, nil, errors.New("黑桃影片 ID 無效")
 	}
 	site := d.providerBaseURL(sourceHeitao)
 	address := site + "/index.php/vod/detail/id/" + sourceID + ".html"
@@ -400,7 +400,7 @@ func heitaoReadPlayerConfig(body string) (heitaoPlayerEntry, error) {
 	text := body[index:]
 	open := strings.Index(text, "{")
 	if open < 0 {
-		return entry, errors.New("黑桃播放器配置无效")
+		return entry, errors.New("黑桃播放器設定無效")
 	}
 	depth, inString, escaped, end := 0, false, false, -1
 scan:
@@ -437,10 +437,10 @@ scan:
 		return entry, errors.New("黑桃播放器配置不完整")
 	}
 	if err := json.Unmarshal([]byte(text[open:end+1]), &entry); err != nil {
-		return entry, fmt.Errorf("黑桃播放器配置解析失败：%w", err)
+		return entry, fmt.Errorf("黑桃播放器設定解析失敗：%w", err)
 	}
 	if strings.TrimSpace(entry.URL) == "" {
-		return entry, errors.New("黑桃该集暂无可用播放地址")
+		return entry, errors.New("黑桃此集目前沒有可用的播放網址")
 	}
 	return entry, nil
 }
@@ -453,7 +453,7 @@ func heitaoDecryptMediaURL(raw string, encrypt int) (string, error) {
 	case 1:
 		unescaped, err := url.PathUnescape(raw)
 		if err != nil {
-			return "", errors.New("黑桃播放地址解码失败")
+			return "", errors.New("黑桃播放網址解碼失敗")
 		}
 		return unescaped, nil
 	case 2:
@@ -462,15 +462,15 @@ func heitaoDecryptMediaURL(raw string, encrypt int) (string, error) {
 			decoded, err = base64.RawStdEncoding.DecodeString(raw)
 		}
 		if err != nil {
-			return "", errors.New("黑桃播放地址解码失败")
+			return "", errors.New("黑桃播放網址解碼失敗")
 		}
 		unescaped, err := url.PathUnescape(string(decoded))
 		if err != nil {
-			return "", errors.New("黑桃播放地址解码失败")
+			return "", errors.New("黑桃播放網址解碼失敗")
 		}
 		return unescaped, nil
 	default:
-		return "", errors.New("黑桃播放地址加密方式暂不支持")
+		return "", errors.New("黑桃播放網址使用的加密方式目前不受支援")
 	}
 }
 
@@ -478,14 +478,14 @@ func (d *Downloader) resolveHeitaoMedia(ctx context.Context, task Task) (provide
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
 	prefix := providerChapterID(sourceHeitao, sourceID, "")
 	if !valid || source != sourceHeitao || !webProviderNumericID.MatchString(sourceID) || !strings.HasPrefix(task.Chapter.ID, prefix) {
-		return providerMedia{}, errors.New("黑桃播放分集信息无效，请刷新详情")
+		return providerMedia{}, errors.New("黑桃播放集數資訊無效，請重新整理詳情")
 	}
 	sid, nid, ok := heitaoSeparateEpisode(strings.TrimPrefix(task.Chapter.ID, prefix))
 	if !ok {
 		sid, nid, ok = heitaoPlayerID(task.Chapter.PageURL)
 	}
 	if !ok {
-		return providerMedia{}, errors.New("黑桃播放分集信息无效，请刷新详情")
+		return providerMedia{}, errors.New("黑桃播放集數資訊無效，請重新整理詳情")
 	}
 	site := d.providerBaseURL(sourceHeitao)
 	playerURL := fmt.Sprintf("%s/index.php/vod/player/id/%s/nid/%d/sid/%d.html", site, sourceID, nid, sid)
@@ -517,7 +517,7 @@ func (d *Downloader) resolveHeitaoMedia(ctx context.Context, task Task) (provide
 	}
 	address = resolveProviderURL(playerURL, address)
 	if !isProviderHTTPMediaURL(address) {
-		return providerMedia{}, errors.New("黑桃播放地址无效")
+		return providerMedia{}, errors.New("黑桃播放網址無效")
 	}
 	return d.prepareWebProviderMedia(ctx, providerMedia{URL: address, Referer: site + "/"}, "黑桃")
 }
