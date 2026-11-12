@@ -216,7 +216,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('自動'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('playback-decoder')), matching: find.text('自動')), findsOneWidget);
     expect(find.text('預設'), findsNothing);
     expect(find.textContaining('無須重啟 D TV'), findsOneWidget);
 
