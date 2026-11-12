@@ -177,7 +177,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
 
   void _checkUser(int epoch) {
     if (_disposed || store.locked || store.profileEpoch != epoch) {
-      throw StateError('當前使用者已變更，請重新操作');
+      throw StateError('目前使用者已變更，請重新操作');
     }
   }
 
@@ -393,7 +393,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       }
       _registration = registration;
     } catch (_) {
-      discoveryMessage = '自動發現暫不可用，可用下方本機地址手動連線';
+      discoveryMessage = '自動探索暫不可用，可使用下方本機位址手動連線';
     }
     if (_disposed || run != _run) return;
     await rescan();
@@ -424,7 +424,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       discovery.addListener(_discovered);
       _discovered();
     } catch (_) {
-      discoveryMessage = '未能自動發現裝置。請檢查區域網許可權，或輸入對方的本機地址';
+      discoveryMessage = '無法自動探索裝置。請檢查區域網路權限，或輸入對方的本機位址';
       _notify();
     }
     _gather?.cancel();
@@ -487,7 +487,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       'requestId': lanID(),
     });
     final peer = LanPeer.fromJson(response);
-    if (peer.id == local?.id) throw StateError('這是本機地址，請輸入另一臺裝置的地址');
+    if (peer.id == local?.id) throw StateError('這是本機位址，請輸入另一台裝置的位址');
     _checkPin(peer);
     _manualPeers[peer.id] = peer;
     _discovered();
@@ -615,7 +615,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
           if (_disposed || run != _run) rethrow;
         }
       }
-      throw lastError ?? StateError('裝置尚未解析出可用地址');
+      throw lastError ?? StateError('裝置尚未取得可用位址');
     } catch (failure) {
       if (run == _run) {
         error = failure.toString();
@@ -732,7 +732,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     }
     if (connection != null && connection!.peer.id != peer.id ||
         _connecting && _selected.isNotEmpty && _selected != peer.id) {
-      throw StateError('接收裝置已有其他連線，當前連線不會被搶佔');
+      throw StateError('接收裝置已有其他連線，目前連線不會被取代');
     }
     final port = peer.port;
     final host = lanText(event['host'], 128);
@@ -750,9 +750,9 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       'deviceId': peer.id,
       'pin': peer.pin,
     });
-    if (run != _run || !receiving) throw StateError('當前使用者已變更，請重新連線');
+    if (run != _run || !receiving) throw StateError('目前使用者已變更，請重新連線');
     await _remember(resolved, reverse.account);
-    if (run != _run || !receiving) throw StateError('當前使用者已變更，請重新連線');
+    if (run != _run || !receiving) throw StateError('目前使用者已變更，請重新連線');
     connection = reverse;
     _selected = peer.id;
     _lastAutomatic = DateTime(2000);
@@ -796,7 +796,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
           store.locked ||
           store.profileEpoch != _sessionEpoch ||
           !_foreground) {
-        throw StateError('接收已關閉或當前使用者已變更');
+        throw StateError('接收已關閉或目前使用者已變更');
       }
       final path = event['path'];
       if (path == 'pair') {
