@@ -344,4 +344,33 @@ void main() {
   });
 
 
+  test('silent playback progress saves persist without notifying background pages', () async {
+    final (store, _) = await create();
+    var notifications = 0;
+    store.addListener(() => notifications++);
+
+    final first = WatchEntry(
+      drama: drama,
+      episode: 1,
+      position: 15,
+      duration: 100,
+      updatedAt: DateTime.now(),
+    );
+    await store.saveWatch(first, notify: false);
+    expect(store.watched(drama.id)?.position, 15);
+    expect(notifications, 0);
+
+    final finalFlush = WatchEntry(
+      drama: drama,
+      episode: 1,
+      position: 20,
+      duration: 100,
+      updatedAt: DateTime.now(),
+    );
+    await store.saveWatch(finalFlush, notify: true);
+    expect(store.watched(drama.id)?.position, 20);
+    expect(notifications, 1);
+  });
+
+
 }
