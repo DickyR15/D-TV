@@ -258,7 +258,6 @@ void main() {
   });
 }
 
-}
   test('pure black dark theme uses black OLED surfaces', () {
     final theme = AppTheme.darkFor(null, pureBlack: true);
     expect(theme.brightness, Brightness.dark);
@@ -284,3 +283,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.pureBlackTheme, isTrue);
   });
+
+}
+
