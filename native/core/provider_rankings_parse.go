@@ -13,7 +13,7 @@ import (
 var rankingScriptTags = regexp.MustCompile(`(?is)<script\b[^>]*>`)
 var rankingJSONLD = regexp.MustCompile(`(?is)<script\b[^>]*type=["']application/ld\+json["'][^>]*>(.*?)</script>`)
 var rankingSourceID = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,100}$`)
-var errHongguoRankingIncomplete = errors.New("红果榜单数据尚未完整返回，请稍后重试")
+var errHongguoRankingIncomplete = errors.New("紅果榜單資料尚未完整回傳，請稍後重試")
 var errHongguoRankingFormat = errors.New("红果榜单格式或分页已变化，请稍后重试")
 
 type hongguoRankingContent struct {
@@ -156,7 +156,7 @@ func parseHuangdouRanking(decoded any, page int) (rankingPage, error) {
 		id := strings.TrimPrefix(firstNonEmpty(mapString(row, "id"), mapString(row, "drama_id")), "rp_")
 		title := mapString(row, "name", "title", "t")
 		if !valid || !rankingSourceID.MatchString(id) || strings.TrimSpace(title) == "" || seen[id] {
-			return rankingPage{}, errors.New("黄豆榜单包含无效或重复条目")
+			return rankingPage{}, errors.New("黃豆榜單包含無效或重複項目")
 		}
 		seen[id] = true
 		drama := huangdouDramaFromMap(row)
