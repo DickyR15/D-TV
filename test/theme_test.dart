@@ -46,16 +46,21 @@ void main() {
       await store.setThemeMode('light');
       final restored = LocalStore(store.preferences);
       expect(restored.themeMode, 'light');
+      await store.setPureBlackTheme(true);
+      expect(store.pureBlackTheme, isTrue);
       final backup = await store.exportBackup();
+      await store.setPureBlackTheme(false);
       await store.setThemeMode('system');
       await store.importBackup(backup);
       expect(store.themeMode, 'light');
+      expect(store.pureBlackTheme, isTrue);
       final old = jsonDecode(backup) as Map<String, dynamic>;
       old.remove('integrity');
       old.remove('themeMode');
       await store.setThemeMode('system');
       await store.importBackup(jsonEncode(old));
       expect(store.themeMode, 'system');
+      expect(store.pureBlackTheme, isTrue);
       old['themeMode'] = 'invalid';
       await expectLater(
         store.importBackup(jsonEncode(old)),
@@ -252,3 +257,30 @@ void main() {
     expect(find.byKey(const ValueKey('open-settings-route')), findsOneWidget);
   });
 }
+
+
+  test('pure black dark theme uses black OLED surfaces', () {
+    final theme = AppTheme.darkFor(null, pureBlack: true);
+    expect(theme.brightness, Brightness.dark);
+    expect(theme.scaffoldBackgroundColor, Colors.black);
+    expect(theme.colorScheme.surface, Colors.black);
+    expect(AppTheme.dark.scaffoldBackgroundColor, isNot(Colors.black));
+    expect(AppTheme.darkFor(null, pureBlack: false).scaffoldBackgroundColor, isNot(Colors.black));
+  });
+
+  test('pure black background option is accessible from settings', () async {
+    final store = await localStore();
+    addTearDown(store.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsScreen(repository: NativeRepository(), store: store),
+      ),
+    );
+    expect(find.byKey(const ValueKey('pure-black-theme-setting')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('pure-black-theme-setting')));
+    await tester.pumpAndSettle();
+    expect(find.text('開啟純黑背景'), findsOneWidget);
+    await tester.tap(find.text('開啟純黑背景'));
+    await tester.pumpAndSettle();
+    expect(store.pureBlackTheme, isTrue);
+  });
