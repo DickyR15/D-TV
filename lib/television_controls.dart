@@ -78,20 +78,28 @@ class TelevisionControlsState extends State<TelevisionControls> {
       generation: widget.playbackGeneration,
       showOnPlaybackReady: widget.showOnPlaybackReady,
     );
-    for (final stream in [
-      widget.player.stream.position,
-      widget.player.stream.duration,
-      widget.player.stream.buffer,
-      widget.player.stream.playing,
-      widget.player.stream.buffering,
-    ]) {
-      _subscriptions.add(
-        stream.listen((_) {
-          if (!mounted) return;
-          setState(() {});
-        }),
+    void refreshProgressIfVisible() {
+      if (!mounted) return;
+      final allowed = playbackProgressRefreshAllowed(
+        controlsVisible: _visible,
+        buffering: widget.player.state.buffering,
+        transientSeekHint: _seekHint,
       );
+      if (allowed) setState(() {});
     }
+
+    _subscriptions.add(widget.player.stream.position.listen((_) {
+      refreshProgressIfVisible();
+    }));
+    _subscriptions.add(widget.player.stream.duration.listen((_) {
+      refreshProgressIfVisible();
+    }));
+    _subscriptions.add(widget.player.stream.buffer.listen((_) {
+      refreshProgressIfVisible();
+    }));
+    _subscriptions.add(widget.player.stream.buffering.listen((_) {
+      refreshProgressIfVisible();
+    }));
     _subscriptions.add(
       widget.player.stream.playing.listen((playing) {
         if (!mounted || !widget.enabled || _panelOpen) return;
