@@ -105,6 +105,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     with WidgetsBindingObserver {
   late final Player _player;
   late final VideoController? _video;
+  VideoOutputSizeAdapter? _videoOutputSize;
   late final VideoEnhancementController _enhancement;
   late final PlaybackLoader _loader;
   late final PlaybackPreloader _preloader;
@@ -181,6 +182,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   double _speed = 1;
   bool _portraitBlurBackground = false;
   double _aspectRatio = 9 / 16;
+  PlaybackAspectRatio _playbackAspectRatio = PlaybackAspectRatio.automatic;
   double _resumePosition = 0;
   bool _rotating = false;
   bool _television = false;
@@ -261,6 +263,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _requestedQuality = preferences.quality;
     _autoAdvance = preferences.autoAdvance;
     _televisionDecoder = preferences.televisionDecoder;
+    _playbackAspectRatio = preferences.aspectRatio;
     // Preserve the previously validated Android TV MPV Embed + MediaCodec path.
     // ExoPlayer remains opt-in through DTV_ANDROID_PLAYER=exo for A/B tests.
     final inheritedLayout = context.getInheritedWidgetOfExactType<AppLayout>();
@@ -334,6 +337,15 @@ class _PlayerScreenState extends State<PlayerScreen>
             ),
           )
         : null;
+    if (Platform.isWindows && _video != null && _player.platform is NativePlayer) {
+      _videoOutputSize = VideoOutputSizeAdapter(
+        _video!,
+        onFailure: () => DiaryService.add('[MPV] output-size-update=failed'),
+      );
+      unawaited(_videoOutputSize!.initialize().catchError((Object error) {
+        DiaryService.add('[MPV] output-size-initialize=failed error=$error');
+      }));
+    }
     _enhancement = VideoEnhancementController(
       player: _player,
       video: _video,
@@ -2391,6 +2403,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final decoderChanged =
         nextPreferences.televisionDecoder != _televisionDecoder;
     _enhancement.setPreferences(nextPreferences.enhancement);
+    _playbackAspectRatio = nextPreferences.aspectRatio;
     setState(() {
       _speed = nextPreferences.speed;
       _requestedQuality = nextPreferences.quality;
@@ -2702,6 +2715,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       unawaited(_desktopMiniChannel.setMethodCallHandler(null));
     }
     final enhancementClosed = _enhancement.close();
+    unawaited(_videoOutputSize?.close() ?? Future<void>.value());
     LanController.current?.detachPlayback(_lanIdentity);
     widget.handoff?.fail('接收端已退出播放');
     widget.store.removeListener(_accessChanged);
@@ -3079,6 +3093,11 @@ class _PlayerScreenState extends State<PlayerScreen>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_closed) {
               _enhancement.setViewport(pixels, television: _television);
+              if (Platform.isWindows && _videoOutputSize != null && pixels.width > 0 && pixels.height > 0) {
+                unawaited(_videoOutputSize!.setTarget(pixels).catchError((Object error) {
+                  DiaryService.add('[MPV] output-size-update=failed error=$error');
+                }));
+              }
             }
           });
           return Stack(
@@ -3089,11 +3108,13 @@ class _PlayerScreenState extends State<PlayerScreen>
                 widget.videoBuilder!(layeredControls)
               else
                 _videoOutput(
-                  fit: playerVideoFit(
-                    ios: Platform.isIOS,
-                    fullscreen: _showFullscreen,
-                    aspectRatio: _aspectRatio,
-                  ),
+                  fit: _playbackAspectRatio == PlaybackAspectRatio.automatic
+                      ? playerVideoFit(
+                          ios: Platform.isIOS,
+                          fullscreen: _showFullscreen,
+                          aspectRatio: _aspectRatio,
+                        )
+                      : playbackAspectRatioFit(_playbackAspectRatio),
                   controls: layeredControls,
                 ),
               if (_loading &&
