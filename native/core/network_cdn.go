@@ -94,6 +94,9 @@ func (transport *hostDoHTransport) RoundTrip(request *http.Request) (*http.Respo
 	response, err := transport.base.RoundTrip(request)
 	if err == nil { return response, nil }
 	if request.Context().Err() != nil { return nil, request.Context().Err() }
+	if !isRecoverableHostDNSFailure(err) {
+		return nil, err
+	}
 	entry, lookupErr := transport.resolver.lookupEntry(request.Context(), request.URL.Hostname(), "")
 	if lookupErr != nil {
 		return nil, fmt.Errorf("紅果設備註冊 DNS 解析失敗：%w", publicError(errors.Join(err, lookupErr)))
@@ -111,6 +114,19 @@ func (transport *hostDoHTransport) RoundTrip(request *http.Request) (*http.Respo
 		lastErr = retryErr
 	}
 	return nil, fmt.Errorf("紅果設備註冊 %s 連線失敗（已嘗試備用 DNS）: %w", request.URL.Hostname(), publicError(lastErr))
+}
+
+func isRecoverableHostDNSFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	if isUnknownAuthorityError(err) {
+		// DNS-RPZ interception can point the original hostname at a block page.
+		// Retry with public DoH, but keep the same hostname and TLS verification.
+		return true
+	}
+	var dnsErr *net.DNSError
+	return errors.As(err, &dnsErr)
 }
 
 func (transport *hostDoHTransport) roundTripAddress(request *http.Request, address string) (*http.Response, error) {
@@ -136,6 +152,9 @@ func (transport *hostDoHTransport) roundTripAddress(request *http.Request, addre
 
 func (transport *hostDoHTransport) CloseIdleConnections() {
 	transport.base.CloseIdleConnections()
+	if transport.resolver != nil && transport.resolver.client != nil {
+		transport.resolver.client.CloseIdleConnections()
+	}
 }
 
 type cdnTransport struct {
