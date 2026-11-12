@@ -342,7 +342,7 @@ func TestSourceHealthChecksHLSKeyAndBoundedMedia(t *testing.T) {
 
 func TestSourceBackoffUsesRelativeTimeAndRetainsTypedError(t *testing.T) {
 	backoff := &requestBackoff{host: "huangguo.video", status: 403, until: time.Now().Add(time.Minute)}
-	if !strings.Contains(backoff.Error(), "秒后") || strings.Contains(backoff.Error(), backoff.until.Format("15:04:05")) {
+	if !strings.Contains(backoff.Error(), "秒後") || strings.Contains(backoff.Error(), backoff.until.Format("15:04:05")) {
 		t.Fatal("retry time depends on native timezone")
 	}
 	var restored *requestBackoff
