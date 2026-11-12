@@ -163,14 +163,14 @@ func parseDSDCards(document *html.Node, pageURL, category string) ([]Drama, erro
 			}
 		}
 		if title == "" {
-			return nil, errors.New("帝果目录缺少视频名称")
+			return nil, errors.New("帝果目錄缺少影片名稱")
 		}
 		seen[id] = true
 		cover := dsdCardCover(card, pageURL)
 		views := strings.TrimSuffix(providerHTMLText(providerHTMLFirstClass(card, "video-item-tag-hits", "counts")), "次")
 		drama := Drama{ID: providerDramaID(sourceDSD, id), Source: sourceDSD, SourceID: id,
 			Title: truncate(title, 1024), Name: truncate(title, 1024), Cover: cover, CoverURL: cover,
-			CategoryName: firstNonEmpty(category, "视频"), ChannelName: "帝果", Views: views}
+			CategoryName: firstNonEmpty(category, "影片"), ChannelName: "帝果", Views: views}
 		if providerHTMLFirstClass(card, "video-item-tag-is-vip", "vip-tag") != nil {
 			vip := true
 			drama.VIP = &vip
@@ -265,7 +265,7 @@ func (d *Downloader) fetchDSDPage(ctx context.Context, page int, category native
 		return nil, false, err
 	}
 	if len(items) == 0 && pages > page {
-		return nil, false, errors.New("帝果未返回应有的视频条目，请重试")
+		return nil, false, errors.New("帝果未提供預期的影片項目，請重試")
 	}
 	if query == "" {
 		state := &d.dsdCatalog
@@ -281,7 +281,7 @@ func (d *Downloader) fetchDSDPage(ctx context.Context, page int, category native
 
 func (d *Downloader) fetchDSDCatalogPage(ctx context.Context, page int, category, query string) ([]Drama, bool, error) {
 	if page < 1 || page > 1000000 || len(query) > 1024 || category != "" && !webProviderNumericID.MatchString(category) {
-		return nil, false, errors.New("帝果目录查询参数无效")
+		return nil, false, errors.New("帝果目錄查詢參數無效")
 	}
 	if query != "" {
 		return d.fetchDSDPage(ctx, page, nativeCategory{}, query)
@@ -296,7 +296,7 @@ func (d *Downloader) fetchDSDCatalogPage(ctx context.Context, page int, category
 				return d.fetchDSDPage(ctx, page, item, "")
 			}
 		}
-		return nil, false, errors.New("帝果分类已变化，请刷新分类")
+		return nil, false, errors.New("帝果分類已變更，請重新整理分類")
 	}
 	type result struct {
 		items []Drama
