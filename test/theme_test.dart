@@ -257,14 +257,16 @@ void main() {
     expect(find.byKey(const ValueKey('open-settings-route')), findsOneWidget);
   });
 }
-
   test('pure black dark theme uses black OLED surfaces', () {
     final theme = AppTheme.darkFor(null, pureBlack: true);
     expect(theme.brightness, Brightness.dark);
     expect(theme.scaffoldBackgroundColor, Colors.black);
     expect(theme.colorScheme.surface, Colors.black);
     expect(AppTheme.dark.scaffoldBackgroundColor, isNot(Colors.black));
-    expect(AppTheme.darkFor(null, pureBlack: false).scaffoldBackgroundColor, isNot(Colors.black));
+    expect(
+      AppTheme.darkFor(null, pureBlack: false).scaffoldBackgroundColor,
+      isNot(Colors.black),
+    );
   });
 
   testWidgets('pure black background option is accessible from settings', (tester) async {
@@ -283,6 +285,5 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.pureBlackTheme, isTrue);
   });
-
 }
 
