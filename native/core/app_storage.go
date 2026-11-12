@@ -124,7 +124,7 @@ func (engine *nativeEngine) moveDownloads(ctx context.Context, parent string) er
 	engine.mu.Lock()
 	if engine.work["media"] || engine.work["mergeQueue"] || engine.work["mergeCleanup"] {
 		engine.mu.Unlock()
-		return errors.New("请等待本地媒体处理完成后再迁移")
+		return errors.New("請等待本機媒體處理完成後再搬移")
 	}
 	defer engine.mu.Unlock()
 	target := filepath.Join(filepath.Clean(parent), "zhenguojian-downloads")
@@ -200,10 +200,10 @@ func (engine *nativeEngine) workLease(id, command string) (int, error) {
 	}
 	if id != "" {
 		if id != "media" && id != "storage" && id != "mergeQueue" && id != "mergeCleanup" {
-			return 0, errors.New("无效的本地任务")
+			return 0, errors.New("無效的本機任務")
 		}
 		if command != "start" && command != "end" {
-			return 0, errors.New("无效的本地任务操作")
+			return 0, errors.New("無效的本機任務操作")
 		}
 		manager := engine.downloads
 		manager.mu.Lock()
