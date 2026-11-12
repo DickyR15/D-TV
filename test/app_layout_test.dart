@@ -6,7 +6,7 @@ void main() {
   test('user-facing app version excludes the internal build number', () {
     expect(appVersion, '1.0.6');
     expect(formatAppVersion('1.0.6'), '1.0.6');
-    expect(formatAppVersion(' 1.0.3 '), '1.0.6');
+    expect(formatAppVersion(' 1.0.3 '), '1.0.3');
     expect(formatAppVersion(''), '1.0.6');
   });
 
