@@ -10,7 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 export 'app_build.dart';
 
-const appVersion = '1.0.3';
+const appVersion = '1.0.6';
 
 /// Returns the user-facing version name without the internal build number.
 String formatAppVersion(String versionName) {
