@@ -767,6 +767,9 @@ class LocalStore extends ChangeNotifier {
     return {'light', 'dark', 'system'}.contains(value) ? value! : 'system';
   }
 
+  bool get pureBlackTheme =>
+      _configurationError == null && (_bool('pureBlackTheme') ?? false);
+
   String get themeAccent {
     final value = _configurationError == null ? _string('themeAccent') : null;
     // Migrate the previous selectable "brand" palette to system color without
@@ -1016,6 +1019,9 @@ class LocalStore extends ChangeNotifier {
 
   Future<void> setCheckForUpdatesOnStartup(bool value) =>
       _setting('checkForUpdatesOnStartup', value);
+
+  Future<void> setPureBlackTheme(bool value) =>
+      _setting('pureBlackTheme', value);
 
   Future<void> setThemeAccent(String value) =>
       const {
@@ -1537,6 +1543,7 @@ class LocalStore extends ChangeNotifier {
       'displayMode': displayMode,
       'themeMode': themeMode,
       'themeAccent': themeAccent,
+      'pureBlackTheme': pureBlackTheme,
       'forceLogin': forceLogin,
       'ignoredUpdateVersion': ignoredUpdateVersion,
       'checkForUpdatesOnStartup': checkForUpdatesOnStartup,
@@ -1643,6 +1650,9 @@ class LocalStore extends ChangeNotifier {
         !{'light', 'dark', 'system'}.contains(data['themeMode'])) {
       throw const FormatException('備份主題設定無效');
     }
+    if (data.containsKey('pureBlackTheme') && data['pureBlackTheme'] is! bool) {
+      throw const FormatException('純黑深色模式備份設定無效');
+    }
     if (data.containsKey('themeAccent') &&
         !const {
           'system', 'brand', 'warmOrange', 'roseRed', 'amber', 'teal', 'ocean', 'indigo',
@@ -1745,6 +1755,7 @@ class LocalStore extends ChangeNotifier {
           : 'auto',
       'themeMode': data['themeMode'] as String? ?? themeMode,
       'themeAccent': data['themeAccent'] as String? ?? themeAccent,
+      'pureBlackTheme': data['pureBlackTheme'] as bool? ?? pureBlackTheme,
       'forceLogin': data['forceLogin'] is bool
           ? data['forceLogin'] as bool
           : profiles.firstWhere((profile) => profile.admin).protected,
