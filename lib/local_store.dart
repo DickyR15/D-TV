@@ -1079,15 +1079,32 @@ class LocalStore extends ChangeNotifier {
     final epoch = _epoch;
     return _queue(() async {
       if (!allowsSource(drama.source) || epoch != _epoch) return;
+      final groupId = drama.seriesGroupId.isNotEmpty
+          ? drama.seriesGroupId
+          : _seriesGroupIdFor(drama.id);
       final entries = Map.of(_favorites);
       final states = Map.of(_followStates);
-      if (entries.containsKey(drama.id)) {
-        entries.remove(drama.id);
-        states.remove(drama.id);
+      final matchingIds = entries.entries
+          .where((entry) =>
+              entry.key == drama.id ||
+              groupId.isNotEmpty && entry.value.seriesGroupId == groupId)
+          .map((entry) => entry.key)
+          .toList();
+      if (matchingIds.isNotEmpty) {
+        for (final id in matchingIds) {
+          entries.remove(id);
+          states.remove(id);
+        }
       } else {
-        if (entries.length >= 20000) throw StateError('收藏數量已達上限，請先整理收藏');
-        entries[drama.id] = drama;
-        states[drama.id] = FollowState.initial(drama, _history[drama.id]);
+        if (entries.length >= 20000) {
+          throw StateError('收藏數量已達上限，請先整理收藏');
+        }
+        final key = groupId.isEmpty ? drama.id : 'hongguo:' + groupId;
+        final canonical = groupId.isEmpty
+            ? drama
+            : (_seriesCandidates[key] ?? drama.withSeriesGroupId(groupId));
+        entries[key] = canonical;
+        states[key] = FollowState.initial(canonical, _history[canonical.id]);
       }
       await _commit({
         _key('favorites'): jsonEncode(
@@ -1108,17 +1125,30 @@ class LocalStore extends ChangeNotifier {
     final epoch = _epoch;
     return _queue(() async {
       if (!allowsSource(drama.source) || epoch != _epoch) return;
-      if (!_favorites.containsKey(drama.id) && _favorites.length >= 20000) {
+      final groupId = drama.seriesGroupId.isNotEmpty
+          ? drama.seriesGroupId
+          : _seriesGroupIdFor(drama.id);
+      final canonicalId = groupId.isEmpty ? drama.id : 'hongguo:' + groupId;
+      final key = _favoriteIdFor(drama.id) ?? canonicalId;
+      if (!_favorites.containsKey(key) && _favorites.length >= 20000) {
         throw StateError('收藏數量已達上限，請先整理收藏');
       }
-      final current = _favorites[drama.id]?.merge(drama) ?? drama;
-      final entries = Map.of(_favorites)..[drama.id] = current;
+      final existing = _favorites[key];
+      final base = existing ??
+          (groupId.isEmpty
+              ? drama
+              : (_seriesCandidates[canonicalId] ??
+                    drama.withSeriesGroupId(groupId)));
+      final current = existing != null && existing.id != drama.id
+          ? existing
+          : base.merge(drama);
+      final entries = Map.of(_favorites)..[key] = current;
       final state =
-          (_followStates[drama.id] ??
-                  FollowState.initial(current, _history[drama.id]))
+          (_followStates[key] ??
+                  FollowState.initial(current, _history[current.id]))
               .observe(current)
               .withStatus(status);
-      final states = Map.of(_followStates)..[drama.id] = state;
+      final states = Map.of(_followStates)..[key] = state;
       await _commit({
         _key('favorites'): jsonEncode(
           entries.values.map((entry) => entry.toJson()).toList(),
@@ -1133,9 +1163,10 @@ class LocalStore extends ChangeNotifier {
   Future<void> markUpdatesRead(String id) {
     final epoch = _epoch;
     return _queue(() async {
-      if (!isFavorite(id) || epoch != _epoch) return;
+      final key = _favoriteIdFor(id);
+      if (key == null || epoch != _epoch || _followStates[key] == null) return;
       final states = Map.of(_followStates)
-        ..[id] = _followStates[id]!.markRead();
+        ..[key] = _followStates[key]!.markRead();
       await _commit({_key('followStates'): _encodeFollowStates(states)});
       _loadLibrary();
       _notify();
@@ -1145,11 +1176,12 @@ class LocalStore extends ChangeNotifier {
   Future<void> markSeriesSeasonRead(String id, String seasonId) {
     final epoch = _epoch;
     return _queue(() async {
-      if (!isFavorite(id) || epoch != _epoch) return;
-      final current = _followStates[id]!;
+      final key = _favoriteIdFor(id);
+      if (key == null || epoch != _epoch || _followStates[key] == null) return;
+      final current = _followStates[key]!;
       final updated = current.markSeriesSeasonRead(seasonId);
       if (identical(current, updated)) return;
-      final states = Map.of(_followStates)..[id] = updated;
+      final states = Map.of(_followStates)..[key] = updated;
       await _commit({_key('followStates'): _encodeFollowStates(states)});
       _loadLibrary();
       _notify();
