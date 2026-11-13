@@ -267,7 +267,10 @@ func parseHeitaoCards(document *html.Node, pageURL string) []Drama {
 		seen[id] = true
 		cover := ""
 		for _, image := range providerHTMLNodes(card, func(node *html.Node) bool { return node.Data == "img" }) {
-			for _, attribute := range []string{"src", "data-src", "data-original"} {
+			for _, attribute := range []string{
+				"src", "data-src", "data-original", "data-lazy-src",
+				"data-original-src", "data-url", "data-echo",
+			} {
 				if address := providerCoverAddress(providerHTMLAttr(image, attribute), pageURL); address != "" {
 					cover = address
 					break

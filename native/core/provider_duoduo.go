@@ -249,7 +249,11 @@ func duoduoPosterAddressesFromRow(row map[string]any) []string {
 	var addresses []string
 	for _, field := range []string{
 		"vod_pic", "vod_pic_thumb", "vod_pic_url", "vod_pic_slide",
-		"vod_pic_screenshot", "cover", "cover_url", "poster", "image", "thumbnail",
+		"vod_pic_screenshot", "vod_pic_local", "vod_pic_original",
+		"vod_pic_big", "vod_pic_small", "vod_pic_720", "vod_pic_1080",
+		"vod_pic_cover", "vod_pic_poster", "vod_pic_img",
+		"cover", "cover_url", "cover_image", "poster", "poster_url",
+		"image", "image_url", "thumbnail", "thumb", "pic", "pic_url", "img",
 	} {
 		addresses = append(addresses, providerCoverAddresses(row[field], duoduoPublicEntryURL)...)
 	}

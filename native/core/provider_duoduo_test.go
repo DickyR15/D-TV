@@ -130,6 +130,25 @@ func TestDuoduoPosterFallbackFields(t *testing.T) {
 	}
 }
 
+func TestDuoduoPosterFallbackSupportsExtendedArtworkFields(t *testing.T) {
+	for _, field := range []string{
+		"vod_pic_original", "vod_pic_big", "vod_pic_cover",
+		"cover_image", "poster_url", "image_url", "pic_url",
+	} {
+		t.Run(field, func(t *testing.T) {
+			row := map[string]any{
+				"vod_id": 78301,
+				"vod_name": "擴充海報欄位",
+				field: "https://img.example.test/" + field + ".jpg",
+			}
+			want := "https://img.example.test/" + field + ".jpg"
+			if got := duoduoDramaFromRow(row).Cover; got != want {
+				t.Fatalf("fallback field %q produced %q, want %q", field, got, want)
+			}
+		})
+	}
+}
+
 func TestDuoduoPosterRecoveryHandlesBaiduWrappersAndUnknownCDNs(t *testing.T) {
 	const wrapped = "https://gimg0.baidu.com/gimg/app=2001&n=0&g=0n&fmt=jpeg&src=https%3A%2F%2Fi0.hdslb.com%2Fbfs%2Fbangumi%2Fimage%2F0af10a0c3258186e96fde4406b384c13dd643d8f.png"
 	const source = "https://i0.hdslb.com/bfs/bangumi/image/0af10a0c3258186e96fde4406b384c13dd643d8f.png"

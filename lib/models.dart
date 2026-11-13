@@ -156,7 +156,7 @@ class Drama {
   final String id;
   final String source;
   final String sourceId;
-  /// Official Redfruit series identity shared by every season.
+  /// Stable provider identity shared by every season of a series.
   final String seriesGroupId;
   final int seriesSeasonNumber;
   final String seriesSeasonUnit;
@@ -263,6 +263,34 @@ class Drama {
     seriesSeasonNumber: seriesSeasonNumber,
     seriesSeasonUnit: seriesSeasonUnit,
     title: title,
+    description: description,
+    cover: cover,
+    episodes: episodes,
+    episodesVerified: episodesVerified,
+    category: category,
+    doubanId: doubanId,
+    vip: vipStatus,
+    heat: heat,
+    views: views,
+    onlineDate: onlineDate,
+    tags: tags,
+    releaseStatus: releaseStatus,
+    badge: badge,
+  );
+
+  Drama withSeriesIdentity({
+    required String groupId,
+    required int seasonNumber,
+    required String seasonUnit,
+    String? displayTitle,
+  }) => Drama(
+    id: id,
+    source: source,
+    sourceId: sourceId,
+    seriesGroupId: groupId,
+    seriesSeasonNumber: seasonNumber,
+    seriesSeasonUnit: seasonUnit,
+    title: displayTitle ?? title,
     description: description,
     cover: cover,
     episodes: episodes,

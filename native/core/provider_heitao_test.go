@@ -44,6 +44,24 @@ func TestParseHeitaoCardsKeepsPosterAndEpisodeBadge(t *testing.T) {
 	}
 }
 
+func TestParseHeitaoCardsRecognizesLazyArtworkAttributes(t *testing.T) {
+	for _, attribute := range []string{
+		"data-lazy-src", "data-original-src", "data-url", "data-echo",
+	} {
+		t.Run(attribute, func(t *testing.T) {
+			source := "<!doctype html><html><body>" +
+				"<a class=\"thumb\" href=\"/index.php/vod/detail/id/321.html\" title=\"延遲海報\">" +
+				"<img " + attribute + "=\"/poster/lazy.webp\" alt=\"延遲海報\">" +
+				"</a></body></html>"
+			document := heitaoTestDocument(t, source)
+			items := parseHeitaoCards(document, "https://heitaodj.com/index.php/vod/show.html")
+			if len(items) != 1 || items[0].Cover != "https://heitaodj.com/poster/lazy.webp" {
+				t.Fatalf("lazy attribute %q was not parsed: %+v", attribute, items)
+			}
+		})
+	}
+}
+
 func TestHeitaoCategoriesAndChapterParsing(t *testing.T) {
 	document := heitaoTestDocument(t, `<!doctype html><html><body>
 <a href="/index.php/vod/type/id/1.html">甜寵</a>

@@ -652,7 +652,8 @@ class LocalStore extends ChangeNotifier {
     for (final row in readJsonList(_seriesCandidatesRaw())) {
       try {
         final drama = Drama.fromJson(row);
-        if (drama.source == SourceSite.hongguo.id) {
+        if (drama.source == SourceSite.hongguo.id ||
+            drama.source == 'duoduo' && drama.seriesGroupId.isNotEmpty) {
           _seriesCandidates[drama.id] = drama;
         }
       } catch (_) {}
@@ -689,7 +690,9 @@ class LocalStore extends ChangeNotifier {
       if (!allowsSource(drama.source)) continue;
       final groupId = drama.seriesGroupId;
       final key = groupId.isEmpty ? 'id:' + drama.id : 'series:' + groupId;
-      final canonicalId = groupId.isEmpty ? drama.id : 'hongguo:' + groupId;
+      final canonicalId = groupId.isEmpty
+          ? drama.id
+          : _seriesCanonicalId(groupId, fallbackId: drama.id);
       unique[key] = _favorites[canonicalId] ??
           _seriesCandidates[canonicalId] ??
           drama;
@@ -703,10 +706,22 @@ class LocalStore extends ChangeNotifier {
       _history[id]?.drama.seriesGroupId ??
       '';
 
+  String _seriesCanonicalId(String groupId, {String fallbackId = ''}) {
+    if (!groupId.startsWith('duoduo-series:')) return 'hongguo:' + groupId;
+    final matches = _seriesCandidates.values
+        .where((drama) => drama.seriesGroupId == groupId)
+        .toList()
+      ..sort((a, b) {
+        final season = a.seriesSeasonNumber.compareTo(b.seriesSeasonNumber);
+        return season != 0 ? season : a.id.compareTo(b.id);
+      });
+    return matches.isNotEmpty ? matches.first.id : fallbackId;
+  }
+
   String? _favoriteIdFor(String id) {
     final groupId = _seriesGroupIdFor(id);
     if (groupId.isNotEmpty) {
-      final canonicalId = 'hongguo:' + groupId;
+      final canonicalId = _seriesCanonicalId(groupId, fallbackId: id);
       if (_favorites.containsKey(canonicalId)) return canonicalId;
       for (final entry in _favorites.entries) {
         if (entry.value.seriesGroupId == groupId) return entry.key;
@@ -1128,7 +1143,9 @@ class LocalStore extends ChangeNotifier {
         if (entries.length >= 20000) {
           throw StateError('收藏數量已達上限，請先整理收藏');
         }
-        final key = groupId.isEmpty ? drama.id : 'hongguo:' + groupId;
+        final key = groupId.isEmpty
+            ? drama.id
+            : _seriesCanonicalId(groupId, fallbackId: drama.id);
         final canonical = groupId.isEmpty
             ? drama
             : (_seriesCandidates[key] ?? drama.withSeriesGroupId(groupId));
@@ -1157,7 +1174,9 @@ class LocalStore extends ChangeNotifier {
       final groupId = drama.seriesGroupId.isNotEmpty
           ? drama.seriesGroupId
           : _seriesGroupIdFor(drama.id);
-      final canonicalId = groupId.isEmpty ? drama.id : 'hongguo:' + groupId;
+      final canonicalId = groupId.isEmpty
+          ? drama.id
+          : _seriesCanonicalId(groupId, fallbackId: drama.id);
       final key = _favoriteIdFor(drama.id) ?? canonicalId;
       if (!_favorites.containsKey(key) && _favorites.length >= 20000) {
         throw StateError('收藏數量已達上限，請先整理收藏');
@@ -1553,7 +1572,9 @@ class LocalStore extends ChangeNotifier {
       final seriesCandidates = Map.of(_seriesCandidates);
       for (final drama in updates) {
         if (!allowsSource(drama.source)) continue;
-        if (cacheSeriesCandidates && drama.source == SourceSite.hongguo.id) {
+        if (cacheSeriesCandidates &&
+            (drama.source == SourceSite.hongguo.id ||
+                drama.source == 'duoduo' && drama.seriesGroupId.isNotEmpty)) {
           seriesCandidates[drama.id] = (seriesCandidates[drama.id] ?? drama)
               .merge(drama);
         }
@@ -1570,7 +1591,7 @@ class LocalStore extends ChangeNotifier {
                     history[drama.id]?.drama.seriesGroupId ??
                     '';
           if (groupId.isNotEmpty) {
-            final canonicalId = 'hongguo:' + groupId;
+            final canonicalId = _seriesCanonicalId(groupId, fallbackId: drama.id);
             final seriesFavorite = favorites[canonicalId] ??
                 favorites.values.where(
                   (item) => item.seriesGroupId == groupId,
