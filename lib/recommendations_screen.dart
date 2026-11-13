@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'catalog_filters.dart';
 import 'core_bridge.dart';
+import 'detail_screen.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'playback_launch_screen.dart';
@@ -197,12 +198,13 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
                                 key: ValueKey(drama.id),
                                 drama: drama,
                                 repository: widget.repository,
-                                onTap: () => unawaited(
-                                  openPlaybackDirectly(
-                                    context,
-                                    drama: drama,
-                                    repository: widget.repository,
-                                    store: widget.store,
+                                onTap: () => Navigator.of(context).push<void>(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => DetailScreen(
+                                      drama: drama,
+                                      repository: widget.repository,
+                                      store: widget.store,
+                                    ),
                                   ),
                                 ),
                               );
