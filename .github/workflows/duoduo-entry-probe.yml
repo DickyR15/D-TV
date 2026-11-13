@@ -1053,7 +1053,12 @@ jobs:
               exact_item = exact_source_records.get(str(vod_id))
               source_year = str(row.get("vod_year") or "").strip()[:4]
               record_year = str(exact_item.get("year") or "").strip()[:4] if exact_item else ""
-              exact_title_match = bool(exact_item and normalize_exact(title) in exact_item["aliases"])
+              exact_title_match = bool(
+                  exact_item
+                  and normalize_exact(title) in {
+                      normalize_exact(alias) for alias in exact_item["aliases"]
+                  }
+              )
               # A dated artwork is not verifiable when the source year is missing.
               # Missing metadata must never turn a known year mismatch into a match.
               exact_year_match = not record_year or source_year == record_year
@@ -2026,7 +2031,12 @@ jobs:
               exact_item = exact_source_records.get(str(vod_id))
               source_year = str(row.get("vod_year") or "").strip()[:4]
               record_year = str(exact_item.get("year") or "").strip()[:4] if exact_item else ""
-              exact_title_match = bool(exact_item and normalize_exact(title) in exact_item["aliases"])
+              exact_title_match = bool(
+                  exact_item
+                  and normalize_exact(title) in {
+                      normalize_exact(alias) for alias in exact_item["aliases"]
+                  }
+              )
               # A dated artwork is not verifiable when the source year is missing.
               # Missing metadata must never turn a known year mismatch into a match.
               exact_year_match = not record_year or source_year == record_year
