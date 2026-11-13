@@ -74,6 +74,78 @@ void main() {
     );
   });
 
+  test('restore disposes the PiP player before resuming the main window', () async {
+    final shutdown = DesktopMiniPlayerShutdown();
+    final disposeGate = Completer<void>();
+    final events = <String>[];
+    var disposeCalls = 0;
+    var notifyCalls = 0;
+    var closeCalls = 0;
+
+    final first = shutdown.close(
+      disposePlayer: () async {
+        disposeCalls++;
+        events.add('dispose-start');
+        await disposeGate.future;
+        events.add('dispose-complete');
+      },
+      notifyMainWindow: () async {
+        notifyCalls++;
+        events.add('notify-main');
+      },
+      closeWindow: () async {
+        closeCalls++;
+        events.add('close-window');
+      },
+    );
+    final second = shutdown.close(
+      disposePlayer: () async => disposeCalls++,
+      notifyMainWindow: () async => notifyCalls++,
+      closeWindow: () async => closeCalls++,
+    );
+
+    expect(identical(first, second), isTrue);
+    expect(events, ['dispose-start']);
+    expect(notifyCalls, 0);
+    expect(closeCalls, 0);
+
+    disposeGate.complete();
+    await first;
+
+    expect(events, [
+      'dispose-start',
+      'dispose-complete',
+      'notify-main',
+      'close-window',
+    ]);
+    expect(disposeCalls, 1);
+    expect(notifyCalls, 1);
+    expect(closeCalls, 1);
+  });
+
+  test('a failed PiP disposal never starts the main player', () async {
+    final shutdown = DesktopMiniPlayerShutdown();
+    final events = <String>[];
+
+    await expectLater(
+      shutdown.close(
+        disposePlayer: () async {
+          events.add('dispose-start');
+          throw StateError('native MPV did not stop');
+        },
+        notifyMainWindow: () async {
+          events.add('notify-main');
+        },
+        closeWindow: () async {
+          events.add('close-window');
+        },
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(events, ['dispose-start']);
+  });
+
   test('mini-player parser sanitizes an invalid saved position', () {
     final encoded = jsonEncode({
       'businessId': DesktopMiniPlayerArguments.businessId,
