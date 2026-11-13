@@ -39,6 +39,10 @@ type heitaoPlayerEntry struct {
 	Encrypt any    `json:"encrypt"`
 }
 
+func heitaoPageContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, providerTextCookieKey{}, heitaoAgeCookie)
+}
+
 func validHeitaoCategory(category string) bool {
 	if category == "" {
 		return true
@@ -208,7 +212,7 @@ func heitaoEpisodeCount(remark string) int {
 
 func (d *Downloader) fetchHeitaoCategories(ctx context.Context) ([]nativeCategory, error) {
 	site := d.providerBaseURL(sourceHeitao)
-	document, pageURL, err := d.fetchProviderPage(ctx, site+"/", site+"/", heitaoUserAgent)
+	document, pageURL, err := d.fetchProviderPage(heitaoPageContext(ctx), site+"/", site+"/", heitaoUserAgent)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +338,7 @@ func (d *Downloader) fetchHeitaoCatalogPage(ctx context.Context, page int, categ
 	}
 	site := d.providerBaseURL(sourceHeitao)
 	address := heitaoCatalogAddress(site, page, category, query)
-	document, pageURL, err := d.fetchProviderPage(ctx, address, site+"/", heitaoUserAgent)
+	document, pageURL, err := d.fetchProviderPage(heitaoPageContext(ctx), address, site+"/", heitaoUserAgent)
 	if err != nil {
 		return nil, false, err
 	}
@@ -402,7 +406,7 @@ func (d *Downloader) fetchHeitaoDetail(ctx context.Context, sourceID string) (Dr
 	}
 	site := d.providerBaseURL(sourceHeitao)
 	address := site + "/index.php/vod/detail/id/" + sourceID + ".html"
-	document, pageURL, err := d.fetchProviderPage(ctx, address, site+"/", heitaoUserAgent)
+	document, pageURL, err := d.fetchProviderPage(heitaoPageContext(ctx), address, site+"/", heitaoUserAgent)
 	if err != nil {
 		return Drama{}, nil, err
 	}
