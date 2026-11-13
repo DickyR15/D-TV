@@ -426,8 +426,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             _acceptErrors &&
             _error == null) {
           final duration = _player.state.duration;
-          if (duration <= Duration.zero ||
-              _player.state.position < duration - const Duration(seconds: 2)) {
+          if (playbackCompletionNeedsRecovery(
+            duration: duration,
+            position: _player.state.position,
+          )) {
             _queueRecovery(reason: 'early_completion');
           } else if (_autoAdvance &&
               _foreground &&
@@ -2823,6 +2825,23 @@ class _PlayerScreenState extends State<PlayerScreen>
                 !_playerFocus.hasPrimaryFocus ||
                 !(ModalRoute.of(context)?.isCurrent ?? true)) {
               return KeyEventResult.ignored;
+            }
+            if ((Platform.isWindows || Platform.isMacOS) &&
+                event is KeyDownEvent &&
+                !_television &&
+                !_panelOpen &&
+                _playerFocus.hasPrimaryFocus &&
+                (ModalRoute.of(context)?.isCurrent ?? true)) {
+              if (event.logicalKey == LogicalKeyboardKey.pageUp) {
+                if (_index > 0) unawaited(_play(_index - 1));
+                return KeyEventResult.handled;
+              }
+              if (event.logicalKey == LogicalKeyboardKey.pageDown) {
+                if (_index + 1 < widget.detail.episodes.length) {
+                  unawaited(_play(_index + 1));
+                }
+                return KeyEventResult.handled;
+              }
             }
             return _interactions.key(event);
           },
