@@ -1303,13 +1303,20 @@ class LocalStore extends ChangeNotifier {
                   );
           }
         }
-        final manuallyWatched =
-            perSeasonStates.values.any((state) => state.manuallyWatched);
-        final status = manuallyWatched
+        final allSeasonsWatched = perSeasonStates.isNotEmpty &&
+            perSeasonStates.values.every(
+              (state) => state.status == FollowStatus.watched,
+            );
+        final manuallyWatched = allSeasonsWatched &&
+            perSeasonStates.values.every((state) => state.manuallyWatched);
+        final anySeasonStarted = perSeasonStates.values.any(
+          (state) => state.status != FollowStatus.planned,
+        );
+        final status = allSeasonsWatched
             ? FollowStatus.watched
-            : perSeasonStates.values.reduce(
-                (a, b) => a.status.index >= b.status.index ? a : b,
-              ).status;
+            : anySeasonStarted
+            ? FollowStatus.watching
+            : FollowStatus.planned;
         final merged = FollowState(
           status: status,
           manuallyWatched: manuallyWatched,
