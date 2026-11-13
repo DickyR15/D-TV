@@ -245,6 +245,18 @@ class _DetailScreenState extends State<DetailScreen> {
           _detail?.drama.id != drama.id) {
         return;
       }
+      if (seasons.isNotEmpty) {
+        await widget.store.registerHongguoSeriesSeasons(
+          drama,
+          seasons.map((season) => season.drama),
+        );
+      }
+      if (!mounted ||
+          generation != _generation ||
+          _profileEpoch != widget.store.profileEpoch ||
+          _detail?.drama.id != drama.id) {
+        return;
+      }
       setState(() {
         _seriesSeasons = seasons;
         _seriesSeasonsLoading = false;
