@@ -685,10 +685,17 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 			call.path = path
 		}
 	}
-	if err != nil && fallback != "" {
+	if err != nil && fallback != "" && !isPermanentMissingCover(err) {
 		if _, statErr := os.Stat(fallback); statErr == nil {
 			call.path, err = fallback, nil
 		}
+	}
+	if isPermanentMissingCover(err) {
+		// A confirmed 404/410 means this exact poster URL has been removed.
+		// Do not keep showing an expired image from the same URL's cache.
+		_ = os.Remove(path)
+		cache.size -= cache.entries[key].size
+		delete(cache.entries, key)
 	}
 	call.err = err
 	delete(cache.pending, key)

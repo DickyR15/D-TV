@@ -604,7 +604,17 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 	}
 	<-cache.slots
 	if downloadErr != nil {
-		if stalePath != "" {
+		if isPermanentMissingCover(downloadErr) {
+			// Remove stale bytes for a URL that the server has explicitly
+			// retired. Temporary network failures still retain stale-if-error.
+			cache.mu.Lock()
+			if entry, found := cache.entries[key]; found {
+				_ = os.Remove(path)
+				cache.size -= entry.size
+				delete(cache.entries, key)
+			}
+			cache.mu.Unlock()
+		} else if stalePath != "" {
 			if _, statErr := os.Stat(stalePath); statErr == nil {
 				return stalePath, nil
 			}

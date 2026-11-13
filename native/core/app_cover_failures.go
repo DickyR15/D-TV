@@ -117,6 +117,11 @@ func (cache *nativeCoverCache) coverOnCooldown(address, referer string) bool {
 	return false
 }
 
+func isPermanentMissingCover(err error) bool {
+	var statusErr *nativeCoverHTTPStatusError
+	return errors.As(err, &statusErr) && (statusErr.StatusCode == 404 || statusErr.StatusCode == 410)
+}
+
 func (cache *nativeCoverCache) noteCoverFailure(address, referer string, err error) {
 	if err == nil || errors.Is(err, context.Canceled) {
 		return

@@ -64,3 +64,20 @@ func TestNativeCoverFailureCooldownExpires(t *testing.T) {
 	if cache.coverOnCooldown(address, referer) { t.Fatal("expired failure remained on cooldown") }
 	if _, ok := cache.failures[key]; ok { t.Fatal("expired failure was not removed") }
 }
+
+
+func TestPermanentMissingCoverOnlyTreatsNotFoundAsPermanent(t *testing.T) {
+	for _, status := range []int{404, 410} {
+		if !isPermanentMissingCover(&nativeCoverHTTPStatusError{StatusCode: status}) {
+			t.Errorf("HTTP %d should be treated as permanently missing", status)
+		}
+	}
+	for _, status := range []int{401, 403, 429, 500, 503} {
+		if isPermanentMissingCover(&nativeCoverHTTPStatusError{StatusCode: status}) {
+			t.Errorf("HTTP %d must not invalidate a cached poster", status)
+		}
+	}
+	if isPermanentMissingCover(errors.New("timeout")) {
+		t.Fatal("network timeout must not invalidate a cached poster")
+	}
+}
