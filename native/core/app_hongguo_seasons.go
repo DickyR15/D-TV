@@ -243,12 +243,23 @@ func (engine *nativeEngine) nativeSeasons(
 	drama nativeDrama,
 ) (map[string]any, error) {
 	source, sourceID, valid := splitProviderDramaID(drama.ID)
-	if !valid || source != sourceHongguo {
+	if !valid {
 		return map[string]any{"items": []nativeDramaSeason{}}, nil
 	}
-	items, err := engine.downloader.hongguoAppSeasons(ctx, sourceID)
-	if err != nil {
-		return nil, err
+	switch source {
+	case sourceHongguo:
+		items, err := engine.downloader.hongguoAppSeasons(ctx, sourceID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"items": items}, nil
+	case sourceDuoduo:
+		items, err := engine.downloader.fetchDuoduoSeriesSeasons(ctx, drama)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"items": items}, nil
+	default:
+		return map[string]any{"items": []nativeDramaSeason{}}, nil
 	}
-	return map[string]any{"items": items}, nil
 }
