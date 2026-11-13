@@ -1174,12 +1174,17 @@ class LocalStore extends ChangeNotifier {
       if (!_favorites.containsKey(key) && _favorites.length >= 20000) {
         throw StateError('收藏數量已達上限，請先整理收藏');
       }
-      final current = (_favorites[key] ??
-              (groupId.isEmpty
-                  ? drama
-                  : (_seriesCandidates[canonicalId] ??
-                        drama.withSeriesGroupId(groupId))))
-          .merge(drama);
+      final existing = _favorites[key];
+      final base = existing ??
+          (groupId.isEmpty
+              ? drama
+              : (_seriesCandidates[canonicalId] ??
+                    drama.withSeriesGroupId(groupId)));
+      // A season-level action updates the one series record without replacing
+      // its canonical first-season identity with a sibling season ID.
+      final current = existing != null && existing.id != drama.id
+          ? existing
+          : base.merge(drama);
       final entries = Map.of(_favorites)..[key] = current;
       final state =
           (_followStates[key] ??
