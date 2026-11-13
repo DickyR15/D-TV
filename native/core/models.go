@@ -11,6 +11,9 @@ type Drama struct {
 	ID                string             `json:"id"`
 	Source            string             `json:"source,omitempty"`
 	SourceID          string             `json:"sourceId,omitempty"`
+	SeriesGroupID     string             `json:"seriesGroupId,omitempty"`
+	SeriesSeasonNumber int               `json:"seriesSeasonNumber,omitempty"`
+	SeriesSeasonUnit  string             `json:"seriesSeasonUnit,omitempty"`
 	DoubanID          string             `json:"doubanId,omitempty"`
 	Title             string             `json:"title"`
 	Name              string             `json:"name"`
