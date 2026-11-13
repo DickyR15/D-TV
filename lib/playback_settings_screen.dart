@@ -49,6 +49,10 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late bool _autoPictureInPicture;
   late bool _desktopAlwaysOnTop =
       widget.store.playbackPreferences.desktopAlwaysOnTop;
+  late bool _showTelevisionNetworkSpeed =
+      widget.store.playbackPreferences.showTelevisionNetworkSpeed;
+  late bool _showTelevisionClock =
+      widget.store.playbackPreferences.showTelevisionClock;
   bool _pictureInPictureSupported = false;
   bool _playbackValuesInitialized = false;
   bool? _compatibleRendering;
@@ -130,6 +134,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           autoAdvance: _autoAdvance,
           autoPictureInPicture: _autoPictureInPicture,
           desktopAlwaysOnTop: _desktopAlwaysOnTop,
+          showTelevisionNetworkSpeed: _showTelevisionNetworkSpeed,
+          showTelevisionClock: _showTelevisionClock,
         ),
       );
       if (mounted) onSaved?.call();
@@ -193,6 +199,16 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateDesktopAlwaysOnTop(bool value) {
     setState(() => _desktopAlwaysOnTop = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateTelevisionNetworkSpeed(bool value) {
+    setState(() => _showTelevisionNetworkSpeed = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateTelevisionClock(bool value) {
+    setState(() => _showTelevisionClock = value);
     unawaited(_persistPreferences());
   }
 
@@ -385,6 +401,22 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             const SizedBox(height: 20),
             if (Platform.isAndroid && AppLayout.isTelevision(context)) ...[
               const SizedBox(height: 20),
+              SwitchListTile(
+                key: const ValueKey('playback-tv-network-speed'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('顯示即時網速'),
+                subtitle: const Text('使用 MPV 回報的快取讀取速率；ExoPlayer 或未提供速率時不顯示數值。'),
+                value: _showTelevisionNetworkSpeed,
+                onChanged: _updateTelevisionNetworkSpeed,
+              ),
+              SwitchListTile(
+                key: const ValueKey('playback-tv-clock'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('顯示時間'),
+                subtitle: const Text('在播放控制列右上角顯示裝置本機時間。'),
+                value: _showTelevisionClock,
+                onChanged: _updateTelevisionClock,
+              ),
               if (_compatibleRendering != null)
                 SwitchListTile(
                   key: const ValueKey('playback-compatible-rendering'),
