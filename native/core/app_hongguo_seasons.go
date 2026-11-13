@@ -71,6 +71,7 @@ func parseHongguoAppSeasons(result map[string]any) ([]nativeDramaSeason, error) 
 	}
 	items := make([]nativeDramaSeason, 0, 8)
 	seen := make(map[string]int)
+seasonRows:
 	for _, rawBlock := range blocks {
 		block, ok := rawBlock.(map[string]any)
 		if !ok {
@@ -150,7 +151,7 @@ func parseHongguoAppSeasons(result map[string]any) ([]nativeDramaSeason, error) 
 			seen[seriesID] = len(items)
 			items = append(items, item)
 			if len(items) >= 100 {
-				return items, nil
+				break seasonRows
 			}
 			_ = subscribeItem // Reservation IDs are intentionally not written here.
 		}
