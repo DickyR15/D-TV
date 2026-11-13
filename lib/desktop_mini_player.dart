@@ -219,7 +219,7 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
-                        'D TV 小窗播放器',
+                        uiTraditional(widget.arguments.detail.drama.title),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontWeight: FontWeight.w600),
