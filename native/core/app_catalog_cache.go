@@ -207,6 +207,17 @@ func mergeNativeDrama(previous, fresh nativeDrama) nativeDrama {
 	if fresh.SourceID == "" {
 		fresh.SourceID = previous.SourceID
 	}
+	if fresh.Source == sourceHeitao && previous.Source == sourceHeitao {
+		_, stableSourceID, valid := splitProviderDramaID(fresh.ID)
+		previousProviderID := strings.TrimSpace(previous.SourceID)
+		if valid && webProviderNumericID.MatchString(previousProviderID) &&
+			previousProviderID != stableSourceID && fresh.SourceID == stableSourceID {
+			// A later catalogue snapshot may still contain the retired ID.
+			// Keep the already verified replacement until another detail lookup
+			// provides a new, different provider ID.
+			fresh.SourceID = previousProviderID
+		}
+	}
 	if fresh.DoubanID == "" {
 		fresh.DoubanID = previous.DoubanID
 	}
