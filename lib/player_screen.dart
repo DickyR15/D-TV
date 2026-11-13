@@ -911,9 +911,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         _desktopMiniWindow = null;
         _desktopMiniReady = null;
         if (wasActive && mounted && !_closed) {
-          await _play(
-            index.clamp(0, widget.detail.episodes.length - 1).toInt(),
-            position: position,
+          // Native MPV has already been disposed by the PiP engine. Start the
+          // main player without holding the mini window open during loading.
+          unawaited(
+            _play(
+              index.clamp(0, widget.detail.episodes.length - 1).toInt(),
+              position: position,
+            ),
           );
         }
         return true;
