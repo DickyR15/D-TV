@@ -231,11 +231,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     televisionDecoder: _televisionDecoder,
     autoPictureInPicture: widget.store.playbackPreferences.autoPictureInPicture,
   );
-  String get _qualityLabel => _plan?.local == true
-      ? '本機原畫'
-      : _requestedQuality == 0
-      ? '自動'
-      : '${_requestedQuality}P';
+  int get _actualVideoQuality =>
+      videoQualityShortEdge(videoDisplaySize(_player.state.videoParams)) ?? 0;
+
+  String get _qualityLabel {
+    final plan = _plan;
+    final actual = _actualVideoQuality;
+    if (plan?.local == true) {
+      return actual > 0 ? '本機 ${actual}P' : '本機原畫';
+    }
+    if (actual > 0) return '${actual}P';
+    if ((plan?.quality ?? 0) > 0) return '${plan!.quality}P';
+    return _requestedQuality > 0 ? '指定 ${_requestedQuality}P' : '自動';
+  }
   String get _session => _plan?.session ?? '';
   double get _currentPosition =>
       _openedIndex == _index && _player.state.position.inMilliseconds > 0
@@ -2467,7 +2475,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               currentIndex: _index,
               preferences: _preferences,
               qualities: _plan?.qualities ?? [],
-              actualQuality: _plan?.quality ?? 0,
+              actualQuality: _actualVideoQuality > 0 ? _actualVideoQuality : (_plan?.quality ?? 0),
               local: _plan?.local == true,
               favorite: widget.store.isFavorite(widget.detail.drama.id),
               mobile: _mobile,
@@ -3093,6 +3101,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             onEpisodes: () => _openPanel(PlayerMenuSection.episodes),
             onSpeed: () => _openPanel(PlayerMenuSection.speed),
             onQuality: () => _openPanel(PlayerMenuSection.quality),
+            onSettings: () => _openPanel(PlayerMenuSection.settings),
             onPush: widget.mediaId == null && !widget.desktopMiniPlayer
                 ? _pushToDevice
                 : null,
