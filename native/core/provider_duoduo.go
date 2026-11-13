@@ -271,7 +271,7 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 	// them when the preferred CDN is unavailable, rather than losing the title's
 	// only other image candidates at the initial JSON mapping stage.
 	cover := firstNonEmpty(duoduoPosterAddressesFromRow(row)...)
-	description := htmlUnescapeDuoduo(firstNonEmpty(
+	description := providerHTMLPlainText(firstNonEmpty(
 		duoduoString(row["vod_content"]),
 		duoduoString(row["vod_blurb"]),
 	))
