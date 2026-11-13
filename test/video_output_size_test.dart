@@ -50,6 +50,45 @@ void main() {
     });
   });
 
+  group('video output safety', () {
+    test('rejects non-finite, empty and excessive output dimensions', () {
+      expect(isValidVideoOutputSize(const Size(1920, 1080)), isTrue);
+      expect(isValidVideoOutputSize(Size.zero), isFalse);
+      expect(
+        isValidVideoOutputSize(const Size(double.infinity, 720)),
+        isFalse,
+      );
+      expect(
+        isValidVideoOutputSize(const Size(16385, 720)),
+        isFalse,
+      );
+    });
+
+    test('does not reconfigure native MPV output while resizing mini-player', () {
+      expect(
+        shouldAdjustWindowsVideoOutput(
+          isWindows: true,
+          desktopMiniPlayer: false,
+        ),
+        isTrue,
+      );
+      expect(
+        shouldAdjustWindowsVideoOutput(
+          isWindows: true,
+          desktopMiniPlayer: true,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldAdjustWindowsVideoOutput(
+          isWindows: false,
+          desktopMiniPlayer: false,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('videoOutputSizeForSource', () {
     const landscape = Size(1920, 1080);
 
@@ -86,12 +125,20 @@ void main() {
       );
     });
 
-    test('rejects invalid and empty viewports', () {
+    test('rejects invalid source dimensions and empty viewports', () {
       expect(videoOutputSizeForSource(landscape, Size.zero), isNull);
+      expect(videoOutputSizeForSource(Size.zero, landscape), isNull);
       expect(
         videoOutputSizeForSource(
           landscape,
           const Size(double.infinity, 10),
+        ),
+        isNull,
+      );
+      expect(
+        videoOutputSizeForSource(
+          const Size(double.infinity, 1080),
+          landscape,
         ),
         isNull,
       );
