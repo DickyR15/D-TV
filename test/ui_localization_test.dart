@@ -153,6 +153,33 @@ void main() {
     expect(uiTraditional('二維碼、掃碼、手機'), 'QR Code、掃描、手機');
   });
 
+  test('converts official season labels and returned metadata to Taiwan Traditional Chinese', () {
+    final season = DramaSeason.fromJson({
+      'drama': {
+        'id': 'hongguo:7628202881140657177',
+        'source': 'hongguo',
+        'sourceId': '7628202881140657177',
+        'title': '万妖图录传第二季',
+        'description': '即将上线',
+        'episodes': 53,
+      },
+      'number': 2,
+      'label': '第2季',
+      'subtitle': '即将上线 · 共53集 · 435万热度',
+      'upcoming': false,
+      'playable': true,
+    });
+
+    expect(uiTraditional(season.drama.title), '萬妖圖錄傳第二季');
+    expect(uiTraditional(season.drama.description), '即將上線');
+    expect(
+      uiTraditional(season.subtitle),
+      '即將上線 · 共53集 · 435萬熱度',
+    );
+    expect(season.number, 2);
+    expect(season.playable, isTrue);
+  });
+
   test('keeps source identifiers and Latin labels untouched', () {
     expect(uiTraditional('hongguo-hot / D TV / AI'), 'hongguo-hot / D TV / AI');
   });
