@@ -2421,7 +2421,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (_closed) return;
     _sleepTimer?.cancel();
     _sleepTimer = null;
-    _sleepMinutes = minutes.clamp(0, 1440);
+    _sleepMinutes = minutes.clamp(0, 1440).toInt();
     _sleepAtEpisodeEnd = episodeEnd;
     if (!episodeEnd && _sleepMinutes > 0) {
       final selectedMinutes = _sleepMinutes;
