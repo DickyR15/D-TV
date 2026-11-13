@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:hgtv/follow_state.dart';
 import 'package:hgtv/local_snapshot.dart';
+import 'package:hgtv/lan_sync_models.dart';
 import 'package:hgtv/local_store.dart';
 import 'package:hgtv/models.dart';
 import 'package:flutter_test/flutter_test.dart';
