@@ -13,6 +13,10 @@ class LocalFiles {
 
   final Directory root;
 
+  /// Files whose primary or backup copy could not be read due to a transient
+  /// filesystem error. Writes to these categories are blocked until reload.
+  final Set<String> temporarilyUnavailableFiles = {};
+
   Directory get _staging => Directory('${root.path}.new');
   Directory get _retired => Directory('${root.path}.old');
 
@@ -42,20 +46,49 @@ class LocalFiles {
   }
 
   /// Reads the primary file, then its last known-good backup.
+  ///
+  /// A filesystem read failure is not corruption: retain the original file,
+  /// try the backup, and mark the category read-only until a later reload can
+  /// read the primary copy successfully.
   Future<Object?> readJson(String name) async {
     final file = _file(root, name);
     final backup = File('${file.path}.bak');
     var found = false;
+    FileSystemException? unavailable;
     for (final candidate in [file, backup]) {
-      if (!await candidate.exists()) continue;
-      found = true;
+      bool exists;
       try {
-        return jsonDecode(await candidate.readAsString());
-      } catch (_) {
-        // Try the last known-good copy before declaring this category damaged.
+        exists = await candidate.exists();
+      } on FileSystemException catch (error) {
+        unavailable ??= error;
+        temporarilyUnavailableFiles.add(name);
+        continue;
+      }
+      if (!exists) continue;
+      found = true;
+
+      String content;
+      try {
+        content = await candidate.readAsString();
+      } on FileSystemException catch (error) {
+        unavailable ??= error;
+        temporarilyUnavailableFiles.add(name);
+        continue;
+      }
+
+      try {
+        final value = jsonDecode(content);
+        if (candidate.path == file.path) {
+          temporarilyUnavailableFiles.remove(name);
+        }
+        return value;
+      } on FormatException {
+        // Only malformed JSON is corruption. Keep trying the known-good copy.
       }
     }
+    if (unavailable != null) throw unavailable;
     if (found) throw FormatException('$name 無法讀取');
+    temporarilyUnavailableFiles.remove(name);
     return null;
   }
 
@@ -128,6 +161,10 @@ class LocalFiles {
       if (_canonical(previous[name]) != _canonical(next[name])) {
         changed.add(name);
       }
+    }
+    final blocked = changed.where(temporarilyUnavailableFiles.contains).toList();
+    if (blocked.isNotEmpty) {
+      throw LocalDataTemporarilyUnavailable(blocked);
     }
     final applied = <String>[];
     try {
@@ -222,4 +259,15 @@ class LocalFiles {
 
 class LocalFilesRecoveryRequired implements Exception {
   const LocalFilesRecoveryRequired();
+}
+
+
+class LocalDataTemporarilyUnavailable implements Exception {
+  const LocalDataTemporarilyUnavailable(this.files);
+
+  final List<String> files;
+
+  @override
+  String toString() =>
+      '本機資料暫時無法讀取（${files.join('、')}），原始檔案已保留；請先重新讀取資料，再修改這些項目。';
 }
