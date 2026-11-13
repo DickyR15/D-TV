@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -145,5 +146,14 @@ func TestHeitaoSynopsisFallsBackToDetailContentAndIgnoresEmptyMarkup(t *testing.
 	empty := heitaoTestDocument(t, `<!doctype html><html><body><div class="module-info-content"><p> </p></div></body></html>`)
 	if got := heitaoSynopsis(empty, heitaoSeriesMeta{}); got != "" {
 		t.Fatalf("empty detail markup returned visible synopsis %q", got)
+	}
+}
+
+
+func TestHeitaoPageRequestsCarryAgeConfirmationCookie(t *testing.T) {
+	ctx := heitaoPageContext(context.Background())
+	value, ok := ctx.Value(providerTextCookieKey{}).(string)
+	if !ok || value != heitaoAgeCookie {
+		t.Fatalf("Heitao page cookie = %q, want %q", value, heitaoAgeCookie)
 	}
 }
