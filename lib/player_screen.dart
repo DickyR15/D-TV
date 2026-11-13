@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -16,7 +15,7 @@ import 'player_fullscreen_layout_policy.dart';
 import 'app_theme.dart';
 import 'back_safe_dialog.dart';
 import 'core_bridge.dart';
-import 'desktop_mini_player_bridge.dart';
+import 'desktop_mini_window_policy.dart';
 import 'diary_service.dart';
 import 'playback_diagnostics.dart';
 import 'local_store.dart';
@@ -222,12 +221,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       _pictureInPictureActive || _pictureInPictureRequested;
   bool get _desktopMiniPlayerSupported =>
       !widget.desktopMiniPlayer && (Platform.isWindows || Platform.isMacOS);
-  final WindowMethodChannel _desktopMiniChannel = desktopMiniPlayerChannel;
-  WindowController? _desktopMiniWindow;
-  Completer<void>? _desktopMiniReady;
   bool _desktopMiniActive = false;
-  int _desktopMiniEpisodeIndex = 0;
-  double _desktopMiniPosition = 0;
+  bool _desktopMiniHovered = false;
+  double? _desktopMiniSeekValue;
+  Rect? _desktopMiniRestoreBounds;
+  bool _desktopMiniWasMaximized = false;
+  bool _desktopMiniWasFullscreen = false;
   bool get _canUsePictureInPicture => supportsPictureInPicture(
     android: defaultTargetPlatform == TargetPlatform.android,
     systemSupported: _pictureInPictureSupported,
@@ -278,12 +277,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       initial: widget.store.playerVolume,
       save: widget.store.setPlayerVolume,
     );
-    if (_desktopMiniPlayerSupported) {
-      unawaited(
-        _desktopMiniChannel.setMethodCallHandler(_handleDesktopMiniMessage)
-            .catchError((Object _) {}),
-      );
-    }
     final preferences = widget.store.playbackPreferences;
     if (Platform.isWindows || Platform.isMacOS) {
       unawaited(
@@ -677,14 +670,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     final sessionChanged =
         widget.store.profileEpoch != _profileEpoch || widget.store.locked;
     if (sessionChanged && _desktopMiniActive) {
-      // Never let a child engine continue using a profile after its parent
-      // session is locked or switched to another user.
-      _desktopMiniActive = false;
-      _desktopMiniReady = null;
-      _desktopMiniWindow = null;
-      unawaited(
-        _desktopMiniChannel.invokeMethod<void>('close').catchError((Object _) {}),
-      );
+      // Restore the original window before the profile is locked or changed.
+      unawaited(_exitDesktopMiniPlayer());
     }
     if (!_closed && mounted) {
       final blurEnabled =
@@ -852,7 +839,9 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _applyLifecycleVisibility({bool pauseWhenHidden = true}) {
     final visible =
-        playbackLifecycleVisible(_lifecycleState) || _pictureInPictureVisible;
+        playbackLifecycleVisible(_lifecycleState) ||
+        _pictureInPictureVisible ||
+        _desktopMiniActive;
     _foreground = visible;
     _enhancement.setForeground(_foreground);
     _syncPreload();
@@ -870,62 +859,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<dynamic> _handleDesktopMiniMessage(MethodCall call) async {
-    switch (call.method) {
-      case 'mini_ready':
-        final ready = _desktopMiniReady;
-        if (ready != null && !ready.isCompleted) ready.complete();
-        return true;
-      case 'mini_progress':
-        final values = call.arguments;
-        if (values is Map) {
-          _desktopMiniEpisodeIndex = intValue(values['index']);
-          final position = (values['position'] as num?)?.toDouble();
-          if (position != null && position.isFinite && position >= 0) {
-            _desktopMiniPosition = position;
-          }
-        }
-        return true;
-      case 'mini_error':
-        final message = call.arguments is Map
-            ? (call.arguments['message']?.toString() ?? '小窗播放器初始化失敗')
-            : '小窗播放器初始化失敗';
-        final ready = _desktopMiniReady;
-        if (ready != null && !ready.isCompleted) {
-          ready.completeError(StateError(message));
-        }
-        return true;
-      case 'mini_closed':
-        final values = call.arguments;
-        var index = _desktopMiniEpisodeIndex;
-        var position = _desktopMiniPosition;
-        if (values is Map) {
-          index = intValue(values['index']);
-          final reported = (values['position'] as num?)?.toDouble();
-          if (reported != null && reported.isFinite && reported >= 0) {
-            position = reported;
-          }
-        }
-        final wasActive = _desktopMiniActive;
-        _desktopMiniActive = false;
-        _desktopMiniWindow = null;
-        _desktopMiniReady = null;
-        if (wasActive && mounted && !_closed) {
-          // Native MPV has already been disposed by the PiP engine. Start the
-          // main player without holding the mini window open during loading.
-          unawaited(
-            _play(
-              index.clamp(0, widget.detail.episodes.length - 1).toInt(),
-              position: position,
-            ),
-          );
-        }
-        return true;
-      default:
-        return null;
-    }
-  }
-
   Future<void> _openDesktopMiniPlayer() async {
     if (!_desktopMiniPlayerSupported ||
         _desktopMiniActive ||
@@ -938,43 +871,412 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
 
-    _desktopMiniEpisodeIndex = _index;
-    _desktopMiniPosition = _currentPosition;
-    final ready = Completer<void>();
-    _desktopMiniReady = ready;
+    _interactions.cancel();
+    await _saveProgress(flush: true);
+    if (!mounted || _closed) return;
+
+    final ratio = clampDesktopMiniAspectRatio(_aspectRatio);
+    _desktopMiniSeekValue = null;
+    setState(() {
+      _desktopMiniActive = true;
+      _desktopMiniHovered = false;
+    });
+    // Render the compact controls before changing the native window frame.
+    // The same Flutter engine and MPV Player remain mounted throughout.
+    await WidgetsBinding.instance.endOfFrame;
 
     try {
-      // Save the last checkpoint before pausing the main-window engine.
-      await _saveProgress(flush: true);
-      await _desktopMiniChannel.setMethodCallHandler(
-        _handleDesktopMiniMessage,
-      );
-      _desktopMiniActive = true;
-      await _player.pause();
-      _desktopMiniWindow = await createDesktopMiniPlayerWindow(
-        detail: widget.detail,
-        index: _index,
-        position: _currentPosition,
-        authorizedSession: !widget.store.locked,
-      );
-      await ready.future.timeout(const Duration(seconds: 12));
-    } catch (error) {
-      _desktopMiniActive = false;
-      _desktopMiniReady = null;
-      final controller = _desktopMiniWindow;
-      _desktopMiniWindow = null;
-      if (controller != null) {
-        try {
-          await _desktopMiniChannel.invokeMethod<void>('close');
-        } catch (_) {}
+      if (Platform.isWindows) {
+        await AppDevice.channel.invokeMethod<void>('setMiniWindow', {
+          'enabled': true,
+          'aspect': ratio,
+        });
+      } else {
+        await _enterMacDesktopMiniWindow(ratio);
       }
-      if (!_closed && mounted) {
-        try {
-          await _player.play();
-        } catch (_) {}
+      DiaryService.add(
+        '[MiniPlayer] entered same-window mode platform=${Platform.operatingSystem} '
+        'aspect=${ratio.toStringAsFixed(3)} playerIdentity=${identityHashCode(_player)}',
+      );
+    } catch (error) {
+      try {
+        if (Platform.isWindows) {
+          await AppDevice.channel.invokeMapMethod<String, dynamic>(
+            'setMiniWindow',
+            {'enabled': false},
+          );
+        } else {
+          await _exitMacDesktopMiniWindow();
+        }
+      } catch (_) {}
+      if (mounted && !_closed) {
+        setState(() => _desktopMiniActive = false);
         _notice('無法開啟桌面小窗：$error');
       }
+      DiaryService.add(
+        '[MiniPlayer] enter_failed error=${playbackDiagnosticError(error)}',
+      );
     }
+  }
+
+  Future<void> _enterMacDesktopMiniWindow(double ratio) async {
+    final fullScreen = await windowManager.isFullScreen();
+    if (fullScreen) {
+      await windowManager.setFullScreen(false);
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+    }
+    final maximized = await windowManager.isMaximized();
+    _desktopMiniRestoreBounds = await windowManager.getBounds();
+    _desktopMiniWasMaximized = maximized;
+    _desktopMiniWasFullscreen = fullScreen;
+
+    if (maximized) await windowManager.unmaximize();
+    await windowManager.setTitleBarStyle(
+      TitleBarStyle.hidden,
+      windowButtonVisibility: false,
+    );
+    await windowManager.setMinimumSize(const Size(120, 120));
+    await windowManager.setAlwaysOnTop(true);
+    await windowManager.setAspectRatio(ratio);
+    await windowManager.setSize(desktopMiniWindowSize(ratio, 480));
+    await windowManager.setAlignment(Alignment.bottomRight);
+  }
+
+  Future<void> _exitMacDesktopMiniWindow() async {
+    final restoreBounds = _desktopMiniRestoreBounds;
+    await windowManager.setAlwaysOnTop(false);
+    await windowManager.setAspectRatio(0);
+    await windowManager.setTitleBarStyle(TitleBarStyle.normal);
+    await windowManager.setMinimumSize(const Size(900, 560));
+    if (restoreBounds != null) {
+      await windowManager.setBounds(restoreBounds);
+    }
+    if (_desktopMiniWasMaximized) await windowManager.maximize();
+    if (_desktopMiniWasFullscreen) await windowManager.setFullScreen(true);
+    _desktopMiniRestoreBounds = null;
+    _desktopMiniWasMaximized = false;
+    _desktopMiniWasFullscreen = false;
+  }
+
+  Future<void> _exitDesktopMiniPlayer() async {
+    if (!_desktopMiniActive) return;
+    try {
+      if (Platform.isWindows) {
+        await AppDevice.channel.invokeMapMethod<String, dynamic>(
+          'setMiniWindow',
+          {'enabled': false},
+        );
+      } else if (Platform.isMacOS) {
+        await _exitMacDesktopMiniWindow();
+      }
+      await windowManager.setAlwaysOnTop(
+        widget.store.playbackPreferences.desktopAlwaysOnTop,
+      );
+      if (mounted && !_closed) {
+        setState(() {
+          _desktopMiniActive = false;
+          _desktopMiniHovered = false;
+          _desktopMiniSeekValue = null;
+        });
+      }
+      DiaryService.add(
+        '[MiniPlayer] restored same-window mode playerIdentity=${identityHashCode(_player)} '
+        'positionMs=${_player.state.position.inMilliseconds}',
+      );
+    } catch (error) {
+      _notice('恢復主視窗失敗：$error');
+      DiaryService.add(
+        '[MiniPlayer] restore_failed error=${playbackDiagnosticError(error)}',
+      );
+    }
+  }
+
+  Future<void> _closeDesktopMiniPlayer() async {
+    await _exitDesktopMiniPlayer();
+    if (mounted && !_closed && !_desktopMiniActive) {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  String _desktopMiniClock(Duration value) {
+    final seconds = value.inSeconds.clamp(0, 359999).toInt();
+    final minutes = seconds ~/ 60;
+    final secondText = (seconds % 60).toString().padLeft(2, '0');
+    if (minutes >= 60) {
+      return '${minutes ~/ 60}:${(minutes % 60).toString().padLeft(2, '0')}:$secondText';
+    }
+    return '$minutes:$secondText';
+  }
+
+  Widget _desktopMiniButton(
+    IconData icon,
+    String tooltip,
+    VoidCallback? onPressed, {
+    double size = 38,
+    double iconSize = 20,
+  }) {
+    return Material(
+      color: Colors.black.withValues(alpha: .58),
+      shape: const CircleBorder(),
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        color: Colors.white,
+        disabledColor: Colors.white38,
+        iconSize: iconSize,
+        constraints: BoxConstraints.tightFor(width: size, height: size),
+        padding: EdgeInsets.zero,
+        icon: Icon(icon),
+      ),
+    );
+  }
+
+  Widget _desktopMiniOverlay() {
+    return MouseRegion(
+      onEnter: (_) {
+        if (mounted && !_desktopMiniHovered) {
+          setState(() => _desktopMiniHovered = true);
+        }
+      },
+      onExit: (_) {
+        if (mounted && _desktopMiniHovered) {
+          setState(() => _desktopMiniHovered = false);
+        }
+      },
+      child: StreamBuilder<bool>(
+        stream: _player.stream.playing,
+        initialData: _player.state.playing,
+        builder: (context, snapshot) {
+          final playing = snapshot.data ?? _player.state.playing;
+          final visible =
+              _desktopMiniHovered || !playing || _loading || _error != null;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onPanStart: (_) => unawaited(windowManager.startDragging()),
+                  onDoubleTap: () => unawaited(_exitDesktopMiniPlayer()),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              IgnorePointer(
+                ignoring: !visible,
+                child: AnimatedOpacity(
+                  opacity: visible ? 1 : 0,
+                  duration: const Duration(milliseconds: 150),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      const IgnorePointer(
+                        child: ColoredBox(color: Color(0x52000000)),
+                      ),
+                      Positioned(
+                        top: 5,
+                        left: 10,
+                        right: 8,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                uiTraditional(
+                                  '${widget.detail.drama.title} · 第 ${widget.detail.episodes[_index].number} 集',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black87,
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            _desktopMiniButton(
+                              Icons.open_in_full_rounded,
+                              '恢復主視窗',
+                              () => unawaited(_exitDesktopMiniPlayer()),
+                            ),
+                            const SizedBox(width: 6),
+                            _desktopMiniButton(
+                              Icons.close_rounded,
+                              '關閉播放',
+                              () => unawaited(_closeDesktopMiniPlayer()),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _desktopMiniButton(
+                              Icons.skip_previous_rounded,
+                              '上一集',
+                              _index > 0
+                                  ? () => unawaited(_play(_index - 1))
+                                  : null,
+                              size: 42,
+                              iconSize: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            _desktopMiniButton(
+                              playing
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              playing ? '暫停' : '播放',
+                              _loading || _error != null
+                                  ? null
+                                  : _togglePlayback,
+                              size: 50,
+                              iconSize: 30,
+                            ),
+                            const SizedBox(width: 12),
+                            _desktopMiniButton(
+                              Icons.skip_next_rounded,
+                              '下一集',
+                              _index + 1 < widget.detail.episodes.length
+                                  ? () => unawaited(_play(_index + 1))
+                                  : null,
+                              size: 42,
+                              iconSize: 24,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_loading)
+                        const Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 34,
+                          child: IgnorePointer(
+                            child: Center(
+                              child: SizedBox.square(
+                                dimension: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (_error != null)
+                        Positioned(
+                          left: 12,
+                          right: 12,
+                          bottom: 38,
+                          child: Text(
+                            uiTraditional(_error!),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(color: Colors.black, blurRadius: 5),
+                              ],
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        left: 8,
+                        right: 8,
+                        bottom: 2,
+                        child: StreamBuilder<Duration>(
+                          stream: _player.stream.position,
+                          initialData: _player.state.position,
+                          builder: (context, positionSnapshot) {
+                            final duration = _player.state.duration;
+                            final durationMs = duration.inMilliseconds;
+                            final maxValue = durationMs > 0
+                                ? durationMs.toDouble()
+                                : 1.0;
+                            final position =
+                                _desktopMiniSeekValue ??
+                                (positionSnapshot.data ??
+                                        _player.state.position)
+                                    .inMilliseconds
+                                    .toDouble();
+                            final currentValue = position
+                                .clamp(0.0, maxValue)
+                                .toDouble();
+                            return Row(
+                              children: [
+                                Text(
+                                  _desktopMiniClock(
+                                    Duration(milliseconds: currentValue.round()),
+                                  ),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      trackHeight: 3,
+                                      activeTrackColor: Colors.white,
+                                      inactiveTrackColor: Colors.white38,
+                                      thumbColor: Colors.white,
+                                      overlayShape:
+                                          const RoundSliderOverlayShape(
+                                            overlayRadius: 8,
+                                          ),
+                                      thumbShape: const RoundSliderThumbShape(
+                                        enabledThumbRadius: 5,
+                                      ),
+                                    ),
+                                    child: Slider(
+                                      value: currentValue,
+                                      max: maxValue,
+                                      onChanged: durationMs <= 0 || _loading
+                                          ? null
+                                          : (value) => setState(
+                                              () => _desktopMiniSeekValue = value,
+                                            ),
+                                      onChangeEnd: durationMs <= 0
+                                          ? null
+                                          : (value) {
+                                              setState(
+                                                () => _desktopMiniSeekValue = null,
+                                              );
+                                              unawaited(
+                                                _seekTo(
+                                                  Duration(
+                                                    milliseconds: value.round(),
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  _desktopMiniClock(duration),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _enterPictureInPicture() async {
@@ -1679,9 +1981,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _saveProgress({bool flush = false}) async {
-    // The main engine is paused while the independent desktop window owns
-    // playback. The mini engine writes the newer watch position itself.
-    if (_desktopMiniActive) return;
     if (_openedIndex < 0 || widget.store.profileEpoch != _profileEpoch) {
       return;
     }
@@ -2864,6 +3163,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _exitPlayback() {
+    if (_desktopMiniActive) {
+      unawaited(_closeDesktopMiniPlayer());
+      return;
+    }
     final override = widget.onBackOverride;
     if (override != null) {
       override();
@@ -2874,6 +3177,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _handlePlaybackBack() {
+    if (_desktopMiniActive) {
+      unawaited(_exitDesktopMiniPlayer());
+      return;
+    }
     // Loading/recovery disables the playback control row. Back must remain
     // available in this state, otherwise ExoPlayer route retries can trap the
     // viewer on Android TV. Exit the playback route directly.
@@ -2892,6 +3199,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _back() {
+    if (_desktopMiniActive) {
+      unawaited(_exitDesktopMiniPlayer());
+      return;
+    }
     final override = widget.onBackOverride;
     if (override != null) {
       override();
@@ -2934,16 +3245,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     widget.onProgress?.call(_index, _currentPosition);
     _closed = true;
     _volumeMemory.dispose();
-    if (_desktopMiniPlayerSupported) {
-      if (_desktopMiniActive) {
-        unawaited(
-          _desktopMiniChannel.invokeMethod<void>('close', {
-            'restoreMain': false,
-          }).catchError((Object _) {}),
-        );
-      }
-      unawaited(_desktopMiniChannel.setMethodCallHandler(null));
-    }
     final enhancementClosed = _enhancement.close();
     final outputSizeClosed =
         _videoOutputSize?.close() ?? Future<void>.value();
@@ -3104,11 +3405,11 @@ class _PlayerScreenState extends State<PlayerScreen>
           canRequestFocus: !_television,
           skipTraversal: _television,
           child: Scaffold(
-            backgroundColor: fullscreen || pictureInPicture
+            backgroundColor: fullscreen || pictureInPicture || _desktopMiniActive
                 ? Colors.black
                 : theme.scaffoldBackgroundColor,
             appBar:
-                widget.desktopMiniPlayer || pictureInPicture || fullscreen || _mobile
+                widget.desktopMiniPlayer || pictureInPicture || _desktopMiniActive || fullscreen || _mobile
                 ? null
                 : AppBar(
                     title: Text(
@@ -3124,7 +3425,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                       ),
                     ],
                   ),
-            body: pictureInPicture
+            body: pictureInPicture || _desktopMiniActive
                 ? _videoPane(context)
                 : SafeArea(
                     top: playerTopSafeAreaEnabled(
@@ -3140,7 +3441,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                             (_formFactor == FormFactor.pad ||
                                 _formFactor == FormFactor.window) &&
                             constraints.maxWidth >= 840;
-                        if (widget.desktopMiniPlayer || fullscreen) {
+                        if (widget.desktopMiniPlayer || fullscreen || _desktopMiniActive) {
                           // PiP is a dedicated video surface, not a miniature
                           // copy of the full desktop player with its side panel.
                           return _videoPane(context);
@@ -3293,7 +3594,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       '${_plan?.local == true ? ' · 本機' : ''}'
       '${widget.detail.episodes[_index].vip ? ' · VIP 試看' : ''}',
     );
-    final hideOverlayForPictureInPicture = _pictureInPictureVisible;
+    final hideOverlayForPictureInPicture =
+        _pictureInPictureVisible || _desktopMiniActive;
     final Widget controls = hideOverlayForPictureInPicture
         ? const SizedBox.shrink()
         : _television
@@ -3389,7 +3691,8 @@ class _PlayerScreenState extends State<PlayerScreen>
               _enhancement.setViewport(pixels, television: _television);
               if (shouldAdjustWindowsVideoOutput(
                     isWindows: Platform.isWindows,
-                    desktopMiniPlayer: widget.desktopMiniPlayer,
+                    desktopMiniPlayer:
+                        widget.desktopMiniPlayer || _desktopMiniActive,
                   ) &&
                   _videoOutputSize != null) {
                 final target = pixels.width.isFinite &&
@@ -3538,6 +3841,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                     ),
                   ),
                 ),
+              if (_desktopMiniActive) _desktopMiniOverlay(),
             ],
           );
         },
