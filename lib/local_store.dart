@@ -683,11 +683,36 @@ class LocalStore extends ChangeNotifier {
           .where((entry) => allowsSource(entry.drama.source))
           .toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-  List<Drama> get favorites => _favorites.values
-      .where((drama) => allowsSource(drama.source))
-      .toList()
-      .reversed
-      .toList();
+  List<Drama> get favorites {
+    final unique = <String, Drama>{};
+    for (final drama in _favorites.values) {
+      if (!allowsSource(drama.source)) continue;
+      final groupId = drama.seriesGroupId;
+      final key = groupId.isEmpty ? 'id:' + drama.id : 'series:' + groupId;
+      final canonicalId = groupId.isEmpty ? drama.id : 'hongguo:' + groupId;
+      unique[key] = _favorites[canonicalId] ??
+          _seriesCandidates[canonicalId] ??
+          drama;
+    }
+    return unique.values.toList().reversed.toList();
+  }
+
+  String _seriesGroupIdFor(String id) =>
+      _seriesCandidates[id]?.seriesGroupId ??
+      _favorites[id]?.seriesGroupId ??
+      _history[id]?.drama.seriesGroupId ??
+      '';
+
+  String? _favoriteIdFor(String id) {
+    if (_favorites.containsKey(id)) return id;
+    final groupId = _seriesGroupIdFor(id);
+    if (groupId.isEmpty) return null;
+    for (final entry in _favorites.entries) {
+      if (entry.value.seriesGroupId == groupId) return entry.key;
+    }
+    return null;
+  }
+
   WatchEntry? watched(String id) {
     WatchEntry? entry = _history[id];
     if (entry == null && isFavorite(id)) {
@@ -698,15 +723,20 @@ class LocalStore extends ChangeNotifier {
     return entry != null && allowsSource(entry.drama.source) ? entry : null;
   }
 
-  bool isFavorite(String id) =>
-      _favorites[id] != null && allowsSource(_favorites[id]!.source);
+  bool isFavorite(String id) {
+    final key = _favoriteIdFor(id);
+    return key != null &&
+        _favorites[key] != null &&
+        allowsSource(_favorites[key]!.source);
+  }
+
   FollowState? following(String id) {
-    if (!isFavorite(id)) return null;
-    final state = _followStates[id];
+    final key = _favoriteIdFor(id);
+    if (key == null || !isFavorite(id)) return null;
+    final state = _followStates[key];
     final watched = _history[id];
-    // Playback updates the watch-history file only. Derive the display status
-    // from that record instead of rewriting a separate follow-state file.
-    return state != null && watched != null
+    // Preserve per-season progress while sharing the series follow status.
+    return state != null && watched != null && id == key
         ? state.afterPlayback(watched)
         : state;
   }
