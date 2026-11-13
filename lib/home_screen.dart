@@ -1358,12 +1358,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _openDrama(Drama drama, {bool resume = false}) {
-    // A fast double-click / repeated TV Select must not stack two launch
-    // routes. The second route can otherwise leave the viewer on a stale
-    // player page after pressing Back.
+    // Poster selection follows the original app flow: open the work details
+    // first, then let the user press Play / Continue from the details page.
+    if (resume) {
+      _playDramaDirectly(drama);
+      return;
+    }
+    _openDramaDetails(drama);
+  }
+
+  void _playDramaDirectly(Drama drama) {
+    // The explicit Continue action may still launch playback directly.
     if (_playbackRouteActive) {
       DiaryService.add(
-        '[Playback] ignored_duplicate_poster_open drama=${drama.id}',
+        '[Playback] ignored_duplicate_direct_continue drama=${drama.id}',
       );
       return;
     }
@@ -1373,7 +1381,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _lastBackAt = null;
     _ignoreExitPromptUntil = null;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    // 所有海報統一一鍵播放；openPlaybackDirectly 會依觀看記錄選擇續播集數與進度。
     unawaited(
       openPlaybackDirectly(
         context,
@@ -1383,8 +1390,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ).whenComplete(() {
         _playbackRouteActive = false;
         _lastBackAt = null;
-        // Swallow the tail end of the same physical Back press after the
-        // player route closes, so it cannot become an app-exit confirmation.
         _ignoreExitPromptUntil =
             DateTime.now().add(const Duration(milliseconds: 500));
         if (mounted) {
