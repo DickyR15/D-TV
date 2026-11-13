@@ -683,11 +683,39 @@ class LocalStore extends ChangeNotifier {
           .where((entry) => allowsSource(entry.drama.source))
           .toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-  List<Drama> get favorites => _favorites.values
-      .where((drama) => allowsSource(drama.source))
-      .toList()
-      .reversed
-      .toList();
+  List<Drama> get favorites {
+    final unique = <String, Drama>{};
+    for (final drama in _favorites.values) {
+      if (!allowsSource(drama.source)) continue;
+      final groupId = drama.seriesGroupId;
+      final key = groupId.isEmpty ? 'id:${drama.id}' : 'series:$groupId';
+      final canonicalId = groupId.isEmpty
+          ? drama.id
+          : '${SourceSite.hongguo.id}:$groupId';
+      final canonical = _favorites[canonicalId] ??
+          _seriesCandidates[canonicalId] ??
+          drama;
+      unique[key] = canonical;
+    }
+    return unique.values.toList().reversed.toList();
+  }
+
+  String _seriesGroupIdFor(String id) =>
+      _seriesCandidates[id]?.seriesGroupId ??
+      _favorites[id]?.seriesGroupId ??
+      _history[id]?.drama.seriesGroupId ??
+      '';
+
+  String? _favoriteIdFor(String id) {
+    if (_favorites.containsKey(id)) return id;
+    final groupId = _seriesGroupIdFor(id);
+    if (groupId.isEmpty) return null;
+    for (final entry in _favorites.entries) {
+      if (entry.value.seriesGroupId == groupId) return entry.key;
+    }
+    return null;
+  }
+
   WatchEntry? watched(String id) {
     WatchEntry? entry = _history[id];
     if (entry == null && isFavorite(id)) {
@@ -698,18 +726,25 @@ class LocalStore extends ChangeNotifier {
     return entry != null && allowsSource(entry.drama.source) ? entry : null;
   }
 
-  bool isFavorite(String id) =>
-      _favorites[id] != null && allowsSource(_favorites[id]!.source);
+  bool isFavorite(String id) {
+    final key = _favoriteIdFor(id);
+    return key != null &&
+        _favorites[key] != null &&
+        allowsSource(_favorites[key]!.source);
+  }
+
   FollowState? following(String id) {
-    if (!isFavorite(id)) return null;
-    final state = _followStates[id];
-    final watched = _history[id];
-    // Playback updates the watch-history file only. Derive the display status
-    // from that record instead of rewriting a separate follow-state file.
+    final key = _favoriteIdFor(id);
+    if (key == null || !isFavorite(id)) return null;
+    final state = _followStates[key];
+    final watched = _history[id] ?? _history[key];
+    // Playback remains keyed by the actual season, while the follow state is
+    // shared by the official series group.
     return state != null && watched != null
         ? state.afterPlayback(watched)
         : state;
   }
+
   List<Drama> seriesDramasFor(Drama anchor) {
     if (!allowsSource(SourceSite.hongguo.id) ||
         anchor.source != SourceSite.hongguo.id) {
@@ -726,7 +761,7 @@ class LocalStore extends ChangeNotifier {
       if (allowsSource(entry.drama.source)) items[entry.drama.id] = entry.drama;
     }
     final notices = <SeriesSeasonNotice>[
-      ...?_followStates[anchor.id]?.seriesSeasons.values,
+      ...?following(anchor.id)?.seriesSeasons.values,
       for (final state in _followStates.values)
         if (state.seriesSeasons.containsKey(anchor.id))
           state.seriesSeasons[anchor.id]!,
@@ -742,6 +777,23 @@ class LocalStore extends ChangeNotifier {
         ),
       );
     }
+
+    final groupId = anchor.seriesGroupId.isNotEmpty
+        ? anchor.seriesGroupId
+        : _seriesGroupIdFor(anchor.id);
+    if (groupId.isNotEmpty) {
+      final grouped = items.values
+          .where((drama) => drama.seriesGroupId == groupId)
+          .toList()
+        ..sort((a, b) {
+          final season = a.seriesSeasonNumber.compareTo(b.seriesSeasonNumber);
+          return season != 0
+              ? season
+              : naturalTitleCompare(a.title, b.title);
+        });
+      if (grouped.isNotEmpty) return grouped;
+    }
+
     final current = items.remove(anchor.id) ?? anchor;
     final rest = items.values.toList()
       ..sort((a, b) => naturalTitleCompare(a.title, b.title));
