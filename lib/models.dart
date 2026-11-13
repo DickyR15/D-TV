@@ -312,6 +312,33 @@ class Episode {
   final String playLine;
 }
 
+class DramaSeason {
+  const DramaSeason({
+    required this.drama,
+    this.number = 0,
+    this.label = '',
+    this.subtitle = '',
+    this.upcoming = false,
+    this.playable = true,
+  });
+
+  final Drama drama;
+  final int number;
+  final String label;
+  final String subtitle;
+  final bool upcoming;
+  final bool playable;
+
+  factory DramaSeason.fromJson(Map<String, dynamic> json) => DramaSeason(
+    drama: Drama.fromJson(Map<String, dynamic>.from(json['drama'] as Map)),
+    number: intValue(json['number']),
+    label: json['label'] as String? ?? '',
+    subtitle: json['subtitle'] as String? ?? '',
+    upcoming: json['upcoming'] == true,
+    playable: json['playable'] == true,
+  );
+}
+
 class DramaDetail {
   DramaDetail(this.drama, this.episodes, {this.warning = ''});
   final Drama drama;
