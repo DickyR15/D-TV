@@ -1758,7 +1758,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     drama: drama,
     store: widget.store,
     onContinue: () => _openDrama(drama, resume: true),
+    onDetails: () => _openDramaDetails(drama),
   );
+
+  void _openDramaDetails(Drama drama) {
+    if (_playbackRouteActive) return;
+    _pauseCatalog();
+    CoverRequestScheduler.pauseBackground();
+    _playbackRouteActive = true;
+    _lastBackAt = null;
+    _ignoreExitPromptUntil = null;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    unawaited(
+      Navigator.of(context)
+          .push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => DetailScreen(
+                drama: drama,
+                repository: widget.repository,
+                store: widget.store,
+              ),
+            ),
+          )
+          .whenComplete(() {
+            _playbackRouteActive = false;
+            _lastBackAt = null;
+            _ignoreExitPromptUntil =
+                DateTime.now().add(const Duration(milliseconds: 500));
+            if (mounted) {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            }
+            CoverRequestScheduler.resumeBackground();
+          }),
+    );
+  }
 
   Widget _catalogTile(
     Drama drama, {
@@ -1772,6 +1805,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       repository: widget.repository,
       focusNode: focusNode,
       onFocus: onFocus,
+      actions: AppLayout.isDesktopPlatform
+          ? DramaActionButton(
+              drama: drama,
+              onPressed: () => _dramaActions(drama),
+            )
+          : null,
       onTap: () => _openDrama(drama),
       onMore: () => _dramaActions(drama),
       badge: following != null && following.hasUpdates
