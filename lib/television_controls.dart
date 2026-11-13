@@ -12,6 +12,7 @@ import 'video_enhancement_settings.dart';
 import 'remote_widgets.dart';
 import 'widgets.dart';
 import 'diary_service.dart';
+import 'television_playback_info.dart';
 import 'contained_slider.dart';
 import 'playback_controls_visibility.dart';
 
@@ -32,6 +33,8 @@ class TelevisionControls extends StatefulWidget {
     this.onPictureInPicture,
     this.enhancement,
     this.playbackGeneration = 0,
+    this.showNetworkSpeed = true,
+    this.showClock = true,
   });
   final Player player;
   final String title;
@@ -47,6 +50,8 @@ class TelevisionControls extends StatefulWidget {
   final Future<void> Function()? onPictureInPicture;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
+  final bool showNetworkSpeed;
+  final bool showClock;
 
   @override
   State<TelevisionControls> createState() => TelevisionControlsState();
@@ -64,6 +69,10 @@ class TelevisionControlsState extends State<TelevisionControls> {
   final _subscriptions = <StreamSubscription<dynamic>>[];
   Timer? _hideTimer;
   Timer? _seekTimer;
+  Timer? _infoTimer;
+  DateTime _clockNow = DateTime.now();
+  String? _networkSpeedLabel;
+  bool _infoReadPending = false;
   bool _visible = true;
   bool _panelOpen = false;
   bool _seekHint = false;
@@ -120,6 +129,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
         _focus(_surface);
       }
     }
+    _syncInfoTimer();
   }
 
   @override
@@ -153,7 +163,87 @@ class TelevisionControlsState extends State<TelevisionControls> {
       _hideTimer?.cancel();
       if (_visible) _visible = false;
     }
+    if (widget.showNetworkSpeed != oldWidget.showNetworkSpeed ||
+        widget.showClock != oldWidget.showClock) {
+      _syncInfoTimer();
+      if (_visible) unawaited(_refreshPlaybackInfo());
+    }
   }
+
+  void _syncInfoTimer() {
+    final needsInfo = widget.showNetworkSpeed || widget.showClock;
+    if (!needsInfo) {
+      _infoTimer?.cancel();
+      _infoTimer = null;
+      _networkSpeedLabel = null;
+      return;
+    }
+    if (_infoTimer != null) return;
+    unawaited(_refreshPlaybackInfo());
+    _infoTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => unawaited(_refreshPlaybackInfo()),
+    );
+  }
+
+  Future<void> _refreshPlaybackInfo() async {
+    if (!mounted || !widget.enabled || !_visible || _infoReadPending) return;
+    _infoReadPending = true;
+    String? speed;
+    try {
+      if (widget.showNetworkSpeed && widget.player.platform is NativePlayer) {
+        final platform = widget.player.platform as NativePlayer;
+        final network = await platform.getProperty(
+          'demuxer-via-network',
+          waitForInitialization: false,
+        );
+        final isNetwork = const {'yes', 'true', '1'}.contains(
+          network.trim().toLowerCase(),
+        );
+        if (isNetwork) {
+          final raw = await platform.getProperty(
+            'cache-speed',
+            waitForInitialization: false,
+          );
+          speed = televisionNetworkSpeedLabel(raw, networkInput: true);
+        }
+      }
+    } catch (error) {
+      // MPV can temporarily report an unavailable property during open/seek.
+      // Keep the previous sample rather than showing a fabricated zero.
+      DiaryService.add(
+        '[TVInfo] network_speed_read_failed error=${error.runtimeType}',
+      );
+      speed = _networkSpeedLabel;
+    } finally {
+      _infoReadPending = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _clockNow = DateTime.now();
+      _networkSpeedLabel = speed;
+    });
+  }
+
+  Widget _infoPill(String label) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: Colors.black.withValues(alpha: .62),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: Colors.white.withValues(alpha: .14)),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          fontFeatures: [],
+        ),
+      ),
+    ),
+  );
 
   void _focus(FocusNode node) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -173,6 +263,9 @@ class TelevisionControlsState extends State<TelevisionControls> {
         !_visible || !_surface.hasFocus || _surface.hasPrimaryFocus;
     if (!_visible) setState(() => _visible = true);
     if (needsFocus) _focus(_play);
+    if (widget.showNetworkSpeed || widget.showClock) {
+      unawaited(_refreshPlaybackInfo());
+    }
     _scheduleHide();
   }
 
@@ -328,6 +421,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
   void dispose() {
     _hideTimer?.cancel();
     _seekTimer?.cancel();
+    _infoTimer?.cancel();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -426,6 +520,14 @@ class TelevisionControlsState extends State<TelevisionControls> {
                           ),
                         ),
                       ),
+                      if (widget.showNetworkSpeed && _networkSpeedLabel != null) ...[
+                        const SizedBox(width: 10),
+                        _infoPill('網速 $_networkSpeedLabel'),
+                      ],
+                      if (widget.showClock) ...[
+                        const SizedBox(width: 10),
+                        _infoPill(televisionClockLabel(_clockNow)),
+                      ],
                     ],
                   ),
                 ),
