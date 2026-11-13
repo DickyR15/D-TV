@@ -27,7 +27,7 @@ var hongguoOfficialSeasonLabel = regexp.MustCompile(`^第([1-9][0-9]*)季$`)
 func hongguoAppSeasonQuery(seriesID string) url.Values {
 	return url.Values{
 		"scene":                 {"10"},
-		"from":                  {"single_col_same_ip_series"},
+		"from":                  {"series_short_play_info"},
 		"offset":                {"0"},
 		"limit":                 {"0"},
 		"total_chapter_num":     {"0"},
