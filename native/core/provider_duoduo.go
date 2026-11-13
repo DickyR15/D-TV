@@ -261,6 +261,15 @@ func duoduoPosterAddressesFromRow(row map[string]any) []string {
 	return addresses
 }
 
+func duoduoSynopsisFromRow(row map[string]any) string {
+	for _, key := range []string{"vod_content", "vod_blurb"} {
+		if description := providerHTMLPlainText(duoduoString(row[key])); description != "" {
+			return description
+		}
+	}
+	return ""
+}
+
 func duoduoDramaFromRow(row map[string]any) Drama {
 	id := firstNonEmpty(duoduoString(row["vod_id"]), duoduoString(row["id"]))
 	title := firstNonEmpty(duoduoString(row["vod_name"]), duoduoString(row["title"]), duoduoString(row["name"]))
@@ -271,10 +280,7 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 	// them when the preferred CDN is unavailable, rather than losing the title's
 	// only other image candidates at the initial JSON mapping stage.
 	cover := firstNonEmpty(duoduoPosterAddressesFromRow(row)...)
-	description := providerHTMLPlainText(firstNonEmpty(
-		duoduoString(row["vod_content"]),
-		duoduoString(row["vod_blurb"]),
-	))
+	description := duoduoSynopsisFromRow(row)
 	category := duoduoString(row["type_name"])
 	year := duoduoString(row["vod_year"])
 	remarks := duoduoString(row["vod_remarks"])
