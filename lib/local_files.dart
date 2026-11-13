@@ -56,15 +56,24 @@ class LocalFiles {
     var found = false;
     FileSystemException? unavailable;
     for (final candidate in [file, backup]) {
-      bool exists;
+      FileSystemEntityType type;
       try {
-        exists = await candidate.exists();
+        type = await FileSystemEntity.type(candidate.path, followLinks: true);
       } on FileSystemException catch (error) {
         unavailable ??= error;
         temporarilyUnavailableFiles.add(name);
         continue;
       }
-      if (!exists) continue;
+      if (type == FileSystemEntityType.notFound) continue;
+      if (type != FileSystemEntityType.file) {
+        found = true;
+        unavailable ??= FileSystemException(
+          '本機資料路徑不是一般檔案',
+          candidate.path,
+        );
+        temporarilyUnavailableFiles.add(name);
+        continue;
+      }
       found = true;
 
       String content;
