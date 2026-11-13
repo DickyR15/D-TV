@@ -495,7 +495,7 @@ class _DetailScreenState extends State<DetailScreen> {
                           label: Text(
                             watched != null && episodes.isNotEmpty
                                 ? '繼續播放 · 第 ${episodes[resumeIndex].number} 集'
-                                : '立即播放',
+                                : '播放',
                             textAlign: TextAlign.center,
                           ),
                         ),
