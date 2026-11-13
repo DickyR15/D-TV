@@ -93,6 +93,10 @@ func TestParseHongguoAppSeasonsKeepsOfficialIDsAndUpcomingRows(t *testing.T) {
 	}
 	if items[0].Drama.SourceID != "7621200213801176126" ||
 		items[0].Drama.ID != "hongguo:7621200213801176126" ||
+		items[0].Drama.SeriesGroupID != "7621200213801176126" ||
+		items[1].Drama.SeriesGroupID != items[0].Drama.SeriesGroupID ||
+		items[2].Drama.SeriesGroupID != items[0].Drama.SeriesGroupID ||
+		items[3].Drama.SeriesGroupID != items[0].Drama.SeriesGroupID ||
 		items[0].Number != 1 || items[0].Label != "第1季" ||
 		!items[0].Playable || items[0].Upcoming {
 		t.Fatalf("first season identity or metadata lost: %+v", items[0])
