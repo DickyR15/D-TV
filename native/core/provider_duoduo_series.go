@@ -87,7 +87,7 @@ func duoduoSeriesGroupID(base, unit string) string {
 	return "duoduo-series:" + duoduoSeriesTitleKey(base) + ":" + unit
 }
 
-var duoduoEpisodeCountPattern = regexp.MustCompile(`(?i)(?:更新至|全|共)?\\s*([0-9]{1,6})\\s*(?:集|话|期|回|章)`)
+var duoduoEpisodeCountPattern = regexp.MustCompile(`(?i)(?:更新至|全|共)?\s*([0-9]{1,6})\s*(?:集|话|期|回|章)`)
 
 func duoduoEpisodeValueCount(value any) int {
 	raw := strings.TrimSpace(fmt.Sprint(value))
