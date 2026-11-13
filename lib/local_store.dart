@@ -1266,31 +1266,30 @@ class LocalStore extends ChangeNotifier {
 
       final favorites = Map<String, Drama>.from(_favorites);
       final states = Map<String, FollowState>.from(_followStates);
+      final history = Map<String, WatchEntry>.from(_history);
+      final groupRows = candidates.values
+          .where((drama) => drama.seriesGroupId == groupId)
+          .toList();
       final groupEntries = favorites.entries
           .where((entry) =>
               entry.value.seriesGroupId == groupId ||
               candidates[entry.key]?.seriesGroupId == groupId)
           .toList();
       if (groupEntries.isNotEmpty) {
+        final perSeasonStates = <String, FollowState>{
+          for (final drama in groupRows)
+            drama.id: states[drama.id] ??
+                FollowState.initial(drama, history[drama.id]),
+          for (final entry in groupEntries)
+            entry.key: states[entry.key] ??
+                FollowState.initial(entry.value, history[entry.key]),
+        };
         final canonical = candidates[canonicalId] ??
             groupEntries.first.value.withSeriesGroupId(groupId);
-        final primaryEntry = groupEntries
-            .where((entry) => entry.key == canonicalId)
-            .firstOrNull;
-        final memberStates = groupEntries
-            .map((entry) =>
-                states[entry.key] ??
-                FollowState.initial(entry.value, _history[entry.key]))
-            .toList();
-        final primary = primaryEntry == null
-            ? memberStates.first
-            : states[canonicalId] ??
-                FollowState.initial(
-                  primaryEntry.value,
-                  _history[canonicalId],
-                );
+        final primary = perSeasonStates[canonicalId] ??
+            perSeasonStates.values.first;
         final notices = <String, SeriesSeasonNotice>{};
-        for (final state in memberStates) {
+        for (final state in perSeasonStates.values) {
           for (final notice in state.seriesSeasons.values) {
             final previous = notices[notice.id];
             notices[notice.id] = previous == null
@@ -1305,10 +1304,10 @@ class LocalStore extends ChangeNotifier {
           }
         }
         final manuallyWatched =
-            memberStates.any((state) => state.manuallyWatched);
+            perSeasonStates.values.any((state) => state.manuallyWatched);
         final status = manuallyWatched
             ? FollowStatus.watched
-            : memberStates.reduce(
+            : perSeasonStates.values.reduce(
                 (a, b) => a.status.index >= b.status.index ? a : b,
               ).status;
         final merged = FollowState(
@@ -1320,14 +1319,44 @@ class LocalStore extends ChangeNotifier {
         );
         for (final entry in groupEntries) {
           favorites.remove(entry.key);
-          states.remove(entry.key);
         }
         favorites[canonicalId] = canonical;
-        states[canonicalId] = observeHongguoSeriesSeasons(
+        final shared = observeHongguoSeriesSeasons(
           anchor: canonical,
           state: merged,
-          candidates: candidates.values,
+          candidates: groupRows,
           favoriteIds: favorites.keys.toSet(),
+        );
+        for (final drama in groupRows) {
+          final own = perSeasonStates[drama.id] ??
+              FollowState.initial(drama, history[drama.id]);
+          states[drama.id] = FollowState(
+            status: shared.status,
+            manuallyWatched: shared.manuallyWatched,
+            knownEpisodes: own.knownEpisodes,
+            readEpisodes: own.readEpisodes,
+            seriesSeasons: shared.seriesSeasons,
+          );
+        }
+        states[canonicalId] = states[canonicalId] ??
+            FollowState.initial(canonical, history[canonicalId]);
+        states[canonicalId] = FollowState(
+          status: shared.status,
+          manuallyWatched: shared.manuallyWatched,
+          knownEpisodes: states[canonicalId]!.knownEpisodes,
+          readEpisodes: states[canonicalId]!.readEpisodes,
+          seriesSeasons: shared.seriesSeasons,
+        );
+      }
+      for (final entry in candidates.entries) {
+        final watched = history[entry.key];
+        if (watched == null || entry.value.seriesGroupId != groupId) continue;
+        history[entry.key] = WatchEntry(
+          drama: watched.drama.merge(entry.value),
+          episode: watched.episode,
+          position: watched.position,
+          duration: watched.duration,
+          updatedAt: watched.updatedAt,
         );
       }
 
@@ -1339,11 +1368,18 @@ class LocalStore extends ChangeNotifier {
       final favoriteJson = jsonEncode(
         favorites.values.map((drama) => drama.toJson()).toList(),
       );
+      final historyJson = jsonEncode(
+        history.values.map((entry) => entry.toJson()).toList(),
+      );
       final statesJson = _encodeFollowStates(states);
       final changes = <String, Object>{};
       if (favoriteJson !=
           jsonEncode(_favorites.values.map((drama) => drama.toJson()).toList())) {
         changes[_key('favorites')] = favoriteJson;
+      }
+      if (historyJson !=
+          jsonEncode(_history.values.map((entry) => entry.toJson()).toList())) {
+        changes[_key('history')] = historyJson;
       }
       if (statesJson != _encodeFollowStates(_followStates)) {
         changes[_key('followStates')] = statesJson;
@@ -1358,6 +1394,7 @@ class LocalStore extends ChangeNotifier {
       }
       _loadLibrary();
       _loadSeriesCandidates();
+      _lanDocumentCache = null;
       _notify();
     });
   }
