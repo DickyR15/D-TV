@@ -137,6 +137,8 @@ class Drama {
     required this.title,
     this.sourceId = '',
     this.seriesGroupId = '',
+    this.seriesSeasonNumber = 0,
+    this.seriesSeasonUnit = '',
     this.description = '',
     this.cover = '',
     this.episodes = 0,
@@ -156,6 +158,8 @@ class Drama {
   final String sourceId;
   /// Official Redfruit series identity shared by every season.
   final String seriesGroupId;
+  final int seriesSeasonNumber;
+  final String seriesSeasonUnit;
   /// Stable identity for catalog items whose legacy JSON only has source + ID.
   String get stableId => id.isNotEmpty
       ? id
@@ -200,6 +204,8 @@ class Drama {
       source: originalSource,
       sourceId: originalSourceId,
       seriesGroupId: json['seriesGroupId'] as String? ?? '',
+      seriesSeasonNumber: intValue(json['seriesSeasonNumber']),
+      seriesSeasonUnit: json['seriesSeasonUnit'] as String? ?? '',
       title: json['title'] as String? ?? '短劇',
       description: json['description'] as String? ?? '',
       cover: json['cover'] as String? ?? '',
@@ -231,6 +237,8 @@ class Drama {
     'source': source,
     'sourceId': sourceId,
     if (seriesGroupId.isNotEmpty) 'seriesGroupId': seriesGroupId,
+    if (seriesSeasonNumber > 0) 'seriesSeasonNumber': seriesSeasonNumber,
+    if (seriesSeasonUnit.isNotEmpty) 'seriesSeasonUnit': seriesSeasonUnit,
     'title': title,
     'description': description,
     'cover': cover,
@@ -252,6 +260,8 @@ class Drama {
     source: source,
     sourceId: sourceId,
     seriesGroupId: value,
+    seriesSeasonNumber: seriesSeasonNumber,
+    seriesSeasonUnit: seriesSeasonUnit,
     title: title,
     description: description,
     cover: cover,
@@ -292,6 +302,12 @@ class Drama {
       seriesGroupId: fresh.seriesGroupId.isEmpty
           ? seriesGroupId
           : fresh.seriesGroupId,
+      seriesSeasonNumber: fresh.seriesSeasonNumber > 0
+          ? fresh.seriesSeasonNumber
+          : seriesSeasonNumber,
+      seriesSeasonUnit: fresh.seriesSeasonUnit.isEmpty
+          ? seriesSeasonUnit
+          : fresh.seriesSeasonUnit,
       title: fresh.title.isEmpty || fresh.title == '短劇' ? title : fresh.title,
       description: fresh.description.isEmpty ? description : fresh.description,
       cover: fresh.cover.isEmpty ? cover : fresh.cover,
