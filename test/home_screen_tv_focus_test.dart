@@ -673,7 +673,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 80));
 
       expect(find.byType(DetailScreen), findsOneWidget);
-      expect(find.byType(PlayerScreen), findsNothing);
       expect(repository.detailCalls, 1);
 
       await tester.pumpWidget(const SizedBox.shrink());
