@@ -115,3 +115,28 @@ func TestNativeNormalizeKeepsDuoduoSeasonMetadata(t *testing.T) {
 		t.Fatalf("Duoduo series metadata was not serialized: %+v", item)
 	}
 }
+
+func TestFetchDuoduoSeriesSeasonsOpensFromUnsuffixedFirstSeason(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		return sourceFixtureResponse(request, http.StatusOK, `{
+			"code":200,
+			"data":[
+				{"vod_id":210,"vod_name":"原名系列","vod_remarks":"18集"},
+				{"vod_id":211,"vod_name":"原名系列第二季","vod_remarks":"20集"}
+			]
+		}`), nil
+	})
+	current := nativeDrama{
+		ID: "duoduo:210", Source: sourceDuoduo, SourceID: "210",
+		Title: "原名系列", Episodes: 18,
+	}
+	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seasons) != 2 || seasons[0].Drama.ID != "duoduo:210" ||
+		seasons[0].Number != 1 || seasons[1].Drama.ID != "duoduo:211" ||
+		seasons[1].Number != 2 {
+		t.Fatalf("unsuffixed first title did not expose its confirmed sibling: %+v", seasons)
+	}
+}
