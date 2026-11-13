@@ -136,6 +136,7 @@ class Drama {
     required this.source,
     required this.title,
     this.sourceId = '',
+    this.seriesGroupId = '',
     this.description = '',
     this.cover = '',
     this.episodes = 0,
@@ -153,6 +154,8 @@ class Drama {
   final String id;
   final String source;
   final String sourceId;
+  /// Official Redfruit series identity shared by every season.
+  final String seriesGroupId;
   /// Stable identity for catalog items whose legacy JSON only has source + ID.
   String get stableId => id.isNotEmpty
       ? id
@@ -196,6 +199,7 @@ class Drama {
       id: originalId,
       source: originalSource,
       sourceId: originalSourceId,
+      seriesGroupId: json['seriesGroupId'] as String? ?? '',
       title: json['title'] as String? ?? '短劇',
       description: json['description'] as String? ?? '',
       cover: json['cover'] as String? ?? '',
@@ -226,6 +230,7 @@ class Drama {
     'id': id,
     'source': source,
     'sourceId': sourceId,
+    if (seriesGroupId.isNotEmpty) 'seriesGroupId': seriesGroupId,
     'title': title,
     'description': description,
     'cover': cover,
@@ -241,6 +246,27 @@ class Drama {
     'releaseStatus': releaseStatus,
     'badge': badge,
   };
+
+  Drama withSeriesGroupId(String value) => Drama(
+    id: id,
+    source: source,
+    sourceId: sourceId,
+    seriesGroupId: value,
+    title: title,
+    description: description,
+    cover: cover,
+    episodes: episodes,
+    episodesVerified: episodesVerified,
+    category: category,
+    doubanId: doubanId,
+    vip: vipStatus,
+    heat: heat,
+    views: views,
+    onlineDate: onlineDate,
+    tags: tags,
+    releaseStatus: releaseStatus,
+    badge: badge,
+  );
 
   Drama merge(Drama fresh) {
     if (stableId != fresh.stableId) return fresh;
@@ -263,6 +289,9 @@ class Drama {
       id: id.isEmpty ? fresh.id : id,
       source: fresh.source.isEmpty ? source : fresh.source,
       sourceId: fresh.sourceId.isEmpty ? sourceId : fresh.sourceId,
+      seriesGroupId: fresh.seriesGroupId.isEmpty
+          ? seriesGroupId
+          : fresh.seriesGroupId,
       title: fresh.title.isEmpty || fresh.title == '短劇' ? title : fresh.title,
       description: fresh.description.isEmpty ? description : fresh.description,
       cover: fresh.cover.isEmpty ? cover : fresh.cover,
