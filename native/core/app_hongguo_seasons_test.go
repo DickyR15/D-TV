@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -11,7 +12,7 @@ func TestHongguoAppSeasonQueryUsesOfficialSelector(t *testing.T) {
 	query := hongguoAppSeasonQuery("7690163276214176792")
 	expected := map[string]string{
 		"scene": "10",
-		"from": "series_short_play_info",
+		"from": "single_col_same_ip_series",
 		"offset": "0",
 		"limit": "0",
 		"total_chapter_num": "0",
@@ -161,5 +162,37 @@ func TestParseHongguoAppSeasonsAcceptsConfirmedEmptyList(t *testing.T) {
 	})
 	if err != nil || len(items) != 0 {
 		t.Fatalf("confirmed empty list was not distinguished from an API failure: %v, %v", items, err)
+	}
+}
+
+
+func TestHongguoAppNextSeasonQueryUsesSeparateVerifiedSource(t *testing.T) {
+	query := hongguoAppNextSeasonQuery("7690163276214176792")
+	if query.Get("from") != "series_short_play_info" {
+		t.Fatalf("next-season query from = %q, want series_short_play_info", query.Get("from"))
+	}
+	if query.Get("book_id") != "7690163276214176792" ||
+		query.Get("filter_ids") != "7690163276214176792" {
+		t.Fatalf("next-season query lost the exact current series ID: %v", query)
+	}
+}
+
+func TestHongguoNeedsSeasonFallbackOnlyFor101116(t *testing.T) {
+	for _, tc := range []struct {
+		message string
+		want    bool
+	}{
+		{message: "紅果 App 接口暫不可用（101116）", want: true},
+		{message: "紅果 App 接口暫不可用（100001）", want: false},
+		{message: "context deadline exceeded", want: false},
+		{message: "", want: false},
+	} {
+		var err error
+		if tc.message != "" {
+			err = errors.New(tc.message)
+		}
+		if got := hongguoNeedsSeasonFallback(err); got != tc.want {
+			t.Errorf("hongguoNeedsSeasonFallback(%q) = %v, want %v", tc.message, got, tc.want)
+		}
 	}
 }
