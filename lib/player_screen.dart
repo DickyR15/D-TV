@@ -180,6 +180,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   String _loadingMessage = '正在準備播放';
   String? _error;
+  String? _lastPlaybackError;
   String? _saveWarning;
   PlaybackPlan? _plan;
   double _speed = 1;
@@ -391,8 +392,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     _configurePictureInPicture();
     _subscriptions.add(
       _player.stream.error.listen((error) {
+        final safeError = playbackDiagnosticError(error);
+        _lastPlaybackError = safeError;
         DiaryService.add(
-          '[Recovery] player_error error=${playbackDiagnosticError(error)} generation=$_generation accepted=$_acceptErrors',
+          '[Recovery] player_error error=$safeError generation=$_generation accepted=$_acceptErrors',
         );
         if (_enhancement.handlePlaybackError(error)) return;
         if (!_closed && _acceptErrors && mounted && error.trim().isNotEmpty) {
@@ -1519,11 +1522,15 @@ class _PlayerScreenState extends State<PlayerScreen>
           _loading = false;
           _showLoadingOverlay = false;
           _localFailure = current.local;
-          _error = current.local
+          final summary = current.local
               ? widget.allowOnlineFallback
                     ? '本機影片讀取失敗，請重試；也可以手動改為線上播放。'
                     : '本機影片讀取失敗，請重試或改為線上播放。'
               : '自動恢復未成功，請檢查網路後重試，也可換一集或選擇其他畫質選項。';
+          final detail = _lastPlaybackError;
+          _error = detail == null || detail.isEmpty
+              ? summary
+              : '$summary\n播放器回報：$detail';
         });
       }
       return;
@@ -1703,6 +1710,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             : null);
     _preloader.clear();
     final ticket = ++_generation;
+    if (recoveryAction == null) _lastPlaybackError = null;
     _enhancement.suspend();
     _seekSequence++;
     _acceptErrors = false;
@@ -2102,7 +2110,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                   ? error.message
                   : error is TimeoutException
                   ? (error.message ?? '播放載入逾時，請重試或更換片源。')
-                  : '無法播放這一集，請重試或換一集。';
+                  : '無法播放這一集：${playbackDiagnosticError(error)}';
               widget.handoff?.fail(_error!);
             });
           }
