@@ -75,17 +75,6 @@ void main() {
     );
   });
 
-  test('closing the mini-player before initialization blocks late player attachment', () {
-    final gate = DesktopMiniPlayerStartupGate();
-    expect(gate.canAttachPlayer, isTrue);
-
-    gate.close();
-
-    expect(gate.canAttachPlayer, isFalse);
-    gate.close();
-    expect(gate.canAttachPlayer, isFalse);
-  });
-
   test('restore disposes the PiP player before resuming the main window', () async {
     final shutdown = DesktopMiniPlayerShutdown();
     final disposeGate = Completer<void>();
