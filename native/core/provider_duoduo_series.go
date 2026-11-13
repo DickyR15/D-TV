@@ -222,8 +222,8 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 			Number: number,
 			Label: label,
 			Subtitle: item.Remark,
-			Upcoming: item.Episodes <= 0,
-			Playable: item.Episodes > 0,
+			Upcoming: native.Episodes <= 0,
+			Playable: native.Episodes > 0,
 		})
 	}
 	return seasons, nil
