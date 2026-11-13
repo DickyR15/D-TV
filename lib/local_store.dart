@@ -704,13 +704,15 @@ class LocalStore extends ChangeNotifier {
       '';
 
   String? _favoriteIdFor(String id) {
-    if (_favorites.containsKey(id)) return id;
     final groupId = _seriesGroupIdFor(id);
-    if (groupId.isEmpty) return null;
-    for (final entry in _favorites.entries) {
-      if (entry.value.seriesGroupId == groupId) return entry.key;
+    if (groupId.isNotEmpty) {
+      final canonicalId = 'hongguo:' + groupId;
+      if (_favorites.containsKey(canonicalId)) return canonicalId;
+      for (final entry in _favorites.entries) {
+        if (entry.value.seriesGroupId == groupId) return entry.key;
+      }
     }
-    return null;
+    return _favorites.containsKey(id) ? id : null;
   }
 
   WatchEntry? watched(String id) {
@@ -733,11 +735,24 @@ class LocalStore extends ChangeNotifier {
   FollowState? following(String id) {
     final key = _favoriteIdFor(id);
     if (key == null || !isFavorite(id)) return null;
-    final state = _followStates[key];
+    final member = _favorites[id] ??
+        _seriesCandidates[id] ??
+        _history[id]?.drama ??
+        _favorites[key]!;
+    final own = _followStates[id] ?? FollowState.initial(member, _history[id]);
+    final shared = _followStates[key] ?? own;
+    final progress = _history[id] == null
+        ? own
+        : own.afterPlayback(_history[id]!);
+    final combined = FollowState(
+      status: shared.status,
+      manuallyWatched: shared.manuallyWatched,
+      knownEpisodes: progress.knownEpisodes,
+      readEpisodes: progress.readEpisodes,
+      seriesSeasons: shared.seriesSeasons,
+    );
     final watched = _history[id];
-    return state != null && watched != null && id == key
-        ? state.afterPlayback(watched)
-        : state;
+    return watched == null ? combined : combined.afterPlayback(watched);
   }
   List<Drama> seriesDramasFor(Drama anchor) {
     if (!allowsSource(SourceSite.hongguo.id) ||
@@ -1178,9 +1193,21 @@ class LocalStore extends ChangeNotifier {
     final epoch = _epoch;
     return _queue(() async {
       final key = _favoriteIdFor(id);
-      if (key == null || epoch != _epoch || _followStates[key] == null) return;
+      if (key == null || epoch != _epoch) return;
+      final member = _favorites[id] ??
+          _seriesCandidates[id] ??
+          _history[id]?.drama ??
+          _favorites[key]!;
+      final own = _followStates[id] ?? FollowState.initial(member, _history[id]);
+      final shared = _followStates[key] ?? own;
       final states = Map.of(_followStates)
-        ..[key] = _followStates[key]!.markRead();
+        ..[id] = FollowState(
+          status: shared.status,
+          manuallyWatched: shared.manuallyWatched,
+          knownEpisodes: own.knownEpisodes,
+          readEpisodes: own.knownEpisodes,
+          seriesSeasons: shared.seriesSeasons,
+        );
       await _commit({_key('followStates'): _encodeFollowStates(states)});
       _loadLibrary();
       _notify();
