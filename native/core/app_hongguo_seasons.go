@@ -41,6 +41,16 @@ func hongguoAppSeasonQuery(seriesID string) url.Values {
 	}
 }
 
+func hongguoAppNextSeasonQuery(seriesID string) url.Values {
+	query := hongguoAppSeasonQuery(seriesID)
+	query.Set("from", "series_short_play_info")
+	return query
+}
+
+func hongguoNeedsSeasonFallback(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "101116")
+}
+
 func (downloader *Downloader) hongguoAppSeasons(
 	ctx context.Context,
 	seriesID string,
@@ -55,6 +65,22 @@ func (downloader *Downloader) hongguoAppSeasons(
 		hongguoAppSeasonQuery(seriesID),
 		nil,
 	)
+	if hongguoNeedsSeasonFallback(err) {
+		// Some works reject the full-series selector with 101116 even though
+		// their signed short-play relationship query still returns season rows.
+		fallback, fallbackErr := downloader.hongguoAppRequest(
+			ctx,
+			http.MethodGet,
+			"/reading/bookapi/plan/v",
+			hongguoAppNextSeasonQuery(seriesID),
+			nil,
+		)
+		if fallbackErr == nil {
+			result, err = fallback, nil
+		} else {
+			err = fmt.Errorf("%w（備援季別查詢失敗：%v）", err, fallbackErr)
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("取得紅果系列季別失敗：%w", err)
 	}
@@ -217,12 +243,23 @@ func (engine *nativeEngine) nativeSeasons(
 	drama nativeDrama,
 ) (map[string]any, error) {
 	source, sourceID, valid := splitProviderDramaID(drama.ID)
-	if !valid || source != sourceHongguo {
+	if !valid {
 		return map[string]any{"items": []nativeDramaSeason{}}, nil
 	}
-	items, err := engine.downloader.hongguoAppSeasons(ctx, sourceID)
-	if err != nil {
-		return nil, err
+	switch source {
+	case sourceHongguo:
+		items, err := engine.downloader.hongguoAppSeasons(ctx, sourceID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"items": items}, nil
+	case sourceDuoduo:
+		items, err := engine.downloader.fetchDuoduoSeriesSeasons(ctx, drama)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"items": items}, nil
+	default:
+		return map[string]any{"items": []nativeDramaSeason{}}, nil
 	}
-	return map[string]any{"items": items}, nil
 }

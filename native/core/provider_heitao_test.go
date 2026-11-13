@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -111,5 +112,48 @@ func TestHeitaoRouteAndIdentifierValidation(t *testing.T) {
 	sid, nid, ok = heitaoPlayerID("https://heitaodj.com/index.php/vod/player/id/123/nid/12/sid/3.html")
 	if !ok || sid != 3 || nid != 12 {
 		t.Fatalf("player route parser returned %d:%d, %t", sid, nid, ok)
+	}
+}
+
+
+func TestHeitaoSynopsisFallsBackFromJSONLDToMetaAndDetailContent(t *testing.T) {
+	document := heitaoTestDocument(t, `<!doctype html><html><head>
+<meta property="og:description" content="&lt;p&gt;官方簡介&amp;amp;補充&lt;/p&gt;">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+  {"@type":"WebSite","name":"黑桃"},
+  {"@type":"TVSeries","name":"測試劇","image":"https://img.example.test/poster.jpg"}
+]}
+</script>
+</head><body><div class="module-info-content"><p>不應覆蓋 meta description</p></div></body></html>`)
+	metadata := heitaoSeriesMetadata(document)
+	if metadata.Name != "測試劇" {
+		t.Fatalf("TVSeries was not found inside @graph: %+v", metadata)
+	}
+	if got, want := heitaoSynopsis(document, metadata), "官方簡介&補充"; got != want {
+		t.Fatalf("synopsis fallback = %q, want %q", got, want)
+	}
+}
+
+func TestHeitaoSynopsisFallsBackToDetailContentAndIgnoresEmptyMarkup(t *testing.T) {
+	document := heitaoTestDocument(t, `<!doctype html><html><head></head><body>
+<div class="module-info-content"><p>第一段</p><p>第二段 &amp; 更多</p><p> </p></div>
+</body></html>`)
+	if got, want := heitaoSynopsis(document, heitaoSeriesMeta{}), "第一段 第二段 & 更多"; got != want {
+		t.Fatalf("detail synopsis = %q, want %q", got, want)
+	}
+
+	empty := heitaoTestDocument(t, `<!doctype html><html><body><div class="module-info-content"><p> </p></div></body></html>`)
+	if got := heitaoSynopsis(empty, heitaoSeriesMeta{}); got != "" {
+		t.Fatalf("empty detail markup returned visible synopsis %q", got)
+	}
+}
+
+
+func TestHeitaoPageRequestsCarryAgeConfirmationCookie(t *testing.T) {
+	ctx := heitaoPageContext(context.Background())
+	value, ok := ctx.Value(providerTextCookieKey{}).(string)
+	if !ok || value != heitaoAgeCookie {
+		t.Fatalf("Heitao page cookie = %q, want %q", value, heitaoAgeCookie)
 	}
 }

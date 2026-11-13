@@ -48,13 +48,15 @@ class _DetailScreenState extends State<DetailScreen> {
   int _generation = 0;
   int _episodePage = 0;
   String _selectedPlayLine = '';
-  bool _expandedDescription = false;
   bool _episodesExpanded = false;
   final _episodeAnchor = GlobalKey();
   final _detailScroll = ScrollController();
   final _startPlayFocus = FocusNode(debugLabel: 'detail-start-play');
   bool _initialActionHandled = false;
   late final int _profileEpoch;
+  bool _supportsSeriesSeasons(String source) =>
+      source == SourceSite.hongguo.id || source == SourceSite.duoduo.id;
+
   Widget? get _sourceDiagnostics => widget.repository.supportsSourceManagement
       ? SourceDiagnosticsButton(
           repository: widget.repository,
@@ -111,7 +113,7 @@ class _DetailScreenState extends State<DetailScreen> {
       _error = null;
       _seriesSeasons = const [];
       _seriesSeasonsError = null;
-      _seriesSeasonsLoading = requestedDrama.source == SourceSite.hongguo.id;
+      _seriesSeasonsLoading = _supportsSeriesSeasons(requestedDrama.source);
     });
     try {
       final detail = await widget.repository.detail(requestedDrama);
@@ -227,7 +229,7 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Future<void> _loadSeriesSeasons(Drama drama, int generation) async {
-    if (drama.source != SourceSite.hongguo.id) {
+    if (!_supportsSeriesSeasons(drama.source)) {
       if (mounted && generation == _generation) {
         setState(() {
           _seriesSeasons = const [];
@@ -246,10 +248,12 @@ class _DetailScreenState extends State<DetailScreen> {
         return;
       }
       if (seasons.isNotEmpty) {
-        await widget.store.registerHongguoSeriesSeasons(
-          drama,
-          seasons.map((season) => season.drama),
-        );
+        if (drama.source == SourceSite.hongguo.id) {
+          await widget.store.registerHongguoSeriesSeasons(
+            drama,
+            seasons.map((season) => season.drama),
+          );
+        }
         await widget.store.refreshDramas(
           seasons.map((season) => season.drama),
         );
@@ -381,8 +385,9 @@ class _DetailScreenState extends State<DetailScreen> {
         !widget.store.allowsSource(drama.source)) {
       return;
     }
-    if (widget.store.following(anchor.id)?.seriesSeasons[drama.id]?.read ==
-        false) {
+    if (anchor.source == SourceSite.hongguo.id &&
+        widget.store.following(anchor.id)?.seriesSeasons[drama.id]?.read ==
+            false) {
       await saveUserChange(
         context,
         () => widget.store.markSeriesSeasonRead(anchor.id, drama.id),
@@ -401,10 +406,9 @@ class _DetailScreenState extends State<DetailScreen> {
       _selectedPlayLine = '';
       _episodePage = 0;
       _episodesExpanded = false;
-      _expandedDescription = false;
       _seriesSeasons = const [];
       _seriesSeasonsError = null;
-      _seriesSeasonsLoading = drama.source == SourceSite.hongguo.id;
+      _seriesSeasonsLoading = _supportsSeriesSeasons(drama.source);
     });
     // Keep the same details route and reload only the selected season's data.
     // Watch progress and favorites remain keyed by each official season ID.
@@ -930,23 +934,11 @@ class _DetailScreenState extends State<DetailScreen> {
               ],
             ),
           ),
-        if (drama.description.isNotEmpty) ...[
+        if (drama.description.trim().isNotEmpty) ...[
           const SizedBox(height: 12),
           Text(
             uiTraditional(drama.description),
-            maxLines: _expandedDescription ? null : 3,
-            overflow: _expandedDescription
-                ? TextOverflow.visible
-                : TextOverflow.ellipsis,
             style: TextStyle(color: colors.onSurfaceVariant, height: 1.6),
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () =>
-                  setState(() => _expandedDescription = !_expandedDescription),
-              child: Text(_expandedDescription ? '收起簡介' : '展開簡介'),
-            ),
           ),
         ],
         if (_detail?.warning.isNotEmpty == true)
@@ -962,7 +954,7 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Widget _seriesSelector(Drama drama) {
-    if (drama.source != SourceSite.hongguo.id) {
+    if (!_supportsSeriesSeasons(drama.source)) {
       return const SizedBox.shrink();
     }
     if (_seriesSeasonsLoading && _seriesSeasons.isEmpty) {

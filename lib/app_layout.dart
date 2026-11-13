@@ -370,6 +370,13 @@ class AppLayout extends InheritedWidget {
     bool? desktopPlatform,
   }) {
     final desktop = desktopPlatform ?? isDesktopPlatform;
+    if (mode == 'auto') {
+      final detectedLabel = currentFactor == null
+          ? null
+          : _displayModeLabels[currentFactor.name];
+      if (detectedLabel == null) return _displayModeLabels['auto']!;
+      return '${_displayModeLabels['auto']}・目前使用$detectedLabel模式';
+    }
     final key = mode == 'standard'
         ? currentFactor?.name ?? 'auto'
         : mode == 'window' && !desktop

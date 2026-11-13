@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	htmlstd "html"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -86,6 +87,21 @@ func providerHTMLText(root *html.Node) string {
 		text.WriteByte(' ')
 	}
 	return strings.Join(strings.Fields(text.String()), " ")
+}
+
+// providerHTMLPlainText converts provider synopsis fields to readable text.
+// Providers commonly return either HTML fragments or HTML-escaped fragments;
+// decoding once before parsing handles both without exposing markup tags.
+func providerHTMLPlainText(raw string) string {
+	raw = strings.TrimSpace(htmlstd.UnescapeString(raw))
+	if raw == "" {
+		return ""
+	}
+	document, err := html.Parse(strings.NewReader(raw))
+	if err != nil {
+		return strings.Join(strings.Fields(raw), " ")
+	}
+	return strings.TrimSpace(providerHTMLText(document))
 }
 
 func (d *Downloader) fetchProviderPage(ctx context.Context, address, referer, agent string) (*html.Node, string, error) {

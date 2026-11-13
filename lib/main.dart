@@ -9,11 +9,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:screen_retriever/screen_retriever.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 import 'desktop_window_state.dart';
-import 'desktop_mini_player.dart';
-import 'desktop_mini_player_bridge.dart';
 
 import 'core_bridge.dart';
 import 'device_registration.dart';
@@ -43,39 +40,6 @@ Future<void> main(List<String> args) async {
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
-
-  if (desktop) {
-    String currentWindowArguments = '';
-    try {
-      final currentWindow = await WindowController.fromCurrentEngine();
-      currentWindowArguments = currentWindow.arguments;
-    } catch (_) {
-      // Keep the main application usable if multi-window support is unavailable.
-    }
-    final miniPlayerArguments =
-        DesktopMiniPlayerArguments.tryParse(currentWindowArguments);
-    if (miniPlayerArguments != null) {
-      windowManager.waitUntilReadyToShow(
-        const WindowOptions(
-          size: Size(660, 390),
-          center: true,
-          title: 'D TV 小窗播放器',
-        ),
-        () async {
-          await windowManager.setMinimumSize(const Size(480, 300));
-          await windowManager.setResizable(true);
-          await windowManager.setAlwaysOnTop(true);
-          await windowManager.show();
-          await windowManager.focus();
-        },
-      );
-      runApp(DesktopMiniPlayerApp(arguments: miniPlayerArguments));
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_initializeUiLocalizationSafely());
-      });
-      return;
-    }
-  }
 
   if (desktop) {
     windowManager.waitUntilReadyToShow(
@@ -204,9 +168,11 @@ class _AppBootstrapState extends State<AppBootstrap>
       final maximized = await windowManager.isMaximized();
       final minimized = await windowManager.isMinimized();
       if (fullScreen || maximized || minimized) return;
-      final current = DesktopWindowState.fromRect(
-        await windowManager.getBounds(),
-      );
+      final bounds = await windowManager.getBounds();
+      // The original desktop window has a 900x560 minimum. A smaller frame
+      // is the in-place mini-player and must never replace the saved main size.
+      if (bounds.width < 900 || bounds.height < 560) return;
+      final current = DesktopWindowState.fromRect(bounds);
       if (current != null) {
         await preferences.setString(
           DesktopWindowState.preferencesKey,

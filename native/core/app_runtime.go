@@ -363,7 +363,11 @@ func nativeNormalize(drama Drama) nativeDrama {
 	if onlineDate == "" {
 		onlineDate = strings.TrimSpace(drama.OnlineDate)
 	}
-	return nativeDrama{MetadataSchema: 1, ID: id, Source: source, SourceID: sourceID, DoubanID: strings.TrimSpace(drama.DoubanID), Title: drama.DisplayTitle(),
+	return nativeDrama{MetadataSchema: 1, ID: id, Source: source, SourceID: sourceID,
+		SeriesGroupID: strings.TrimSpace(drama.SeriesGroupID),
+		SeriesSeasonNumber: drama.SeriesSeasonNumber,
+		SeriesSeasonUnit: strings.TrimSpace(drama.SeriesSeasonUnit),
+		DoubanID: strings.TrimSpace(drama.DoubanID), Title: drama.DisplayTitle(),
 		Description: firstNonEmpty(drama.Desc, drama.Intro), Cover: cover, CoverCandidates: candidates, Episodes: episodes,
 		EpisodesVerified: drama.EpisodesVerified || episodes > 0,
 		Category: nativeDramaCategory(drama), VIP: drama.VIP,
@@ -957,7 +961,13 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 	case sourceHanxiaoquan:
 		raw, chapters, err = engine.downloader.fetchHanxiaoquanDetail(ctx, sourceID)
 	case sourceHeitao:
-		raw, chapters, err = engine.downloader.fetchHeitaoDetail(ctx, sourceID)
+		lookupSourceID := sourceID
+		if webProviderNumericID.MatchString(strings.TrimSpace(drama.SourceID)) {
+			lookupSourceID = strings.TrimSpace(drama.SourceID)
+		}
+		raw, chapters, err = engine.downloader.fetchHeitaoDetailWithFallback(
+			ctx, sourceID, lookupSourceID, drama.Title,
+		)
 	default:
 		title, chapters, err = engine.downloader.GetHuangguoChapters(ctx, source, sourceID)
 	}
@@ -990,7 +1000,15 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		drama.Title = title
 	}
 	if raw.ID == drama.ID {
-		drama = mergeNativeDrama(drama, nativeNormalize(raw))
+		fresh := nativeNormalize(raw)
+		if source == sourceHeitao && webProviderNumericID.MatchString(strings.TrimSpace(raw.SourceID)) {
+			// Keep the app's original identity (favorites/watch history) while
+			// persisting the replacement provider ID used for future requests.
+			fresh.ID = drama.ID
+			fresh.Source = sourceHeitao
+			fresh.SourceID = strings.TrimSpace(raw.SourceID)
+		}
+		drama = mergeNativeDrama(drama, fresh)
 	}
 	if source == sourceHongguo {
 		raw := engine.downloader.hongguoCachedDrama(Drama{ID: drama.ID, Title: drama.Title, Source: source})
@@ -1004,7 +1022,11 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 			}
 		}
 	}
-	drama.Source, drama.SourceID, drama.Episodes = source, sourceID, len(chapters)
+	resolvedSourceID := sourceID
+	if source == sourceHeitao && webProviderNumericID.MatchString(strings.TrimSpace(raw.SourceID)) {
+		resolvedSourceID = strings.TrimSpace(raw.SourceID)
+	}
+	drama.Source, drama.SourceID, drama.Episodes = source, resolvedSourceID, len(chapters)
 	if source == sourceDuoduo {
 		if episodeCount := duoduoChapterEpisodeCount(chapters); episodeCount > 0 {
 			drama.Episodes = episodeCount
