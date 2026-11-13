@@ -87,6 +87,8 @@ func duoduoSeriesGroupID(base, unit string) string {
 	return "duoduo-series:" + duoduoSeriesTitleKey(base) + ":" + unit
 }
 
+var duoduoEpisodeCountPattern = regexp.MustCompile(`(?i)(?:更新至|全|共)?\\s*([0-9]{1,6})\\s*(?:集|话|期|回|章)`)
+
 func duoduoEpisodeValueCount(value any) int {
 	raw := strings.TrimSpace(fmt.Sprint(value))
 	if raw == "" || raw == "<nil>" {
@@ -95,11 +97,13 @@ func duoduoEpisodeValueCount(value any) int {
 	if count, err := strconv.Atoi(raw); err == nil && count > 0 && count <= 100000 {
 		return count
 	}
-	if match := reEpisodeNumber.FindStringSubmatch(raw); len(match) > 0 {
-		for _, candidate := range match[1:] {
-			if count, err := strconv.Atoi(candidate); err == nil && count > 0 && count <= 100000 {
-				return count
-			}
+	if number, err := strconv.ParseFloat(raw, 64); err == nil &&
+		number > 0 && number <= 100000 && number == float64(int(number)) {
+		return int(number)
+	}
+	if match := duoduoEpisodeCountPattern.FindStringSubmatch(raw); len(match) == 2 {
+		if count, err := strconv.Atoi(match[1]); err == nil && count > 0 && count <= 100000 {
+			return count
 		}
 	}
 	return 0
