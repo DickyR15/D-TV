@@ -272,8 +272,10 @@ void main() {
       );
       expect(store.favorites, hasLength(1));
       expect(store.favorites.single.id, officialSeasonOne.id);
-      expect(store.following(officialSeasonOne.id)!.manuallyWatched, isTrue);
-      expect(store.following(officialSeasonTwo.id)!.manuallyWatched, isTrue);
+      expect(store.following(officialSeasonOne.id)!.status, FollowStatus.watching);
+      expect(store.following(officialSeasonTwo.id)!.status, FollowStatus.watching);
+      expect(store.following(officialSeasonOne.id)!.manuallyWatched, isFalse);
+      expect(store.following(officialSeasonTwo.id)!.manuallyWatched, isFalse);
       expect(store.following(officialSeasonTwo.id)!.newSeasons, 1);
 
       await store.markSeriesSeasonRead(
