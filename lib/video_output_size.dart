@@ -57,22 +57,41 @@ int? videoQualityShortEdge(Size? size) {
 
 /// Calculates an aspect-preserving MPV output size for the visible viewport.
 /// The result never exceeds source dimensions, avoiding wasteful upscaling.
+const maxVideoOutputDimension = 16384;
+
+bool isValidVideoOutputSize(Size value) =>
+    value.width.isFinite &&
+    value.height.isFinite &&
+    value.width >= 1 &&
+    value.height >= 1 &&
+    value.width <= maxVideoOutputDimension &&
+    value.height <= maxVideoOutputDimension;
+
+/// The independent desktop mini-player should scale the existing Flutter
+/// texture instead of asking native MPV to reconfigure its output while the
+/// user is interactively resizing the child window.
+bool shouldAdjustWindowsVideoOutput({
+  required bool isWindows,
+  required bool desktopMiniPlayer,
+}) => isWindows && !desktopMiniPlayer;
+
+/// Calculates an aspect-preserving MPV output size for the visible viewport.
+/// The result never exceeds source dimensions, avoiding wasteful upscaling.
 Size? videoOutputSizeForSource(Size? source, Size viewport) {
   if (source == null ||
-      !viewport.width.isFinite ||
-      !viewport.height.isFinite ||
-      viewport.width <= 0 ||
-      viewport.height <= 0) {
+      !isValidVideoOutputSize(source) ||
+      !isValidVideoOutputSize(viewport)) {
     return null;
   }
   final scale = math.min(
     1.0,
     math.min(viewport.width / source.width, viewport.height / source.height),
   );
-  return Size(
+  final result = Size(
     math.max(1, (source.width * scale).round()).toDouble(),
     math.max(1, (source.height * scale).round()).toDouble(),
   );
+  return isValidVideoOutputSize(result) ? result : null;
 }
 
 class VideoOutputSizeAdapter {
@@ -88,6 +107,8 @@ class VideoOutputSizeAdapter {
   Timer? _windowsResizeTimer;
   Size? _target;
   Size? _lastWindowsSize;
+  Future<void>? _windowsResizeFuture;
+  bool _windowsResizeQueued = false;
   bool _closed = false;
 
   Size? get actualSize => video.rect.value?.size;
@@ -116,9 +137,14 @@ class VideoOutputSizeAdapter {
   Future<void> setTarget(Size? value) async {
     await initialize();
     if (_closed) return;
+    // Layout transitions can briefly report unbounded or invalid constraints.
+    // Ignore those intermediate frames instead of passing NaN/Infinity to
+    // round() or into the native MPV video output API.
+    if (value != null && !isValidVideoOutputSize(value)) return;
     final normalized = value == null
         ? null
         : Size(value.width.roundToDouble(), value.height.roundToDouble());
+    if (normalized != null && !isValidVideoOutputSize(normalized)) return;
     final changed = _target != normalized;
     _target = normalized;
     if (Platform.isAndroid) {
@@ -146,12 +172,36 @@ class VideoOutputSizeAdapter {
     });
   }
 
-  Future<void> _resizeWindows() async {
+  Future<void> _resizeWindows() {
+    if (_closed) return Future<void>.value();
+    final running = _windowsResizeFuture;
+    if (running != null) {
+      // Coalesce overlapping WM_SIZE / Flutter layout notifications. The
+      // active operation finishes first, then one pass applies the newest size.
+      _windowsResizeQueued = true;
+      return running;
+    }
+    late final Future<void> tracked;
+    tracked = _applyWindowsResize().whenComplete(() {
+      if (identical(_windowsResizeFuture, tracked)) {
+        _windowsResizeFuture = null;
+      }
+      if (_windowsResizeQueued && !_closed) {
+        _windowsResizeQueued = false;
+        _scheduleWindowsResize();
+      }
+    });
+    _windowsResizeFuture = tracked;
+    return tracked;
+  }
+
+  Future<void> _applyWindowsResize() async {
     if (_closed) return;
     final target = _target;
     if (target == null) {
       if (_lastWindowsSize != null) {
         await video.setSize(width: null, height: null);
+        if (_closed) return;
         _lastWindowsSize = null;
       }
       return;
@@ -193,6 +243,11 @@ class VideoOutputSizeAdapter {
     _closed = true;
     _windowsResizeTimer?.cancel();
     _windowsResizeTimer = null;
+    try {
+      await _windowsResizeFuture;
+    } catch (_) {
+      // Closing the adapter must not propagate a late native resize failure.
+    }
     await _initialization;
     await _subscription?.cancel();
   }
