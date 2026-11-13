@@ -847,7 +847,7 @@ func TestDuoduoSynopsisRemovesHTMLMarkup(t *testing.T) {
 			name: "blurb fallback",
 			row: map[string]any{
 				"vod_id": 78299, "vod_name": "測試短劇",
-				"vod_content": "", "vod_blurb": "<div>備用簡介</div>",
+				"vod_content": "<p> </p>", "vod_blurb": "<div>備用簡介</div>",
 			},
 			want: "備用簡介",
 		},
