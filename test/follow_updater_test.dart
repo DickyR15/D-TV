@@ -125,6 +125,45 @@ void main() {
     expect(store.followChecks.keys.toSet(), {active.id, finished.id});
   });
 
+  test('已完結的第一季仍會檢查系列是否推出新季', () async {
+    final completedFirstSeason = _drama(
+      88,
+      releaseStatus: 'completed',
+    ).withSeriesGroupId('88');
+    await watching(completedFirstSeason);
+    await store.setFollowStatus(
+      completedFirstSeason,
+      FollowStatus.watching,
+    );
+    repository.seasonLists[completedFirstSeason.id] = [
+      DramaSeason(
+        drama: completedFirstSeason,
+        number: 1,
+        label: '第 1 季',
+      ),
+      DramaSeason(
+        drama: Drama(
+          id: 'hongguo:89',
+          source: 'hongguo',
+          sourceId: '89',
+          seriesGroupId: '88',
+          seriesSeasonNumber: 2,
+          seriesSeasonUnit: '季',
+          title: '合成劇88 第二季',
+          episodes: 6,
+        ),
+        number: 2,
+        label: '第 2 季',
+      ),
+    ];
+
+    await updater().run();
+
+    expect(repository.checked, [completedFirstSeason.id]);
+    expect(repository.seasonRequests, [completedFirstSeason.id]);
+    expect(store.following(completedFirstSeason.id)!.newSeasons, 1);
+  });
+
   test('追劇檢查會發現紅果新季，並維持系列單一收藏', () async {
     final seasonOne = _drama(101);
     final seasonTwo = Drama(
