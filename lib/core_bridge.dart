@@ -69,6 +69,9 @@ String _nativeRequest(String body) {
   }
 }
 
+bool supportsNativeSeriesSeasons(String source) =>
+    source == 'hongguo' || source == 'duoduo';
+
 class AppFailure implements Exception {
   AppFailure(String message, {this.code = ''})
     : message = uiTraditional(message);
@@ -822,7 +825,7 @@ class NativeRepository extends AppRepository {
   @override
   Future<List<DramaSeason>> seasons(Drama drama) async {
     _authorize(drama.source);
-    if (drama.source != 'hongguo') return const [];
+    if (!supportsNativeSeriesSeasons(drama.source)) return const [];
     final epoch = access?.profileEpoch;
     final result = await _read('seasons-${drama.id}', {
       'action': 'seasons',

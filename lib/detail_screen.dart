@@ -55,7 +55,7 @@ class _DetailScreenState extends State<DetailScreen> {
   bool _initialActionHandled = false;
   late final int _profileEpoch;
   bool _supportsSeriesSeasons(String source) =>
-      source == SourceSite.hongguo.id || source == SourceSite.duoduo.id;
+      supportsNativeSeriesSeasons(source);
 
   Widget? get _sourceDiagnostics => widget.repository.supportsSourceManagement
       ? SourceDiagnosticsButton(
@@ -996,14 +996,32 @@ class _DetailScreenState extends State<DetailScreen> {
         children: [
           Text('系列劇', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final season in seasons)
-                _seasonChip(drama, season),
-            ],
-          ),
+          if (AppLayout.isTelevision(context))
+            FocusTraversalGroup(
+              child: SizedBox(
+                height: 76,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final season in seasons)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: _seasonChip(drama, season),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final season in seasons) _seasonChip(drama, season),
+              ],
+            ),
           if (_seriesSeasonsLoading)
             const Padding(
               padding: EdgeInsets.only(top: 8),
