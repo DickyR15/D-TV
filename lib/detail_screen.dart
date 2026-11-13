@@ -17,7 +17,6 @@ import 'widgets.dart';
 import 'ui_localization.dart';
 import 'sources_screen.dart';
 import 'episode_browser.dart';
-import 'hongguo_series.dart';
 
 
 class DetailScreen extends StatefulWidget {
