@@ -133,7 +133,10 @@ void main() {
     'official Redfruit seasons share one favorite but keep per-season history',
     () async {
       final store = await create();
-      await store.refreshDramas([officialSeasonOne, officialSeasonTwo]);
+      await store.registerHongguoSeriesSeasons(
+        officialSeasonTwo.withSeriesGroupId(''),
+        [officialSeasonOne, officialSeasonTwo],
+      );
       expect(
         store.seriesDramasFor(officialSeasonTwo).map((drama) => drama.id),
         [officialSeasonOne.id, officialSeasonTwo.id],
