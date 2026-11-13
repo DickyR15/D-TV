@@ -2,6 +2,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/playback_preferences.dart';
 
 void main() {
+  test('desktop always-on-top defaults off and persists', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.desktopAlwaysOnTop, isFalse);
+
+    final enabled = defaults.copyWith(desktopAlwaysOnTop: true);
+    expect(enabled.desktopAlwaysOnTop, isTrue);
+    expect(
+      PlaybackPreferences.fromJson(enabled.toJson()).desktopAlwaysOnTop,
+      isTrue,
+    );
+    expect(
+      PlaybackPreferences.fromJson(
+        enabled.copyWith(desktopAlwaysOnTop: false).toJson(),
+      ).desktopAlwaysOnTop,
+      isFalse,
+    );
+  });
+
   test('1.1x playback speed is available and persists', () {
     expect(playbackSpeeds, contains(1.1));
     final preferences = PlaybackPreferences.fromJson(const {'speed': 1.1});
