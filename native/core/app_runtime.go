@@ -363,7 +363,11 @@ func nativeNormalize(drama Drama) nativeDrama {
 	if onlineDate == "" {
 		onlineDate = strings.TrimSpace(drama.OnlineDate)
 	}
-	return nativeDrama{MetadataSchema: 1, ID: id, Source: source, SourceID: sourceID, DoubanID: strings.TrimSpace(drama.DoubanID), Title: drama.DisplayTitle(),
+	return nativeDrama{MetadataSchema: 1, ID: id, Source: source, SourceID: sourceID,
+		SeriesGroupID: strings.TrimSpace(drama.SeriesGroupID),
+		SeriesSeasonNumber: drama.SeriesSeasonNumber,
+		SeriesSeasonUnit: strings.TrimSpace(drama.SeriesSeasonUnit),
+		DoubanID: strings.TrimSpace(drama.DoubanID), Title: drama.DisplayTitle(),
 		Description: firstNonEmpty(drama.Desc, drama.Intro), Cover: cover, CoverCandidates: candidates, Episodes: episodes,
 		EpisodesVerified: drama.EpisodesVerified || episodes > 0,
 		Category: nativeDramaCategory(drama), VIP: drama.VIP,
