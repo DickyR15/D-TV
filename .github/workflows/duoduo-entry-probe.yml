@@ -976,9 +976,9 @@ jobs:
               },
               "1192": {
                       "aliases": {"奉子成婚"},
-                      "year": "2001",
-                      "address": "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
-                      "label": "Fuji Creative official Shotgun Marriage artwork (2001)",
+                      "year": "2025",
+                      "address": "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+                      "label": "Official 2025 Japanese anime デキちゃうまで婚 key visual",
                   },
                   "66452": {
                       "aliases": {"逆愛2後會無期", "逆爱2后会无期", "逆愛2：後會無期", "逆爱2：后会无期"},
@@ -1394,7 +1394,10 @@ jobs:
                           continue
                       episode_count += 1
                       if urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
-                          detail_direct.append((str(player.get("show") or name), episode_title.strip(), address))
+                          detail_direct.append((
+                              f"{player.get('show') or name} [{name.strip()}]",
+                              episode_title.strip(), address
+                          ))
               _, aggregate_payload = api(
                   "/api.php/web/internal/search_aggregate", {"vod_id": vod_id}
               )
@@ -1410,7 +1413,8 @@ jobs:
                       address = address.strip()
                       if address and urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
                           aggregate_direct.append((
-                              str(line.get("site_name") or line.get("site_key") or "aggregate"),
+                              f"{line.get('site_name') or line.get('site_key') or 'aggregate'} "
+                              f"[{line.get('site_key') or line.get('vod_play_from') or 'no-key'}]",
                               episode_title.strip(), address
                           ))
               detail_episode_count = episode_count
@@ -1419,8 +1423,9 @@ jobs:
               seen = set()
               direct = []
               for item in detail_direct + aggregate_direct:
-                  if item[2] not in seen:
-                      seen.add(item[2])
+                  identity = (item[0].strip().casefold(), item[2])
+                  if identity not in seen:
+                      seen.add(identity)
                       direct.append(item)
               print(
                   f"SINGLE_INFERNO id={vod_id} title={title!r} episodes={episode_count} "
@@ -1434,7 +1439,25 @@ jobs:
                   raise RuntimeError(
                       f"單身即地獄 第五季 id={vod_id}: episodes exist but no direct HLS/MP4 links"
                   )
-              for line_name, episode_title, address in direct[:4]:
+              # Probe one representative episode from every distinct public
+              # playback source, rather than four episodes from whichever line
+              # happens to sort first. This catches a broken first line without
+              # misclassifying the whole title when another line still works.
+              probe_candidates = []
+              seen_probe_lines = set()
+              for item in direct:
+                  line_name, episode_title, address = item
+                  host = (urlsplit(address).hostname or "").casefold()
+                  identity = (line_name.strip().casefold(), host)
+                  if identity in seen_probe_lines:
+                      continue
+                  seen_probe_lines.add(identity)
+                  probe_candidates.append(item)
+              print(
+                  f"SINGLE_INFERNO_PLAYBACK_LINES={len(probe_candidates)} "
+                  f"samples={[(name, episode, urlsplit(address).netloc) for name, episode, address in probe_candidates[:12]]}"
+              )
+              for line_name, episode_title, address in probe_candidates[:12]:
                   single_inferno_checked += 1
                   ok, message = probe_media(address, api_base + "/")
                   referer = "active-api-mirror"
@@ -1902,8 +1925,9 @@ jobs:
               },
               "1192": {
                       "aliases": {"奉子成婚"},
-                      "address": "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
-                      "label": "Fuji Creative official Shotgun Marriage artwork (2001)",
+                      "year": "2025",
+                      "address": "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+                      "label": "Official 2025 Japanese anime デキちゃうまで婚 key visual",
                   },
                   "66452": {
                       "aliases": {"逆愛2後會無期", "逆爱2后会无期", "逆愛2：後會無期", "逆爱2：后会无期"},

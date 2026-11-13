@@ -478,15 +478,16 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		address: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
 	},
 	{
-		// Duoduo ID 1192 is the 2001 Fuji TV series できちゃった結婚
-		// (Shotgun Marriage). Prefer the programme distributor's official
-		// artwork because the source CDN is unavailable and Douban is blocked.
-		// The mapping is restricted to this exact provider ID and title.
+		// Duoduo ID 1192 is the 2025 Japanese anime デキちゃうまで婚.
+		// Use the official programme site's key visual because the source CDN
+		// has no public DNS record. Require the exact ID, anime category and year.
 		title: "奉子成婚",
 		source: sourceDuoduo,
 		sourceID: "1192",
+		year: "2025",
+		workType: "anime",
 		preferred: true,
-		address: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+		address: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 	},
 	{
 		// Duoduo ID 66452 is the 2014 micro-film 逆愛2後會無期.

@@ -312,9 +312,9 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 			want: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
 		},
 		{
-			name: "Duoduo 1192 Shotgun Marriage uses Fuji Creative official artwork",
-			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
-			want: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+			name: "Duoduo 1192 奉子成婚 uses the official 2025 anime key visual",
+			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
+			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 		},
 		{
 			name: "Duoduo 66452 逆愛2後會無期 uses exact-record archive artwork as fallback",
@@ -359,9 +359,9 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 			want: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
 		},
 		{
-			name: "Shotgun Marriage 2001",
-			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚"},
-			want: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+			name: "奉子成婚 2025 Japanese anime",
+			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
+			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 		},
 	}
 	for _, tc := range tests {
@@ -394,6 +394,9 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{ID: "duoduo:77681", Title: "獨角獸學院：秘密揭開第二章", Category: "動漫", OnlineDate: "2026"},
 		{ID: "retired-source:77681", Title: "獨角獸學院：秘密揭開第一章", Category: "動漫", OnlineDate: "2026"},
 		{ID: "duoduo:1193", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
+		{ID: "duoduo:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2025"},
+		{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2001"},
+		{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}},
 		{ID: "duoduo:87222", Title: "單身即地獄 第五季", Category: "劇集", OnlineDate: "2026"},
 		{ID: "duoduo:87221", Title: "單身即地獄 第四季", Category: "劇集", OnlineDate: "2025"},
 		{ID: "duoduo:59903", Title: "明星大偵探 第二季", Category: "綜藝", OnlineDate: "2017"},
