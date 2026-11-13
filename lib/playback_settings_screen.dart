@@ -47,6 +47,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late bool _preloadEnabled;
   late bool _autoAdvance;
   late bool _autoPictureInPicture;
+  late bool _desktopAlwaysOnTop =
+      widget.store.playbackPreferences.desktopAlwaysOnTop;
   bool _pictureInPictureSupported = false;
   bool _playbackValuesInitialized = false;
   bool? _compatibleRendering;
@@ -127,6 +129,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           preload: _preloadEnabled,
           autoAdvance: _autoAdvance,
           autoPictureInPicture: _autoPictureInPicture,
+          desktopAlwaysOnTop: _desktopAlwaysOnTop,
         ),
       );
       if (mounted) onSaved?.call();
@@ -185,6 +188,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateAutoPictureInPicture(bool value) {
     setState(() => _autoPictureInPicture = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateDesktopAlwaysOnTop(bool value) {
+    setState(() => _desktopAlwaysOnTop = value);
     unawaited(_persistPreferences());
   }
 
@@ -283,6 +291,17 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               },
             ),
             const SizedBox(height: 20),
+            if (Platform.isWindows || Platform.isMacOS)
+              SwitchListTile(
+                key: const ValueKey('playback-desktop-always-on-top'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('播放視窗置頂'),
+                subtitle: const Text('播放期間讓 D TV 視窗保持在其他視窗上方；離開播放時自動還原。'),
+                value: _desktopAlwaysOnTop,
+                onChanged: _updateDesktopAlwaysOnTop,
+              ),
+            if (Platform.isWindows || Platform.isMacOS)
+              const SizedBox(height: 8),
             DropdownButtonFormField<TelevisionDecoder>(
               key: const ValueKey('playback-decoder'),
               initialValue: _decoder,
