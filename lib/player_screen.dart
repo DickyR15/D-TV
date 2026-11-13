@@ -65,6 +65,7 @@ class PlayerScreen extends StatefulWidget {
     required this.repository,
     required this.store,
     this.initialPosition = 0,
+    this.preparedPlan,
     this.localOnly = false,
     this.allowOnlineFallback = true,
     this.mediaId,
@@ -79,6 +80,8 @@ class PlayerScreen extends StatefulWidget {
   final DramaDetail detail;
   final int initialIndex;
   final double initialPosition;
+  /// A detail-page pre-resolved plan transferred to the playback screen.
+  final PlaybackPlan? preparedPlan;
   final bool localOnly;
   final bool allowOnlineFallback;
   final String? mediaId;
@@ -637,7 +640,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _play(
         _index,
         position: widget.initialPosition,
-        handoffPlan: handoff?.plan,
+        handoffPlan: handoff?.plan ?? widget.preparedPlan,
         // A clean-player restart is part of automatic recovery; don't flash
         // the control overlay while the replacement stream begins.
         showControlsOnReady: !widget.recoveryRestarted,
