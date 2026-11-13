@@ -598,6 +598,7 @@ class NativeRepository extends AppRepository {
         'cover',
         'prepareCover',
         'detail',
+        'seasons',
         'metadata',
         'resolve',
         'preload',
