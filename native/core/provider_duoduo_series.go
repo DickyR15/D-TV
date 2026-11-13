@@ -87,6 +87,45 @@ func duoduoSeriesGroupID(base, unit string) string {
 	return "duoduo-series:" + duoduoSeriesTitleKey(base) + ":" + unit
 }
 
+func duoduoEpisodeValueCount(value any) int {
+	raw := strings.TrimSpace(fmt.Sprint(value))
+	if raw == "" || raw == "<nil>" {
+		return 0
+	}
+	if count, err := strconv.Atoi(raw); err == nil && count > 0 && count <= 100000 {
+		return count
+	}
+	if match := reEpisodeNumber.FindStringSubmatch(raw); len(match) > 0 {
+		for _, candidate := range match[1:] {
+			if count, err := strconv.Atoi(candidate); err == nil && count > 0 && count <= 100000 {
+				return count
+			}
+		}
+	}
+	return 0
+}
+
+// Duoduo catalog rows store episode totals in several legacy aliases; Episodes
+// itself may be empty. Resolve the known fields before classifying a season.
+func duoduoDramaEpisodeCount(drama Drama) int {
+	for _, value := range []any{
+		drama.Episodes,
+		drama.EpisodeCount,
+		drama.EpisodeCountSnake,
+		drama.TotalEpisode,
+		drama.TotalEpisodeSnake,
+		drama.ChapterCount,
+		drama.ChapterCountSnake,
+		drama.Total,
+		drama.Remark,
+	} {
+		if count := duoduoEpisodeValueCount(value); count > 0 {
+			return count
+		}
+	}
+	return 0
+}
+
 func duoduoDramaFromNative(drama nativeDrama) Drama {
 	return Drama{
 		ID: drama.ID, Source: drama.Source, SourceID: drama.SourceID,
@@ -212,7 +251,10 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 		item.SeriesGroupID = groupID
 		item.SeriesSeasonNumber = number
 		item.SeriesSeasonUnit = unit
+		episodeCount := duoduoDramaEpisodeCount(item)
 		native := nativeNormalize(item)
+		native.Episodes = episodeCount
+		native.EpisodesVerified = episodeCount > 0
 		native.SeriesGroupID = groupID
 		native.SeriesSeasonNumber = number
 		native.SeriesSeasonUnit = unit
@@ -222,8 +264,8 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 			Number: number,
 			Label: label,
 			Subtitle: item.Remark,
-			Upcoming: native.Episodes <= 0,
-			Playable: native.Episodes > 0,
+			Upcoming: episodeCount <= 0,
+			Playable: episodeCount > 0,
 		})
 	}
 	return seasons, nil
