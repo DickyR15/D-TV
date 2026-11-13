@@ -39,6 +39,7 @@ import 'sources_screen.dart';
 import 'lan_controller.dart';
 import 'lan_screen.dart';
 import 'video_enhancement.dart';
+import 'video_enhancement_preferences.dart';
 import 'video_output_size.dart';
 
 const _androidPlayerEngine = String.fromEnvironment(
@@ -371,7 +372,12 @@ class _PlayerScreenState extends State<PlayerScreen>
             ),
           )
         : null;
-    if (Platform.isWindows && _video != null && _player.platform is NativePlayer) {
+    if (shouldAdjustWindowsVideoOutput(
+          isWindows: Platform.isWindows,
+          desktopMiniPlayer: widget.desktopMiniPlayer,
+        ) &&
+        _video != null &&
+        _player.platform is NativePlayer) {
       _videoOutputSize = VideoOutputSizeAdapter(
         _video!,
         onFailure: () => DiaryService.add('[MPV] output-size-update=failed'),
@@ -383,7 +389,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     _enhancement = VideoEnhancementController(
       player: _player,
       video: _video,
-      preferences: preferences.enhancement,
+      // Keep the independently resizable mini-player on native MPV output
+      // sizing. Its Flutter texture scales with the window; shader/output-size
+      // reconfiguration during WM_SIZE is not needed in this compact surface.
+      preferences: widget.desktopMiniPlayer
+          ? const VideoEnhancementPreferences()
+          : preferences.enhancement,
       category: widget.detail.drama.category,
       tags: widget.detail.drama.tags,
     );
@@ -3330,8 +3341,15 @@ class _PlayerScreenState extends State<PlayerScreen>
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_closed) {
               _enhancement.setViewport(pixels, television: _television);
-              if (Platform.isWindows && _videoOutputSize != null) {
-                final target = pixels.width > 0 && pixels.height > 0
+              if (shouldAdjustWindowsVideoOutput(
+                    isWindows: Platform.isWindows,
+                    desktopMiniPlayer: widget.desktopMiniPlayer,
+                  ) &&
+                  _videoOutputSize != null) {
+                final target = pixels.width.isFinite &&
+                        pixels.height.isFinite &&
+                        pixels.width > 0 &&
+                        pixels.height > 0
                     ? pixels
                     : null;
                 unawaited(_videoOutputSize!.setTarget(target).catchError((Object error) {
