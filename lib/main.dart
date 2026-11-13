@@ -9,11 +9,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:screen_retriever/screen_retriever.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 import 'desktop_window_state.dart';
-import 'desktop_mini_player.dart';
-import 'desktop_mini_player_bridge.dart';
 
 import 'core_bridge.dart';
 import 'device_registration.dart';
@@ -43,39 +40,6 @@ Future<void> main(List<String> args) async {
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
-
-  if (desktop) {
-    String currentWindowArguments = '';
-    try {
-      final currentWindow = await WindowController.fromCurrentEngine();
-      currentWindowArguments = currentWindow.arguments;
-    } catch (_) {
-      // Keep the main application usable if multi-window support is unavailable.
-    }
-    final miniPlayerArguments =
-        DesktopMiniPlayerArguments.tryParse(currentWindowArguments);
-    if (miniPlayerArguments != null) {
-      windowManager.waitUntilReadyToShow(
-        const WindowOptions(
-          size: Size(660, 390),
-          center: true,
-          title: 'D TV 小窗播放器',
-        ),
-        () async {
-          await windowManager.setMinimumSize(const Size(480, 300));
-          await windowManager.setResizable(true);
-          await windowManager.setAlwaysOnTop(true);
-          await windowManager.show();
-          await windowManager.focus();
-        },
-      );
-      runApp(DesktopMiniPlayerApp(arguments: miniPlayerArguments));
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_initializeUiLocalizationSafely());
-      });
-      return;
-    }
-  }
 
   if (desktop) {
     windowManager.waitUntilReadyToShow(
