@@ -187,7 +187,10 @@ void main() {
         FollowStatus.watched,
       );
 
-      await store.refreshDramas([officialSeasonOne, officialSeasonTwo]);
+      await store.registerHongguoSeriesSeasons(
+        officialSeasonTwo.withSeriesGroupId(''),
+        [officialSeasonOne, officialSeasonTwo],
+      );
       expect(store.favorites, hasLength(1));
       expect(store.favorites.single.id, officialSeasonOne.id);
       expect(store.following(officialSeasonOne.id)!.manuallyWatched, isTrue);
