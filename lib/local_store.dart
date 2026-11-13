@@ -168,6 +168,12 @@ class LocalStore extends ChangeNotifier {
   final SharedPreferences preferences;
   final Future<String> Function(String pin, String salt) _pinHasher;
   final LocalFiles? _fileStore;
+
+  bool get hasUnavailableLocalDataFiles =>
+      _fileStore?.temporarilyUnavailableFiles.isNotEmpty ?? false;
+
+  List<String> get unavailableLocalDataFiles =>
+      List.unmodifiable(_fileStore?.temporarilyUnavailableFiles ?? const <String>{});
   // Only a player window created by an already-unlocked app session may use
   // this. Profile and per-source permissions are still loaded and enforced.
   final bool _assumeAuthenticated;
