@@ -28,7 +28,7 @@ var (
 )
 
 type heitaoSeriesMeta struct {
-	Type        string `json:"@type"`
+	Type        any    `json:"@type"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Image       any    `json:"image"`
@@ -56,6 +56,24 @@ func heitaoScriptText(node *html.Node) string {
 	return strings.TrimSpace(builder.String())
 }
 
+func heitaoHasSeriesType(value any) bool {
+	matches := func(raw string) bool {
+		raw = strings.TrimSpace(strings.ToLower(raw))
+		return raw == "tvseries" || strings.HasSuffix(raw, "/tvseries") || strings.HasSuffix(raw, "#tvseries")
+	}
+	switch typed := value.(type) {
+	case string:
+		return matches(typed)
+	case []any:
+		for _, item := range typed {
+			if value, ok := item.(string); ok && matches(value) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func heitaoSeriesMetadata(document *html.Node) heitaoSeriesMeta {
 	for _, script := range providerHTMLNodes(document, func(node *html.Node) bool {
 		return node.Type == html.ElementNode && node.Data == "script" &&
@@ -65,21 +83,82 @@ func heitaoSeriesMetadata(document *html.Node) heitaoSeriesMeta {
 		if text == "" {
 			continue
 		}
+
 		var list []heitaoSeriesMeta
 		if json.Unmarshal([]byte(text), &list) == nil {
 			for _, item := range list {
-				if strings.EqualFold(item.Type, "TVSeries") {
+				if heitaoHasSeriesType(item.Type) {
 					return item
 				}
 			}
 			continue
 		}
+
 		var single heitaoSeriesMeta
-		if json.Unmarshal([]byte(text), &single) == nil && strings.EqualFold(single.Type, "TVSeries") {
+		if json.Unmarshal([]byte(text), &single) == nil && heitaoHasSeriesType(single.Type) {
 			return single
+		}
+
+		// Some sites wrap the series object in a Schema.org @graph array.
+		var graph struct {
+			Graph []heitaoSeriesMeta `json:"@graph"`
+		}
+		if json.Unmarshal([]byte(text), &graph) == nil {
+			for _, item := range graph.Graph {
+				if heitaoHasSeriesType(item.Type) {
+					return item
+				}
+			}
 		}
 	}
 	return heitaoSeriesMeta{}
+}
+
+func heitaoMetaDescription(document *html.Node) string {
+	// Prefer Open Graph, then standard and Twitter description tags.
+	for _, wanted := range []string{"og:description", "description", "twitter:description"} {
+		for _, node := range providerHTMLNodes(document, func(node *html.Node) bool {
+			return node.Type == html.ElementNode && node.Data == "meta"
+		}) {
+			name := strings.ToLower(strings.TrimSpace(firstNonEmpty(
+				providerHTMLAttr(node, "property"),
+				providerHTMLAttr(node, "name"),
+			)))
+			if name != wanted {
+				continue
+			}
+			if description := providerHTMLPlainText(providerHTMLAttr(node, "content")); description != "" {
+				return description
+			}
+		}
+	}
+	return ""
+}
+
+func heitaoSynopsis(document *html.Node, metadata heitaoSeriesMeta) string {
+	candidates := []string{
+		providerHTMLPlainText(fmt.Sprint(metadata.Description)),
+		heitaoMetaDescription(document),
+	}
+	// Older pages sometimes put the synopsis in a visible detail block rather
+	// than JSON-LD or a meta tag. Limit fallbacks to common detail containers.
+	for _, className := range []string{
+		"module-info-content",
+		"detail-content",
+		"detail-desc",
+		"vod_content",
+		"desc",
+	} {
+		if block := providerHTMLFirstClass(document, className); block != nil {
+			candidates = append(candidates, providerHTMLText(block))
+		}
+	}
+	for _, candidate := range candidates {
+		if description := providerHTMLPlainText(candidate); description != "" {
+			return truncate(description, 12000)
+		}
+	}
+	return ""
 }
 
 func heitaoCategoryName(document *html.Node) string {
@@ -352,7 +431,7 @@ func (d *Downloader) fetchHeitaoDetail(ctx context.Context, sourceID string) (Dr
 			}
 		}
 	}
-	description := truncate(meta.Description, 12000)
+	description := heitaoSynopsis(document, meta)
 	drama := Drama{
 		ID: providerDramaID(sourceHeitao, sourceID), Source: sourceHeitao, SourceID: sourceID,
 		Title: truncate(name, 512), Name: truncate(name, 512),
