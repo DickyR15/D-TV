@@ -161,6 +161,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   DateTime? _lastNestedRoutePopAt;
   int _mobileTab = 0;
   bool _autoAdvance = true;
+  bool _advancingOfficialSeason = false;
   Timer? _sleepTimer;
   int _sleepMinutes = 0;
   bool _sleepAtEpisodeEnd = false;
@@ -458,6 +459,16 @@ class _PlayerScreenState extends State<PlayerScreen>
               !_panelOpen &&
               _index + 1 < widget.detail.episodes.length) {
             _play(_index + 1, showControlsOnReady: false);
+          } else if (_autoAdvance &&
+              _foreground &&
+              !_panelOpen &&
+              widget.mediaId == null &&
+              !widget.desktopMiniPlayer &&
+              widget.detail.drama.source == 'hongguo') {
+            _playIntent = false;
+            _interactions.cancel();
+            unawaited(_player.pause());
+            unawaited(_advanceOfficialSeason());
           } else {
             _playIntent = false;
             _interactions.cancel();
@@ -2562,6 +2573,91 @@ class _PlayerScreenState extends State<PlayerScreen>
         setState(() => _panelOpen = false);
         _playerFocus.requestFocus();
       }
+    }
+  }
+
+  Future<void> _advanceOfficialSeason() async {
+    if (_advancingOfficialSeason ||
+        _closed ||
+        !mounted ||
+        widget.store.profileEpoch != _profileEpoch) {
+      return;
+    }
+    _advancingOfficialSeason = true;
+    final generation = _generation;
+    final current = widget.detail.drama;
+    try {
+      await _saveProgress(flush: true);
+      final seasons = await widget.repository.seasons(current);
+      if (_closed ||
+          !mounted ||
+          generation != _generation ||
+          widget.store.profileEpoch != _profileEpoch) {
+        return;
+      }
+      final currentIndex = seasons.indexWhere(
+        (season) => season.drama.id == current.id,
+      );
+      if (currentIndex < 0 || currentIndex + 1 >= seasons.length) {
+        DiaryService.add(
+          '[Series] no_next_official_season current=${playbackDiagnosticId(current.id)}',
+        );
+        return;
+      }
+      final next = seasons[currentIndex + 1];
+      if (next.upcoming || !next.playable) {
+        _notice(
+          next.upcoming
+              ? '本季已播放完畢，下一季尚未上線。'
+              : '本季已播放完畢，下一季目前無法播放。',
+        );
+        return;
+      }
+
+      final nextDetail = await widget.repository.detail(next.drama);
+      if (_closed ||
+          !mounted ||
+          generation != _generation ||
+          widget.store.profileEpoch != _profileEpoch) {
+        return;
+      }
+      if (nextDetail.episodes.isEmpty) {
+        _notice('下一季尚未提供可播放的集數。');
+        return;
+      }
+      DiaryService.add(
+        '[Series] auto_advance current=${playbackDiagnosticId(current.id)} next=${playbackDiagnosticId(next.drama.id)}',
+      );
+      final merged = widget.repository.catalogUpdates
+          .current(next.drama)
+          .merge(nextDetail.drama);
+      await Navigator.of(context).pushReplacement<void, void>(
+        PageRouteBuilder<void>(
+          settings: const RouteSettings(name: 'DTVOfficialSeasonAdvance'),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(
+            detail: DramaDetail(
+              merged,
+              nextDetail.episodes,
+              warning: nextDetail.warning,
+            ),
+            initialIndex: 0,
+            initialPosition: 0,
+            repository: widget.repository,
+            store: widget.store,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!_closed && mounted && generation == _generation) {
+        DiaryService.add(
+          '[Series] auto_advance_failed error=${playbackDiagnosticError(error)}',
+        );
+        _notice('下一季資料暫時無法取得，播放已停止。');
+      }
+    } finally {
+      _advancingOfficialSeason = false;
     }
   }
 
