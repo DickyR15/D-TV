@@ -29,6 +29,9 @@ class PlayerMenu extends StatefulWidget {
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
+    this.sleepMinutes = 0,
+    this.sleepAtEpisodeEnd = false,
+    this.onSleepTimer,
   });
 
   final PlayerMenuSection section;
@@ -43,6 +46,9 @@ class PlayerMenu extends StatefulWidget {
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
+  final int sleepMinutes;
+  final bool sleepAtEpisodeEnd;
+  final Future<void> Function(int minutes, bool episodeEnd)? onSleepTimer;
   final ValueChanged<int> onEpisode;
   final Future<void> Function(PlaybackPreferences) onPreferences;
   final Future<void> Function() onFavorite;
@@ -240,6 +246,43 @@ class _PlayerMenuState extends State<PlayerMenu> {
                             preferences.copyWith(aspectRatio: ratio),
                           ),
                         ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
+        if (all && widget.onSleepTimer != null) ...[
+          const Text('睡眠計時'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                key: const ValueKey('sleep-timer-off'),
+                label: const Text('關閉'),
+                selected: widget.sleepMinutes == 0 && !widget.sleepAtEpisodeEnd,
+                onSelected: _busy
+                    ? null
+                    : (_) => _run(() => widget.onSleepTimer!(0, false)),
+              ),
+              ChoiceChip(
+                key: const ValueKey('sleep-timer-episode'),
+                label: const Text('本集結束'),
+                selected: widget.sleepAtEpisodeEnd,
+                onSelected: _busy
+                    ? null
+                    : (_) => _run(() => widget.onSleepTimer!(0, true)),
+              ),
+              for (final minutes in [15, 30, 60, 90])
+                ChoiceChip(
+                  key: ValueKey('sleep-timer-$minutes'),
+                  label: Text('$minutes 分鐘'),
+                  selected: widget.sleepMinutes == minutes &&
+                      !widget.sleepAtEpisodeEnd,
+                  onSelected: _busy
+                      ? null
+                      : (_) => _run(() => widget.onSleepTimer!(minutes, false)),
                 ),
             ],
           ),
