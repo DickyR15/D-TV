@@ -37,6 +37,7 @@ class DetailScreen extends StatefulWidget {
 
 class _DetailScreenState extends State<DetailScreen> {
   DramaDetail? _detail;
+  late Drama _activeDrama;
   List<DramaSeason> _seriesSeasons = const [];
   String? _seriesSeasonsError;
   bool _seriesSeasonsLoading = false;
@@ -56,7 +57,7 @@ class _DetailScreenState extends State<DetailScreen> {
       ? SourceDiagnosticsButton(
           repository: widget.repository,
           store: widget.store,
-          drama: widget.drama,
+          drama: _activeDrama,
         )
       : null;
 
@@ -64,6 +65,7 @@ class _DetailScreenState extends State<DetailScreen> {
   void initState() {
     super.initState();
     _profileEpoch = widget.store.profileEpoch;
+    _activeDrama = widget.drama;
     widget.store.addListener(_onStoreChanged);
     _load();
   }
@@ -74,6 +76,10 @@ class _DetailScreenState extends State<DetailScreen> {
     if (oldWidget.store != widget.store) {
       oldWidget.store.removeListener(_onStoreChanged);
       widget.store.addListener(_onStoreChanged);
+    }
+    if (oldWidget.drama.id != widget.drama.id) {
+      _activeDrama = widget.drama;
+      unawaited(_load());
     }
   }
 
@@ -94,22 +100,23 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<void> _load() async {
     final generation = ++_generation;
+    final requestedDrama = _activeDrama;
     setState(() {
       _loading = true;
       _error = null;
       _seriesSeasons = const [];
       _seriesSeasonsError = null;
-      _seriesSeasonsLoading = widget.drama.source == SourceSite.hongguo.id;
+      _seriesSeasonsLoading = requestedDrama.source == SourceSite.hongguo.id;
     });
     try {
-      final detail = await widget.repository.detail(widget.drama);
+      final detail = await widget.repository.detail(requestedDrama);
       if (!mounted ||
           generation != _generation ||
           _profileEpoch != widget.store.profileEpoch) {
         return;
       }
       final merged = widget.repository.catalogUpdates
-          .current(widget.drama)
+          .current(requestedDrama)
           .merge(detail.drama);
       final availableLines = _playLineNames(detail.episodes);
       final selectedLine = availableLines.contains(_selectedPlayLine)
@@ -176,7 +183,7 @@ class _DetailScreenState extends State<DetailScreen> {
         _loading = false;
       });
       widget.repository.catalogUpdates.publish(
-        widget.repository.catalogUpdates.current(widget.drama),
+        widget.repository.catalogUpdates.current(requestedDrama),
         retryCover: true,
       );
     }
@@ -310,36 +317,45 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Future<void> _openSeriesDrama(Drama drama) async {
+    final anchor = _detail?.drama ?? _activeDrama;
     if (_profileEpoch != widget.store.profileEpoch ||
-        drama.id == (_detail?.drama.id ?? widget.drama.id)) {
+        drama.id == anchor.id ||
+        !widget.store.allowsSource(drama.source)) {
       return;
     }
-    final anchor = _detail?.drama ?? widget.drama;
     if (widget.store.following(anchor.id)?.seriesSeasons[drama.id]?.read ==
         false) {
       await saveUserChange(
         context,
         () => widget.store.markSeriesSeasonRead(anchor.id, drama.id),
       );
-      if (!mounted) return;
+      if (!mounted ||
+          _profileEpoch != widget.store.profileEpoch ||
+          drama.id == _activeDrama.id) {
+        return;
+      }
     }
-    CoverRequestScheduler.pauseBackground();
-    await Navigator.of(context)
-        .pushReplacement<void, void>(
-          MaterialPageRoute<void>(
-            builder: (_) => DetailScreen(
-              drama: drama,
-              repository: widget.repository,
-              store: widget.store,
-            ),
-          ),
-        )
-        .whenComplete(CoverRequestScheduler.resumeBackground);
+    setState(() {
+      _activeDrama = drama;
+      _detail = null;
+      _error = null;
+      _loading = true;
+      _selectedPlayLine = '';
+      _episodePage = 0;
+      _episodesExpanded = false;
+      _expandedDescription = false;
+      _seriesSeasons = const [];
+      _seriesSeasonsError = null;
+      _seriesSeasonsLoading = drama.source == SourceSite.hongguo.id;
+    });
+    // Keep the same details route and reload only the selected season's data.
+    // Watch progress and favorites remain keyed by each official season ID.
+    unawaited(_load());
   }
 
   @override
   Widget build(BuildContext context) {
-    final drama = _detail?.drama ?? widget.drama;
+    final drama = _detail?.drama ?? _activeDrama;
     final watched = widget.store.watched(drama.id);
     final allEpisodes = _detail?.episodes ?? <Episode>[];
     final playLines = _playLineNames(allEpisodes);
