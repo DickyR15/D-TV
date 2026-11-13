@@ -58,6 +58,26 @@ void main() {
     title: '無字尾系列 第2季',
     episodes: 10,
   );
+  const officialSeasonOne = Drama(
+    id: 'hongguo:1111111111111111111',
+    source: 'hongguo',
+    sourceId: '1111111111111111111',
+    seriesGroupId: '1111111111111111111',
+    seriesSeasonNumber: 1,
+    seriesSeasonUnit: '季',
+    title: '官方系列第一季',
+    episodes: 12,
+  );
+  const officialSeasonTwo = Drama(
+    id: 'hongguo:2222222222222222222',
+    source: 'hongguo',
+    sourceId: '2222222222222222222',
+    seriesGroupId: '1111111111111111111',
+    seriesSeasonNumber: 2,
+    seriesSeasonUnit: '季',
+    title: '官方系列第二季',
+    episodes: 8,
+  );
   Future<LocalStore> create([Map<String, Object> values = const {}]) async {
     SharedPreferences.setMockInitialValues(values);
     final store = LocalStore(await SharedPreferences.getInstance());
@@ -106,6 +126,82 @@ void main() {
       expect(restarted.following('hongguo:follow')!.readEpisodes, 12);
       expect(restarted.following('hongguo:follow')!.newEpisodes, 2);
       expect(restarted.history, isEmpty);
+    },
+  );
+
+  test(
+    'official Redfruit seasons share one favorite but keep per-season history',
+    () async {
+      final store = await create();
+      await store.registerHongguoSeriesSeasons(
+        officialSeasonTwo,
+        [officialSeasonOne, officialSeasonTwo],
+      );
+      expect(
+        store.seriesDramasFor(officialSeasonTwo).map((drama) => drama.id),
+        [officialSeasonOne.id, officialSeasonTwo.id],
+      );
+
+      await store.toggleFavorite(officialSeasonTwo);
+      expect(store.favorites.map((drama) => drama.id), [
+        officialSeasonOne.id,
+      ]);
+      expect(store.isFavorite(officialSeasonOne.id), isTrue);
+      expect(store.isFavorite(officialSeasonTwo.id), isTrue);
+      expect(store.following(officialSeasonOne.id), isNotNull);
+      expect(store.following(officialSeasonTwo.id), isNotNull);
+
+      await store.saveWatch(
+        WatchEntry(
+          drama: officialSeasonTwo,
+          episode: 3,
+          position: 24,
+          duration: 60,
+          updatedAt: DateTime.utc(2026, 11, 13, 12),
+        ),
+      );
+      expect(store.watched(officialSeasonTwo.id)!.episode, 3);
+      await store.toggleFavorite(officialSeasonOne);
+      expect(store.favorites, isEmpty);
+      expect(store.following(officialSeasonTwo.id), isNull);
+      expect(store.watched(officialSeasonTwo.id)!.episode, 3);
+    },
+  );
+
+  test(
+    'official season registration consolidates old per-season favorites',
+    () async {
+      final store = await create();
+      await store.toggleFavorite(
+        officialSeasonOne.withSeriesGroupId(''),
+      );
+      await store.setFollowStatus(
+        officialSeasonOne.withSeriesGroupId(''),
+        FollowStatus.watching,
+      );
+      await store.toggleFavorite(
+        officialSeasonTwo.withSeriesGroupId(''),
+      );
+      await store.setFollowStatus(
+        officialSeasonTwo.withSeriesGroupId(''),
+        FollowStatus.watched,
+      );
+
+      await store.registerHongguoSeriesSeasons(
+        officialSeasonTwo.withSeriesGroupId(''),
+        [officialSeasonOne, officialSeasonTwo],
+      );
+      expect(store.favorites, hasLength(1));
+      expect(store.favorites.single.id, officialSeasonOne.id);
+      expect(store.following(officialSeasonOne.id)!.manuallyWatched, isTrue);
+      expect(store.following(officialSeasonTwo.id)!.manuallyWatched, isTrue);
+      expect(store.following(officialSeasonTwo.id)!.newSeasons, 1);
+
+      await store.markSeriesSeasonRead(
+        officialSeasonTwo.id,
+        officialSeasonTwo.id,
+      );
+      expect(store.following(officialSeasonOne.id)!.newSeasons, 0);
     },
   );
 
