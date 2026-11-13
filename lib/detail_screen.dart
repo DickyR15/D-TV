@@ -17,6 +17,7 @@ import 'widgets.dart';
 import 'ui_localization.dart';
 import 'sources_screen.dart';
 import 'episode_browser.dart';
+import 'playback_preloader.dart';
 
 
 class DetailScreen extends StatefulWidget {
@@ -38,6 +39,7 @@ class DetailScreen extends StatefulWidget {
 class _DetailScreenState extends State<DetailScreen> {
   DramaDetail? _detail;
   late Drama _activeDrama;
+  late final PlaybackPreloader _detailPreloader;
   List<DramaSeason> _seriesSeasons = const [];
   String? _seriesSeasonsError;
   bool _seriesSeasonsLoading = false;
@@ -66,6 +68,7 @@ class _DetailScreenState extends State<DetailScreen> {
     super.initState();
     _profileEpoch = widget.store.profileEpoch;
     _activeDrama = widget.drama;
+    _detailPreloader = PlaybackPreloader(widget.repository);
     widget.store.addListener(_onStoreChanged);
     _load();
   }
@@ -87,6 +90,7 @@ class _DetailScreenState extends State<DetailScreen> {
   void dispose() {
     _detailScroll.dispose();
     _startPlayFocus.dispose();
+    _detailPreloader.dispose();
     widget.store.removeListener(_onStoreChanged);
     _generation++;
     super.dispose();
@@ -101,6 +105,7 @@ class _DetailScreenState extends State<DetailScreen> {
   Future<void> _load() async {
     final generation = ++_generation;
     final requestedDrama = _activeDrama;
+    _detailPreloader.clear();
     setState(() {
       _loading = true;
       _error = null;
@@ -128,6 +133,10 @@ class _DetailScreenState extends State<DetailScreen> {
         detail.episodes,
         selectedLine,
       );
+      final resumeIndex = resumeEpisodeIndex(
+        visibleEpisodes,
+        widget.store.watched(merged.id),
+      );
       setState(() {
         _selectedPlayLine = selectedLine;
         _detail = DramaDetail(merged, detail.episodes, warning: detail.warning);
@@ -153,6 +162,7 @@ class _DetailScreenState extends State<DetailScreen> {
         }
       });
       widget.repository.catalogUpdates.publish(merged, retryCover: true);
+      _prepareDetailPlayback(merged, visibleEpisodes, resumeIndex);
       unawaited(_loadSeriesSeasons(merged, generation));
       unawaited(_supplement(merged, generation));
       await saveUserChange(context, () => widget.store.refreshDrama(merged));
@@ -187,6 +197,33 @@ class _DetailScreenState extends State<DetailScreen> {
         retryCover: true,
       );
     }
+  }
+
+  void _prepareDetailPlayback(
+    Drama drama,
+    List<Episode> episodes,
+    int index,
+  ) {
+    _detailPreloader.clear();
+    if (widget.resumeOnOpen ||
+        episodes.isEmpty ||
+        index < 0 ||
+        index >= episodes.length ||
+        episodes[index].vip ||
+        !widget.store.allowsSource(drama.source)) {
+      return;
+    }
+    final television = AppLayout.isTelevision(context);
+    if (!widget.store.playbackPreferences.preloads(television: television)) {
+      return;
+    }
+    // Prepare only the episode the user is expected to resume. The native
+    // resolver may warm a bounded stream cache, but no player or decoder starts.
+    _detailPreloader.prepare(
+      drama,
+      episodes[index],
+      quality: widget.store.playbackPreferences.quality,
+    );
   }
 
   Future<void> _loadSeriesSeasons(Drama drama, int generation) async {
@@ -300,12 +337,18 @@ class _DetailScreenState extends State<DetailScreen> {
     if (!mounted || _profileEpoch != widget.store.profileEpoch) {
       return;
     }
+    final preparedPlan = _detailPreloader.take(
+      detail.drama,
+      episodes[index],
+      quality: widget.store.playbackPreferences.quality,
+    );
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PlayerScreen(
           detail: playDetail,
           initialIndex: index,
           initialPosition: position,
+          preparedPlan: preparedPlan,
           repository: widget.repository,
           store: widget.store,
         ),
@@ -598,15 +641,15 @@ class _DetailScreenState extends State<DetailScreen> {
   void _selectPlayLine(String? line) {
     if (line == null || line == _selectedPlayLine || _detail == null) return;
     final episodes = _episodesForLine(_detail!.episodes, line);
+    final resumeIndex = resumeEpisodeIndex(
+      episodes,
+      widget.store.watched(_detail!.drama.id),
+    );
     setState(() {
       _selectedPlayLine = line;
-      _episodePage =
-          resumeEpisodeIndex(
-            episodes,
-            widget.store.watched(_detail!.drama.id),
-          ) ~/
-          episodePageSize;
+      _episodePage = resumeIndex ~/ episodePageSize;
     });
+    _prepareDetailPlayback(_detail!.drama, episodes, resumeIndex);
   }
 
   Widget _playLineSelector(List<String> lines) {
