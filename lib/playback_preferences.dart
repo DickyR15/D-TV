@@ -99,6 +99,7 @@ class PlaybackPreferences {
     this.televisionDecoder = TelevisionDecoder.automatic,
     this.autoPictureInPicture = false,
     this.aspectRatio = PlaybackAspectRatio.automatic,
+    this.desktopAlwaysOnTop = false,
   });
 
   final double speed;
@@ -110,6 +111,7 @@ class PlaybackPreferences {
   final TelevisionDecoder televisionDecoder;
   final bool autoPictureInPicture;
   final PlaybackAspectRatio aspectRatio;
+  final bool desktopAlwaysOnTop;
 
   // Fresh installs enable next-episode preloading on phones and TVs.
   // A saved explicit choice (including false) always takes precedence.
@@ -125,6 +127,7 @@ class PlaybackPreferences {
     TelevisionDecoder? televisionDecoder,
     bool? autoPictureInPicture,
     PlaybackAspectRatio? aspectRatio,
+    bool? desktopAlwaysOnTop,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
@@ -135,6 +138,7 @@ class PlaybackPreferences {
     televisionDecoder: televisionDecoder ?? this.televisionDecoder,
     autoPictureInPicture: autoPictureInPicture ?? this.autoPictureInPicture,
     aspectRatio: aspectRatio ?? this.aspectRatio,
+    desktopAlwaysOnTop: desktopAlwaysOnTop ?? this.desktopAlwaysOnTop,
   );
 
   Map<String, dynamic> toJson() => {
@@ -147,6 +151,7 @@ class PlaybackPreferences {
     'televisionDecoderMode': televisionDecoder.name,
     'autoPictureInPicture': autoPictureInPicture,
     'aspectRatioMode': aspectRatio.name,
+    'desktopAlwaysOnTop': desktopAlwaysOnTop,
   };
 
   factory PlaybackPreferences.fromJson(Map<String, dynamic> value) {
@@ -176,6 +181,7 @@ class PlaybackPreferences {
       televisionDecoder: decoder,
       autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
       aspectRatio: aspectRatio,
+      desktopAlwaysOnTop: value['desktopAlwaysOnTop'] as bool? ?? false,
     );
   }
 }
