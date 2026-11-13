@@ -771,6 +771,21 @@ class LocalStore extends ChangeNotifier {
         ),
       );
     }
+    final groupId = anchor.seriesGroupId.isNotEmpty
+        ? anchor.seriesGroupId
+        : _seriesGroupIdFor(anchor.id);
+    if (groupId.isNotEmpty) {
+      final grouped = items.values
+          .where((drama) => drama.seriesGroupId == groupId)
+          .toList()
+        ..sort((a, b) {
+          final season = a.seriesSeasonNumber.compareTo(b.seriesSeasonNumber);
+          return season != 0
+              ? season
+              : naturalTitleCompare(a.title, b.title);
+        });
+      if (grouped.isNotEmpty) return grouped;
+    }
     final current = items.remove(anchor.id) ?? anchor;
     final rest = items.values.toList()
       ..sort((a, b) => naturalTitleCompare(a.title, b.title));
