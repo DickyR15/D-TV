@@ -99,9 +99,15 @@ void main() {
       },
     );
     final second = shutdown.close(
-      disposePlayer: () async => disposeCalls++,
-      notifyMainWindow: () async => notifyCalls++,
-      closeWindow: () async => closeCalls++,
+      disposePlayer: () async {
+        disposeCalls++;
+      },
+      notifyMainWindow: () async {
+        notifyCalls++;
+      },
+      closeWindow: () async {
+        closeCalls++;
+      },
     );
 
     expect(identical(first, second), isTrue);
