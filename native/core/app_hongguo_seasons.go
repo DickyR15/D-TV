@@ -123,6 +123,14 @@ func parseHongguoAppSeasons(result map[string]any) ([]nativeDramaSeason, error) 
 			if item.Label == "" && item.Number > 0 {
 				item.Label = fmt.Sprintf("第%d季", item.Number)
 			}
+			if item.Number > 0 {
+				item.Drama.SeriesSeasonNumber = item.Number
+				if strings.HasSuffix(item.Label, "部") {
+					item.Drama.SeriesSeasonUnit = "部"
+				} else {
+					item.Drama.SeriesSeasonUnit = "季"
+				}
+			}
 
 			subscribeItem, hasSubscribeItem := row["subscribe_item"].(map[string]any)
 			vid := firstNonEmpty(mapString(row, "vid"), mapString(row, "start_vid"))
