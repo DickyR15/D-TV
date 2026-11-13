@@ -168,9 +168,11 @@ class _AppBootstrapState extends State<AppBootstrap>
       final maximized = await windowManager.isMaximized();
       final minimized = await windowManager.isMinimized();
       if (fullScreen || maximized || minimized) return;
-      final current = DesktopWindowState.fromRect(
-        await windowManager.getBounds(),
-      );
+      final bounds = await windowManager.getBounds();
+      // The original desktop window has a 900x560 minimum. A smaller frame
+      // is the in-place mini-player and must never replace the saved main size.
+      if (bounds.width < 900 || bounds.height < 560) return;
+      final current = DesktopWindowState.fromRect(bounds);
       if (current != null) {
         await preferences.setString(
           DesktopWindowState.preferencesKey,
