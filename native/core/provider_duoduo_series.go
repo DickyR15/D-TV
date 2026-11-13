@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	duoduoChineseSeasonTitle = regexp.MustCompile(`(?i)^(.+?)\\s*第\\s*([0-9]{1,3}|[零〇一二三四五六七八九十百]+)\\s*(季|部)\\s*$`)
-	duoduoEnglishSeasonTitle = regexp.MustCompile(`(?i)^(.+?)\\s+(?:season\\s*([0-9]{1,3})|s([0-9]{1,3}))\\s*$`)
+	duoduoChineseSeasonTitle = regexp.MustCompile(`(?i)^(.+?)\s*第\s*([0-9]{1,3}|[零〇一二三四五六七八九十百]+)\s*(季|部)\s*$`)
+	duoduoEnglishSeasonTitle = regexp.MustCompile(`(?i)^(.+?)\s+(?:season\s*([0-9]{1,3})|s([0-9]{1,3}))\s*$`)
 )
 
 func duoduoChineseSeasonNumber(raw string) int {
