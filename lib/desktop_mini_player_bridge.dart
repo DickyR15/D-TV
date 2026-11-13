@@ -89,6 +89,18 @@ Future<WindowController> createDesktopMiniPlayerWindow({
 }
 
 
+/// Prevents a child window that is already closing from attaching a late
+/// PlayerScreen after the parent has resumed its own player.
+class DesktopMiniPlayerStartupGate {
+  bool _closed = false;
+
+  bool get canAttachPlayer => !_closed;
+
+  void close() {
+    _closed = true;
+  }
+}
+
 /// Serializes shutdown of the independent PiP engine. The main window must not
 /// resume its MPV instance until the mini-player has finished disposing its
 /// own native player; closing the OS window is always the final step.
