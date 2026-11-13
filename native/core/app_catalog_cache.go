@@ -89,7 +89,13 @@ func migrateNativeDrama(drama nativeDrama) nativeDrama {
 	// identity as freshly normalized catalog rows, otherwise DramaCover skips
 	// the poster request permanently.
 	if source, sourceID, valid := splitProviderDramaID(drama.ID); valid {
-		drama.ID, drama.Source, drama.SourceID = providerDramaID(source, sourceID), source, sourceID
+		drama.ID, drama.Source = providerDramaID(source, sourceID), source
+		// Heitao may retire an old catalogue ID while preserving the same
+		// title under a replacement provider ID. Keep that resolved SourceID
+		// alias while retaining the original canonical app ID.
+		if source != sourceHeitao || !webProviderNumericID.MatchString(strings.TrimSpace(drama.SourceID)) {
+			drama.SourceID = sourceID
+		}
 	} else {
 		source := canonicalProviderSource(drama.Source)
 		sourceID := strings.TrimSpace(drama.SourceID)
