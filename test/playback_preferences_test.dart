@@ -2,6 +2,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/playback_preferences.dart';
 
 void main() {
+  test('1.1x playback speed is available and persists', () {
+    expect(playbackSpeeds, contains(1.1));
+    final preferences = PlaybackPreferences.fromJson(const {'speed': 1.1});
+    expect(preferences.speed, 1.1);
+    expect(
+      PlaybackPreferences.fromJson(preferences.toJson()).speed,
+      1.1,
+    );
+  });
+
   test('legacy danmaku preference is ignored and omitted from saved settings', () {
     final restored = PlaybackPreferences.fromJson(const {'danmaku': true});
     expect(restored.toJson().containsKey('danmaku'), isFalse);
