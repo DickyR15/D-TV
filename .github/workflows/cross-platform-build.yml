@@ -24,6 +24,11 @@ on:
       - "v*"
       - "!v1.0.3"
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
     branches:
       - main
     paths:
@@ -259,6 +264,7 @@ jobs:
           packages: "platforms;android-36 build-tools;36.0.0 platform-tools ndk;28.2.13676358"
           accept-android-sdk-licenses: true
       - name: Set up Android signing (same key source as v7a build)
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ github.event_name == 'pull_request' && '' || secrets.ANDROID_KEYSTORE_BASE64 }}
