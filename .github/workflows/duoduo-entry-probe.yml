@@ -198,6 +198,15 @@ jobs:
                   f"playlist duration checked={checked_seconds:.2f}s"
               )
 
+          def safe_probe_media(address, referer):
+              try:
+                  return probe_media(address, referer)
+              except (URLError, TimeoutError, socket.timeout, OSError, http.client.HTTPException) as exc:
+                  return False, (
+                      f"upstream network unavailable: {type(exc).__name__}: "
+                      f"{str(exc)[:140]}"
+                  )
+
           print("\\n=== USER-REPORTED MOVIE EPISODE DIAGNOSTIC: 161235 ===")
           target_id = "161235"
           _, detail_payload = api("/api.php/web/vod/get_detail", {"vod_id": target_id})
@@ -661,6 +670,41 @@ jobs:
                   "aliases": (
                       "逆愛2：後會無期", "逆爱2：后会无期",
                       "逆愛2後會無期", "逆爱2后会无期",
+                  ),
+              },
+              {
+                  "label": "謊言第一季",
+                  "queries": ("謊言第一季", "謊言 第一季", "谎言第一季", "谎言 第一季"),
+                  "aliases": ("謊言第一季", "謊言 第一季", "谎言第一季", "谎言 第一季"),
+              },
+              {
+                  "label": "全球御鬼時代，我成了最終BOSS動態漫畫",
+                  "queries": (
+                      "全球御鬼時代，我成了最終BOSS動態漫畫",
+                      "全球御鬼时代，我成了最终BOSS动态漫画",
+                      "全球御鬼時代我成了最終BOSS動態漫畫",
+                      "全球御鬼时代我成了最终BOSS动态漫画",
+                  ),
+                  "aliases": (
+                      "全球御鬼時代，我成了最終BOSS動態漫畫",
+                      "全球御鬼时代，我成了最终BOSS动态漫画",
+                      "全球御鬼時代我成了最終BOSS動態漫畫",
+                      "全球御鬼时代我成了最终BOSS动态漫画",
+                  ),
+              },
+              {
+                  "label": "迷離時空(原版) 第一季",
+                  "queries": (
+                      "迷離時空(原版) 第一季",
+                      "迷離時空（原版）第一季",
+                      "迷离时空(原版) 第一季",
+                      "迷离时空（原版）第一季",
+                  ),
+                  "aliases": (
+                      "迷離時空(原版) 第一季",
+                      "迷離時空（原版）第一季",
+                      "迷离时空(原版) 第一季",
+                      "迷离时空（原版）第一季",
                   ),
               },
           ]
@@ -1459,10 +1503,10 @@ jobs:
               )
               for line_name, episode_title, address in probe_candidates[:12]:
                   single_inferno_checked += 1
-                  ok, message = probe_media(address, api_base + "/")
+                  ok, message = safe_probe_media(address, api_base + "/")
                   referer = "active-api-mirror"
                   if not ok:
-                      retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                      retry_ok, retry_message = safe_probe_media(address, "https://duoduozhuiju.com/")
                       if retry_ok:
                           ok, message, referer = retry_ok, retry_message, "public-entry"
                       else:
