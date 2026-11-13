@@ -231,8 +231,8 @@ func TestDuoduoPosterAttemptsReserveTimeForResizedProxy(t *testing.T) {
 	if got := nativeCoverAttemptTimeout(sourceDuoduo, "https://img.example.test/poster.jpg"); got != 2500*time.Millisecond {
 		t.Fatalf("origin attempt timeout = %s, want 2.5s", got)
 	}
-	if got := nativeCoverAttemptTimeout(sourceDuoduo, "https://wsrv.nl/?url=example.test/poster.jpg"); got != 9*time.Second {
-		t.Fatalf("resized proxy timeout = %s, want 9s", got)
+	if got := nativeCoverAttemptTimeout(sourceDuoduo, "https://wsrv.nl/?url=example.test/poster.jpg"); got != 6*time.Second {
+		t.Fatalf("resized proxy timeout = %s, want 6s", got)
 	}
 	if got := nativeCoverAttemptTimeout(sourceHongguo, "https://img.example.test/poster.jpg"); got != 12*time.Second {
 		t.Fatalf("other source timeout = %s, want unchanged 12s", got)

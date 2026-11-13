@@ -138,8 +138,19 @@ func TestNativeCoverFormatsFailuresAndOfflineFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cached, err := restarted.covers.load(context.Background(), drama, false); err != nil || cached != path || calls.Load() != 3 {
-		t.Fatal("expired image was not retained during a network failure", err, cached, calls.Load())
+	started := time.Now()
+	if cached, err := restarted.covers.load(context.Background(), drama, false); err != nil || cached != path || calls.Load() != 2 {
+		t.Fatal("expired image was not returned immediately while refreshing", err, cached, calls.Load())
+	}
+	if elapsed := time.Since(started); elapsed > 200*time.Millisecond {
+		t.Fatalf("expired image waited %v for a background refresh", elapsed)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for calls.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if calls.Load() != 3 {
+		t.Fatalf("background refresh did not reach the failing upstream, calls=%d", calls.Load())
 	}
 	if _, err := restarted.covers.load(context.Background(), drama, true); err == nil {
 		t.Fatal("forced retry hid an upstream failure behind stale data")
