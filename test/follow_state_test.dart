@@ -169,6 +169,44 @@ void main() {
   );
 
   test(
+    'LAN series snapshot syncs each season progress under one favorite',
+    () async {
+      final store = await create();
+      await store.registerHongguoSeriesSeasons(
+        officialSeasonTwo.withSeriesGroupId(''),
+        [officialSeasonOne, officialSeasonTwo],
+      );
+      await store.toggleFavorite(officialSeasonTwo);
+      await store.saveWatch(
+        WatchEntry(
+          drama: officialSeasonTwo,
+          episode: 3,
+          position: 24,
+          duration: 60,
+          updatedAt: DateTime.utc(2026, 11, 13, 12),
+        ),
+      );
+
+      expect(store.favorites, hasLength(1));
+      final snapshot = store.lanDocument;
+      expect(
+        snapshot.records.keys,
+        containsAll([officialSeasonOne.id, officialSeasonTwo.id]),
+      );
+      expect(snapshot.records[officialSeasonOne.id]!.followed, isTrue);
+      expect(snapshot.records[officialSeasonTwo.id]!.followed, isTrue);
+      expect(snapshot.records[officialSeasonTwo.id]!.watch!.episode, 3);
+
+      final restored = LanDocument.fromJson(
+        jsonDecode(jsonEncode(snapshot.toJson())),
+      );
+      expect(restored.records[officialSeasonTwo.id]!.watch!.episode, 3);
+      expect(restored.records[officialSeasonTwo.id]!.drama.seriesGroupId,
+          officialSeasonOne.seriesGroupId);
+    },
+  );
+
+  test(
     'official season registration consolidates old per-season favorites',
     () async {
       final store = await create();
