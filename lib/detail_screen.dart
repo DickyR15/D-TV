@@ -246,6 +246,10 @@ class _DetailScreenState extends State<DetailScreen> {
         return;
       }
       if (seasons.isNotEmpty) {
+        await widget.store.registerHongguoSeriesSeasons(
+          drama,
+          seasons.map((season) => season.drama),
+        );
         await widget.store.refreshDramas(
           seasons.map((season) => season.drama),
         );
