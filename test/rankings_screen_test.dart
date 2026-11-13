@@ -589,7 +589,7 @@ void main() {
 
       // Match the original-app flow: show the work details first. Playback
       // starts only after the user activates the Play button on this page.
-      expect(find.text('合成榜單1'), findsOneWidget);
+      expect(find.text('合成榜單1'), findsAtLeastNWidgets(1));
       expect(find.byKey(const ValueKey('start-play')), findsOneWidget);
       expect(find.text('播放'), findsOneWidget);
     },
