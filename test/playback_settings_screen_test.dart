@@ -192,6 +192,23 @@ void main() {
         allOf(contains('橫式畫面播放直式影片'), contains('不另開解碼器')),
       ),
     );
+
+    final network = tester.widget<SwitchListTile>(
+      find.byKey(const ValueKey('playback-tv-network-speed')),
+    );
+    final clock = tester.widget<SwitchListTile>(
+      find.byKey(const ValueKey('playback-tv-clock')),
+    );
+    expect(network.value, isTrue);
+    expect(clock.value, isTrue);
+    await tester.tap(find.byKey(const ValueKey('playback-tv-network-speed')));
+    await tester.pumpAndSettle();
+    expect(store.playbackPreferences.showTelevisionNetworkSpeed, isFalse);
+    expect(store.playbackPreferences.showTelevisionClock, isTrue);
+    await tester.tap(find.byKey(const ValueKey('playback-tv-clock')));
+    await tester.pumpAndSettle();
+    expect(store.playbackPreferences.showTelevisionNetworkSpeed, isFalse);
+    expect(store.playbackPreferences.showTelevisionClock, isFalse);
   });
 
 
