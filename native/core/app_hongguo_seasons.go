@@ -27,7 +27,7 @@ var hongguoOfficialSeasonLabel = regexp.MustCompile(`^第([1-9][0-9]*)季$`)
 func hongguoAppSeasonQuery(seriesID string) url.Values {
 	return url.Values{
 		"scene":                 {"10"},
-		"from":                  {"series_short_play_info"},
+		"from":                  {"single_col_same_ip_series"},
 		"offset":                {"0"},
 		"limit":                 {"0"},
 		"total_chapter_num":     {"0"},
@@ -39,6 +39,16 @@ func hongguoAppSeasonQuery(seriesID string) url.Values {
 		"book_id":               {seriesID},
 		"filter_ids":            {seriesID},
 	}
+}
+
+func hongguoAppNextSeasonQuery(seriesID string) url.Values {
+	query := hongguoAppSeasonQuery(seriesID)
+	query.Set("from", "series_short_play_info")
+	return query
+}
+
+func hongguoNeedsSeasonFallback(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "101116")
 }
 
 func (downloader *Downloader) hongguoAppSeasons(
@@ -55,6 +65,22 @@ func (downloader *Downloader) hongguoAppSeasons(
 		hongguoAppSeasonQuery(seriesID),
 		nil,
 	)
+	if hongguoNeedsSeasonFallback(err) {
+		// Some works reject the full-series selector with 101116 even though
+		// their signed short-play relationship query still returns season rows.
+		fallback, fallbackErr := downloader.hongguoAppRequest(
+			ctx,
+			http.MethodGet,
+			"/reading/bookapi/plan/v",
+			hongguoAppNextSeasonQuery(seriesID),
+			nil,
+		)
+		if fallbackErr == nil {
+			result, err = fallback, nil
+		} else {
+			err = fmt.Errorf("%w（備援季別查詢失敗：%v）", err, fallbackErr)
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("取得紅果系列季別失敗：%w", err)
 	}
