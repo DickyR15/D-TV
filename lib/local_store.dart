@@ -1553,7 +1553,27 @@ class LocalStore extends ChangeNotifier {
         final favorite = favorites[drama.id];
         if (favorite != null) {
           favorites[drama.id] = favorite.merge(drama);
-          states[drama.id] = states[drama.id]!.observe(favorites[drama.id]!);
+          final current = states[drama.id] ??
+              FollowState.initial(favorites[drama.id]!, history[drama.id]);
+          states[drama.id] = current.observe(favorites[drama.id]!);
+        } else {
+          final groupId = drama.seriesGroupId.isNotEmpty
+              ? drama.seriesGroupId
+              : seriesCandidates[drama.id]?.seriesGroupId ??
+                    history[drama.id]?.drama.seriesGroupId ??
+                    '';
+          if (groupId.isNotEmpty) {
+            final canonicalId = 'hongguo:' + groupId;
+            final seriesFavorite = favorites[canonicalId] ??
+                favorites.values.where(
+                  (item) => item.seriesGroupId == groupId,
+                ).firstOrNull;
+            if (seriesFavorite != null) {
+              final memberState = states[drama.id] ??
+                  FollowState.initial(drama, history[drama.id]);
+              states[drama.id] = memberState.observe(drama);
+            }
+          }
         }
         final watched = history[drama.id];
         if (watched != null) {
