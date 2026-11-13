@@ -83,6 +83,7 @@ type nativeDrama struct {
 	ID             string   `json:"id"`
 	Source         string   `json:"source"`
 	SourceID       string   `json:"sourceId"`
+	SeriesGroupID  string   `json:"seriesGroupId,omitempty"`
 	DoubanID       string   `json:"doubanId,omitempty"`
 	Title          string   `json:"title"`
 	Description    string   `json:"description"`
