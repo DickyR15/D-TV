@@ -92,8 +92,7 @@ class FollowUpdater {
             try {
               final seasons = await repository.seasons(updated);
               if (_valid && seasons.isNotEmpty) {
-                await store.registerHongguoSeriesSeasons(
-                  updated,
+                await store.refreshDramas(
                   seasons.map((season) => season.drama),
                 );
               }
