@@ -140,3 +140,25 @@ func TestFetchDuoduoSeriesSeasonsOpensFromUnsuffixedFirstSeason(t *testing.T) {
 		t.Fatalf("unsuffixed first title did not expose its confirmed sibling: %+v", seasons)
 	}
 }
+
+
+func TestDuoduoDramaEpisodeCountReadsCatalogAliases(t *testing.T) {
+	tests := []struct {
+		name  string
+		drama Drama
+		want  int
+	}{
+		{name: "episodes", drama: Drama{Episodes: 12}, want: 12},
+		{name: "episode count", drama: Drama{EpisodeCount: 24}, want: 24},
+		{name: "total episode", drama: Drama{TotalEpisode: 36}, want: 36},
+		{name: "remark", drama: Drama{Remark: "更新至42集"}, want: 42},
+		{name: "missing count", drama: Drama{}, want: 0},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := duoduoDramaEpisodeCount(test.drama); got != test.want {
+				t.Fatalf("duoduoDramaEpisodeCount() = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
