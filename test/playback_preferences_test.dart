@@ -2,6 +2,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/playback_preferences.dart';
 
 void main() {
+  test('TV network speed and clock visibility preferences are independent', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.showTelevisionNetworkSpeed, isTrue);
+    expect(defaults.showTelevisionClock, isTrue);
+
+    final speedOff = defaults.copyWith(showTelevisionNetworkSpeed: false);
+    expect(speedOff.showTelevisionNetworkSpeed, isFalse);
+    expect(speedOff.showTelevisionClock, isTrue);
+    final speedRestored = PlaybackPreferences.fromJson(speedOff.toJson());
+    expect(speedRestored.showTelevisionNetworkSpeed, isFalse);
+    expect(speedRestored.showTelevisionClock, isTrue);
+
+    final clockOff = defaults.copyWith(showTelevisionClock: false);
+    expect(clockOff.showTelevisionNetworkSpeed, isTrue);
+    expect(clockOff.showTelevisionClock, isFalse);
+    final clockRestored = PlaybackPreferences.fromJson(clockOff.toJson());
+    expect(clockRestored.showTelevisionNetworkSpeed, isTrue);
+    expect(clockRestored.showTelevisionClock, isFalse);
+  });
+
   test('desktop always-on-top defaults off and persists', () {
     final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
     expect(defaults.desktopAlwaysOnTop, isFalse);
