@@ -1323,6 +1323,50 @@ class LocalStore extends ChangeNotifier {
           );
         }
       }
+      // Collapse legacy per-season favorites after official IDs are known.
+      final favoriteGroups = <String, List<MapEntry<String, Drama>>>{};
+      for (final entry in favorites.entries) {
+        final groupId = entry.value.seriesGroupId;
+        if (groupId.isNotEmpty) {
+          (favoriteGroups[groupId] ??= []).add(entry);
+        }
+      }
+      for (final group in favoriteGroups.entries) {
+        if (group.value.length < 2) continue;
+        final canonicalId = 'hongguo:' + group.key;
+        final canonicalEntry = group.value.where((e) => e.key == canonicalId).firstOrNull;
+        final canonical = seriesCandidates[canonicalId] ??
+            (canonicalEntry?.value ?? group.value.first.value).withSeriesGroupId(group.key);
+        final priorStates = group.value.map((e) =>
+            states[e.key] ?? FollowState.initial(e.value, history[e.key])).toList();
+        final primary = canonicalEntry == null
+            ? priorStates.first
+            : states[canonicalId] ?? FollowState.initial(canonicalEntry.value, history[canonicalId]);
+        final notices = <String, SeriesSeasonNotice>{};
+        for (final state in priorStates) {
+          for (final notice in state.seriesSeasons.values) {
+            final old = notices[notice.id];
+            notices[notice.id] = old == null ? notice : SeriesSeasonNotice(
+              id: notice.id, title: notice.title, season: notice.season,
+              unit: notice.unit, read: old.read && notice.read,
+            );
+          }
+        }
+        final manual = priorStates.any((s) => s.manuallyWatched);
+        final status = manual ? FollowStatus.watched :
+            priorStates.reduce((a, b) => a.status.index >= b.status.index ? a : b).status;
+        for (final entry in group.value) {
+          favorites.remove(entry.key);
+          states.remove(entry.key);
+        }
+        favorites[canonical.id] = canonical;
+        states[canonical.id] = FollowState(
+          status: status, manuallyWatched: manual,
+          knownEpisodes: primary.knownEpisodes, readEpisodes: primary.readEpisodes,
+          seriesSeasons: notices,
+        );
+      }
+
       final candidates = <String, Drama>{
         for (final entry in history.values) entry.drama.id: entry.drama,
         ...favorites,
