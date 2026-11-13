@@ -36,6 +36,7 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
   final DesktopMiniPlayerShutdown _shutdown = DesktopMiniPlayerShutdown();
   Completer<void>? _playerDisposed;
   bool _closing = false;
+  bool _restoreMainWindowOnClose = true;
   String? _closeError;
   int _episodeIndex = 0;
   double _position = 0;
@@ -74,7 +75,11 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
   Future<void> _channelReady() async {
     await desktopMiniPlayerChannel.setMethodCallHandler((call) async {
       if (call.method == 'close') {
-        unawaited(_closeMiniPlayer());
+        final arguments = call.arguments;
+        if (arguments is Map && arguments['restoreMain'] == false) {
+          _restoreMainWindowOnClose = false;
+        }
+        unawaited(_closeMiniPlayer().catchError((Object _) {}));
         return true;
       }
       return null;
@@ -156,6 +161,7 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
   }
 
   Future<void> _notifyMainWindow() async {
+    if (!_restoreMainWindowOnClose) return;
     await desktopMiniPlayerChannel.invokeMethod<void>('mini_closed', {
       'index': _episodeIndex,
       'position': _position,
