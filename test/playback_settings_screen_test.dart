@@ -180,9 +180,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final blur = tester.widget<SwitchListTile>(
-      find.byKey(const ValueKey('playback-portrait-blur-background')),
+    final blurFinder = find.byKey(
+      const ValueKey('playback-portrait-blur-background'),
     );
+    await tester.scrollUntilVisible(blurFinder, 120);
+    await tester.pumpAndSettle();
+    final blur = tester.widget<SwitchListTile>(blurFinder);
     expect(blur.value, isTrue);
     expect(blur.onChanged, isNotNull);
     expect((blur.title as Text).data, '直式影片模糊背景');
