@@ -108,17 +108,25 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 	ctx context.Context,
 	current nativeDrama,
 ) ([]nativeDramaSeason, error) {
-	base, currentNumber, unit, ok := duoduoSeriesTitle(current.Title)
-	if !ok {
+	base := strings.TrimSpace(current.Title)
+	currentNumber, unit := 0, ""
+	if parsedBase, number, parsedUnit, found := duoduoSeriesTitle(current.Title); found {
+		base, currentNumber, unit = parsedBase, number, parsedUnit
+	}
+	if base == "" {
 		return nil, nil
 	}
 	baseKey := duoduoSeriesTitleKey(base)
-	groupID := duoduoSeriesGroupID(base, unit)
 	searchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	byNumber := make(map[int]Drama)
 	var unnumbered *Drama
+	if currentNumber == 0 {
+		item := duoduoDramaFromNative(current)
+		unnumbered = &item
+	}
+	unitMismatch := false
 	for page := 1; page <= 3; page++ {
 		items, more, err := downloader.fetchDuoduoCatalogPage(
 			searchCtx, page, "", base, "hits",
@@ -141,13 +149,19 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 				}
 				continue
 			}
-			if duoduoSeriesTitleKey(itemBase) != baseKey || itemUnit != unit {
+			if duoduoSeriesTitleKey(itemBase) != baseKey {
+				continue
+			}
+			if unit == "" {
+				unit = itemUnit
+			} else if itemUnit != unit {
+				unitMismatch = true
 				continue
 			}
 			if existing, found := byNumber[number]; found && existing.ID != item.ID {
 				return nil, nil
 			}
-			item.SeriesGroupID = groupID
+			item.SeriesGroupID = duoduoSeriesGroupID(base, unit)
 			item.SeriesSeasonNumber = number
 			item.SeriesSeasonUnit = unit
 			byNumber[number] = item
@@ -156,9 +170,15 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 			break
 		}
 	}
+	// Do not mix "season" and "part" labels for a title family unless the
+	// catalogue provides an explicit, consistent numbering unit.
+	if unitMismatch || unit == "" {
+		return nil, nil
+	}
+	groupID := duoduoSeriesGroupID(base, unit)
 
-	// Some catalogs name the first season with the unsuffixed series title.
-	// Only interpret it as season 1 after a numbered sibling was confirmed.
+	// An unsuffixed title is treated as season/part 1 only when at least one
+	// explicitly numbered sibling exists in the same exact title family.
 	if _, hasFirst := byNumber[1]; !hasFirst && unnumbered != nil && len(byNumber) > 0 {
 		unnumbered.SeriesGroupID = groupID
 		unnumbered.SeriesSeasonNumber = 1
