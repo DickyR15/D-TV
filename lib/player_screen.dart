@@ -235,6 +235,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     portraitBlurBackground: _portraitBlurBackground,
     televisionDecoder: _televisionDecoder,
     autoPictureInPicture: widget.store.playbackPreferences.autoPictureInPicture,
+    desktopAlwaysOnTop: widget.store.playbackPreferences.desktopAlwaysOnTop,
   );
   int get _actualVideoQuality =>
       videoQualityShortEdge(videoDisplaySize(_player.state.videoParams)) ?? 0;
@@ -272,6 +273,17 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
     }
     final preferences = widget.store.playbackPreferences;
+    if (Platform.isWindows || Platform.isMacOS) {
+      unawaited(
+        windowManager.setAlwaysOnTop(preferences.desktopAlwaysOnTop).catchError(
+          (Object error) {
+            DiaryService.add(
+              '[Window] always_on_top_apply_failed error=${playbackDiagnosticError(error)}',
+            );
+          },
+        ),
+      );
+    }
     _speed = preferences.speed;
     _requestedQuality = preferences.quality;
     _autoAdvance = preferences.autoAdvance;
@@ -2474,6 +2486,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     _interactions.cancel();
     final nextPreferences = preferences;
     await widget.store.setPlaybackPreferences(nextPreferences);
+    if (Platform.isWindows || Platform.isMacOS) {
+      try {
+        await windowManager.setAlwaysOnTop(nextPreferences.desktopAlwaysOnTop);
+      } catch (error) {
+        DiaryService.add(
+          '[Window] always_on_top_apply_failed error=${playbackDiagnosticError(error)}',
+        );
+      }
+    }
     if (!mounted || _closed || widget.store.profileEpoch != _profileEpoch) {
       return;
     }
@@ -2921,6 +2942,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       }),
     );
     if (Platform.isWindows || Platform.isMacOS) {
+      unawaited(
+        windowManager.setAlwaysOnTop(false).catchError((Object _) {}),
+      );
       unawaited(windowManager.setFullScreen(false));
     } else if (_mobile ||
         _formFactor == FormFactor.pad ||
