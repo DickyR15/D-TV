@@ -38,6 +38,9 @@ class DetailScreen extends StatefulWidget {
 
 class _DetailScreenState extends State<DetailScreen> {
   DramaDetail? _detail;
+  List<DramaSeason> _seriesSeasons = const [];
+  String? _seriesSeasonsError;
+  bool _seriesSeasonsLoading = false;
   String? _error;
   bool _loading = true;
   int _generation = 0;
@@ -95,6 +98,9 @@ class _DetailScreenState extends State<DetailScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _seriesSeasons = const [];
+      _seriesSeasonsError = null;
+      _seriesSeasonsLoading = widget.drama.source == SourceSite.hongguo.id;
     });
     try {
       final detail = await widget.repository.detail(widget.drama);
@@ -141,6 +147,7 @@ class _DetailScreenState extends State<DetailScreen> {
         }
       });
       widget.repository.catalogUpdates.publish(merged, retryCover: true);
+      unawaited(_loadSeriesSeasons(merged, generation));
       unawaited(_supplement(merged, generation));
       await saveUserChange(context, () => widget.store.refreshDrama(merged));
       if (mounted &&
@@ -173,6 +180,45 @@ class _DetailScreenState extends State<DetailScreen> {
         widget.repository.catalogUpdates.current(widget.drama),
         retryCover: true,
       );
+    }
+  }
+
+  Future<void> _loadSeriesSeasons(Drama drama, int generation) async {
+    if (drama.source != SourceSite.hongguo.id) {
+      if (mounted && generation == _generation) {
+        setState(() {
+          _seriesSeasons = const [];
+          _seriesSeasonsLoading = false;
+          _seriesSeasonsError = null;
+        });
+      }
+      return;
+    }
+    try {
+      final seasons = await widget.repository.seasons(drama);
+      if (!mounted ||
+          generation != _generation ||
+          _profileEpoch != widget.store.profileEpoch ||
+          _detail?.drama.id != drama.id) {
+        return;
+      }
+      setState(() {
+        _seriesSeasons = seasons;
+        _seriesSeasonsLoading = false;
+        _seriesSeasonsError = null;
+      });
+    } catch (error) {
+      if (!mounted ||
+          generation != _generation ||
+          _profileEpoch != widget.store.profileEpoch ||
+          _detail?.drama.id != drama.id) {
+        return;
+      }
+      setState(() {
+        _seriesSeasons = const [];
+        _seriesSeasonsLoading = false;
+        _seriesSeasonsError = uiTraditional(error.toString());
+      });
     }
   }
 
@@ -843,58 +889,102 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Widget _seriesSelector(Drama drama) {
-    final entries = hongguoSeriesEntries(
-      drama,
-      widget.store.seriesDramasFor(drama),
-    );
-    if (entries.isEmpty) return const SizedBox.shrink();
-    final colors = Theme.of(context).colorScheme;
-    final notices = widget.store.following(drama.id)?.seriesSeasons ?? const {};
+    if (drama.source != SourceSite.hongguo.id) {
+      return const SizedBox.shrink();
+    }
+    if (_seriesSeasonsLoading && _seriesSeasons.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(20, 10, 20, 8),
+        child: LinearProgressIndicator(),
+      );
+    }
+    final seasons = _seriesSeasons;
+    if (_seriesSeasonsError != null && seasons.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '系列季別暫時無法載入：${_seriesSeasonsError!}',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _seriesSeasonsLoading
+                  ? null
+                  : () => unawaited(
+                      _loadSeriesSeasons(drama, _generation),
+                    ),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('重試'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (seasons.length < 2) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('相關推薦', style: Theme.of(context).textTheme.titleMedium),
+          Text('系列劇', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final entry in entries)
-                ChoiceChip(
-                  key: ValueKey('series-${entry.drama.id}'),
-                  label: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 260),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            '${entry.label} · ${uiTraditional(entry.drama.title)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (notices[entry.drama.id]?.read == false) ...[
-                          const SizedBox(width: 6),
-                          Icon(
-                            Icons.fiber_new_rounded,
-                            size: 18,
-                            color: colors.primary,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  selected: entry.drama.id == drama.id,
-                  onSelected: entry.drama.id == drama.id
-                      ? null
-                      : (_) => _openSeriesDrama(entry.drama),
-                ),
+              for (final season in seasons)
+                _seasonChip(drama, season),
             ],
           ),
+          if (_seriesSeasonsLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(),
+            ),
         ],
+      ),
+    );
+  }
+
+  Widget _seasonChip(Drama currentDrama, DramaSeason season) {
+    final current = season.drama.id == currentDrama.id;
+    final watched = widget.store.watched(season.drama.id);
+    final label = season.label.isNotEmpty
+        ? uiTraditional(season.label)
+        : season.number > 0
+        ? '第 ${season.number} 季'
+        : current
+        ? '目前季別'
+        : '其他季別';
+    final details = <String>[
+      if (season.drama.episodes > 0) '共 ${season.drama.episodes} 集',
+      if (season.upcoming) '即將上線',
+      if (!season.playable && !season.upcoming) '暫不可播放',
+      if (watched != null && !current) '有觀看紀錄',
+    ];
+    final text = [
+      label,
+      ...details,
+    ].join(' · ');
+    return Tooltip(
+      message: [
+        uiTraditional(season.drama.title),
+        if (season.subtitle.isNotEmpty) uiTraditional(season.subtitle),
+      ].where((value) => value.isNotEmpty).join('\n'),
+      child: ChoiceChip(
+        key: ValueKey('official-season-${season.drama.id}'),
+        label: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        selected: current,
+        onSelected: current || !season.playable
+            ? null
+            : (_) => _openSeriesDrama(season.drama),
       ),
     );
   }
