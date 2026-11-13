@@ -41,6 +41,20 @@ Size? videoDisplaySize(VideoParams parameters) =>
       rotation: parameters.rotate ?? 0,
     );
 
+/// Returns the visible short-edge resolution used by common 720P/1080P labels.
+/// This keeps portrait video such as 720x1280 labelled 720P, not 1280P.
+int? videoQualityShortEdge(Size? size) {
+  if (size == null ||
+      !size.width.isFinite ||
+      !size.height.isFinite ||
+      size.width <= 0 ||
+      size.height <= 0) {
+    return null;
+  }
+  final quality = size.shortestSide.round();
+  return quality > 0 ? quality : null;
+}
+
 /// Calculates an aspect-preserving MPV output size for the visible viewport.
 /// The result never exceeds source dimensions, avoiding wasteful upscaling.
 Size? videoOutputSizeForSource(Size? source, Size viewport) {
