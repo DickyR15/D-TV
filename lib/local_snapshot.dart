@@ -483,6 +483,8 @@ class LocalSnapshot {
         return;
       } on LocalFilesRecoveryRequired {
         throw const SnapshotRecoveryRequired();
+      } on LocalDataTemporarilyUnavailable catch (error) {
+        throw StateError(error.toString());
       } catch (_) {
         throw StateError('未能儲存本機檔案，原有紀錄已保留；請檢查儲存空間與權限後重試');
       }

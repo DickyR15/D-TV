@@ -2,7 +2,7 @@ import 'package:flutter/painting.dart';
 
 import 'video_enhancement_preferences.dart';
 
-const playbackSpeeds = [.5, .75, 1.0, 1.25, 1.5, 2.0, 3.0];
+const playbackSpeeds = [.5, .75, 1.0, 1.1, 1.25, 1.5, 2.0, 3.0];
 
 enum TelevisionDecoder { automatic, optimized, hardware, software }
 
@@ -99,6 +99,9 @@ class PlaybackPreferences {
     this.televisionDecoder = TelevisionDecoder.automatic,
     this.autoPictureInPicture = false,
     this.aspectRatio = PlaybackAspectRatio.automatic,
+    this.desktopAlwaysOnTop = false,
+    this.showTelevisionNetworkSpeed = true,
+    this.showTelevisionClock = true,
   });
 
   final double speed;
@@ -110,6 +113,9 @@ class PlaybackPreferences {
   final TelevisionDecoder televisionDecoder;
   final bool autoPictureInPicture;
   final PlaybackAspectRatio aspectRatio;
+  final bool desktopAlwaysOnTop;
+  final bool showTelevisionNetworkSpeed;
+  final bool showTelevisionClock;
 
   // Fresh installs enable next-episode preloading on phones and TVs.
   // A saved explicit choice (including false) always takes precedence.
@@ -125,6 +131,9 @@ class PlaybackPreferences {
     TelevisionDecoder? televisionDecoder,
     bool? autoPictureInPicture,
     PlaybackAspectRatio? aspectRatio,
+    bool? desktopAlwaysOnTop,
+    bool? showTelevisionNetworkSpeed,
+    bool? showTelevisionClock,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
@@ -135,6 +144,10 @@ class PlaybackPreferences {
     televisionDecoder: televisionDecoder ?? this.televisionDecoder,
     autoPictureInPicture: autoPictureInPicture ?? this.autoPictureInPicture,
     aspectRatio: aspectRatio ?? this.aspectRatio,
+    desktopAlwaysOnTop: desktopAlwaysOnTop ?? this.desktopAlwaysOnTop,
+    showTelevisionNetworkSpeed:
+        showTelevisionNetworkSpeed ?? this.showTelevisionNetworkSpeed,
+    showTelevisionClock: showTelevisionClock ?? this.showTelevisionClock,
   );
 
   Map<String, dynamic> toJson() => {
@@ -147,6 +160,9 @@ class PlaybackPreferences {
     'televisionDecoderMode': televisionDecoder.name,
     'autoPictureInPicture': autoPictureInPicture,
     'aspectRatioMode': aspectRatio.name,
+    'desktopAlwaysOnTop': desktopAlwaysOnTop,
+    'showTelevisionNetworkSpeed': showTelevisionNetworkSpeed,
+    'showTelevisionClock': showTelevisionClock,
   };
 
   factory PlaybackPreferences.fromJson(Map<String, dynamic> value) {
@@ -176,6 +192,10 @@ class PlaybackPreferences {
       televisionDecoder: decoder,
       autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
       aspectRatio: aspectRatio,
+      desktopAlwaysOnTop: value['desktopAlwaysOnTop'] as bool? ?? false,
+      showTelevisionNetworkSpeed:
+          value['showTelevisionNetworkSpeed'] as bool? ?? true,
+      showTelevisionClock: value['showTelevisionClock'] as bool? ?? true,
     );
   }
 }

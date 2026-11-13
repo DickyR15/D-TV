@@ -209,6 +209,7 @@ abstract class AppRepository {
   Future<String> cover(Drama drama, {bool force = false});
   bool coverCached(Drama drama) => false;
   Future<DramaDetail> detail(Drama drama);
+  Future<List<DramaSeason>> seasons(Drama drama) async => const [];
   Future<PlaybackPlan> resolve(Drama drama, Episode episode, {int quality = 0});
   Future<PlaybackPlan> fallback(PlaybackPlan current);
   Future<void> cancelPlayback();
@@ -598,6 +599,7 @@ class NativeRepository extends AppRepository {
         'cover',
         'prepareCover',
         'detail',
+        'seasons',
         'metadata',
         'resolve',
         'preload',
@@ -815,6 +817,25 @@ class NativeRepository extends AppRepository {
     _coverPaths[key] = path;
     if (_coverPaths.length > 2000) _coverPaths.remove(_coverPaths.keys.first);
     return path;
+  }
+
+  @override
+  Future<List<DramaSeason>> seasons(Drama drama) async {
+    _authorize(drama.source);
+    if (drama.source != 'hongguo') return const [];
+    final epoch = access?.profileEpoch;
+    final result = await _read('seasons-${drama.id}', {
+      'action': 'seasons',
+      'drama': drama.toJson(),
+    });
+    _authorize(drama.source);
+    if (epoch != access?.profileEpoch) {
+      throw AppFailure('使用者已切換，請重新操作');
+    }
+    return [
+      for (final row in result['items'] as List? ?? const [])
+        DramaSeason.fromJson(Map<String, dynamic>.from(row as Map)),
+    ];
   }
 
   @override

@@ -47,6 +47,12 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late bool _preloadEnabled;
   late bool _autoAdvance;
   late bool _autoPictureInPicture;
+  late bool _desktopAlwaysOnTop =
+      widget.store.playbackPreferences.desktopAlwaysOnTop;
+  late bool _showTelevisionNetworkSpeed =
+      widget.store.playbackPreferences.showTelevisionNetworkSpeed;
+  late bool _showTelevisionClock =
+      widget.store.playbackPreferences.showTelevisionClock;
   bool _pictureInPictureSupported = false;
   bool _playbackValuesInitialized = false;
   bool? _compatibleRendering;
@@ -127,6 +133,9 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           preload: _preloadEnabled,
           autoAdvance: _autoAdvance,
           autoPictureInPicture: _autoPictureInPicture,
+          desktopAlwaysOnTop: _desktopAlwaysOnTop,
+          showTelevisionNetworkSpeed: _showTelevisionNetworkSpeed,
+          showTelevisionClock: _showTelevisionClock,
         ),
       );
       if (mounted) onSaved?.call();
@@ -185,6 +194,21 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateAutoPictureInPicture(bool value) {
     setState(() => _autoPictureInPicture = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateDesktopAlwaysOnTop(bool value) {
+    setState(() => _desktopAlwaysOnTop = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateTelevisionNetworkSpeed(bool value) {
+    setState(() => _showTelevisionNetworkSpeed = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateTelevisionClock(bool value) {
+    setState(() => _showTelevisionClock = value);
     unawaited(_persistPreferences());
   }
 
@@ -283,6 +307,36 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               },
             ),
             const SizedBox(height: 20),
+            if (AppLayout.isTelevision(context)) ...[
+              SwitchListTile(
+                key: const ValueKey('playback-tv-network-speed'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('顯示即時網速'),
+                subtitle: const Text('使用 MPV 回報的快取讀取速率；ExoPlayer 或未提供速率時不顯示數值。'),
+                value: _showTelevisionNetworkSpeed,
+                onChanged: _updateTelevisionNetworkSpeed,
+              ),
+              SwitchListTile(
+                key: const ValueKey('playback-tv-clock'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('顯示時間'),
+                subtitle: const Text('在播放控制列右上角顯示裝置本機時間。'),
+                value: _showTelevisionClock,
+                onChanged: _updateTelevisionClock,
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (Platform.isWindows || Platform.isMacOS)
+              SwitchListTile(
+                key: const ValueKey('playback-desktop-always-on-top'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('播放視窗置頂'),
+                subtitle: const Text('播放期間讓 D TV 視窗保持在其他視窗上方；離開播放時自動還原。'),
+                value: _desktopAlwaysOnTop,
+                onChanged: _updateDesktopAlwaysOnTop,
+              ),
+            if (Platform.isWindows || Platform.isMacOS)
+              const SizedBox(height: 8),
             DropdownButtonFormField<TelevisionDecoder>(
               key: const ValueKey('playback-decoder'),
               initialValue: _decoder,
@@ -385,7 +439,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
+              '倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入、自動連播、電視網速與時鐘顯示，以及電腦播放視窗置頂都會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
             ),
           ],
         ),

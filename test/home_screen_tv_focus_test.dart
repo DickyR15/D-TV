@@ -6,8 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/home_screen.dart';
+import 'package:hgtv/detail_screen.dart';
 import 'package:hgtv/models.dart';
-import 'package:hgtv/playback_launch_screen.dart';
 import 'package:hgtv/app_navigation.dart';
 import 'package:hgtv/remote_widgets.dart';
 
@@ -629,7 +629,7 @@ void main() {
   );
 
   testWidgets(
-    'rapid repeated TV poster activation opens one playback launch route',
+    'rapid repeated TV poster activation opens one work details route',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final store = testStore(await SharedPreferences.getInstance());
@@ -665,14 +665,14 @@ void main() {
       expect(poster, findsOneWidget);
       final target = tester.widget<RemoteTarget>(poster);
 
-      // Simulate a fast double-click / two Select deliveries before the
-      // launch route has finished resolving the drama's episodes.
+      // Simulate a fast double-select before the details route finishes
+      // loading. Only one details page should be pushed.
       target.onPressed!.call();
       target.onPressed!.call();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 80));
 
-      expect(find.byType(PlaybackLaunchScreen), findsOneWidget);
+      expect(find.byType(DetailScreen), findsOneWidget);
       expect(repository.detailCalls, 1);
 
       await tester.pumpWidget(const SizedBox.shrink());

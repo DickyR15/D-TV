@@ -3,6 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/video_output_size.dart';
 
 void main() {
+  group('videoQualityShortEdge', () {
+    test('uses the shorter edge for portrait and landscape video', () {
+      expect(videoQualityShortEdge(const Size(720, 1280)), 720);
+      expect(videoQualityShortEdge(const Size(1920, 1080)), 1080);
+    });
+
+    test('rejects missing, empty, or invalid dimensions', () {
+      expect(videoQualityShortEdge(null), isNull);
+      expect(videoQualityShortEdge(Size.zero), isNull);
+      expect(videoQualityShortEdge(const Size(double.infinity, 720)), isNull);
+    });
+  });
+
   group('videoDisplaySizeForSource', () {
     test('prefers valid display dimensions over coded dimensions', () {
       expect(
@@ -34,6 +47,45 @@ void main() {
     test('rejects missing or invalid source dimensions', () {
       expect(videoDisplaySizeForSource(codedSize: null), isNull);
       expect(videoDisplaySizeForSource(codedSize: Size.zero), isNull);
+    });
+  });
+
+  group('video output safety', () {
+    test('rejects non-finite, empty and excessive output dimensions', () {
+      expect(isValidVideoOutputSize(const Size(1920, 1080)), isTrue);
+      expect(isValidVideoOutputSize(Size.zero), isFalse);
+      expect(
+        isValidVideoOutputSize(const Size(double.infinity, 720)),
+        isFalse,
+      );
+      expect(
+        isValidVideoOutputSize(const Size(16385, 720)),
+        isFalse,
+      );
+    });
+
+    test('does not reconfigure native MPV output while resizing mini-player', () {
+      expect(
+        shouldAdjustWindowsVideoOutput(
+          isWindows: true,
+          desktopMiniPlayer: false,
+        ),
+        isTrue,
+      );
+      expect(
+        shouldAdjustWindowsVideoOutput(
+          isWindows: true,
+          desktopMiniPlayer: true,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldAdjustWindowsVideoOutput(
+          isWindows: false,
+          desktopMiniPlayer: false,
+        ),
+        isFalse,
+      );
     });
   });
 
@@ -73,12 +125,20 @@ void main() {
       );
     });
 
-    test('rejects invalid and empty viewports', () {
+    test('rejects invalid source dimensions and empty viewports', () {
       expect(videoOutputSizeForSource(landscape, Size.zero), isNull);
+      expect(videoOutputSizeForSource(Size.zero, landscape), isNull);
       expect(
         videoOutputSizeForSource(
           landscape,
           const Size(double.infinity, 10),
+        ),
+        isNull,
+      );
+      expect(
+        videoOutputSizeForSource(
+          const Size(double.infinity, 1080),
+          landscape,
         ),
         isNull,
       );

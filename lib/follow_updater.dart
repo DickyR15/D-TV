@@ -55,7 +55,8 @@ class FollowUpdater {
       if (state == null ||
           state.manuallyWatched ||
           state.status == FollowStatus.planned ||
-          const {'finished', 'completed'}.contains(drama.releaseStatus)) {
+          drama.seriesGroupId.isEmpty &&
+              const {'finished', 'completed'}.contains(drama.releaseStatus)) {
         return false;
       }
       final check = checks[drama.id];
@@ -83,7 +84,23 @@ class FollowUpdater {
       for (final drama in _due(checks)) {
         if (!_valid) return;
         try {
-          updates.add(await repository.followCheck(drama));
+          final updated = await repository.followCheck(drama);
+          updates.add(updated);
+          if (updated.source == SourceSite.hongguo.id && _valid) {
+            // Episode-count checks alone cannot discover a brand-new season.
+            // Reconcile the official season list as part of the same follow pass.
+            try {
+              final seasons = await repository.seasons(updated);
+              if (_valid && seasons.isNotEmpty) {
+                await store.refreshDramas(
+                  seasons.map((season) => season.drama),
+                );
+              }
+            } catch (_) {
+              // Keep the successful episode check; the season API can retry
+              // during the next follow cycle without blocking other dramas.
+            }
+          }
           checks[drama.id] = FollowCheck(_clock());
         } catch (_) {
           checks[drama.id] = FollowCheck(

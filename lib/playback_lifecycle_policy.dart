@@ -15,3 +15,8 @@ bool playbackBackShouldExitImmediately({
   required bool loading,
   required bool hasError,
 }) => loading || hasError;
+
+/// The independent desktop mini-player is already a compact window and must
+/// not inherit the main player's automatic fullscreen startup behavior.
+bool playbackWindowStartsFullscreen({required bool desktopMiniPlayer}) =>
+    !desktopMiniPlayer;

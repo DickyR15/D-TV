@@ -86,8 +86,11 @@ type requestLimiter struct {
 	gates              map[string]*requestGate
 	backoffs           map[string]*requestBackoff
 	backgroundBackoffs map[string]*requestBackoff
+	forbiddenStreaks   map[string]int
 	changed            chan struct{}
 }
+
+const forbiddenStreakLimit = 3
 
 type backgroundCatalogKey struct{}
 
@@ -95,7 +98,7 @@ func newRequestLimiter(concurrency int, interval time.Duration) *requestLimiter 
 	if concurrency < 1 {
 		concurrency = 1
 	}
-	return &requestLimiter{concurrency: concurrency, interval: interval, gates: map[string]*requestGate{}, backoffs: map[string]*requestBackoff{}, backgroundBackoffs: map[string]*requestBackoff{}, changed: make(chan struct{})}
+	return &requestLimiter{concurrency: concurrency, interval: interval, gates: map[string]*requestGate{}, backoffs: map[string]*requestBackoff{}, backgroundBackoffs: map[string]*requestBackoff{}, forbiddenStreaks: map[string]int{}, changed: make(chan struct{})}
 }
 
 func (limiter *requestLimiter) notifyLocked() {
@@ -190,7 +193,22 @@ func (limiter *requestLimiter) acquire(ctx context.Context, request *http.Reques
 }
 
 func (limiter *requestLimiter) observe(request *http.Request, response *http.Response) {
-	if response.StatusCode != http.StatusForbidden && response.StatusCode != http.StatusTooManyRequests && !strings.EqualFold(response.Header.Get("Cf-Mitigated"), "challenge") {
+	host := strings.ToLower(request.URL.Hostname())
+	challenged := strings.EqualFold(response.Header.Get("Cf-Mitigated"), "challenge")
+
+	limiter.mu.Lock()
+	if response.StatusCode == http.StatusForbidden && !challenged {
+		limiter.forbiddenStreaks[host]++
+	} else {
+		delete(limiter.forbiddenStreaks, host)
+	}
+	repeatedlyForbidden := limiter.forbiddenStreaks[host] >= forbiddenStreakLimit
+	limiter.mu.Unlock()
+
+	// A single 403 can be caused by a temporary edge or device-specific issue.
+	// Cool down the host only after three consecutive non-challenge 403s.
+	// Explicit rate limits and browser challenges retain immediate protection.
+	if response.StatusCode != http.StatusTooManyRequests && !challenged && !repeatedlyForbidden {
 		return
 	}
 	limiter.observeBlock(request, response)

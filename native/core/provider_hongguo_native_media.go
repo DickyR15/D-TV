@@ -48,6 +48,26 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 	return selectHongguoAppMedia(model)
 }
 
+
+func hongguoMediaShortEdgeQuality(width, height, definition int) int {
+	// The visible resolution label is the shorter image edge. Prefer actual
+	// dimensions over definition metadata, which may describe the long edge
+	// for portrait video (for example, 720x1280 reported as "1280P").
+	if width > 0 && height > 0 {
+		return min(width, height)
+	}
+	if definition > 0 {
+		return definition
+	}
+	if width > 0 {
+		return width
+	}
+	if height > 0 {
+		return height
+	}
+	return 0
+}
+
 func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 	variants := anyList(model["video_list"])
 	if rows, ok := model["video_list"].(map[string]any); ok && len(variants) == 0 {
@@ -91,13 +111,11 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 				continue
 			}
 		}
+		width, _ := strconv.Atoi(mapString(meta, "vwidth"))
 		height, _ := strconv.Atoi(mapString(meta, "vheight"))
-		if definition, err := strconv.Atoi(hongguoQualityNumber.FindString(mapString(meta, "definition"))); err == nil && definition > 0 {
-			height = definition
-		} else if width, _ := strconv.Atoi(mapString(meta, "vwidth")); width > 0 && (height == 0 || width < height) {
-			height = width
-		}
-		media.Quality = height
+		definition, _ := strconv.Atoi(hongguoQualityNumber.FindString(mapString(meta, "definition")))
+		media.Quality = hongguoMediaShortEdgeQuality(width, height, definition)
+		height = media.Quality
 		quality := height * 10
 		if codec == "h264" || codec == "avc1" {
 			quality++
