@@ -35,6 +35,7 @@ class PlayerControls extends StatefulWidget {
     this.onSeek,
     this.onPush,
     this.onPictureInPicture,
+    this.onSettings,
     this.pictureInPictureTooltip = '畫中畫',
     this.enhancement,
     this.playbackGeneration = 0,
@@ -64,6 +65,7 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function(Duration)? onSeek;
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
+  final Future<void> Function()? onSettings;
   final String pictureInPictureTooltip;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
@@ -445,6 +447,12 @@ class _PlayerControlsState extends State<PlayerControls> {
               )
             else
               const Spacer(),
+            if (widget.onSettings != null)
+              _overlayIconButton(
+                tooltip: '播放設定',
+                onPressed: () => unawaited(widget.onSettings!.call()),
+                icon: Icons.tune_rounded,
+              ),
             if (compact)
               _overlayIconButton(
                 tooltip: '旋轉與全屏',
