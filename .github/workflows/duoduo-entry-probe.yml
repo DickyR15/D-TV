@@ -975,7 +975,8 @@ jobs:
                   return False
 
           def verified_official_title_poster(vod_id, title, row):
-              # Exact programme artwork from programme-owner / official-platform materials.
+              # Exact programme artwork from programme owners, official platforms,
+              # or a verifiable exact-title/season catalogue record.
               # Do not use fuzzy parent-title matching or substitute another season.
               def normalize_exact(value):
                   simplified_to_traditional = str.maketrans({
@@ -1005,6 +1006,24 @@ jobs:
                       "year": "2014",
                       "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
                       "label": "Distributor poster for Obsessed (2014)",
+                  },
+                  "92722": {
+                      "aliases": {"謊言第一季", "谎言第一季"},
+                      "year": "2020",
+                      "address": "https://www.francetvpro.fr/sites/default/files/styles/crop_format_bandeau/public/telechargements/images/LE%20MENSONGE%20ok.jpg.webp?itok=wfjSja09",
+                      "label": "France Télévisions official LE MENSONGE 2020 promotional artwork (exact series title and year)",
+                  },
+                  "140381": {
+                      "aliases": {"全球御鬼時代我成了最終BOSS動態漫畫", "全球御鬼时代我成了最终BOSS动态漫画"},
+                      "year": "2025",
+                      "address": "https://i0.hdslb.com/bfs/bangumi/image/0defb063125d0e558e29731c13989a25d5357965.png",
+                      "label": "Bilibili official series artwork for 全球御鬼时代，我成了最终BOSS 动态漫 (2025)",
+                  },
+                  "87957": {
+                      "aliases": {"迷離時空原版第一季", "迷离时空原版第一季"},
+                      "year": "1959",
+                      "address": "https://image.tmdb.org/t/p/original/1DKVWl80YSLi0TE8IbyUdqq2o5l.jpg",
+                      "label": "TMDB exact The Twilight Zone Season 1 poster (1959)",
                   },
                   "1625": {
                   "aliases": {"鬼灭之刃剧场版无限城篇第一章猗窝座再来", "鬼滅之刃劇場版無限城篇第一章猗窩座再來"},
@@ -1929,7 +1948,8 @@ jobs:
                   return False
 
           def verified_official_title_poster(vod_id, title, row):
-              # Exact programme artwork from programme-owner / official-platform materials.
+              # Exact programme artwork from programme owners, official platforms,
+              # or a verifiable exact-title/season catalogue record.
               # Do not use fuzzy parent-title matching or substitute another season.
               def normalize_exact(value):
                   simplified_to_traditional = str.maketrans({
