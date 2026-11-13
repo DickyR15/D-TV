@@ -55,7 +55,8 @@ class FollowUpdater {
       if (state == null ||
           state.manuallyWatched ||
           state.status == FollowStatus.planned ||
-          const {'finished', 'completed'}.contains(drama.releaseStatus)) {
+          drama.seriesGroupId.isEmpty &&
+              const {'finished', 'completed'}.contains(drama.releaseStatus)) {
         return false;
       }
       final check = checks[drama.id];
