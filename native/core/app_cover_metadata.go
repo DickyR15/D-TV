@@ -104,7 +104,14 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nat
 	case sourceHanxiaoquan:
 		fresh, _, err = d.fetchHanxiaoquanDetail(ctx, id)
 	case sourceHeitao:
-		fresh, _, err = d.fetchHeitaoDetail(ctx, id)
+		// Use the same exact-title stale-ID recovery as the detail/player path.
+		// A retired Heitao catalogue ID should not block poster repair when
+		// the official search contains one unique exact replacement record.
+		lookupID := id
+		if candidate := strings.TrimSpace(drama.SourceID); webProviderNumericID.MatchString(candidate) {
+			lookupID = candidate
+		}
+		fresh, _, err = d.fetchHeitaoDetailWithFallback(ctx, id, lookupID, drama.Title)
 	case sourceDuoduo:
 		fresh, _, _, _, err = d.fetchDuoduoDetailRow(ctx, id)
 	case sourceCloudFront:
