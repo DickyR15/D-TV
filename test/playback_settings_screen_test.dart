@@ -110,9 +110,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final blur = tester.widget<SwitchListTile>(
-      find.byKey(const ValueKey('playback-portrait-blur-background')),
+    final blurFinder = find.byKey(
+      const ValueKey('playback-portrait-blur-background'),
     );
+    await tester.scrollUntilVisible(blurFinder, 160);
+    await tester.pumpAndSettle();
+    final blur = tester.widget<SwitchListTile>(blurFinder);
     expect(blur.value, isFalse);
     expect(store.needsPortraitBlurLandscapeDefaultMigration, isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -193,19 +196,25 @@ void main() {
       ),
     );
 
-    final network = tester.widget<SwitchListTile>(
-      find.byKey(const ValueKey('playback-tv-network-speed')),
+    final networkFinder = find.byKey(
+      const ValueKey('playback-tv-network-speed'),
     );
-    final clock = tester.widget<SwitchListTile>(
-      find.byKey(const ValueKey('playback-tv-clock')),
-    );
+    await tester.scrollUntilVisible(networkFinder, 120);
+    await tester.pumpAndSettle();
+    final network = tester.widget<SwitchListTile>(networkFinder);
+    final clockFinder = find.byKey(const ValueKey('playback-tv-clock'));
+    await tester.scrollUntilVisible(clockFinder, 120);
+    await tester.pumpAndSettle();
+    final clock = tester.widget<SwitchListTile>(clockFinder);
     expect(network.value, isTrue);
     expect(clock.value, isTrue);
-    await tester.tap(find.byKey(const ValueKey('playback-tv-network-speed')));
+    await tester.ensureVisible(networkFinder);
+    await tester.tap(networkFinder);
     await tester.pumpAndSettle();
     expect(store.playbackPreferences.showTelevisionNetworkSpeed, isFalse);
     expect(store.playbackPreferences.showTelevisionClock, isTrue);
-    await tester.tap(find.byKey(const ValueKey('playback-tv-clock')));
+    await tester.ensureVisible(clockFinder);
+    await tester.tap(clockFinder);
     await tester.pumpAndSettle();
     expect(store.playbackPreferences.showTelevisionNetworkSpeed, isFalse);
     expect(store.playbackPreferences.showTelevisionClock, isFalse);
