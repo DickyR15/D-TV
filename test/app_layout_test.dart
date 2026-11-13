@@ -180,6 +180,58 @@ void main() {
       );
     });
   });
+  group('display mode labels', () {
+    test('auto reports the currently applied layout', () {
+      expect(
+        AppLayout.displayModeLabel(
+          'auto',
+          currentFactor: FormFactor.phone,
+          desktopPlatform: false,
+        ),
+        '自動偵測裝置・目前使用手機模式',
+      );
+      expect(
+        AppLayout.displayModeLabel(
+          'auto',
+          currentFactor: FormFactor.pad,
+          desktopPlatform: false,
+        ),
+        '自動偵測裝置・目前使用平板模式',
+      );
+      expect(
+        AppLayout.displayModeLabel(
+          'auto',
+          currentFactor: FormFactor.television,
+          desktopPlatform: false,
+        ),
+        '自動偵測裝置・目前使用電視模式',
+      );
+      expect(
+        AppLayout.displayModeLabel(
+          'auto',
+          currentFactor: FormFactor.window,
+          desktopPlatform: true,
+        ),
+        '自動偵測裝置・目前使用電腦模式',
+      );
+    });
+
+    test('auto keeps the generic label until a layout is available', () {
+      expect(AppLayout.displayModeLabel('auto'), '自動偵測裝置');
+    });
+
+    test('explicit mode label remains the selected mode', () {
+      expect(
+        AppLayout.displayModeLabel(
+          'pad',
+          currentFactor: FormFactor.television,
+          desktopPlatform: false,
+        ),
+        '平板',
+      );
+    });
+  });
+
   testWidgets('physical TV detection is retained when the user selects phone layout', (
     tester,
   ) async {
