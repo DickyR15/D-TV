@@ -975,10 +975,26 @@ class _DetailScreenState extends State<DetailScreen> {
       ].where((value) => value.isNotEmpty).join('\n'),
       child: ChoiceChip(
         key: ValueKey('official-season-${season.drama.id}'),
-        label: Text(
-          text,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        label: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 260),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (season.subtitle.isNotEmpty)
+                Text(
+                  uiTraditional(season.subtitle),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+            ],
+          ),
         ),
         selected: current,
         onSelected: current || !season.playable
