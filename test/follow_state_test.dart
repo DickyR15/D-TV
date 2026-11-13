@@ -208,6 +208,46 @@ void main() {
   );
 
   test(
+    'LAN import restores one series favorite and each season progress',
+    () async {
+      final sender = await create();
+      await sender.registerHongguoSeriesSeasons(
+        officialSeasonTwo.withSeriesGroupId(''),
+        [officialSeasonOne, officialSeasonTwo],
+      );
+      await sender.toggleFavorite(officialSeasonTwo);
+      await sender.saveWatch(
+        WatchEntry(
+          drama: officialSeasonTwo,
+          episode: 3,
+          position: 24,
+          duration: 60,
+          updatedAt: DateTime.utc(2026, 11, 13, 12),
+        ),
+      );
+      final records = sender.lanDocument.records.values.toList();
+
+      final receiver = await create();
+      final base = receiver.lanDocument.hashFor({'hongguo'});
+      await receiver.applyLanRecords(
+        operation: 'series-progress-transfer-test',
+        base: base,
+        sources: {'hongguo'},
+        records: records,
+        epoch: receiver.profileEpoch,
+      );
+
+      expect(receiver.favorites, hasLength(1));
+      expect(receiver.favorites.single.seriesGroupId,
+          officialSeasonOne.seriesGroupId);
+      expect(receiver.isFavorite(officialSeasonOne.id), isTrue);
+      expect(receiver.isFavorite(officialSeasonTwo.id), isTrue);
+      expect(receiver.watched(officialSeasonTwo.id)!.episode, 3);
+      expect(receiver.watched(officialSeasonTwo.id)!.position, 24);
+    },
+  );
+
+  test(
     'official season registration consolidates old per-season favorites',
     () async {
       final store = await create();
