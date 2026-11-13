@@ -126,7 +126,7 @@ func TestHeitaoCoverRecoveryUsesExactStaleIDFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(addresses) == 0 || addresses[0] != "https://img.example.test/200.jpg" {
-		t.Fatalf("Heitao cover recovery = %#v, want official replacement poster", addresses)
+	if len(addresses) < 2 || addresses[0] != "https://img.example.test/200.jpg" || addresses[1] != "https://img.example.test/old.jpg" {
+		t.Fatalf("Heitao cover recovery = %#v, want refreshed official poster before the stale cached URL", addresses)
 	}
 }

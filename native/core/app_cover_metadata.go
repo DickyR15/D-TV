@@ -216,9 +216,24 @@ func nativeMergeCoverRecoveryMetadata(drama *nativeDrama, fresh Drama) []string 
 			seenTags[key] = true
 		}
 	}
-	if drama.Cover == "" {
+	// A successful detail refresh is newer than the catalogue's cached cover.
+	// Prefer the provider's current artwork, but keep the previous URL as a
+	// lower-priority candidate in case the refreshed image is temporarily down.
+	freshAddresses := nativeCoverAddressesFromDrama(fresh)
+	if len(freshAddresses) > 0 {
+		previousCover := strings.TrimSpace(drama.Cover)
+		drama.Cover = freshAddresses[0]
+		candidates := append([]string{}, freshAddresses[1:]...)
+		candidates = append(candidates, drama.CoverCandidates...)
+		if previousCover != "" && previousCover != drama.Cover {
+			candidates = append(candidates, previousCover)
+		}
+		drama.CoverCandidates = nativeUniqueCoverAddresses(candidates...)
+	} else if drama.Cover == "" {
 		drama.Cover = normalized.Cover
 	}
+	// Preserve alternate fields from the refreshed detail row even when the
+	// primary cover is already populated by a higher-priority source field.
 	drama.CoverCandidates = nativeUniqueCoverAddresses(append(
 		drama.CoverCandidates, normalized.CoverCandidates...,
 	)...)
