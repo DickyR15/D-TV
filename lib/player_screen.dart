@@ -2974,7 +2974,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         } catch (_) {}
       }),
     );
-    final playbackReleased = _releasePlayback(_session, 'screen_dispose');
     final loaderClosed = _loader.close().catchError((Object _) {});
     unawaited(() async {
       try {
@@ -2986,8 +2985,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         await enhancementClosed.catchError((Object _) {});
         await outputSizeClosed.catchError((Object _) {});
         await loaderClosed;
-        await playbackReleased;
         await _player.dispose();
+        await _releasePlayback(_session, 'screen_dispose');
         // The PiP host waits for this signal before telling the main engine
         // to resume playback. It is deliberately after native dispose.
         widget.onPlaybackDisposed?.call();
@@ -3000,10 +2999,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
     }());
     if (Platform.isWindows || Platform.isMacOS) {
-      unawaited(
-        windowManager.setAlwaysOnTop(false).catchError((Object _) {}),
-      );
-      unawaited(windowManager.setFullScreen(false));
+      if (!widget.desktopMiniPlayer) {
+        unawaited(
+          windowManager.setAlwaysOnTop(false).catchError((Object _) {}),
+        );
+        unawaited(windowManager.setFullScreen(false));
+      }
     } else if (_mobile ||
         _formFactor == FormFactor.pad ||
         _television && Platform.isAndroid) {
