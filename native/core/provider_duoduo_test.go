@@ -235,7 +235,7 @@ func TestDuoduoMapsMovieMetadataAndCategories(t *testing.T) {
 	if drama.ID != "duoduo:78296" || drama.Source != sourceDuoduo ||
 		drama.Title != "流浪地球（特別版）" || drama.CategoryName != "电影" || drama.DoubanID != "20502443" ||
 		drama.Cover != "https://images.example.test/poster.jpg" ||
-		!strings.Contains(drama.Desc, "<p>科幻電影</p>") {
+		drama.Desc != "科幻電影" || drama.Intro != "科幻電影" || strings.Contains(drama.Desc, "<p>") {
 		t.Fatalf("Duoduo metadata mapping is incomplete: %+v", drama)
 	}
 	if !validNativeCategory(sourceDuoduo, "1") || !validNativeCategory(sourceDuoduo, "4") ||
