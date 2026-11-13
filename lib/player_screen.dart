@@ -1271,6 +1271,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _syncInitialPlaybackFullscreen() {
     if (!_fullscreen || _initialFullscreenApplied) return;
     _initialFullscreenApplied = true;
+    if (widget.desktopMiniPlayer) {
+      // A desktop mini-player is a normal, independently resizable window.
+      // Do not let the shared player startup policy force it into fullscreen.
+      _fullscreen = false;
+      _automaticFullscreenSuppressed = true;
+      return;
+    }
     if (_television) {
       _scheduleSystemUi();
       return;
