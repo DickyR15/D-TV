@@ -34,8 +34,6 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
   LocalStore? _store;
   Object? _error;
   final DesktopMiniPlayerShutdown _shutdown = DesktopMiniPlayerShutdown();
-  final DesktopMiniPlayerStartupGate _startupGate =
-      DesktopMiniPlayerStartupGate();
   Completer<void>? _playerDisposed;
   bool _closing = false;
   bool _restoreMainWindowOnClose = true;
@@ -92,9 +90,6 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
     try {
       final preferences = await SharedPreferences.getInstance();
       await _repository.initialize();
-      // Closing can happen while preferences or the native repository are
-      // initializing. Never attach a late player after the parent resumes.
-      if (!mounted || !_startupGate.canAttachPlayer) return;
       if (!widget.arguments.authorizedSession) {
         throw StateError('主視窗尚未完成使用者驗證');
       }
@@ -102,19 +97,18 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
         preferences,
         assumeAuthenticated: widget.arguments.authorizedSession,
       );
-      if (!mounted || !_startupGate.canAttachPlayer) {
+      _repository.access = store;
+      if (!mounted) {
         store.dispose();
         return;
       }
-      _repository.access = store;
       setState(() {
         _store = store;
         _error = null;
       });
       await desktopMiniPlayerChannel.invokeMethod<void>('mini_ready');
     } catch (error) {
-      if (!mounted || !_startupGate.canAttachPlayer) return;
-      setState(() => _error = error);
+      if (mounted) setState(() => _error = error);
       try {
         await desktopMiniPlayerChannel.invokeMethod<void>(
           'mini_error',
@@ -146,14 +140,10 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
   }
 
   Future<void> _disposePlayerBeforeHandoff() async {
-    // Close the startup gate even when PlayerScreen has not been attached yet.
-    // Otherwise a slow initialization could create it after mini_closed.
-    _startupGate.close();
-    if (mounted && !_closing) setState(() => _closing = true);
     if (_store == null) return;
-
     final disposed = Completer<void>();
     _playerDisposed = disposed;
+    if (mounted) setState(() => _closing = true);
 
     // Give the host one frame to unmount PlayerScreen. Its completion callback
     // is fired only after the underlying media_kit MPV player is disposed.
