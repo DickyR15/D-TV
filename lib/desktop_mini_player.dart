@@ -223,7 +223,7 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
                 child: Row(
                   children: [
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         uiTraditional(widget.arguments.detail.drama.title),
                         maxLines: 1,
