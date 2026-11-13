@@ -147,6 +147,36 @@ func parseHongguoAppSeasons(result map[string]any) ([]nativeDramaSeason, error) 
 			_ = subscribeItem // Reservation IDs are intentionally not written here.
 		}
 	}
+
+	// The lowest numbered season is the stable canonical identity for the
+	// season group. Every sibling query returns the same official season list,
+	// so selecting a different season does not create a second favorite group.
+	groupID := ""
+	groupNumber := int(^uint(0) >> 1)
+	for _, item := range items {
+		_, sourceID, valid := splitProviderDramaID(item.Drama.ID)
+		if !valid || sourceID == "" {
+			continue
+		}
+		if item.Number > 0 && (item.Number < groupNumber ||
+			item.Number == groupNumber && (groupID == "" || sourceID < groupID)) {
+			groupID = sourceID
+			groupNumber = item.Number
+		}
+	}
+	if groupID == "" {
+		for _, item := range items {
+			_, sourceID, valid := splitProviderDramaID(item.Drama.ID)
+			if valid && sourceID != "" && (groupID == "" || sourceID < groupID) {
+				groupID = sourceID
+			}
+		}
+	}
+	if groupID != "" {
+		for index := range items {
+			items[index].Drama.SeriesGroupID = groupID
+		}
+	}
 	return items, nil
 }
 
