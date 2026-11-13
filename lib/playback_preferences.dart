@@ -100,6 +100,8 @@ class PlaybackPreferences {
     this.autoPictureInPicture = false,
     this.aspectRatio = PlaybackAspectRatio.automatic,
     this.desktopAlwaysOnTop = false,
+    this.showTelevisionNetworkSpeed = true,
+    this.showTelevisionClock = true,
   });
 
   final double speed;
@@ -112,6 +114,8 @@ class PlaybackPreferences {
   final bool autoPictureInPicture;
   final PlaybackAspectRatio aspectRatio;
   final bool desktopAlwaysOnTop;
+  final bool showTelevisionNetworkSpeed;
+  final bool showTelevisionClock;
 
   // Fresh installs enable next-episode preloading on phones and TVs.
   // A saved explicit choice (including false) always takes precedence.
@@ -128,6 +132,8 @@ class PlaybackPreferences {
     bool? autoPictureInPicture,
     PlaybackAspectRatio? aspectRatio,
     bool? desktopAlwaysOnTop,
+    bool? showTelevisionNetworkSpeed,
+    bool? showTelevisionClock,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
@@ -139,6 +145,9 @@ class PlaybackPreferences {
     autoPictureInPicture: autoPictureInPicture ?? this.autoPictureInPicture,
     aspectRatio: aspectRatio ?? this.aspectRatio,
     desktopAlwaysOnTop: desktopAlwaysOnTop ?? this.desktopAlwaysOnTop,
+    showTelevisionNetworkSpeed:
+        showTelevisionNetworkSpeed ?? this.showTelevisionNetworkSpeed,
+    showTelevisionClock: showTelevisionClock ?? this.showTelevisionClock,
   );
 
   Map<String, dynamic> toJson() => {
@@ -152,6 +161,8 @@ class PlaybackPreferences {
     'autoPictureInPicture': autoPictureInPicture,
     'aspectRatioMode': aspectRatio.name,
     'desktopAlwaysOnTop': desktopAlwaysOnTop,
+    'showTelevisionNetworkSpeed': showTelevisionNetworkSpeed,
+    'showTelevisionClock': showTelevisionClock,
   };
 
   factory PlaybackPreferences.fromJson(Map<String, dynamic> value) {
@@ -182,6 +193,9 @@ class PlaybackPreferences {
       autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
       aspectRatio: aspectRatio,
       desktopAlwaysOnTop: value['desktopAlwaysOnTop'] as bool? ?? false,
+      showTelevisionNetworkSpeed:
+          value['showTelevisionNetworkSpeed'] as bool? ?? true,
+      showTelevisionClock: value['showTelevisionClock'] as bool? ?? true,
     );
   }
 }
