@@ -3,6 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/video_output_size.dart';
 
 void main() {
+  group('videoQualityShortEdge', () {
+    test('uses the shorter edge for portrait and landscape video', () {
+      expect(videoQualityShortEdge(const Size(720, 1280)), 720);
+      expect(videoQualityShortEdge(const Size(1920, 1080)), 1080);
+    });
+
+    test('rejects missing, empty, or invalid dimensions', () {
+      expect(videoQualityShortEdge(null), isNull);
+      expect(videoQualityShortEdge(Size.zero), isNull);
+      expect(videoQualityShortEdge(const Size(double.infinity, 720)), isNull);
+    });
+  });
+
   group('videoDisplaySizeForSource', () {
     test('prefers valid display dimensions over coded dimensions', () {
       expect(
