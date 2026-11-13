@@ -162,6 +162,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   int _mobileTab = 0;
   bool _autoAdvance = true;
   bool _advancingOfficialSeason = false;
+  bool _showTelevisionNetworkSpeed = true;
+  bool _showTelevisionClock = true;
   Timer? _sleepTimer;
   int _sleepMinutes = 0;
   bool _sleepAtEpisodeEnd = false;
@@ -236,6 +238,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     televisionDecoder: _televisionDecoder,
     autoPictureInPicture: widget.store.playbackPreferences.autoPictureInPicture,
     desktopAlwaysOnTop: widget.store.playbackPreferences.desktopAlwaysOnTop,
+    showTelevisionNetworkSpeed: _showTelevisionNetworkSpeed,
+    showTelevisionClock: _showTelevisionClock,
   );
   int get _actualVideoQuality =>
       videoQualityShortEdge(videoDisplaySize(_player.state.videoParams)) ?? 0;
@@ -289,6 +293,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _autoAdvance = preferences.autoAdvance;
     _televisionDecoder = preferences.televisionDecoder;
     _playbackAspectRatio = preferences.aspectRatio;
+    _showTelevisionNetworkSpeed = preferences.showTelevisionNetworkSpeed;
+    _showTelevisionClock = preferences.showTelevisionClock;
     // Preserve the previously validated Android TV MPV Embed + MediaCodec path.
     // ExoPlayer remains opt-in through DTV_ANDROID_PLAYER=exo for A/B tests.
     final inheritedLayout = context.getInheritedWidgetOfExactType<AppLayout>();
@@ -2510,6 +2516,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       _preloadEnabled = nextPreferences.preload ?? _preloadEnabled;
       _portraitBlurBackground = nextPreferences.portraitBlurBackground;
       _televisionDecoder = nextPreferences.televisionDecoder;
+      _showTelevisionNetworkSpeed = nextPreferences.showTelevisionNetworkSpeed;
+      _showTelevisionClock = nextPreferences.showTelevisionClock;
     });
     if (qualityChanged) _preloader.clear();
     _syncPreload();
@@ -3233,6 +3241,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             key: _televisionControlsKey,
             player: _player,
             playbackGeneration: _generation,
+            showNetworkSpeed: _showTelevisionNetworkSpeed,
+            showClock: _showTelevisionClock,
             title: title,
             enabled: !_loading && _error == null,
             // On TV, start with a clean video. The user can reveal controls
