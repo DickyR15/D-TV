@@ -48,7 +48,6 @@ class _DetailScreenState extends State<DetailScreen> {
   int _generation = 0;
   int _episodePage = 0;
   String _selectedPlayLine = '';
-  bool _expandedDescription = false;
   bool _episodesExpanded = false;
   final _episodeAnchor = GlobalKey();
   final _detailScroll = ScrollController();
@@ -401,7 +400,6 @@ class _DetailScreenState extends State<DetailScreen> {
       _selectedPlayLine = '';
       _episodePage = 0;
       _episodesExpanded = false;
-      _expandedDescription = false;
       _seriesSeasons = const [];
       _seriesSeasonsError = null;
       _seriesSeasonsLoading = drama.source == SourceSite.hongguo.id;
@@ -930,23 +928,11 @@ class _DetailScreenState extends State<DetailScreen> {
               ],
             ),
           ),
-        if (drama.description.isNotEmpty) ...[
+        if (drama.description.trim().isNotEmpty) ...[
           const SizedBox(height: 12),
           Text(
             uiTraditional(drama.description),
-            maxLines: _expandedDescription ? null : 3,
-            overflow: _expandedDescription
-                ? TextOverflow.visible
-                : TextOverflow.ellipsis,
             style: TextStyle(color: colors.onSurfaceVariant, height: 1.6),
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () =>
-                  setState(() => _expandedDescription = !_expandedDescription),
-              child: Text(_expandedDescription ? '收起簡介' : '展開簡介'),
-            ),
           ),
         ],
         if (_detail?.warning.isNotEmpty == true)
