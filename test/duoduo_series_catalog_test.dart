@@ -92,6 +92,18 @@ void main() {
     expect(store.isFavorite(first.id), isTrue);
     expect(store.isFavorite(second.id), isTrue);
     expect(store.favorites, hasLength(1));
+    await store.saveWatch(WatchEntry(
+      drama: first, episode: 3, position: 42, duration: 120,
+      updatedAt: DateTime(2026, 11, 14, 1),
+    ));
+    await store.saveWatch(WatchEntry(
+      drama: second, episode: 8, position: 16, duration: 90,
+      updatedAt: DateTime(2026, 11, 14, 2),
+    ));
+    expect(store.watched(first.id)?.episode, 3);
+    expect(store.watched(second.id)?.episode, 8);
+    expect(store.watched(first.id)?.position, 42);
+    expect(store.watched(second.id)?.position, 16);
     await store.toggleFavorite(second);
     expect(store.favorites, isEmpty);
   });

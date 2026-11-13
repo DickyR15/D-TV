@@ -66,11 +66,13 @@ func TestFetchDuoduoSeriesSeasonsMatchesExactBaseTitle(t *testing.T) {
 		t.Fatalf("expected exactly two related seasons, got %+v", seasons)
 	}
 	if seasons[0].Drama.ID != "duoduo:100" || seasons[0].Number != 1 ||
-		seasons[0].Label != "第1季" || !seasons[0].Playable {
+		seasons[0].Label != "第1季" || !seasons[0].Playable ||
+		seasons[0].Drama.Cover != "https://img.example.test/1.jpg" {
 		t.Fatalf("first season metadata mismatch: %+v", seasons[0])
 	}
 	if seasons[1].Drama.ID != "duoduo:101" || seasons[1].Number != 2 ||
-		seasons[1].Label != "第2季" || seasons[1].Drama.SeriesGroupID == "" {
+		seasons[1].Label != "第2季" || seasons[1].Drama.SeriesGroupID == "" ||
+		seasons[1].Drama.Cover != "https://img.example.test/2.jpg" {
 		t.Fatalf("second season metadata mismatch: %+v", seasons[1])
 	}
 	if seasons[0].Drama.SeriesGroupID != seasons[1].Drama.SeriesGroupID {

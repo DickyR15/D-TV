@@ -278,7 +278,12 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 	// Preserve the source's alternate poster fields so the cover cache can try
 	// them when the preferred CDN is unavailable, rather than losing the title's
 	// only other image candidates at the initial JSON mapping stage.
-	cover := firstNonEmpty(duoduoPosterAddressesFromRow(row)...)
+	posterAddresses := duoduoPosterAddressesFromRow(row)
+	cover := firstNonEmpty(posterAddresses...)
+	var coverCandidates []string
+	if len(posterAddresses) > 1 {
+		coverCandidates = append(coverCandidates, posterAddresses[1:]...)
+	}
 	description := duoduoSynopsisFromRow(row)
 	category := duoduoString(row["type_name"])
 	year := duoduoString(row["vod_year"])
@@ -304,7 +309,7 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 		ID: providerDramaID(sourceDuoduo, id), Source: sourceDuoduo, SourceID: id,
 		Title: truncate(title, 512), Name: truncate(title, 512),
 		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
-		Cover: cover, CoverURL: cover, ChannelName: "多多追劇",
+		Cover: cover, CoverURL: cover, CoverCandidates: coverCandidates, ChannelName: "多多追劇",
 		CategoryName: category,
 		Remark: truncate(remarks, 96), Score: duoduoString(row["vod_douban_score"]),
 		Heat: duoduoString(row["vod_hits"]), OnlineDate: year,

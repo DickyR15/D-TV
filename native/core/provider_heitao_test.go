@@ -47,6 +47,8 @@ func TestParseHeitaoCardsKeepsPosterAndEpisodeBadge(t *testing.T) {
 func TestParseHeitaoCardsRecognizesLazyArtworkAttributes(t *testing.T) {
 	for _, attribute := range []string{
 		"data-lazy-src", "data-original-src", "data-url", "data-echo",
+		"data-lazyload", "data-lazy", "data-ks-lazyload", "data-image", "data-poster",
+		"data-srcset", "srcset",
 	} {
 		t.Run(attribute, func(t *testing.T) {
 			source := "<!doctype html><html><body>" +
@@ -59,6 +61,31 @@ func TestParseHeitaoCardsRecognizesLazyArtworkAttributes(t *testing.T) {
 				t.Fatalf("lazy attribute %q was not parsed: %+v", attribute, items)
 			}
 		})
+	}
+}
+
+func TestParseHeitaoCardsPreservesAllLazyPosterCandidates(t *testing.T) {
+	document := heitaoTestDocument(t, `<!doctype html><html><body>
+<a class="thumb" href="/index.php/vod/detail/id/322.html" title="多圖海報">
+  <img src="/poster/main.jpg" data-original="/poster/original.jpg"
+       data-srcset="/poster/retina.webp 2x, /poster/large.webp 3x">
+</a></body></html>`)
+	items := parseHeitaoCards(document, "https://heitaodj.com/index.php/vod/show.html")
+	if len(items) != 1 || items[0].Cover != "https://heitaodj.com/poster/main.jpg" {
+		t.Fatalf("primary Heitao artwork mismatch: %+v", items)
+	}
+	want := []string{
+		"https://heitaodj.com/poster/original.jpg",
+		"https://heitaodj.com/poster/retina.webp",
+		"https://heitaodj.com/poster/large.webp",
+	}
+	if len(items[0].CoverCandidates) != len(want) {
+		t.Fatalf("lazy artwork candidates = %#v, want %#v", items[0].CoverCandidates, want)
+	}
+	for index, address := range want {
+		if items[0].CoverCandidates[index] != address {
+			t.Fatalf("lazy artwork candidate %d = %q, want %q", index, items[0].CoverCandidates[index], address)
+		}
 	}
 }
 

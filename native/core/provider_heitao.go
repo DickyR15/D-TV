@@ -238,6 +238,36 @@ func (d *Downloader) fetchHeitaoCategories(ctx context.Context) ([]nativeCategor
 	return categories, nil
 }
 
+func heitaoImageCoverAddresses(image *html.Node, pageURL string) []string {
+	if image == nil {
+		return nil
+	}
+	var addresses []string
+	for _, attribute := range []string{
+		"src", "data-src", "data-original", "data-lazy-src",
+		"data-original-src", "data-url", "data-echo", "data-lazyload",
+		"data-lazy", "data-ks-lazyload", "data-image", "data-poster",
+		"data-srcset", "srcset",
+	} {
+		value := strings.TrimSpace(providerHTMLAttr(image, attribute))
+		if value == "" {
+			continue
+		}
+		if strings.Contains(attribute, "srcset") {
+			for _, candidate := range strings.Split(value, ",") {
+				fields := strings.Fields(strings.TrimSpace(candidate))
+				if len(fields) == 0 {
+					continue
+				}
+				addresses = append(addresses, providerCoverAddresses(fields[0], pageURL)...)
+			}
+			continue
+		}
+		addresses = append(addresses, providerCoverAddresses(value, pageURL)...)
+	}
+	return nativeUniqueCoverAddresses(addresses...)
+}
+
 func parseHeitaoCards(document *html.Node, pageURL string) []Drama {
 	items := []Drama{}
 	seen := map[string]bool{}
@@ -265,20 +295,15 @@ func parseHeitaoCards(document *html.Node, pageURL string) []Drama {
 			continue
 		}
 		seen[id] = true
-		cover := ""
+		var coverAddresses []string
 		for _, image := range providerHTMLNodes(card, func(node *html.Node) bool { return node.Data == "img" }) {
-			for _, attribute := range []string{
-				"src", "data-src", "data-original", "data-lazy-src",
-				"data-original-src", "data-url", "data-echo",
-			} {
-				if address := providerCoverAddress(providerHTMLAttr(image, attribute), pageURL); address != "" {
-					cover = address
-					break
-				}
-			}
-			if cover != "" {
-				break
-			}
+			coverAddresses = append(coverAddresses, heitaoImageCoverAddresses(image, pageURL)...)
+		}
+		coverAddresses = nativeUniqueCoverAddresses(coverAddresses...)
+		cover := firstNonEmpty(coverAddresses...)
+		var coverCandidates []string
+		if len(coverAddresses) > 1 {
+			coverCandidates = append(coverCandidates, coverAddresses[1:]...)
 		}
 		remark := ""
 		if label := providerHTMLFirstClass(card, "label"); label != nil {
@@ -287,7 +312,8 @@ func parseHeitaoCards(document *html.Node, pageURL string) []Drama {
 		drama := Drama{
 			ID: providerDramaID(sourceHeitao, id), Source: sourceHeitao, SourceID: id,
 			Title: truncate(title, 512), Name: truncate(title, 512),
-			Cover: cover, CoverURL: cover, ChannelName: "黑桃", CategoryName: "短剧", Remark: remark, Badge: remark,
+			Cover: cover, CoverURL: cover, CoverCandidates: coverCandidates,
+			ChannelName: "黑桃", CategoryName: "短剧", Remark: remark, Badge: remark,
 		}
 		if count := heitaoEpisodeCount(remark); count > 0 {
 			drama.EpisodeCount, drama.TotalEpisode = count, count
@@ -429,23 +455,24 @@ func (d *Downloader) fetchHeitaoDetail(ctx context.Context, sourceID string) (Dr
 	if len(chapters) == 0 {
 		return Drama{}, nil, errors.New("黑桃该剧暂无可播放分集")
 	}
-	cover := providerCoverAddress(meta.Image, pageURL)
-	if cover == "" {
-		if block := providerHTMLFirstClass(document, "albumDetailImg"); block != nil {
-			for _, image := range providerHTMLNodes(block, func(node *html.Node) bool { return node.Data == "img" }) {
-				if address := providerCoverAddress(providerHTMLAttr(image, "src"), pageURL); address != "" {
-					cover = address
-					break
-				}
-			}
+	coverAddresses := providerCoverAddresses(meta.Image, pageURL)
+	if block := providerHTMLFirstClass(document, "albumDetailImg"); block != nil {
+		for _, image := range providerHTMLNodes(block, func(node *html.Node) bool { return node.Data == "img" }) {
+			coverAddresses = append(coverAddresses, heitaoImageCoverAddresses(image, pageURL)...)
 		}
+	}
+	coverAddresses = nativeUniqueCoverAddresses(coverAddresses...)
+	cover := firstNonEmpty(coverAddresses...)
+	var coverCandidates []string
+	if len(coverAddresses) > 1 {
+		coverCandidates = append(coverCandidates, coverAddresses[1:]...)
 	}
 	description := heitaoSynopsis(document, meta)
 	drama := Drama{
 		ID: providerDramaID(sourceHeitao, sourceID), Source: sourceHeitao, SourceID: sourceID,
 		Title: truncate(name, 512), Name: truncate(name, 512),
 		Desc: description, Intro: description,
-		Cover: cover, CoverURL: cover, ChannelName: "黑桃",
+		Cover: cover, CoverURL: cover, CoverCandidates: coverCandidates, ChannelName: "黑桃",
 		CategoryName: firstNonEmpty(heitaoCategoryName(document), "短剧"),
 		Tags:         heitaoTags(document),
 		TotalEpisode: len(chapters), EpisodeCount: len(chapters),

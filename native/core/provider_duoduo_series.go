@@ -134,7 +134,8 @@ func duoduoDramaFromNative(drama nativeDrama) Drama {
 	return Drama{
 		ID: drama.ID, Source: drama.Source, SourceID: drama.SourceID,
 		Title: drama.Title, Name: drama.Title, Desc: drama.Description,
-		Cover: drama.Cover, Episodes: drama.Episodes, Category: drama.Category,
+		Cover: drama.Cover, CoverCandidates: append([]string(nil), drama.CoverCandidates...),
+		Episodes: drama.Episodes, Category: drama.Category,
 		Heat: drama.Heat, Views: drama.Views, OnlineDate: drama.OnlineDate,
 		Tags: append([]string(nil), drama.Tags...), ReleaseStatus: drama.ReleaseStatus,
 		SeriesGroupID: drama.SeriesGroupID,

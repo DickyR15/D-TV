@@ -1188,6 +1188,56 @@ func TestExternalPosterAddressUsesDoubanSuggestionAfterBangumiMiss(t *testing.T)
 	if address != expected { t.Fatalf("external fallback poster = %q, want %q", address, expected) }
 }
 
+func TestLoadAlternativeAddressHTTP404EvictsExpiredStaleBytes(t *testing.T) {
+	const address = "https://img.example.test/stale-poster.jpg"
+	const referer = "https://heitaodj.com/"
+	image := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 1}
+	downloader := &Downloader{
+		client: &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(image)), ContentLength: int64(len(image)), Request: request,
+			}, nil
+		})},
+		cfg: defaultConfig(),
+	}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	drama := nativeDrama{ID: "heitao:404", Source: sourceHeitao, SourceID: "404"}
+	path, err := cache.loadAlternativeAddress(context.Background(), drama, address, referer, "provider", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache.mu.Lock()
+	var cacheKey string
+	for key, entry := range cache.entries {
+		cacheKey = key
+		entry.updatedAt = time.Now().Add(-nativeCoverTTL - time.Second)
+		cache.entries[key] = entry
+	}
+	cache.mu.Unlock()
+	if cacheKey == "" {
+		t.Fatal("initial poster was not recorded in the cache")
+	}
+	downloader.client = &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusNotFound, Header: make(http.Header),
+			Body: io.NopCloser(strings.NewReader("not found")), Request: request,
+		}, nil
+	})}
+	if _, err := cache.loadAlternativeAddress(context.Background(), drama, address, referer, "provider", false); err == nil {
+		t.Fatal("HTTP 404 unexpectedly reused expired stale artwork")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("HTTP 404 left stale poster bytes on disk: %v", err)
+	}
+	cache.mu.Lock()
+	_, retained := cache.entries[cacheKey]
+	cache.mu.Unlock()
+	if retained {
+		t.Fatal("HTTP 404 left the stale poster cache entry")
+	}
+}
+
 func TestLoadAlternativeAddressForcedRetryReDownloadsFreshCache(t *testing.T) {
 	firstImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 1}
 	secondImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 2}

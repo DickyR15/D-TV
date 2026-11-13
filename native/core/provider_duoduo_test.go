@@ -179,6 +179,32 @@ func TestDuoduoPosterRecoveryHandlesBaiduWrappersAndUnknownCDNs(t *testing.T) {
 	}
 }
 
+func TestDuoduoDramaFromRowPreservesAlternatePostersForNativeCache(t *testing.T) {
+	row := map[string]any{
+		"vod_id": 78296, "vod_name": "測試影片",
+		"vod_pic": "https://broken.example.test/main.jpg",
+		"vod_pic_thumb": "https://working.example.test/thumb.jpg",
+		"vod_pic_slide": "https://working.example.test/slide.jpg",
+		"vod_pic_original": "https://working.example.test/original.jpg",
+	}
+	drama := duoduoDramaFromRow(row)
+	if drama.Cover != "https://broken.example.test/main.jpg" {
+		t.Fatalf("primary poster = %v", drama.Cover)
+	}
+	want := []string{
+		"https://working.example.test/thumb.jpg",
+		"https://working.example.test/slide.jpg",
+		"https://working.example.test/original.jpg",
+	}
+	if !reflect.DeepEqual(drama.CoverCandidates, want) {
+		t.Fatalf("Duoduo alternate poster candidates = %#v, want %#v", drama.CoverCandidates, want)
+	}
+	native := nativeNormalize(drama)
+	if !reflect.DeepEqual(native.CoverCandidates, want) {
+		t.Fatalf("native poster candidates = %#v, want %#v", native.CoverCandidates, want)
+	}
+}
+
 func TestDuoduoKeepsAlternatePosterFieldsForRetry(t *testing.T) {
 	row := map[string]any{
 		"vod_id": 78296,

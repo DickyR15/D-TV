@@ -22,6 +22,7 @@ type Drama struct {
 	Cover             any                `json:"cover"`
 	CoverURL          any                `json:"coverUrl"`
 	CoverURLSnake     any                `json:"cover_url"`
+	CoverCandidates   []string           `json:"coverCandidates,omitempty"`
 	Image             any                `json:"image"`
 	ImageURL          any                `json:"imageUrl"`
 	ImageURLSnake     any                `json:"image_url"`

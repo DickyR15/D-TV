@@ -326,7 +326,7 @@ func nativeNormalize(drama Drama) nativeDrama {
 		drama.Cover, drama.CoverURL, drama.CoverURLSnake,
 		drama.Image, drama.ImageURL, drama.ImageURLSnake,
 		drama.Img, drama.Pic, drama.Picture, drama.Poster,
-		drama.Thumb, drama.Thumbnail,
+		drama.Thumb, drama.Thumbnail, drama.CoverCandidates,
 	} {
 		for _, raw := range nativeCoverValueStrings(value) {
 			address := ""
