@@ -219,8 +219,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
       _pictureInPictureActive || _pictureInPictureRequested;
-  bool get _desktopMiniPlayerSupported =>
-      !widget.desktopMiniPlayer && (Platform.isWindows || Platform.isMacOS);
+  bool get _desktopMiniPlayerSupported => supportsDesktopMiniPlayer(
+    isWindows: Platform.isWindows,
+    isMacOS: Platform.isMacOS,
+    secondaryPlayer: widget.desktopMiniPlayer,
+  );
   bool _desktopMiniActive = false;
   bool _desktopMiniHovered = false;
   double? _desktopMiniSeekValue;

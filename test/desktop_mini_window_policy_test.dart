@@ -2,6 +2,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/desktop_mini_window_policy.dart';
 
 void main() {
+  test('desktop mini-player is disabled on Windows and secondary players', () {
+    expect(
+      supportsDesktopMiniPlayer(
+        isWindows: true,
+        isMacOS: false,
+        secondaryPlayer: false,
+      ),
+      isFalse,
+    );
+    expect(
+      supportsDesktopMiniPlayer(
+        isWindows: true,
+        isMacOS: true,
+        secondaryPlayer: false,
+      ),
+      isFalse,
+    );
+    expect(
+      supportsDesktopMiniPlayer(
+        isWindows: false,
+        isMacOS: true,
+        secondaryPlayer: false,
+      ),
+      isTrue,
+    );
+    expect(
+      supportsDesktopMiniPlayer(
+        isWindows: false,
+        isMacOS: true,
+        secondaryPlayer: true,
+      ),
+      isFalse,
+    );
+  });
+
   test('mini window preserves landscape video aspect ratio', () {
     expect(clampDesktopMiniAspectRatio(16 / 9), closeTo(16 / 9, 0.0001));
     expect(
