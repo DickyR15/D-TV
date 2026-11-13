@@ -2933,7 +2933,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (_desktopMiniPlayerSupported) {
       if (_desktopMiniActive) {
         unawaited(
-          _desktopMiniChannel.invokeMethod<void>('close').catchError((Object _) {}),
+          _desktopMiniChannel.invokeMethod<void>('close', {
+            'restoreMain': false,
+          }).catchError((Object _) {}),
         );
       }
       unawaited(_desktopMiniChannel.setMethodCallHandler(null));
