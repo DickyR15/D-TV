@@ -221,6 +221,30 @@ class _PlayerMenuState extends State<PlayerMenu> {
             ),
           const SizedBox(height: 20),
         ],
+        if (all) ...[
+          const Text('畫面比例'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final ratio in PlaybackAspectRatio.values)
+                ChoiceChip(
+                  key: ValueKey('menu-aspect-${ratio.name}'),
+                  label: Text(playbackAspectRatioLabel(ratio)),
+                  selected: ratio == preferences.aspectRatio,
+                  onSelected: _busy
+                      ? null
+                      : (_) => _run(
+                          () => widget.onPreferences(
+                            preferences.copyWith(aspectRatio: ratio),
+                          ),
+                        ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
         if ((all || widget.section == PlayerMenuSection.quality) &&
             widget.enhancement != null)
           VideoEnhancementSettings(
