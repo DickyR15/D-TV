@@ -73,6 +73,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
   DateTime _clockNow = DateTime.now();
   String? _networkSpeedLabel;
   bool _infoReadPending = false;
+  bool _infoReadFailureLogged = false;
   bool _visible = true;
   bool _panelOpen = false;
   bool _seekHint = false;
@@ -208,12 +209,16 @@ class TelevisionControlsState extends State<TelevisionControls> {
           speed = televisionNetworkSpeedLabel(raw, networkInput: true);
         }
       }
+      _infoReadFailureLogged = false;
     } catch (error) {
       // MPV can temporarily report an unavailable property during open/seek.
       // Keep the previous sample rather than showing a fabricated zero.
-      DiaryService.add(
-        '[TVInfo] network_speed_read_failed error=${error.runtimeType}',
-      );
+      if (!_infoReadFailureLogged) {
+        DiaryService.add(
+          '[TVInfo] network_speed_read_failed error=${error.runtimeType}',
+        );
+        _infoReadFailureLogged = true;
+      }
       speed = _networkSpeedLabel;
     } finally {
       _infoReadPending = false;
