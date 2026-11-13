@@ -14,6 +14,8 @@ class FollowRepository extends FixtureRepository {
   final checked = <String>[];
   final failing = <String>{};
   final episodes = <String, int>{};
+  final seasonRequests = <String>[];
+  final seasonLists = <String, List<DramaSeason>>{};
   Future<void> Function(Drama drama)? onCheck;
 
   @override
@@ -31,6 +33,12 @@ class FollowRepository extends FixtureRepository {
       title: drama.title,
       episodes: episodes[drama.id] ?? drama.episodes,
     );
+  }
+  
+  @override
+  Future<List<DramaSeason>> seasons(Drama drama) async {
+    seasonRequests.add(drama.id);
+    return seasonLists[drama.id] ?? const [];
   }
 }
 
@@ -115,6 +123,58 @@ void main() {
     expect(store.following(finished.id)!.status, FollowStatus.watching);
     expect(store.following(finished.id)!.newEpisodes, 2);
     expect(store.followChecks.keys.toSet(), {active.id, finished.id});
+  });
+
+  test('追劇檢查會發現紅果新季，並維持系列單一收藏', () async {
+    final seasonOne = _drama(101);
+    final seasonTwo = Drama(
+      id: 'hongguo:202',
+      source: 'hongguo',
+      sourceId: '202',
+      title: '合成系列第二季',
+      episodes: 8,
+    );
+    await watching(seasonOne);
+    repository.seasonLists[seasonOne.id] = [
+      DramaSeason(
+        drama: seasonOne.withSeriesGroupId('101').merge(
+          Drama(
+            id: seasonOne.id,
+            source: seasonOne.source,
+            sourceId: seasonOne.sourceId,
+            seriesGroupId: '101',
+            seriesSeasonNumber: 1,
+            seriesSeasonUnit: '季',
+            title: seasonOne.title,
+          ),
+        ),
+        number: 1,
+        label: '第 1 季',
+      ),
+      DramaSeason(
+        drama: Drama(
+          id: seasonTwo.id,
+          source: seasonTwo.source,
+          sourceId: seasonTwo.sourceId,
+          seriesGroupId: '101',
+          seriesSeasonNumber: 2,
+          seriesSeasonUnit: '季',
+          title: seasonTwo.title,
+          episodes: seasonTwo.episodes,
+        ),
+        number: 2,
+        label: '第 2 季',
+      ),
+    ];
+
+    await updater().run();
+
+    expect(repository.seasonRequests, [seasonOne.id]);
+    expect(store.favorites, hasLength(1));
+    expect(store.favorites.single.id, seasonOne.id);
+    expect(store.isFavorite(seasonTwo.id), isTrue);
+    expect(store.following(seasonOne.id)!.newSeasons, 1);
+    expect(store.following(seasonTwo.id)!.newSeasons, 1);
   });
 
   test('每輪限量，按上次檢查時間輪轉', () async {
