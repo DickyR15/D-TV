@@ -59,9 +59,10 @@ on:
           - windows
           - macos
 
+# Keep each commit's cross-platform build alive while newer commits are queued.
 concurrency:
-  group: dtv-cross-platform-${{ github.ref }}
-  cancel-in-progress: true
+  group: dtv-cross-platform-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
