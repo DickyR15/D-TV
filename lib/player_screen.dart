@@ -161,6 +161,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   DateTime? _lastNestedRoutePopAt;
   int _mobileTab = 0;
   bool _autoAdvance = true;
+  Timer? _sleepTimer;
+  int _sleepMinutes = 0;
+  bool _sleepAtEpisodeEnd = false;
   bool? _systemFullscreen;
   Orientation? _lastOrientation;
   bool _closed = false;
@@ -439,6 +442,14 @@ class _PlayerScreenState extends State<PlayerScreen>
             position: _player.state.position,
           )) {
             _queueRecovery(reason: 'early_completion');
+          } else if (_sleepAtEpisodeEnd) {
+            _clearSleepTimer();
+            _playIntent = false;
+            _interactions.cancel();
+            unawaited(_player.pause());
+            unawaited(_saveProgress(flush: true));
+            _menuRevision.value++;
+            _notice('本集已結束，睡眠計時已停止播放');
           } else if (_autoAdvance &&
               _foreground &&
               !_panelOpen &&
@@ -2399,6 +2410,44 @@ class _PlayerScreenState extends State<PlayerScreen>
     ).showSnackBar(SnackBar(content: Text(uiTraditional(message))));
   }
 
+  void _clearSleepTimer() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepMinutes = 0;
+    _sleepAtEpisodeEnd = false;
+  }
+
+  Future<void> _setSleepTimer(int minutes, bool episodeEnd) async {
+    if (_closed) return;
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepMinutes = minutes.clamp(0, 1440);
+    _sleepAtEpisodeEnd = episodeEnd;
+    if (!episodeEnd && _sleepMinutes > 0) {
+      final selectedMinutes = _sleepMinutes;
+      _sleepTimer = Timer(Duration(minutes: selectedMinutes), () {
+        _sleepTimer = null;
+        _sleepMinutes = 0;
+        _sleepAtEpisodeEnd = false;
+        if (_closed || !mounted) return;
+        _playIntent = false;
+        _interactions.cancel();
+        unawaited(_player.pause());
+        unawaited(_saveProgress(flush: true));
+        _menuRevision.value++;
+        _notice('睡眠計時已結束，播放已停止');
+      });
+    }
+    _menuRevision.value++;
+    if (episodeEnd) {
+      _notice('已設定於本集結束後停止播放');
+    } else if (_sleepMinutes > 0) {
+      _notice('已設定 ${_sleepMinutes} 分鐘後停止播放');
+    } else {
+      _notice('已關閉睡眠計時');
+    }
+  }
+
   Future<void> _setPreferences(PlaybackPreferences preferences) async {
     if (_closed || widget.store.profileEpoch != _profileEpoch) {
       throw StateError('目前使用者已變更');
@@ -2481,6 +2530,9 @@ class _PlayerScreenState extends State<PlayerScreen>
               mobile: _mobile,
               onEpisode: (index) => Navigator.pop(menuContext, index),
               onPreferences: _setPreferences,
+              sleepMinutes: _sleepMinutes,
+              sleepAtEpisodeEnd: _sleepAtEpisodeEnd,
+              onSleepTimer: _setSleepTimer,
               preloadStatus: _preloader.status,
               enhancement: _enhancementForUi,
               onCompareEnhancement: () {
@@ -2733,6 +2785,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     _generation++;
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
     _healthTimer?.cancel();
     _loadingOverlayTimer?.cancel();
     _syncDiagnosticTimer?.cancel();
