@@ -811,3 +811,53 @@ func TestDuoduoMovieDetectionUsesExplicitRemarkOnlyWhenCategoryIsMissing(t *test
     t.Fatal("ordinary episodic update remark was mistaken for a movie")
   }
 }
+
+
+func TestDuoduoSynopsisRemovesHTMLMarkup(t *testing.T) {
+	cases := []struct {
+		name string
+		row  map[string]any
+		want string
+	}{
+		{
+			name: "paragraphs and entities",
+			row: map[string]any{
+				"vod_id": 78296, "vod_name": "測試短劇",
+				"vod_content": "<p>第一段</p><p>第二段 &amp; 更多</p><p> </p>",
+			},
+			want: "第一段 第二段 & 更多",
+		},
+		{
+			name: "escaped paragraph markup",
+			row: map[string]any{
+				"vod_id": 78297, "vod_name": "測試短劇",
+				"vod_content": "&lt;p&gt;這是簡介&lt;/p&gt;",
+			},
+			want: "這是簡介",
+		},
+		{
+			name: "empty paragraphs do not become visible tags",
+			row: map[string]any{
+				"vod_id": 78298, "vod_name": "測試短劇",
+				"vod_content": "<p> </p><p>&nbsp;</p>",
+			},
+			want: "",
+		},
+		{
+			name: "blurb fallback",
+			row: map[string]any{
+				"vod_id": 78299, "vod_name": "測試短劇",
+				"vod_content": "", "vod_blurb": "<div>備用簡介</div>",
+			},
+			want: "備用簡介",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			drama := duoduoDramaFromRow(tc.row)
+			if drama.Desc != tc.want || drama.Intro != tc.want {
+				t.Fatalf("synopsis = %q / %q, want %q", drama.Desc, drama.Intro, tc.want)
+			}
+		})
+	}
+}
