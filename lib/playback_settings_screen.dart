@@ -307,6 +307,25 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               },
             ),
             const SizedBox(height: 20),
+            if (AppLayout.isTelevision(context)) ...[
+              SwitchListTile(
+                key: const ValueKey('playback-tv-network-speed'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('顯示即時網速'),
+                subtitle: const Text('使用 MPV 回報的快取讀取速率；ExoPlayer 或未提供速率時不顯示數值。'),
+                value: _showTelevisionNetworkSpeed,
+                onChanged: _updateTelevisionNetworkSpeed,
+              ),
+              SwitchListTile(
+                key: const ValueKey('playback-tv-clock'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('顯示時間'),
+                subtitle: const Text('在播放控制列右上角顯示裝置本機時間。'),
+                value: _showTelevisionClock,
+                onChanged: _updateTelevisionClock,
+              ),
+              const SizedBox(height: 8),
+            ],
             if (Platform.isWindows || Platform.isMacOS)
               SwitchListTile(
                 key: const ValueKey('playback-desktop-always-on-top'),
@@ -401,22 +420,6 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             const SizedBox(height: 20),
             if (Platform.isAndroid && AppLayout.isTelevision(context)) ...[
               const SizedBox(height: 20),
-              SwitchListTile(
-                key: const ValueKey('playback-tv-network-speed'),
-                contentPadding: EdgeInsets.zero,
-                title: const Text('顯示即時網速'),
-                subtitle: const Text('使用 MPV 回報的快取讀取速率；ExoPlayer 或未提供速率時不顯示數值。'),
-                value: _showTelevisionNetworkSpeed,
-                onChanged: _updateTelevisionNetworkSpeed,
-              ),
-              SwitchListTile(
-                key: const ValueKey('playback-tv-clock'),
-                contentPadding: EdgeInsets.zero,
-                title: const Text('顯示時間'),
-                subtitle: const Text('在播放控制列右上角顯示裝置本機時間。'),
-                value: _showTelevisionClock,
-                onChanged: _updateTelevisionClock,
-              ),
               if (_compatibleRendering != null)
                 SwitchListTile(
                   key: const ValueKey('playback-compatible-rendering'),
@@ -436,7 +439,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入及自動連播會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
+              '倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入、自動連播、電視網速與時鐘顯示，以及電腦播放視窗置頂都會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
             ),
           ],
         ),
