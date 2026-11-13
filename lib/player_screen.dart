@@ -77,6 +77,7 @@ class PlayerScreen extends StatefulWidget {
     this.desktopMiniPlayer = false,
     this.onBackOverride,
     this.onProgress,
+    this.onPlaybackDisposed,
   });
   final DramaDetail detail;
   final int initialIndex;
@@ -95,6 +96,9 @@ class PlayerScreen extends StatefulWidget {
   final VoidCallback? onBackOverride;
   /// Reports the current episode and playback position to the paired window.
   final void Function(int index, double position)? onProgress;
+  /// Called only after this screen's native player has been fully disposed.
+  /// Desktop PiP uses it to avoid starting the main MPV instance too early.
+  final VoidCallback? onPlaybackDisposed;
   /// True after the one automatic clean-player restart has already been used.
   final bool recoveryRestarted;
   @visibleForTesting
@@ -2921,6 +2925,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   void dispose() {
+    widget.onProgress?.call(_index, _currentPosition);
     _closed = true;
     _volumeMemory.dispose();
     if (_desktopMiniPlayerSupported) {
@@ -2932,7 +2937,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       unawaited(_desktopMiniChannel.setMethodCallHandler(null));
     }
     final enhancementClosed = _enhancement.close();
-    unawaited(_videoOutputSize?.close() ?? Future<void>.value());
+    final outputSizeClosed =
+        _videoOutputSize?.close() ?? Future<void>.value();
     LanController.current?.detachPlayback(_lanIdentity);
     widget.handoff?.fail('接收端已退出播放');
     widget.store.removeListener(_accessChanged);
@@ -2958,19 +2964,38 @@ class _PlayerScreenState extends State<PlayerScreen>
     _interactions.dispose();
     _playerFocus.dispose();
     _menuRevision.dispose();
-    unawaited(_saveProgress(flush: true));
-    for (final subscription in _subscriptions) {
-      subscription.cancel();
-    }
-    unawaited(_releasePlayback(_session, 'screen_dispose'));
-    unawaited(_loader.close().catchError((Object _) {}));
-    unawaited(
-      _operations.catchError((Object _) {}).then((_) async {
-        await _interactions.pendingRates.catchError((Object _) {});
-        await enhancementClosed.catchError((Object _) {});
-        await _player.dispose();
+    final progressSaved = _saveProgress(flush: true).catchError((Object _) {});
+    final subscriptionsClosed = Future.wait<void>(
+      _subscriptions.map((subscription) async {
+        try {
+          await subscription.cancel();
+        } catch (_) {}
       }),
     );
+    final playbackReleased = _releasePlayback(_session, 'screen_dispose');
+    final loaderClosed = _loader.close().catchError((Object _) {});
+    unawaited(() async {
+      try {
+        // Stop pending episode transitions before disposing native MPV.
+        await _operations.catchError((Object _) {});
+        await _interactions.pendingRates.catchError((Object _) {});
+        await progressSaved;
+        await subscriptionsClosed;
+        await enhancementClosed.catchError((Object _) {});
+        await outputSizeClosed.catchError((Object _) {});
+        await loaderClosed;
+        await playbackReleased;
+        await _player.dispose();
+      } catch (error) {
+        DiaryService.add(
+          '[Player] dispose_failure error=${playbackDiagnosticError(error)}',
+        );
+      } finally {
+        // The PiP host waits for this signal before telling the main engine
+        // to resume playback. It is deliberately after native dispose.
+        widget.onPlaybackDisposed?.call();
+      }
+    }());
     if (Platform.isWindows || Platform.isMacOS) {
       unawaited(
         windowManager.setAlwaysOnTop(false).catchError((Object _) {}),
@@ -3072,7 +3097,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             backgroundColor: fullscreen || pictureInPicture
                 ? Colors.black
                 : theme.scaffoldBackgroundColor,
-            appBar: pictureInPicture || fullscreen || _mobile
+            appBar:
+                widget.desktopMiniPlayer || pictureInPicture || fullscreen || _mobile
                 ? null
                 : AppBar(
                     title: Text(
@@ -3104,7 +3130,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                             (_formFactor == FormFactor.pad ||
                                 _formFactor == FormFactor.window) &&
                             constraints.maxWidth >= 840;
-                        if (fullscreen) {
+                        if (widget.desktopMiniPlayer || fullscreen) {
+                          // PiP is a dedicated video surface, not a miniature
+                          // copy of the full desktop player with its side panel.
                           return _videoPane(context);
                         }
                         if (desktop ||
