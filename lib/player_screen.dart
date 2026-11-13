@@ -287,7 +287,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     final preferences = widget.store.playbackPreferences;
     if (Platform.isWindows || Platform.isMacOS) {
       unawaited(
-        windowManager.setAlwaysOnTop(preferences.desktopAlwaysOnTop).catchError(
+        windowManager.setAlwaysOnTop(
+          widget.desktopMiniPlayer ? true : preferences.desktopAlwaysOnTop,
+        ).catchError(
           (Object error) {
             DiaryService.add(
               '[Window] always_on_top_apply_failed error=${playbackDiagnosticError(error)}',
@@ -2986,14 +2988,15 @@ class _PlayerScreenState extends State<PlayerScreen>
         await loaderClosed;
         await playbackReleased;
         await _player.dispose();
+        // The PiP host waits for this signal before telling the main engine
+        // to resume playback. It is deliberately after native dispose.
+        widget.onPlaybackDisposed?.call();
       } catch (error) {
         DiaryService.add(
           '[Player] dispose_failure error=${playbackDiagnosticError(error)}',
         );
-      } finally {
-        // The PiP host waits for this signal before telling the main engine
-        // to resume playback. It is deliberately after native dispose.
-        widget.onPlaybackDisposed?.call();
+        // Do not signal a successful handoff when native dispose failed.
+        // The PiP host will time out and keep the main player paused.
       }
     }());
     if (Platform.isWindows || Platform.isMacOS) {
