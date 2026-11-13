@@ -30,6 +30,7 @@ const nativeCoverTTL = 30 * 24 * time.Hour
 
 const nativeCoverDuoduoFetchBudget = 12 * time.Second
 const nativeCoverDuoduoFallbackBudget = 12 * time.Second
+const nativeCoverDuoduoProxyHedgeDelay = 650 * time.Millisecond
 
 func nativeCoverFetchTimeout(source string) time.Duration {
 	if source == sourceDuoduo {
@@ -52,7 +53,7 @@ func nativeCoverAttemptTimeout(source, address string, cacheClass ...string) tim
 	}
 	parsed, err := url.Parse(strings.TrimSpace(address))
 	if err == nil && strings.EqualFold(parsed.Hostname(), "wsrv.nl") {
-		return 9 * time.Second
+		return 6 * time.Second
 	}
 	return 2500 * time.Millisecond
 }
@@ -235,7 +236,11 @@ func (cache *nativeCoverCache) recordDuoduoPosterAttempt(
 	}
 	result := "success"
 	level := "info"
-	if err != nil {
+	if errors.Is(err, context.Canceled) {
+		// A slower request cancelled after the competing route returned a
+		// verified image is a measured hedge loss, not a host failure.
+		result = "hedge_cancelled"
+	} else if err != nil {
 		level = "warn"
 		result = nativeStreamError(err)
 		if result == "io_error" {
@@ -370,6 +375,126 @@ func duoduoPosterAttemptsForDrama(address string, downloader *Downloader, drama 
 	}
 	return unique
 }
+
+// downloadDuoduoPosterPair gives the origin a short head start, then races its
+// resized wsrv.nl edge copy against it. The first fully validated image wins.
+// Attempt timings are recorded on the user's own network, so Taiwan-specific
+// latency naturally influences every poster without hard-coding a region.
+func (cache *nativeCoverCache) downloadDuoduoPosterPair(
+	ctx context.Context,
+	drama nativeDrama,
+	attempts []duoduoPosterAttempt,
+) ([]byte, int, error) {
+	if cache == nil || len(attempts) < 2 {
+		return nil, 0, nil
+	}
+	source := canonicalProviderSource(drama.Source)
+	if source == "" {
+		source = sourceFromDramaID(drama.ID)
+	}
+	proxyURL, err := url.Parse(strings.TrimSpace(attempts[1].address))
+	if source != sourceDuoduo || err != nil || !strings.EqualFold(proxyURL.Hostname(), "wsrv.nl") {
+		return nil, 0, nil
+	}
+
+	eligible := [2]bool{
+		!cache.coverOnCooldown(attempts[0].address, attempts[0].referer),
+		!cache.coverOnCooldown(attempts[1].address, attempts[1].referer),
+	}
+	nextIndex := 2
+	if !eligible[0] && !eligible[1] {
+		return nil, nextIndex, errors.New("多多海報原始網址與代理網址均在冷卻中")
+	}
+
+	type attemptResult struct {
+		data []byte
+		err  error
+	}
+	pairCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	results := make(chan attemptResult, 2)
+	launched := [2]bool{}
+	launchedCount := 0
+	completed := 0
+	launch := func(index int) {
+		if index < 0 || index > 1 || !eligible[index] || launched[index] {
+			return
+		}
+		launched[index] = true
+		launchedCount++
+		attempt := attempts[index]
+		go func() {
+			started := time.Now()
+			attemptCtx, attemptCancel := context.WithTimeout(
+				pairCtx,
+				nativeCoverAttemptTimeout(source, attempt.address, "provider"),
+			)
+			data, requestErr := cache.download(attemptCtx, attempt.address, attempt.referer)
+			attemptCancel()
+			cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, requestErr)
+			if requestErr == nil {
+				cache.clearCoverFailure(attempt.address, attempt.referer)
+			} else if !errors.Is(requestErr, context.Canceled) {
+				cache.noteCoverFailure(attempt.address, attempt.referer, requestErr)
+			}
+			results <- attemptResult{data: data, err: requestErr}
+		}()
+	}
+
+	if eligible[0] {
+		launch(0)
+	} else {
+		// The origin is already cooling down; do not make the user wait.
+		launch(1)
+	}
+	var hedgeTimer *time.Timer
+	var hedge <-chan time.Time
+	if eligible[0] && eligible[1] {
+		hedgeTimer = time.NewTimer(nativeCoverDuoduoProxyHedgeDelay)
+		hedge = hedgeTimer.C
+	}
+	stopHedge := func() {
+		if hedgeTimer != nil {
+			hedgeTimer.Stop()
+			hedgeTimer = nil
+		}
+		hedge = nil
+	}
+
+	var failures []error
+	for {
+		if completed == launchedCount && (!eligible[1] || launched[1]) {
+			stopHedge()
+			if len(failures) == 0 {
+				return nil, nextIndex, errors.New("多多海報下載失敗")
+			}
+			return nil, nextIndex, errors.Join(failures...)
+		}
+		select {
+		case <-ctx.Done():
+			stopHedge()
+			return nil, nextIndex, ctx.Err()
+		case <-hedge:
+			launch(1)
+			hedge = nil
+		case result := <-results:
+			completed++
+			if result.err == nil {
+				stopHedge()
+				cancel()
+				return result.data, nextIndex, nil
+			}
+			failures = append(failures, result.err)
+			// A fast origin failure should trigger the edge attempt immediately;
+			// otherwise the edge starts after the short hedge window.
+			if !launched[1] && eligible[1] {
+				stopHedge()
+				launch(1)
+			}
+		}
+	}
+}
+
 func duoduoPosterAttempts(address, referer string) []duoduoPosterAttempt {
 	var attempts []duoduoPosterAttempt
 	seen := map[string]bool{}
@@ -475,6 +600,12 @@ func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDram
 		go cache.fetch(key, drama, referer, fallback, call)
 	}
 	cache.mu.Unlock()
+	// If an expired but verified image exists, show it immediately. The
+	// refresh goroutine above keeps running and replaces the disk cache in the
+	// background; users never wait for a slow origin just to see a poster.
+	if fallback != "" && !force {
+		return fallback, nil
+	}
 	select {
 	case <-ctx.Done():
 		return "", ctx.Err()
@@ -501,12 +632,17 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 		if coverSource == sourceDuoduo {
 			attempts = duoduoPosterAttemptsForDrama(drama.Cover, cache.downloader, drama)
 		}
-		tryAttempts := func(candidates []duoduoPosterAttempt) {
-			for index, attempt := range candidates {
+		startIndex := 0
+		if coverSource == sourceDuoduo {
+			data, startIndex, err = cache.downloadDuoduoPosterPair(ctx, drama, attempts)
+		}
+		if startIndex == 0 || err != nil {
+			for index := startIndex; index < len(attempts); index++ {
 				if ctx.Err() != nil {
 					err = ctx.Err()
-					return
+					break
 				}
+				attempt := attempts[index]
 				if cache.coverOnCooldown(attempt.address, attempt.referer) {
 					err = errors.New("海報網址暫時冷卻，略過重複請求")
 					continue
@@ -520,12 +656,11 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 				cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, err)
 				if err == nil {
 					cache.clearCoverFailure(attempt.address, attempt.referer)
-					return
+					break
 				}
 				cache.noteCoverFailure(attempt.address, attempt.referer, err)
 			}
 		}
-		tryAttempts(attempts)
 
 		// Provider-detail alternatives are checked once by load() -> repair().
 		// Do not repeat the same detail API request here after the primary

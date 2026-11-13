@@ -5,13 +5,20 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestDuoduoParsesOnlyPublicDirectPlaybackLines(t *testing.T) {
@@ -67,6 +74,12 @@ func TestDuoduoPosterUsesOfficialPlayPageRefererBeforeHomepage(t *testing.T) {
 		t.Fatalf("homepage Referer compatibility retry was lost: %+v", attempts)
 	}
 }
+type posterTestRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTrip posterTestRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
 func TestDuoduoPosterFallbackFields(t *testing.T) {
 	cases := []struct {
 		name string
@@ -161,6 +174,181 @@ func TestDuoduoKeepsAlternatePosterFieldsForRetry(t *testing.T) {
 		addresses[1] != "https://working.example.test/thumb.jpg" ||
 		addresses[2] != "https://working.example.test/slide.jpg" {
 		t.Fatalf("alternate poster URLs were lost or reordered: %+v", addresses)
+	}
+}
+
+func TestDuoduoKeepsAllPosterCandidatesInsideNestedFields(t *testing.T) {
+	row := map[string]any{
+		"vod_id": 78298,
+		"vod_name": "多圖海報作品",
+		"vod_pic": []any{
+			"https://img.example.test/main.jpg",
+			map[string]any{"url": "https://img.example.test/second.webp"},
+			"https://img.example.test/main.jpg",
+		},
+		"vod_pic_thumb": map[string]any{
+			"thumbnailUrl": []any{
+				"https://img.example.test/thumb-a.jpg",
+				"https://img.example.test/thumb-b.jpg",
+			},
+		},
+	}
+	addresses := duoduoPosterAddressesFromRow(row)
+	want := []string{
+		"https://img.example.test/main.jpg",
+		"https://img.example.test/second.webp",
+		"https://img.example.test/thumb-a.jpg",
+		"https://img.example.test/thumb-b.jpg",
+	}
+	if !reflect.DeepEqual(addresses, want) {
+		t.Fatalf("nested poster candidates = %+v, want %+v", addresses, want)
+	}
+}
+
+func TestDuoduoPosterRaceStartsProxyWhenOriginIsSlow(t *testing.T) {
+	const image = "\x89PNG\r\n\x1a\nposter"
+	var originCalls, proxyCalls atomic.Int32
+	client := &http.Client{
+		Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+			switch request.URL.Hostname() {
+			case "origin.example.test":
+				originCalls.Add(1)
+				<-request.Context().Done()
+				return nil, request.Context().Err()
+			case "wsrv.nl":
+				proxyCalls.Add(1)
+				body := []byte(image)
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header: http.Header{"Content-Type": []string{"image/png"}},
+					Body: io.NopCloser(bytes.NewReader(body)),
+					ContentLength: int64(len(body)),
+					Request: request,
+				}, nil
+			default:
+				return nil, fmt.Errorf("unexpected poster host: %s", request.URL.Hostname())
+			}
+		}),
+	}
+	cache := &nativeCoverCache{
+		downloader: &Downloader{client: client},
+		failures: map[string]time.Time{},
+	}
+	drama := nativeDrama{ID: "duoduo:54635", Source: sourceDuoduo, Title: "測試海報"}
+	origin := "https://origin.example.test/poster.jpg"
+	attempts := []duoduoPosterAttempt{
+		{address: origin, referer: "https://duoduozhuiju.com/play/54635"},
+		{address: duoduoPosterProxyURL(origin), referer: "https://wsrv.nl/"},
+	}
+	started := time.Now()
+	data, nextIndex, err := cache.downloadDuoduoPosterPair(context.Background(), drama, attempts)
+	if err != nil || nextIndex != 2 || !bytes.Equal(data, []byte(image)) {
+		t.Fatalf("proxy race result = %q, next=%d, err=%v", data, nextIndex, err)
+	}
+	if originCalls.Load() != 1 || proxyCalls.Load() != 1 {
+		t.Fatalf("origin/proxy calls = %d/%d, want 1/1", originCalls.Load(), proxyCalls.Load())
+	}
+	if elapsed := time.Since(started); elapsed < nativeCoverDuoduoProxyHedgeDelay ||
+		elapsed > nativeCoverDuoduoProxyHedgeDelay+time.Second {
+		t.Fatalf("slow-origin fallback took %v, expected near the %v hedge window", elapsed, nativeCoverDuoduoProxyHedgeDelay)
+	}
+}
+
+func TestDuoduoPosterRaceDoesNotStartProxyWhenOriginIsFast(t *testing.T) {
+	const image = "\x89PNG\r\n\x1a\nposter"
+	var proxyCalls atomic.Int32
+	client := &http.Client{
+		Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+			if request.URL.Hostname() == "wsrv.nl" {
+				proxyCalls.Add(1)
+			}
+			body := []byte(image)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/png"}},
+				Body: io.NopCloser(bytes.NewReader(body)),
+				ContentLength: int64(len(body)),
+				Request: request,
+			}, nil
+		}),
+	}
+	cache := &nativeCoverCache{
+		downloader: &Downloader{client: client},
+		failures: map[string]time.Time{},
+	}
+	drama := nativeDrama{ID: "duoduo:54636", Source: sourceDuoduo, Title: "快速海報"}
+	origin := "https://origin.example.test/poster.jpg"
+	attempts := []duoduoPosterAttempt{
+		{address: origin, referer: "https://duoduozhuiju.com/play/54636"},
+		{address: duoduoPosterProxyURL(origin), referer: "https://wsrv.nl/"},
+	}
+	data, nextIndex, err := cache.downloadDuoduoPosterPair(context.Background(), drama, attempts)
+	if err != nil || nextIndex != 2 || !bytes.Equal(data, []byte(image)) {
+		t.Fatalf("fast-origin race result = %q, next=%d, err=%v", data, nextIndex, err)
+	}
+	if proxyCalls.Load() != 0 {
+		t.Fatalf("fast origin unnecessarily started wsrv.nl %d times", proxyCalls.Load())
+	}
+}
+
+func TestDuoduoStaleCachedPosterReturnsImmediatelyWhileRefreshing(t *testing.T) {
+	const image = "\x89PNG\r\n\x1a\nold-image"
+	client := &http.Client{
+		Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Header: http.Header{},
+				Body: io.NopCloser(strings.NewReader("not found")),
+				Request: request,
+			}, nil
+		}),
+	}
+	downloader := &Downloader{client: client}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	drama := nativeDrama{
+		ID: "duoduo:54637", Source: sourceDuoduo,
+		Title: "快取海報", Cover: "https://origin.example.test/cached.jpg",
+	}
+	referer := nativeCoverRefererForDrama(downloader, drama, drama.Cover)
+	digest := sha256.Sum256([]byte(sourceDuoduo + "\x00" + drama.Cover + "\x00" + referer))
+	key := hex.EncodeToString(digest[:])
+	path := filepath.Join(cache.directory, key+".img")
+	if err := os.MkdirAll(cache.directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(image), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cache.mu.Lock()
+	cache.entries[key] = nativeCoverEntry{
+		size: int64(len(image)),
+		updatedAt: time.Now().Add(-nativeCoverTTL-time.Minute),
+		usedAt: time.Now(),
+	}
+	cache.size += int64(len(image))
+	cache.mu.Unlock()
+
+	started := time.Now()
+	got, err := cache.loadAddress(context.Background(), drama, false)
+	if err != nil || got != path {
+		t.Fatalf("stale cache result = %q, err=%v; want cached path %q", got, err, path)
+	}
+	if elapsed := time.Since(started); elapsed > 200*time.Millisecond {
+		t.Fatalf("stale cached poster waited %v instead of returning immediately", elapsed)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		cache.mu.Lock()
+		pending := len(cache.pending)
+		cache.mu.Unlock()
+		if pending == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("background cached-poster refresh did not finish")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 

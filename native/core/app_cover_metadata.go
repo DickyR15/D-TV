@@ -317,36 +317,59 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 	return nil, errors.New("此片源目前不支援補齊海報")
 }
 
-func providerCoverAddress(value any, pageURL string) string {
-	switch item := value.(type) {
-	case []any:
-		for _, value := range item {
-			if address := providerCoverAddress(value, pageURL); address != "" {
-				return address
+func providerCoverAddresses(value any, pageURL string) []string {
+	var addresses []string
+	var collect func(any, int)
+	collect = func(item any, depth int) {
+		if depth > 6 || len(addresses) >= 24 {
+			return
+		}
+		switch typed := item.(type) {
+		case []any:
+			for _, child := range typed {
+				collect(child, depth+1)
 			}
-		}
-	case map[string]any:
-		for _, key := range []string{"url", "contentUrl", "thumbnailUrl"} {
-			if address := providerCoverAddress(item[key], pageURL); address != "" {
-				return address
+		case []string:
+			for _, child := range typed {
+				collect(child, depth+1)
 			}
-		}
-	case string:
-		if strings.TrimSpace(item) == "" {
-			return ""
-		}
-		address, err := url.Parse(strings.TrimSpace(item))
-		if err != nil {
-			return ""
-		}
-		if base, err := url.Parse(pageURL); err == nil && base.IsAbs() {
-			address = base.ResolveReference(address)
-		}
-		if validNativeCoverURL(address) {
-			return address.String()
+		case map[string]any:
+			for _, key := range []string{
+				"url", "contentUrl", "thumbnailUrl", "src", "cover", "cover_url",
+				"image", "imageUrl", "image_url", "pic", "poster", "thumbnail",
+				"large", "medium", "small", "original", "origin", "common", "grid",
+			} {
+				if child, ok := typed[key]; ok {
+					collect(child, depth+1)
+				}
+			}
+		case string:
+			raw := strings.TrimSpace(typed)
+			if raw == "" || len(raw) > 8192 {
+				return
+			}
+			address, err := url.Parse(raw)
+			if err != nil {
+				return
+			}
+			if base, err := url.Parse(pageURL); err == nil && base.IsAbs() {
+				address = base.ResolveReference(address)
+			}
+			if validNativeCoverURL(address) {
+				addresses = append(addresses, address.String())
+			}
 		}
 	}
-	return ""
+	collect(value, 0)
+	return nativeUniqueCoverAddresses(addresses...)
+}
+
+func providerCoverAddress(value any, pageURL string) string {
+	addresses := providerCoverAddresses(value, pageURL)
+	if len(addresses) == 0 {
+		return ""
+	}
+	return addresses[0]
 }
 
 func hongguoCoverAddress(values ...string) string {

@@ -565,30 +565,42 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 	if source == sourceDuoduo && cacheClass == "provider" {
 		attempts = duoduoPosterAttemptsForDrama(address, cache.downloader, drama)
 	}
-	for index, attempt := range attempts {
-		if requestCtx.Err() != nil {
-			downloadErr = requestCtx.Err()
-			break
-		}
+	startIndex := 0
+	if source == sourceDuoduo && cacheClass == "provider" {
 		if force {
-			cache.clearCoverFailure(attempt.address, attempt.referer)
+			for _, attempt := range attempts {
+				cache.clearCoverFailure(attempt.address, attempt.referer)
+			}
 		}
-		if !force && cache.coverOnCooldown(attempt.address, attempt.referer) {
-			downloadErr = errors.New("海報網址暫時冷卻，略過重複請求")
-			continue
+		data, startIndex, downloadErr = cache.downloadDuoduoPosterPair(requestCtx, drama, attempts)
+	}
+	if startIndex == 0 || downloadErr != nil {
+		for index := startIndex; index < len(attempts); index++ {
+			if requestCtx.Err() != nil {
+				downloadErr = requestCtx.Err()
+				break
+			}
+			attempt := attempts[index]
+			if force {
+				cache.clearCoverFailure(attempt.address, attempt.referer)
+			}
+			if !force && cache.coverOnCooldown(attempt.address, attempt.referer) {
+				downloadErr = errors.New("海報網址暫時冷卻，略過重複請求")
+				continue
+			}
+			started := time.Now()
+			attemptCtx, attemptCancel := context.WithTimeout(
+				requestCtx, nativeCoverAttemptTimeout(source, attempt.address, cacheClass),
+			)
+			data, downloadErr = cache.download(attemptCtx, attempt.address, attempt.referer)
+			attemptCancel()
+			cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, downloadErr)
+			if downloadErr == nil {
+				cache.clearCoverFailure(attempt.address, attempt.referer)
+				break
+			}
+			cache.noteCoverFailure(attempt.address, attempt.referer, downloadErr)
 		}
-		started := time.Now()
-		attemptCtx, attemptCancel := context.WithTimeout(
-			requestCtx, nativeCoverAttemptTimeout(source, attempt.address, cacheClass),
-		)
-		data, downloadErr = cache.download(attemptCtx, attempt.address, attempt.referer)
-		attemptCancel()
-		cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, downloadErr)
-		if downloadErr == nil {
-			cache.clearCoverFailure(attempt.address, attempt.referer)
-			break
-		}
-		cache.noteCoverFailure(attempt.address, attempt.referer, downloadErr)
 	}
 	<-cache.slots
 	if downloadErr != nil {

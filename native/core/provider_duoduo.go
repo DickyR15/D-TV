@@ -247,18 +247,13 @@ func duoduoEpisodeNumber(title string, fallback int) int {
 
 func duoduoPosterAddressesFromRow(row map[string]any) []string {
 	var addresses []string
-	seen := map[string]bool{}
 	for _, field := range []string{
 		"vod_pic", "vod_pic_thumb", "vod_pic_url", "vod_pic_slide",
 		"vod_pic_screenshot", "cover", "cover_url", "poster", "image", "thumbnail",
 	} {
-		address := providerCoverAddress(row[field], duoduoPublicEntryURL)
-		if address != "" && !seen[address] {
-			seen[address] = true
-			addresses = append(addresses, address)
-		}
+		addresses = append(addresses, providerCoverAddresses(row[field], duoduoPublicEntryURL)...)
 	}
-	return addresses
+	return nativeUniqueCoverAddresses(addresses...)
 }
 
 func duoduoSynopsisFromRow(row map[string]any) string {
