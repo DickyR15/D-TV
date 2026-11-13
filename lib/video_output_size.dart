@@ -55,8 +55,6 @@ int? videoQualityShortEdge(Size? size) {
   return quality > 0 ? quality : null;
 }
 
-/// Calculates an aspect-preserving MPV output size for the visible viewport.
-/// The result never exceeds source dimensions, avoiding wasteful upscaling.
 const maxVideoOutputDimension = 16384;
 
 bool isValidVideoOutputSize(Size value) =>
