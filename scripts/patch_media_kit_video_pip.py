@@ -267,14 +267,9 @@ def patch_texture_sw(package: Path, template: Path) -> None:
     text = replace_exact(
         text,
         """  deinit {
-    if #available(iOS 15.0, *) {
-      stopDTVPiP()
-    }
-    Self.dtvInstanceLock.lock()
-    Self.dtvInstances.removeValue(forKey: Int(bitPattern: handle))
-    Self.dtvInstanceLock.unlock()
     disposePixelBuffer()
-""",
+    disposeMPV()
+  }""",
         """  deinit {
     if #available(iOS 15.0, *) {
       stopDTVPiP()
@@ -283,7 +278,8 @@ def patch_texture_sw(package: Path, template: Path) -> None:
     Self.dtvInstances.removeValue(forKey: Int(bitPattern: handle))
     Self.dtvInstanceLock.unlock()
     disposePixelBuffer()
-""",
+    disposeMPV()
+  }""",
         "TextureSW instance cleanup",
     )
 
