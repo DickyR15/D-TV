@@ -203,8 +203,12 @@ func (downloader *Downloader) hydrateDuoduoSeriesSeason(ctx context.Context, cat
 	if detail.ID != catalog.ID || detail.SourceID != catalog.SourceID {
 		return catalog
 	}
+	detailEpisodeCount := duoduoDramaEpisodeCount(detail)
 	catalog = duoduoMergeSameSeasonMetadata(catalog, detail)
-	if duoduoDramaEpisodeCount(catalog) == 0 && len(chapters) > 0 {
+	// When the official detail row omits a count, the shared detail+aggregate
+	// resolver's actual chapters are more authoritative than a stale catalog
+	// count. Do not keep an inflated search-card total in that case.
+	if detailEpisodeCount == 0 && len(chapters) > 0 {
 		maxEpisode := 0
 		for index, chapter := range chapters {
 			number := duoduoEpisodeNumber(chapter.Title, index+1)
