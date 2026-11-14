@@ -70,19 +70,6 @@ func TestFetchDuoduoSeriesSeasonsHydratesMissingSeasonPosterAndEpisodeCount(t *t
 					"vod_play_url":"第1集$https://media.example.test/s1e1.m3u8#第2集$https://media.example.test/s1e2.m3u8"
 				}]
 			}`), nil
-		case "/api.php/web/internal/search_aggregate":
-			if request.URL.Query().Get("vod_id") != "901" {
-				t.Fatalf("unexpected aggregate ID: %s", request.URL.Query().Get("vod_id"))
-			}
-			return sourceFixtureResponse(request, http.StatusOK, `{
-				"code":200,
-				"data":[{
-					"site_key":"series-direct",
-					"site_name":"系列直連",
-					"decode_status":0,
-					"vod_play_url":"第1集$https://media.example.test/s1e1.m3u8"
-				}]
-			}`), nil
 		case "/api.php/web/vod/get_detail":
 			if request.URL.Query().Get("vod_id") != "901" {
 				t.Fatalf("unexpected detail ID: %s", request.URL.Query().Get("vod_id"))
