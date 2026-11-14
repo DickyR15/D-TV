@@ -2962,6 +2962,9 @@ jobs:
           med_aggregate_summary = []
           for line in med_aggregate_rows:
               decode_status = str(line.get("decode_status") or "0")
+              site_key = str(line.get("site_key") or line.get("vod_play_from") or "")
+              site_name = str(line.get("site_name") or site_key or "aggregate")
+              line_label = f"{site_name} [{site_key}]" if site_key else site_name
               raw = str(line.get("vod_play_url") or "")
               entries = []
               for episode in raw.split("#"):
@@ -2973,12 +2976,12 @@ jobs:
                       continue
                   entries.append((episode_title.strip(), address))
                   if decode_status == "0" and is_direct_http_media(address):
-                      med_direct.append((episode_title.strip(), address, "aggregate"))
+                      med_direct.append((episode_title.strip(), address, line_label))
                   else:
-                      med_non_direct.append((decode_status, episode_title.strip(), address, "aggregate"))
+                      med_non_direct.append((decode_status, episode_title.strip(), address, line_label))
               med_aggregate_summary.append({
-                  "site_key": str(line.get("site_key") or ""),
-                  "site_name": str(line.get("site_name") or ""),
+                  "site_key": site_key,
+                  "site_name": site_name,
                   "decode_status": decode_status,
                   "episodes": len(entries),
                   "direct_urls": sum(
@@ -3018,8 +3021,13 @@ jobs:
                   "Chicago Med S1 id=131229 has no D-TV-compatible direct detail/aggregate URL; "
                   "inspect the redacted decode-status and URL-kind summaries above."
               )
+          # Probe one real episode URL from every official aggregate source line,
+          # not three adjacent episodes from the first line only.
+          probe_by_line = {}
+          for episode_title, address, origin in med_direct:
+              probe_by_line.setdefault(origin, (episode_title, address))
           med_probe_ok = False
-          for address, (episode_title, origin) in list(direct_unique.items())[:3]:
+          for origin, (episode_title, address) in probe_by_line.items():
               ok, message = probe_media(address, med_base + "/")
               if not ok:
                   retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
