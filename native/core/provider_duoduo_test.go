@@ -358,14 +358,14 @@ func TestDuoduoKeepsAllPosterCandidatesInsideNestedFields(t *testing.T) {
 }
 
 func TestDuoduoPosterRaceStartsOriginFallbackWhenEdgeIsSlow(t *testing.T) {
-	const image = "\x89PNG\r\n\x1a\nposter"
+	image := posterTestJPEGVariant(t, 71)
 	var originCalls, proxyCalls atomic.Int32
 	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Hostname() {
 		case "origin.example.test":
 			originCalls.Add(1)
 			body := []byte(image)
-			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/png"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
 		case "wsrv.nl":
 			proxyCalls.Add(1)
 			<-request.Context().Done()
@@ -394,7 +394,7 @@ func TestDuoduoPosterRaceStartsOriginFallbackWhenEdgeIsSlow(t *testing.T) {
 	}
 }
 func TestDuoduoPosterRaceDoesNotStartOriginWhenEdgeIsFast(t *testing.T) {
-	const image = "\x89PNG\r\n\x1a\nposter"
+	image := posterTestJPEGVariant(t, 72)
 	var originCalls, proxyCalls atomic.Int32
 	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Hostname() == "wsrv.nl" {
@@ -403,7 +403,7 @@ func TestDuoduoPosterRaceDoesNotStartOriginWhenEdgeIsFast(t *testing.T) {
 			originCalls.Add(1)
 		}
 		body := []byte(image)
-		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/png"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
 	})}
 	cache := &nativeCoverCache{downloader: &Downloader{client: client}, failures: map[string]time.Time{}}
 	drama := nativeDrama{ID: "duoduo:54636", Source: sourceDuoduo, Title: "快速海報"}
@@ -421,7 +421,7 @@ func TestDuoduoPosterRaceDoesNotStartOriginWhenEdgeIsFast(t *testing.T) {
 	}
 }
 func TestDuoduoPosterRaceFallsBackImmediatelyWhenEdgeFails(t *testing.T) {
-	const image = "\x89PNG\r\n\x1a\nposter"
+	image := posterTestJPEGVariant(t, 73)
 	var originCalls, proxyCalls atomic.Int32
 	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Hostname() == "wsrv.nl" {
@@ -431,7 +431,7 @@ func TestDuoduoPosterRaceFallsBackImmediatelyWhenEdgeFails(t *testing.T) {
 		if request.URL.Hostname() == "origin.example.test" {
 			originCalls.Add(1)
 			body := []byte(image)
-			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/png"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
 		}
 		return nil, fmt.Errorf("unexpected poster host: %s", request.URL.Hostname())
 	})}
@@ -993,7 +993,7 @@ func TestDuoduoPosterProxySupportsPublicCDNsAndRejectsUnsafeHosts(t *testing.T) 
 		}
 		query := parsed.Query()
 		if query.Get("url") == "" || query.Get("w") != "440" ||
-			query.Get("h") != "660" || query.Get("output") != "webp" {
+			query.Get("h") != "660" || query.Get("output") != "jpg" {
 			t.Fatalf("poster proxy is missing resize parameters: address=%q proxy=%q", address, proxy)
 		}
 	}
