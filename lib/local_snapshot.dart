@@ -49,6 +49,7 @@ class LocalSnapshot {
     'themeAccent',
     'pureBlackTheme',
     'sourceSwitches',
+    'advancedSourceOrder',
     'forceLogin',
     'ignoredUpdateVersion',
     'checkForUpdatesOnStartup',
