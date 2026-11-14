@@ -163,11 +163,11 @@ func duoduoMergeSameSeasonMetadata(catalog, detail Drama) Drama {
 		catalog.SourceID == "" || catalog.SourceID != detail.SourceID {
 		return catalog
 	}
-	detailAddresses := nativeCoverAddressesFromDrama(nativeNormalize(detail))
+	detailAddresses := nativeCoverAddressesFromDrama(detail)
 	if len(detailAddresses) > 0 {
 		// Keep the previous primary and alternate URLs as lower-priority
 		// candidates when the official detail endpoint refreshes the main poster.
-		previousAddresses := nativeCoverAddressesFromDrama(nativeNormalize(catalog))
+		previousAddresses := nativeCoverAddressesFromDrama(catalog)
 		catalog.Cover = detailAddresses[0]
 		catalog.CoverURL = detailAddresses[0]
 		candidates := append([]string{}, detailAddresses[1:]...)
