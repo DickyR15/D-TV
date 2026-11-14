@@ -53,8 +53,13 @@ def patch_texture_sw(package: Path, template: Path) -> None:
         )
     text = path.read_text(encoding="utf-8")
     destination = path.parent / "DTVSampleBufferPiPRenderer.swift"
+    # A previous V1 build placed the same Swift class beside TextureHW.swift.
+    # Reuse that single compiled source when it exists; copying another one
+    # under common/ would define DTVSampleBufferPiPRenderer twice.
+    legacy_destination = package / "ios/Classes/plugin/DTVSampleBufferPiPRenderer.swift"
     if MARKER in text:
-        shutil.copy2(template, destination)
+        if not legacy_destination.exists():
+            shutil.copy2(template, destination)
         return
 
     text = replace_exact(
@@ -318,7 +323,8 @@ def patch_texture_sw(package: Path, template: Path) -> None:
     )
 
     path.write_text(text + "\n// " + MARKER + "\n", encoding="utf-8")
-    shutil.copy2(template, destination)
+    if not legacy_destination.exists():
+        shutil.copy2(template, destination)
 
 
 def patch_plugin(package: Path) -> None:
