@@ -364,7 +364,7 @@ func TestDuoduoPosterRaceStartsOriginFallbackWhenEdgeIsSlow(t *testing.T) {
 		switch request.URL.Hostname() {
 		case "origin.example.test":
 			originCalls.Add(1)
-			body := []byte(image)
+			body := image
 			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
 		case "wsrv.nl":
 			proxyCalls.Add(1)
@@ -383,7 +383,7 @@ func TestDuoduoPosterRaceStartsOriginFallbackWhenEdgeIsSlow(t *testing.T) {
 	}
 	started := time.Now()
 	data, nextIndex, err := cache.downloadDuoduoPosterPair(context.Background(), drama, attempts)
-	if err != nil || nextIndex != 2 || !bytes.Equal(data, []byte(image)) {
+	if err != nil || nextIndex != 2 || !bytes.Equal(data, image) {
 		t.Fatalf("origin fallback result = %q, next=%d, err=%v", data, nextIndex, err)
 	}
 	if originCalls.Load() != 1 || proxyCalls.Load() != 1 {
@@ -456,7 +456,7 @@ func TestDuoduoPosterRaceFallsBackImmediatelyWhenEdgeFails(t *testing.T) {
 }
 
 func TestDuoduoStaleCachedPosterReturnsImmediatelyWhileRefreshing(t *testing.T) {
-	const image = "\x89PNG\r\n\x1a\nold-image"
+	image := posterTestPNG(t)
 	client := &http.Client{
 		Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
 			return &http.Response{
@@ -480,7 +480,7 @@ func TestDuoduoStaleCachedPosterReturnsImmediatelyWhileRefreshing(t *testing.T) 
 	if err := os.MkdirAll(cache.directory, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(image), 0600); err != nil {
+	if err := os.WriteFile(path, image, 0600); err != nil {
 		t.Fatal(err)
 	}
 	cache.mu.Lock()
@@ -517,7 +517,7 @@ func TestDuoduoStaleCachedPosterReturnsImmediatelyWhileRefreshing(t *testing.T) 
 }
 
 func TestNativeDecodeCoverUnwrapsGzipImageBodies(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var compressed bytes.Buffer
 	writer := gzip.NewWriter(&compressed)
 	if _, err := writer.Write(image); err != nil {
