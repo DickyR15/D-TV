@@ -26,7 +26,6 @@ import 'player_screen.dart';
 import 'video_enhancement_assets.dart';
 import 'diary_service.dart';
 import 'app_navigation.dart';
-import 'dtv_launch_animation.dart';
 import 'ui_localization.dart';
 
 Future<void> main(List<String> args) async {
@@ -85,7 +84,6 @@ class _AppBootstrapState extends State<AppBootstrap>
   SharedPreferences? _desktopPreferences;
   Timer? _desktopWindowSaveTimer;
   bool _restoringDesktopWindow = false;
-  bool _showStartupOverlay = true;
   late final _desktopWindowListener = _DesktopWindowListener(
     onGeometryChanged: _scheduleDesktopWindowSave,
     onClose: () => unawaited(_saveDesktopWindowState()),
@@ -105,11 +103,6 @@ class _AppBootstrapState extends State<AppBootstrap>
       _desktopWindowSaveTimer = null;
       unawaited(_saveDesktopWindowState());
     });
-  }
-
-  void _onStartupAnimationFinished() {
-    if (!mounted || !_showStartupOverlay) return;
-    setState(() => _showStartupOverlay = false);
   }
 
   Future<bool> _isOnConnectedDisplay(Rect bounds) async {
@@ -376,8 +369,6 @@ class _AppBootstrapState extends State<AppBootstrap>
     version: device.version,
     navigatorKey: navigator,
     systemAccentColors: systemAccentColors,
-    showStartupOverlay: _showStartupOverlay,
-    onStartupAnimationFinished: _onStartupAnimationFinished,
   );
 }
 
@@ -422,8 +413,6 @@ class DuanjuApp extends StatelessWidget {
     this.version = appVersion,
     this.navigatorKey,
     this.systemAccentColors = (light: null, dark: null),
-    this.showStartupOverlay = true,
-    this.onStartupAnimationFinished,
   });
   final AppRepository repository;
   final LocalStore? store;
@@ -434,8 +423,6 @@ class DuanjuApp extends StatelessWidget {
   final String version;
   final GlobalKey<NavigatorState>? navigatorKey;
   final SystemAccentColors systemAccentColors;
-  final bool showStartupOverlay;
-  final VoidCallback? onStartupAnimationFinished;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -541,14 +528,6 @@ class DuanjuApp extends StatelessWidget {
           ),
         ),
           ),
-          if (showStartupOverlay)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: DtvLaunchAnimation(
-                  onCompleted: onStartupAnimationFinished,
-                ),
-              ),
-            ),
         ],
       );
     },
