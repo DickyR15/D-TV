@@ -529,50 +529,50 @@ class _DetailScreenState extends State<DetailScreen> {
                             currentNumber: resumeEpisodeNumber,
                           ),
                         ),
-                          SliverToBoxAdapter(
-                            child: EpisodeRangeBar(
-                              key: _episodeAnchor,
-                              episodes: episodes,
-                              page: _episodePage,
-                              title: '分組',
-                              currentNumber: resumeEpisodeNumber,
-                              onLocate: _locateEpisode,
-                            ),
+                        SliverToBoxAdapter(
+                          child: EpisodeRangeBar(
+                            key: _episodeAnchor,
+                            episodes: episodes,
+                            page: _episodePage,
+                            title: '分組',
+                            currentNumber: resumeEpisodeNumber,
+                            onLocate: _locateEpisode,
                           ),
-                          SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                            sliver: SliverGrid(
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: _episodeColumns(
-                                      constraints.maxWidth,
-                                      episodes,
-                                    ),
-                                    mainAxisExtent: math.max(
-                                      54,
-                                      MediaQuery.textScalerOf(
-                                            context,
-                                          ).scale(20) +
-                                          30,
-                                    ),
-                                    crossAxisSpacing: 10,
-                                    mainAxisSpacing: 10,
+                        ),
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                          sliver: SliverGrid(
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: _episodeColumns(
+                                    constraints.maxWidth,
+                                    episodes,
                                   ),
-                              delegate: SliverChildBuilderDelegate((
-                                context,
-                                index,
-                              ) {
-                                final episode = visible[index];
-                                return RemoteEpisodeButton(
-                                  key: ValueKey('episode-${episode.number}'),
-                                  number: episode.number,
-                                  vip: episode.vip,
-                                  current: episode.number == resumeEpisodeNumber,
-                                  onPressed: () => _play(start + index),
-                                );
-                              }, childCount: visible.length),
-                            ),
+                                  mainAxisExtent: math.max(
+                                    54,
+                                    MediaQuery.textScalerOf(
+                                          context,
+                                        ).scale(20) +
+                                        30,
+                                  ),
+                                  crossAxisSpacing: 10,
+                                  mainAxisSpacing: 10,
+                                ),
+                            delegate: SliverChildBuilderDelegate((
+                              context,
+                              index,
+                            ) {
+                              final episode = visible[index];
+                              return RemoteEpisodeButton(
+                                key: ValueKey('episode-${episode.number}'),
+                                number: episode.number,
+                                vip: episode.vip,
+                                current: episode.number == resumeEpisodeNumber,
+                                onPressed: () => _play(start + index),
+                              );
+                            }, childCount: visible.length),
                           ),
+                        ),
                       ],
                     ],
                   );
