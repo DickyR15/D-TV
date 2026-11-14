@@ -2951,12 +2951,7 @@ jobs:
                   "non_direct_samples": [
                       safe_media_kind(address)
                       for _, address, _ in entries[:2]
-                      if not (
-                          decode_status == "0" and (
-                              urlsplit(address).path.lower().endswith(".m3u8")
-                              or urlsplit(address).path.lower().endswith(".mp4")
-                          )
-                      )
+                      if not (decode_status == "0" and is_direct_http_media(address))
                   ],
               })
 
@@ -2993,12 +2988,7 @@ jobs:
                   "non_direct_samples": [
                       safe_media_kind(address)
                       for _, address in entries[:2]
-                      if not (
-                          decode_status == "0" and (
-                              urlsplit(address).path.lower().endswith(".m3u8")
-                              or urlsplit(address).path.lower().endswith(".mp4")
-                          )
-                      )
+                      if not (decode_status == "0" and is_direct_http_media(address))
                   ],
               })
 
