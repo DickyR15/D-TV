@@ -22,14 +22,14 @@ part 'lan_playback.dart';
 String lanPublicErrorMessage(Object failure) {
   final raw = failure is StateError
       ? failure.message.toString()
-      : lanPublicErrorMessage(failure);
-  final firstLine = raw.split(RegExp(r'[\\r\\n]')).first.trim();
+      : failure.toString();
+  final firstLine = raw.split(RegExp(r'[\r\n]')).first.trim();
   final message = firstLine
-      .replaceFirst(RegExp(r'^Bad state:\\s*'), '')
+      .replaceFirst(RegExp(r'^Bad state:\s*'), '')
       .trim();
-  final hasChinese = RegExp(r'[\\u3400-\\u9fff]').hasMatch(message);
+  final hasChinese = RegExp(r'[\u3400-\u9fff]').hasMatch(message);
   final looksInternal = RegExp(
-    r'bad state|exception|stack|trace|socketexception|formatexception|stateerror|package:|#\\d+',
+    r'bad state|exception|stack|trace|socketexception|formatexception|stateerror|package:|#\d+',
     caseSensitive: false,
   ).hasMatch(message);
   if (message.isNotEmpty && hasChinese && !looksInternal) return message;
