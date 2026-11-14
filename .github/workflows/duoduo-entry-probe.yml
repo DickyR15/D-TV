@@ -54,17 +54,25 @@ jobs:
           TLS = ssl.create_default_context()
           dns_unavailable_hosts = set()
 
-          def request(url, referer, limit=262144, timeout=12, byte_range=None, user_agent=UA):
+          def normalize_http_url(url):
               parsed = urlsplit(url)
               if parsed.scheme in ("http", "https") and parsed.netloc:
-                  # URL-encode Unicode path/query components, including nested
-                  # HLS segment URIs discovered after the first playlist fetch.
-                  url = parsed._replace(
-                      path=quote(parsed.path, safe="/%:@!          def request(url, referer, limit=262144, timeout=12, byte_range=None, user_agent=UA):
-              headers = {
-'()*+,;=-._~"),
+                  return parsed._replace(
+                      path=quote(parsed.path, safe="/%:@!'()*+,;=-._~"),
                       query=quote(parsed.query, safe="=&?/:;+,%@-._~"),
                   ).geturl()
+              return url
+
+          unicode_test_url = normalize_http_url(
+              "https://media.example.test/hls/第1集/片段 1.ts?token=a&part=1"
+          )
+          unicode_test_parts = urlsplit(unicode_test_url)
+          if "第" in unicode_test_parts.path or " " in unicode_test_parts.path:
+              raise RuntimeError("Unicode HLS URL was not percent-encoded")
+          print("PASS: Unicode HLS URL encoding")
+
+          def request(url, referer, limit=262144, timeout=12, byte_range=None, user_agent=UA):
+              url = normalize_http_url(url)
               headers = {
                   "User-Agent": user_agent,
                   "Accept": "application/json,application/vnd.apple.mpegurl,*/*",
