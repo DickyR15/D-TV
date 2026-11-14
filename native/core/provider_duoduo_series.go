@@ -13,7 +13,7 @@ import (
 
 const (
 	duoduoSeriesCatalogTimeout = 10 * time.Second
-	duoduoSeriesHydrationTimeout = 30 * time.Second
+	duoduoSeriesHydrationTimeout = 60 * time.Second
 	duoduoSeasonHydrationTimeout = 12 * time.Second
 )
 
@@ -335,9 +335,14 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 	}
 	needsHydration := make([]int, 0, len(byNumber))
 	for number, item := range byNumber {
-		if !duoduoDramaHasOfficialCover(item) || duoduoDramaEpisodeCount(item) <= 0 {
-			needsHydration = append(needsHydration, number)
+		// The currently opened season has already passed through the normal
+		// detail + aggregate resolver. Every sibling must use its own official
+		// season ID too, even when catalogue poster/count fields look complete:
+		// those fields can be stale and do not prove a usable playback route.
+		if item.ID == current.ID {
+			continue
 		}
+		needsHydration = append(needsHydration, number)
 	}
 	// Do not reuse the short catalogue-search context for detail hydration.
 	// Sort the season queue and give each official detail+aggregate lookup its

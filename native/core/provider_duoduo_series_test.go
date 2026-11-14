@@ -464,3 +464,71 @@ func TestFetchDuoduoSeriesSeasonsKeepsOfficialMetadataWhenAggregateHasNoDirectLi
 		t.Fatalf("official detail poster/count were lost when aggregate had no direct line: %+v", first)
 	}
 }
+
+
+func TestFetchDuoduoSeriesHydratesCompleteCatalogueSeasonFromOfficialDetailAndAggregate(t *testing.T) {
+	var hydrated []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[
+					{"vod_id":970,"vod_name":"全域系列第一季","vod_pic":"https://img.example.test/catalog-s1.jpg","vod_total":24,"vod_remarks":"全24集"},
+					{"vod_id":971,"vod_name":"全域系列第二季","vod_pic":"https://img.example.test/catalog-s2.jpg","vod_total":10,"vod_remarks":"全10集"}
+				]
+			}`), nil
+		case "/api.php/web/vod/get_detail":
+			id := request.URL.Query().Get("vod_id")
+			if id != "970" {
+				t.Fatalf("current opened season must reuse its resolved detail, unexpected detail ID: %s", id)
+			}
+			hydrated = append(hydrated, id)
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[{
+					"vod_id":970,
+					"vod_name":"全域系列第一季",
+					"vod_pic_detail":"https://img.example.test/official-s1-detail.jpg",
+					"vod_remarks":"已完結",
+					"vod_play_from":"",
+					"vod_play_url":""
+				}],
+				"vodplayer":[]
+			}`), nil
+		case "/api.php/web/internal/search_aggregate":
+			if request.URL.Query().Get("vod_id") != "970" {
+				t.Fatalf("unexpected aggregate ID: %s", request.URL.Query().Get("vod_id"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[{
+					"site_key":"public-season-one",
+					"site_name":"第一季公開線路",
+					"decode_status":0,
+					"vod_play_url":"第1集$https://media.example.test/s1e1.m3u8#第2集$https://media.example.test/s1e2.m3u8#第3集$https://media.example.test/s1e3.m3u8"
+				}]
+			}`), nil
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+	current := nativeDrama{
+		ID:"duoduo:971", Source:sourceDuoduo, SourceID:"971",
+		Title:"全域系列第二季", Cover:"https://img.example.test/current-s2-detail.jpg",
+		Episodes:10, EpisodesVerified:true,
+	}
+	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
+	if err != nil { t.Fatal(err) }
+	if len(seasons) != 2 { t.Fatalf("expected two seasons, got %+v", seasons) }
+	if len(hydrated) != 1 || hydrated[0] != "970" {
+		t.Fatalf("complete sibling catalogue row was not resolved by its own official ID: hydrated=%v", hydrated)
+	}
+	first := seasons[0]
+	if first.Drama.ID != "duoduo:970" ||
+		first.Drama.Cover != "https://img.example.test/official-s1-detail.jpg" ||
+		first.Drama.Episodes != 3 || !first.Playable || first.Upcoming {
+		t.Fatalf("official sibling detail + aggregate did not replace stale catalogue metadata: %+v", first)
+	}
+}
