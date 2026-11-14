@@ -35,6 +35,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>用於尋找區域網路中的裝置、同步追劇進度與傳送播放指令，並存取裝置上的播放服務。</string>
 	<key>NSBonjourServices</key>
