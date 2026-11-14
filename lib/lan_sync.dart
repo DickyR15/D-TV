@@ -102,7 +102,7 @@ extension LanSynchronization on LanController {
       return await operation(ticket);
     } catch (failure) {
       if (run == _run && epoch == store.profileEpoch) {
-        syncMessage = failure.toString();
+        syncMessage = lanPublicErrorMessage(failure);
       }
       rethrow;
     } finally {
@@ -440,11 +440,11 @@ extension LanSynchronization on LanController {
       if (remoteSaved) {
         throw StateError(
           (localSaved ? '雙方記錄已儲存，連線狀態已變化。' : '對方已儲存，本機尚未儲存；再次合併可補齊。') +
-              failure.toString(),
+              lanPublicErrorMessage(failure),
         );
       }
       if (remoteCommitRequested) {
-        throw StateError('尚未確認對方是否儲存，重連後再次合併可補齊；本機原記錄保留。$failure');
+        throw StateError('尚未確認對方是否儲存，重連後再次合併可補齊；本機原記錄保留。' + lanPublicErrorMessage(failure));
       }
       rethrow;
     }
