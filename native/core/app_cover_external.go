@@ -250,7 +250,15 @@ func posterTitleVariants(value string) []string {
 			break
 		}
 	}
-	candidates := []string{value, bangumiPosterBaseTitle(value), withoutYear}
+	baseTitle := bangumiPosterBaseTitle(value)
+	candidates := []string{value, baseTitle, withoutYear}
+	baseKey := normalizeBangumiPosterTitle(baseTitle)
+	if baseKey == normalizeBangumiPosterTitle("緊急呼救") ||
+		baseKey == normalizeBangumiPosterTitle("紧急呼救") {
+		// TVmaze indexes the same 2018 Fox series under its original title.
+		// Keep this as an exact alias; candidate year matching still applies.
+		candidates = append(candidates, "9-1-1")
+	}
 	for _, separator := range []string{" / ", "／", "｜", " | "} {
 		if strings.Contains(value, separator) {
 			for _, part := range strings.Split(value, separator) {
@@ -611,6 +619,12 @@ func nativePosterIsTVSeries(drama nativeDrama) bool {
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
 	if nativePosterIsAnime(drama) || bangumiPosterContainsAny(category, "電影", "电影", "movie", "film") {
 		return false
+	}
+	// An explicit season suffix is reliable TV evidence even when the
+	// catalogue detail row omits type_name and category.
+	if title := strings.TrimSpace(drama.Title); title != "" &&
+		bangumiPosterBaseTitle(title) != title {
+		return true
 	}
 	return bangumiPosterContainsAny(
 		category,
