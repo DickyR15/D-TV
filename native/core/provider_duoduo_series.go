@@ -186,8 +186,7 @@ func duoduoMergeSameSeasonMetadata(catalog, detail Drama) Drama {
 }
 
 func (downloader *Downloader) hydrateDuoduoSeriesSeason(ctx context.Context, catalog Drama) Drama {
-	if catalog.Source != sourceDuoduo || catalog.SourceID == "" ||
-		(duoduoDramaHasOfficialCover(catalog) && duoduoDramaEpisodeCount(catalog) > 0) {
+	if catalog.Source != sourceDuoduo || catalog.SourceID == "" {
 		return catalog
 	}
 
