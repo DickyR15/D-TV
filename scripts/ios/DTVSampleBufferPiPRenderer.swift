@@ -34,6 +34,7 @@ final class DTVSampleBufferPiPRenderer: NSObject,
   private var possibleObservation: NSKeyValueObservation?
   private var startTimeout: DispatchWorkItem?
   private var pendingStart: ((Error?) -> Void)?
+  private var pendingSkipCompletion: (@Sendable () -> Void)?
 
   init(eventHandler: @escaping EventHandler) {
     self.eventHandler = eventHandler
@@ -384,6 +385,15 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     }
   }
 
+  func completePendingSkip() {
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      let completion = self.pendingSkipCompletion
+      self.pendingSkipCompletion = nil
+      completion?()
+    }
+  }
+
   func stop() {
     DispatchQueue.main.async {
       self.stateLock.lock()
@@ -466,13 +476,22 @@ final class DTVSampleBufferPiPRenderer: NSObject,
   func pictureInPictureController(
     _ pictureInPictureController: AVPictureInPictureController,
     skipByInterval skipInterval: CMTime,
-    completion: @escaping () -> Void
+    completion completionHandler: @escaping @Sendable () -> Void
   ) {
-    eventHandler("pictureInPictureAction", [
-      "action": "seekBy",
-      "seconds": skipInterval.seconds
-    ])
-    completion()
+    DispatchQueue.main.async { [weak self] in
+      guard let self else {
+        completionHandler()
+        return
+      }
+      // AVKit can issue another seek before the previous one is acknowledged.
+      // Finish the previous request rather than leaving the system controls stuck.
+      self.pendingSkipCompletion?()
+      self.pendingSkipCompletion = completionHandler
+      self.eventHandler("pictureInPictureAction", [
+        "action": "seekBy",
+        "seconds": skipInterval.seconds
+      ])
+    }
   }
 
   func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(
