@@ -118,6 +118,38 @@ def patch_texture_hw(package: Path, template: Path) -> None:
     }
   }
 
+  public static func updateDTVPiP(
+    handle: Int64,
+    playing: Bool,
+    positionSeconds: Double
+  ) {
+    dtvInstanceLock.lock()
+    let instance = dtvInstances[Int(handle)]?.value
+    dtvInstanceLock.unlock()
+
+    guard let instance else { return }
+    if #available(iOS 15.0, *) {
+      instance.updateDTVPiP(
+        playing: playing,
+        positionSeconds: positionSeconds
+      )
+    }
+  }
+
+  @available(iOS 15.0, *)
+  private func updateDTVPiP(
+    playing: Bool,
+    positionSeconds: Double
+  ) {
+    pipLock.lock()
+    let renderer = pipRenderer
+    pipLock.unlock()
+    renderer?.updatePlaybackState(
+      playing: playing,
+      positionSeconds: positionSeconds
+    )
+  }
+
   @available(iOS 15.0, *)
   private func startDTVPiP(
     width: Int,
@@ -351,6 +383,8 @@ def patch_plugin(package: Path) -> None:
       handleDTVPiPStart(call.arguments, result)
     case "DTVPiP.Stop":
       handleDTVPiPStop(call.arguments, result)
+    case "DTVPiP.PlaybackStateChanged":
+      handleDTVPiPPlaybackStateChanged(call.arguments, result)
     case "DTVPiP.Status":
       result([
         "supported": AVPictureInPictureController.isPictureInPictureSupported()
@@ -421,6 +455,29 @@ def patch_plugin(package: Path) -> None:
       return
     }
     TextureHW.stopDTVPiP(handle: handle)
+    result(nil)
+  }
+
+  private func handleDTVPiPPlaybackStateChanged(
+    _ arguments: Any?,
+    _ result: FlutterResult
+  ) {
+    guard let args = arguments as? [String: Any],
+          let handle = (args["handle"] as? NSNumber)?.int64Value else {
+      result(FlutterError(
+        code: "DTV_PIP_INVALID_HANDLE",
+        message: "缺少 MPV 播放器識別碼",
+        details: nil
+      ))
+      return
+    }
+    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true
+    let positionMs = max(0, (args["positionMs"] as? NSNumber)?.int64Value ?? 0)
+    TextureHW.updateDTVPiP(
+      handle: handle,
+      playing: playing,
+      positionSeconds: Double(positionMs) / 1000.0
+    )
     result(nil)
   }
 
