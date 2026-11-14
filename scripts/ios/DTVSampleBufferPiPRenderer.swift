@@ -123,6 +123,7 @@ final class DTVSampleBufferPiPRenderer: NSObject,
   ) -> Bool {
     if let hostView, let displayLayer {
       updateHostFrame(hostView, layer: displayLayer, width: width, height: height)
+      displayLayer.flush()
       if let timebase {
         CMTimebaseSetTime(
           timebase,
@@ -363,6 +364,27 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     startTimeout = nil
     controller.startPictureInPicture()
     completion(nil)
+  }
+
+  func updatePlaybackState(playing: Bool, positionSeconds: Double) {
+    stateLock.lock()
+    paused = !playing
+    if positionSeconds.isFinite {
+      lastMediaTime = positionSeconds
+    }
+    stateLock.unlock()
+
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      if let timebase = self.timebase, positionSeconds.isFinite {
+        CMTimebaseSetTime(
+          timebase,
+          time: CMTime(seconds: max(0, positionSeconds), preferredTimescale: 600)
+        )
+        CMTimebaseSetRate(timebase, rate: playing ? 1 : 0)
+      }
+      self.controller?.invalidatePlaybackState()
+    }
   }
 
   func stop() {
