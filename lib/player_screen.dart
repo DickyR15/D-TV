@@ -871,6 +871,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     final width = ratio >= 1 ? (1000 * ratio).round() : 1000;
     final height = ratio >= 1 ? 1000 : (1000 / ratio).round();
 
+    DiaryService.add(
+      '[PiP] iOS Sample Buffer request starting '
+      'ratio=${ratio.toStringAsFixed(3)} playing=$wasPlaying '
+      'positionMs=${(position * 1000).round()}',
+    );
     _pictureInPictureResumePosition = position;
     _pictureInPictureResumePlaying = wasPlaying;
     _pictureInPictureHandoff = false;
@@ -889,6 +894,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       final handle = await platform.handle.timeout(
         const Duration(seconds: 4),
       );
+      DiaryService.add('[PiP] iOS MPV handle acquired handle=$handle');
+      DiaryService.add('[PiP] invoking DTVPiP.Start');
       final status = await _iosSampleBufferPipChannel
           .invokeMapMethod<String, dynamic>('DTVPiP.Start', {
             'handle': handle,
@@ -900,6 +907,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           })
           .timeout(const Duration(seconds: 15));
 
+      DiaryService.add('[PiP] DTVPiP.Start response=$status');
       if (status?['started'] != true) {
         throw PlatformException(
           code: 'PIP_SAMPLE_BUFFER_NOT_STARTED',
@@ -1081,23 +1089,37 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _refreshPictureInPictureStatus() async {
     if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
+      DiaryService.add(
+        '[PiP] status query begin channel=${Platform.isIOS ? "duanju/mediakit_pip" : "duanju/device"}',
+      );
       final status = Platform.isIOS
           ? await _iosSampleBufferPipChannel
               .invokeMapMethod<String, dynamic>('DTVPiP.Status')
+              .timeout(const Duration(seconds: 5))
           : await AppDevice.channel.invokeMapMethod<String, dynamic>(
               'pictureInPictureStatus',
-            );
+            ).timeout(const Duration(seconds: 5));
+      DiaryService.add(
+        '[PiP] status query result supported=${status?["supported"]} active=${status?["active"]}',
+      );
       if (!mounted || _closed) return;
       _setPictureInPictureStatus(
         supported: status?['supported'] == true,
         active: status?['active'] == true,
       );
       _syncPictureInPicture();
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      DiaryService.add('[PiP] status query PlatformException code=${error.code} message=${error.message}');
       if (mounted && !_closed) {
         _setPictureInPictureStatus(supported: false, active: false);
       }
-    } on MissingPluginException {
+    } on MissingPluginException catch (error) {
+      DiaryService.add('[PiP] status query MissingPluginException error=$error');
+      if (mounted && !_closed) {
+        _setPictureInPictureStatus(supported: false, active: false);
+      }
+    } catch (error) {
+      DiaryService.add('[PiP] status query failed error=$error');
       if (mounted && !_closed) {
         _setPictureInPictureStatus(supported: false, active: false);
       }
@@ -1614,6 +1636,12 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _enterPictureInPicture() async {
+    DiaryService.add(
+      '[PiP] button tapped platform=${Platform.operatingSystem} '
+      'supported=$_pictureInPictureSupported active=$_pictureInPictureActive '
+      'requested=$_pictureInPictureRequested loading=$_loading '
+      'error=${_error != null} panelOpen=$_panelOpen',
+    );
     if (_pictureInPictureRequested ||
         _pictureInPictureActive ||
         !_canUsePictureInPicture ||
@@ -1621,6 +1649,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         _loading ||
         _error != null ||
         _panelOpen) {
+      DiaryService.add(
+        '[PiP] button ignored reason='
+        '${_pictureInPictureRequested ? "already-requested" : _pictureInPictureActive ? "already-active" : !_canUsePictureInPicture ? "unsupported" : _closed ? "closed" : _loading ? "loading" : _error != null ? "playback-error" : _panelOpen ? "panel-open" : "unknown"}',
+      );
+      if (!_canUsePictureInPicture && !_closed && mounted) {
+        _notice('iOS 尚未回報子母畫面支援，請重新開啟播放頁後再試');
+      }
       return;
     }
     if (Platform.isIOS) {

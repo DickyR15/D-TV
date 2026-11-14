@@ -58,11 +58,8 @@ def patch_texture_sw(package: Path, template: Path) -> None:
     # under common/ would define DTVSampleBufferPiPRenderer twice.
     legacy_destination = package / "ios/Classes/plugin/DTVSampleBufferPiPRenderer.swift"
     if MARKER in text:
-        # A restored pub cache may already contain V2-patched TextureSW.swift.
-        # Keep its generated renderer in sync with the checked-in template.
-        target = legacy_destination if legacy_destination.exists() else destination
-        if not target.exists() or target.read_bytes() != template.read_bytes():
-            shutil.copy2(template, target)
+        if not legacy_destination.exists():
+            shutil.copy2(template, destination)
         return
 
     text = replace_exact(

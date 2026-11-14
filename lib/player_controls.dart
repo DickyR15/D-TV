@@ -893,7 +893,7 @@ class _PlayerControlsState extends State<PlayerControls> {
           tooltip: widget.pictureInPictureTooltip,
           icon: Icons.picture_in_picture_alt_rounded,
           onPressed: widget.enabled
-              ? () => _panel(widget.onPictureInPicture!)
+              ? () => unawaited(widget.onPictureInPicture!())
               : null,
         ),
       _toolIcon(
@@ -942,7 +942,7 @@ class _PlayerControlsState extends State<PlayerControls> {
           tooltip: widget.pictureInPictureTooltip,
           icon: Icons.picture_in_picture_alt_rounded,
           onPressed: widget.enabled
-              ? () => _panel(widget.onPictureInPicture!)
+              ? () => unawaited(widget.onPictureInPicture!())
               : null,
         ),
     ];

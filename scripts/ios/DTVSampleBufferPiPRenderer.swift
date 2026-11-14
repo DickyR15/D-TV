@@ -100,14 +100,19 @@ final class DTVSampleBufferPiPRenderer: NSObject,
         }
       }
 
-      guard self.pendingStart == nil else {
-        completion(self.error("子母畫面正在啟動，請稍後再試"))
-        return
-      }
       self.pendingStart = completion
-      self.scheduleStartTimeout()
       if self.controller?.isPictureInPicturePossible == true {
         self.startWhenPossible()
+      } else {
+        let timeout = DispatchWorkItem { [weak self] in
+          guard let self, self.pendingStart != nil else { return }
+          let callback = self.pendingStart
+          self.pendingStart = nil
+          callback?(self.error("MPV 影格尚未準備好，iOS 無法啟動子母畫面"))
+        }
+        self.startTimeout?.cancel()
+        self.startTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
       }
     }
   }
@@ -349,28 +354,14 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     stateLock.unlock()
   }
 
-  private func scheduleStartTimeout() {
-    startTimeout?.cancel()
-    let timeout = DispatchWorkItem { [weak self] in
-      guard let self, let completion = self.pendingStart else { return }
-      self.pendingStart = nil
-      self.startTimeout = nil
-      self.stateLock.lock()
-      self.enabled = false
-      self.stateLock.unlock()
-      completion(self.error("iOS 子母畫面啟動逾時，已保留原播放器"))
-    }
-    startTimeout = timeout
-    DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
-  }
-
   private func startWhenPossible() {
     guard let controller, controller.isPictureInPicturePossible else { return }
-    guard pendingStart != nil else { return }
-    // Do not report success here. AVKit may still reject the request.
-    // The MethodChannel completes only from didStart / failedToStart.
+    guard let completion = pendingStart else { return }
+    pendingStart = nil
+    startTimeout?.cancel()
+    startTimeout = nil
     controller.startPictureInPicture()
-    scheduleStartTimeout()
+    completion(nil)
   }
 
   func updatePlaybackState(playing: Bool, positionSeconds: Double) {
@@ -512,12 +503,7 @@ final class DTVSampleBufferPiPRenderer: NSObject,
   func pictureInPictureControllerDidStartPictureInPicture(
     _ pictureInPictureController: AVPictureInPictureController
   ) {
-    let completion = pendingStart
-    pendingStart = nil
-    startTimeout?.cancel()
-    startTimeout = nil
     eventHandler("pictureInPictureChanged", ["active": true])
-    completion?(nil)
   }
 
   func pictureInPictureControllerDidStopPictureInPicture(
@@ -533,18 +519,10 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     _ pictureInPictureController: AVPictureInPictureController,
     failedToStartPictureInPictureWithError error: Error
   ) {
-    let completion = pendingStart
-    pendingStart = nil
-    startTimeout?.cancel()
-    startTimeout = nil
     stateLock.lock()
     enabled = false
     stateLock.unlock()
-    if let completion {
-      completion(error)
-    } else {
-      eventHandler("mpvPictureInPictureError", error.localizedDescription)
-    }
+    eventHandler("mpvPictureInPictureError", error.localizedDescription)
   }
 
   func pictureInPictureController(
