@@ -67,7 +67,7 @@ func TestFetchDuoduoSeriesSeasonsHydratesMissingSeasonPosterAndEpisodeCount(t *t
 					"site_key":"season-one-direct",
 					"site_name":"第一季直連",
 					"decode_status":0,
-					"vod_play_url":"第1集$https://media.example.test/s1e1.m3u8#第2集$https://media.example.test/s1e2.m3u8"
+					"vod_play_url":"第1集$https://media.example.test/s1e1.m3u8#第2集$https://media.example.test/s1e2.m3u8#第3集$https://media.example.test/s1e3.m3u8#第4集$https://media.example.test/s1e4.m3u8#第5集$https://media.example.test/s1e5.m3u8#第6集$https://media.example.test/s1e6.m3u8#第7集$https://media.example.test/s1e7.m3u8#第8集$https://media.example.test/s1e8.m3u8#第9集$https://media.example.test/s1e9.m3u8#第10集$https://media.example.test/s1e10.m3u8"
 				}]
 			}`), nil
 		case "/api.php/web/vod/get_detail":
