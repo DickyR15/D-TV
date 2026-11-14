@@ -7,6 +7,27 @@ import 'package:flutter/services.dart';
 /// 僅處理畫面顯示文字；API 的分類 ID、查詢參數與原始資料不修改。
 const Map<String, String> _twPhrases = {
   // Product UI wording is intentionally distinct from API/source vocabulary.
+  // Supjav uses its Chinese-language catalogue; normalize common labels to Taiwan wording.
+  '视频列表': '影片清單',
+  '視頻列表': '影片清單',
+  '播放列表': '播放清單',
+  '搜索': '搜尋',
+  '上映时间': '上映日期',
+  '上映時間': '上映日期',
+  '最新发布': '最新上架',
+  '最新發布': '最新上架',
+  '播放次数': '播放次數',
+  '播放次數': '播放次數',
+  '时长': '片長',
+  '時長': '片長',
+  '演员': '演員',
+  '演員': '演員',
+  '演员表': '演員名單',
+  '演員表': '演員名單',
+  '影片详情': '影片詳情',
+  '影片詳情': '影片詳情',
+  '女优': '女優',
+  '女优列表': '女優清單',
   '消息推送': '訊息推播',
   '訊息推送': '訊息推播',
   '推送通知': '推播通知',
