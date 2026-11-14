@@ -506,7 +506,6 @@ class _DetailScreenState extends State<DetailScreen> {
                       .skip(start)
                       .take(episodePageSize)
                       .toList();
-                  const showEpisodes = true;
                   return CustomScrollView(
                     controller: _detailScroll,
                     slivers: [
@@ -530,7 +529,6 @@ class _DetailScreenState extends State<DetailScreen> {
                             currentNumber: resumeEpisodeNumber,
                           ),
                         ),
-                        if (showEpisodes) ...[
                           SliverToBoxAdapter(
                             child: EpisodeRangeBar(
                               key: _episodeAnchor,
@@ -575,7 +573,6 @@ class _DetailScreenState extends State<DetailScreen> {
                               }, childCount: visible.length),
                             ),
                           ),
-                        ],
                       ],
                     ],
                   );
