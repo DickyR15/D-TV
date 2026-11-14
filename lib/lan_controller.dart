@@ -19,11 +19,49 @@ export 'lan_sync_models.dart';
 part 'lan_sync.dart';
 part 'lan_playback.dart';
 
+String lanPublicErrorMessage(Object failure) {
+  final raw = failure is StateError
+      ? failure.message.toString()
+      : failure.toString();
+  final firstLine = raw.split(RegExp(r'[\r\n]')).first.trim();
+  final message = firstLine
+      .replaceFirst(RegExp(r'^Bad state:\s*'), '')
+      .trim();
+  final hasChinese = RegExp(r'[\u3400-\u9fff]').hasMatch(message);
+  final looksInternal = RegExp(
+    r'bad state|exception|stack|trace|socketexception|formatexception|stateerror|package:|#\d+',
+    caseSensitive: false,
+  ).hasMatch(message);
+  if (message.isNotEmpty && hasChinese && !looksInternal) return message;
+  if (failure is TimeoutException) {
+    return '連線逾時，請確認兩臺裝置位於同一個網路後重試。';
+  }
+  if (failure is SocketException) {
+    return '網路連線失敗，請檢查 Wi-Fi 或區域網路權限後重試。';
+  }
+  if (failure is FormatException) {
+    return '裝置資料格式不相容，請更新兩端應用程式後重試。';
+  }
+  return '裝置互聯暫時無法使用，請確認兩臺裝置都已開啟區域網路自動同步，並連線至同一個網路。';
+}
+
+bool lanDiscoveryShouldRun({
+  required bool enabled,
+  required bool autoSync,
+  required bool receiving,
+}) => enabled && autoSync && receiving;
+
 class LanController extends ChangeNotifier with WidgetsBindingObserver {
   LanController(this.repository, this.store, {required this.kind}) {
     store.addListener(_storeChanged);
     WidgetsBinding.instance.addObserver(this);
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _tick());
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      unawaited(_tick().catchError((Object failure) {
+        if (_disposed) return;
+        error = lanPublicErrorMessage(failure);
+        _notify();
+      }));
+    });
     _storeChanged();
   }
 
@@ -177,7 +215,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
 
   void _checkUser(int epoch) {
     if (_disposed || store.locked || store.profileEpoch != epoch) {
-      throw StateError('當前使用者已變更，請重新操作');
+      throw StateError('目前使用者已變更，請重新操作');
     }
   }
 
@@ -234,7 +272,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
             .then((_) => _reconcile());
         unawaited(
           _lifecycle.catchError((Object failure) {
-            error = failure.toString();
+            error = lanPublicErrorMessage(failure);
             _notify();
           }),
         );
@@ -250,7 +288,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
     } catch (failure) {
-      error = failure.toString();
+      error = lanPublicErrorMessage(failure);
       _notify();
     }
   }
@@ -353,12 +391,12 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _reconcile() async {
     final run = _run;
     await _stop();
-    if (_disposed || run != _run || !_foreground || !enabled) return;
+    if (_disposed || run != _run || !_foreground || !enabled || !autoSync) return;
     await store.ensureLanRecords();
-    if (_disposed || run != _run) return;
+    if (_disposed || run != _run || !enabled || !autoSync) return;
     _sessionEpoch = store.profileEpoch;
     final info = await repository.lan('start', {'config': _config()});
-    if (_disposed || run != _run) {
+    if (_disposed || run != _run || !enabled || !autoSync) {
       await repository.lan('stop', {'generation': info['generation']});
       return;
     }
@@ -393,7 +431,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       }
       _registration = registration;
     } catch (_) {
-      discoveryMessage = '自動發現暫不可用，可用下方本機地址手動連線';
+      discoveryMessage = '自動探索暫不可用，可使用下方本機位址手動連線';
     }
     if (_disposed || run != _run) return;
     await rescan();
@@ -401,7 +439,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> rescan() async {
-    if (!receiving) return;
+    if (!lanDiscoveryShouldRun(
+      enabled: enabled,
+      autoSync: autoSync,
+      receiving: receiving,
+    )) return;
     final run = _run;
     final previous = _discovery;
     _discovery = null;
@@ -409,6 +451,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       previous.removeListener(_discovered);
       await nsd.stopDiscovery(previous).catchError((Object _) {});
     }
+    if (_disposed || run != _run || !lanDiscoveryShouldRun(
+      enabled: enabled,
+      autoSync: autoSync,
+      receiving: receiving,
+    )) return;
     _scanStarted = DateTime.now();
     _retryAt = DateTime(2000);
     try {
@@ -416,7 +463,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         serviceType,
         ipLookupType: nsd.IpLookupType.any,
       );
-      if (_disposed || run != _run) {
+      if (_disposed || run != _run || !lanDiscoveryShouldRun(
+        enabled: enabled,
+        autoSync: autoSync,
+        receiving: receiving,
+      )) {
         await nsd.stopDiscovery(discovery);
         return;
       }
@@ -424,7 +475,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       discovery.addListener(_discovered);
       _discovered();
     } catch (_) {
-      discoveryMessage = '未能自動發現裝置。請檢查區域網許可權，或輸入對方的本機地址';
+      discoveryMessage = '無法自動探索裝置。請檢查區域網路權限，或輸入對方的本機位址';
       _notify();
     }
     _gather?.cancel();
@@ -432,6 +483,22 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _discovered() {
+    if (_disposed || !lanDiscoveryShouldRun(
+      enabled: enabled,
+      autoSync: autoSync,
+      receiving: receiving,
+    )) return;
+    try {
+      _processDiscovered();
+    } catch (failure) {
+      if (_disposed) return;
+      discoveryMessage = '無法自動探索裝置。請檢查區域網路權限，或輸入對方的本機位址';
+      error = lanPublicErrorMessage(failure);
+      _notify();
+    }
+  }
+
+  void _processDiscovered() {
     final map = <String, LanPeer>{..._manualPeers};
     final conflicted = <String>{};
     for (final service in _discovery?.services.take(128) ?? <nsd.Service>[]) {
@@ -487,7 +554,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       'requestId': lanID(),
     });
     final peer = LanPeer.fromJson(response);
-    if (peer.id == local?.id) throw StateError('這是本機地址，請輸入另一臺裝置的地址');
+    if (peer.id == local?.id) throw StateError('這是本機位址，請輸入另一台裝置的位址');
     _checkPin(peer);
     _manualPeers[peer.id] = peer;
     _discovered();
@@ -615,10 +682,10 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
           if (_disposed || run != _run) rethrow;
         }
       }
-      throw lastError ?? StateError('裝置尚未解析出可用地址');
+      throw lastError ?? StateError('裝置尚未取得可用位址');
     } catch (failure) {
       if (run == _run) {
-        error = failure.toString();
+        error = lanPublicErrorMessage(failure);
         if (connection?.peer.id != peer.id) {
           _selected = '';
           await _native(
@@ -681,7 +748,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _autoConnect() async {
     if (_disposed ||
-        !receiving ||
+        !lanDiscoveryShouldRun(
+          enabled: enabled,
+          autoSync: autoSync,
+          receiving: receiving,
+        ) ||
         connection != null ||
         _connecting ||
         DateTime.now().isBefore(_retryAt)) {
@@ -702,7 +773,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       }
       await connect(peer, automatic: true);
     } catch (failure) {
-      error = failure.toString();
+      error = lanPublicErrorMessage(failure);
       _retryAt = DateTime.now().add(const Duration(seconds: 15));
       _notify();
     }
@@ -732,7 +803,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     }
     if (connection != null && connection!.peer.id != peer.id ||
         _connecting && _selected.isNotEmpty && _selected != peer.id) {
-      throw StateError('接收裝置已有其他連線，當前連線不會被搶佔');
+      throw StateError('接收裝置已有其他連線，目前連線不會被取代');
     }
     final port = peer.port;
     final host = lanText(event['host'], 128);
@@ -750,9 +821,9 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       'deviceId': peer.id,
       'pin': peer.pin,
     });
-    if (run != _run || !receiving) throw StateError('當前使用者已變更，請重新連線');
+    if (run != _run || !receiving) throw StateError('目前使用者已變更，請重新連線');
     await _remember(resolved, reverse.account);
-    if (run != _run || !receiving) throw StateError('當前使用者已變更，請重新連線');
+    if (run != _run || !receiving) throw StateError('目前使用者已變更，請重新連線');
     connection = reverse;
     _selected = peer.id;
     _lastAutomatic = DateTime(2000);
@@ -768,7 +839,14 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _poll(int run, String generation) async {
-    while (!_disposed && run == _run && _generation == generation) {
+    while (!_disposed &&
+        run == _run &&
+        _generation == generation &&
+        lanDiscoveryShouldRun(
+          enabled: enabled,
+          autoSync: autoSync,
+          receiving: receiving,
+        )) {
       try {
         final data = await repository.lan('poll', {'generation': generation});
         if (run != _run || _disposed) return;
@@ -777,7 +855,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         }
       } catch (failure) {
         if (_disposed || run != _run) return;
-        error = failure.toString();
+        error = lanPublicErrorMessage(failure);
         _notify();
         await Future<void>.delayed(const Duration(seconds: 1));
       }
@@ -795,8 +873,10 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       if (run != _run ||
           store.locked ||
           store.profileEpoch != _sessionEpoch ||
-          !_foreground) {
-        throw StateError('接收已關閉或當前使用者已變更');
+          !_foreground ||
+          !enabled ||
+          !autoSync) {
+        throw StateError('接收已關閉或目前使用者已變更');
       }
       final path = event['path'];
       if (path == 'pair') {
@@ -854,7 +934,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
     } catch (error) {
-      failure = error.toString();
+      failure = lanPublicErrorMessage(error);
     }
     await repository
         .lan('respond', {
@@ -942,14 +1022,18 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(
       synchronize(automatic: true).catchError((Object failure) {
         if (run != _run || _disposed) return;
-        syncMessage = '等待重試 · $failure';
+        syncMessage = '等待重試 · ' + lanPublicErrorMessage(failure);
         _notify();
       }),
     );
   }
 
   Future<void> _tick() async {
-    if (_disposed || !receiving) return;
+    if (_disposed || !lanDiscoveryShouldRun(
+      enabled: enabled,
+      autoSync: autoSync,
+      receiving: receiving,
+    )) return;
     if (_incomingSync != null &&
         DateTime.now().difference(_incomingSync!.updated) >
             const Duration(minutes: 2)) {
@@ -990,7 +1074,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       if (connection == remote) {
         connection = null;
         _syncTicket++;
-        error = failure.toString();
+        error = lanPublicErrorMessage(failure);
         syncMessage = '連線中斷，重連後補齊';
         _retryAt = DateTime.now().add(const Duration(seconds: 5));
         _notify();

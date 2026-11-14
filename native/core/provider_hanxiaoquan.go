@@ -192,13 +192,13 @@ func hanxiaoquanPageCount(body, category string, page, count int) int {
 
 func (d *Downloader) fetchHanxiaoquanCatalogPage(ctx context.Context, page int, category, query string) ([]Drama, bool, error) {
 	if page < 1 || page > 100000 {
-		return nil, false, errors.New("韩小圈目录页码无效")
+		return nil, false, errors.New("韓小圈目錄頁碼無效")
 	}
 	if query != "" {
 		return d.searchHanxiaoquan(ctx, page, query)
 	}
 	if !validHanxiaoquanCategory(category) {
-		return nil, false, errors.New("韩小圈内容分类无效")
+		return nil, false, errors.New("韓小圈內容分類無效")
 	}
 	if category == "" {
 		category = hanxiaoquanCategories[0].ID
@@ -335,7 +335,7 @@ func hanxiaoquanPlayURL(href string) string {
 
 func (d *Downloader) fetchHanxiaoquanDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
 	if !hanxiaoquanNumericID(sourceID) {
-		return Drama{}, nil, errors.New("韩小圈视频 ID 无效")
+		return Drama{}, nil, errors.New("韓小圈影片 ID 無效")
 	}
 	body, err := d.hanxiaoquanGet(ctx, "/hanxiaoquan/"+sourceID+".html")
 	if err != nil {
@@ -346,7 +346,7 @@ func (d *Downloader) fetchHanxiaoquanDetail(ctx context.Context, sourceID string
 		name = hanxiaoquanClean(match[1])
 	}
 	if name == "" {
-		return Drama{}, nil, errors.New("韩小圈详情缺少视频名称")
+		return Drama{}, nil, errors.New("韓小圈詳情缺少影片名稱")
 	}
 	cover := ""
 	if match := reHanxiaoquanOgImage.FindStringSubmatch(body); len(match) > 1 {
@@ -408,14 +408,14 @@ func (d *Downloader) resolveHanxiaoquanMedia(ctx context.Context, task Task) (pr
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
 	prefix := providerChapterID(sourceHanxiaoquan, sourceID, "")
 	if !valid || source != sourceHanxiaoquan || !hanxiaoquanNumericID(sourceID) || !strings.HasPrefix(task.Chapter.ID, prefix) {
-		return providerMedia{}, errors.New("韩小圈播放分集信息无效，请刷新详情")
+		return providerMedia{}, errors.New("韓小圈播放集數資訊無效，請重新整理詳情")
 	}
 	playURL := strings.TrimPrefix(task.Chapter.ID, prefix)
 	if playURL == "" {
 		playURL = task.Chapter.PageURL
 	}
 	if hanxiaoquanPlayURL(playURL) == "" {
-		return providerMedia{}, errors.New("韩小圈播放页地址无效")
+		return providerMedia{}, errors.New("韓小圈播放頁網址無效")
 	}
 	body, err := d.hanxiaoquanGet(ctx, playURL)
 	if err != nil {
@@ -429,17 +429,17 @@ func (d *Downloader) resolveHanxiaoquanMedia(ctx context.Context, task Task) (pr
 		address = reHanxiaoquanMediaAny.FindString(body)
 	}
 	if address == "" {
-		return providerMedia{}, errors.New("韩小圈该集暂无可用播放地址")
+		return providerMedia{}, errors.New("韓小圈此集目前沒有可用的播放網址")
 	}
 	if strings.HasPrefix(address, "//") {
 		address = "https:" + address
 	}
 	if !isProviderHTTPMediaURL(address) {
-		return providerMedia{}, errors.New("韩小圈播放地址无效")
+		return providerMedia{}, errors.New("韓小圈播放網址無效")
 	}
 	parsed, err := url.Parse(address)
 	if err != nil {
-		return providerMedia{}, errors.New("韩小圈播放地址无效")
+		return providerMedia{}, errors.New("韓小圈播放網址無效")
 	}
 	media := providerMedia{URL: address, Referer: hanxiaoquanSiteBaseURL + "/"}
 	if strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
@@ -452,7 +452,7 @@ func (d *Downloader) resolveHanxiaoquanMedia(ctx context.Context, task Task) (pr
 func (d *Downloader) searchHanxiaoquan(ctx context.Context, page int, query string) ([]Drama, bool, error) {
 	query = strings.TrimSpace(query)
 	if query == "" || len(query) > 256 {
-		return nil, false, errors.New("韩小圈搜索关键词无效")
+		return nil, false, errors.New("韓小圈搜尋關鍵字無效")
 	}
 	if page > 1 {
 		// 站点搜索无翻页，直接返回空。

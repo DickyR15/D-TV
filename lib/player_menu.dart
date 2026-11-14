@@ -29,6 +29,9 @@ class PlayerMenu extends StatefulWidget {
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
+    this.sleepMinutes = 0,
+    this.sleepAtEpisodeEnd = false,
+    this.onSleepTimer,
   });
 
   final PlayerMenuSection section;
@@ -43,6 +46,9 @@ class PlayerMenu extends StatefulWidget {
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
+  final int sleepMinutes;
+  final bool sleepAtEpisodeEnd;
+  final Future<void> Function(int minutes, bool episodeEnd)? onSleepTimer;
   final ValueChanged<int> onEpisode;
   final Future<void> Function(PlaybackPreferences) onPreferences;
   final Future<void> Function() onFavorite;
@@ -187,7 +193,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             widget.local
                 ? '本集正在播放本地原畫，畫質偏好用於後續線上播放。'
                 : widget.actualQuality > 0
-                ? '當前播放 ${widget.actualQuality}P'
+                ? '目前播放畫質 ${widget.actualQuality}P'
                 : '使用源站可用畫質',
             style: helperStyle,
           ),
@@ -219,6 +225,67 @@ class _PlayerMenuState extends State<PlayerMenu> {
                 style: helperStyle,
               ),
             ),
+          const SizedBox(height: 20),
+        ],
+        if (all) ...[
+          const Text('畫面比例'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final ratio in PlaybackAspectRatio.values)
+                ChoiceChip(
+                  key: ValueKey('menu-aspect-${ratio.name}'),
+                  label: Text(playbackAspectRatioLabel(ratio)),
+                  selected: ratio == preferences.aspectRatio,
+                  onSelected: _busy
+                      ? null
+                      : (_) => _run(
+                          () => widget.onPreferences(
+                            preferences.copyWith(aspectRatio: ratio),
+                          ),
+                        ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
+        if (all && widget.onSleepTimer != null) ...[
+          const Text('睡眠計時'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                key: const ValueKey('sleep-timer-off'),
+                label: const Text('關閉'),
+                selected: widget.sleepMinutes == 0 && !widget.sleepAtEpisodeEnd,
+                onSelected: _busy
+                    ? null
+                    : (_) => _run(() => widget.onSleepTimer!(0, false)),
+              ),
+              ChoiceChip(
+                key: const ValueKey('sleep-timer-episode'),
+                label: const Text('本集結束'),
+                selected: widget.sleepAtEpisodeEnd,
+                onSelected: _busy
+                    ? null
+                    : (_) => _run(() => widget.onSleepTimer!(0, true)),
+              ),
+              for (final minutes in [15, 30, 60, 90])
+                ChoiceChip(
+                  key: ValueKey('sleep-timer-$minutes'),
+                  label: Text('$minutes 分鐘'),
+                  selected: widget.sleepMinutes == minutes &&
+                      !widget.sleepAtEpisodeEnd,
+                  onSelected: _busy
+                      ? null
+                      : (_) => _run(() => widget.onSleepTimer!(minutes, false)),
+                ),
+            ],
+          ),
           const SizedBox(height: 20),
         ],
         if ((all || widget.section == PlayerMenuSection.quality) &&
@@ -253,7 +320,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             key: const ValueKey('player-auto-advance'),
             contentPadding: EdgeInsets.zero,
             title: const Text('自動連播'),
-            subtitle: const Text('關閉後，播放結束停在當前集'),
+            subtitle: const Text('關閉後，播放結束後停留在目前集數'),
             value: preferences.autoAdvance,
             onChanged: _busy
                 ? null

@@ -29,7 +29,7 @@ func (backoff *requestBackoff) Error() string {
 		reason = "：" + backoff.reason
 	}
 	seconds := max(1, int(time.Until(backoff.until).Seconds()+0.999))
-	return fmt.Sprintf("%s HTTP %d%s，请在 %d 秒后重试", backoff.host, backoff.status, reason, seconds)
+	return fmt.Sprintf("%s HTTP %d%s，請在 %d 秒後重試", backoff.host, backoff.status, reason, seconds)
 }
 
 func catalogResponseBlockReason(response *http.Response, body []byte) string {
@@ -39,9 +39,9 @@ func catalogResponseBlockReason(response *http.Response, body []byte) string {
 	page := strings.ToLower(string(body))
 	reason := ""
 	if strings.Contains(page, "cloudflare") && (strings.Contains(page, "sorry, you have been blocked") || strings.Contains(page, "you are unable to access")) {
-		reason = "Cloudflare 拒绝了当前请求"
+		reason = "Cloudflare 拒絕了目前的要求"
 	} else if strings.EqualFold(response.Header.Get("Cf-Mitigated"), "challenge") || strings.Contains(page, "_cf_chl_opt") || strings.Contains(page, "<title>just a moment") && strings.Contains(page, "cloudflare") {
-		reason = "站点要求浏览器验证，当前请求无法通过"
+		reason = "片源要求瀏覽器驗證，目前的要求無法通過"
 	}
 	return reason
 }
@@ -86,8 +86,11 @@ type requestLimiter struct {
 	gates              map[string]*requestGate
 	backoffs           map[string]*requestBackoff
 	backgroundBackoffs map[string]*requestBackoff
+	forbiddenStreaks   map[string]int
 	changed            chan struct{}
 }
+
+const forbiddenStreakLimit = 3
 
 type backgroundCatalogKey struct{}
 
@@ -95,7 +98,7 @@ func newRequestLimiter(concurrency int, interval time.Duration) *requestLimiter 
 	if concurrency < 1 {
 		concurrency = 1
 	}
-	return &requestLimiter{concurrency: concurrency, interval: interval, gates: map[string]*requestGate{}, backoffs: map[string]*requestBackoff{}, backgroundBackoffs: map[string]*requestBackoff{}, changed: make(chan struct{})}
+	return &requestLimiter{concurrency: concurrency, interval: interval, gates: map[string]*requestGate{}, backoffs: map[string]*requestBackoff{}, backgroundBackoffs: map[string]*requestBackoff{}, forbiddenStreaks: map[string]int{}, changed: make(chan struct{})}
 }
 
 func (limiter *requestLimiter) notifyLocked() {
@@ -190,7 +193,22 @@ func (limiter *requestLimiter) acquire(ctx context.Context, request *http.Reques
 }
 
 func (limiter *requestLimiter) observe(request *http.Request, response *http.Response) {
-	if response.StatusCode != http.StatusForbidden && response.StatusCode != http.StatusTooManyRequests && !strings.EqualFold(response.Header.Get("Cf-Mitigated"), "challenge") {
+	host := strings.ToLower(request.URL.Hostname())
+	challenged := strings.EqualFold(response.Header.Get("Cf-Mitigated"), "challenge")
+
+	limiter.mu.Lock()
+	if response.StatusCode == http.StatusForbidden && !challenged {
+		limiter.forbiddenStreaks[host]++
+	} else {
+		delete(limiter.forbiddenStreaks, host)
+	}
+	repeatedlyForbidden := limiter.forbiddenStreaks[host] >= forbiddenStreakLimit
+	limiter.mu.Unlock()
+
+	// A single 403 can be caused by a temporary edge or device-specific issue.
+	// Cool down the host only after three consecutive non-challenge 403s.
+	// Explicit rate limits and browser challenges retain immediate protection.
+	if response.StatusCode != http.StatusTooManyRequests && !challenged && !repeatedlyForbidden {
 		return
 	}
 	limiter.observeBlock(request, response)

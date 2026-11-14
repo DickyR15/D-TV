@@ -17,7 +17,7 @@ import 'widgets.dart';
 import 'ui_localization.dart';
 import 'sources_screen.dart';
 import 'episode_browser.dart';
-import 'hongguo_series.dart';
+import 'playback_preloader.dart';
 
 
 class DetailScreen extends StatefulWidget {
@@ -38,23 +38,29 @@ class DetailScreen extends StatefulWidget {
 
 class _DetailScreenState extends State<DetailScreen> {
   DramaDetail? _detail;
+  late Drama _activeDrama;
+  late final PlaybackPreloader _detailPreloader;
+  List<DramaSeason> _seriesSeasons = const [];
+  String? _seriesSeasonsError;
+  bool _seriesSeasonsLoading = false;
   String? _error;
   bool _loading = true;
   int _generation = 0;
   int _episodePage = 0;
   String _selectedPlayLine = '';
-  bool _expandedDescription = false;
-  bool _episodesExpanded = false;
   final _episodeAnchor = GlobalKey();
   final _detailScroll = ScrollController();
   final _startPlayFocus = FocusNode(debugLabel: 'detail-start-play');
   bool _initialActionHandled = false;
   late final int _profileEpoch;
+  bool _supportsSeriesSeasons(String source) =>
+      supportsNativeSeriesSeasons(source);
+
   Widget? get _sourceDiagnostics => widget.repository.supportsSourceManagement
       ? SourceDiagnosticsButton(
           repository: widget.repository,
           store: widget.store,
-          drama: widget.drama,
+          drama: _activeDrama,
         )
       : null;
 
@@ -62,6 +68,8 @@ class _DetailScreenState extends State<DetailScreen> {
   void initState() {
     super.initState();
     _profileEpoch = widget.store.profileEpoch;
+    _activeDrama = widget.drama;
+    _detailPreloader = PlaybackPreloader(widget.repository);
     widget.store.addListener(_onStoreChanged);
     _load();
   }
@@ -73,12 +81,17 @@ class _DetailScreenState extends State<DetailScreen> {
       oldWidget.store.removeListener(_onStoreChanged);
       widget.store.addListener(_onStoreChanged);
     }
+    if (oldWidget.drama.id != widget.drama.id) {
+      _activeDrama = widget.drama;
+      unawaited(_load());
+    }
   }
 
   @override
   void dispose() {
     _detailScroll.dispose();
     _startPlayFocus.dispose();
+    _detailPreloader.dispose();
     widget.store.removeListener(_onStoreChanged);
     _generation++;
     super.dispose();
@@ -92,19 +105,24 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<void> _load() async {
     final generation = ++_generation;
+    final requestedDrama = _activeDrama;
+    _detailPreloader.clear();
     setState(() {
       _loading = true;
       _error = null;
+      _seriesSeasons = const [];
+      _seriesSeasonsError = null;
+      _seriesSeasonsLoading = _supportsSeriesSeasons(requestedDrama.source);
     });
     try {
-      final detail = await widget.repository.detail(widget.drama);
+      final detail = await widget.repository.detail(requestedDrama);
       if (!mounted ||
           generation != _generation ||
           _profileEpoch != widget.store.profileEpoch) {
         return;
       }
       final merged = widget.repository.catalogUpdates
-          .current(widget.drama)
+          .current(requestedDrama)
           .merge(detail.drama);
       final availableLines = _playLineNames(detail.episodes);
       final selectedLine = availableLines.contains(_selectedPlayLine)
@@ -115,6 +133,10 @@ class _DetailScreenState extends State<DetailScreen> {
       final visibleEpisodes = _episodesForLine(
         detail.episodes,
         selectedLine,
+      );
+      final resumeIndex = resumeEpisodeIndex(
+        visibleEpisodes,
+        widget.store.watched(merged.id),
       );
       setState(() {
         _selectedPlayLine = selectedLine;
@@ -141,6 +163,8 @@ class _DetailScreenState extends State<DetailScreen> {
         }
       });
       widget.repository.catalogUpdates.publish(merged, retryCover: true);
+      _prepareDetailPlayback(merged, visibleEpisodes, resumeIndex);
+      unawaited(_loadSeriesSeasons(merged, generation));
       unawaited(_supplement(merged, generation));
       await saveUserChange(context, () => widget.store.refreshDrama(merged));
       if (mounted &&
@@ -170,9 +194,92 @@ class _DetailScreenState extends State<DetailScreen> {
         _loading = false;
       });
       widget.repository.catalogUpdates.publish(
-        widget.repository.catalogUpdates.current(widget.drama),
+        widget.repository.catalogUpdates.current(requestedDrama),
         retryCover: true,
       );
+    }
+  }
+
+  void _prepareDetailPlayback(
+    Drama drama,
+    List<Episode> episodes,
+    int index,
+  ) {
+    _detailPreloader.clear();
+    if (widget.resumeOnOpen ||
+        episodes.isEmpty ||
+        index < 0 ||
+        index >= episodes.length ||
+        episodes[index].vip ||
+        !widget.store.allowsSource(drama.source)) {
+      return;
+    }
+    final television = AppLayout.isTelevision(context);
+    if (!widget.store.playbackPreferences.preloads(television: television)) {
+      return;
+    }
+    // Prepare only the episode the user is expected to resume. The native
+    // resolver may warm a bounded stream cache, but no player or decoder starts.
+    _detailPreloader.prepare(
+      drama,
+      episodes[index],
+      quality: widget.store.playbackPreferences.quality,
+    );
+  }
+
+  Future<void> _loadSeriesSeasons(Drama drama, int generation) async {
+    if (!_supportsSeriesSeasons(drama.source)) {
+      if (mounted && generation == _generation) {
+        setState(() {
+          _seriesSeasons = const [];
+          _seriesSeasonsLoading = false;
+          _seriesSeasonsError = null;
+        });
+      }
+      return;
+    }
+    try {
+      final seasons = await widget.repository.seasons(drama);
+      if (!mounted ||
+          generation != _generation ||
+          _profileEpoch != widget.store.profileEpoch ||
+          _detail?.drama.id != drama.id) {
+        return;
+      }
+      if (seasons.isNotEmpty) {
+        if (drama.source == SourceSite.hongguo.id) {
+          await widget.store.registerHongguoSeriesSeasons(
+            drama,
+            seasons.map((season) => season.drama),
+          );
+        }
+        await widget.store.refreshDramas(
+          seasons.map((season) => season.drama),
+        );
+      }
+      if (!mounted ||
+          generation != _generation ||
+          _profileEpoch != widget.store.profileEpoch ||
+          _detail?.drama.id != drama.id) {
+        return;
+      }
+      setState(() {
+        _seriesSeasons = seasons;
+        _seriesSeasonsLoading = false;
+        _seriesSeasonsError = null;
+      });
+    } catch (error) {
+      if (!mounted ||
+          generation != _generation ||
+          _profileEpoch != widget.store.profileEpoch ||
+          _detail?.drama.id != drama.id) {
+        return;
+      }
+      setState(() {
+        _seriesSeasons = const [];
+        _seriesSeasonsLoading = false;
+        _seriesSeasonsError = uiTraditional(error.toString());
+      });
     }
   }
 
@@ -248,12 +355,18 @@ class _DetailScreenState extends State<DetailScreen> {
     if (!mounted || _profileEpoch != widget.store.profileEpoch) {
       return;
     }
+    final preparedPlan = _detailPreloader.take(
+      detail.drama,
+      episodes[index],
+      quality: widget.store.playbackPreferences.quality,
+    );
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PlayerScreen(
           detail: playDetail,
           initialIndex: index,
           initialPosition: position,
+          preparedPlan: preparedPlan,
           repository: widget.repository,
           store: widget.store,
         ),
@@ -265,36 +378,44 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Future<void> _openSeriesDrama(Drama drama) async {
+    final anchor = _detail?.drama ?? _activeDrama;
     if (_profileEpoch != widget.store.profileEpoch ||
-        drama.id == (_detail?.drama.id ?? widget.drama.id)) {
+        drama.id == anchor.id ||
+        !widget.store.allowsSource(drama.source)) {
       return;
     }
-    final anchor = _detail?.drama ?? widget.drama;
-    if (widget.store.following(anchor.id)?.seriesSeasons[drama.id]?.read ==
-        false) {
+    if (anchor.source == SourceSite.hongguo.id &&
+        widget.store.following(anchor.id)?.seriesSeasons[drama.id]?.read ==
+            false) {
       await saveUserChange(
         context,
         () => widget.store.markSeriesSeasonRead(anchor.id, drama.id),
       );
-      if (!mounted) return;
+      if (!mounted ||
+          _profileEpoch != widget.store.profileEpoch ||
+          drama.id == _activeDrama.id) {
+        return;
+      }
     }
-    CoverRequestScheduler.pauseBackground();
-    await Navigator.of(context)
-        .pushReplacement<void, void>(
-          MaterialPageRoute<void>(
-            builder: (_) => DetailScreen(
-              drama: drama,
-              repository: widget.repository,
-              store: widget.store,
-            ),
-          ),
-        )
-        .whenComplete(CoverRequestScheduler.resumeBackground);
+    setState(() {
+      _activeDrama = drama;
+      _detail = null;
+      _error = null;
+      _loading = true;
+      _selectedPlayLine = '';
+      _episodePage = 0;
+      _seriesSeasons = const [];
+      _seriesSeasonsError = null;
+      _seriesSeasonsLoading = _supportsSeriesSeasons(drama.source);
+    });
+    // Keep the same details route and reload only the selected season's data.
+    // Watch progress and favorites remain keyed by each official season ID.
+    unawaited(_load());
   }
 
   @override
   Widget build(BuildContext context) {
-    final drama = _detail?.drama ?? widget.drama;
+    final drama = _detail?.drama ?? _activeDrama;
     final watched = widget.store.watched(drama.id);
     final allEpisodes = _detail?.episodes ?? <Episode>[];
     final playLines = _playLineNames(allEpisodes);
@@ -385,7 +506,7 @@ class _DetailScreenState extends State<DetailScreen> {
                       .skip(start)
                       .take(episodePageSize)
                       .toList();
-                  final showEpisodes = _episodesExpanded;
+                  const showEpisodes = true;
                   return CustomScrollView(
                     controller: _detailScroll,
                     slivers: [
@@ -403,13 +524,6 @@ class _DetailScreenState extends State<DetailScreen> {
                       else ...[
                         SliverToBoxAdapter(child: _seriesSelector(drama)),
                         SliverToBoxAdapter(child: _playLineSelector(playLines)),
-                        SliverToBoxAdapter(
-                          child: _episodeSummary(
-                            episodes,
-                            currentNumber: resumeEpisodeNumber,
-                            expanded: showEpisodes,
-                          ),
-                        ),
                         if (showEpisodes) ...[
                           SliverToBoxAdapter(
                             child: EpisodeRangeBar(
@@ -495,7 +609,7 @@ class _DetailScreenState extends State<DetailScreen> {
                           label: Text(
                             watched != null && episodes.isNotEmpty
                                 ? '繼續播放 · 第 ${episodes[resumeIndex].number} 集'
-                                : '立即播放',
+                                : '播放',
                             textAlign: TextAlign.center,
                           ),
                         ),
@@ -537,15 +651,15 @@ class _DetailScreenState extends State<DetailScreen> {
   void _selectPlayLine(String? line) {
     if (line == null || line == _selectedPlayLine || _detail == null) return;
     final episodes = _episodesForLine(_detail!.episodes, line);
+    final resumeIndex = resumeEpisodeIndex(
+      episodes,
+      widget.store.watched(_detail!.drama.id),
+    );
     setState(() {
       _selectedPlayLine = line;
-      _episodePage =
-          resumeEpisodeIndex(
-            episodes,
-            widget.store.watched(_detail!.drama.id),
-          ) ~/
-          episodePageSize;
+      _episodePage = resumeIndex ~/ episodePageSize;
     });
+    _prepareDetailPlayback(_detail!.drama, episodes, resumeIndex);
   }
 
   Widget _playLineSelector(List<String> lines) {
@@ -609,52 +723,6 @@ class _DetailScreenState extends State<DetailScreen> {
       message: _error == null ? '可以更新劇集資訊後重試。' : uiTraditional(_error!),
       onRetry: _load,
       secondaryAction: _sourceDiagnostics,
-    );
-  }
-
-  Widget _episodeSummary(
-    List<Episode> episodes, {
-    required int? currentNumber,
-    required bool expanded,
-  }) {
-    final colors = Theme.of(context).colorScheme;
-    final current = currentNumber == null ? '' : ' · 目前第 $currentNumber 集';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-      child: Material(
-        color: colors.surfaceContainer,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => setState(() => _episodesExpanded = !expanded),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                Icon(Icons.grid_view_rounded, color: colors.onSurfaceVariant),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '選集 · ${episodes.length} 集$current',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                Text(expanded ? '收起' : '展開'),
-                const SizedBox(width: 2),
-                Icon(
-                  expanded
-                      ? Icons.expand_less_rounded
-                      : Icons.expand_more_rounded,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -811,23 +879,11 @@ class _DetailScreenState extends State<DetailScreen> {
               ],
             ),
           ),
-        if (drama.description.isNotEmpty) ...[
+        if (drama.description.trim().isNotEmpty) ...[
           const SizedBox(height: 12),
           Text(
             uiTraditional(drama.description),
-            maxLines: _expandedDescription ? null : 3,
-            overflow: _expandedDescription
-                ? TextOverflow.visible
-                : TextOverflow.ellipsis,
             style: TextStyle(color: colors.onSurfaceVariant, height: 1.6),
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () =>
-                  setState(() => _expandedDescription = !_expandedDescription),
-              child: Text(_expandedDescription ? '收起簡介' : '展開簡介'),
-            ),
           ),
         ],
         if (_detail?.warning.isNotEmpty == true)
@@ -843,58 +899,139 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Widget _seriesSelector(Drama drama) {
-    final entries = hongguoSeriesEntries(
-      drama,
-      widget.store.seriesDramasFor(drama),
-    );
-    if (entries.isEmpty) return const SizedBox.shrink();
-    final colors = Theme.of(context).colorScheme;
-    final notices = widget.store.following(drama.id)?.seriesSeasons ?? const {};
+    if (!_supportsSeriesSeasons(drama.source)) {
+      return const SizedBox.shrink();
+    }
+    if (_seriesSeasonsLoading && _seriesSeasons.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(20, 10, 20, 8),
+        child: LinearProgressIndicator(),
+      );
+    }
+    final seasons = _seriesSeasons;
+    if (_seriesSeasonsError != null && seasons.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '系列季別暫時無法載入：${_seriesSeasonsError!}',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _seriesSeasonsLoading
+                  ? null
+                  : () => unawaited(
+                      _loadSeriesSeasons(drama, _generation),
+                    ),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('重試'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (seasons.length < 2) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('相關推薦', style: Theme.of(context).textTheme.titleMedium),
+          Text('系列劇', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final entry in entries)
-                ChoiceChip(
-                  key: ValueKey('series-${entry.drama.id}'),
-                  label: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 260),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            '${entry.label} · ${uiTraditional(entry.drama.title)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+          if (AppLayout.isTelevision(context))
+            FocusTraversalGroup(
+              child: SizedBox(
+                height: 76,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final season in seasons)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: _seasonChip(drama, season),
                         ),
-                        if (notices[entry.drama.id]?.read == false) ...[
-                          const SizedBox(width: 6),
-                          Icon(
-                            Icons.fiber_new_rounded,
-                            size: 18,
-                            color: colors.primary,
-                          ),
-                        ],
-                      ],
-                    ),
+                    ],
                   ),
-                  selected: entry.drama.id == drama.id,
-                  onSelected: entry.drama.id == drama.id
-                      ? null
-                      : (_) => _openSeriesDrama(entry.drama),
+                ),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final season in seasons) _seasonChip(drama, season),
+              ],
+            ),
+          if (_seriesSeasonsLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _seasonChip(Drama currentDrama, DramaSeason season) {
+    final current = season.drama.id == currentDrama.id;
+    final watched = widget.store.watched(season.drama.id);
+    final label = season.label.isNotEmpty
+        ? uiTraditional(season.label)
+        : season.number > 0
+        ? '第 ${season.number} 季'
+        : current
+        ? '目前季別'
+        : '其他季別';
+    final details = <String>[
+      if (season.drama.episodes > 0) '共 ${season.drama.episodes} 集',
+      if (season.upcoming) '即將上線',
+      if (!season.playable && !season.upcoming) '集數待確認',
+      if (watched != null && !current) '有觀看紀錄',
+    ];
+    final text = [
+      label,
+      ...details,
+    ].join(' · ');
+    return Tooltip(
+      message: [
+        uiTraditional(season.drama.title),
+        if (season.subtitle.isNotEmpty) uiTraditional(season.subtitle),
+      ].where((value) => value.isNotEmpty).join('\n'),
+      child: ChoiceChip(
+        key: ValueKey('official-season-${season.drama.id}'),
+        label: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 260),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (season.subtitle.isNotEmpty)
+                Text(
+                  uiTraditional(season.subtitle),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall,
                 ),
             ],
           ),
-        ],
+        ),
+        selected: current,
+        // Missing catalogue counts do not prove that a season is unavailable.
+        // The official season detail + aggregate resolver decides whether it
+        // has direct media, just as it does when opened from search results.
+        onSelected: current || season.upcoming
+            ? null
+            : (_) => _openSeriesDrama(season.drama),
       ),
     );
   }

@@ -197,6 +197,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _reloadLocalData() async {
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    try {
+      await widget.store.reload();
+      if (!mounted) return;
+      setState(() {
+        _message = widget.store.hasUnavailableLocalDataFiles
+            ? '部分本機資料仍無法讀取；原始檔案已保留，請檢查儲存空間與權限後再試。'
+            : '本機資料已重新讀取。';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _message = '重新讀取失敗：${uiTraditional(error.toString())}');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _backup(bool restore) async {
     setState(() {
       _busy = true;
@@ -223,7 +245,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 content: SelectableText(
                   '已儲存設定備份：\n$path\n\n'
                   '請從檔案管理器開啟 Download/D TV 資料夾，'
-                  '將 JSON 備份檔複製到電腦保存。',
+                  '將 JSON 備份檔複製到電腦儲存。',
                 ),
                 actions: [
                   TextButton(
@@ -358,7 +380,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 focusNode: _deviceInterconnectFocus,
                 leading: const Icon(Icons.devices_rounded),
                 title: const Text('裝置互聯'),
-                subtitle: const Text('區域網路自動同步收藏與推送播放'),
+                subtitle: const Text('透過區域網路同步收藏，並傳送播放內容至其他裝置'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => openLanSync(context),
               ),
@@ -446,6 +468,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => DiaryService.showDiaryDialog(context),
               ),
               if (widget.store.profile.admin) ...[
+                if (widget.store.hasUnavailableLocalDataFiles)
+                  ListTile(
+                    key: const ValueKey('reload-unavailable-local-data'),
+                    leading: const Icon(Icons.sync_rounded),
+                    title: const Text('重新讀取本機資料'),
+                    subtitle: const Text(
+                      '有資料暫時無法存取；原始檔案已保留，並暫停覆寫該資料。',
+                    ),
+                    onTap: _busy ? null : _reloadLocalData,
+                  ),
                 ListTile(
                   leading: const Icon(Icons.settings_ethernet_rounded),
                   title: const Text('網路與資源'),

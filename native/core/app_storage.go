@@ -39,7 +39,7 @@ func (engine *nativeEngine) storage() (nativeStorageInfo, error) {
 		return nil
 	})
 	if err != nil {
-		return info, errors.New("无法读取下载目录，请检查存储设备")
+		return info, errors.New("無法讀取下載目錄，請檢查儲存裝置")
 	}
 	info.Free = nativeFreeSpace(root)
 	return info, nil
@@ -65,7 +65,7 @@ func nativeCopyTree(ctx context.Context, source, target string) error {
 			return err
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
-			return errors.New("下载目录中包含符号链接，无法迁移")
+			return errors.New("下載目錄中包含符號連結，無法搬移")
 		}
 		relative, err := filepath.Rel(source, path)
 		if err != nil {
@@ -113,29 +113,29 @@ func nativeCopyTree(ctx context.Context, source, target string) error {
 
 func (engine *nativeEngine) moveDownloads(ctx context.Context, parent string) error {
 	if !filepath.IsAbs(parent) {
-		return errors.New("请选择有效的保存目录")
+		return errors.New("請選擇有效的儲存目錄")
 	}
 	manager := engine.downloads
 	resolved, err := filepath.EvalSymlinks(parent)
 	if err != nil {
-		return errors.New("无法打开所选目录")
+		return errors.New("無法開啟選取的目錄")
 	}
 	parent = resolved
 	engine.mu.Lock()
 	if engine.work["media"] || engine.work["mergeQueue"] || engine.work["mergeCleanup"] {
 		engine.mu.Unlock()
-		return errors.New("请等待本地媒体处理完成后再迁移")
+		return errors.New("請等待本機媒體處理完成後再搬移")
 	}
 	defer engine.mu.Unlock()
 	target := filepath.Join(filepath.Clean(parent), "zhenguojian-downloads")
 	manager.mu.Lock()
 	if manager.loadErr != nil {
 		manager.mu.Unlock()
-		return errors.New("下载记录无法读取，已停止迁移并保留原索引和文件；请先恢复下载记录")
+		return errors.New("下載紀錄無法讀取，已停止搬移並保留原索引與檔案；請先修復下載紀錄")
 	}
 	if manager.closed || manager.moving {
 		manager.mu.Unlock()
-		return errors.New("下载目录正在处理，请稍后重试")
+		return errors.New("下載目錄正在處理，請稍後重試")
 	}
 	if target == manager.root {
 		manager.mu.Unlock()
@@ -146,11 +146,11 @@ func (engine *nativeEngine) moveDownloads(ctx context.Context, parent string) er
 	if (relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator))) ||
 		(inverse != ".." && !strings.HasPrefix(inverse, ".."+string(os.PathSeparator))) {
 		manager.mu.Unlock()
-		return errors.New("新目录不能与原下载目录互相包含")
+		return errors.New("新目錄不能與原下載目錄互相包含")
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		manager.mu.Unlock()
-		return errors.New("目标中已有应用下载目录，请选择空目录，避免覆盖文件")
+		return errors.New("目標位置已有應用程式下載目錄，請選擇空目錄以避免覆寫檔案")
 	}
 	manager.moving = true
 	for id, job := range manager.jobs {
@@ -172,11 +172,11 @@ func (engine *nativeEngine) moveDownloads(ctx context.Context, parent string) er
 	}
 	source := manager.root
 	if err := os.Mkdir(target, 0700); err != nil {
-		return errors.New("无法创建目标目录，请检查权限或选择其他位置")
+		return errors.New("無法建立目標目錄，請檢查權限或選擇其他位置")
 	}
 	if err := nativeCopyTree(ctx, source, target); err != nil {
 		_ = os.RemoveAll(target)
-		return errors.New("文件迁移未完成，原文件已保留，请检查空间与目录权限")
+		return errors.New("檔案搬移未完成，原檔案已保留，請檢查儲存空間與目錄權限")
 	}
 	if err := ctx.Err(); err != nil {
 		_ = os.RemoveAll(target)
@@ -185,7 +185,7 @@ func (engine *nativeEngine) moveDownloads(ctx context.Context, parent string) er
 	data, _ := json.Marshal(map[string]string{"directory": target})
 	if err := nativeDownloadWrite(filepath.Join(engine.directory, "download-location.json"), data); err != nil {
 		_ = os.RemoveAll(target)
-		return errors.New("保存下载目录失败，原文件已保留")
+		return errors.New("儲存下載目錄失敗，原檔案已保留")
 	}
 	manager.root = target
 	_ = os.RemoveAll(source)
@@ -200,10 +200,10 @@ func (engine *nativeEngine) workLease(id, command string) (int, error) {
 	}
 	if id != "" {
 		if id != "media" && id != "storage" && id != "mergeQueue" && id != "mergeCleanup" {
-			return 0, errors.New("无效的本地任务")
+			return 0, errors.New("無效的本機任務")
 		}
 		if command != "start" && command != "end" {
-			return 0, errors.New("无效的本地任务操作")
+			return 0, errors.New("無效的本機任務操作")
 		}
 		manager := engine.downloads
 		manager.mu.Lock()

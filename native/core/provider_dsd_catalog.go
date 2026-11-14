@@ -81,7 +81,7 @@ func parseDSDCategories(document *html.Node, pageURL string) ([]nativeCategory, 
 		categories = append(categories, nativeCategory{ID: id, Name: name})
 	}
 	if len(categories) == 0 || len(categories) > 32 {
-		return nil, errors.New("帝果未返回有效的内容分类")
+		return nil, errors.New("帝果未提供有效的內容分類")
 	}
 	return categories, nil
 }
@@ -163,21 +163,21 @@ func parseDSDCards(document *html.Node, pageURL, category string) ([]Drama, erro
 			}
 		}
 		if title == "" {
-			return nil, errors.New("帝果目录缺少视频名称")
+			return nil, errors.New("帝果目錄缺少影片名稱")
 		}
 		seen[id] = true
 		cover := dsdCardCover(card, pageURL)
 		views := strings.TrimSuffix(providerHTMLText(providerHTMLFirstClass(card, "video-item-tag-hits", "counts")), "次")
 		drama := Drama{ID: providerDramaID(sourceDSD, id), Source: sourceDSD, SourceID: id,
 			Title: truncate(title, 1024), Name: truncate(title, 1024), Cover: cover, CoverURL: cover,
-			CategoryName: firstNonEmpty(category, "视频"), ChannelName: "帝果", Views: views}
+			CategoryName: firstNonEmpty(category, "影片"), ChannelName: "帝果", Views: views}
 		if providerHTMLFirstClass(card, "video-item-tag-is-vip", "vip-tag") != nil {
 			vip := true
 			drama.VIP = &vip
 		}
 		items = append(items, drama)
 		if len(items) > 500 {
-			return nil, errors.New("帝果目录条目过多")
+			return nil, errors.New("帝果目錄項目過多")
 		}
 	}
 	return items, nil
@@ -187,7 +187,7 @@ func dsdPagination(document *html.Node, pageURL, category, query string, page in
 	pagination := providerHTMLFirstClass(document, "el-pagination", "pagination", "mac_pages")
 	if pagination == nil {
 		if page != 1 {
-			return 0, errors.New("帝果未返回请求页码，请重试")
+			return 0, errors.New("帝果未提供要求的頁碼，請重試")
 		}
 		return 1, nil
 	}
@@ -201,7 +201,7 @@ func dsdPagination(document *html.Node, pageURL, category, query string, page in
 		}
 	}
 	if activePage != page {
-		return 0, errors.New("帝果返回的页码与请求不符")
+		return 0, errors.New("帝果回傳的頁碼與要求不符")
 	}
 	pages := page
 	for _, anchor := range providerHTMLNodes(pagination, func(node *html.Node) bool { return node.Data == "a" }) {
@@ -258,14 +258,14 @@ func (d *Downloader) fetchDSDPage(ctx context.Context, page int, category native
 		return nil, false, err
 	}
 	if len(items) == 0 && providerHTMLFirstClass(document, "video-contaner", "nvyou-wrap", "van-list", "search-page", "lists") == nil {
-		return nil, false, errors.New("帝果未返回内容列表，页面可能已变化")
+		return nil, false, errors.New("帝果未提供內容清單，頁面可能已變更")
 	}
 	pages, err := dsdPagination(document, address, category.ID, query, page)
 	if err != nil {
 		return nil, false, err
 	}
 	if len(items) == 0 && pages > page {
-		return nil, false, errors.New("帝果未返回应有的视频条目，请重试")
+		return nil, false, errors.New("帝果未提供預期的影片項目，請重試")
 	}
 	if query == "" {
 		state := &d.dsdCatalog
@@ -281,7 +281,7 @@ func (d *Downloader) fetchDSDPage(ctx context.Context, page int, category native
 
 func (d *Downloader) fetchDSDCatalogPage(ctx context.Context, page int, category, query string) ([]Drama, bool, error) {
 	if page < 1 || page > 1000000 || len(query) > 1024 || category != "" && !webProviderNumericID.MatchString(category) {
-		return nil, false, errors.New("帝果目录查询参数无效")
+		return nil, false, errors.New("帝果目錄查詢參數無效")
 	}
 	if query != "" {
 		return d.fetchDSDPage(ctx, page, nativeCategory{}, query)
@@ -296,7 +296,7 @@ func (d *Downloader) fetchDSDCatalogPage(ctx context.Context, page int, category
 				return d.fetchDSDPage(ctx, page, item, "")
 			}
 		}
-		return nil, false, errors.New("帝果分类已变化，请刷新分类")
+		return nil, false, errors.New("帝果分類已變更，請重新整理分類")
 	}
 	type result struct {
 		items []Drama

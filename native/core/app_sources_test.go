@@ -285,7 +285,7 @@ func TestSourceHealthRejectsHTML200AndPreservesFailureStage(t *testing.T) {
 	if err == nil || status.Health == nil || status.Health.State != "failed" || len(status.Health.Steps) != 3 || status.Health.Steps[2].State != "failed" {
 		t.Fatal("HTML 200 was reported as playable", err, status.Health)
 	}
-	if status.Health.Steps[2].HTTPStatus != 200 || !strings.Contains(status.Health.Steps[2].Message, "浏览器验证") {
+	if status.Health.Steps[2].HTTPStatus != 200 || !strings.Contains(status.Health.Steps[2].Message, "瀏覽器驗證") {
 		t.Fatal("missing CF failure detail", status.Health.Steps)
 	}
 }
@@ -342,7 +342,7 @@ func TestSourceHealthChecksHLSKeyAndBoundedMedia(t *testing.T) {
 
 func TestSourceBackoffUsesRelativeTimeAndRetainsTypedError(t *testing.T) {
 	backoff := &requestBackoff{host: "huangguo.video", status: 403, until: time.Now().Add(time.Minute)}
-	if !strings.Contains(backoff.Error(), "秒后") || strings.Contains(backoff.Error(), backoff.until.Format("15:04:05")) {
+	if !strings.Contains(backoff.Error(), "秒後") || strings.Contains(backoff.Error(), backoff.until.Format("15:04:05")) {
 		t.Fatal("retry time depends on native timezone")
 	}
 	var restored *requestBackoff

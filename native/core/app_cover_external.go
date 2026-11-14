@@ -250,7 +250,15 @@ func posterTitleVariants(value string) []string {
 			break
 		}
 	}
-	candidates := []string{value, bangumiPosterBaseTitle(value), withoutYear}
+	baseTitle := bangumiPosterBaseTitle(value)
+	candidates := []string{value, baseTitle, withoutYear}
+	baseKey := normalizeBangumiPosterTitle(baseTitle)
+	if baseKey == normalizeBangumiPosterTitle("緊急呼救") ||
+		baseKey == normalizeBangumiPosterTitle("紧急呼救") {
+		// TVmaze indexes the same 2018 Fox series under its original title.
+		// Keep this as an exact alias; candidate year matching still applies.
+		candidates = append(candidates, "9-1-1")
+	}
 	for _, separator := range []string{" / ", "／", "｜", " | "} {
 		if strings.Contains(value, separator) {
 			for _, part := range strings.Split(value, separator) {
@@ -392,7 +400,14 @@ func (d *Downloader) doubanSuggestedPosterAddress(ctx context.Context, drama nat
 		}
 	}
 	if len(matches) == 1 {
-		for _, address := range matches {
+		for showID, address := range matches {
+			if _, seasonNumber, _, hasSeason := duoduoSeriesTitle(drama.Title); hasSeason {
+				if seasonAddress, seasonErr := d.tvMazeSeasonPosterAddress(
+					searchCtx, showID, seasonNumber,
+				); seasonErr == nil && seasonAddress != "" {
+					return seasonAddress, nil
+				}
+			}
 			return address, nil
 		}
 	}
@@ -478,15 +493,30 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		address: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
 	},
 	{
-		// Duoduo ID 1192 is the 2001 Fuji TV series できちゃった結婚
-		// (Shotgun Marriage). Prefer the programme distributor's official
-		// artwork because the source CDN is unavailable and Douban is blocked.
-		// The mapping is restricted to this exact provider ID and title.
+		// Duoduo ID 88129 is the exact 9-1-1 Season 1 catalogue entry (2018).
+		// TVmaze lists this season separately and provides season-specific key art.
+		// Restrict the poster to this exact source ID, title, TV category and year.
+		title: "緊急呼救第一季",
+		titleAliases: []string{"紧急呼救第一季", "緊急呼救 第一季", "紧急呼救 第一季"},
+		source: sourceDuoduo,
+		sourceID: "88129",
+		year: "2018",
+		workType: "tv",
+		preferred: true,
+		overrideProvider: true,
+		address: "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
+	},
+	{
+		// Duoduo ID 1192 is the 2025 Japanese anime デキちゃうまで婚.
+		// Use the official programme site's key visual because the source CDN
+		// has no public DNS record. Require the exact ID, anime category and year.
 		title: "奉子成婚",
 		source: sourceDuoduo,
 		sourceID: "1192",
+		year: "2025",
+		workType: "anime",
 		preferred: true,
-		address: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+		address: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 	},
 	{
 		// Duoduo ID 66452 is the 2014 micro-film 逆愛2後會無期.
@@ -547,6 +577,12 @@ func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficia
 			if !nativePosterIsAnime(drama) || year == "" || year != candidate.year {
 				continue
 			}
+		} else if candidate.workType == "tv" {
+			// Season-specific TV artwork is accepted only for the exact TV
+			// catalogue entry and its verified premiere year.
+			if !nativePosterIsTVSeries(drama) || year == "" || year != candidate.year {
+				continue
+			}
 		} else if candidate.source == "" && candidate.sourceID == "" {
 			// Unscoped curated programme artwork remains variety-only.
 			if !isVariety {
@@ -590,6 +626,12 @@ func nativePosterIsTVSeries(drama nativeDrama) bool {
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
 	if nativePosterIsAnime(drama) || bangumiPosterContainsAny(category, "電影", "电影", "movie", "film") {
 		return false
+	}
+	// An explicit season suffix is reliable TV evidence even when the
+	// catalogue detail row omits type_name and category.
+	if title := strings.TrimSpace(drama.Title); title != "" &&
+		bangumiPosterBaseTitle(title) != title {
+		return true
 	}
 	return bangumiPosterContainsAny(
 		category,
@@ -727,6 +769,57 @@ func validTVMazePosterAddress(raw string) string {
 	return parsed.String()
 }
 
+func (d *Downloader) tvMazeSeasonPosterAddress(
+	ctx context.Context,
+	showID string,
+	seasonNumber int,
+) (string, error) {
+	showID = strings.TrimSpace(showID)
+	if !webProviderNumericID.MatchString(showID) || seasonNumber < 1 {
+		return "", errors.New("TVmaze 季別查詢參數無效")
+	}
+	endpoint := "https://api.tvmaze.com/shows/" + showID + "/seasons"
+	request, err := http.NewRequestWithContext(
+		context.WithValue(ctx, nativeCoverNetworkKey{}, true),
+		http.MethodGet, endpoint, nil,
+	)
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("User-Agent", userAgent)
+	request.Header.Set("Accept", "application/json")
+	client := *d.client
+	response, err := client.Do(request)
+	if err != nil {
+		return "", err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+	response.Body.Close()
+	if readErr != nil {
+		return "", readErr
+	}
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("TVmaze 季別回應 HTTP %d", response.StatusCode)
+	}
+	if len(body) > 1<<20 {
+		return "", errors.New("TVmaze 季別回應超過大小限制")
+	}
+	var seasons []map[string]any
+	if err := json.Unmarshal(body, &seasons); err != nil {
+		return "", errors.New("TVmaze 季別回應格式無效")
+	}
+	for _, season := range seasons {
+		if duoduoEpisodeValueCount(season["number"]) != seasonNumber {
+			continue
+		}
+		image := nestedMap(season, "image")
+		return validTVMazePosterAddress(firstNonEmpty(
+			duoduoString(image["original"]), duoduoString(image["medium"]),
+		)), nil
+	}
+	return "", nil
+}
+
 func (d *Downloader) tvMazePosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
 	if d == nil || d.client == nil {
 		return "", errors.New("TVmaze 海報搜尋用戶端尚未初始化")
@@ -804,7 +897,16 @@ func (d *Downloader) tvMazePosterAddress(ctx context.Context, drama nativeDrama)
 		}
 	}
 	if len(matches) == 1 {
-		for _, address := range matches {
+		for showID, address := range matches {
+			// A season page must use TVmaze's season-specific artwork when
+			// available; the show-level image is only a fallback.
+			if _, seasonNumber, _, hasSeason := duoduoSeriesTitle(drama.Title); hasSeason {
+				if seasonAddress, seasonErr := d.tvMazeSeasonPosterAddress(
+					searchCtx, showID, seasonNumber,
+				); seasonErr == nil && seasonAddress != "" {
+					return seasonAddress, nil
+				}
+			}
 			return address, nil
 		}
 	}

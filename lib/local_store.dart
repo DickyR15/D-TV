@@ -168,6 +168,12 @@ class LocalStore extends ChangeNotifier {
   final SharedPreferences preferences;
   final Future<String> Function(String pin, String salt) _pinHasher;
   final LocalFiles? _fileStore;
+
+  bool get hasUnavailableLocalDataFiles =>
+      _fileStore?.temporarilyUnavailableFiles.isNotEmpty ?? false;
+
+  List<String> get unavailableLocalDataFiles =>
+      List.unmodifiable(_fileStore?.temporarilyUnavailableFiles ?? const <String>{});
   // Only a player window created by an already-unlocked app session may use
   // this. Profile and per-source permissions are still loaded and enforced.
   final bool _assumeAuthenticated;
@@ -646,7 +652,8 @@ class LocalStore extends ChangeNotifier {
     for (final row in readJsonList(_seriesCandidatesRaw())) {
       try {
         final drama = Drama.fromJson(row);
-        if (drama.source == SourceSite.hongguo.id) {
+        if (drama.source == SourceSite.hongguo.id ||
+            drama.source == 'duoduo' && drama.seriesGroupId.isNotEmpty) {
           _seriesCandidates[drama.id] = drama;
         }
       } catch (_) {}
@@ -677,11 +684,52 @@ class LocalStore extends ChangeNotifier {
           .where((entry) => allowsSource(entry.drama.source))
           .toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-  List<Drama> get favorites => _favorites.values
-      .where((drama) => allowsSource(drama.source))
-      .toList()
-      .reversed
-      .toList();
+  List<Drama> get favorites {
+    final unique = <String, Drama>{};
+    for (final drama in _favorites.values) {
+      if (!allowsSource(drama.source)) continue;
+      final groupId = drama.seriesGroupId;
+      final key = groupId.isEmpty ? 'id:' + drama.id : 'series:' + groupId;
+      final canonicalId = groupId.isEmpty
+          ? drama.id
+          : _seriesCanonicalId(groupId, fallbackId: drama.id);
+      unique[key] = _favorites[canonicalId] ??
+          _seriesCandidates[canonicalId] ??
+          drama;
+    }
+    return unique.values.toList().reversed.toList();
+  }
+
+  String _seriesGroupIdFor(String id) =>
+      _seriesCandidates[id]?.seriesGroupId ??
+      _favorites[id]?.seriesGroupId ??
+      _history[id]?.drama.seriesGroupId ??
+      '';
+
+  String _seriesCanonicalId(String groupId, {String fallbackId = ''}) {
+    if (!groupId.startsWith('duoduo-series:')) return 'hongguo:' + groupId;
+    final matches = _seriesCandidates.values
+        .where((drama) => drama.seriesGroupId == groupId)
+        .toList()
+      ..sort((a, b) {
+        final season = a.seriesSeasonNumber.compareTo(b.seriesSeasonNumber);
+        return season != 0 ? season : a.id.compareTo(b.id);
+      });
+    return matches.isNotEmpty ? matches.first.id : fallbackId;
+  }
+
+  String? _favoriteIdFor(String id) {
+    final groupId = _seriesGroupIdFor(id);
+    if (groupId.isNotEmpty) {
+      final canonicalId = _seriesCanonicalId(groupId, fallbackId: id);
+      if (_favorites.containsKey(canonicalId)) return canonicalId;
+      for (final entry in _favorites.entries) {
+        if (entry.value.seriesGroupId == groupId) return entry.key;
+      }
+    }
+    return _favorites.containsKey(id) ? id : null;
+  }
+
   WatchEntry? watched(String id) {
     WatchEntry? entry = _history[id];
     if (entry == null && isFavorite(id)) {
@@ -692,17 +740,34 @@ class LocalStore extends ChangeNotifier {
     return entry != null && allowsSource(entry.drama.source) ? entry : null;
   }
 
-  bool isFavorite(String id) =>
-      _favorites[id] != null && allowsSource(_favorites[id]!.source);
+  bool isFavorite(String id) {
+    final key = _favoriteIdFor(id);
+    return key != null &&
+        _favorites[key] != null &&
+        allowsSource(_favorites[key]!.source);
+  }
+
   FollowState? following(String id) {
-    if (!isFavorite(id)) return null;
-    final state = _followStates[id];
+    final key = _favoriteIdFor(id);
+    if (key == null || !isFavorite(id)) return null;
+    final member = _favorites[id] ??
+        _seriesCandidates[id] ??
+        _history[id]?.drama ??
+        _favorites[key]!;
+    final own = _followStates[id] ?? FollowState.initial(member, _history[id]);
+    final shared = _followStates[key] ?? own;
+    final progress = _history[id] == null
+        ? own
+        : own.afterPlayback(_history[id]!);
+    final combined = FollowState(
+      status: shared.status,
+      manuallyWatched: shared.manuallyWatched,
+      knownEpisodes: progress.knownEpisodes,
+      readEpisodes: progress.readEpisodes,
+      seriesSeasons: shared.seriesSeasons,
+    );
     final watched = _history[id];
-    // Playback updates the watch-history file only. Derive the display status
-    // from that record instead of rewriting a separate follow-state file.
-    return state != null && watched != null
-        ? state.afterPlayback(watched)
-        : state;
+    return watched == null ? combined : combined.afterPlayback(watched);
   }
   List<Drama> seriesDramasFor(Drama anchor) {
     if (!allowsSource(SourceSite.hongguo.id) ||
@@ -735,6 +800,21 @@ class LocalStore extends ChangeNotifier {
           title: notice.title,
         ),
       );
+    }
+    final groupId = anchor.seriesGroupId.isNotEmpty
+        ? anchor.seriesGroupId
+        : _seriesGroupIdFor(anchor.id);
+    if (groupId.isNotEmpty) {
+      final grouped = items.values
+          .where((drama) => drama.seriesGroupId == groupId)
+          .toList()
+        ..sort((a, b) {
+          final season = a.seriesSeasonNumber.compareTo(b.seriesSeasonNumber);
+          return season != 0
+              ? season
+              : naturalTitleCompare(a.title, b.title);
+        });
+      if (grouped.isNotEmpty) return grouped;
     }
     final current = items.remove(anchor.id) ?? anchor;
     final rest = items.values.toList()
@@ -1043,15 +1123,34 @@ class LocalStore extends ChangeNotifier {
     final epoch = _epoch;
     return _queue(() async {
       if (!allowsSource(drama.source) || epoch != _epoch) return;
+      final groupId = drama.seriesGroupId.isNotEmpty
+          ? drama.seriesGroupId
+          : _seriesGroupIdFor(drama.id);
       final entries = Map.of(_favorites);
       final states = Map.of(_followStates);
-      if (entries.containsKey(drama.id)) {
-        entries.remove(drama.id);
-        states.remove(drama.id);
+      final matchingIds = entries.entries
+          .where((entry) =>
+              entry.key == drama.id ||
+              groupId.isNotEmpty && entry.value.seriesGroupId == groupId)
+          .map((entry) => entry.key)
+          .toList();
+      if (matchingIds.isNotEmpty) {
+        for (final id in matchingIds) {
+          entries.remove(id);
+          states.remove(id);
+        }
       } else {
-        if (entries.length >= 20000) throw StateError('收藏數量已達上限，請先整理收藏');
-        entries[drama.id] = drama;
-        states[drama.id] = FollowState.initial(drama, _history[drama.id]);
+        if (entries.length >= 20000) {
+          throw StateError('收藏數量已達上限，請先整理收藏');
+        }
+        final key = groupId.isEmpty
+            ? drama.id
+            : _seriesCanonicalId(groupId, fallbackId: drama.id);
+        final canonical = groupId.isEmpty
+            ? drama
+            : (_seriesCandidates[key] ?? drama.withSeriesGroupId(groupId));
+        entries[key] = canonical;
+        states[key] = FollowState.initial(canonical, _history[canonical.id]);
       }
       await _commit({
         _key('favorites'): jsonEncode(
@@ -1072,17 +1171,32 @@ class LocalStore extends ChangeNotifier {
     final epoch = _epoch;
     return _queue(() async {
       if (!allowsSource(drama.source) || epoch != _epoch) return;
-      if (!_favorites.containsKey(drama.id) && _favorites.length >= 20000) {
+      final groupId = drama.seriesGroupId.isNotEmpty
+          ? drama.seriesGroupId
+          : _seriesGroupIdFor(drama.id);
+      final canonicalId = groupId.isEmpty
+          ? drama.id
+          : _seriesCanonicalId(groupId, fallbackId: drama.id);
+      final key = _favoriteIdFor(drama.id) ?? canonicalId;
+      if (!_favorites.containsKey(key) && _favorites.length >= 20000) {
         throw StateError('收藏數量已達上限，請先整理收藏');
       }
-      final current = _favorites[drama.id]?.merge(drama) ?? drama;
-      final entries = Map.of(_favorites)..[drama.id] = current;
+      final existing = _favorites[key];
+      final base = existing ??
+          (groupId.isEmpty
+              ? drama
+              : (_seriesCandidates[canonicalId] ??
+                    drama.withSeriesGroupId(groupId)));
+      final current = existing != null && existing.id != drama.id
+          ? existing
+          : base.merge(drama);
+      final entries = Map.of(_favorites)..[key] = current;
       final state =
-          (_followStates[drama.id] ??
-                  FollowState.initial(current, _history[drama.id]))
+          (_followStates[key] ??
+                  FollowState.initial(current, _history[current.id]))
               .observe(current)
               .withStatus(status);
-      final states = Map.of(_followStates)..[drama.id] = state;
+      final states = Map.of(_followStates)..[key] = state;
       await _commit({
         _key('favorites'): jsonEncode(
           entries.values.map((entry) => entry.toJson()).toList(),
@@ -1097,9 +1211,22 @@ class LocalStore extends ChangeNotifier {
   Future<void> markUpdatesRead(String id) {
     final epoch = _epoch;
     return _queue(() async {
-      if (!isFavorite(id) || epoch != _epoch) return;
+      final key = _favoriteIdFor(id);
+      if (key == null || epoch != _epoch) return;
+      final member = _favorites[id] ??
+          _seriesCandidates[id] ??
+          _history[id]?.drama ??
+          _favorites[key]!;
+      final own = _followStates[id] ?? FollowState.initial(member, _history[id]);
+      final shared = _followStates[key] ?? own;
       final states = Map.of(_followStates)
-        ..[id] = _followStates[id]!.markRead();
+        ..[id] = FollowState(
+          status: shared.status,
+          manuallyWatched: shared.manuallyWatched,
+          knownEpisodes: own.knownEpisodes,
+          readEpisodes: own.knownEpisodes,
+          seriesSeasons: shared.seriesSeasons,
+        );
       await _commit({_key('followStates'): _encodeFollowStates(states)});
       _loadLibrary();
       _notify();
@@ -1109,13 +1236,191 @@ class LocalStore extends ChangeNotifier {
   Future<void> markSeriesSeasonRead(String id, String seasonId) {
     final epoch = _epoch;
     return _queue(() async {
-      if (!isFavorite(id) || epoch != _epoch) return;
-      final current = _followStates[id]!;
+      final key = _favoriteIdFor(id);
+      if (key == null || epoch != _epoch || _followStates[key] == null) return;
+      final current = _followStates[key]!;
       final updated = current.markSeriesSeasonRead(seasonId);
       if (identical(current, updated)) return;
-      final states = Map.of(_followStates)..[id] = updated;
+      final states = Map.of(_followStates)..[key] = updated;
       await _commit({_key('followStates'): _encodeFollowStates(states)});
       _loadLibrary();
+      _notify();
+    });
+  }
+
+  /// Registers official Redfruit season IDs and consolidates older
+  /// season-level favorites into one series-level favorite.
+  Future<void> registerHongguoSeriesSeasons(
+    Drama anchor,
+    Iterable<Drama> seasons,
+  ) {
+    final epoch = _epoch;
+    final rows = [anchor, ...seasons]
+        .where((drama) =>
+            drama.source == SourceSite.hongguo.id && drama.id.isNotEmpty)
+        .toList();
+    final groupId = rows
+        .map((drama) => drama.seriesGroupId)
+        .firstWhere((value) => value.isNotEmpty, orElse: () => '');
+    if (groupId.isEmpty ||
+        groupId.length > 64 ||
+        RegExp(r'^[0-9]+').matchAsPrefix(groupId)?.end != groupId.length) {
+      return Future.value();
+    }
+    return _queue(() async {
+      if (locked || epoch != _epoch) return;
+      final candidates = Map<String, Drama>.from(_seriesCandidates);
+      for (final row in rows) {
+        final previous = candidates[row.id] ??
+            _favorites[row.id] ??
+            _history[row.id]?.drama;
+        final tagged = row.withSeriesGroupId(groupId);
+        candidates[row.id] =
+            previous == null ? tagged : previous.merge(tagged);
+      }
+      final canonicalId = 'hongguo:' + groupId;
+      if (!candidates.containsKey(anchor.id)) {
+        candidates[anchor.id] = anchor.withSeriesGroupId(groupId);
+      }
+
+      final favorites = Map<String, Drama>.from(_favorites);
+      final states = Map<String, FollowState>.from(_followStates);
+      final history = Map<String, WatchEntry>.from(_history);
+      final groupRows = candidates.values
+          .where((drama) => drama.seriesGroupId == groupId)
+          .toList();
+      final groupEntries = favorites.entries
+          .where((entry) =>
+              entry.value.seriesGroupId == groupId ||
+              candidates[entry.key]?.seriesGroupId == groupId)
+          .toList();
+      if (groupEntries.isNotEmpty) {
+        final perSeasonStates = <String, FollowState>{
+          for (final drama in groupRows)
+            drama.id: states[drama.id] ??
+                FollowState.initial(drama, history[drama.id]),
+          for (final entry in groupEntries)
+            entry.key: states[entry.key] ??
+                FollowState.initial(entry.value, history[entry.key]),
+        };
+        final canonical = candidates[canonicalId] ??
+            groupEntries.first.value.withSeriesGroupId(groupId);
+        final primary = perSeasonStates[canonicalId] ??
+            perSeasonStates.values.first;
+        final notices = <String, SeriesSeasonNotice>{};
+        for (final state in perSeasonStates.values) {
+          for (final notice in state.seriesSeasons.values) {
+            final previous = notices[notice.id];
+            notices[notice.id] = previous == null
+                ? notice
+                : SeriesSeasonNotice(
+                    id: notice.id,
+                    title: notice.title,
+                    season: notice.season,
+                    unit: notice.unit,
+                    read: previous.read && notice.read,
+                  );
+          }
+        }
+        final allSeasonsWatched = perSeasonStates.isNotEmpty &&
+            perSeasonStates.values.every(
+              (state) => state.status == FollowStatus.watched,
+            );
+        final manuallyWatched = allSeasonsWatched &&
+            perSeasonStates.values.every((state) => state.manuallyWatched);
+        final anySeasonStarted = perSeasonStates.values.any(
+          (state) => state.status != FollowStatus.planned,
+        );
+        final status = allSeasonsWatched
+            ? FollowStatus.watched
+            : anySeasonStarted
+            ? FollowStatus.watching
+            : FollowStatus.planned;
+        final merged = FollowState(
+          status: status,
+          manuallyWatched: manuallyWatched,
+          knownEpisodes: primary.knownEpisodes,
+          readEpisodes: primary.readEpisodes,
+          seriesSeasons: notices,
+        );
+        for (final entry in groupEntries) {
+          favorites.remove(entry.key);
+        }
+        favorites[canonicalId] = canonical;
+        final shared = observeHongguoSeriesSeasons(
+          anchor: canonical,
+          state: merged,
+          candidates: groupRows,
+          favoriteIds: favorites.keys.toSet(),
+        );
+        for (final drama in groupRows) {
+          final own = perSeasonStates[drama.id] ??
+              FollowState.initial(drama, history[drama.id]);
+          states[drama.id] = FollowState(
+            status: shared.status,
+            manuallyWatched: shared.manuallyWatched,
+            knownEpisodes: own.knownEpisodes,
+            readEpisodes: own.readEpisodes,
+            seriesSeasons: shared.seriesSeasons,
+          );
+        }
+        states[canonicalId] = states[canonicalId] ??
+            FollowState.initial(canonical, history[canonicalId]);
+        states[canonicalId] = FollowState(
+          status: shared.status,
+          manuallyWatched: shared.manuallyWatched,
+          knownEpisodes: states[canonicalId]!.knownEpisodes,
+          readEpisodes: states[canonicalId]!.readEpisodes,
+          seriesSeasons: shared.seriesSeasons,
+        );
+      }
+      for (final entry in candidates.entries) {
+        final watched = history[entry.key];
+        if (watched == null || entry.value.seriesGroupId != groupId) continue;
+        history[entry.key] = WatchEntry(
+          drama: watched.drama.merge(entry.value),
+          episode: watched.episode,
+          position: watched.position,
+          duration: watched.duration,
+          updatedAt: watched.updatedAt,
+        );
+      }
+
+      final candidateRows = candidates.values.toList()
+        ..sort((a, b) => a.id.compareTo(b.id));
+      final candidateJson = jsonEncode(
+        candidateRows.take(2000).map((drama) => drama.toJson()).toList(),
+      );
+      final favoriteJson = jsonEncode(
+        favorites.values.map((drama) => drama.toJson()).toList(),
+      );
+      final historyJson = jsonEncode(
+        history.values.map((entry) => entry.toJson()).toList(),
+      );
+      final statesJson = _encodeFollowStates(states);
+      final changes = <String, Object>{};
+      if (favoriteJson !=
+          jsonEncode(_favorites.values.map((drama) => drama.toJson()).toList())) {
+        changes[_key('favorites')] = favoriteJson;
+      }
+      if (historyJson !=
+          jsonEncode(_history.values.map((entry) => entry.toJson()).toList())) {
+        changes[_key('history')] = historyJson;
+      }
+      if (statesJson != _encodeFollowStates(_followStates)) {
+        changes[_key('followStates')] = statesJson;
+      }
+      final oldCandidates = _seriesCandidatesRaw();
+      if (_fileStore != null && candidateJson != oldCandidates) {
+        changes[_key('seriesCandidates')] = candidateJson;
+      }
+      if (changes.isNotEmpty) await _commit(changes);
+      if (_fileStore == null && candidateJson != oldCandidates) {
+        await preferences.setString(_seriesKey(), candidateJson);
+      }
+      _loadLibrary();
+      _loadSeriesCandidates();
+      _lanDocumentCache = null;
       _notify();
     });
   }
@@ -1143,7 +1448,7 @@ class LocalStore extends ChangeNotifier {
         ),
       }, trackSync: false, syncUrgent: false);
       _loadLibrary();
-      if (_favorites.containsKey(entry.drama.id)) {
+      if (isFavorite(entry.drama.id)) {
         // The LAN view is derived from watch history on read. Avoid writing
         // the LAN snapshot during playback; it is persisted on sync/startup.
         _lanRevision++;
@@ -1267,14 +1572,36 @@ class LocalStore extends ChangeNotifier {
       final seriesCandidates = Map.of(_seriesCandidates);
       for (final drama in updates) {
         if (!allowsSource(drama.source)) continue;
-        if (cacheSeriesCandidates && drama.source == SourceSite.hongguo.id) {
+        if (cacheSeriesCandidates &&
+            (drama.source == SourceSite.hongguo.id ||
+                drama.source == 'duoduo' && drama.seriesGroupId.isNotEmpty)) {
           seriesCandidates[drama.id] = (seriesCandidates[drama.id] ?? drama)
               .merge(drama);
         }
         final favorite = favorites[drama.id];
         if (favorite != null) {
           favorites[drama.id] = favorite.merge(drama);
-          states[drama.id] = states[drama.id]!.observe(favorites[drama.id]!);
+          final current = states[drama.id] ??
+              FollowState.initial(favorites[drama.id]!, history[drama.id]);
+          states[drama.id] = current.observe(favorites[drama.id]!);
+        } else {
+          final groupId = drama.seriesGroupId.isNotEmpty
+              ? drama.seriesGroupId
+              : seriesCandidates[drama.id]?.seriesGroupId ??
+                    history[drama.id]?.drama.seriesGroupId ??
+                    '';
+          if (groupId.isNotEmpty) {
+            final canonicalId = _seriesCanonicalId(groupId, fallbackId: drama.id);
+            final seriesFavorite = favorites[canonicalId] ??
+                favorites.values.where(
+                  (item) => item.seriesGroupId == groupId,
+                ).firstOrNull;
+            if (seriesFavorite != null) {
+              final memberState = states[drama.id] ??
+                  FollowState.initial(drama, history[drama.id]);
+              states[drama.id] = memberState.observe(drama);
+            }
+          }
         }
         final watched = history[drama.id];
         if (watched != null) {

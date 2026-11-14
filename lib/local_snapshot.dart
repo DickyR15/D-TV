@@ -483,8 +483,10 @@ class LocalSnapshot {
         return;
       } on LocalFilesRecoveryRequired {
         throw const SnapshotRecoveryRequired();
+      } on LocalDataTemporarilyUnavailable catch (error) {
+        throw StateError(error.toString());
       } catch (_) {
-        throw StateError('未能保存本機檔案，原有記錄已保留；請檢查儲存空間和權限後重試');
+        throw StateError('未能儲存本機檔案，原有紀錄已保留；請檢查儲存空間與權限後重試');
       }
     }
 
@@ -507,7 +509,7 @@ class LocalSnapshot {
       } catch (_) {
         throw const SnapshotRecoveryRequired();
       }
-      throw StateError('未能儲存，原有記錄已保留；請檢查儲存空間和許可權後重試');
+      throw StateError('未能儲存，原有紀錄已保留；請檢查儲存空間與權限後重試');
     }
     _values = Map.of(values);
   }

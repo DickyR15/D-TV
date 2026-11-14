@@ -26,12 +26,17 @@ extension LocalStoreSync on LocalStore {
       }
       records[record.id] = record;
     }
+    String favoriteKey(Drama drama) =>
+        drama.source == 'hongguo' && drama.seriesGroupId.isNotEmpty
+        ? 'series:' + drama.seriesGroupId
+        : 'id:' + drama.id;
     final favorites = (library['favorites'] as List)
-        .map((row) => (row as Map)['id'])
+        .map((row) => Drama.fromJson(Map<String, dynamic>.from(row as Map)))
+        .map(favoriteKey)
         .toSet();
     final followed = records.values
         .where((record) => record.followed)
-        .map((record) => record.id)
+        .map((record) => favoriteKey(record.drama))
         .toSet();
     if (favorites.length != followed.length ||
         !followed.containsAll(favorites)) {
@@ -40,24 +45,96 @@ extension LocalStoreSync on LocalStore {
     return records;
   }
 
+  Map<String, Drama> _lanSeriesFavoriteRows(
+    Map<String, Drama> favorites,
+    Map<String, WatchEntry> history,
+  ) {
+    final rows = Map<String, Drama>.from(favorites);
+    final groups = favorites.values
+        .where(
+          (drama) =>
+              drama.source == 'hongguo' && drama.seriesGroupId.isNotEmpty,
+        )
+        .map((drama) => drama.seriesGroupId)
+        .toSet();
+    for (final groupId in groups) {
+      for (final drama in _seriesCandidates.values) {
+        if (drama.source == 'hongguo' &&
+            drama.seriesGroupId == groupId) {
+          rows.putIfAbsent(drama.id, () => drama);
+        }
+      }
+      for (final entry in history.entries) {
+        final drama = entry.value.drama;
+        if (drama.source == 'hongguo' &&
+            drama.seriesGroupId == groupId) {
+          rows.putIfAbsent(drama.id, () => drama);
+        }
+      }
+    }
+    return rows;
+  }
+
+  Map<String, FollowState> _lanSeriesFollowStates(
+    Map<String, Drama> favorites,
+    Map<String, FollowState> states,
+    Map<String, WatchEntry> history,
+  ) {
+    final result = Map<String, FollowState>.from(states);
+    final rows = _lanSeriesFavoriteRows(favorites, history);
+    final groups = favorites.values
+        .where(
+          (drama) =>
+              drama.source == 'hongguo' && drama.seriesGroupId.isNotEmpty,
+        )
+        .map((drama) => drama.seriesGroupId)
+        .toSet();
+    for (final groupId in groups) {
+      final canonicalId = 'hongguo:' + groupId;
+      final anchor = favorites[canonicalId] ??
+          favorites.values.firstWhere(
+            (drama) => drama.seriesGroupId == groupId,
+          );
+      final shared = states[canonicalId] ??
+          states[anchor.id] ??
+          FollowState.initial(anchor, history[anchor.id]);
+      for (final drama in rows.values) {
+        if (drama.seriesGroupId != groupId) continue;
+        var own = states[drama.id] ??
+            FollowState.initial(drama, history[drama.id]);
+        final watched = history[drama.id];
+        if (watched != null) own = own.afterPlayback(watched);
+        result[drama.id] = FollowState(
+          status: shared.status,
+          manuallyWatched: shared.manuallyWatched,
+          knownEpisodes: own.knownEpisodes,
+          readEpisodes: own.readEpisodes,
+          seriesSeasons: shared.seriesSeasons,
+        );
+      }
+    }
+    return result;
+  }
+
   LanDocument get lanDocument {
-    if (locked) throw StateError('請先解鎖當前使用者');
+    if (locked) throw StateError('請先解鎖目前使用者');
     final cached = _lanDocumentCache;
     if (cached != null) return cached.copy();
     final raw = _string(_key('lanRecords'));
     final document = raw == null
         ? LanDocument.empty()
         : LanDocument.fromJson(jsonDecode(raw));
+    final favoriteRows = _lanSeriesFavoriteRows(_favorites, _history);
+    final stateRows = _lanSeriesFollowStates(
+      _favorites,
+      _followStates,
+      _history,
+    );
     if (raw == null) {
       document.reconcile(
         previous: const {},
-        favorites: _favorites,
-        states: {
-          for (final entry in _followStates.entries)
-            entry.key: _history[entry.key] == null
-                ? entry.value
-                : entry.value.afterPlayback(_history[entry.key]!),
-        },
+        favorites: favoriteRows,
+        states: stateRows,
         history: _history,
         oldHistory: const {},
       );
@@ -67,14 +144,9 @@ extension LocalStoreSync on LocalStore {
           if (record.watch case final watch?) record.id: watch,
       };
       document.reconcile(
-        previous: _favorites,
-        favorites: _favorites,
-        states: {
-          for (final entry in _followStates.entries)
-            entry.key: _history[entry.key] == null
-                ? entry.value
-                : entry.value.afterPlayback(_history[entry.key]!),
-        },
+        previous: favoriteRows,
+        favorites: favoriteRows,
+        states: stateRows,
         history: _history,
         oldHistory: oldHistory,
       );
@@ -94,7 +166,7 @@ extension LocalStoreSync on LocalStore {
   Future<void> ensureLanRecords() {
     final epoch = _epoch;
     return _queue(() async {
-      if (locked || epoch != _epoch) throw StateError('當前使用者已變更');
+      if (locked || epoch != _epoch) throw StateError('目前使用者已變更');
       final document = lanDocument;
       await _commit({
         _key('lanRecords'): jsonEncode(document.toJson()),
@@ -120,7 +192,13 @@ extension LocalStoreSync on LocalStore {
     final document = lanDocument;
     final favorites = <String, Drama>{};
     final history = <String, WatchEntry>{};
-    final states = <String, FollowState>{};
+    final rawStates = lanMap(
+      jsonDecode(values[_key('followStates')] as String? ?? '{}'),
+    );
+    final states = <String, FollowState>{
+      for (final entry in rawStates.entries)
+        entry.key: FollowState.fromJson(lanMap(entry.value)),
+    };
     for (final row in readJsonList(values[_key('favorites')] as String?)) {
       final drama = Drama.fromJson(row);
       favorites[drama.id] = drama;
@@ -129,21 +207,13 @@ extension LocalStoreSync on LocalStore {
       final watch = WatchEntry.fromJson(row);
       history[watch.drama.id] = watch;
     }
-    final rawStates = lanMap(
-      jsonDecode(values[_key('followStates')] as String? ?? '{}'),
-    );
-    for (final drama in favorites.values) {
-      final savedState = rawStates[drama.id] == null
-          ? FollowState.initial(drama, history[drama.id])
-          : FollowState.fromJson(lanMap(rawStates[drama.id]));
-      states[drama.id] = history[drama.id] == null
-          ? savedState
-          : savedState.afterPlayback(history[drama.id]!);
-    }
+    final previousFavorites = _lanSeriesFavoriteRows(_favorites, _history);
+    final nextFavorites = _lanSeriesFavoriteRows(favorites, history);
+    final nextStates = _lanSeriesFollowStates(favorites, states, history);
     document.reconcile(
-      previous: _favorites,
-      favorites: favorites,
-      states: states,
+      previous: previousFavorites,
+      favorites: nextFavorites,
+      states: nextStates,
       history: history,
       oldHistory: _history,
       clearProgress: clearProgress,
@@ -171,7 +241,7 @@ extension LocalStoreSync on LocalStore {
           isCurrent?.call() == false ||
           sources.isEmpty ||
           !sources.every(allowsSource)) {
-        throw StateError('當前使用者或站源許可權已變更，請重新連線');
+        throw StateError('目前使用者或片源權限已變更，請重新連線');
       }
       if (lanReceipt(operation) != null) return;
       final document = lanDocument;
@@ -246,7 +316,7 @@ extension LocalStoreSync on LocalStore {
   ) {
     final epoch = _epoch;
     return _queue(() async {
-      if (locked || epoch != _epoch) throw StateError('當前使用者已變更');
+      if (locked || epoch != _epoch) throw StateError('目前使用者已變更');
       final document = lanDocument;
       final record = document.records[id];
       final cell = record?.fields[field];

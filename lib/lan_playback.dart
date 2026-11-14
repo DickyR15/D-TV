@@ -47,9 +47,9 @@ extension LanPlayback on LanController {
     }
     pending.cancelled = true;
     pending.state = 'cancelled';
-    pending.message = '推送已取消';
+    pending.message = '傳送已取消';
     pending.playback?.cancelled = true;
-    pending.playback?.fail('推送已取消');
+    pending.playback?.fail('傳送已取消');
     await repository.cancelHandoff().catchError((Object _) {});
     final playback = pending.playback;
     if (playback != null) {
@@ -110,7 +110,7 @@ extension LanPlayback on LanController {
       final intent = LanPlaybackIntent.fromJson(body['intent']);
       if (!store.allowsSource(intent.drama.source) ||
           !remote.sources.contains(intent.drama.source)) {
-        throw StateError('接收裝置當前使用者沒有此站源許可權');
+        throw StateError('接收裝置目前使用者沒有此片源權限');
       }
       if (!intent.playing || openPlayback == null) {
         throw StateError('接收裝置暫不能開始播放');
@@ -124,7 +124,7 @@ extension LanPlayback on LanController {
       }
       if (pending != null &&
           {'preparing', 'prepared', 'starting'}.contains(pending.state)) {
-        throw StateError('接收裝置正在處理另一次推送');
+        throw StateError('接收裝置正在處理另一個播放交接');
       }
       pending = _LanPreparedPlayback(
         id,
@@ -138,24 +138,24 @@ extension LanPlayback on LanController {
       return pending.result;
     }
     if (pending == null || pending.id != id || pending.remote != remote) {
-      throw StateError('播放準備已過期，請重新推送');
+      throw StateError('播放準備已逾期，請重新傳送');
     }
     if (path == 'play/status') return pending.result;
     if (path == 'play/start') {
       if (pending.state != 'prepared') return pending.result;
       if (playbackHost?.identity != pending.previousHost) {
         await _cancelIncomingPlayback(id: id);
-        throw StateError('接收端播放內容已變化，請重新推送');
+        throw StateError('接收端播放內容已變更，請重新傳送');
       }
       final position = body['position'];
       if (position is! num ||
           !position.isFinite ||
           position < 0 ||
           position > 604800) {
-        throw const FormatException('推送播放位置無效');
+        throw const FormatException('傳送播放位置無效');
       }
       if (body['identity'] != pending.intent.identity) {
-        throw StateError('推送的分集已變化');
+        throw StateError('播放集數已變更');
       }
       pending.playback!.position = position.toDouble();
       pending.state = 'starting';
@@ -203,7 +203,7 @@ extension LanPlayback on LanController {
             detail = DramaDetail(
               selected.drama,
               jobs.map((job) => job.episode).toList(),
-              warning: '當前僅列出接收裝置已下載的分集',
+              warning: '目前僅列出接收裝置已下載的集數',
             );
           }
         }
@@ -261,7 +261,7 @@ extension LanPlayback on LanController {
       }
       if (_preparedPlayback == pending && !pending.cancelled) {
         pending.state = 'failed';
-        pending.message = failure.toString();
+        pending.message = lanPublicErrorMessage(failure);
         _playReceipts[pending.id] = pending.result;
         _trimPlayReceipts();
       }
@@ -301,7 +301,7 @@ extension LanPlayback on LanController {
       }
       if (_preparedPlayback == pending && !pending.cancelled) {
         pending.state = 'failed';
-        pending.message = failure.toString();
+        pending.message = lanPublicErrorMessage(failure);
         _playReceipts[pending.id] = pending.result;
         _trimPlayReceipts();
       }
@@ -314,12 +314,12 @@ extension LanPlayback on LanController {
     required Future<void> Function() onAccepted,
     required Future<bool> Function(String title) confirmReplace,
   }) async {
-    if (_pushing) throw StateError('正在推送，請稍候');
+    if (_pushing) throw StateError('正在傳送，請稍候');
     final remote = connection;
     if (remote == null) throw StateError('請先選擇接收裝置');
     final intent = snapshot();
     if (!remote.sources.contains(intent.drama.source)) {
-      throw StateError('對方當前使用者沒有此站源許可權');
+      throw StateError('對方目前使用者沒有此片源權限');
     }
     final run = _run;
     final id = lanID();
@@ -349,9 +349,9 @@ extension LanPlayback on LanController {
       );
       final replacing = ready['replacing'] as String? ?? '';
       if (replacing.isNotEmpty && !await confirmReplace(replacing)) {
-        throw StateError('已取消推送，本機繼續播放');
+        throw StateError('已取消傳送，本機繼續播放');
       }
-      if (!valid()) throw StateError('本機播放內容已變更，推送已取消');
+      if (!valid()) throw StateError('本機播放內容已變更，傳送已取消');
       final latest = snapshot();
       pushMessage = '對方正在定位並開播';
       _notify();
@@ -367,7 +367,7 @@ extension LanPlayback on LanController {
       pushMessage = '已在 ${remote.peer.name} 播放';
       flush();
     } catch (failure) {
-      if (ticket == _pushSequence) pushMessage = failure.toString();
+      if (ticket == _pushSequence) pushMessage = lanPublicErrorMessage(failure);
       rethrow;
     } finally {
       if (!accepted && connection == remote) {
@@ -388,7 +388,7 @@ extension LanPlayback on LanController {
   ) async {
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
-      if (!valid()) throw StateError('推送已取消，本機繼續播放');
+      if (!valid()) throw StateError('傳送已取消，本機繼續播放');
       final response = await _request('play/status', {'id': id}, owner: 'play');
       if (response['state'] == goal) return response;
       if (response['state'] == 'failed' || response['state'] == 'cancelled') {
@@ -408,7 +408,7 @@ extension LanPlayback on LanController {
         'requestId': id,
       }).catchError((Object _) => <String, dynamic>{});
     }
-    pushMessage = '已取消推送，本機繼續播放';
+    pushMessage = '已取消傳送，本機繼續播放';
     _notify();
   }
 }

@@ -9,6 +9,35 @@ import 'package:media_kit/media_kit.dart';
 import 'app_layout.dart';
 import 'widgets.dart';
 
+const double _playerHoldBoostSpeed = 2.0;
+
+const Duration _playerHoldSeekInterval = Duration(milliseconds: 350);
+
+int playerHoldSeekMultiplier(Duration elapsed) {
+  if (elapsed >= const Duration(seconds: 3)) return 8;
+  if (elapsed >= const Duration(milliseconds: 1500)) return 4;
+  return 2;
+}
+
+Duration playerHoldSeekStep(Duration elapsed) => Duration(
+  milliseconds: _playerHoldSeekInterval.inMilliseconds *
+      playerHoldSeekMultiplier(elapsed),
+);
+
+Duration playerHoldSeekTarget({
+  required Duration current,
+  required Duration duration,
+  required int direction,
+  required Duration step,
+}) {
+  if (duration <= Duration.zero) return Duration.zero;
+  final sign = direction < 0 ? -1 : 1;
+  final milliseconds = (current.inMilliseconds + sign * step.inMilliseconds)
+      .clamp(0, duration.inMilliseconds)
+      .toInt();
+  return Duration(milliseconds: milliseconds);
+}
+
 enum SwipeAction { none, brightness, episode }
 
 class GestureHudState {
@@ -49,6 +78,13 @@ class PlayerInteractions extends ChangeNotifier {
   final Future<void> Function(Duration)? onSeek;
   late final StreamSubscription<bool> _playing;
   Timer? _holdTimer;
+  Timer? _seekHoldTimer;
+  DateTime? _seekHoldStarted;
+  Duration _seekHoldTarget = Duration.zero;
+  Duration? _seekHoldPendingTarget;
+  int _seekHoldDirection = 0;
+  bool _seekHoldRunning = false;
+  Future<void> _seekHoldWork = Future<void>.value();
   Timer? _hintTimer;
   Future<void> _rates = Future<void>.value();
   final Set<int> _pointers = {};
@@ -94,6 +130,7 @@ class PlayerInteractions extends ChangeNotifier {
   bool get boosting => _boosting;
   bool get suppressTap => DateTime.now().isBefore(_ignoreTapUntil);
   Future<void> get pendingRates => _rates;
+  Future<void> get pendingSeeks => _seekHoldWork;
 
   void hint(String message, {bool persistent = false}) {
     if (_disposed) return;
@@ -104,7 +141,7 @@ class PlayerInteractions extends ChangeNotifier {
     }
     if (!persistent && message.isNotEmpty) {
       _hintTimer = Timer(const Duration(milliseconds: 1200), () {
-        hint(_boosting ? '3 倍速 · 鬆開恢復' : '', persistent: true);
+        hint(_boosting ? '${_playerHoldBoostSpeed.toStringAsFixed(0)} 倍速播放中 · 鬆開恢復' : '', persistent: true);
       });
     }
   }
@@ -136,8 +173,8 @@ class PlayerInteractions extends ChangeNotifier {
       }
       _boosting = true;
       _held = true;
-      unawaited(_setRate(3));
-      hint('3 倍速 · 鬆開恢復', persistent: true);
+      unawaited(_setRate(_playerHoldBoostSpeed));
+      hint('${_playerHoldBoostSpeed.toStringAsFixed(0)} 倍速播放中 · 鬆開恢復', persistent: true);
     });
   }
 
@@ -156,6 +193,97 @@ class PlayerInteractions extends ChangeNotifier {
     }
   }
 
+  void beginSeekHold(int direction) {
+    final duration = player.state.duration;
+    if (_disposed || !available() || direction == 0 || duration <= Duration.zero) {
+      return;
+    }
+    endSeekHold(silent: true, discardPending: true);
+    _endHold(silent: true);
+    _seekHoldDirection = direction < 0 ? -1 : 1;
+    _seekHoldStarted = DateTime.now();
+    _seekHoldTarget = player.state.position;
+    _held = true;
+    _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 600));
+    _seekHoldTimer = Timer.periodic(_playerHoldSeekInterval, (_) {
+      _tickSeekHold();
+    });
+    final label = _seekHoldDirection > 0 ? '快進' : '快退';
+    hint(label + ' 2× · 鬆開停止', persistent: true);
+  }
+
+  void endSeekHold({bool silent = false, bool discardPending = false}) {
+    if (_seekHoldDirection == 0 && _seekHoldTimer == null) return;
+    final direction = _seekHoldDirection;
+    _seekHoldTimer?.cancel();
+    _seekHoldTimer = null;
+    _seekHoldDirection = 0;
+    _seekHoldStarted = null;
+    if (discardPending) _seekHoldPendingTarget = null;
+    if (!silent && direction != 0) {
+      hint(direction > 0 ? '已停止快進' : '已停止快退');
+    }
+  }
+
+  void _tickSeekHold() {
+    final started = _seekHoldStarted;
+    final direction = _seekHoldDirection;
+    final duration = player.state.duration;
+    if (_disposed || direction == 0 || started == null || !available() ||
+        duration <= Duration.zero) {
+      endSeekHold(silent: true, discardPending: true);
+      return;
+    }
+    final elapsed = DateTime.now().difference(started);
+    final multiplier = playerHoldSeekMultiplier(elapsed);
+    final target = playerHoldSeekTarget(
+      current: _seekHoldTarget,
+      duration: duration,
+      direction: direction,
+      step: playerHoldSeekStep(elapsed),
+    );
+    if (target == _seekHoldTarget) {
+      endSeekHold();
+      return;
+    }
+    _seekHoldTarget = target;
+    _seekHoldPendingTarget = target;
+    _scheduleSeekHold();
+    final label = direction > 0 ? '快進' : '快退';
+    hint(
+      label + ' ' + multiplier.toString() + '× · ' +
+          formatPosition(target.inMilliseconds / 1000) + ' · 鬆開停止',
+      persistent: true,
+    );
+  }
+
+  void _scheduleSeekHold() {
+    if (_disposed || _seekHoldRunning || _seekHoldPendingTarget == null) return;
+    _seekHoldRunning = true;
+    _seekHoldWork = () async {
+      while (!_disposed && _seekHoldPendingTarget != null) {
+        final target = _seekHoldPendingTarget!;
+        _seekHoldPendingTarget = null;
+        try {
+          await (onSeek ?? player.seek)(target);
+        } catch (_) {
+          _seekHoldTimer?.cancel();
+          _seekHoldTimer = null;
+          _seekHoldDirection = 0;
+          _seekHoldStarted = null;
+          _seekHoldPendingTarget = null;
+          if (!_disposed) hint('快轉定位失敗，請放開後重試');
+          break;
+        }
+      }
+      _seekHoldRunning = false;
+      if (!_disposed && _seekHoldPendingTarget != null) {
+        _scheduleSeekHold();
+      }
+    }();
+    unawaited(_seekHoldWork);
+  }
+
   void cancel() {
     if (_disposed) return;
     if (_pointers.isNotEmpty) {
@@ -165,6 +293,7 @@ class PlayerInteractions extends ChangeNotifier {
     _pointer = null;
     _origin = null;
     _lastPosition = null;
+    endSeekHold(silent: true, discardPending: true);
     _endHold(silent: true);
     hint('');
   }
@@ -199,12 +328,12 @@ class PlayerInteractions extends ChangeNotifier {
           ? SwipeAction.brightness
           : SwipeAction.episode;
     }
-    _beginHold();
   }
 
   void pointerMove(PointerMoveEvent event) {
     if (_pointer != event.pointer || _origin == null) return;
     _lastPosition = event.localPosition;
+    if (_seekHoldDirection != 0) return;
     final diff = event.localPosition - _origin!;
     if (diff.distance > 12) {
       _moved = true;
@@ -284,6 +413,7 @@ class PlayerInteractions extends ChangeNotifier {
     _brightnessReady = false;
     _brightnessLoading = false;
     _endHold();
+    endSeekHold();
   }
 
   void pointerCancel(PointerCancelEvent event) {
@@ -313,6 +443,7 @@ class PlayerInteractions extends ChangeNotifier {
 
   void seek(int seconds) {
     if (!available() || player.state.duration <= Duration.zero) return;
+    endSeekHold(silent: true, discardPending: true);
     _endHold();
     final target = (player.state.position.inMilliseconds + seconds * 1000)
         .clamp(0, player.state.duration.inMilliseconds);
@@ -392,6 +523,9 @@ class PlayerInteractions extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _holdTimer?.cancel();
+    _seekHoldTimer?.cancel();
+    _seekHoldDirection = 0;
+    _seekHoldPendingTarget = null;
     _hintTimer?.cancel();
     _hudTimer?.cancel();
     AppDevice.resetBrightness(); // 離開播放器時自動恢復手機/平板系統預設亮度

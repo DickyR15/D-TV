@@ -960,18 +960,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } else {
       _loading = false;
     }
-    // Check only release builds. The request is delayed so the first screen
-    // and ranking data are not held up by the GitHub API.
+    // Check after the first frame so Home is visible immediately, without
+    // making users wait six seconds for the startup update check.
     if (kReleaseMode &&
         (Platform.isAndroid ||
             Platform.isWindows ||
             Platform.isMacOS ||
             Platform.isIOS) &&
         widget.store.checkForUpdatesOnStartup) {
-      _appUpdateCheckTimer = Timer(
-        const Duration(seconds: 6),
-        () => unawaited(_checkForAppUpdate()),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_checkForAppUpdate());
+      });
     }
   }
 
@@ -1358,12 +1357,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _openDrama(Drama drama, {bool resume = false}) {
-    // A fast double-click / repeated TV Select must not stack two launch
-    // routes. The second route can otherwise leave the viewer on a stale
-    // player page after pressing Back.
+    // Poster selection follows the original app flow: open the work details
+    // first, then let the user press Play / Continue from the details page.
+    if (resume) {
+      _playDramaDirectly(drama);
+      return;
+    }
+    _openDramaDetails(drama);
+  }
+
+  void _playDramaDirectly(Drama drama) {
+    // The explicit Continue action may still launch playback directly.
     if (_playbackRouteActive) {
       DiaryService.add(
-        '[Playback] ignored_duplicate_poster_open drama=${drama.id}',
+        '[Playback] ignored_duplicate_direct_continue drama=${drama.id}',
       );
       return;
     }
@@ -1373,7 +1380,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _lastBackAt = null;
     _ignoreExitPromptUntil = null;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    // 所有海報統一一鍵播放；openPlaybackDirectly 會依觀看記錄選擇續播集數與進度。
     unawaited(
       openPlaybackDirectly(
         context,
@@ -1383,8 +1389,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ).whenComplete(() {
         _playbackRouteActive = false;
         _lastBackAt = null;
-        // Swallow the tail end of the same physical Back press after the
-        // player route closes, so it cannot become an app-exit confirmation.
         _ignoreExitPromptUntil =
             DateTime.now().add(const Duration(milliseconds: 500));
         if (mounted) {
@@ -1758,7 +1762,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     drama: drama,
     store: widget.store,
     onContinue: () => _openDrama(drama, resume: true),
+    onDetails: () => _openDramaDetails(drama),
   );
+
+  void _openDramaDetails(Drama drama) {
+    if (_playbackRouteActive) return;
+    _pauseCatalog();
+    CoverRequestScheduler.pauseBackground();
+    _playbackRouteActive = true;
+    _lastBackAt = null;
+    _ignoreExitPromptUntil = null;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    unawaited(
+      Navigator.of(context)
+          .push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => DetailScreen(
+                drama: drama,
+                repository: widget.repository,
+                store: widget.store,
+              ),
+            ),
+          )
+          .whenComplete(() {
+            _playbackRouteActive = false;
+            _lastBackAt = null;
+            _ignoreExitPromptUntil =
+                DateTime.now().add(const Duration(milliseconds: 500));
+            if (mounted) {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            }
+            CoverRequestScheduler.resumeBackground();
+          }),
+    );
+  }
 
   Widget _catalogTile(
     Drama drama, {
@@ -1772,6 +1809,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       repository: widget.repository,
       focusNode: focusNode,
       onFocus: onFocus,
+      actions: AppLayout.isDesktopPlatform
+          ? DramaActionButton(
+              drama: drama,
+              onPressed: () => _dramaActions(drama),
+            )
+          : null,
       onTap: () => _openDrama(drama),
       onMore: () => _dramaActions(drama),
       badge: following != null && following.hasUpdates

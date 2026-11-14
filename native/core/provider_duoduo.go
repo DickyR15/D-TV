@@ -28,6 +28,8 @@ var duoduoAPIHosts = []string{
 	"dduotv01.top",
 }
 
+var errDuoduoNoDirectPlayback = errors.New("多多追劇目前沒有可直接播放的影片線路")
+
 type duoduoPlayEpisode struct {
 	Title string
 	URL   string
@@ -247,18 +249,66 @@ func duoduoEpisodeNumber(title string, fallback int) int {
 
 func duoduoPosterAddressesFromRow(row map[string]any) []string {
 	var addresses []string
-	seen := map[string]bool{}
-	for _, field := range []string{
+	preferred := []string{
 		"vod_pic", "vod_pic_thumb", "vod_pic_url", "vod_pic_slide",
-		"vod_pic_screenshot", "cover", "cover_url", "poster", "image", "thumbnail",
-	} {
-		address := providerCoverAddress(row[field], duoduoPublicEntryURL)
-		if address != "" && !seen[address] {
-			seen[address] = true
-			addresses = append(addresses, address)
+		"vod_pic_screenshot", "vod_pic_local", "vod_pic_original",
+		"vod_pic_big", "vod_pic_small", "vod_pic_720", "vod_pic_1080",
+		"vod_pic_cover", "vod_pic_poster", "vod_pic_img",
+		"cover", "cover_url", "cover_image", "poster", "poster_url",
+		"image", "image_url", "thumbnail", "thumb", "pic", "pic_url", "img",
+	}
+	seen := make(map[string]bool, len(preferred))
+	for _, field := range preferred {
+		seen[field] = true
+		addresses = append(addresses, providerCoverAddresses(row[field], duoduoPublicEntryURL)...)
+	}
+
+	// Some Duoduo responses expose artwork only in late/detail-specific fields
+	// (for example vod_pic_detail or cover_img). Discover only image-like keys;
+	// sort them so candidate order stays deterministic across map iterations.
+	var additional []string
+	for field := range row {
+		key := strings.ToLower(strings.TrimSpace(field))
+		if seen[field] {
+			continue
+		}
+		if strings.Contains(key, "pic") ||
+			strings.Contains(key, "cover") ||
+			strings.Contains(key, "poster") ||
+			strings.Contains(key, "image") ||
+			strings.Contains(key, "thumbnail") ||
+			strings.Contains(key, "thumb") ||
+			strings.Contains(key, "img") {
+			additional = append(additional, field)
 		}
 	}
-	return addresses
+	sort.Strings(additional)
+	for _, field := range additional {
+		addresses = append(addresses, providerCoverAddresses(row[field], duoduoPublicEntryURL)...)
+	}
+	return nativeUniqueCoverAddresses(addresses...)
+}
+
+func duoduoEpisodeCountFromRow(row map[string]any) int {
+	for _, field := range []string{
+		"vod_total", "vod_total_episode", "vod_episode_count", "vod_episodes",
+		"total_episode", "totalEpisode", "episode_count", "episodeCount",
+		"chapter_count", "chapterCount", "episodes", "total",
+	} {
+		if count := duoduoEpisodeValueCount(row[field]); count > 0 {
+			return count
+		}
+	}
+	return duoduoEpisodeValueCount(row["vod_remarks"])
+}
+
+func duoduoSynopsisFromRow(row map[string]any) string {
+	for _, key := range []string{"vod_content", "vod_blurb"} {
+		if description := providerHTMLPlainText(duoduoString(row[key])); description != "" {
+			return description
+		}
+	}
+	return ""
 }
 
 func duoduoDramaFromRow(row map[string]any) Drama {
@@ -270,11 +320,13 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 	// Preserve the source's alternate poster fields so the cover cache can try
 	// them when the preferred CDN is unavailable, rather than losing the title's
 	// only other image candidates at the initial JSON mapping stage.
-	cover := firstNonEmpty(duoduoPosterAddressesFromRow(row)...)
-	description := htmlUnescapeDuoduo(firstNonEmpty(
-		duoduoString(row["vod_content"]),
-		duoduoString(row["vod_blurb"]),
-	))
+	posterAddresses := duoduoPosterAddressesFromRow(row)
+	cover := firstNonEmpty(posterAddresses...)
+	var coverCandidates []string
+	if len(posterAddresses) > 1 {
+		coverCandidates = append(coverCandidates, posterAddresses[1:]...)
+	}
+	description := duoduoSynopsisFromRow(row)
 	category := duoduoString(row["type_name"])
 	year := duoduoString(row["vod_year"])
 	remarks := duoduoString(row["vod_remarks"])
@@ -286,26 +338,24 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 		}
 		tags = append(tags, area)
 	}
-	episodeCount := 0
-	if match := reEpisodeNumber.FindStringSubmatch(remarks); len(match) > 0 {
-		for index := 1; index < len(match); index++ {
-			if match[index] != "" {
-				episodeCount, _ = strconv.Atoi(match[index])
-				break
-			}
-		}
-	}
-	return Drama{
+	episodeCount := duoduoEpisodeCountFromRow(row)
+	drama := Drama{
 		ID: providerDramaID(sourceDuoduo, id), Source: sourceDuoduo, SourceID: id,
 		Title: truncate(title, 512), Name: truncate(title, 512),
 		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
-		Cover: cover, CoverURL: cover, ChannelName: "多多追劇",
+		Cover: cover, CoverURL: cover, CoverCandidates: coverCandidates, ChannelName: "多多追劇",
 		CategoryName: category,
 		Remark: truncate(remarks, 96), Score: duoduoString(row["vod_douban_score"]),
 		Heat: duoduoString(row["vod_hits"]), OnlineDate: year,
-		DoubanID: duoduoString(row["vod_douban_id"]),
-		TotalEpisode: episodeCount, EpisodeCount: episodeCount, Tags: tags,
+		DoubanID: duoduoString(row["vod_douban_id"]), IMDbID: duoduoIMDbIDFromRow(row),
+		Episodes: episodeCount, TotalEpisode: episodeCount, EpisodeCount: episodeCount, Tags: tags,
 	}
+	if base, number, unit, ok := duoduoSeriesTitle(title); ok {
+		drama.SeriesGroupID = duoduoCanonicalSeriesGroupID(base, unit, drama.IMDbID, drama.DoubanID)
+		drama.SeriesSeasonNumber = number
+		drama.SeriesSeasonUnit = unit
+	}
+	return drama
 }
 
 func htmlUnescapeDuoduo(value string) string {
@@ -653,6 +703,32 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 }
 
 func (d *Downloader) fetchDuoduoDetailWithCategory(ctx context.Context, sourceID, catalogCategory string) (Drama, []Chapter, error) {
+	drama, chapters, err := d.fetchDuoduoDetailDirectOnly(ctx, sourceID, catalogCategory)
+	if err == nil || !errors.Is(err, errDuoduoNoDirectPlayback) {
+		return drama, chapters, err
+	}
+
+	// Some verified localized titles are duplicated by the upstream catalogue.
+	// When the selected row exposes only a private decoder (for example qsvip),
+	// try another exact same-season record from the same verified series before
+	// reporting that the season has no playable episodes.
+	fallback, fallbackErr := d.fetchDuoduoAlternateSeasonPlayback(
+		ctx, drama, sourceID, catalogCategory,
+	)
+	if fallbackErr != nil || len(fallback) == 0 {
+		return drama, chapters, err
+	}
+	episodeCount := duoduoChapterEpisodeCount(fallback)
+	if episodeCount > 0 {
+		drama.TotalEpisode = episodeCount
+		drama.EpisodeCount = episodeCount
+		drama.Episodes = episodeCount
+		drama.EpisodesVerified = true
+	}
+	return drama, fallback, nil
+}
+
+func (d *Downloader) fetchDuoduoDetailDirectOnly(ctx context.Context, sourceID, catalogCategory string) (Drama, []Chapter, error) {
 	drama, detailRow, payload, base, err := d.fetchDuoduoDetailRow(ctx, sourceID)
 	if err != nil {
 		return Drama{}, nil, err
@@ -670,9 +746,9 @@ func (d *Downloader) fetchDuoduoDetailWithCategory(ctx context.Context, sourceID
 	lines := duoduoMergePlayLines(detailLines, aggregateLines)
 	if len(lines) == 0 {
 		if aggregateErr != nil {
-			return Drama{}, nil, fmt.Errorf("多多追劇已取得影片資料，但目前沒有可直接播放的線路：%w", aggregateErr)
+			return drama, nil, fmt.Errorf("%w（備援播放線路查詢失敗：%v）", errDuoduoNoDirectPlayback, aggregateErr)
 		}
-		return Drama{}, nil, errors.New("多多追劇目前沒有可直接播放的影片線路")
+		return drama, nil, errDuoduoNoDirectPlayback
 	}
 	// Merge every direct playback line into one canonical chapter per episode.
 	// The first available line is the preferred URL; other lines for the same
@@ -707,7 +783,7 @@ func (d *Downloader) fetchDuoduoDetailWithCategory(ctx context.Context, sourceID
 		}
 	}
 	if len(choices) == 0 {
-		return Drama{}, nil, errors.New("多多追劇目前沒有可用的直接播放集數")
+		return Drama{}, nil, fmt.Errorf("%w：目前沒有可用的直接播放集數", errDuoduoNoDirectPlayback)
 	}
 	numbers := make([]int, 0, len(choices))
 	maxEpisodes := 0

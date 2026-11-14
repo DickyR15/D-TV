@@ -152,7 +152,7 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 			return "", ctx.Err()
 		}
 	}
-	primaryErr := errors.New("站源尚未提供原始海報網址")
+	primaryErr := errors.New("片源尚未提供原始海報網址")
 
 	// Reuse verified local images before contacting remote hosts. For any
 	// record that has already been repaired, its external fallback was saved
@@ -565,34 +565,63 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 	if source == sourceDuoduo && cacheClass == "provider" {
 		attempts = duoduoPosterAttemptsForDrama(address, cache.downloader, drama)
 	}
-	for index, attempt := range attempts {
-		if requestCtx.Err() != nil {
-			downloadErr = requestCtx.Err()
-			break
-		}
+	startIndex := 0
+	if source == sourceDuoduo && cacheClass == "provider" {
 		if force {
-			cache.clearCoverFailure(attempt.address, attempt.referer)
+			for _, attempt := range attempts {
+				cache.clearCoverFailure(attempt.address, attempt.referer)
+				cache.clearCoverNodeFailure(attempt.address)
+			}
 		}
-		if !force && cache.coverOnCooldown(attempt.address, attempt.referer) {
-			downloadErr = errors.New("海報網址暫時冷卻，略過重複請求")
-			continue
+		data, startIndex, downloadErr = cache.downloadDuoduoPosterPair(requestCtx, drama, attempts)
+	}
+	if startIndex == 0 || downloadErr != nil {
+		for index := startIndex; index < len(attempts); index++ {
+			if requestCtx.Err() != nil {
+				downloadErr = requestCtx.Err()
+				break
+			}
+			attempt := attempts[index]
+			if force {
+				cache.clearCoverFailure(attempt.address, attempt.referer)
+			}
+			if !force && cache.coverNodeOnCooldown(attempt.address) {
+				downloadErr = errors.New("海報節點暫時冷卻，略過重複請求")
+				continue
+			}
+			if !force && cache.coverOnCooldown(attempt.address, attempt.referer) {
+				downloadErr = errors.New("海報網址暫時冷卻，略過重複請求")
+				continue
+			}
+			started := time.Now()
+			attemptCtx, attemptCancel := context.WithTimeout(
+				requestCtx, nativeCoverAttemptTimeout(source, attempt.address, cacheClass),
+			)
+			data, downloadErr = cache.download(attemptCtx, attempt.address, attempt.referer)
+			attemptCancel()
+			cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, downloadErr)
+			if downloadErr == nil {
+				cache.clearCoverFailure(attempt.address, attempt.referer)
+				cache.clearCoverNodeFailure(attempt.address)
+				break
+			}
+			cache.noteCoverFailure(attempt.address, attempt.referer, downloadErr)
+			cache.noteCoverNodeFailure(attempt.address, downloadErr)
 		}
-		started := time.Now()
-		attemptCtx, attemptCancel := context.WithTimeout(
-			requestCtx, nativeCoverAttemptTimeout(source, attempt.address, cacheClass),
-		)
-		data, downloadErr = cache.download(attemptCtx, attempt.address, attempt.referer)
-		attemptCancel()
-		cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, downloadErr)
-		if downloadErr == nil {
-			cache.clearCoverFailure(attempt.address, attempt.referer)
-			break
-		}
-		cache.noteCoverFailure(attempt.address, attempt.referer, downloadErr)
 	}
 	<-cache.slots
 	if downloadErr != nil {
-		if stalePath != "" {
+		if isPermanentMissingCover(downloadErr) {
+			// Remove stale bytes for a URL that the server has explicitly
+			// retired. Temporary network failures still retain stale-if-error.
+			cache.mu.Lock()
+			if entry, found := cache.entries[key]; found {
+				_ = os.Remove(path)
+				cache.size -= entry.size
+				delete(cache.entries, key)
+			}
+			cache.mu.Unlock()
+		} else if stalePath != "" {
 			if _, statErr := os.Stat(stalePath); statErr == nil {
 				return stalePath, nil
 			}
@@ -718,7 +747,7 @@ func (cache *nativeCoverCache) repair(ctx context.Context, drama nativeDrama, fo
 				}
 			}
 			if providerAddress == "" && providerErr == nil {
-				providerErr = errors.New("站源詳情沒有可用的備用海報")
+				providerErr = errors.New("片源詳情沒有可用的備用海報")
 			}
 
 			// An official/provider detail poster always outranks external matches.

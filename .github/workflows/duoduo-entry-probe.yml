@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "native/core/provider_duoduo.go"
+      - "native/core/provider_duoduo_series.go"
+      - "native/core/provider_duoduo_series_test.go"
       - "native/core/provider_duoduo_test.go"
       - "native/core/app_cover_metadata.go"
       - "native/core/app_cover_external.go"
@@ -52,7 +54,25 @@ jobs:
           TLS = ssl.create_default_context()
           dns_unavailable_hosts = set()
 
+          def normalize_http_url(url):
+              parsed = urlsplit(url)
+              if parsed.scheme in ("http", "https") and parsed.netloc:
+                  return parsed._replace(
+                      path=quote(parsed.path, safe="/%:@!'()*+,;=-._~"),
+                      query=quote(parsed.query, safe="=&?/:;+,%@-._~"),
+                  ).geturl()
+              return url
+
+          unicode_test_url = normalize_http_url(
+              "https://media.example.test/hls/第1集/片段 1.ts?token=a&part=1"
+          )
+          unicode_test_parts = urlsplit(unicode_test_url)
+          if "第" in unicode_test_parts.path or " " in unicode_test_parts.path:
+              raise RuntimeError("Unicode HLS URL was not percent-encoded")
+          print("PASS: Unicode HLS URL encoding")
+
           def request(url, referer, limit=262144, timeout=12, byte_range=None, user_agent=UA):
+              url = normalize_http_url(url)
               headers = {
                   "User-Agent": user_agent,
                   "Accept": "application/json,application/vnd.apple.mpegurl,*/*",
@@ -109,9 +129,16 @@ jobs:
                   parts = value.split(",")
               return [part.strip() for part in parts if part.strip()]
           def probe_media(address, referer):
+              address = str(address or "").strip()
               parsed = urlsplit(address)
+              # The official web player may resolve RFC 3986 network-path
+              # media references against its HTTPS page. Probe that exact
+              # browser-equivalent form without accepting arbitrary hostless paths.
+              if not parsed.scheme and parsed.netloc and address.startswith("//"):
+                  address = "https:" + address
+                  parsed = urlsplit(address)
               if parsed.scheme not in ("http", "https") or not parsed.netloc:
-                  return False, "invalid media URL"
+                  return False, f"invalid media URL (scheme={parsed.scheme or '-'} host={parsed.hostname or '-'} path_suffix={parsed.path.rsplit('.', 1)[-1][:12] if '.' in parsed.path.rsplit('/', 1)[-1] else '-'})"
               if parsed.path.lower().endswith(".mp4"):
                   status, final, content_type, body = request(
                       address, referer, limit=65536, byte_range="bytes=0-65535"
@@ -197,6 +224,21 @@ jobs:
                   f"{segment_count}/{len(media_uris)} fetched; "
                   f"playlist duration checked={checked_seconds:.2f}s"
               )
+
+          def safe_probe_media(address, referer):
+              try:
+                  parsed = urlsplit(address)
+                  if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                      return False, "invalid media URL"
+                  return probe_media(normalize_http_url(address), referer)
+              except (
+                  URLError, TimeoutError, socket.timeout, OSError,
+                  http.client.HTTPException, UnicodeError, ValueError,
+              ) as exc:
+                  return False, (
+                      f"upstream network unavailable: {type(exc).__name__}: "
+                      f"{str(exc)[:140]}"
+                  )
 
           print("\\n=== USER-REPORTED MOVIE EPISODE DIAGNOSTIC: 161235 ===")
           target_id = "161235"
@@ -354,6 +396,7 @@ jobs:
                           row_candidate_count = 0
                           for field in (
                               "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                              "vod_pic_detail", "vod_pic_big", "vod_pic_original",
                               "vod_pic_slide", "vod_pic_screenshot",
                               "cover", "cover_url", "poster", "image", "thumbnail",
                           ):
@@ -451,10 +494,10 @@ jobs:
                   target = parsed.netloc + parsed.path + (
                       ("?" + parsed.query) if parsed.query else ""
                   )
-                  proxy = "https://images.weserv.nl/?url=" + quote(target, safe="")
+                  proxy = "https://wsrv.nl/?url=" + quote(target, safe="") + "&w=440&h=660&fit=inside&output=jpg&q=80"
                   try:
                       proxy_status, _, proxy_type, proxy_body = request(
-                          proxy, "https://images.weserv.nl/", limit=2048,
+                          proxy, "https://wsrv.nl/", limit=2048,
                           timeout=8, byte_range="bytes=0-2047"
                       )
                       proxy_ok = proxy_status in (200, 206) and bool(proxy_body) and (
@@ -485,6 +528,7 @@ jobs:
                           alternatives = []
                           for field in (
                               "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                              "vod_pic_detail", "vod_pic_big", "vod_pic_original",
                               "vod_pic_slide", "vod_pic_screenshot",
                               "cover", "cover_url", "poster", "image", "thumbnail",
                           ):
@@ -571,7 +615,7 @@ jobs:
                       )
 
           print("\n=== USER-REPORTED MISSING POSTERS ===")
-          TARGET_POSTER_IDS = ("54635", "151850", "1625", "49704", "1206", "157219", "101901", "1192", "73988")
+          TARGET_POSTER_IDS = ("54635", "151850", "1625", "49704", "1206", "157219", "101901", "1192", "73988", "131229")
           TARGET_POSTER_TITLES = [
               {
                   "label": "怪奇物語 第一季",
@@ -661,6 +705,98 @@ jobs:
                   "aliases": (
                       "逆愛2：後會無期", "逆爱2：后会无期",
                       "逆愛2後會無期", "逆爱2后会无期",
+                  ),
+              },
+              {
+                  "label": "謊言第一季",
+                  "queries": ("謊言第一季", "謊言 第一季", "谎言第一季", "谎言 第一季"),
+                  "aliases": ("謊言第一季", "謊言 第一季", "谎言第一季", "谎言 第一季"),
+              },
+              {
+                  "label": "全球御鬼時代，我成了最終BOSS動態漫畫",
+                  "queries": (
+                      "全球御鬼時代，我成了最終BOSS動態漫畫",
+                      "全球御鬼时代，我成了最终BOSS动态漫画",
+                      "全球御鬼時代我成了最終BOSS動態漫畫",
+                      "全球御鬼时代我成了最终BOSS动态漫画",
+                  ),
+                  "aliases": (
+                      "全球御鬼時代，我成了最終BOSS動態漫畫",
+                      "全球御鬼时代，我成了最终BOSS动态漫画",
+                      "全球御鬼時代我成了最終BOSS動態漫畫",
+                      "全球御鬼时代我成了最终BOSS动态漫画",
+                  ),
+              },
+              {
+                  "label": "迷離時空(原版) 第一季",
+                  "queries": (
+                      "迷離時空(原版) 第一季",
+                      "迷離時空（原版）第一季",
+                      "迷离时空(原版) 第一季",
+                      "迷离时空（原版）第一季",
+                  ),
+                  "aliases": (
+                      "迷離時空(原版) 第一季",
+                      "迷離時空（原版）第一季",
+                      "迷离时空(原版) 第一季",
+                      "迷离时空（原版）第一季",
+                  ),
+              },
+              {
+                  "label": "緊急呼救 第一季",
+                  "queries": (
+                      "緊急呼救 第一季", "緊急呼救第一季",
+                      "紧急呼救 第一季", "紧急呼救第一季",
+                      "緊急呼救 第1季", "紧急呼救第1季",
+                      "9-1-1 Season 1", "911 Season 1", "9-1-1 第一季",
+                  ),
+                  "aliases": (
+                      "緊急呼救 第一季", "緊急呼救第一季",
+                      "紧急呼救 第一季", "紧急呼救第一季",
+                      "緊急呼救 第1季", "紧急呼救第1季",
+                      "9-1-1 Season 1", "911 Season 1",
+                      "9-1-1 第一季", "9-1-1第一季", "911第一季",
+                  ),
+              },
+              {
+                  "label": "芝加哥醫院 第一季",
+                  "queries": (
+                      "芝加哥醫院第1季", "芝加哥醫院 第一季",
+                      "芝加哥医院第1季", "芝加哥医院 第一季",
+                      "芝加哥急救第一季", "芝加哥急救 第一季",
+                      "Chicago Med Season 1", "Chicago Med S01",
+                  ),
+                  "aliases": (
+                      "芝加哥醫院第1季", "芝加哥醫院 第一季",
+                      "芝加哥医院第1季", "芝加哥医院 第一季",
+                      "芝加哥急救第一季", "芝加哥急救 第一季",
+                      "Chicago Med Season 1", "Chicago Med S01",
+                  ),
+              },
+              {
+                  "label": "芝加哥烈焰 第一季",
+                  "queries": (
+                      "芝加哥烈焰 第一季", "芝加哥烈焰第一季",
+                      "芝加哥烈焰 第1季", "芝加哥烈焰第1季",
+                      "Chicago Fire Season 1", "Chicago Fire S01",
+                  ),
+                  "aliases": (
+                      "芝加哥烈焰 第一季", "芝加哥烈焰第一季",
+                      "芝加哥烈焰 第1季", "芝加哥烈焰第1季",
+                      "Chicago Fire Season 1", "Chicago Fire S01",
+                  ),
+              },
+              {
+                  "label": "芝加哥烈焰 第五季",
+                  "queries": (
+                      "芝加哥烈焰 第五季", "芝加哥烈焰第五季",
+                      "芝加哥烈焰 第5季", "芝加哥烈焰第5季",
+                      "Chicago Fire Season 5", "Chicago Fire S05",
+                  ),
+                  "aliases": (
+                      "芝加哥烈焰 第五季", "芝加哥烈焰第五季",
+                      "芝加哥烈焰 第5季", "芝加哥烈焰第5季",
+                      "Chicago Fire Season 5", "Chicago Fire S05",
                   ),
               },
           ]
@@ -931,7 +1067,8 @@ jobs:
                   return False
 
           def verified_official_title_poster(vod_id, title, row):
-              # Exact programme artwork from programme-owner / official-platform materials.
+              # Exact programme artwork from programme owners, official platforms,
+              # or a verifiable exact-title/season catalogue record.
               # Do not use fuzzy parent-title matching or substitute another season.
               def normalize_exact(value):
                   simplified_to_traditional = str.maketrans({
@@ -962,6 +1099,37 @@ jobs:
                       "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
                       "label": "Distributor poster for Obsessed (2014)",
                   },
+                  "88129": {
+                      "aliases": {"緊急呼救第一季", "紧急呼救第一季", "緊急呼救 第一季", "紧急呼救 第一季"},
+                      "year": "2018",
+                      "address": "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
+                      "label": "TVmaze exact 9-1-1 Season 1 artwork (2018)",
+                  },
+
+                  "92722": {
+                      "aliases": {"謊言第一季", "谎言第一季"},
+                      "year": "2020",
+                      "address": "https://www.francetvpro.fr/sites/default/files/styles/crop_format_bandeau/public/telechargements/images/LE%20MENSONGE%20ok.jpg.webp?itok=wfjSja09",
+                      "label": "France Télévisions official LE MENSONGE 2020 promotional artwork (exact series title and year)",
+                  },
+                  "140381": {
+                      "aliases": {"全球御鬼時代我成了最終BOSS動態漫畫", "全球御鬼时代我成了最终BOSS动态漫画"},
+                      "year": "2025",
+                      "address": "https://i0.hdslb.com/bfs/bangumi/image/0defb063125d0e558e29731c13989a25d5357965.png",
+                      "label": "Bilibili official series artwork for 全球御鬼时代，我成了最终BOSS 动态漫 (2025)",
+                  },
+                  "87957": {
+                      "aliases": {"迷離時空原版第一季", "迷离时空原版第一季"},
+                      "year": "1959",
+                      "address": "https://image.tmdb.org/t/p/original/1DKVWl80YSLi0TE8IbyUdqq2o5l.jpg",
+                      "label": "TMDB exact The Twilight Zone Season 1 poster (1959)",
+                  },
+                  "88129": {
+                      "aliases": {"緊急呼救 第一季", "緊急呼救第一季", "紧急呼救 第一季", "紧急呼救第一季"},
+                      "year": "2018",
+                      "address": "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
+                      "label": "TVmaze exact 9-1-1 Season 1 poster (2018; exact Chinese title alias)",
+                  },
                   "1625": {
                   "aliases": {"鬼灭之刃剧场版无限城篇第一章猗窝座再来", "鬼滅之刃劇場版無限城篇第一章猗窩座再來"},
                   "year": "2025",
@@ -976,9 +1144,9 @@ jobs:
               },
               "1192": {
                       "aliases": {"奉子成婚"},
-                      "year": "2001",
-                      "address": "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
-                      "label": "Fuji Creative official Shotgun Marriage artwork (2001)",
+                      "year": "2025",
+                      "address": "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+                      "label": "Official 2025 Japanese anime デキちゃうまで婚 key visual",
                   },
                   "66452": {
                       "aliases": {"逆愛2後會無期", "逆爱2后会无期", "逆愛2：後會無期", "逆爱2：后会无期"},
@@ -990,7 +1158,12 @@ jobs:
               exact_item = exact_source_records.get(str(vod_id))
               source_year = str(row.get("vod_year") or "").strip()[:4]
               record_year = str(exact_item.get("year") or "").strip()[:4] if exact_item else ""
-              exact_title_match = bool(exact_item and normalize_exact(title) in exact_item["aliases"])
+              exact_title_match = bool(
+                  exact_item
+                  and normalize_exact(title) in {
+                      normalize_exact(alias) for alias in exact_item["aliases"]
+                  }
+              )
               # A dated artwork is not verifiable when the source year is missing.
               # Missing metadata must never turn a known year mismatch into a match.
               exact_year_match = not record_year or source_year == record_year
@@ -1133,6 +1306,7 @@ jobs:
 
           target_failures = []
           target_upstream_unavailable = []
+          verified_poster_addresses = {}
           for vod_id in TARGET_POSTER_IDS:
               try:
                   api_base, detail_payload = api("/api.php/web/vod/get_detail", {"vod_id": vod_id})
@@ -1155,8 +1329,9 @@ jobs:
                   candidates = []
                   seen = set()
                   for field in (
-                      "vod_pic", "vod_pic_thumb", "vod_pic_url", "vod_pic_slide",
-                      "vod_pic_screenshot", "cover", "cover_url", "poster", "image",
+                      "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                      "vod_pic_detail", "vod_pic_big", "vod_pic_original",
+                      "vod_pic_slide", "vod_pic_screenshot", "cover", "cover_url", "poster", "image",
                       "thumbnail", "thumb", "pic", "img", "picture",
                   ):
                       address = poster_address(row.get(field))
@@ -1263,10 +1438,12 @@ jobs:
                       f"fields={[label for label, _ in candidates[:16]]}"
                   )
                   poster_ok = False
+                  validated_poster_address = ""
                   for label, address in candidates[:16]:
                       print(f"  candidate source={label} url={address[:260]}")
                       if targeted_image_ok(address, play_url, root_url):
                           poster_ok = True
+                          validated_poster_address = address
                           break
                   if not poster_ok:
                       try:
@@ -1274,6 +1451,7 @@ jobs:
                           if bangumi_address:
                               poster_ok = targeted_image_ok(bangumi_address, play_url, root_url)
                               if poster_ok:
+                                  validated_poster_address = bangumi_address
                                   print(f"PASS: Bangumi exact-match fallback poster validated for id={vod_id}")
                       except Exception as exc:
                           print(
@@ -1287,6 +1465,7 @@ jobs:
                           print(f"  verified exact-record artwork candidate={verified_address}")
                           poster_ok = targeted_image_ok(verified_address, play_url, root_url)
                           if poster_ok:
+                              validated_poster_address = verified_address
                               print(f"PASS: exact source-record artwork validated for id={vod_id}")
                   if not poster_ok:
                       source_poster = poster_address(row.get("vod_pic"))
@@ -1326,6 +1505,11 @@ jobs:
                           target_failures.append(vod_id)
                           print(f"FAIL: official poster not validated for id={vod_id}")
                   else:
+                      if validated_poster_address:
+                          verified_poster_addresses[vod_id] = (
+                              normalize_target_title(title),
+                              validated_poster_address,
+                          )
                       print(f"PASS: official poster validated for id={vod_id}")
               except Exception as exc:
                   target_failures.append(vod_id)
@@ -1394,7 +1578,10 @@ jobs:
                           continue
                       episode_count += 1
                       if urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
-                          detail_direct.append((str(player.get("show") or name), episode_title.strip(), address))
+                          detail_direct.append((
+                              f"{player.get('show') or name} [{name.strip()}]",
+                              episode_title.strip(), address
+                          ))
               _, aggregate_payload = api(
                   "/api.php/web/internal/search_aggregate", {"vod_id": vod_id}
               )
@@ -1410,7 +1597,8 @@ jobs:
                       address = address.strip()
                       if address and urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
                           aggregate_direct.append((
-                              str(line.get("site_name") or line.get("site_key") or "aggregate"),
+                              f"{line.get('site_name') or line.get('site_key') or 'aggregate'} "
+                              f"[{line.get('site_key') or line.get('vod_play_from') or 'no-key'}]",
                               episode_title.strip(), address
                           ))
               detail_episode_count = episode_count
@@ -1419,8 +1607,9 @@ jobs:
               seen = set()
               direct = []
               for item in detail_direct + aggregate_direct:
-                  if item[2] not in seen:
-                      seen.add(item[2])
+                  identity = (item[0].strip().casefold(), item[2])
+                  if identity not in seen:
+                      seen.add(identity)
                       direct.append(item)
               print(
                   f"SINGLE_INFERNO id={vod_id} title={title!r} episodes={episode_count} "
@@ -1434,12 +1623,30 @@ jobs:
                   raise RuntimeError(
                       f"單身即地獄 第五季 id={vod_id}: episodes exist but no direct HLS/MP4 links"
                   )
-              for line_name, episode_title, address in direct[:4]:
+              # Probe one representative episode from every distinct public
+              # playback source, rather than four episodes from whichever line
+              # happens to sort first. This catches a broken first line without
+              # misclassifying the whole title when another line still works.
+              probe_candidates = []
+              seen_probe_lines = set()
+              for item in direct:
+                  line_name, episode_title, address = item
+                  host = (urlsplit(address).hostname or "").casefold()
+                  identity = (line_name.strip().casefold(), host)
+                  if identity in seen_probe_lines:
+                      continue
+                  seen_probe_lines.add(identity)
+                  probe_candidates.append(item)
+              print(
+                  f"SINGLE_INFERNO_PLAYBACK_LINES={len(probe_candidates)} "
+                  f"samples={[(name, episode, urlsplit(address).netloc) for name, episode, address in probe_candidates[:12]]}"
+              )
+              for line_name, episode_title, address in probe_candidates[:12]:
                   single_inferno_checked += 1
-                  ok, message = probe_media(address, api_base + "/")
+                  ok, message = safe_probe_media(address, api_base + "/")
                   referer = "active-api-mirror"
                   if not ok:
-                      retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                      retry_ok, retry_message = safe_probe_media(address, "https://duoduozhuiju.com/")
                       if retry_ok:
                           ok, message, referer = retry_ok, retry_message, "public-entry"
                       else:
@@ -1453,6 +1660,126 @@ jobs:
           print(f"SINGLE_INFERNO_PLAYBACK_PROBES={single_inferno_ok}/{single_inferno_checked}")
           if not single_inferno_ok:
               raise RuntimeError("單身即地獄 第五季 currently has no validated public direct playback line")
+
+          print("\\n=== USER-REPORTED SERIES PLAYBACK: 緊急呼救 第一季 ===")
+          nine_one_one_ids = target_title_ids.get("緊急呼救 第一季", [])
+          if not nine_one_one_ids:
+              raise RuntimeError("緊急呼救 第一季 was not resolved in Duoduo catalogue/search")
+          nine_one_one_checked = 0
+          nine_one_one_ok = 0
+          for vod_id in nine_one_one_ids:
+              api_base, detail_payload = api(
+                  "/api.php/web/vod/get_detail", {"vod_id": vod_id}
+              )
+              detail_rows = response_rows(detail_payload.get("data"))
+              if not detail_rows:
+                  raise RuntimeError(f"緊急呼救 第一季 id={vod_id}: no detail row")
+              row = detail_rows[0]
+              title = row_title(row)
+              expected = {
+                  normalize_target_title(value) for value in (
+                      "緊急呼救 第一季", "緊急呼救第一季",
+                      "紧急呼救 第一季", "紧急呼救第一季",
+                      "緊急呼救 第1季", "紧急呼救第1季",
+                      "9-1-1 Season 1", "911 Season 1",
+                      "9-1-1 第一季", "9-1-1第一季", "911第一季",
+                  )
+              }
+              if normalize_target_title(title) not in expected:
+                  raise RuntimeError(
+                      f"緊急呼救 第一季 detail title mismatch: id={vod_id} title={title!r}"
+                  )
+              names = split_source_groups(row.get("vod_play_from"), comma_fallback=True)
+              blocks = split_source_groups(row.get("vod_play_url"))
+              player_rows = response_rows(detail_payload.get("vodplayer"))
+              player_by_from = {
+                  str(player.get("from") or "").strip(): player
+                  for player in player_rows if str(player.get("from") or "").strip()
+              }
+              detail_direct = []
+              detail_episode_count = 0
+              for index, name in enumerate(names[:len(blocks)]):
+                  player = player_by_from.get(name.strip(), {})
+                  if str(player.get("decode_status") or "0") != "0":
+                      continue
+                  for episode in blocks[index].split("#"):
+                      if "$" not in episode:
+                          continue
+                      episode_title, address = episode.split("$", 1)
+                      address = address.strip()
+                      if not address:
+                          continue
+                      detail_episode_count += 1
+                      if urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
+                          detail_direct.append((
+                              f"{player.get('show') or name} [{name.strip()}]",
+                              episode_title.strip(), address
+                          ))
+              _, aggregate_payload = api(
+                  "/api.php/web/internal/search_aggregate", {"vod_id": vod_id}
+              )
+              aggregate_rows = response_rows(aggregate_payload.get("data"))
+              aggregate_direct = []
+              for line in aggregate_rows:
+                  if str(line.get("decode_status")) != "0":
+                      continue
+                  for episode in str(line.get("vod_play_url") or "").split("#"):
+                      if "$" not in episode:
+                          continue
+                      episode_title, address = episode.split("$", 1)
+                      address = address.strip()
+                      if address and urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
+                          aggregate_direct.append((
+                              f"{line.get('site_name') or line.get('site_key') or 'aggregate'} "
+                              f"[{line.get('site_key') or line.get('vod_play_from') or 'no-key'}]",
+                              episode_title.strip(), address
+                          ))
+              direct = []
+              seen = set()
+              for item in detail_direct + aggregate_direct:
+                  identity = (item[0].strip().casefold(), item[2])
+                  if identity not in seen:
+                      seen.add(identity)
+                      direct.append(item)
+              print(
+                  f"NINE_ONE_ONE_SEASON_ONE id={vod_id} title={title!r} "
+                  f"detail_episodes={detail_episode_count} aggregate_rows={len(aggregate_rows)} "
+                  f"detail_direct={len(detail_direct)} aggregate_direct={len(aggregate_direct)}"
+              )
+              if not direct:
+                  raise RuntimeError(
+                      f"緊急呼救 第一季 id={vod_id}: detail and aggregate contain no direct HLS/MP4 links"
+                  )
+              probe_candidates = []
+              seen_probe_lines = set()
+              for item in direct:
+                  line_name, episode_title, address = item
+                  host = (urlsplit(address).hostname or "").casefold()
+                  identity = (line_name.strip().casefold(), host)
+                  if identity not in seen_probe_lines:
+                      seen_probe_lines.add(identity)
+                      probe_candidates.append(item)
+              for line_name, episode_title, address in probe_candidates[:12]:
+                  nine_one_one_checked += 1
+                  ok, message = safe_probe_media(address, api_base + "/")
+                  referer = "active-api-mirror"
+                  if not ok:
+                      retry_ok, retry_message = safe_probe_media(address, "https://duoduozhuiju.com/")
+                      if retry_ok:
+                          ok, message, referer = retry_ok, retry_message, "public-entry"
+                      else:
+                          message += f"; public-entry retry failed: {retry_message}"
+                  print(
+                      f"NINE_ONE_ONE_MEDIA line={line_name!r} episode={episode_title!r} "
+                      f"host={urlsplit(address).netloc} referer={referer} ok={ok} {message}"
+                  )
+                  if ok:
+                      nine_one_one_ok += 1
+          print(
+              f"NINE_ONE_ONE_SEASON_ONE_PLAYBACK_PROBES={nine_one_one_ok}/{nine_one_one_checked}"
+          )
+          if not nine_one_one_ok:
+              raise RuntimeError("緊急呼救 第一季 has no validated public direct playback line")
 
           print("\n=== CROSS-CATEGORY SEARCH / DETAIL SAMPLES ===")
           candidates = []
@@ -1862,7 +2189,8 @@ jobs:
                   return False
 
           def verified_official_title_poster(vod_id, title, row):
-              # Exact programme artwork from programme-owner / official-platform materials.
+              # Exact programme artwork from programme owners, official platforms,
+              # or a verifiable exact-title/season catalogue record.
               # Do not use fuzzy parent-title matching or substitute another season.
               def normalize_exact(value):
                   simplified_to_traditional = str.maketrans({
@@ -1877,44 +2205,92 @@ jobs:
               exact_source_records = {
                   "87221": {
                       "aliases": {"單身即地獄第五季", "单身即地狱第五季"},
+                      "year": "2026",
                       "address": "https://resource02.ulifestyle.com.hk/ulcms/content/article/image/w1280/2026/01/20260106180130_adf32c82e8e9ede7a5f96d795e9f224666da43bd.jpg",
                       "label": "Netflix Single's Inferno Season 5",
                   },
                   "59902": {
                       "aliases": {"明星大偵探第二季", "明星大侦探第二季"},
+                      "year": "2017",
                       "address": "https://4img.hitv.com/preview/internettv/sp_images/ott/2018/zongyi/309556/20180328100639870-new.jpg",
                       "label": "MangoTV 明星大侦探 第二季",
                   },
                   "78011": {
                       "aliases": {"人間中毒", "人间中毒"},
+                      "year": "2014",
                       "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
                       "label": "Distributor poster for Obsessed (2014)",
                   },
+                  "92722": {
+                      "aliases": {"謊言第一季", "谎言第一季"},
+                      "year": "2020",
+                      "address": "https://www.francetvpro.fr/sites/default/files/styles/crop_format_bandeau/public/telechargements/images/LE%20MENSONGE%20ok.jpg.webp?itok=wfjSja09",
+                      "label": "France Télévisions official LE MENSONGE 2020 promotional artwork (exact series title and year)",
+                  },
+                  "140381": {
+                      "aliases": {"全球御鬼時代我成了最終BOSS動態漫畫", "全球御鬼时代我成了最终BOSS动态漫画"},
+                      "year": "2025",
+                      "address": "https://i0.hdslb.com/bfs/bangumi/image/0defb063125d0e558e29731c13989a25d5357965.png",
+                      "label": "Bilibili official series artwork for 全球御鬼时代，我成了最终BOSS 动态漫 (2025)",
+                  },
+                  "87957": {
+                      "aliases": {"迷離時空原版第一季", "迷离时空原版第一季"},
+                      "year": "1959",
+                      "address": "https://image.tmdb.org/t/p/original/1DKVWl80YSLi0TE8IbyUdqq2o5l.jpg",
+                      "label": "TMDB exact The Twilight Zone Season 1 poster (1959)",
+                  },
+                  "88129": {
+                      "aliases": {"緊急呼救 第一季", "緊急呼救第一季", "紧急呼救 第一季", "紧急呼救第一季"},
+                      "year": "2018",
+                      "address": "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
+                      "label": "TVmaze exact 9-1-1 Season 1 poster (2018; exact Chinese title alias)",
+                  },
                   "1625": {
                   "aliases": {"鬼灭之刃剧场版无限城篇第一章猗窝座再来", "鬼滅之刃劇場版無限城篇第一章猗窩座再來"},
+                  "year": "2025",
                   "address": "https://img3.doubanio.com/view/photo/s_ratio_poster/public/p2926775179.jpg",
                   "label": "Douban exact subject 36524559 poster for Demon Slayer Infinity Castle Chapter 1 (2025)",
               },
               "54635": {
                   "aliases": {"玩物"},
+                  "year": "2013",
                   "address": "https://file.osen.co.kr/article/2013/03/12/201303120849775921_513e6de134d01.jpg",
                   "label": "OSEN original 2013 Norigae theatrical poster (official release coverage)",
               },
               "1192": {
                       "aliases": {"奉子成婚"},
-                      "address": "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
-                      "label": "Fuji Creative official Shotgun Marriage artwork (2001)",
+                      "year": "2025",
+                      "address": "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+                      "label": "Official 2025 Japanese anime デキちゃうまで婚 key visual",
                   },
                   "66452": {
                       "aliases": {"逆愛2後會無期", "逆爱2后会无期", "逆愛2：後會無期", "逆爱2：后会无期"},
+                      "year": "2014",
                       "address": "https://www.jendow.com.tw/img/5/105/nBnauM3X1gTO1AzM4MzMzIzM3QTM5YzNyITOzQTNwAzMwIzLzMzL3YzLt92YucmbvRWdo5Cd0FmL0E2LvoDc0RHa.jpg",
                       "label": "Archive image indexed under the exact 逆愛2後會無期 programme record (2014)",
                   },
               }
               exact_item = exact_source_records.get(str(vod_id))
-              if exact_item and normalize_exact(title) in exact_item["aliases"]:
+              source_year = str(row.get("vod_year") or "").strip()[:4]
+              record_year = str(exact_item.get("year") or "").strip()[:4] if exact_item else ""
+              exact_title_match = bool(
+                  exact_item
+                  and normalize_exact(title) in {
+                      normalize_exact(alias) for alias in exact_item["aliases"]
+                  }
+              )
+              # A dated artwork is not verifiable when the source year is missing.
+              # Missing metadata must never turn a known year mismatch into a match.
+              exact_year_match = not record_year or source_year == record_year
+              if exact_title_match and exact_year_match:
                   print(f"  verified poster matched exact source record={vod_id} programme={exact_item['label']!r}")
                   return exact_item["address"]
+              if exact_title_match and record_year and source_year != record_year:
+                  observed_year = source_year or "(missing)"
+                  print(
+                      f"  verified poster rejected for id={vod_id}: source year "
+                      f"{observed_year} does not match artwork year {record_year}"
+                  )
 
               flower_key = normalize_exact("花兒與少年同心季")
               xiyou_key = normalize_exact("這是我的西遊第二季")
@@ -2059,8 +2435,9 @@ jobs:
                   candidates = []
                   seen = set()
                   for field in (
-                      "vod_pic", "vod_pic_thumb", "vod_pic_url", "vod_pic_slide",
-                      "vod_pic_screenshot", "cover", "cover_url", "poster", "image",
+                      "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                      "vod_pic_detail", "vod_pic_big", "vod_pic_original",
+                      "vod_pic_slide", "vod_pic_screenshot", "cover", "cover_url", "poster", "image",
                       "thumbnail", "thumb", "pic", "img", "picture",
                   ):
                       address = poster_address(row.get(field))
@@ -2167,7 +2544,16 @@ jobs:
                       f"fields={[label for label, _ in candidates[:16]]}"
                   )
                   poster_ok = False
+                  cached_poster = verified_poster_addresses.get(vod_id)
+                  if cached_poster and cached_poster[0] == normalize_target_title(title):
+                      cached_address = cached_poster[1]
+                      print(f"  revalidate same-run poster id={vod_id} url={cached_address[:260]}")
+                      poster_ok = targeted_image_ok(cached_address, play_url, root_url)
+                      if poster_ok:
+                          print(f"PASS: same-run verified poster bytes revalidated for id={vod_id}")
                   for label, address in candidates[:16]:
+                      if poster_ok:
+                          break
                       print(f"  candidate source={label} url={address[:260]}")
                       if targeted_image_ok(address, play_url, root_url):
                           poster_ok = True
@@ -2353,4 +2739,560 @@ jobs:
           if playable == 0:
               raise RuntimeError("no public direct line passed the bounded media probe; " + "; ".join(errors[:5]))
           print("PASS: Duoduo catalogue candidates, detail and aggregate direct lines, and media segments were probed.")
+
+          print("\\n=== CHICAGO FIRE LIVE SERIES RECONCILIATION ===")
+          chicago_base_title = "芝加哥烈焰"
+
+          def chicago_season_number(title):
+              compact = re.sub(r"\s+", "", str(title or ""))
+              match = re.fullmatch(r"芝加哥烈焰第?([0-9]{1,2}|[一二三四五六七八九十]+)季", compact)
+              if not match:
+                  return 0
+              raw = match.group(1)
+              if raw.isdigit():
+                  return int(raw)
+              digits = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+                        "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+              if raw == "十":
+                  return 10
+              if raw.startswith("十"):
+                  return 10 + digits.get(raw[1:], 0)
+              if raw.endswith("十"):
+                  return digits.get(raw[0], 0) * 10
+              if "十" in raw:
+                  left, right = raw.split("十", 1)
+                  return digits.get(left, 0) * 10 + digits.get(right, 0)
+              return digits.get(raw, 0)
+
+          assert chicago_season_number("芝加哥烈焰 第一季") == 1
+          assert chicago_season_number("芝加哥烈焰第五季") == 5
+          assert chicago_season_number("芝加哥烈焰 第五季") == 5
+          assert chicago_season_number("芝加哥烈焰 第十二季") == 12
+
+          chicago_catalog = {}
+          chicago_conflicts = []
+          for page in range(1, 4):
+              _, payload = api(
+                  "/api.php/web/search/index",
+                  {"wd": chicago_base_title, "page": page, "limit": 24},
+              )
+              for row in response_rows(payload.get("data")):
+                  season_number = chicago_season_number(row_title(row))
+                  vod_id = row_id(row)
+                  if not season_number or not vod_id.isdigit():
+                      continue
+                  previous = chicago_catalog.get(season_number)
+                  if previous and row_id(previous) != vod_id:
+                      chicago_conflicts.append((season_number, row_id(previous), vod_id))
+                  else:
+                      chicago_catalog[season_number] = row
+
+          if chicago_conflicts:
+              raise RuntimeError(
+                  "Chicago Fire exact season search produced ambiguous IDs: "
+                  + repr(chicago_conflicts)
+              )
+          missing_required = sorted({1, 5} - set(chicago_catalog))
+          if missing_required:
+              raise RuntimeError(
+                  "Chicago Fire exact series search did not return required seasons "
+                  + repr(missing_required)
+              )
+
+          chicago_season_results = []
+          for season_number, summary in sorted(chicago_catalog.items()):
+              vod_id = row_id(summary)
+              search_title = row_title(summary)
+              api_base, detail_payload = api(
+                  "/api.php/web/vod/get_detail", {"vod_id": vod_id}
+              )
+              details = response_rows(detail_payload.get("data"))
+              if not details:
+                  raise RuntimeError(
+                      f"Chicago Fire S{season_number:02d} id={vod_id}: empty official detail response"
+                  )
+              detail = details[0]
+              detail_id = row_id(detail)
+              detail_title = row_title(detail)
+              if detail_id != vod_id or normalize_target_title(detail_title) != normalize_target_title(search_title):
+                  raise RuntimeError(
+                      f"Chicago Fire S{season_number:02d} search/detail identity mismatch: "
+                      f"search=({vod_id},{search_title!r}) detail=({detail_id},{detail_title!r})"
+                  )
+
+              direct = []
+              player_rows = response_rows(detail_payload.get("vodplayer"))
+              player_by_from = {
+                  str(player.get("from") or "").strip(): player
+                  for player in player_rows if str(player.get("from") or "").strip()
+              }
+              names = split_source_groups(detail.get("vod_play_from"), comma_fallback=True)
+              blocks = split_source_groups(detail.get("vod_play_url"))
+              for index, name in enumerate(names[:len(blocks)]):
+                  player = player_by_from.get(name.strip(), {})
+                  if str(player.get("decode_status") or "0") != "0":
+                      continue
+                  for episode in blocks[index].split("#"):
+                      if "$" not in episode:
+                          continue
+                      episode_title, address = episode.split("$", 1)
+                      address = address.strip()
+                      if address and urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
+                          direct.append((episode_title.strip(), address, "detail"))
+
+              _, aggregate_payload = api(
+                  "/api.php/web/internal/search_aggregate", {"vod_id": vod_id}
+              )
+              for line in response_rows(aggregate_payload.get("data")):
+                  if str(line.get("decode_status")) != "0":
+                      continue
+                  for episode in str(line.get("vod_play_url") or "").split("#"):
+                      if "$" not in episode:
+                          continue
+                      episode_title, address = episode.split("$", 1)
+                      address = address.strip()
+                      if address and urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
+                          direct.append((episode_title.strip(), address, "aggregate"))
+
+              unique_urls = {}
+              for episode_title, address, origin in direct:
+                  unique_urls.setdefault(address, (episode_title, origin))
+              episode_numbers = {
+                  int(match.group(1))
+                  for episode_title, _ in unique_urls.values()
+                  if (match := re.search(r"([0-9]{1,4})", episode_title))
+              }
+              remarks = str(detail.get("vod_remarks") or summary.get("vod_remarks") or "")
+              print(
+                  f"CHICAGO_FIRE season={season_number:02d} id={vod_id} "
+                  f"search_title={search_title!r} detail_title={detail_title!r} "
+                  f"remarks={remarks!r} direct_urls={len(unique_urls)} "
+                  f"distinct_episode_numbers={len(episode_numbers)} "
+                  f"poster_fields={[key for key in ('vod_pic','vod_pic_thumb','vod_pic_detail','vod_pic_big','vod_pic_original') if detail.get(key)]}"
+              )
+              chicago_season_results.append({
+                  "season": season_number,
+                  "id": vod_id,
+                  "title": detail_title,
+                  "direct_urls": len(unique_urls),
+                  "episodes": len(episode_numbers),
+              })
+
+          for required_season in (1, 5):
+              result = next(item for item in chicago_season_results if item["season"] == required_season)
+              if result["direct_urls"] == 0 or result["episodes"] == 0:
+                  raise RuntimeError(
+                      f"Chicago Fire S{required_season:02d} has no direct detail/aggregate episodes: {result}"
+                  )
+          print(
+              "PASS: Chicago Fire exact search IDs match their official detail IDs; "
+              "season 1 and season 5 both expose direct episode data through the shared detail+aggregate resolver."
+          )
+
+          print("\\n=== USER-REPORTED CHICAGO MED S1 PLAYBACK: 131229 ===")
+          chicago_med_id = "131229"
+          med_base, med_payload = api(
+              "/api.php/web/vod/get_detail", {"vod_id": chicago_med_id}
+          )
+          med_rows = response_rows(med_payload.get("data"))
+          if not med_rows:
+              raise RuntimeError("Chicago Med S1 id=131229 returned no official detail row")
+          med = med_rows[0]
+          med_title = row_title(med)
+          med_returned_id = row_id(med)
+          if med_returned_id != chicago_med_id:
+              raise RuntimeError(
+                  f"Chicago Med requested detail identity mismatch: requested={chicago_med_id} returned={med_returned_id}"
+              )
+          if not any(alias in med_title for alias in ("芝加哥醫院", "芝加哥医院", "芝加哥急救", "Chicago Med")):
+              raise RuntimeError(
+                  f"Chicago Med id=131229 official title mismatch: {med_title!r}"
+              )
+
+          def safe_media_kind(address):
+              value = str(address or "").strip()
+              parsed = urlsplit(value)
+              suffix = parsed.path.lower().rsplit(".", 1)[-1] if "." in parsed.path.rsplit("/", 1)[-1] else "none"
+              if parsed.scheme not in ("http", "https") or not parsed.hostname:
+                  return (
+                      f"invalid scheme={parsed.scheme or '-'} host={parsed.hostname or '-'} "
+                      f"authority={'yes' if parsed.netloc else 'no'} ext={suffix}"
+                  )
+              return f"{parsed.hostname}{parsed.path[-48:]} [ext={suffix}]"
+
+          def is_direct_http_media(address):
+              parsed = urlsplit(str(address or "").strip())
+              return (
+                  parsed.scheme.lower() in ("http", "https")
+                  and bool(parsed.hostname)
+                  and (
+                      parsed.path.lower().endswith(".m3u8")
+                      or parsed.path.lower().endswith(".mp4")
+                  )
+              )
+
+          med_player_rows = response_rows(med_payload.get("vodplayer"))
+          med_player_by_from = {
+              str(player.get("from") or "").strip(): player
+              for player in med_player_rows if str(player.get("from") or "").strip()
+          }
+          med_detail_lines = []
+          med_direct = []
+          med_non_direct = []
+          med_names = split_source_groups(med.get("vod_play_from"), comma_fallback=True)
+          med_blocks = split_source_groups(med.get("vod_play_url"))
+          for index, name in enumerate(med_names[:len(med_blocks)]):
+              player = med_player_by_from.get(name.strip(), {})
+              decode_status = str(player.get("decode_status") or "0")
+              entries = []
+              for episode in med_blocks[index].split("#"):
+                  if "$" not in episode:
+                      continue
+                  episode_title, address = episode.split("$", 1)
+                  address = address.strip()
+                  if not address:
+                      continue
+                  record = (episode_title.strip(), address, name)
+                  entries.append(record)
+                  if decode_status == "0" and is_direct_http_media(address):
+                      med_direct.append(record)
+                  else:
+                      med_non_direct.append((decode_status, episode_title.strip(), address, name))
+              med_detail_lines.append({
+                  "from": name,
+                  "show": str(player.get("show") or name),
+                  "decode_status": decode_status,
+                  "episodes": len(entries),
+                  "direct_urls": sum(
+                      1 for _, address, _ in entries
+                      if decode_status == "0" and is_direct_http_media(address)
+                  ),
+                  "non_direct_samples": [
+                      safe_media_kind(address)
+                      for _, address, _ in entries[:2]
+                      if not (decode_status == "0" and is_direct_http_media(address))
+                  ],
+              })
+
+          _, med_aggregate_payload = api(
+              "/api.php/web/internal/search_aggregate", {"vod_id": chicago_med_id}
+          )
+          med_aggregate_rows = response_rows(med_aggregate_payload.get("data"))
+          med_aggregate_summary = []
+          for line in med_aggregate_rows:
+              decode_status = str(line.get("decode_status") or "0")
+              site_key = str(line.get("site_key") or line.get("vod_play_from") or "")
+              site_name = str(line.get("site_name") or site_key or "aggregate")
+              line_label = f"{site_name} [{site_key}]" if site_key else site_name
+              raw = str(line.get("vod_play_url") or "")
+              entries = []
+              for episode in raw.split("#"):
+                  if "$" not in episode:
+                      continue
+                  episode_title, address = episode.split("$", 1)
+                  address = address.strip()
+                  if not address:
+                      continue
+                  entries.append((episode_title.strip(), address))
+                  if decode_status == "0" and is_direct_http_media(address):
+                      med_direct.append((episode_title.strip(), address, line_label))
+                  else:
+                      med_non_direct.append((decode_status, episode_title.strip(), address, line_label))
+              med_aggregate_summary.append({
+                  "site_key": site_key,
+                  "site_name": site_name,
+                  "decode_status": decode_status,
+                  "episodes": len(entries),
+                  "direct_urls": sum(
+                      1 for _, address in entries
+                      if decode_status == "0" and is_direct_http_media(address)
+                  ),
+                  "non_direct_samples": [
+                      safe_media_kind(address)
+                      for _, address in entries[:2]
+                      if not (decode_status == "0" and is_direct_http_media(address))
+                  ],
+              })
+
+          direct_unique = {}
+          for title, address, origin in med_direct:
+              direct_unique.setdefault(address, (title, origin))
+          print(
+              f"CHICAGO_MED id={med_returned_id} title={med_title!r} "
+              f"remarks={str(med.get('vod_remarks') or '')!r} "
+              f"poster_fields={[key for key in ('vod_pic','vod_pic_thumb','vod_pic_detail','vod_pic_big','vod_pic_original','vod_pic_slide') if med.get(key)]}"
+          )
+          print(
+              f"CHICAGO_MED detail_player_rows={len(med_player_rows)} "
+              f"detail_lines={med_detail_lines!r}"
+          )
+          print(
+              f"CHICAGO_MED aggregate_lines={len(med_aggregate_rows)} "
+              f"aggregate_summary={med_aggregate_summary!r}"
+          )
+          print(
+              f"CHICAGO_MED direct_urls={len(direct_unique)} "
+              f"non_direct_entries={len(med_non_direct)} "
+              f"non_direct_samples={[{'decode_status': row[0], 'line': row[3], 'media': safe_media_kind(row[2])} for row in med_non_direct[:8]]!r}"
+          )
+          if not direct_unique:
+              raise RuntimeError(
+                  "Chicago Med S1 id=131229 has no D-TV-compatible direct detail/aggregate URL; "
+                  "inspect the redacted decode-status and URL-kind summaries above."
+              )
+          # Probe one real episode URL from every official aggregate source line,
+          # not three adjacent episodes from the first line only.
+          probe_by_line = {}
+          for episode_title, address, origin in med_direct:
+              probe_by_line.setdefault(origin, (episode_title, address))
+          med_probe_ok = False
+          for origin, (episode_title, address) in probe_by_line.items():
+              ok, message = probe_media(address, med_base + "/")
+              if not ok:
+                  retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                  if retry_ok:
+                      ok, message = retry_ok, retry_message
+                  else:
+                      message += f"; public-entry retry failed: {retry_message}"
+              print(
+                  f"CHICAGO_MED_MEDIA episode={episode_title!r} line={origin!r} "
+                  f"media={safe_media_kind(address)} ok={ok} {message}"
+              )
+              med_probe_ok = med_probe_ok or ok
+          if not med_probe_ok:
+              raise RuntimeError("Chicago Med S1 id=131229 direct media URLs did not pass the bounded public media probe")
+          print("PASS: Chicago Med S1 id=131229 has validated official direct playback data.")
+
+          # The catalogue also contains a second exact-title/translation variant.
+          # Diagnose it independently before deciding whether D-TV should route
+          # this alias to the already-verified playable record (131229).
+          print("\\n=== CHICAGO MED ALTERNATE TITLE RECORD: 160306 ===")
+          chicago_med_alt_id = "160306"
+          alt_base, alt_payload = api(
+              "/api.php/web/vod/get_detail", {"vod_id": chicago_med_alt_id}
+          )
+          alt_rows = response_rows(alt_payload.get("data"))
+          if not alt_rows:
+              raise RuntimeError("Chicago Med alternate id=160306 returned no official detail row")
+          alt_med = alt_rows[0]
+          alt_title = row_title(alt_med)
+          if row_id(alt_med) != chicago_med_alt_id:
+              raise RuntimeError("Chicago Med alternate detail identity mismatch")
+          if not any(alias in alt_title for alias in ("芝加哥醫院", "芝加哥医院", "芝加哥急救", "Chicago Med")):
+              raise RuntimeError(f"Chicago Med alternate id=160306 title mismatch: {alt_title!r}")
+
+          alt_player_rows = response_rows(alt_payload.get("vodplayer"))
+          alt_player_by_from = {
+              str(player.get("from") or "").strip(): player
+              for player in alt_player_rows if str(player.get("from") or "").strip()
+          }
+          alt_detail_summary = []
+          alt_direct = []
+          alt_non_direct = []
+          alt_names = split_source_groups(alt_med.get("vod_play_from"), comma_fallback=True)
+          alt_blocks = split_source_groups(alt_med.get("vod_play_url"))
+          for index, name in enumerate(alt_names[:len(alt_blocks)]):
+              player = alt_player_by_from.get(name.strip(), {})
+              decode_status = str(player.get("decode_status") or "0")
+              entries = []
+              for episode in alt_blocks[index].split("#"):
+                  if "$" not in episode:
+                      continue
+                  episode_title, address = episode.split("$", 1)
+                  address = address.strip()
+                  if not address:
+                      continue
+                  if decode_status == "0" and is_direct_http_media(address):
+                      alt_direct.append((episode_title.strip(), address, name))
+                  else:
+                      alt_non_direct.append((decode_status, episode_title.strip(), address, name))
+                  entries.append((episode_title.strip(), address))
+              alt_detail_summary.append({
+                  "from": name,
+                  "show": str(player.get("show") or name),
+                  "decode_status": decode_status,
+                  "episodes": len(entries),
+                  "direct_urls": sum(
+                      1 for _, address in entries
+                      if decode_status == "0" and is_direct_http_media(address)
+                  ),
+                  "non_direct_samples": [
+                      safe_media_kind(address)
+                      for _, address in entries[:2]
+                      if not (decode_status == "0" and is_direct_http_media(address))
+                  ],
+              })
+
+          _, alt_aggregate_payload = api(
+              "/api.php/web/internal/search_aggregate", {"vod_id": chicago_med_alt_id}
+          )
+          alt_aggregate_rows = response_rows(alt_aggregate_payload.get("data"))
+          alt_aggregate_summary = []
+          for line in alt_aggregate_rows:
+              decode_status = str(line.get("decode_status") or "0")
+              site_key = str(line.get("site_key") or line.get("vod_play_from") or "")
+              site_name = str(line.get("site_name") or site_key or "aggregate")
+              line_label = f"{site_name} [{site_key}]" if site_key else site_name
+              entries = []
+              for episode in str(line.get("vod_play_url") or "").split("#"):
+                  if "$" not in episode:
+                      continue
+                  episode_title, address = episode.split("$", 1)
+                  address = address.strip()
+                  if not address:
+                      continue
+                  entries.append((episode_title.strip(), address))
+                  if decode_status == "0" and is_direct_http_media(address):
+                      alt_direct.append((episode_title.strip(), address, line_label))
+                  else:
+                      alt_non_direct.append((decode_status, episode_title.strip(), address, line_label))
+              alt_aggregate_summary.append({
+                  "site_key": site_key,
+                  "site_name": site_name,
+                  "decode_status": decode_status,
+                  "episodes": len(entries),
+                  "direct_urls": sum(
+                      1 for _, address in entries
+                      if decode_status == "0" and is_direct_http_media(address)
+                  ),
+                  "non_direct_samples": [
+                      safe_media_kind(address)
+                      for _, address in entries[:2]
+                      if not (decode_status == "0" and is_direct_http_media(address))
+                  ],
+              })
+
+          alt_unique = {}
+          for episode_title, address, origin in alt_direct:
+              alt_unique.setdefault(address, (episode_title, origin))
+          print(
+              f"CHICAGO_MED_ALT id={chicago_med_alt_id} title={alt_title!r} "
+              f"remarks={str(alt_med.get('vod_remarks') or '')!r} "
+              f"direct_urls={len(alt_unique)} detail_lines={alt_detail_summary!r} "
+              f"aggregate_lines={alt_aggregate_summary!r} "
+              f"non_direct_samples={[{'decode_status': row[0], 'line': row[3], 'media': safe_media_kind(row[2])} for row in alt_non_direct[:8]]!r}"
+          )
+          if alt_unique:
+              alt_probe_by_line = {}
+              for episode_title, address, origin in alt_direct:
+                  alt_probe_by_line.setdefault(origin, (episode_title, address))
+              alt_probe_ok = False
+              for origin, (episode_title, address) in alt_probe_by_line.items():
+                  ok, message = probe_media(address, alt_base + "/")
+                  if not ok:
+                      retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                      if retry_ok:
+                          ok, message = retry_ok, retry_message
+                      else:
+                          message += f"; public-entry retry failed: {retry_message}"
+                  print(
+                      f"CHICAGO_MED_ALT_MEDIA episode={episode_title!r} line={origin!r} "
+                      f"media={safe_media_kind(address)} ok={ok} {message}"
+                  )
+                  alt_probe_ok = alt_probe_ok or ok
+              print(f"CHICAGO_MED_ALT playable_probe={alt_probe_ok}")
+          else:
+              print("CHICAGO_MED_ALT no D-TV-compatible direct routes; alias fallback is required.")
+          print("\n=== CHICAGO MED SEASON 12 PLAYBACK DIAGNOSTIC ===")
+          med_s12_aliases = (
+              "芝加哥醫院第十二季", "芝加哥醫院第12季",
+              "芝加哥医院第十二季", "芝加哥医院第12季",
+              "芝加哥急救第十二季", "芝加哥急救第12季",
+              "Chicago Med Season 12", "Chicago Med S12",
+          )
+          med_s12_wanted = {normalize_target_title(value) for value in med_s12_aliases}
+          med_s12_queries = (
+              "芝加哥醫院", "芝加哥医院", "芝加哥急救",
+              "Chicago Med Season 12", "Chicago Med S12",
+          )
+          med_s12_matches = {}
+          for term in med_s12_queries:
+              _, search_payload = api(
+                  "/api.php/web/search/index", {"wd": term, "page": 1, "limit": 30}
+              )
+              for row in response_rows(search_payload.get("data")):
+                  source_id = row_id(row)
+                  if source_id.isdigit() and normalize_target_title(row_title(row)) in med_s12_wanted:
+                      med_s12_matches[source_id] = row
+          for row in catalog_all_rows:
+              source_id = row_id(row)
+              if source_id.isdigit() and normalize_target_title(row_title(row)) in med_s12_wanted:
+                  med_s12_matches[source_id] = row
+          if not med_s12_matches:
+              print("CHICAGO_MED_S12 exact title rows were not returned by the current search/catalog scan.")
+          for source_id, catalog_row in sorted(med_s12_matches.items()):
+              detail_base, detail_payload = api(
+                  "/api.php/web/vod/get_detail", {"vod_id": source_id}
+              )
+              detail_rows = response_rows(detail_payload.get("data"))
+              if not detail_rows or row_id(detail_rows[0]) != source_id:
+                  print(f"CHICAGO_MED_S12 id={source_id} detail identity mismatch or empty.")
+                  continue
+              detail = detail_rows[0]
+              player_rows = response_rows(detail_payload.get("vodplayer"))
+              player_by_from = {
+                  str(player.get("from") or "").strip(): player
+                  for player in player_rows if str(player.get("from") or "").strip()
+              }
+              direct_by_line = {}
+              detail_line_summary = []
+              names = split_source_groups(detail.get("vod_play_from"), comma_fallback=True)
+              blocks = split_source_groups(detail.get("vod_play_url"))
+              for index, name in enumerate(names[:len(blocks)]):
+                  player = player_by_from.get(name.strip(), {})
+                  status = str(player.get("decode_status") or "0")
+                  count = 0
+                  for item in blocks[index].split("#"):
+                      if "$" not in item:
+                          continue
+                      episode_title, address = item.split("$", 1)
+                      address = address.strip()
+                      if status == "0" and is_direct_http_media(address):
+                          direct_by_line.setdefault(name, (episode_title.strip(), address))
+                          count += 1
+                  detail_line_summary.append({
+                      "line": name, "decode_status": status, "direct_urls": count,
+                  })
+              _, aggregate_payload = api(
+                  "/api.php/web/internal/search_aggregate", {"vod_id": source_id}
+              )
+              aggregate_summary = []
+              for line in response_rows(aggregate_payload.get("data")):
+                  status = str(line.get("decode_status") or "0")
+                  key = str(line.get("site_key") or line.get("vod_play_from") or line.get("site_name") or "aggregate")
+                  count = 0
+                  for item in str(line.get("vod_play_url") or "").split("#"):
+                      if "$" not in item:
+                          continue
+                      episode_title, address = item.split("$", 1)
+                      address = address.strip()
+                      if status == "0" and is_direct_http_media(address):
+                          direct_by_line.setdefault(key, (episode_title.strip(), address))
+                          count += 1
+                  aggregate_summary.append({
+                      "line": key, "decode_status": status, "direct_urls": count,
+                  })
+              print(
+                  f"CHICAGO_MED_S12 id={source_id} "
+                  f"catalog_title={row_title(catalog_row)!r} "
+                  f"detail_title={row_title(detail)!r} "
+                  f"remarks={str(detail.get('vod_remarks') or '')!r} "
+                  f"direct_line_count={len(direct_by_line)} "
+                  f"detail_lines={detail_line_summary!r} aggregate_lines={aggregate_summary!r}"
+              )
+              probe_ok = False
+              for line_name, (episode_title, address) in direct_by_line.items():
+                  ok, message = safe_probe_media(address, detail_base + "/")
+                  if not ok:
+                      retry_ok, retry_message = safe_probe_media(address, "https://duoduozhuiju.com/")
+                      if retry_ok:
+                          ok, message = retry_ok, retry_message
+                      else:
+                          message += f"; public-entry retry failed: {retry_message}"
+                  print(
+                      f"CHICAGO_MED_S12_MEDIA id={source_id} episode={episode_title!r} "
+                      f"line={line_name!r} media={safe_media_kind(address)} ok={ok} {message}"
+                  )
+                  probe_ok = probe_ok or ok
+              print(f"CHICAGO_MED_S12 id={source_id} playable_probe={probe_ok}")
           PY

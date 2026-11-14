@@ -33,4 +33,15 @@ void main() {
       isFalse,
     );
   });
+  test('desktop mini-player starts as a normal resizable window', () {
+    expect(
+      playbackWindowStartsFullscreen(desktopMiniPlayer: true),
+      isFalse,
+    );
+    expect(
+      playbackWindowStartsFullscreen(desktopMiniPlayer: false),
+      isTrue,
+    );
+  });
+
 }

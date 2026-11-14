@@ -6,6 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	stdimage "image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,6 +31,45 @@ func posterLookupJSONResponse(request *http.Request, body string) *http.Response
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Request:    request,
 	}
+}
+
+
+func posterTestCanvas(seed uint8) *stdimage.RGBA {
+	canvas := stdimage.NewRGBA(stdimage.Rect(0, 0, 2, 2))
+	for y := 0; y < 2; y++ {
+		for x := 0; x < 2; x++ {
+			canvas.SetRGBA(x, y, color.RGBA{
+				R: seed, G: seed + 16, B: seed + 32, A: 255,
+			})
+		}
+	}
+	return canvas
+}
+
+func posterTestJPEGVariant(t *testing.T, seed uint8) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	if err := jpeg.Encode(&buffer, posterTestCanvas(seed), &jpeg.Options{Quality: 85}); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
+}
+
+func posterTestJPEG(t *testing.T) []byte {
+	return posterTestJPEGVariant(t, 42)
+}
+
+func posterTestPNGVariant(t *testing.T, seed uint8) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, posterTestCanvas(seed)); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
+}
+
+func posterTestPNG(t *testing.T) []byte {
+	return posterTestPNGVariant(t, 42)
 }
 
 func TestDoubanPosterAddressUsesMobileDetailAndOfficialSubjectID(t *testing.T) {
@@ -312,9 +355,14 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 			want: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
 		},
 		{
-			name: "Duoduo 1192 Shotgun Marriage uses Fuji Creative official artwork",
-			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
-			want: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+			name: "Duoduo 88129 緊急呼救第一季 uses TVmaze Season 1 key art",
+			drama: nativeDrama{ID: "duoduo:88129", Title: "紧急呼救 第一季", Category: "剧集", OnlineDate: "2018"},
+			want: "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
+		},
+		{
+			name: "Duoduo 1192 奉子成婚 uses the official 2025 anime key visual",
+			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
+			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 		},
 		{
 			name: "Duoduo 66452 逆愛2後會無期 uses exact-record archive artwork as fallback",
@@ -359,9 +407,14 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 			want: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
 		},
 		{
-			name: "Shotgun Marriage 2001",
-			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚"},
-			want: "https://fujicreative.co.jp/forBuyers/wp-content/uploads/2022/06/2_0227.jpg",
+			name: "9-1-1 Season 1 exact Duoduo record",
+			drama: nativeDrama{ID: "duoduo:88129", Title: "緊急呼救第一季", Category: "劇集", OnlineDate: "2018"},
+			want: "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
+		},
+		{
+			name: "奉子成婚 2025 Japanese anime",
+			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
+			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 		},
 	}
 	for _, tc := range tests {
@@ -394,12 +447,19 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{ID: "duoduo:77681", Title: "獨角獸學院：秘密揭開第二章", Category: "動漫", OnlineDate: "2026"},
 		{ID: "retired-source:77681", Title: "獨角獸學院：秘密揭開第一章", Category: "動漫", OnlineDate: "2026"},
 		{ID: "duoduo:1193", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
+		{ID: "duoduo:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2025"},
+		{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2001"},
+		{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}},
 		{ID: "duoduo:87222", Title: "單身即地獄 第五季", Category: "劇集", OnlineDate: "2026"},
 		{ID: "duoduo:87221", Title: "單身即地獄 第四季", Category: "劇集", OnlineDate: "2025"},
 		{ID: "duoduo:59903", Title: "明星大偵探 第二季", Category: "綜藝", OnlineDate: "2017"},
 		{ID: "duoduo:59902", Title: "明星大偵探 第一季", Category: "綜藝", OnlineDate: "2016"},
 		{ID: "duoduo:78012", Title: "人間中毒", Category: "電影", OnlineDate: "2014"},
 		{ID: "duoduo:78011", Title: "其他作品", Category: "電影", OnlineDate: "2014"},
+		{ID: "duoduo:88129", Title: "緊急呼救第二季", Category: "劇集", OnlineDate: "2018"},
+		{ID: "duoduo:88129", Title: "緊急呼救第一季", Category: "電影", OnlineDate: "2018"},
+		{ID: "duoduo:88129", Title: "緊急呼救第一季", Category: "劇集", OnlineDate: "2017"},
+		{ID: "duoduo:88128", Title: "緊急呼救第一季", Category: "劇集", OnlineDate: "2018"},
 		{ID: "duoduo:1192", Title: "奉子不成婚", Category: "電影", OnlineDate: "2016"},
 		{ID: "duoduo:66453", Title: "逆愛2後會無期", Category: "愛情", OnlineDate: "2014"},
 		{ID: "duoduo:66452", Title: "其他作品", Category: "愛情", OnlineDate: "2014"},
@@ -442,7 +502,7 @@ func TestNativeNormalizeRetainsAlternativePosterFields(t *testing.T) {
 }
 
 func TestNativeCoverLoadTriesCatalogueVariantBeforeMetadataRepair(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var requests []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		requests = append(requests, request.URL.Host)
@@ -514,7 +574,7 @@ func TestMergeNativeDramaKeepsOriginalAndFallbackCoversSeparate(t *testing.T) {
 }
 
 func TestNativeCoverLoadPrefersHealthyOriginalBeforeFallback(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var originalCalls, fallbackCalls int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Host {
@@ -558,7 +618,7 @@ func TestNativeCoverLoadPrefersHealthyOriginalBeforeFallback(t *testing.T) {
 }
 
 func TestNativeCoverLoadPrefersProviderPosterOverExternalPoster(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var requests []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		requests = append(requests, request.URL.Host)
@@ -609,7 +669,7 @@ func TestNativeCoverLoadPrefersProviderPosterOverExternalPoster(t *testing.T) {
 }
 
 func TestNativeCoverLoadUsesFallbackOnlyAfterOriginalFails(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var requests []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		requests = append(requests, request.URL.Host)
@@ -698,7 +758,7 @@ func TestNativeMergeCoverRepairMetadataPrefersFreshIdentifiers(t *testing.T) {
 }
 
 func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
-	imageBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
+	imageBytes := posterTestJPEG(t)
 	var seenReferer string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Host != "img9.doubanio.com" {
@@ -737,13 +797,21 @@ func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
 
 func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 	const poster = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2932687546.jpg"
-	imageBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
-	var seenReferer string
+	edge := duoduoPosterProxyURL(poster)
+	imageBytes := posterTestJPEG(t)
+	var seenReferer, seenAddress string
+	var originCalls, edgeCalls int
+	var unexpectedURLs []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
-		if request.URL.String() != poster {
-			t.Fatalf("unexpected poster request: %s", request.URL)
+		if request.URL.Host == "wsrv.nl" {
+			edgeCalls++
+			seenAddress = request.URL.String()
+			seenReferer = request.Header.Get("Referer")
+		} else if request.URL.String() == poster {
+			originCalls++
+		} else {
+			unexpectedURLs = append(unexpectedURLs, request.URL.String())
 		}
-		seenReferer = request.Header.Get("Referer")
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header: http.Header{"Content-Type": []string{"image/jpeg"}},
@@ -768,8 +836,12 @@ func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if seenReferer != "https://323433ssdfd.top/play/137937" {
-		t.Fatalf("poster Referer = %q, want the work's official play page", seenReferer)
+	if seenAddress != edge || seenReferer != "https://wsrv.nl/" || edgeCalls != 1 ||
+		originCalls != 0 || len(unexpectedURLs) != 0 {
+		t.Fatalf(
+			"edge/origin calls=%d/%d address=%q referer=%q unexpected=%v; want edge=%q",
+			edgeCalls, originCalls, seenAddress, seenReferer, unexpectedURLs, edge,
+		)
 	}
 	cached, err := os.ReadFile(path)
 	if err != nil {
@@ -779,7 +851,6 @@ func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 		t.Fatalf("native cover cache did not save a valid image: %d bytes", len(cached))
 	}
 }
-
 func TestExternalPosterAddressUsesBangumiWhenDoubanIDIsMissing(t *testing.T) {
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Host != "api.bgm.tv" {
@@ -971,8 +1042,71 @@ func TestExternalPosterAddressFallsBackToBangumiWhenDoubanIsDenied(t *testing.T)
 	}
 }
 
+func TestDuoduoPosterDecodeFailureFallsBackFromEdgeToOrigin(t *testing.T) {
+	const poster = "https://img.example.test/poster.jpg"
+	validImage := posterTestJPEG(t)
+	invalidEdgeImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
+	var edgeCalls, originCalls int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "wsrv.nl":
+			edgeCalls++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(invalidEdgeImage)),
+				ContentLength: int64(len(invalidEdgeImage)),
+				Request: request,
+			}, nil
+		case "img.example.test":
+			originCalls++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(validImage)),
+				ContentLength: int64(len(validImage)),
+				Request: request,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader("not found")),
+				Request: request,
+			}, nil
+		}
+	})}
+	downloader := &Downloader{
+		client: client,
+		cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
+	}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	path, err := cache.load(context.Background(), nativeDrama{
+		ID: "duoduo:decode-fallback",
+		Source: sourceDuoduo,
+		SourceID: "decode-fallback",
+		Title: "解碼備援測試",
+		Cover: poster,
+		CoverCandidates: []string{poster},
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edgeCalls != 1 || originCalls != 1 {
+		t.Fatalf("poster fallback requests: edge=%d origin=%d, want 1 each", edgeCalls, originCalls)
+	}
+	cached, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(cached, validImage) {
+		t.Fatal("corrupt edge image was cached instead of the decoded origin fallback")
+	}
+}
+
 func TestNativeCoverExternalDownloadFailureFallsBackToBangumi(t *testing.T) {
-	image := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0, 1}
+	image := posterTestJPEG(t)
 	var bangumiCalls int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Host {
@@ -1031,7 +1165,7 @@ func TestNativeCoverExternalDownloadFailureFallsBackToBangumi(t *testing.T) {
 }
 
 func TestNativeCoverExternalDownloadFailureRetriesVerifiedOfficialProgrammePoster(t *testing.T) {
-	image := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0, 1}
+	image := posterTestJPEG(t)
 	cases := []struct {
 		name      string
 		drama     nativeDrama
@@ -1157,6 +1291,35 @@ func TestAniListPosterAddressUsesExactAnimeTitleAndYear(t *testing.T) {
 	if address != expected { t.Fatalf("AniList poster = %q, want %q", address, expected) }
 }
 
+func TestAniListPosterAddressDoesNotTreatAniListIDAsTVMazeShowID(t *testing.T) {
+	const expected = "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx12345-season.jpg"
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPost || request.URL.Host != "graphql.anilist.co" {
+			t.Fatalf("AniList season lookup used a non-AniList endpoint: %s", request.URL.String())
+		}
+		var payload struct {
+			Query string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		body := `{"data":{"Page":{"media":[{"id":12345,"title":{"native":"葬送のフリーレン","romaji":"Sousou no Frieren","english":"Frieren: Beyond Journey's End"},"synonyms":["葬送的芙莉蓮 第二季"],"startDate":{"year":2023},"coverImage":{"extraLarge":"` + expected + `"}}]}}}`
+		return posterLookupJSONResponse(request, body), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.aniListPosterAddress(
+		context.Background(),
+		nativeDrama{Title: "葬送的芙莉蓮 第二季", Category: "動漫", OnlineDate: "2023"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != expected {
+		t.Fatalf("AniList season poster = %q, want %q", address, expected)
+	}
+}
+
 func TestTVMazePosterAddressUsesExactTVTitleAndYear(t *testing.T) {
 	const expected = "https://static.tvmaze.com/uploads/images/original_untouched/1/3456.jpg"
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
@@ -1168,6 +1331,53 @@ func TestTVMazePosterAddressUsesExactTVTitleAndYear(t *testing.T) {
 	address, err := downloader.tvMazePosterAddress(context.Background(), nativeDrama{Title: "怪奇物語", Category: "劇集", OnlineDate: "2016"})
 	if err != nil { t.Fatal(err) }
 	if address != expected { t.Fatalf("TVmaze poster = %q, want %q", address, expected) }
+}
+
+func TestTVMazePosterAddressResolvesSeasonSpecificChinesePoster(t *testing.T) {
+	const expected = "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg"
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodGet || request.URL.Host != "api.tvmaze.com" {
+			t.Fatalf("unexpected TVmaze request: %s", request.URL.String())
+		}
+		switch request.URL.Path {
+		case "/search/shows":
+			if request.URL.Query().Get("q") != "9-1-1" {
+				return posterLookupJSONResponse(request, "[]"), nil
+			}
+			body := "[{\"score\":1,\"show\":{\"id\":28152,\"name\":\"9-1-1\",\"premiered\":\"2018-01-03\",\"image\":{\"original\":\"https://static.tvmaze.com/uploads/images/medium_portrait/645/1614039.jpg\"}}}," +
+				"{\"score\":0.9,\"show\":{\"id\":42164,\"name\":\"9-1-1: Lone Star\",\"premiered\":\"2020-01-19\",\"image\":{\"original\":\"https://static.tvmaze.com/uploads/images/medium_portrait/1/wrong.jpg\"}}}]"
+			return posterLookupJSONResponse(request, body), nil
+		case "/shows/28152/seasons":
+			body := "[{\"id\":1001,\"number\":1,\"name\":\"Season 1\",\"image\":{\"original\":\"" + expected + "\"}}]"
+			return posterLookupJSONResponse(request, body), nil
+		default:
+			t.Fatalf("unexpected TVmaze path: %s", request.URL.Path)
+			return nil, errors.New("unexpected TVmaze path")
+		}
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	drama := nativeDrama{Title: "緊急呼救 第一季", OnlineDate: "2018"}
+	if !nativePosterIsTVSeries(drama) {
+		t.Fatal("an explicit season title should be recognized as a TV series without category metadata")
+	}
+	if !nativePosterTitleMatches(drama.Title, "9-1-1") {
+		t.Fatal("the exact 9-1-1 Chinese title alias was not recognized")
+	}
+	if _, seasonNumber, seasonUnit, hasSeason := duoduoSeriesTitle(drama.Title); !hasSeason ||
+		seasonNumber != 1 || seasonUnit != "季" {
+		t.Fatalf("Duoduo season title was not parsed: number=%d unit=%q matched=%v", seasonNumber, seasonUnit, hasSeason)
+	}
+	seasonAddress, seasonErr := downloader.tvMazeSeasonPosterAddress(context.Background(), "28152", 1)
+	if seasonErr != nil || seasonAddress != expected {
+		t.Fatalf("direct TVmaze Season 1 lookup = %q, err=%v", seasonAddress, seasonErr)
+	}
+	address, err := downloader.tvMazePosterAddress(context.Background(), drama)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != expected {
+		t.Fatalf("TVmaze season poster = %q, want %q", address, expected)
+	}
 }
 
 func TestExternalPosterAddressUsesDoubanSuggestionAfterBangumiMiss(t *testing.T) {
@@ -1185,9 +1395,59 @@ func TestExternalPosterAddressUsesDoubanSuggestionAfterBangumiMiss(t *testing.T)
 	if address != expected { t.Fatalf("external fallback poster = %q, want %q", address, expected) }
 }
 
+func TestLoadAlternativeAddressHTTP404EvictsExpiredStaleBytes(t *testing.T) {
+	const address = "https://img.example.test/stale-poster.jpg"
+	const referer = "https://heitaodj.com/"
+	image := posterTestJPEG(t)
+	downloader := &Downloader{
+		client: &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(image)), ContentLength: int64(len(image)), Request: request,
+			}, nil
+		})},
+		cfg: defaultConfig(),
+	}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	drama := nativeDrama{ID: "heitao:404", Source: sourceHeitao, SourceID: "404"}
+	path, err := cache.loadAlternativeAddress(context.Background(), drama, address, referer, "provider", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache.mu.Lock()
+	var cacheKey string
+	for key, entry := range cache.entries {
+		cacheKey = key
+		entry.updatedAt = time.Now().Add(-nativeCoverTTL - time.Second)
+		cache.entries[key] = entry
+	}
+	cache.mu.Unlock()
+	if cacheKey == "" {
+		t.Fatal("initial poster was not recorded in the cache")
+	}
+	downloader.client = &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusNotFound, Header: make(http.Header),
+			Body: io.NopCloser(strings.NewReader("not found")), Request: request,
+		}, nil
+	})}
+	if _, err := cache.loadAlternativeAddress(context.Background(), drama, address, referer, "provider", false); err == nil {
+		t.Fatal("HTTP 404 unexpectedly reused expired stale artwork")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("HTTP 404 left stale poster bytes on disk: %v", err)
+	}
+	cache.mu.Lock()
+	_, retained := cache.entries[cacheKey]
+	cache.mu.Unlock()
+	if retained {
+		t.Fatal("HTTP 404 left the stale poster cache entry")
+	}
+}
+
 func TestLoadAlternativeAddressForcedRetryReDownloadsFreshCache(t *testing.T) {
-	firstImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 1}
-	secondImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 2}
+	firstImage := posterTestJPEGVariant(t, 1)
+	secondImage := posterTestJPEGVariant(t, 2)
 	var calls int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		calls++
@@ -1286,7 +1546,7 @@ func TestDuoduoYongshengOfficialArtworkRejectsWrongSourceTypeAndYear(t *testing.
 
 func TestDuoduoYongshengOfficialArtworkOverridesAntiHotlinkCache(t *testing.T) {
 	const officialHost = "i0.hdslb.com"
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var officialRequests, originalRequests int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Host {
@@ -1304,7 +1564,7 @@ func TestDuoduoYongshengOfficialArtworkOverridesAntiHotlinkCache(t *testing.T) {
 			}, nil
 		case "original.example.test":
 			originalRequests++
-			placeholder := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 1, 1, 1, 1}
+			placeholder := posterTestPNGVariant(t, 2)
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header: http.Header{"Content-Type": []string{"image/png"}},

@@ -203,13 +203,13 @@ func (d *Downloader) fetchAPI(ctx context.Context, apiPath string, params any, o
 		}
 		return json.Unmarshal(payload, out)
 	}
-	return errors.New("黄果访客登录已失效，请稍后重试")
+	return errors.New("黃果訪客登入已失效，請稍後重試")
 }
 
 type legacyAPIError struct{ code, message string }
 
 func (err *legacyAPIError) Error() string {
-	return fmt.Sprintf("黄果 API 错误 %s: %s", err.code, err.message)
+	return fmt.Sprintf("黃果 API 錯誤 %s：%s", err.code, err.message)
 }
 
 func (d *Downloader) legacyRequest(ctx context.Context, method, apiPath string, params any, access legacyAccess) ([]byte, error) {
@@ -282,7 +282,7 @@ func (d *Downloader) legacyRequest(ctx context.Context, method, apiPath string, 
 			continue
 		}
 		if len(body) > providerMaxBodyBytes {
-			return nil, errors.New("API 响应过大")
+			return nil, errors.New("API 回應資料過大")
 		}
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			lastErr = d.catalogResponseError(req, resp, body)
@@ -301,7 +301,7 @@ func (d *Downloader) legacyRequest(ctx context.Context, method, apiPath string, 
 			continue
 		}
 		if code := strings.Trim(string(env.Code), `"`); code != "" && code != "null" && code != "200" && code != "0" {
-			message := firstNonEmpty(env.Msg, "请检查访问配置或刷新登录凭证")
+			message := firstNonEmpty(env.Msg, "請檢查存取設定或重新整理登入憑證")
 			if access.Token != "" {
 				message = strings.ReplaceAll(message, access.Token, "[已隐藏]")
 			}
@@ -322,7 +322,7 @@ func (d *Downloader) legacyRequest(ctx context.Context, method, apiPath string, 
 			payload = plain
 		}
 		if len(payload) == 0 || string(payload) == "null" {
-			return nil, errors.New("黄果 API 未返回数据，请检查登录凭证或接口是否变更")
+			return nil, errors.New("黃果 API 未提供資料，請檢查登入憑證或介面是否已變更")
 		}
 		return payload, nil
 	}

@@ -121,7 +121,7 @@ void main() {
         repository.starts,
         store.sources.map((source) => '${source.id}:update').toList(),
       );
-      expect(updater.error('hongguo'), contains('合成站源啟動失敗'));
+      expect(updater.error('hongguo'), contains('合成片源啟動失敗'));
       for (final source in store.sources.where(
         (source) => source.id != 'hongguo',
       )) {

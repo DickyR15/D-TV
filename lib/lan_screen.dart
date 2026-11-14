@@ -9,6 +9,7 @@ import 'lan_controller.dart';
 import 'local_store.dart';
 import 'widgets.dart';
 
+String _lanErrorMessage(Object error) => lanPublicErrorMessage(error);
 IconData lanDeviceIcon(String kind) => switch (kind) {
   'tv' => Icons.tv_rounded,
   'computer' => Icons.computer_rounded,
@@ -151,7 +152,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
     try {
       await action();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _lanErrorMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -177,7 +178,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
     try {
       await link.cancelSync();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _lanErrorMessage(error));
     } finally {
       if (mounted) setState(() => _cancelling = false);
     }
@@ -417,7 +418,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                   enabled: remote != null && controlsEnabled,
                   onTap: remote != null && controlsEnabled ? _manual : null,
                 ),
-                if (_error ?? link.error case final message?)
+                if ((_error ?? (link.error == null ? null : _lanErrorMessage(link.error!))) case final message?)
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
@@ -435,27 +436,27 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                 if (link.local != null)
                   ExpansionTile(
                     leading: const Icon(Icons.info_outline_rounded),
-                    title: const Text('本機地址與連線幫助'),
+                    title: const Text('本機位址與連線說明'),
                     onExpansionChanged: (expanded) {
                       if (expanded) _revealConnectionHelpBottom();
                     },
                     childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     children: [
                       const Text(
-                        '兩臺裝置都需開啟「區域網路自動同步」並保持應用在前景。發現失敗時，可在另一端輸入下列地址；Windows 需允許本應用透過專用網路防火牆。',
+                        '兩臺裝置都需開啟「區域網路自動同步」並保持應用在前景。發現失敗時，可在另一端輸入下列位址；Windows 需允許本應用透過專用網路防火牆。',
                       ),
                       for (final address in link.local!.addresses)
                         ListTile(
                           title: SelectableText(address),
                           trailing: IconButton(
-                            tooltip: '複製地址',
+                            tooltip: '複製位址',
                             icon: const Icon(Icons.copy_rounded),
                             onPressed: () =>
                                 Clipboard.setData(ClipboardData(text: address)),
                           ),
                         ),
                       if (link.local!.addresses.isEmpty)
-                        const Text('尚未取得區域網地址，請檢查 Wi-Fi 或網線連線。'),
+                        const Text('尚未取得區域網路位址，請檢查 Wi-Fi 或網路線是否連線。'),
                       SizedBox(key: _connectionHelpBottomKey, height: 1),
                     ],
                   ),
@@ -497,12 +498,20 @@ class _LanDevicesState extends State<_LanDevices> {
   }
 
   Future<void> _start() async {
+    // Opening the device sheet must not throw merely because LAN sync is off.
+    // Keep the actionable setting hint, but skip listener/discovery startup.
+    if (!link.enabled || !link.autoSync) {
+      if (mounted) {
+        setState(() => _error = '請先開啟「區域網路自動同步」');
+      }
+      return;
+    }
     try {
       await link.ensureEnabled();
       if (widget.change) await link.rescan();
       _changed();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _lanErrorMessage(error));
     }
   }
 
@@ -533,6 +542,13 @@ class _LanDevicesState extends State<_LanDevices> {
 
   Future<void> _connect(LanPeer? peer) async {
     if (_busy) return;
+    if (!link.enabled || !link.autoSync) {
+      setState(() {
+        _error = '請先在設定中開啟「區域網路自動同步」，再連線其他裝置。';
+        _selected = false;
+      });
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -553,7 +569,7 @@ class _LanDevicesState extends State<_LanDevices> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _error = error.toString();
+          _error = _lanErrorMessage(error);
           _selected = false;
           _target = null;
         });
@@ -572,7 +588,7 @@ class _LanDevicesState extends State<_LanDevices> {
     try {
       await link.forget(peer);
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _lanErrorMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -609,7 +625,7 @@ class _LanDevicesState extends State<_LanDevices> {
                 ),
                 IconButton(
                   tooltip: '重新搜尋',
-                  onPressed: _busy ? null : link.rescan,
+                  onPressed: _busy || !link.enabled || !link.autoSync ? null : link.rescan,
                   icon: const Icon(Icons.refresh_rounded),
                 ),
                 IconButton(
@@ -676,7 +692,7 @@ class _LanDevicesState extends State<_LanDevices> {
                           : () => _connect(peer),
                     ),
                   ),
-                if (_error ?? link.error case final message?)
+                if ((_error ?? (link.error == null ? null : _lanErrorMessage(link.error!))) case final message?)
                   Padding(
                     padding: const EdgeInsets.all(12),
                     child: Text(
@@ -694,7 +710,7 @@ class _LanDevicesState extends State<_LanDevices> {
                 TextButton.icon(
                   onPressed: () => setState(() => _manual = !_manual),
                   icon: const Icon(Icons.keyboard_rounded),
-                  label: const Text('輸入地址連線'),
+                  label: const Text('輸入位址連線'),
                 ),
                 if (_manual) ...[
                   TextField(
@@ -702,7 +718,7 @@ class _LanDevicesState extends State<_LanDevices> {
                     autocorrect: false,
                     enableSuggestions: false,
                     decoration: const InputDecoration(
-                      labelText: '對方顯示的本機地址',
+                      labelText: '對方顯示的本機位址',
                       hintText: '192.168.1.8:53120',
                     ),
                     onSubmitted: (_) => _connect(null),
@@ -757,7 +773,7 @@ class _LanManualState extends State<_LanManual> {
     try {
       await link.cancelSync();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _lanErrorMessage(error));
     } finally {
       if (mounted) setState(() => _cancelling = false);
     }
@@ -795,7 +811,7 @@ class _LanManualState extends State<_LanManual> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _error = error.toString();
+          _error = _lanErrorMessage(error);
           _preview = null;
         });
       }
@@ -1076,8 +1092,8 @@ class LanPushButton extends StatelessWidget {
       animation: link,
       builder: (context, _) => IconButton(
         tooltip: link.connection == null
-            ? '推送'
-            : '推送到 ${link.connection!.peer.name}',
+            ? '傳送播放'
+            : '傳送播放至 ${link.connection!.peer.name}',
         onPressed: onPressed,
         constraints: const BoxConstraints.tightFor(width: 36, height: 36),
         padding: EdgeInsets.zero,
@@ -1158,7 +1174,7 @@ class _LanPushPanelState extends State<_LanPushPanel> {
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('切換對方正在播放的內容？'),
-                  content: Text('對方正在播放“$title”，繼續後將接續本機目前集數。'),
+                  content: Text('對方正在播放「$title」，繼續後會接續本機目前的集數。'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context, false),
@@ -1166,7 +1182,7 @@ class _LanPushPanelState extends State<_LanPushPanel> {
                     ),
                     FilledButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: const Text('推送播放'),
+                      child: const Text('傳送播放內容'),
                     ),
                   ],
                 ),
@@ -1191,7 +1207,7 @@ class _LanPushPanelState extends State<_LanPushPanel> {
         children: [
           Padding(
             padding: const EdgeInsets.all(20),
-            child: Text('推送播放', style: Theme.of(context).textTheme.titleLarge),
+            child: Text('傳送播放內容', style: Theme.of(context).textTheme.titleLarge),
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -1244,7 +1260,7 @@ class _LanPushPanelState extends State<_LanPushPanel> {
                 if (!_done) await widget.controller.cancelPush();
                 if (context.mounted) Navigator.pop(context);
               },
-              child: Text(_done ? '完成' : '取消推送'),
+              child: Text(_done ? '完成' : '取消傳送'),
             ),
           ),
         ],

@@ -19,6 +19,7 @@ import 'catalog_updates.dart';
 import 'download_collections.dart';
 import 'resource_settings.dart';
 import 'diary_service.dart';
+import 'ui_localization.dart';
 
 typedef _NativeRequest = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _DartRequest = Pointer<Utf8> Function(Pointer<Utf8>);
@@ -68,8 +69,12 @@ String _nativeRequest(String body) {
   }
 }
 
+bool supportsNativeSeriesSeasons(String source) =>
+    source == 'hongguo' || source == 'duoduo';
+
 class AppFailure implements Exception {
-  AppFailure(this.message, {this.code = ''});
+  AppFailure(String message, {this.code = ''})
+    : message = uiTraditional(message);
   final String message;
   final String code;
   @override
@@ -207,6 +212,7 @@ abstract class AppRepository {
   Future<String> cover(Drama drama, {bool force = false});
   bool coverCached(Drama drama) => false;
   Future<DramaDetail> detail(Drama drama);
+  Future<List<DramaSeason>> seasons(Drama drama) async => const [];
   Future<PlaybackPlan> resolve(Drama drama, Episode episode, {int quality = 0});
   Future<PlaybackPlan> fallback(PlaybackPlan current);
   Future<void> cancelPlayback();
@@ -596,6 +602,7 @@ class NativeRepository extends AppRepository {
         'cover',
         'prepareCover',
         'detail',
+        'seasons',
         'metadata',
         'resolve',
         'preload',
@@ -774,13 +781,15 @@ class NativeRepository extends AppRepository {
     }),
   );
 
+  String _coverCacheKey(Drama drama) =>
+      '${drama.stableId}\u0000${drama.cover}\u0000${drama.coverCandidates.join('\u0001')}';
+
   @override
-  bool coverCached(Drama drama) =>
-      _coverPaths.containsKey('${drama.stableId}\u0000${drama.cover}');
+  bool coverCached(Drama drama) => _coverPaths.containsKey(_coverCacheKey(drama));
 
   @override
   Future<String> cover(Drama drama, {bool force = false}) async {
-    final key = '${drama.stableId}\u0000${drama.cover}';
+    final key = _coverCacheKey(drama);
     final known = force ? null : _coverPaths[key];
     if (known != null) {
       _authorize(drama.source);
@@ -813,6 +822,25 @@ class NativeRepository extends AppRepository {
     _coverPaths[key] = path;
     if (_coverPaths.length > 2000) _coverPaths.remove(_coverPaths.keys.first);
     return path;
+  }
+
+  @override
+  Future<List<DramaSeason>> seasons(Drama drama) async {
+    _authorize(drama.source);
+    if (!supportsNativeSeriesSeasons(drama.source)) return const [];
+    final epoch = access?.profileEpoch;
+    final result = await _read('seasons-${drama.id}', {
+      'action': 'seasons',
+      'drama': drama.toJson(),
+    });
+    _authorize(drama.source);
+    if (epoch != access?.profileEpoch) {
+      throw AppFailure('使用者已切換，請重新操作');
+    }
+    return [
+      for (final row in result['items'] as List? ?? const [])
+        DramaSeason.fromJson(Map<String, dynamic>.from(row as Map)),
+    ];
   }
 
   @override

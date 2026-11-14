@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -40,6 +41,51 @@ func TestParseHeitaoCardsKeepsPosterAndEpisodeBadge(t *testing.T) {
 	}
 	if items[1].ID != "heitao:124" || items[1].Badge != "完整版" {
 		t.Fatalf("second Heitao card badge mismatch: %+v", items[1])
+	}
+}
+
+func TestParseHeitaoCardsRecognizesLazyArtworkAttributes(t *testing.T) {
+	for _, attribute := range []string{
+		"data-lazy-src", "data-original-src", "data-url", "data-echo",
+		"data-lazyload", "data-lazy", "data-ks-lazyload", "data-image", "data-poster",
+		"data-srcset", "srcset",
+	} {
+		t.Run(attribute, func(t *testing.T) {
+			source := "<!doctype html><html><body>" +
+				"<a class=\"thumb\" href=\"/index.php/vod/detail/id/321.html\" title=\"延遲海報\">" +
+				"<img " + attribute + "=\"/poster/lazy.webp\" alt=\"延遲海報\">" +
+				"</a></body></html>"
+			document := heitaoTestDocument(t, source)
+			items := parseHeitaoCards(document, "https://heitaodj.com/index.php/vod/show.html")
+			if len(items) != 1 || items[0].Cover != "https://heitaodj.com/poster/lazy.webp" {
+				t.Fatalf("lazy attribute %q was not parsed: %+v", attribute, items)
+			}
+		})
+	}
+}
+
+func TestParseHeitaoCardsPreservesAllLazyPosterCandidates(t *testing.T) {
+	document := heitaoTestDocument(t, `<!doctype html><html><body>
+<a class="thumb" href="/index.php/vod/detail/id/322.html" title="多圖海報">
+  <img src="/poster/main.jpg" data-original="/poster/original.jpg"
+       data-srcset="/poster/retina.webp 2x, /poster/large.webp 3x">
+</a></body></html>`)
+	items := parseHeitaoCards(document, "https://heitaodj.com/index.php/vod/show.html")
+	if len(items) != 1 || items[0].Cover != "https://heitaodj.com/poster/main.jpg" {
+		t.Fatalf("primary Heitao artwork mismatch: %+v", items)
+	}
+	want := []string{
+		"https://heitaodj.com/poster/original.jpg",
+		"https://heitaodj.com/poster/retina.webp",
+		"https://heitaodj.com/poster/large.webp",
+	}
+	if len(items[0].CoverCandidates) != len(want) {
+		t.Fatalf("lazy artwork candidates = %#v, want %#v", items[0].CoverCandidates, want)
+	}
+	for index, address := range want {
+		if items[0].CoverCandidates[index] != address {
+			t.Fatalf("lazy artwork candidate %d = %q, want %q", index, items[0].CoverCandidates[index], address)
+		}
 	}
 }
 
@@ -111,5 +157,48 @@ func TestHeitaoRouteAndIdentifierValidation(t *testing.T) {
 	sid, nid, ok = heitaoPlayerID("https://heitaodj.com/index.php/vod/player/id/123/nid/12/sid/3.html")
 	if !ok || sid != 3 || nid != 12 {
 		t.Fatalf("player route parser returned %d:%d, %t", sid, nid, ok)
+	}
+}
+
+
+func TestHeitaoSynopsisFallsBackFromJSONLDToMetaAndDetailContent(t *testing.T) {
+	document := heitaoTestDocument(t, `<!doctype html><html><head>
+<meta property="og:description" content="&lt;p&gt;官方簡介&amp;amp;補充&lt;/p&gt;">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+  {"@type":"WebSite","name":"黑桃"},
+  {"@type":"TVSeries","name":"測試劇","image":"https://img.example.test/poster.jpg"}
+]}
+</script>
+</head><body><div class="module-info-content"><p>不應覆蓋 meta description</p></div></body></html>`)
+	metadata := heitaoSeriesMetadata(document)
+	if metadata.Name != "測試劇" {
+		t.Fatalf("TVSeries was not found inside @graph: %+v", metadata)
+	}
+	if got, want := heitaoSynopsis(document, metadata), "官方簡介&補充"; got != want {
+		t.Fatalf("synopsis fallback = %q, want %q", got, want)
+	}
+}
+
+func TestHeitaoSynopsisFallsBackToDetailContentAndIgnoresEmptyMarkup(t *testing.T) {
+	document := heitaoTestDocument(t, `<!doctype html><html><head></head><body>
+<div class="module-info-content"><p>第一段</p><p>第二段 &amp; 更多</p><p> </p></div>
+</body></html>`)
+	if got, want := heitaoSynopsis(document, heitaoSeriesMeta{}), "第一段 第二段 & 更多"; got != want {
+		t.Fatalf("detail synopsis = %q, want %q", got, want)
+	}
+
+	empty := heitaoTestDocument(t, `<!doctype html><html><body><div class="module-info-content"><p> </p></div></body></html>`)
+	if got := heitaoSynopsis(empty, heitaoSeriesMeta{}); got != "" {
+		t.Fatalf("empty detail markup returned visible synopsis %q", got)
+	}
+}
+
+
+func TestHeitaoPageRequestsCarryAgeConfirmationCookie(t *testing.T) {
+	ctx := heitaoPageContext(context.Background())
+	value, ok := ctx.Value(providerTextCookieKey{}).(string)
+	if !ok || value != heitaoAgeCookie {
+		t.Fatalf("Heitao page cookie = %q, want %q", value, heitaoAgeCookie)
 	}
 }

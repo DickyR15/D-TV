@@ -112,7 +112,7 @@ func (d *Downloader) fetchHongguoCategoryPage(ctx context.Context, route, catego
 	data := parseRouterData(body)
 	page := routerLoaderMap(data, "category_page", "category_$")
 	if len(page) == 0 || page["isSuccess"] == false {
-		return nil, 0, errors.New("红果分类数据不可用，可能是页面结构或访问权限变化")
+		return nil, 0, errors.New("紅果分類資料無法使用，可能是頁面結構或存取權限已變更")
 	}
 	items := anyList(page["recommendList"])
 	out := make([]Drama, 0, len(items))
@@ -248,7 +248,7 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 
 func (d *Downloader) resolveHongguoQuickAppMedia(ctx context.Context, seriesID, videoID string) (providerMedia, error) {
 	if !hongguoNumericID.MatchString(seriesID) || !hongguoNumericID.MatchString(videoID) {
-		return providerMedia{}, errors.New("红果快捷网页剧集 ID 无效")
+		return providerMedia{}, errors.New("紅果快捷網頁劇集 ID 無效")
 	}
 	ctx = context.WithValue(ctx, providerTextUserAgentKey{}, hongguoQuickAppUserAgent)
 	pageURL := hongguoQuickAppBaseURL + "/player/" + url.PathEscape(seriesID) + "/" + url.PathEscape(videoID)
@@ -270,16 +270,16 @@ func hongguoQuickAppMediaFromPage(body string) (providerMedia, error) {
 	end := min(len(body), index+8192)
 	match := hongguoQuickAppMainURLPattern.FindStringSubmatch(body[index:end])
 	if len(match) < 2 {
-		return providerMedia{}, errors.New("红果快捷网页未提供公开播放地址")
+		return providerMedia{}, errors.New("紅果快捷網頁未提供公開播放網址")
 	}
 	var address string
 	if err := json.Unmarshal([]byte(match[1]), &address); err != nil {
-		return providerMedia{}, errors.New("红果快捷网页播放地址格式异常")
+		return providerMedia{}, errors.New("紅果快捷網頁播放網址格式異常")
 	}
 	address = strings.TrimSpace(address)
 	parsed, err := url.Parse(address)
 	if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil {
-		return providerMedia{}, errors.New("红果快捷网页未返回有效公开播放地址")
+		return providerMedia{}, errors.New("紅果快捷網頁未提供有效的公開播放網址")
 	}
 	return providerMedia{URL: address, Referer: hongguoQuickAppBaseURL + "/"}, nil
 }
@@ -297,7 +297,7 @@ func (d *Downloader) resolveHongguoWebMedia(ctx context.Context, seriesID, video
 	info, _ := page["video_player_info"].(map[string]any)
 	addresses := hongguoMediaAddresses(info)
 	if len(addresses) == 0 {
-		return providerMedia{}, fmt.Errorf("红果该集未提供公开播放地址，可能需要登录或 App 授权；不会将试看集冒充该集下载")
+		return providerMedia{}, fmt.Errorf("紅果此集未提供公開播放網址，可能需要登入或 App 授權；不會將試看集當成該集下載")
 	}
 	duration, _ := strconv.ParseFloat(mapString(info, "duration"), 64)
 	media := providerMedia{URL: addresses[0], Referer: d.providerBaseURL(sourceHongguo) + "/", Duration: time.Duration(duration * float64(time.Second))}

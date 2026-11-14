@@ -35,6 +35,7 @@ class PlayerControls extends StatefulWidget {
     this.onSeek,
     this.onPush,
     this.onPictureInPicture,
+    this.onSettings,
     this.pictureInPictureTooltip = '畫中畫',
     this.enhancement,
     this.playbackGeneration = 0,
@@ -64,6 +65,7 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function(Duration)? onSeek;
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
+  final Future<void> Function()? onSettings;
   final String pictureInPictureTooltip;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
@@ -358,6 +360,22 @@ class _PlayerControlsState extends State<PlayerControls> {
                   widget.onTogglePlayback();
                   _show();
                 },
+                onLongPressStart: widget.enabled
+                    ? (details) {
+                        final direction =
+                            details.localPosition.dx < constraints.maxWidth / 2
+                            ? -1
+                            : 1;
+                        widget.interactions.beginSeekHold(direction);
+                        _show();
+                      }
+                    : null,
+                onLongPressEnd: widget.enabled
+                    ? (_) => widget.interactions.endSeekHold()
+                    : null,
+                onLongPressCancel: widget.enabled
+                    ? () => widget.interactions.endSeekHold(silent: true)
+                    : null,
               ),
             ),
             if (state.buffering && widget.enabled)
@@ -445,6 +463,12 @@ class _PlayerControlsState extends State<PlayerControls> {
               )
             else
               const Spacer(),
+            if (widget.onSettings != null)
+              _overlayIconButton(
+                tooltip: '播放設定',
+                onPressed: () => unawaited(widget.onSettings!.call()),
+                icon: Icons.tune_rounded,
+              ),
             if (compact)
               _overlayIconButton(
                 tooltip: '旋轉與全屏',
@@ -785,8 +809,8 @@ class _PlayerControlsState extends State<PlayerControls> {
       builder: (context, _) => _toolButton(
         key: key,
         tooltip: link.connection == null
-            ? '推送'
-            : '推送到 ${link.connection!.peer.name}',
+            ? '傳送播放'
+            : '傳送播放至 ${link.connection!.peer.name}',
         onPressed: widget.enabled ? () => _panel(widget.onPush!) : null,
         child: link.pushing
             ? const SizedBox(

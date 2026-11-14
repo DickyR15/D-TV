@@ -11,7 +11,11 @@ type Drama struct {
 	ID                string             `json:"id"`
 	Source            string             `json:"source,omitempty"`
 	SourceID          string             `json:"sourceId,omitempty"`
+	SeriesGroupID     string             `json:"seriesGroupId,omitempty"`
+	SeriesSeasonNumber int               `json:"seriesSeasonNumber,omitempty"`
+	SeriesSeasonUnit  string             `json:"seriesSeasonUnit,omitempty"`
 	DoubanID          string             `json:"doubanId,omitempty"`
+	IMDbID            string             `json:"imdbId,omitempty"`
 	Title             string             `json:"title"`
 	Name              string             `json:"name"`
 	Desc              string             `json:"desc"`
@@ -19,6 +23,7 @@ type Drama struct {
 	Cover             any                `json:"cover"`
 	CoverURL          any                `json:"coverUrl"`
 	CoverURLSnake     any                `json:"cover_url"`
+	CoverCandidates   []string           `json:"coverCandidates,omitempty"`
 	Image             any                `json:"image"`
 	ImageURL          any                `json:"imageUrl"`
 	ImageURLSnake     any                `json:"image_url"`

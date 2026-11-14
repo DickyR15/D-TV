@@ -120,7 +120,7 @@ func (d *Downloader) fetchHuangdouChapters(ctx context.Context, sourceID string)
 		count = len(episodes)
 	}
 	if count <= 0 || count > 10000 {
-		return title, nil, fmt.Errorf("黄豆返回了无效集数: %d", count)
+		return title, nil, fmt.Errorf("黃豆回傳無效的集數：%d", count)
 	}
 	chapters := make([]Chapter, 0, count)
 	if len(episodes) > 0 {
@@ -149,24 +149,24 @@ func (d *Downloader) resolveHuangdouPlayback(ctx context.Context, client *huangd
 	data := huangdouDataMap(decoded)
 	media := firstNonEmpty(mapString(data, "m3u8"), mapString(data, "url"), mapString(data, "play_url"), mapString(data, "playUrl"))
 	if huangdouPreviewOnly(data, media, client.host) {
-		return providerMedia{}, &huangdouAPIError{code: "preview", message: "黄豆仅提供试看，未取得该集正片；不会把试看内容当作完整分集"}
+		return providerMedia{}, &huangdouAPIError{code: "preview", message: "黃豆僅提供試看，未取得該集完整影片；不會將試看內容當成完整集數"}
 	}
 	if media == "" {
 		media = fmt.Sprintf("%s/api/drama/hls/%s/%d/play.m3u8?line=free", client.host, url.PathEscape(sourceID), seq)
 		playlist, err := d.fetchProviderText(ctx, media, client.host+"/home")
 		if err != nil || !strings.HasPrefix(strings.TrimSpace(playlist), "#EXTM3U") {
-			return providerMedia{}, errors.New("黄豆未提供有效的播放地址，备用播放列表也不可用")
+			return providerMedia{}, errors.New("黃豆未提供有效的播放網址，備用播放清單也無法使用")
 		}
 	}
 	media = resolveProviderURL(client.host+"/", media)
 	if !isProviderHTTPMediaURL(media) {
-		return providerMedia{}, errors.New("黄豆播放地址不是 HTTP/HTTPS URL")
+		return providerMedia{}, errors.New("黃豆播放網址不是 HTTP/HTTPS URL")
 	}
 	result := providerMedia{URL: media, Referer: client.host + "/home"}
 	if rawKey := mapString(data, "hls_key"); rawKey != "" {
 		key, err := hex.DecodeString(rawKey)
 		if err != nil || len(key) != aes.BlockSize {
-			return providerMedia{}, errors.New("黄豆返回了无效的 HLS 密钥")
+			return providerMedia{}, errors.New("黃豆回傳的 HLS 金鑰無效")
 		}
 		result.HLSKey = key
 	}
@@ -191,7 +191,7 @@ func (c *huangdouAPIClient) call(ctx context.Context, path string, data map[stri
 		if err == nil || len(hostsTried) < 2 {
 			return err
 		}
-		return fmt.Errorf("黄豆站点连接失败：已尝试 %d 个域名，最后错误：%w", len(hostsTried), err)
+		return fmt.Errorf("黃豆片源連線失敗：已嘗試 %d 個網域，最後錯誤：%w", len(hostsTried), err)
 	}
 	for attempt := 0; attempt < attempts; attempt++ {
 		if err := ctx.Err(); err != nil {
@@ -253,7 +253,7 @@ type huangdouAPIError struct {
 
 func (failure *huangdouAPIError) Error() string {
 	if failure.code != "preview" && isHuangdouAccessError(failure) {
-		return failure.message + "（站点权限限制，已停止自动重试；切换代理不会解锁）"
+		return failure.message + "（片源權限限制，已停止自動重試；切換代理無法解除限制）"
 	}
 	return failure.message
 }

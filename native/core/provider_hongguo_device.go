@@ -142,11 +142,11 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.UseNumber()
 	if err := decoder.Decode(&result); err != nil {
-		return "", "", hongguoRegisterRejection{errors.New("红果设备注册返回格式异常")}
+		return "", "", hongguoRegisterRejection{errors.New("紅果裝置註冊回傳格式異常")}
 	}
 	deviceID, installID := mapString(result, "device_id_str", "device_id"), mapString(result, "install_id_str", "install_id")
 	if !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0" {
-		return "", "", hongguoRegisterRejection{errors.New("红果设备注册未返回设备号")}
+		return "", "", hongguoRegisterRejection{errors.New("紅果裝置註冊未提供裝置編號")}
 	}
 	return deviceID, installID, nil
 }

@@ -60,23 +60,23 @@ func huangjuDramaFromMap(row map[string]any, site, sourceID string) (Drama, erro
 	slug := mapString(row, "slug")
 	title, _ := row["title"].(string)
 	if !validHuangjuID(id) || strings.TrimSpace(title) == "" {
-		return Drama{}, errors.New("剧果返回的剧集信息不完整")
+		return Drama{}, errors.New("劇果回傳的劇集資訊不完整")
 	}
 	if sourceID == "" {
 		if !validHuangjuID(slug) {
-			return Drama{}, errors.New("剧果返回的剧集地址无效")
+			return Drama{}, errors.New("劇果回傳的劇集網址無效")
 		}
 		sourceID = slug + "-" + id
 	}
 	if !validHuangjuID(sourceID) || !strings.HasSuffix(sourceID, "-"+id) {
-		return Drama{}, errors.New("剧果详情与请求剧集不符")
+		return Drama{}, errors.New("劇果詳情與要求的劇集不符")
 	}
 	episodes := 0
 	if row["totalEpisodes"] != nil {
 		var valid bool
 		episodes, valid = huangjuInteger(row["totalEpisodes"], 100000)
 		if !valid {
-			return Drama{}, errors.New("剧果集数格式无效")
+			return Drama{}, errors.New("劇果集數格式無效")
 		}
 	}
 	categories := huangjuCategoryNames(row)
@@ -121,7 +121,7 @@ func (d *Downloader) fetchHuangjuCategories(ctx context.Context) ([]nativeCatego
 	}
 	rows, valid := huangjuPayload(response.value).([]any)
 	if !valid || len(rows) > 300 {
-		return nil, errors.New("剧果分类数据格式无效")
+		return nil, errors.New("劇果分類資料格式無效")
 	}
 	categories := []nativeCategory{{ID: huangjuNewestCategory, Name: "最新"}}
 	seen := map[string]bool{huangjuNewestCategory: true}
@@ -132,7 +132,7 @@ func (d *Downloader) fetchHuangjuCategories(ctx context.Context) ([]nativeCatego
 			continue
 		}
 		if !validNativeCategory(sourceHuangju, id) || id == "" || name == "" || len([]rune(name)) > 48 || seen[id] {
-			return nil, errors.New("剧果分类数据包含无效或重复条目")
+			return nil, errors.New("劇果分類資料包含無效或重複項目")
 		}
 		seen[id] = true
 		categories = append(categories, nativeCategory{ID: id, Name: name})
@@ -142,7 +142,7 @@ func (d *Downloader) fetchHuangjuCategories(ctx context.Context) ([]nativeCatego
 
 func (d *Downloader) fetchHuangjuCatalogPage(ctx context.Context, page int, category, query string) ([]Drama, bool, error) {
 	if page < 1 || page > 1000000 || len(query) > 1024 || !validNativeCategory(sourceHuangju, category) {
-		return nil, false, errors.New("剧果目录查询参数无效")
+		return nil, false, errors.New("劇果目錄查詢參數無效")
 	}
 	values := url.Values{"page": {strconv.Itoa(page)}}
 	switch {
@@ -162,34 +162,34 @@ func (d *Downloader) fetchHuangjuCatalogPage(ctx context.Context, page int, cate
 	row, _ := huangjuPayload(response.value).(map[string]any)
 	rows, valid := row["items"].([]any)
 	if !valid || len(rows) > 500 {
-		return nil, false, errors.New("剧果目录数据格式无效")
+		return nil, false, errors.New("劇果目錄資料格式無效")
 	}
 	pageSize := 20
 	if row["pageSize"] != nil {
 		pageSize, valid = huangjuInteger(row["pageSize"], 500)
 		if !valid || pageSize < 1 {
-			return nil, false, errors.New("剧果分页数据格式无效")
+			return nil, false, errors.New("劇果分頁資料格式無效")
 		}
 	}
 	if row["page"] != nil {
 		actualPage, valid := huangjuInteger(row["page"], 1000000)
 		if !valid || actualPage != page {
-			return nil, false, errors.New("剧果返回的页码与请求不符")
+			return nil, false, errors.New("劇果回傳的頁碼與要求不符")
 		}
 	}
 	if len(rows) > pageSize {
-		return nil, false, errors.New("剧果分页数据格式无效")
+		return nil, false, errors.New("劇果分頁資料格式無效")
 	}
 	hasMore := len(rows) >= pageSize
 	if row["total"] != nil {
 		total, valid := huangjuInteger(row["total"], 100000000)
 		if !valid || total < len(rows) {
-			return nil, false, errors.New("剧果分页总数无效")
+			return nil, false, errors.New("劇果分頁總數無效")
 		}
 		hasMore = page < (total+pageSize-1)/pageSize
 	}
 	if hasMore && len(rows) == 0 {
-		return nil, false, errors.New("剧果未返回应有的目录页，请重试")
+		return nil, false, errors.New("劇果未提供預期的目錄頁，請重試")
 	}
 	items := make([]Drama, 0, len(rows))
 	seen := map[string]bool{}
@@ -200,7 +200,7 @@ func (d *Downloader) fetchHuangjuCatalogPage(ctx context.Context, page int, cate
 			return nil, false, err
 		}
 		if seen[drama.ID] {
-			return nil, false, errors.New("剧果目录包含重复剧集，请重试")
+			return nil, false, errors.New("劇果目錄包含重複集數，請重試")
 		}
 		seen[drama.ID] = true
 		items = append(items, drama)
@@ -210,7 +210,7 @@ func (d *Downloader) fetchHuangjuCatalogPage(ctx context.Context, page int, cate
 
 func (d *Downloader) fetchHuangjuDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
 	if !validHuangjuID(sourceID) {
-		return Drama{}, nil, errors.New("剧果剧集地址无效")
+		return Drama{}, nil, errors.New("劇果集數網址無效")
 	}
 	response, err := d.huangjuClient().get(ctx, "/dramas/"+url.PathEscape(sourceID), nil, 8<<20)
 	if err != nil {
@@ -223,7 +223,7 @@ func (d *Downloader) fetchHuangjuDetail(ctx context.Context, sourceID string) (D
 	}
 	rows, valid := row["episodes"].([]any)
 	if !valid || len(rows) > 10000 {
-		return Drama{}, nil, errors.New("剧果分集目录格式无效")
+		return Drama{}, nil, errors.New("劇果分集目錄格式無效")
 	}
 	chapters := make([]Chapter, 0, len(rows))
 	seenIDs, seenNumbers := map[string]bool{}, map[int]bool{}
@@ -234,21 +234,21 @@ func (d *Downloader) fetchHuangjuDetail(ctx context.Context, sourceID string) (D
 		}
 		id := mapString(episode, "id")
 		if !validHuangjuID(id) || seenIDs[id] {
-			return Drama{}, nil, errors.New("剧果分集目录包含无效或重复分集")
+			return Drama{}, nil, errors.New("劇果分集目錄包含無效或重複集數")
 		}
 		number := index + 1
 		if episode["epNo"] != nil {
 			var valid bool
 			number, valid = huangjuInteger(episode["epNo"], 100000)
 			if !valid {
-				return Drama{}, nil, errors.New("剧果分集编号无效")
+				return Drama{}, nil, errors.New("劇果集數編號無效")
 			}
 			if number == 0 {
 				number = index + 1
 			}
 		}
 		if seenNumbers[number] {
-			return Drama{}, nil, errors.New("剧果分集编号重复，请刷新目录")
+			return Drama{}, nil, errors.New("劇果集數編號重複，請重新整理目錄")
 		}
 		seenIDs[id], seenNumbers[number] = true, true
 		chapters = append(chapters, Chapter{
@@ -307,16 +307,16 @@ func huangjuMediaCredentials(headers http.Header, address, site string, expirati
 	for _, name := range []string{"CloudFront-Policy", "CloudFront-Signature", "CloudFront-Key-Pair-Id"} {
 		value := cookies[name]
 		if value == "" || len(value) > 8192 || strings.ContainsAny(value, ",;\"\\") || strings.IndexFunc(value, func(r rune) bool { return r <= 32 || r >= 127 }) >= 0 {
-			return nil, errors.New("剧果未返回完整的媒体凭证，请重试")
+			return nil, errors.New("劇果未提供完整的媒體憑證，請重試")
 		}
 		values = append(values, name+"="+value)
 	}
 	if !expires.IsZero() && !time.Now().Before(expires) {
-		return nil, errors.New("剧果媒体凭证已过期，请检查设备时间后重试")
+		return nil, errors.New("劇果媒體憑證已過期，請檢查裝置時間後重試")
 	}
 	parsed, err := url.Parse(address)
 	if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil {
-		return nil, errors.New("剧果播放地址无效")
+		return nil, errors.New("劇果播放網址無效")
 	}
 	return &providerMediaCredentials{
 		cookie: strings.Join(values, "; "), origin: providerMediaOrigin(parsed),
@@ -328,11 +328,11 @@ func (d *Downloader) resolveHuangjuMedia(ctx context.Context, task Task) (provid
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
 	prefix := providerChapterID(sourceHuangju, sourceID, "")
 	if !valid || source != sourceHuangju || !validHuangjuID(sourceID) || !strings.HasPrefix(task.Chapter.ID, prefix) {
-		return providerMedia{}, errors.New("剧果播放分集信息无效，请刷新详情")
+		return providerMedia{}, errors.New("劇果播放集數資訊無效，請重新整理詳情")
 	}
 	id := strings.TrimPrefix(task.Chapter.ID, prefix)
 	if !validHuangjuID(id) {
-		return providerMedia{}, errors.New("剧果分集地址无效")
+		return providerMedia{}, errors.New("劇果集數網址無效")
 	}
 	response, err := d.huangjuClient().get(ctx, "/play/"+url.PathEscape(id), nil, 64<<10)
 	if err != nil {
@@ -349,7 +349,7 @@ func (d *Downloader) resolveHuangjuMedia(ctx context.Context, task Task) (provid
 	if strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
 		media.Playlist, media.URL, err = d.fetchMediaPlaylist(providerMediaContext(ctx, credentials), media.URL, media.Referer)
 		if err != nil {
-			return providerMedia{}, fmt.Errorf("获取剧果播放列表失败：%w", err)
+			return providerMedia{}, fmt.Errorf("取得劇果播放清單失敗：%w", err)
 		}
 		media.Duration = m3u8Duration(media.Playlist)
 	}

@@ -29,7 +29,7 @@ var rankingBoards = []rankingBoard{
 	{ID: "hongguo-ai", Source: sourceHongguo, Name: "AI剧榜", Description: "红果 AI 剧热播榜；每日更新。", path: "hot-ai-drama", upstreamKey: "ai"},
 	{ID: "huangdou-all", Source: sourceHuangdou, Name: "总榜", Description: "黄豆短剧总榜，保留站点返回的顺序。", upstreamKey: "all"},
 	{ID: "huangdou-mogai", Source: sourceHuangdou, Name: "魔改榜", Description: "黄豆站点魔改榜。", upstreamKey: "mogai"},
-	{ID: "huangdou-search", Source: sourceHuangdou, Name: "搜索榜", Description: "黄豆站点搜索榜。", upstreamKey: "search"},
+	{ID: "huangdou-search", Source: sourceHuangdou, Name: "搜尋榜", Description: "黃豆片源搜尋榜。", upstreamKey: "search"},
 	{ID: "huangdou-favorite", Source: sourceHuangdou, Name: "收藏榜", Description: "黄豆站点收藏榜。", upstreamKey: "favorite"},
 	{ID: "huangdou-finish", Source: sourceHuangdou, Name: "完结榜", Description: "黄豆站点完结榜。", upstreamKey: "finish"},
 	{ID: "huangguo-hot", Source: sourceHuangguoAI, Name: "热播榜", Description: "黄果站点热播 TOP 20；每日更新。", path: "hot"},
@@ -37,7 +37,7 @@ var rankingBoards = []rankingBoard{
 	{ID: "huangguo-potential", Source: sourceHuangguoAI, Name: "潜力榜", Description: "黄果站点潜力 TOP 20。", path: "potential"},
 	{ID: "huangju-hot", Source: sourceHuangju, Name: "热门榜", Description: "剧果目录热门顺序，按源站返回顺序展示。"},
 	{ID: "huangju-new", Source: sourceHuangju, Name: "最新榜", Description: "剧果最新目录顺序，按源站返回顺序展示。", path: huangjuNewestCategory},
-	{ID: "yeguo-recommend", Source: sourceYeguo, Name: "目录榜", Description: "野果默认目录顺序，按源站返回顺序展示。"},
+	{ID: "yeguo-recommend", Source: sourceYeguo, Name: "目录榜", Description: "野果預設目錄順序，依片源回傳順序顯示。"},
 	{ID: "dsd-catalog", Source: sourceDSD, Name: "目录榜", Description: "帝果分类目录聚合顺序，按源站返回顺序展示。"},
 }
 
@@ -250,7 +250,7 @@ func (d *Downloader) loadRankingPage(ctx context.Context, board rankingBoard, pa
 	} else if exists && ctx.Err() == nil && time.Since(cached.FetchedAt) >= 0 && time.Since(cached.FetchedAt) < 24*time.Hour {
 		result = cloneRankingPage(cached)
 		result.Stale = true
-		result.Warning = "站点暂不可用，显示上次取得的榜单，请稍后刷新。"
+		result.Warning = "片源暫時無法使用，先顯示上次取得的榜單，請稍後重新整理。"
 		err = nil
 	}
 	pending.page, pending.err = cloneRankingPage(result), err
@@ -288,7 +288,7 @@ func (d *Downloader) fetchRankingPage(ctx context.Context, board rankingBoard, p
 	case sourceHuangju, sourceYeguo, sourceDSD:
 		return d.fetchCatalogRankingPage(ctx, board, page)
 	default:
-		return rankingPage{}, fmt.Errorf("不支持的榜单站源 %s", board.Source)
+		return rankingPage{}, fmt.Errorf("不支援的榜單片源 %s", board.Source)
 	}
 }
 

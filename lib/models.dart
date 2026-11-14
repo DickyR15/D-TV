@@ -136,12 +136,17 @@ class Drama {
     required this.source,
     required this.title,
     this.sourceId = '',
+    this.seriesGroupId = '',
+    this.seriesSeasonNumber = 0,
+    this.seriesSeasonUnit = '',
     this.description = '',
     this.cover = '',
+    this.coverCandidates = const [],
     this.episodes = 0,
     this.episodesVerified = false,
     this.category = '',
     this.doubanId = '',
+    this.imdbId = '',
     bool? vip,
     this.heat = '',
     this.views = '',
@@ -153,6 +158,10 @@ class Drama {
   final String id;
   final String source;
   final String sourceId;
+  /// Stable provider identity shared by every season of a series.
+  final String seriesGroupId;
+  final int seriesSeasonNumber;
+  final String seriesSeasonUnit;
   /// Stable identity for catalog items whose legacy JSON only has source + ID.
   String get stableId => id.isNotEmpty
       ? id
@@ -162,12 +171,14 @@ class Drama {
   final String title;
   final String description;
   final String cover;
+  final List<String> coverCandidates;
   final int episodes;
   final bool episodesVerified;
   bool get canShowEpisodeCount =>
       episodes > 0 && (source != 'hongguo' || episodesVerified);
   final String category;
   final String doubanId;
+  final String imdbId;
   final bool? vipStatus;
   bool get vip => vipStatus == true;
   final String heat;
@@ -196,9 +207,18 @@ class Drama {
       id: originalId,
       source: originalSource,
       sourceId: originalSourceId,
+      seriesGroupId: json['seriesGroupId'] as String? ?? '',
+      seriesSeasonNumber: intValue(json['seriesSeasonNumber']),
+      seriesSeasonUnit: json['seriesSeasonUnit'] as String? ?? '',
       title: json['title'] as String? ?? '短劇',
       description: json['description'] as String? ?? '',
       cover: json['cover'] as String? ?? '',
+      coverCandidates: (json['coverCandidates'] as List? ?? const [])
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList(growable: false),
       episodes: intValue(json['episodes']),
       episodesVerified: json['episodesVerified'] == true,
       category: originalSource == 'duoduo' &&
@@ -206,6 +226,7 @@ class Drama {
           ? ''
           : json['category'] as String? ?? '',
       doubanId: json['doubanId'] as String? ?? '',
+      imdbId: json['imdbId'] as String? ?? '',
       vip: json['vip'] == true
           ? true
           : json['vip'] == false &&
@@ -226,13 +247,18 @@ class Drama {
     'id': id,
     'source': source,
     'sourceId': sourceId,
+    if (seriesGroupId.isNotEmpty) 'seriesGroupId': seriesGroupId,
+    if (seriesSeasonNumber > 0) 'seriesSeasonNumber': seriesSeasonNumber,
+    if (seriesSeasonUnit.isNotEmpty) 'seriesSeasonUnit': seriesSeasonUnit,
     'title': title,
     'description': description,
     'cover': cover,
+    if (coverCandidates.isNotEmpty) 'coverCandidates': coverCandidates,
     'episodes': episodes,
     'episodesVerified': episodesVerified,
     'category': category,
     'doubanId': doubanId,
+    if (imdbId.isNotEmpty) 'imdbId': imdbId,
     'vip': vipStatus,
     'heat': heat,
     'views': views,
@@ -241,6 +267,61 @@ class Drama {
     'releaseStatus': releaseStatus,
     'badge': badge,
   };
+
+  Drama withSeriesGroupId(String value) => Drama(
+    id: id,
+    source: source,
+    sourceId: sourceId,
+    seriesGroupId: value,
+    seriesSeasonNumber: seriesSeasonNumber,
+    seriesSeasonUnit: seriesSeasonUnit,
+    title: title,
+    description: description,
+    cover: cover,
+    coverCandidates: coverCandidates,
+    episodes: episodes,
+    episodesVerified: episodesVerified,
+    category: category,
+    doubanId: doubanId,
+    imdbId: imdbId,
+    vip: vipStatus,
+    heat: heat,
+    views: views,
+    onlineDate: onlineDate,
+    tags: tags,
+    releaseStatus: releaseStatus,
+    badge: badge,
+  );
+
+  Drama withSeriesIdentity({
+    required String groupId,
+    required int seasonNumber,
+    required String seasonUnit,
+    String? displayTitle,
+  }) => Drama(
+    id: id,
+    source: source,
+    sourceId: sourceId,
+    seriesGroupId: groupId,
+    seriesSeasonNumber: seasonNumber,
+    seriesSeasonUnit: seasonUnit,
+    title: displayTitle ?? title,
+    description: description,
+    cover: cover,
+    coverCandidates: coverCandidates,
+    episodes: episodes,
+    episodesVerified: episodesVerified,
+    category: category,
+    doubanId: doubanId,
+    imdbId: imdbId,
+    vip: vipStatus,
+    heat: heat,
+    views: views,
+    onlineDate: onlineDate,
+    tags: tags,
+    releaseStatus: releaseStatus,
+    badge: badge,
+  );
 
   Drama merge(Drama fresh) {
     if (stableId != fresh.stableId) return fresh;
@@ -259,13 +340,36 @@ class Drama {
             const {'影視', '影视'}.contains(category)
         ? ''
         : category;
+    final mergedCoverCandidates = <String>[];
+    final seenCoverCandidates = <String>{};
+    for (final candidate in [
+      ...fresh.coverCandidates,
+      if (fresh.cover.isNotEmpty && cover.isNotEmpty && cover != fresh.cover)
+        cover,
+      ...coverCandidates,
+    ]) {
+      final normalized = candidate.trim();
+      if (normalized.isNotEmpty && seenCoverCandidates.add(normalized)) {
+        mergedCoverCandidates.add(normalized);
+      }
+    }
     return Drama(
       id: id.isEmpty ? fresh.id : id,
       source: fresh.source.isEmpty ? source : fresh.source,
       sourceId: fresh.sourceId.isEmpty ? sourceId : fresh.sourceId,
+      seriesGroupId: fresh.seriesGroupId.isEmpty
+          ? seriesGroupId
+          : fresh.seriesGroupId,
+      seriesSeasonNumber: fresh.seriesSeasonNumber > 0
+          ? fresh.seriesSeasonNumber
+          : seriesSeasonNumber,
+      seriesSeasonUnit: fresh.seriesSeasonUnit.isEmpty
+          ? seriesSeasonUnit
+          : fresh.seriesSeasonUnit,
       title: fresh.title.isEmpty || fresh.title == '短劇' ? title : fresh.title,
       description: fresh.description.isEmpty ? description : fresh.description,
       cover: fresh.cover.isEmpty ? cover : fresh.cover,
+      coverCandidates: mergedCoverCandidates,
       episodes: fresh.episodes > 0 ? fresh.episodes : episodes,
       episodesVerified:
           episodesVerified ||
@@ -279,6 +383,7 @@ class Drama {
           ? currentCategory
           : fresh.category,
       doubanId: fresh.doubanId.isEmpty ? doubanId : fresh.doubanId,
+      imdbId: fresh.imdbId.isEmpty ? imdbId : fresh.imdbId,
       vip: fresh.vipStatus ?? vipStatus,
       heat: fresh.heat.isEmpty ? heat : fresh.heat,
       views: fresh.views.isEmpty ? views : fresh.views,
@@ -310,6 +415,33 @@ class Episode {
   final bool vip;
   final bool? vertical;
   final String playLine;
+}
+
+class DramaSeason {
+  const DramaSeason({
+    required this.drama,
+    this.number = 0,
+    this.label = '',
+    this.subtitle = '',
+    this.upcoming = false,
+    this.playable = true,
+  });
+
+  final Drama drama;
+  final int number;
+  final String label;
+  final String subtitle;
+  final bool upcoming;
+  final bool playable;
+
+  factory DramaSeason.fromJson(Map<String, dynamic> json) => DramaSeason(
+    drama: Drama.fromJson(Map<String, dynamic>.from(json['drama'] as Map)),
+    number: intValue(json['number']),
+    label: json['label'] as String? ?? '',
+    subtitle: json['subtitle'] as String? ?? '',
+    upcoming: json['upcoming'] == true,
+    playable: json['playable'] == true,
+  );
 }
 
 class DramaDetail {
