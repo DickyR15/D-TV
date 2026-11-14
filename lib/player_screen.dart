@@ -3620,6 +3620,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         ? TelevisionControls(
             key: _televisionControlsKey,
             player: _player,
+            interactions: _interactions,
             playbackGeneration: _generation,
             showNetworkSpeed: _showTelevisionNetworkSpeed,
             showClock: _showTelevisionClock,
