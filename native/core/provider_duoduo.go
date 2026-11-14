@@ -703,6 +703,32 @@ func (d *Downloader) fetchDuoduoDetail(ctx context.Context, sourceID string) (Dr
 }
 
 func (d *Downloader) fetchDuoduoDetailWithCategory(ctx context.Context, sourceID, catalogCategory string) (Drama, []Chapter, error) {
+	drama, chapters, err := d.fetchDuoduoDetailDirectOnly(ctx, sourceID, catalogCategory)
+	if err == nil || !errors.Is(err, errDuoduoNoDirectPlayback) {
+		return drama, chapters, err
+	}
+
+	// Some verified localized titles are duplicated by the upstream catalogue.
+	// When the selected row exposes only a private decoder (for example qsvip),
+	// try another exact same-season record from the same verified series before
+	// reporting that the season has no playable episodes.
+	fallback, fallbackErr := d.fetchDuoduoAlternateSeasonPlayback(
+		ctx, drama, sourceID, catalogCategory,
+	)
+	if fallbackErr != nil || len(fallback) == 0 {
+		return drama, chapters, err
+	}
+	episodeCount := duoduoChapterEpisodeCount(fallback)
+	if episodeCount > 0 {
+		drama.TotalEpisode = episodeCount
+		drama.EpisodeCount = episodeCount
+		drama.Episodes = episodeCount
+		drama.EpisodesVerified = true
+	}
+	return drama, fallback, nil
+}
+
+func (d *Downloader) fetchDuoduoDetailDirectOnly(ctx context.Context, sourceID, catalogCategory string) (Drama, []Chapter, error) {
 	drama, detailRow, payload, base, err := d.fetchDuoduoDetailRow(ctx, sourceID)
 	if err != nil {
 		return Drama{}, nil, err
