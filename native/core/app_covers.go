@@ -30,7 +30,7 @@ const nativeCoverTTL = 30 * 24 * time.Hour
 
 const nativeCoverDuoduoFetchBudget = 12 * time.Second
 const nativeCoverDuoduoFallbackBudget = 12 * time.Second
-const nativeCoverDuoduoProxyHedgeDelay = 650 * time.Millisecond
+const nativeCoverDuoduoOriginHedgeDelay = 650 * time.Millisecond
 
 func nativeCoverFetchTimeout(source string) time.Duration {
 	if source == sourceDuoduo {
@@ -376,10 +376,11 @@ func duoduoPosterAttemptsForDrama(address string, downloader *Downloader, drama 
 	return unique
 }
 
-// downloadDuoduoPosterPair gives the origin a short head start, then races its
-// resized wsrv.nl edge copy against it. The first fully validated image wins.
-// Attempt timings are recorded on the user's own network, so Taiwan-specific
-// latency naturally influences every poster without hard-coding a region.
+// downloadDuoduoPosterPair prefers wsrv.nl's Cloudflare edge cache, then
+// starts the original provider image as a fallback after a short hedge window.
+// Cloudflare routes each client to its nearest available POP (including Taipei
+// when selected by the network); the app does not pin a region or IP address.
+// The first fully validated image wins, and failures are remembered per route.
 func (cache *nativeCoverCache) downloadDuoduoPosterPair(
 	ctx context.Context,
 	drama nativeDrama,
@@ -441,16 +442,17 @@ func (cache *nativeCoverCache) downloadDuoduoPosterPair(
 		}()
 	}
 
-	if eligible[0] {
-		launch(0)
-	} else {
-		// The origin is already cooling down; do not make the user wait.
-		launch(1)
+	preferredIndex := 1
+	if !eligible[1] {
+		preferredIndex = 0
 	}
+	launch(preferredIndex)
 	var hedgeTimer *time.Timer
 	var hedge <-chan time.Time
 	if eligible[0] && eligible[1] {
-		hedgeTimer = time.NewTimer(nativeCoverDuoduoProxyHedgeDelay)
+		// Try the Cloudflare edge first. Fall back to the provider origin if
+		// the edge remains slow beyond the short hedge window.
+		hedgeTimer = time.NewTimer(nativeCoverDuoduoOriginHedgeDelay)
 		hedge = hedgeTimer.C
 	}
 	stopHedge := func() {
@@ -463,7 +465,7 @@ func (cache *nativeCoverCache) downloadDuoduoPosterPair(
 
 	var failures []error
 	for {
-		if completed == launchedCount && (!eligible[1] || launched[1]) {
+		if completed == launchedCount && (!eligible[0] || launched[0]) && (!eligible[1] || launched[1]) {
 			stopHedge()
 			if len(failures) == 0 {
 				return nil, nextIndex, errors.New("多多海報下載失敗")
@@ -475,7 +477,7 @@ func (cache *nativeCoverCache) downloadDuoduoPosterPair(
 			stopHedge()
 			return nil, nextIndex, ctx.Err()
 		case <-hedge:
-			launch(1)
+			launch(0)
 			hedge = nil
 		case result := <-results:
 			completed++
@@ -485,11 +487,10 @@ func (cache *nativeCoverCache) downloadDuoduoPosterPair(
 				return result.data, nextIndex, nil
 			}
 			failures = append(failures, result.err)
-			// A fast origin failure should trigger the edge attempt immediately;
-			// otherwise the edge starts after the short hedge window.
-			if !launched[1] && eligible[1] {
+			// A fast edge failure should trigger the original source immediately.
+			if !launched[0] && eligible[0] {
 				stopHedge()
-				launch(1)
+				launch(0)
 			}
 		}
 	}
