@@ -571,7 +571,7 @@ func TestDuoduoPosterPairSkipsCooledEdgeNodeAndUsesOrigin(t *testing.T) {
 	if string(data) == "" {
 		t.Fatal("origin fallback returned an empty poster")
 	}
-	if cache.coverNodeOnCooldown(proxyURL) {
-		t.Fatal("successful origin request should not clear the unrelated edge node cooldown")
+	if !cache.coverNodeOnCooldown(proxyURL) {
+		t.Fatal("successful origin request incorrectly cleared the unrelated edge node cooldown")
 	}
 }
