@@ -68,9 +68,10 @@ String? playbackHwdecFor({
 /// Whether the current Android device exposes the system Picture-in-Picture API.
 bool supportsPictureInPicture({
   required bool android,
+  bool ios = false,
   required bool systemSupported,
   bool television = false,
-}) => android && !television && systemSupported;
+}) => (android || ios) && !television && systemSupported;
 
 /// PiP auto-entry is only enabled while a supported Android player is running.
 bool shouldAutoEnterPictureInPicture({
