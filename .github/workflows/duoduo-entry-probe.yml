@@ -2699,7 +2699,7 @@ jobs:
           chicago_base_title = "芝加哥烈焰"
 
           def chicago_season_number(title):
-              compact = re.sub(r"\\s+", "", str(title or ""))
+              compact = re.sub(r"\s+", "", str(title or ""))
               match = re.fullmatch(r"芝加哥烈焰第?([0-9]{1,2}|[一二三四五六七八九十]+)季", compact)
               if not match:
                   return 0
@@ -2718,6 +2718,11 @@ jobs:
                   left, right = raw.split("十", 1)
                   return digits.get(left, 0) * 10 + digits.get(right, 0)
               return digits.get(raw, 0)
+
+          assert chicago_season_number("芝加哥烈焰 第一季") == 1
+          assert chicago_season_number("芝加哥烈焰第五季") == 5
+          assert chicago_season_number("芝加哥烈焰 第五季") == 5
+          assert chicago_season_number("芝加哥烈焰 第十二季") == 12
 
           chicago_catalog = {}
           chicago_conflicts = []
