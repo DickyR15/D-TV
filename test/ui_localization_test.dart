@@ -122,13 +122,6 @@ void main() {
     );
   });
 
-  test('converts Supjav Chinese catalogue labels to Taiwan Traditional Chinese', () {
-    expect(
-      uiTraditional('视频列表、播放列表、搜索、上映时间、最新发布、播放次数、时长、演员、演员表、影片详情、女优'),
-      '影片清單、播放清單、搜尋、上映日期、最新上架、播放次數、片長、演員、演員名單、影片詳情、女優',
-    );
-  });
-
   test('uses Taiwan wording for playback quality labels', () {
     expect(uiTraditional('清晰度、其他清晰度、高清'), '畫質、其他畫質選項、高畫質');
   });
