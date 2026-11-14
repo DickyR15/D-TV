@@ -880,7 +880,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
     } catch (error) {
-      failure = error.toString();
+      failure = lanPublicErrorMessage(error);
     }
     await repository
         .lan('respond', {
@@ -968,7 +968,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(
       synchronize(automatic: true).catchError((Object failure) {
         if (run != _run || _disposed) return;
-        syncMessage = '等待重試 · $failure';
+        syncMessage = '等待重試 · ' + lanPublicErrorMessage(failure);
         _notify();
       }),
     );
