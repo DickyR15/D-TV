@@ -129,9 +129,16 @@ jobs:
                   parts = value.split(",")
               return [part.strip() for part in parts if part.strip()]
           def probe_media(address, referer):
+              address = str(address or "").strip()
               parsed = urlsplit(address)
+              # The official web player may resolve RFC 3986 network-path
+              # media references against its HTTPS page. Probe that exact
+              # browser-equivalent form without accepting arbitrary hostless paths.
+              if not parsed.scheme and parsed.netloc and address.startswith("//"):
+                  address = "https:" + address
+                  parsed = urlsplit(address)
               if parsed.scheme not in ("http", "https") or not parsed.netloc:
-                  return False, "invalid media URL"
+                  return False, f"invalid media URL (scheme={parsed.scheme or '-'} host={parsed.hostname or '-'} path_suffix={parsed.path.rsplit('.', 1)[-1][:12] if '.' in parsed.path.rsplit('/', 1)[-1] else '-'})"
               if parsed.path.lower().endswith(".mp4"):
                   status, final, content_type, body = request(
                       address, referer, limit=65536, byte_range="bytes=0-65535"
@@ -2884,10 +2891,14 @@ jobs:
               )
 
           def safe_media_kind(address):
-              parsed = urlsplit(str(address or "").strip())
-              if parsed.scheme not in ("http", "https") or not parsed.hostname:
-                  return "invalid"
+              value = str(address or "").strip()
+              parsed = urlsplit(value)
               suffix = parsed.path.lower().rsplit(".", 1)[-1] if "." in parsed.path.rsplit("/", 1)[-1] else "none"
+              if parsed.scheme not in ("http", "https") or not parsed.hostname:
+                  return (
+                      f"invalid scheme={parsed.scheme or '-'} host={parsed.hostname or '-'} "
+                      f"authority={'yes' if parsed.netloc else 'no'} ext={suffix}"
+                  )
               return f"{parsed.hostname}{parsed.path[-48:]} [ext={suffix}]"
 
           med_player_rows = response_rows(med_payload.get("vodplayer"))
