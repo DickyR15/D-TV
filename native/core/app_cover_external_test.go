@@ -756,20 +756,18 @@ func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 	const poster = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2932687546.jpg"
 	edge := duoduoPosterProxyURL(poster)
 	imageBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
-	var seenReferer string
+	var seenReferer, seenAddress string
 	var originCalls, edgeCalls int
+	var unexpectedURLs []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Host == "wsrv.nl" {
 			edgeCalls++
-			if request.URL.String() != edge {
-				t.Fatalf("unexpected edge poster request: %s", request.URL)
-			}
+			seenAddress = request.URL.String()
 			seenReferer = request.Header.Get("Referer")
 		} else if request.URL.String() == poster {
 			originCalls++
-			t.Fatalf("fast edge response should avoid unnecessary origin request")
 		} else {
-			t.Fatalf("unexpected poster request: %s", request.URL)
+			unexpectedURLs = append(unexpectedURLs, request.URL.String())
 		}
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -795,8 +793,12 @@ func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if seenReferer != "https://wsrv.nl/" || edgeCalls != 1 || originCalls != 0 {
-		t.Fatalf("edge/origin calls = %d/%d with Referer %q", edgeCalls, originCalls, seenReferer)
+	if seenAddress != edge || seenReferer != "https://wsrv.nl/" || edgeCalls != 1 ||
+		originCalls != 0 || len(unexpectedURLs) != 0 {
+		t.Fatalf(
+			"edge/origin calls=%d/%d address=%q referer=%q unexpected=%v; want edge=%q",
+			edgeCalls, originCalls, seenAddress, seenReferer, unexpectedURLs, edge,
+		)
 	}
 	cached, err := os.ReadFile(path)
 	if err != nil {
