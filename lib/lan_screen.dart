@@ -11,7 +11,7 @@ import 'widgets.dart';
 
 String _lanErrorMessage(Object error) {
   final raw = error is StateError ? error.message.toString() : error.toString();
-  return raw.replaceFirst(RegExp(r'^Bad state:\\s*'), '');
+  return raw.replaceFirst(RegExp(r'^Bad state:\s*'), '');
 }
 
 IconData lanDeviceIcon(String kind) => switch (kind) {
