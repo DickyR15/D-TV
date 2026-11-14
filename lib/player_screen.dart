@@ -784,7 +784,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                   .clamp(0.0, upperBound)
                   .toDouble();
               await _seekTo(Duration(milliseconds: (target * 1000).round()));
-              await _notifyIosSampleBufferPiPPlaybackState();
+              await _notifyIosSampleBufferPiPPlaybackState(
+                completePendingSkip: true,
+              );
             }
             break;
           case 'previous':
@@ -1076,6 +1078,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _notifyIosSampleBufferPiPPlaybackState({
     bool? playing,
+    bool completePendingSkip = false,
   }) async {
     if (!Platform.isIOS || _closed) return;
     try {
@@ -1089,6 +1092,12 @@ class _PlayerScreenState extends State<PlayerScreen>
           'positionMs': (_currentPosition * 1000).round(),
         },
       );
+      if (completePendingSkip) {
+        await _iosSampleBufferPipChannel.invokeMethod<void>(
+          'DTVPiP.SeekCompleted',
+          {'handle': handle},
+        );
+      }
     } catch (error) {
       DiaryService.add('[PiP] playback state sync failed error=$error');
     }
