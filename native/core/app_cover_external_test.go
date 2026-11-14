@@ -1304,19 +1304,27 @@ func TestTVMazePosterAddressUsesExactTVTitleAndYear(t *testing.T) {
 	if address != expected { t.Fatalf("TVmaze poster = %q, want %q", address, expected) }
 }
 
-func TestTVMazePosterAddressResolvesSeasonSuffixedChineseAlias(t *testing.T) {
-	const expected = "https://static.tvmaze.com/uploads/images/medium_portrait/645/1614039.jpg"
+func TestTVMazePosterAddressResolvesSeasonSpecificChinesePoster(t *testing.T) {
+	const expected = "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg"
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
-		if request.Method != http.MethodGet || request.URL.Host != "api.tvmaze.com" ||
-			request.URL.Path != "/search/shows" {
+		if request.Method != http.MethodGet || request.URL.Host != "api.tvmaze.com" {
 			t.Fatalf("unexpected TVmaze request: %s", request.URL.String())
 		}
-		if request.URL.Query().Get("q") != "9-1-1" {
-			return posterLookupJSONResponse(request, "[]"), nil
+		switch request.URL.Path {
+		case "/search/shows":
+			if request.URL.Query().Get("q") != "9-1-1" {
+				return posterLookupJSONResponse(request, "[]"), nil
+			}
+			body := "[{\"score\":1,\"show\":{\"id\":28152,\"name\":\"9-1-1\",\"premiered\":\"2018-01-03\",\"image\":{\"original\":\"https://static.tvmaze.com/uploads/images/medium_portrait/645/1614039.jpg\"}}}," +
+				"{\"score\":0.9,\"show\":{\"id\":42164,\"name\":\"9-1-1: Lone Star\",\"premiered\":\"2020-01-19\",\"image\":{\"original\":\"https://static.tvmaze.com/uploads/images/medium_portrait/1/wrong.jpg\"}}}]"
+			return posterLookupJSONResponse(request, body), nil
+		case "/shows/28152/seasons":
+			body := "[{\"id\":1001,\"number\":1,\"name\":\"Season 1\",\"image\":{\"original\":\"" + expected + "\"}}]"
+			return posterLookupJSONResponse(request, body), nil
+		default:
+			t.Fatalf("unexpected TVmaze path: %s", request.URL.Path)
+			return nil, errors.New("unexpected TVmaze path")
 		}
-		body := "[{\"score\":1,\"show\":{\"id\":28152,\"name\":\"9-1-1\",\"premiered\":\"2018-01-03\",\"image\":{\"original\":\"" + expected + "\"}}}," +
-			"{\"score\":0.9,\"show\":{\"id\":42164,\"name\":\"9-1-1: Lone Star\",\"premiered\":\"2020-01-19\",\"image\":{\"original\":\"https://static.tvmaze.com/uploads/images/medium_portrait/1/wrong.jpg\"}}}]"
-		return posterLookupJSONResponse(request, body), nil
 	})}
 	downloader := &Downloader{client: client, cfg: defaultConfig()}
 	drama := nativeDrama{Title: "緊急呼救 第一季", OnlineDate: "2018"}
@@ -1331,7 +1339,7 @@ func TestTVMazePosterAddressResolvesSeasonSuffixedChineseAlias(t *testing.T) {
 		t.Fatal(err)
 	}
 	if address != expected {
-		t.Fatalf("TVmaze poster = %q, want %q", address, expected)
+		t.Fatalf("TVmaze season poster = %q, want %q", address, expected)
 	}
 }
 
