@@ -3193,4 +3193,106 @@ jobs:
               print(f"CHICAGO_MED_ALT playable_probe={alt_probe_ok}")
           else:
               print("CHICAGO_MED_ALT no D-TV-compatible direct routes; alias fallback is required.")
+          print("\n=== CHICAGO MED SEASON 12 PLAYBACK DIAGNOSTIC ===")
+          med_s12_aliases = (
+              "芝加哥醫院第十二季", "芝加哥醫院第12季",
+              "芝加哥医院第十二季", "芝加哥医院第12季",
+              "芝加哥急救第十二季", "芝加哥急救第12季",
+              "Chicago Med Season 12", "Chicago Med S12",
+          )
+          med_s12_wanted = {normalize_target_title(value) for value in med_s12_aliases}
+          med_s12_queries = (
+              "芝加哥醫院", "芝加哥医院", "芝加哥急救",
+              "Chicago Med Season 12", "Chicago Med S12",
+          )
+          med_s12_matches = {}
+          for term in med_s12_queries:
+              _, search_payload = api(
+                  "/api.php/web/search/index", {"wd": term, "page": 1, "limit": 30}
+              )
+              for row in response_rows(search_payload.get("data")):
+                  source_id = row_id(row)
+                  if source_id.isdigit() and normalize_target_title(row_title(row)) in med_s12_wanted:
+                      med_s12_matches[source_id] = row
+          for row in catalog_all_rows:
+              source_id = row_id(row)
+              if source_id.isdigit() and normalize_target_title(row_title(row)) in med_s12_wanted:
+                  med_s12_matches[source_id] = row
+          if not med_s12_matches:
+              print("CHICAGO_MED_S12 exact title rows were not returned by the current search/catalog scan.")
+          for source_id, catalog_row in sorted(med_s12_matches.items()):
+              detail_base, detail_payload = api(
+                  "/api.php/web/vod/get_detail", {"vod_id": source_id}
+              )
+              detail_rows = response_rows(detail_payload.get("data"))
+              if not detail_rows or row_id(detail_rows[0]) != source_id:
+                  print(f"CHICAGO_MED_S12 id={source_id} detail identity mismatch or empty.")
+                  continue
+              detail = detail_rows[0]
+              player_rows = response_rows(detail_payload.get("vodplayer"))
+              player_by_from = {
+                  str(player.get("from") or "").strip(): player
+                  for player in player_rows if str(player.get("from") or "").strip()
+              }
+              direct_by_line = {}
+              detail_line_summary = []
+              names = split_source_groups(detail.get("vod_play_from"), comma_fallback=True)
+              blocks = split_source_groups(detail.get("vod_play_url"))
+              for index, name in enumerate(names[:len(blocks)]):
+                  player = player_by_from.get(name.strip(), {})
+                  status = str(player.get("decode_status") or "0")
+                  count = 0
+                  for item in blocks[index].split("#"):
+                      if "$" not in item:
+                          continue
+                      episode_title, address = item.split("$", 1)
+                      address = address.strip()
+                      if status == "0" and is_direct_http_media(address):
+                          direct_by_line.setdefault(name, (episode_title.strip(), address))
+                          count += 1
+                  detail_line_summary.append({
+                      "line": name, "decode_status": status, "direct_urls": count,
+                  })
+              _, aggregate_payload = api(
+                  "/api.php/web/internal/search_aggregate", {"vod_id": source_id}
+              )
+              aggregate_summary = []
+              for line in response_rows(aggregate_payload.get("data")):
+                  status = str(line.get("decode_status") or "0")
+                  key = str(line.get("site_key") or line.get("vod_play_from") or line.get("site_name") or "aggregate")
+                  count = 0
+                  for item in str(line.get("vod_play_url") or "").split("#"):
+                      if "$" not in item:
+                          continue
+                      episode_title, address = item.split("$", 1)
+                      address = address.strip()
+                      if status == "0" and is_direct_http_media(address):
+                          direct_by_line.setdefault(key, (episode_title.strip(), address))
+                          count += 1
+                  aggregate_summary.append({
+                      "line": key, "decode_status": status, "direct_urls": count,
+                  })
+              print(
+                  f"CHICAGO_MED_S12 id={source_id} "
+                  f"catalog_title={row_title(catalog_row)!r} "
+                  f"detail_title={row_title(detail)!r} "
+                  f"remarks={str(detail.get('vod_remarks') or '')!r} "
+                  f"direct_line_count={len(direct_by_line)} "
+                  f"detail_lines={detail_line_summary!r} aggregate_lines={aggregate_summary!r}"
+              )
+              probe_ok = False
+              for line_name, (episode_title, address) in direct_by_line.items():
+                  ok, message = probe_media(address, detail_base + "/")
+                  if not ok:
+                      retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                      if retry_ok:
+                          ok, message = retry_ok, retry_message
+                      else:
+                          message += f"; public-entry retry failed: {retry_message}"
+                  print(
+                      f"CHICAGO_MED_S12_MEDIA id={source_id} episode={episode_title!r} "
+                      f"line={line_name!r} media={safe_media_kind(address)} ok={ok} {message}"
+                  )
+                  probe_ok = probe_ok or ok
+              print(f"CHICAGO_MED_S12 id={source_id} playable_probe={probe_ok}")
           PY
