@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hgtv/main.dart';
+import 'package:hgtv/dtv_launch_animation.dart';
 
 void main() {
   testWidgets('startup reveal displays animated D TV wordmark and tagline', (
