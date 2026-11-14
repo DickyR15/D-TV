@@ -477,25 +477,32 @@ class TelevisionControlsState extends State<TelevisionControls> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.enabled ? _show : null,
-          onLongPressStart: widget.enabled
-              ? (details) {
-                  final direction =
-                      details.localPosition.dx < MediaQuery.sizeOf(context).width / 2
-                      ? -1
-                      : 1;
-                  widget.interactions.beginSeekHold(direction);
-                  _show();
-                }
-              : null,
-          onLongPressEnd: widget.enabled
-              ? (_) => widget.interactions.endSeekHold()
-              : null,
-          onLongPressCancel: widget.enabled
-              ? () => widget.interactions.endSeekHold(silent: true)
-              : null,
           child: Stack(
             fit: StackFit.expand,
             children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onLongPressStart: widget.enabled
+                      ? (details) {
+                          final direction =
+                              details.localPosition.dx <
+                                  MediaQuery.sizeOf(context).width / 2
+                              ? -1
+                              : 1;
+                          widget.interactions.beginSeekHold(direction);
+                          _show();
+                        }
+                      : null,
+                  onLongPressEnd: widget.enabled
+                      ? (_) => widget.interactions.endSeekHold()
+                      : null,
+                  onLongPressCancel: widget.enabled
+                      ? () => widget.interactions.endSeekHold(silent: true)
+                      : null,
+                  child: const SizedBox.expand(),
+                ),
+              ),
               if (state.buffering && widget.enabled)
                 const Center(child: CircularProgressIndicator()),
               if (widget.interactions.feedback.isNotEmpty)
