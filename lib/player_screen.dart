@@ -9,7 +9,6 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
-const _iosSampleBufferPipChannel = MethodChannel('duanju/mediakit_pip');
 
 import 'app_layout.dart';
 import 'app_orientation.dart';
@@ -42,6 +41,8 @@ import 'lan_screen.dart';
 import 'video_enhancement.dart';
 import 'video_enhancement_preferences.dart';
 import 'video_output_size.dart';
+
+const _iosSampleBufferPipChannel = MethodChannel('duanju/mediakit_pip');
 
 const _androidPlayerEngine = String.fromEnvironment(
   'DTV_ANDROID_PLAYER',
