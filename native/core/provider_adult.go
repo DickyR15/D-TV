@@ -29,7 +29,7 @@ var (
 	reMissavSourceID = regexp.MustCompile(`(?i)^[a-z0-9]+-[0-9]+(?:-[a-z0-9]+)*$`)
 	reMissavMediaURL = regexp.MustCompile(`(?i)(?:https?:)?//[^\s"'<>\\]+\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?`)
 	reSupjavDetailID = regexp.MustCompile(`(?i)/(?:[^/?#]+/)?([0-9]+)\.html(?:[?#].*)?$`)
-	reSupjavPlayerURL = regexp.MustCompile(`(?is)urlPlay[^\r\n]{0,256}?(https?://[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?)`)
+	reSupjavPlayerURL = regexp.MustCompile(`(?is)urlPlay.{0,1024}?(https?://[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?)`)
 )
 
 func (d *Downloader) fetchAdultProviderDocument(ctx context.Context, address, referer string) (*html.Node, string, string, error) {
