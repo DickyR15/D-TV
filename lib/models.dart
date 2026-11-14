@@ -15,9 +15,7 @@ class SourceSite {
       id == 'dsd' ||
       id == 'duoduo' ||
       id == 'hanxiaoquan' ||
-      id == 'heitao' ||
-      id == 'missav' ||
-      id == 'supjav';
+      id == 'heitao';
   bool get searchSuggestions => id == 'hongguo';
   // These providers must remain independent in
   // source switching and ranking filters.
@@ -63,8 +61,6 @@ class SourceSite {
     SourceSite('huangguo-video', '黃果影片', '影片與劇集'),
     SourceSite('huangguoai', '黃果 AI', 'AI 短劇'),
     SourceSite('heitao', '黑桃', '分類短劇 · 線上搜尋'),
-    SourceSite('missav', 'MissAV', '影片目錄 · 線上搜尋'),
-    SourceSite('supjav', 'Supjav', '影片目錄 · 線上搜尋'),
     SourceSite('cloudfront', '黃果舊版', '舊版 API 片庫'),
   ];
   static const knownValues = [...primaryValues, ...restrictedValues];
