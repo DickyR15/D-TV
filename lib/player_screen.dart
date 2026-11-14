@@ -909,8 +909,8 @@ class _PlayerScreenState extends State<PlayerScreen>
 
       _setPictureInPictureStatus(
         supported: true,
-        active: false,
-        requested: true,
+        active: true,
+        requested: false,
       );
       DiaryService.add(
         '[PiP] iOS MPV Sample Buffer source started '
@@ -923,6 +923,33 @@ class _PlayerScreenState extends State<PlayerScreen>
         playbackDiagnosticError(error),
       );
     }
+  }
+
+  Future<void> _cancelPendingIosPictureInPicture() async {
+    if (!Platform.isIOS ||
+        !_pictureInPictureRequested ||
+        _pictureInPictureActive) {
+      return;
+    }
+    _pictureInPictureExitTimer?.cancel();
+    _setPictureInPictureStatus(active: false, requested: false);
+    _pictureInPictureHandoff = false;
+
+    try {
+      final handle = await _player.platform?.handle.timeout(
+        const Duration(seconds: 2),
+      );
+      if (handle != null) {
+        await _iosSampleBufferPipChannel
+            .invokeMethod<void>('DTVPiP.Stop', {'handle': handle})
+            .timeout(const Duration(seconds: 2));
+      }
+    } catch (_) {}
+    try {
+      await AppDevice.channel
+          .invokeMethod<void>('cancelPictureInPicture')
+          .timeout(const Duration(seconds: 2));
+    } catch (_) {}
   }
 
   Future<void> _fallbackFromIosSampleBufferPiP(String reason) async {
@@ -1587,7 +1614,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _enterPictureInPicture() async {
-    if (!_canUsePictureInPicture ||
+    if (_pictureInPictureRequested ||
+        _pictureInPictureActive ||
+        !_canUsePictureInPicture ||
         _closed ||
         _loading ||
         _error != null ||
@@ -3484,6 +3513,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _exitPlayback() {
+    if (Platform.isIOS &&
+        _pictureInPictureRequested &&
+        !_pictureInPictureActive) {
+      unawaited(_cancelPendingIosPictureInPicture());
+    }
     if (_desktopMiniActive) {
       unawaited(_closeDesktopMiniPlayer());
       return;
@@ -3520,6 +3554,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _back() {
+    if (Platform.isIOS &&
+        _pictureInPictureRequested &&
+        !_pictureInPictureActive) {
+      unawaited(_cancelPendingIosPictureInPicture());
+      Navigator.of(context).maybePop();
+      return;
+    }
     if (_desktopMiniActive) {
       unawaited(_exitDesktopMiniPlayer());
       return;
@@ -3688,12 +3729,26 @@ class _PlayerScreenState extends State<PlayerScreen>
     final title = uiTraditional(widget.detail.drama.title);
     final fullscreen = _showFullscreen;
     final pictureInPicture = _pictureInPictureVisible;
+    final iosPiPPending =
+        Platform.isIOS && _pictureInPictureRequested && !_pictureInPictureActive;
     return PopScope(
       // A failed playback must always allow an explicit return to the detail page.
+      // An iOS PiP request that has not actually started must never trap the route.
       // Android TV continues to consume remote Back through its playback controls.
-      canPop: _error != null ? !_television : !_television && !fullscreen,
+      canPop: _error != null
+          ? !_television
+          : !_television && (!fullscreen || iosPiPPending),
       onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
+        if (didPop) {
+          if (iosPiPPending) {
+            unawaited(_cancelPendingIosPictureInPicture());
+          }
+          return;
+        }
+        if (iosPiPPending) {
+          unawaited(_cancelPendingIosPictureInPicture());
+          return;
+        }
         if (_television) {
           _handlePlaybackBack();
         } else if (fullscreen) {
@@ -3931,7 +3986,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       '${widget.detail.episodes[_index].vip ? ' · VIP 試看' : ''}',
     );
     final hideOverlayForPictureInPicture =
-        _pictureInPictureVisible || _desktopMiniActive;
+        _pictureInPictureActive || _desktopMiniActive;
     final Widget controls = hideOverlayForPictureInPicture
         ? const SizedBox.shrink()
         : _television
