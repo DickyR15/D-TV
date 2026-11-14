@@ -28,7 +28,6 @@ on:
       - main
     paths:
       - ".github/workflows/cross-platform-build.yml"
-      - ".github/workflows/duoduo-entry-probe.yml"
       - "lib/**"
       - "native/**"
       - "android/**"
