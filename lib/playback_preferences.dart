@@ -65,7 +65,7 @@ String? playbackHwdecFor({
   return null;
 }
 
-/// Whether the current Android device exposes the system Picture-in-Picture API.
+/// Whether the current Android or iOS device exposes the system Picture-in-Picture API.
 bool supportsPictureInPicture({
   required bool android,
   bool ios = false,
