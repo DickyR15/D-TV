@@ -14,7 +14,6 @@ import AVFoundation
   private var pipHostView: UIView?
   private var pipPossibleObservation: NSKeyValueObservation?
   private var pipItemStatusObservation: NSKeyValueObservation?
-  private var pipPresentationSizeObservation: NSKeyValueObservation?
   private var pipPrepareTimeout: DispatchWorkItem?
   private var pendingPipPrepareResult: FlutterResult?
   override func application(
@@ -137,30 +136,6 @@ import AVFoundation
     return Int64((seconds * 1000).rounded())
   }
 
-  private func pictureInPictureHostSize(aspectRatio: CGFloat) -> CGSize {
-    let ratio = aspectRatio.isFinite && aspectRatio > 0
-      ? min(max(aspectRatio, 1.0 / 2.39), 2.39)
-      : 16.0 / 9.0
-    let maximumDimension: CGFloat = 360
-    if ratio >= 1 {
-      return CGSize(width: maximumDimension, height: maximumDimension / ratio)
-    }
-    return CGSize(width: maximumDimension * ratio, height: maximumDimension)
-  }
-
-  private func updatePictureInPictureHostAspectRatio(_ aspectRatio: CGFloat) {
-    guard let hostView = pipHostView, let layer = pipPlayerLayer else { return }
-    let size = pictureInPictureHostSize(aspectRatio: aspectRatio)
-    var frame = hostView.frame
-    frame.size = size
-    UIView.performWithoutAnimation {
-      hostView.frame = frame
-      layer.frame = hostView.bounds
-      hostView.setNeedsLayout()
-      hostView.layoutIfNeeded()
-    }
-  }
-
   private func completePipPreparation(error: FlutterError? = nil) {
     guard let callback = pendingPipPrepareResult else { return }
     pendingPipPrepareResult = nil
@@ -205,19 +180,6 @@ import AVFoundation
     let player = AVPlayer(playerItem: item)
     player.automaticallyWaitsToMinimizeStalling = true
 
-    // Flutter already knows the active MPV video's display ratio. Use it to
-    // size the inline AVPlayerLayer instead of attaching every video to a
-    // square 2x2 surface; the square surface can make portrait streams fail
-    // AVKit's isPictureInPicturePossible check.
-    let requestedWidth = (args["width"] as? NSNumber)?.doubleValue ?? 16
-    let requestedHeight = (args["height"] as? NSNumber)?.doubleValue ?? 9
-    let requestedAspectRatio = requestedWidth.isFinite &&
-      requestedHeight.isFinite &&
-      requestedWidth > 0 &&
-      requestedHeight > 0
-      ? CGFloat(requestedWidth / requestedHeight)
-      : 16.0 / 9.0
-
     guard let windowScene = UIApplication.shared.connectedScenes
       .compactMap({ $0 as? UIWindowScene })
       .first(where: { $0.activationState == .foregroundActive }),
@@ -226,8 +188,10 @@ import AVFoundation
       return
     }
 
-    let hostSize = pictureInPictureHostSize(aspectRatio: requestedAspectRatio)
-    let hostView = UIView(frame: CGRect(origin: CGPoint(x: 1, y: 1), size: hostSize))
+    // Keep the proven minimal inline host. AVPlayerLayer obtains the actual
+    // presentation dimensions from the media track; the host view's bounds
+    // do not determine the PiP aspect ratio.
+    let hostView = UIView(frame: CGRect(x: 1, y: 1, width: 2, height: 2))
     hostView.backgroundColor = .clear
     hostView.alpha = 0.01
     hostView.isUserInteractionEnabled = false
@@ -257,13 +221,6 @@ import AVFoundation
     pipPossibleObservation = controller.observe(\.isPictureInPicturePossible, options: [.initial, .new]) { [weak self] observed, _ in
       guard let self, observed.isPictureInPicturePossible else { return }
       DispatchQueue.main.async { self.completePipPreparation() }
-    }
-    pipPresentationSizeObservation = item.observe(\.presentationSize, options: [.initial, .new]) { [weak self] observed, _ in
-      let size = observed.presentationSize
-      guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return }
-      DispatchQueue.main.async {
-        self?.updatePictureInPictureHostAspectRatio(size.width / size.height)
-      }
     }
     pipItemStatusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self] observed, _ in
       guard let self, observed.status == .failed else { return }
@@ -304,8 +261,6 @@ import AVFoundation
     pipPossibleObservation = nil
     pipItemStatusObservation?.invalidate()
     pipItemStatusObservation = nil
-    pipPresentationSizeObservation?.invalidate()
-    pipPresentationSizeObservation = nil
     if pipController?.isPictureInPictureActive == true {
       pipController?.stopPictureInPicture()
     }
