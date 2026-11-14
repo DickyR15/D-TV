@@ -749,6 +749,32 @@ jobs:
                       "9-1-1 第一季", "9-1-1第一季", "911第一季",
                   ),
               },
+              {
+                  "label": "芝加哥烈焰 第一季",
+                  "queries": (
+                      "芝加哥烈焰 第一季", "芝加哥烈焰第一季",
+                      "芝加哥烈焰 第1季", "芝加哥烈焰第1季",
+                      "Chicago Fire Season 1", "Chicago Fire S01",
+                  ),
+                  "aliases": (
+                      "芝加哥烈焰 第一季", "芝加哥烈焰第一季",
+                      "芝加哥烈焰 第1季", "芝加哥烈焰第1季",
+                      "Chicago Fire Season 1", "Chicago Fire S01",
+                  ),
+              },
+              {
+                  "label": "芝加哥烈焰 第五季",
+                  "queries": (
+                      "芝加哥烈焰 第五季", "芝加哥烈焰第五季",
+                      "芝加哥烈焰 第5季", "芝加哥烈焰第5季",
+                      "Chicago Fire Season 5", "Chicago Fire S05",
+                  ),
+                  "aliases": (
+                      "芝加哥烈焰 第五季", "芝加哥烈焰第五季",
+                      "芝加哥烈焰 第5季", "芝加哥烈焰第5季",
+                      "Chicago Fire Season 5", "Chicago Fire S05",
+                  ),
+              },
           ]
 
           def normalize_target_title(value):
@@ -2668,4 +2694,148 @@ jobs:
           if playable == 0:
               raise RuntimeError("no public direct line passed the bounded media probe; " + "; ".join(errors[:5]))
           print("PASS: Duoduo catalogue candidates, detail and aggregate direct lines, and media segments were probed.")
+
+          print("\\n=== CHICAGO FIRE LIVE SERIES RECONCILIATION ===")
+          chicago_base_title = "芝加哥烈焰"
+
+          def chicago_season_number(title):
+              compact = re.sub(r"\\s+", "", str(title or ""))
+              match = re.fullmatch(r"芝加哥烈焰第?([0-9]{1,2}|[一二三四五六七八九十]+)季", compact)
+              if not match:
+                  return 0
+              raw = match.group(1)
+              if raw.isdigit():
+                  return int(raw)
+              digits = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+                        "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+              if raw == "十":
+                  return 10
+              if raw.startswith("十"):
+                  return 10 + digits.get(raw[1:], 0)
+              if raw.endswith("十"):
+                  return digits.get(raw[0], 0) * 10
+              if "十" in raw:
+                  left, right = raw.split("十", 1)
+                  return digits.get(left, 0) * 10 + digits.get(right, 0)
+              return digits.get(raw, 0)
+
+          chicago_catalog = {}
+          chicago_conflicts = []
+          for page in range(1, 4):
+              _, payload = api(
+                  "/api.php/web/search/index",
+                  {"wd": chicago_base_title, "page": page, "limit": 24},
+              )
+              for row in response_rows(payload.get("data")):
+                  season_number = chicago_season_number(row_title(row))
+                  vod_id = row_id(row)
+                  if not season_number or not vod_id.isdigit():
+                      continue
+                  previous = chicago_catalog.get(season_number)
+                  if previous and row_id(previous) != vod_id:
+                      chicago_conflicts.append((season_number, row_id(previous), vod_id))
+                  else:
+                      chicago_catalog[season_number] = row
+
+          if chicago_conflicts:
+              raise RuntimeError(
+                  "Chicago Fire exact season search produced ambiguous IDs: "
+                  + repr(chicago_conflicts)
+              )
+          missing_required = sorted({1, 5} - set(chicago_catalog))
+          if missing_required:
+              raise RuntimeError(
+                  "Chicago Fire exact series search did not return required seasons "
+                  + repr(missing_required)
+              )
+
+          chicago_season_results = []
+          for season_number, summary in sorted(chicago_catalog.items()):
+              vod_id = row_id(summary)
+              search_title = row_title(summary)
+              api_base, detail_payload = api(
+                  "/api.php/web/vod/get_detail", {"vod_id": vod_id}
+              )
+              details = response_rows(detail_payload.get("data"))
+              if not details:
+                  raise RuntimeError(
+                      f"Chicago Fire S{season_number:02d} id={vod_id}: empty official detail response"
+                  )
+              detail = details[0]
+              detail_id = row_id(detail)
+              detail_title = row_title(detail)
+              if detail_id != vod_id or normalize_target_title(detail_title) != normalize_target_title(search_title):
+                  raise RuntimeError(
+                      f"Chicago Fire S{season_number:02d} search/detail identity mismatch: "
+                      f"search=({vod_id},{search_title!r}) detail=({detail_id},{detail_title!r})"
+                  )
+
+              direct = []
+              player_rows = response_rows(detail_payload.get("vodplayer"))
+              player_by_from = {
+                  str(player.get("from") or "").strip(): player
+                  for player in player_rows if str(player.get("from") or "").strip()
+              }
+              names = split_source_groups(detail.get("vod_play_from"), comma_fallback=True)
+              blocks = split_source_groups(detail.get("vod_play_url"))
+              for index, name in enumerate(names[:len(blocks)]):
+                  player = player_by_from.get(name.strip(), {})
+                  if str(player.get("decode_status") or "0") != "0":
+                      continue
+                  for episode in blocks[index].split("#"):
+                      if "$" not in episode:
+                          continue
+                      episode_title, address = episode.split("$", 1)
+                      address = address.strip()
+                      if address and urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
+                          direct.append((episode_title.strip(), address, "detail"))
+
+              _, aggregate_payload = api(
+                  "/api.php/web/internal/search_aggregate", {"vod_id": vod_id}
+              )
+              for line in response_rows(aggregate_payload.get("data")):
+                  if str(line.get("decode_status")) != "0":
+                      continue
+                  for episode in str(line.get("vod_play_url") or "").split("#"):
+                      if "$" not in episode:
+                          continue
+                      episode_title, address = episode.split("$", 1)
+                      address = address.strip()
+                      if address and urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
+                          direct.append((episode_title.strip(), address, "aggregate"))
+
+              unique_urls = {}
+              for episode_title, address, origin in direct:
+                  unique_urls.setdefault(address, (episode_title, origin))
+              episode_numbers = {
+                  int(match.group(1))
+                  for episode_title, _ in unique_urls.values()
+                  if (match := re.search(r"([0-9]{1,4})", episode_title))
+              }
+              remarks = str(detail.get("vod_remarks") or summary.get("vod_remarks") or "")
+              print(
+                  f"CHICAGO_FIRE season={season_number:02d} id={vod_id} "
+                  f"search_title={search_title!r} detail_title={detail_title!r} "
+                  f"remarks={remarks!r} direct_urls={len(unique_urls)} "
+                  f"distinct_episode_numbers={len(episode_numbers)} "
+                  f"poster_fields={[key for key in ('vod_pic','vod_pic_thumb','vod_pic_detail','vod_pic_big','vod_pic_original') if detail.get(key)]}"
+              )
+              chicago_season_results.append({
+                  "season": season_number,
+                  "id": vod_id,
+                  "title": detail_title,
+                  "direct_urls": len(unique_urls),
+                  "episodes": len(episode_numbers),
+              })
+
+          for required_season in (1, 5):
+              result = next(item for item in chicago_season_results if item["season"] == required_season)
+              if result["direct_urls"] == 0 or result["episodes"] == 0:
+                  raise RuntimeError(
+                      f"Chicago Fire S{required_season:02d} has no direct detail/aggregate episodes: {result}"
+                  )
+          print(
+              "PASS: Chicago Fire exact search IDs match their official detail IDs; "
+              "season 1 and season 5 both expose direct episode data through the shared detail+aggregate resolver."
+          )
           PY
