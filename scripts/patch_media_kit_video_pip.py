@@ -11,7 +11,8 @@ from urllib.parse import unquote, urljoin, urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MARKER = "DTV_SAMPLE_BUFFER_PIP_PATCH_V1"
+MARKER = "DTV_SAMPLE_BUFFER_PIP_PATCH_V2"
+LEGACY_MARKER = "DTV_SAMPLE_BUFFER_PIP_PATCH_V1"
 EXPECTED_VERSION = "2.0.1"
 
 
@@ -41,35 +42,37 @@ def replace_exact(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-def patch_texture_hw(package: Path, template: Path) -> None:
-    # media_kit_video 2.0.1 is the pre-SwiftPM package layout:
-    # native iOS plugin sources live under ios/Classes/plugin.
-    path = package / "ios/Classes/plugin/TextureHW.swift"
+def patch_texture_sw(package: Path, template: Path) -> None:
+    # D TV sets enableHardwareAcceleration=false on iOS, so media_kit_video
+    # renders through TextureSW. PiP must tap this active software renderer.
+    path = package / "ios/Classes/plugin/common/TextureSW.swift"
     if not path.is_file():
         raise SystemExit(
-            "media_kit_video 2.0.1 缺少預期的 iOS TextureHW.swift："
+            "media_kit_video 2.0.1 缺少預期的 iOS TextureSW.swift："
             + str(path)
         )
     text = path.read_text(encoding="utf-8")
+    destination = path.parent / "DTVSampleBufferPiPRenderer.swift"
     if MARKER in text:
+        shutil.copy2(template, destination)
         return
 
     text = replace_exact(
         text,
-        "import OpenGLES\n",
-        "import OpenGLES\nimport AVFoundation\nimport AVKit\nimport CoreImage\nimport CoreMedia\nimport CoreVideo\n",
-        "TextureHW imports",
+        "#if canImport(Flutter)\n",
+        "import AVFoundation\nimport AVKit\nimport CoreImage\nimport CoreMedia\nimport CoreVideo\nimport Foundation\n\n#if canImport(Flutter)\n",
+        "TextureSW imports",
     )
 
     registry_code = """
   // D TV bridges the already-rendered MPV frames into AVKit's sample-buffer PiP.
-  private final class WeakTextureHW {
-    weak var value: TextureHW?
-    init(_ value: TextureHW) { self.value = value }
+  private final class WeakTextureSW {
+    weak var value: TextureSW?
+    init(_ value: TextureSW) { self.value = value }
   }
 
   private static let dtvInstanceLock = NSLock()
-  private static var dtvInstances: [Int: WeakTextureHW] = [:]
+  private static var dtvInstances: [Int: WeakTextureSW] = [:]
 
   public static func startDTVPiP(
     handle: Int64,
@@ -208,7 +211,7 @@ def patch_texture_hw(package: Path, template: Path) -> None:
 
     // If MPV is already paused, its render callback may not fire again.
     // Seed PiP once from the last completed texture frame; subsequent frames
-    // arrive through TextureHW.render() as MPV continues playback.
+    // arrive through TextureSW.render() as MPV continues playback.
     if !playing {
       DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250)) { [weak self, weak renderer] in
         guard let self, let renderer,
@@ -235,33 +238,34 @@ def patch_texture_hw(package: Path, template: Path) -> None:
         text,
         "  public typealias UpdateCallback = () -> Void\n",
         "  public typealias UpdateCallback = () -> Void\n" + registry_code,
-        "TextureHW D TV registry methods",
+        "TextureSW D TV registry methods",
     )
 
     text = replace_exact(
         text,
-        "  private var textureContexts = SwappableObjectManager<TextureGLESContext>(\n",
-        "  private let pipLock = NSLock()\n  @available(iOS 15.0, *)\n  private var pipRenderer: DTVSampleBufferPiPRenderer?\n  private var textureContexts = SwappableObjectManager<TextureGLESContext>(\n",
-        "TextureHW PiP state",
+        "  private var textureContexts = SwappableObjectManager<TextureSWContext>(\n",
+        "  private let pipLock = NSLock()\n  @available(iOS 15.0, *)\n  private var pipRenderer: DTVSampleBufferPiPRenderer?\n  private var textureContexts = SwappableObjectManager<TextureSWContext>(\n",
+        "TextureSW PiP state",
     )
 
     text = replace_exact(
         text,
-        "    super.init()\n\n    self.initMPV()\n",
+        "    super.init()\n\n    DispatchQueue.main.async {\n      self.initMPV()\n    }\n",
         """    super.init()
 
     Self.dtvInstanceLock.lock()
-    Self.dtvInstances[Int(bitPattern: handle)] = WeakTextureHW(self)
+    Self.dtvInstances[Int(bitPattern: handle)] = WeakTextureSW(self)
     Self.dtvInstanceLock.unlock()
 
-    self.initMPV()
+    DispatchQueue.main.async {
+      self.initMPV()
+    }
 """,
-        "TextureHW instance registration",
+        "TextureSW instance registration",
     )
 
     text = replace_exact(
         text,
-        "  deinit {\n    disposePixelBuffer()\n",
         """  deinit {
     if #available(iOS 15.0, *) {
       stopDTVPiP()
@@ -271,12 +275,46 @@ def patch_texture_hw(package: Path, template: Path) -> None:
     Self.dtvInstanceLock.unlock()
     disposePixelBuffer()
 """,
-        "TextureHW instance cleanup",
+        """  deinit {
+    if #available(iOS 15.0, *) {
+      stopDTVPiP()
+    }
+    Self.dtvInstanceLock.lock()
+    Self.dtvInstances.removeValue(forKey: Int(bitPattern: handle))
+    Self.dtvInstanceLock.unlock()
+    disposePixelBuffer()
+""",
+        "TextureSW instance cleanup",
     )
 
     text = replace_exact(
         text,
-        "    mpv_render_context_render(renderContext, &params)\n\n    glFlush()\n",
+        """    mpv_render_context_render(renderContext, &params)
+
+    // Copy the completed MPV frame before this buffer returns to Flutter's
+    // three-buffer texture ring. The PiP renderer owns a separate buffer pool.
+    if #available(iOS 15.0, *) {
+      pipLock.lock()
+      let sampleBufferRenderer = pipRenderer
+      pipLock.unlock()
+      if let sampleBufferRenderer {
+        var mediaTime: Double = 0
+        let timeStatus = mpv_get_property(
+          handle,
+          "time-pos",
+          MPV_FORMAT_DOUBLE,
+          &mediaTime
+        )
+        if timeStatus >= 0 && mediaTime.isFinite {
+          sampleBufferRenderer.appendFrame(
+            from: textureContext!.pixelBuffer,
+            positionSeconds: mediaTime
+          )
+        }
+      }
+    }
+
+    textureContexts.pushAsReady(textureContext!)""",
         """    mpv_render_context_render(renderContext, &params)
     glFlush()
 
@@ -303,12 +341,10 @@ def patch_texture_hw(package: Path, template: Path) -> None:
       }
     }
 """,
-        "TextureHW frame tap",
+        "TextureSW frame tap",
     )
 
     path.write_text(text + "\n// " + MARKER + "\n", encoding="utf-8")
-
-    destination = path.parent / "DTVSampleBufferPiPRenderer.swift"
     shutil.copy2(template, destination)
 
 
@@ -321,6 +357,11 @@ def patch_plugin(package: Path) -> None:
         )
     text = path.read_text(encoding="utf-8")
     if MARKER in text:
+        return
+    if LEGACY_MARKER in text:
+        text = text.replace("TextureHW.", "TextureSW.")
+        text = text.replace(LEGACY_MARKER, MARKER)
+        path.write_text(text, encoding="utf-8")
         return
 
     text = replace_exact(
@@ -449,7 +490,7 @@ def patch_plugin(package: Path) -> None:
     let durationMs = max(0, (args["durationMs"] as? NSNumber)?.int64Value ?? 0)
     let playing = (args["playing"] as? NSNumber)?.boolValue ?? true
 
-    TextureHW.startDTVPiP(
+    TextureSW.startDTVPiP(
       handle: handle,
       width: width,
       height: height,
@@ -488,7 +529,7 @@ def patch_plugin(package: Path) -> None:
       ))
       return
     }
-    TextureHW.stopDTVPiP(handle: handle)
+    TextureSW.stopDTVPiP(handle: handle)
     result(nil)
   }
 
@@ -507,7 +548,7 @@ def patch_plugin(package: Path) -> None:
     }
     let playing = (args["playing"] as? NSNumber)?.boolValue ?? true
     let positionMs = max(0, (args["positionMs"] as? NSNumber)?.int64Value ?? 0)
-    TextureHW.updateDTVPiP(
+    TextureSW.updateDTVPiP(
       handle: handle,
       playing: playing,
       positionSeconds: Double(positionMs) / 1000.0
@@ -528,7 +569,7 @@ def patch_plugin(package: Path) -> None:
       ))
       return
     }
-    TextureHW.completeDTVPiPSkip(handle: handle)
+    TextureSW.completeDTVPiPSkip(handle: handle)
     result(nil)
   }
 
@@ -580,7 +621,7 @@ def main() -> None:
             "停止套用以避免 PiP 原生檔案未被編譯。"
         )
 
-    patch_texture_hw(package, template)
+    patch_texture_sw(package, template)
     patch_plugin(package)
     print(f"已套用 D TV Sample Buffer PiP 原生擴充：media_kit_video {version}")
 
