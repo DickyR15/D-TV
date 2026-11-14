@@ -211,6 +211,11 @@ func (d *Downloader) missavCatalogAddress(page int, query string) string {
 	return address
 }
 
+func (d *Downloader) missavDetailAddress(sourceID string) string {
+	sourceID = strings.ToLower(strings.TrimSpace(sourceID))
+	return strings.TrimRight(d.providerBaseURL(sourceMissav), "/") + "/" + url.PathEscape(sourceID) + "/"
+}
+
 func (d *Downloader) fetchMissavCatalogPage(ctx context.Context, page int, category, query string) ([]Drama, bool, error) {
 	if page < 1 || page > 10000 || strings.TrimSpace(category) != "" || len(query) > 160 {
 		return nil, false, errors.New("MissAV 目錄查詢參數無效")
@@ -238,7 +243,7 @@ func (d *Downloader) fetchMissavDetail(ctx context.Context, sourceID string) (Dr
 		return Drama{}, nil, errors.New("MissAV 影片片號無效")
 	}
 	site := strings.TrimRight(d.providerBaseURL(sourceMissav), "/")
-	address := site + "/zh/" + url.PathEscape(sourceID)
+	address := d.missavDetailAddress(sourceID)
 	document, pageURL, _, err := d.fetchAdultProviderDocument(ctx, address, site+"/zh/")
 	if err != nil {
 		return Drama{}, nil, err
@@ -313,7 +318,7 @@ func (d *Downloader) resolveMissavMedia(ctx context.Context, task Task) (provide
 	site := strings.TrimRight(d.providerBaseURL(sourceMissav), "/")
 	pageURL := strings.TrimSpace(task.Chapter.PageURL)
 	if pageURL == "" {
-		pageURL = site + "/zh/" + url.PathEscape(sourceID)
+		pageURL = d.missavDetailAddress(sourceID)
 	}
 	document, actualURL, body, err := d.fetchAdultProviderDocument(ctx, pageURL, site+"/zh/")
 	if err != nil {
