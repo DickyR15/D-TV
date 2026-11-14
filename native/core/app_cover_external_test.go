@@ -1363,6 +1363,14 @@ func TestTVMazePosterAddressResolvesSeasonSpecificChinesePoster(t *testing.T) {
 	if !nativePosterTitleMatches(drama.Title, "9-1-1") {
 		t.Fatal("the exact 9-1-1 Chinese title alias was not recognized")
 	}
+	if _, seasonNumber, seasonUnit, hasSeason := duoduoSeriesTitle(drama.Title); !hasSeason ||
+		seasonNumber != 1 || seasonUnit != "季" {
+		t.Fatalf("Duoduo season title was not parsed: number=%d unit=%q matched=%v", seasonNumber, seasonUnit, hasSeason)
+	}
+	seasonAddress, seasonErr := downloader.tvMazeSeasonPosterAddress(context.Background(), "28152", 1)
+	if seasonErr != nil || seasonAddress != expected {
+		t.Fatalf("direct TVmaze Season 1 lookup = %q, err=%v", seasonAddress, seasonErr)
+	}
 	address, err := downloader.tvMazePosterAddress(context.Background(), drama)
 	if err != nil {
 		t.Fatal(err)
