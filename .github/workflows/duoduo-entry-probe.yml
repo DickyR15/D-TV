@@ -1050,6 +1050,12 @@ jobs:
                       "address": "https://image.tmdb.org/t/p/original/1DKVWl80YSLi0TE8IbyUdqq2o5l.jpg",
                       "label": "TMDB exact The Twilight Zone Season 1 poster (1959)",
                   },
+                  "88129": {
+                      "aliases": {"緊急呼救 第一季", "緊急呼救第一季", "紧急呼救 第一季", "紧急呼救第一季"},
+                      "year": "2018",
+                      "address": "https://static.tvmaze.com/uploads/images/medium_portrait/645/1614039.jpg",
+                      "label": "TVmaze 9-1-1 series poster (2018; exact Chinese title alias)",
+                  },
                   "1625": {
                   "aliases": {"鬼灭之刃剧场版无限城篇第一章猗窝座再来", "鬼滅之刃劇場版無限城篇第一章猗窩座再來"},
                   "year": "2025",
@@ -2147,6 +2153,12 @@ jobs:
                       "year": "1959",
                       "address": "https://image.tmdb.org/t/p/original/1DKVWl80YSLi0TE8IbyUdqq2o5l.jpg",
                       "label": "TMDB exact The Twilight Zone Season 1 poster (1959)",
+                  },
+                  "88129": {
+                      "aliases": {"緊急呼救 第一季", "緊急呼救第一季", "紧急呼救 第一季", "紧急呼救第一季"},
+                      "year": "2018",
+                      "address": "https://static.tvmaze.com/uploads/images/medium_portrait/645/1614039.jpg",
+                      "label": "TVmaze 9-1-1 series poster (2018; exact Chinese title alias)",
                   },
                   "1625": {
                   "aliases": {"鬼灭之刃剧场版无限城篇第一章猗窝座再来", "鬼滅之刃劇場版無限城篇第一章猗窩座再來"},
