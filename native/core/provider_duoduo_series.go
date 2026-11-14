@@ -194,7 +194,7 @@ func (downloader *Downloader) hydrateDuoduoSeriesSeason(ctx context.Context, cat
 	// Resolve the season through the same detail + aggregate parser used by
 	// search-result playback. Catalog rows can omit the episode count even
 	// though search playback can resolve direct URLs from search_aggregate.
-	detail, chapters, _ := downloader.fetchDuoduoDetailWithCategory(
+	detail, chapters, _ := downloader.fetchDuoduoDetailDirectOnly(
 		ctx, catalog.SourceID, catalog.CategoryName,
 	)
 	// Detail identity and poster/count metadata remain useful even when the
