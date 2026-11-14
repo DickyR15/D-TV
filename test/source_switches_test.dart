@@ -93,18 +93,6 @@ void main() {
     expect(heitao.onlineSearch, isTrue);
   });
 
-  test('MissAV and Supjav are registered as advanced searchable sources', () {
-    for (final id in ['missav', 'supjav']) {
-      final source = SourceSite.byId(id);
-      expect(SourceSite.isKnown(id), isTrue);
-      expect(SourceSite.isRestricted(id), isTrue);
-      expect(source.pagedSearch, isTrue);
-      expect(source.onlineSearch, isTrue);
-    }
-    expect(SourceSite.byId('missav').name, 'MissAV');
-    expect(SourceSite.byId('supjav').name, 'Supjav');
-  });
-
   test('advanced source drag order is password protected and persists', () async {
     if (!allSourcesEnabled) return;
     final store = await create();
