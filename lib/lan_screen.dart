@@ -9,6 +9,11 @@ import 'lan_controller.dart';
 import 'local_store.dart';
 import 'widgets.dart';
 
+String _lanErrorMessage(Object error) {
+  final raw = error is StateError ? error.message.toString() : error.toString();
+  return raw.replaceFirst(RegExp(r'^Bad state:\\s*'), '');
+}
+
 IconData lanDeviceIcon(String kind) => switch (kind) {
   'tv' => Icons.tv_rounded,
   'computer' => Icons.computer_rounded,
@@ -151,7 +156,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
     try {
       await action();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _lanErrorMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -177,7 +182,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
     try {
       await link.cancelSync();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _lanErrorMessage(error));
     } finally {
       if (mounted) setState(() => _cancelling = false);
     }
@@ -502,7 +507,7 @@ class _LanDevicesState extends State<_LanDevices> {
       if (widget.change) await link.rescan();
       _changed();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _lanErrorMessage(error));
     }
   }
 
@@ -553,7 +558,7 @@ class _LanDevicesState extends State<_LanDevices> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _error = error.toString();
+          _error = _lanErrorMessage(error);
           _selected = false;
           _target = null;
         });
@@ -572,7 +577,7 @@ class _LanDevicesState extends State<_LanDevices> {
     try {
       await link.forget(peer);
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _lanErrorMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -757,7 +762,7 @@ class _LanManualState extends State<_LanManual> {
     try {
       await link.cancelSync();
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) setState(() => _error = _lanErrorMessage(error));
     } finally {
       if (mounted) setState(() => _cancelling = false);
     }
@@ -795,7 +800,7 @@ class _LanManualState extends State<_LanManual> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _error = error.toString();
+          _error = _lanErrorMessage(error);
           _preview = null;
         });
       }
