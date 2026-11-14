@@ -45,11 +45,23 @@ String lanPublicErrorMessage(Object failure) {
   return '裝置互聯暫時無法使用，請確認兩臺裝置都已開啟區域網路自動同步，並連線至同一個網路。';
 }
 
+bool lanDiscoveryShouldRun({
+  required bool enabled,
+  required bool autoSync,
+  required bool receiving,
+}) => enabled && autoSync && receiving;
+
 class LanController extends ChangeNotifier with WidgetsBindingObserver {
   LanController(this.repository, this.store, {required this.kind}) {
     store.addListener(_storeChanged);
     WidgetsBinding.instance.addObserver(this);
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _tick());
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      unawaited(_tick().catchError((Object failure) {
+        if (_disposed) return;
+        error = lanPublicErrorMessage(failure);
+        _notify();
+      }));
+    });
     _storeChanged();
   }
 
@@ -379,12 +391,12 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _reconcile() async {
     final run = _run;
     await _stop();
-    if (_disposed || run != _run || !_foreground || !enabled) return;
+    if (_disposed || run != _run || !_foreground || !enabled || !autoSync) return;
     await store.ensureLanRecords();
-    if (_disposed || run != _run) return;
+    if (_disposed || run != _run || !enabled || !autoSync) return;
     _sessionEpoch = store.profileEpoch;
     final info = await repository.lan('start', {'config': _config()});
-    if (_disposed || run != _run) {
+    if (_disposed || run != _run || !enabled || !autoSync) {
       await repository.lan('stop', {'generation': info['generation']});
       return;
     }
@@ -427,7 +439,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> rescan() async {
-    if (!receiving) return;
+    if (!lanDiscoveryShouldRun(
+      enabled: enabled,
+      autoSync: autoSync,
+      receiving: receiving,
+    )) return;
     final run = _run;
     final previous = _discovery;
     _discovery = null;
@@ -435,6 +451,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       previous.removeListener(_discovered);
       await nsd.stopDiscovery(previous).catchError((Object _) {});
     }
+    if (_disposed || run != _run || !lanDiscoveryShouldRun(
+      enabled: enabled,
+      autoSync: autoSync,
+      receiving: receiving,
+    )) return;
     _scanStarted = DateTime.now();
     _retryAt = DateTime(2000);
     try {
@@ -442,7 +463,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         serviceType,
         ipLookupType: nsd.IpLookupType.any,
       );
-      if (_disposed || run != _run) {
+      if (_disposed || run != _run || !lanDiscoveryShouldRun(
+        enabled: enabled,
+        autoSync: autoSync,
+        receiving: receiving,
+      )) {
         await nsd.stopDiscovery(discovery);
         return;
       }
@@ -458,6 +483,22 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _discovered() {
+    if (_disposed || !lanDiscoveryShouldRun(
+      enabled: enabled,
+      autoSync: autoSync,
+      receiving: receiving,
+    )) return;
+    try {
+      _processDiscovered();
+    } catch (failure) {
+      if (_disposed) return;
+      discoveryMessage = '無法自動探索裝置。請檢查區域網路權限，或輸入對方的本機位址';
+      error = lanPublicErrorMessage(failure);
+      _notify();
+    }
+  }
+
+  void _processDiscovered() {
     final map = <String, LanPeer>{..._manualPeers};
     final conflicted = <String>{};
     for (final service in _discovery?.services.take(128) ?? <nsd.Service>[]) {
@@ -707,7 +748,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _autoConnect() async {
     if (_disposed ||
-        !receiving ||
+        !lanDiscoveryShouldRun(
+          enabled: enabled,
+          autoSync: autoSync,
+          receiving: receiving,
+        ) ||
         connection != null ||
         _connecting ||
         DateTime.now().isBefore(_retryAt)) {
@@ -794,7 +839,14 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _poll(int run, String generation) async {
-    while (!_disposed && run == _run && _generation == generation) {
+    while (!_disposed &&
+        run == _run &&
+        _generation == generation &&
+        lanDiscoveryShouldRun(
+          enabled: enabled,
+          autoSync: autoSync,
+          receiving: receiving,
+        )) {
       try {
         final data = await repository.lan('poll', {'generation': generation});
         if (run != _run || _disposed) return;
@@ -821,7 +873,9 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       if (run != _run ||
           store.locked ||
           store.profileEpoch != _sessionEpoch ||
-          !_foreground) {
+          !_foreground ||
+          !enabled ||
+          !autoSync) {
         throw StateError('接收已關閉或目前使用者已變更');
       }
       final path = event['path'];
@@ -975,7 +1029,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _tick() async {
-    if (_disposed || !receiving) return;
+    if (_disposed || !lanDiscoveryShouldRun(
+      enabled: enabled,
+      autoSync: autoSync,
+      receiving: receiving,
+    )) return;
     if (_incomingSync != null &&
         DateTime.now().difference(_incomingSync!.updated) >
             const Duration(minutes: 2)) {

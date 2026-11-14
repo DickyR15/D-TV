@@ -4,6 +4,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/lan_controller.dart';
 
 void main() {
+  group('lanDiscoveryShouldRun', () {
+    test('stops discovery immediately when auto-sync is disabled', () {
+      expect(
+        lanDiscoveryShouldRun(enabled: true, autoSync: false, receiving: true),
+        isFalse,
+      );
+      expect(
+        lanDiscoveryShouldRun(enabled: false, autoSync: true, receiving: true),
+        isFalse,
+      );
+      expect(
+        lanDiscoveryShouldRun(enabled: true, autoSync: true, receiving: false),
+        isFalse,
+      );
+      expect(
+        lanDiscoveryShouldRun(enabled: true, autoSync: true, receiving: true),
+        isTrue,
+      );
+    });
+  });
+
   group('lanPublicErrorMessage', () {
     test('keeps actionable Traditional Chinese state errors', () {
       expect(
