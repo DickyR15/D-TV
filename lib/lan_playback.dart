@@ -261,7 +261,7 @@ extension LanPlayback on LanController {
       }
       if (_preparedPlayback == pending && !pending.cancelled) {
         pending.state = 'failed';
-        pending.message = failure.toString();
+        pending.message = lanPublicErrorMessage(failure);
         _playReceipts[pending.id] = pending.result;
         _trimPlayReceipts();
       }
@@ -301,7 +301,7 @@ extension LanPlayback on LanController {
       }
       if (_preparedPlayback == pending && !pending.cancelled) {
         pending.state = 'failed';
-        pending.message = failure.toString();
+        pending.message = lanPublicErrorMessage(failure);
         _playReceipts[pending.id] = pending.result;
         _trimPlayReceipts();
       }
@@ -367,7 +367,7 @@ extension LanPlayback on LanController {
       pushMessage = '已在 ${remote.peer.name} 播放';
       flush();
     } catch (failure) {
-      if (ticket == _pushSequence) pushMessage = failure.toString();
+      if (ticket == _pushSequence) pushMessage = lanPublicErrorMessage(failure);
       rethrow;
     } finally {
       if (!accepted && connection == remote) {
