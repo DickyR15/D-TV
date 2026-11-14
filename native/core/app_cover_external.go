@@ -400,7 +400,14 @@ func (d *Downloader) doubanSuggestedPosterAddress(ctx context.Context, drama nat
 		}
 	}
 	if len(matches) == 1 {
-		for _, address := range matches {
+		for showID, address := range matches {
+			if _, seasonNumber, _, hasSeason := duoduoSeriesTitle(drama.Title); hasSeason {
+				if seasonAddress, seasonErr := d.tvMazeSeasonPosterAddress(
+					searchCtx, showID, seasonNumber,
+				); seasonErr == nil && seasonAddress != "" {
+					return seasonAddress, nil
+				}
+			}
 			return address, nil
 		}
 	}
@@ -760,6 +767,57 @@ func validTVMazePosterAddress(raw string) string {
 		return ""
 	}
 	return parsed.String()
+}
+
+func (d *Downloader) tvMazeSeasonPosterAddress(
+	ctx context.Context,
+	showID string,
+	seasonNumber int,
+) (string, error) {
+	showID = strings.TrimSpace(showID)
+	if !webProviderNumericID.MatchString(showID) || seasonNumber < 1 {
+		return "", errors.New("TVmaze 季別查詢參數無效")
+	}
+	endpoint := "https://api.tvmaze.com/shows/" + showID + "/seasons"
+	request, err := http.NewRequestWithContext(
+		context.WithValue(ctx, nativeCoverNetworkKey{}, true),
+		http.MethodGet, endpoint, nil,
+	)
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("User-Agent", userAgent)
+	request.Header.Set("Accept", "application/json")
+	client := *d.client
+	response, err := client.Do(request)
+	if err != nil {
+		return "", err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+	response.Body.Close()
+	if readErr != nil {
+		return "", readErr
+	}
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("TVmaze 季別回應 HTTP %d", response.StatusCode)
+	}
+	if len(body) > 1<<20 {
+		return "", errors.New("TVmaze 季別回應超過大小限制")
+	}
+	var seasons []map[string]any
+	if err := json.Unmarshal(body, &seasons); err != nil {
+		return "", errors.New("TVmaze 季別回應格式無效")
+	}
+	for _, season := range seasons {
+		if duoduoEpisodeValueCount(season["number"]) != seasonNumber {
+			continue
+		}
+		image := nestedMap(season, "image")
+		return validTVMazePosterAddress(firstNonEmpty(
+			duoduoString(image["original"]), duoduoString(image["medium"]),
+		)), nil
+	}
+	return "", nil
 }
 
 func (d *Downloader) tvMazePosterAddress(ctx context.Context, drama nativeDrama) (string, error) {
