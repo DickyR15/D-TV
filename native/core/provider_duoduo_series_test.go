@@ -164,3 +164,67 @@ func TestDuoduoDramaEpisodeCountReadsCatalogAliases(t *testing.T) {
 		})
 	}
 }
+
+
+func TestFetchDuoduoSeriesSeasonsUsesSearchPlaybackResolverForPlayableFlag(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[
+					{"vod_id":900,"vod_name":"緊急呼救第一季","vod_pic":"https://img.example.test/s1.jpg","vod_remarks":"已完結"},
+					{"vod_id":901,"vod_name":"緊急呼救第二季","vod_pic":"https://img.example.test/s2.jpg","vod_remarks":"18集"}
+				]
+			}`), nil
+		case "/api.php/web/vod/get_detail":
+			if request.URL.Query().Get("vod_id") != "900" {
+				t.Fatalf("unexpected detail ID: %s", request.URL.Query().Get("vod_id"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[{
+					"vod_id":900,
+					"vod_name":"緊急呼救第一季",
+					"vod_pic":"https://img.example.test/s1.jpg",
+					"vod_remarks":"已完結",
+					"vod_play_from":"",
+					"vod_play_url":""
+				}],
+				"vodplayer":[]
+			}`), nil
+		case "/api.php/web/internal/search_aggregate":
+			if request.URL.Query().Get("vod_id") != "900" {
+				t.Fatalf("unexpected aggregate ID: %s", request.URL.Query().Get("vod_id"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[{
+					"site_key":"series-direct",
+					"site_name":"系列直連",
+					"decode_status":0,
+					"vod_play_url":"第1集$https://media.example.test/s1e1.m3u8#第2集$https://media.example.test/s1e2.m3u8"
+				}]
+			}`), nil
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+	current := nativeDrama{
+		ID: "duoduo:901", Source: sourceDuoduo, SourceID: "901",
+		Title: "緊急呼救第二季", Episodes: 18,
+	}
+	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seasons) != 2 {
+		t.Fatalf("expected two seasons, got %+v", seasons)
+	}
+	first := seasons[0]
+	if first.Drama.ID != "duoduo:900" || !first.Playable || first.Upcoming ||
+		duoduoDramaEpisodeCount(duoduoDramaFromNative(first.Drama)) < 2 {
+		t.Fatalf("season with aggregate playback URLs was incorrectly unavailable: %+v", first)
+	}
+}
