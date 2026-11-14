@@ -3062,4 +3062,135 @@ jobs:
           if not med_probe_ok:
               raise RuntimeError("Chicago Med S1 id=131229 direct media URLs did not pass the bounded public media probe")
           print("PASS: Chicago Med S1 id=131229 has validated official direct playback data.")
+
+          # The catalogue also contains a second exact-title/translation variant.
+          # Diagnose it independently before deciding whether D-TV should route
+          # this alias to the already-verified playable record (131229).
+          print("\\n=== CHICAGO MED ALTERNATE TITLE RECORD: 160306 ===")
+          chicago_med_alt_id = "160306"
+          alt_base, alt_payload = api(
+              "/api.php/web/vod/get_detail", {"vod_id": chicago_med_alt_id}
+          )
+          alt_rows = response_rows(alt_payload.get("data"))
+          if not alt_rows:
+              raise RuntimeError("Chicago Med alternate id=160306 returned no official detail row")
+          alt_med = alt_rows[0]
+          alt_title = row_title(alt_med)
+          if row_id(alt_med) != chicago_med_alt_id:
+              raise RuntimeError("Chicago Med alternate detail identity mismatch")
+          if not any(alias in alt_title for alias in ("芝加哥醫院", "芝加哥医院", "芝加哥急救", "Chicago Med")):
+              raise RuntimeError(f"Chicago Med alternate id=160306 title mismatch: {alt_title!r}")
+
+          alt_player_rows = response_rows(alt_payload.get("vodplayer"))
+          alt_player_by_from = {
+              str(player.get("from") or "").strip(): player
+              for player in alt_player_rows if str(player.get("from") or "").strip()
+          }
+          alt_detail_summary = []
+          alt_direct = []
+          alt_non_direct = []
+          alt_names = split_source_groups(alt_med.get("vod_play_from"), comma_fallback=True)
+          alt_blocks = split_source_groups(alt_med.get("vod_play_url"))
+          for index, name in enumerate(alt_names[:len(alt_blocks)]):
+              player = alt_player_by_from.get(name.strip(), {})
+              decode_status = str(player.get("decode_status") or "0")
+              entries = []
+              for episode in alt_blocks[index].split("#"):
+                  if "$" not in episode:
+                      continue
+                  episode_title, address = episode.split("$", 1)
+                  address = address.strip()
+                  if not address:
+                      continue
+                  if decode_status == "0" and is_direct_http_media(address):
+                      alt_direct.append((episode_title.strip(), address, name))
+                  else:
+                      alt_non_direct.append((decode_status, episode_title.strip(), address, name))
+                  entries.append((episode_title.strip(), address))
+              alt_detail_summary.append({
+                  "from": name,
+                  "show": str(player.get("show") or name),
+                  "decode_status": decode_status,
+                  "episodes": len(entries),
+                  "direct_urls": sum(
+                      1 for _, address in entries
+                      if decode_status == "0" and is_direct_http_media(address)
+                  ),
+                  "non_direct_samples": [
+                      safe_media_kind(address)
+                      for _, address in entries[:2]
+                      if not (decode_status == "0" and is_direct_http_media(address))
+                  ],
+              })
+
+          _, alt_aggregate_payload = api(
+              "/api.php/web/internal/search_aggregate", {"vod_id": chicago_med_alt_id}
+          )
+          alt_aggregate_rows = response_rows(alt_aggregate_payload.get("data"))
+          alt_aggregate_summary = []
+          for line in alt_aggregate_rows:
+              decode_status = str(line.get("decode_status") or "0")
+              site_key = str(line.get("site_key") or line.get("vod_play_from") or "")
+              site_name = str(line.get("site_name") or site_key or "aggregate")
+              line_label = f"{site_name} [{site_key}]" if site_key else site_name
+              entries = []
+              for episode in str(line.get("vod_play_url") or "").split("#"):
+                  if "$" not in episode:
+                      continue
+                  episode_title, address = episode.split("$", 1)
+                  address = address.strip()
+                  if not address:
+                      continue
+                  entries.append((episode_title.strip(), address))
+                  if decode_status == "0" and is_direct_http_media(address):
+                      alt_direct.append((episode_title.strip(), address, line_label))
+                  else:
+                      alt_non_direct.append((decode_status, episode_title.strip(), address, line_label))
+              alt_aggregate_summary.append({
+                  "site_key": site_key,
+                  "site_name": site_name,
+                  "decode_status": decode_status,
+                  "episodes": len(entries),
+                  "direct_urls": sum(
+                      1 for _, address in entries
+                      if decode_status == "0" and is_direct_http_media(address)
+                  ),
+                  "non_direct_samples": [
+                      safe_media_kind(address)
+                      for _, address in entries[:2]
+                      if not (decode_status == "0" and is_direct_http_media(address))
+                  ],
+              })
+
+          alt_unique = {}
+          for episode_title, address, origin in alt_direct:
+              alt_unique.setdefault(address, (episode_title, origin))
+          print(
+              f"CHICAGO_MED_ALT id={chicago_med_alt_id} title={alt_title!r} "
+              f"remarks={str(alt_med.get('vod_remarks') or '')!r} "
+              f"direct_urls={len(alt_unique)} detail_lines={alt_detail_summary!r} "
+              f"aggregate_lines={alt_aggregate_summary!r} "
+              f"non_direct_samples={[{'decode_status': row[0], 'line': row[3], 'media': safe_media_kind(row[2])} for row in alt_non_direct[:8]]!r}"
+          )
+          if alt_unique:
+              alt_probe_by_line = {}
+              for episode_title, address, origin in alt_direct:
+                  alt_probe_by_line.setdefault(origin, (episode_title, address))
+              alt_probe_ok = False
+              for origin, (episode_title, address) in alt_probe_by_line.items():
+                  ok, message = probe_media(address, alt_base + "/")
+                  if not ok:
+                      retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                      if retry_ok:
+                          ok, message = retry_ok, retry_message
+                      else:
+                          message += f"; public-entry retry failed: {retry_message}"
+                  print(
+                      f"CHICAGO_MED_ALT_MEDIA episode={episode_title!r} line={origin!r} "
+                      f"media={safe_media_kind(address)} ok={ok} {message}"
+                  )
+                  alt_probe_ok = alt_probe_ok or ok
+              print(f"CHICAGO_MED_ALT playable_probe={alt_probe_ok}")
+          else:
+              print("CHICAGO_MED_ALT no D-TV-compatible direct routes; alias fallback is required.")
           PY
