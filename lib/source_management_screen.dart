@@ -124,6 +124,24 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     }
   }
 
+  Future<void> _reorderAdvancedSources(int oldIndex, int newIndex) async {
+    final sourceIds = widget.store.advancedSources
+        .map((source) => source.id)
+        .toList();
+    if (oldIndex < 0 || oldIndex >= sourceIds.length) return;
+    if (newIndex > oldIndex) newIndex--;
+    if (newIndex < 0 || newIndex >= sourceIds.length || newIndex == oldIndex) {
+      return;
+    }
+    final moved = sourceIds.removeAt(oldIndex);
+    sourceIds.insert(newIndex, moved);
+    try {
+      await widget.store.reorderAdvancedSources(sourceIds);
+    } catch (error) {
+      if (mounted) setState(() => _error = sourceManagementErrorMessage(error));
+    }
+  }
+
   Future<void> _toggle(SourceSite source, bool enabled) async {
     if (_busy || _busySourceIds.contains(source.id)) return;
     setState(() {
@@ -242,13 +260,11 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         .where((source) => SourceSite.isAvailable(source.id))
         .toList();
     final generalNames = general.map((source) => source.name).join('、');
-    final advanced = SourceSite.restrictedValues
-        .where((source) => SourceSite.isAvailable(source.id))
-        .toList();
     return AnimatedBuilder(
       animation: widget.store,
       builder: (context, _) {
         final unlocked = _unlocked && widget.store.advancedSourcesUnlocked;
+        final advanced = widget.store.advancedSources;
         return Scaffold(
           appBar: AppBar(title: const Text('片源管理')),
           body: Center(
@@ -283,12 +299,51 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                           '進階片源',
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
-                        const SizedBox(height: 8),
-                        for (var index = 0; index < advanced.length; index++)
-                          _sourceTile(
-                            advanced[index],
-                            focusNode: index == 0 ? _firstAdvancedFocus : null,
-                          ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '拖曳右側圖示即可調整片源順序，變更會自動儲存。',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 4),
+                        ReorderableListView.builder(
+                          key: const ValueKey('advanced-source-reorder-list'),
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          buildDefaultDragHandles: false,
+                          itemCount: advanced.length,
+                          onReorder: _reorderAdvancedSources,
+                          itemBuilder: (context, index) {
+                            final source = advanced[index];
+                            return KeyedSubtree(
+                              key: ValueKey('advanced-source-item-${source.id}'),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _sourceTile(
+                                      source,
+                                      focusNode: index == 0
+                                          ? _firstAdvancedFocus
+                                          : null,
+                                    ),
+                                  ),
+                                  ReorderableDragStartListener(
+                                    index: index,
+                                    child: Tooltip(
+                                      message: '拖曳以調整順序',
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(horizontal: 12),
+                                        child: Icon(
+                                          Icons.drag_handle_rounded,
+                                          semanticLabel: '拖曳調整順序',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                         Align(
                           alignment: Alignment.centerLeft,
                           child: TextButton.icon(
