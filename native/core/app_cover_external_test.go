@@ -1042,6 +1042,69 @@ func TestExternalPosterAddressFallsBackToBangumiWhenDoubanIsDenied(t *testing.T)
 	}
 }
 
+func TestDuoduoPosterDecodeFailureFallsBackFromEdgeToOrigin(t *testing.T) {
+	const poster = "https://img.example.test/poster.jpg"
+	validImage := posterTestJPEG(t)
+	invalidEdgeImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
+	var edgeCalls, originCalls int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "wsrv.nl":
+			edgeCalls++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(invalidEdgeImage)),
+				ContentLength: int64(len(invalidEdgeImage)),
+				Request: request,
+			}, nil
+		case "img.example.test":
+			originCalls++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(validImage)),
+				ContentLength: int64(len(validImage)),
+				Request: request,
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader("not found")),
+				Request: request,
+			}, nil
+		}
+	})}
+	downloader := &Downloader{
+		client: client,
+		cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
+	}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	path, err := cache.load(context.Background(), nativeDrama{
+		ID: "duoduo:decode-fallback",
+		Source: sourceDuoduo,
+		SourceID: "decode-fallback",
+		Title: "解碼備援測試",
+		Cover: poster,
+		CoverCandidates: []string{poster},
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edgeCalls != 1 || originCalls != 1 {
+		t.Fatalf("poster fallback requests: edge=%d origin=%d, want 1 each", edgeCalls, originCalls)
+	}
+	cached, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(cached, validImage) {
+		t.Fatal("corrupt edge image was cached instead of the decoded origin fallback")
+	}
+}
+
 func TestNativeCoverExternalDownloadFailureFallsBackToBangumi(t *testing.T) {
 	image := posterTestJPEG(t)
 	var bangumiCalls int
