@@ -42,7 +42,14 @@ def replace_exact(text: str, old: str, new: str, label: str) -> str:
 
 
 def patch_texture_hw(package: Path, template: Path) -> None:
-    path = package / "ios/media_kit_video/Sources/media_kit_video/plugin/TextureHW.swift"
+    # media_kit_video 2.0.1 is the pre-SwiftPM package layout:
+    # native iOS plugin sources live under ios/Classes/plugin.
+    path = package / "ios/Classes/plugin/TextureHW.swift"
+    if not path.is_file():
+        raise SystemExit(
+            "media_kit_video 2.0.1 缺少預期的 iOS TextureHW.swift："
+            + str(path)
+        )
     text = path.read_text(encoding="utf-8")
     if MARKER in text:
         return
@@ -306,7 +313,12 @@ def patch_texture_hw(package: Path, template: Path) -> None:
 
 
 def patch_plugin(package: Path) -> None:
-    path = package / "ios/media_kit_video/Sources/media_kit_video/plugin/common/MediaKitVideoPlugin.swift"
+    path = package / "ios/Classes/plugin/common/MediaKitVideoPlugin.swift"
+    if not path.is_file():
+        raise SystemExit(
+            "media_kit_video 2.0.1 缺少預期的 iOS MediaKitVideoPlugin.swift："
+            + str(path)
+        )
     text = path.read_text(encoding="utf-8")
     if MARKER in text:
         return
@@ -557,6 +569,16 @@ def main() -> None:
     template = ROOT / "scripts" / "ios" / "DTVSampleBufferPiPRenderer.swift"
     if not template.is_file():
         raise SystemExit("找不到 DTVSampleBufferPiPRenderer.swift 樣板。")
+
+    podspec = package / "ios" / "media_kit_video.podspec"
+    if not podspec.is_file():
+        raise SystemExit("找不到 media_kit_video iOS Podspec。")
+    podspec_text = podspec.read_text(encoding="utf-8")
+    if "Classes/plugin/**/*.swift" not in podspec_text:
+        raise SystemExit(
+            "media_kit_video 2.0.1 Podspec 未包含 Classes/plugin/**/*.swift；"
+            "停止套用以避免 PiP 原生檔案未被編譯。"
+        )
 
     patch_texture_hw(package, template)
     patch_plugin(package)
