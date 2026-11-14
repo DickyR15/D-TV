@@ -128,6 +128,10 @@ func missavIDFromURL(raw, baseURL string) string {
 		}
 		parsed = base.ResolveReference(parsed)
 	}
+	host := strings.ToLower(parsed.Hostname())
+	if host != "missav.ws" && host != "www.missav.ws" {
+		return ""
+	}
 	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 	for index := len(segments) - 1; index >= 0; index-- {
 		segment := strings.TrimSpace(segments[index])
@@ -330,6 +334,10 @@ func supjavIDFromURL(raw, baseURL string) string {
 		}
 		parsed = base.ResolveReference(parsed)
 	}
+	host := strings.ToLower(parsed.Hostname())
+	if host != "supjav.com" && host != "www.supjav.com" {
+		return ""
+	}
 	match := reSupjavDetailID.FindStringSubmatch(parsed.Path)
 	if len(match) != 2 {
 		return ""
@@ -363,7 +371,7 @@ func supjavDramaFromCard(anchor *html.Node, pageURL string) (Drama, bool) {
 		ID: providerDramaID(sourceSupjav, sourceID), Source: sourceSupjav, SourceID: sourceID,
 		Title: truncate(title, 512), Name: truncate(title, 512),
 		Cover: firstNonEmpty(covers...), CoverURL: firstNonEmpty(covers...),
-		CoverCandidates: append([]string(nil), covers[1:]...),
+		CoverCandidates: adultAdditionalCoverCandidates(covers),
 		ChannelName: "Supjav", CategoryName: "影片", TotalEpisode: 1, EpisodeCount: 1,
 	}, true
 }
@@ -407,7 +415,7 @@ func (d *Downloader) fetchSupjavCatalogPage(ctx context.Context, page int, categ
 		return nil, false, errors.New("Supjav 目錄查詢參數無效")
 	}
 	address := d.supjavCatalogAddress(page, strings.TrimSpace(query))
-	document, pageURL, err := d.fetchProviderPage(ctx, address, d.providerBaseURL(sourceSupjav)+"/zh/", "")
+	document, pageURL, _, err := d.fetchAdultProviderDocument(ctx, address, d.providerBaseURL(sourceSupjav)+"/zh/")
 	if err != nil {
 		return nil, false, err
 	}
@@ -422,7 +430,7 @@ func (d *Downloader) fetchSupjavDetail(ctx context.Context, sourceID string) (Dr
 	}
 	site := strings.TrimRight(d.providerBaseURL(sourceSupjav), "/")
 	address := site + "/" + sourceID + ".html"
-	document, pageURL, err := d.fetchProviderPage(ctx, address, site+"/zh/", "")
+	document, pageURL, _, err := d.fetchAdultProviderDocument(ctx, address, site+"/zh/")
 	if err != nil {
 		return Drama{}, nil, err
 	}
@@ -477,11 +485,7 @@ func (d *Downloader) resolveSupjavMedia(ctx context.Context, task Task) (provide
 	if pageURL == "" {
 		pageURL = site + "/" + sourceID + ".html"
 	}
-	document, actualURL, err := d.fetchProviderPage(ctx, pageURL, site+"/zh/", "")
-	if err != nil {
-		return providerMedia{}, err
-	}
-	body, err := d.fetchProviderText(ctx, actualURL, site+"/zh/")
+	document, actualURL, body, err := d.fetchAdultProviderDocument(ctx, pageURL, site+"/zh/")
 	if err != nil {
 		return providerMedia{}, err
 	}
