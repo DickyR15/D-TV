@@ -194,7 +194,7 @@ func TestSupjavPlaybackResolverUsesTVEndpointAndLoadsPlaylist(t *testing.T) {
 			}
 			pageSeen = true
 			return sourceFixtureResponse(request, http.StatusOK,
-				`<html><body><a data-link="${encodedLink}">TV</a></body></html>`), nil
+				"<html><body><a data-link=\"" + encodedLink + "\">TV</a></body></html>"), nil
 		case "lk1.supremejav.com":
 			if request.URL.Path != "/supjav.php" {
 				return nil, fmt.Errorf("unexpected Supjav playback path: %s", request.URL.Path)
@@ -207,7 +207,7 @@ func TestSupjavPlaybackResolverUsesTVEndpointAndLoadsPlaylist(t *testing.T) {
 			}
 			endpointSeen = true
 			return sourceFixtureResponse(request, http.StatusOK,
-				`<script>var urlPlay = "${playlistURL}";</script>`), nil
+				"<script>var urlPlay = \"" + playlistURL + "\";</script>"), nil
 		case "media.example.test":
 			if request.URL.Path != "/master.m3u8" || request.URL.Query().Get("token") != "fixture" {
 				return nil, fmt.Errorf("unexpected Supjav playlist URL: %s", request.URL)
