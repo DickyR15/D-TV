@@ -760,8 +760,30 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
-	if query != "" && source == sourceHeitao {
+\tif query != "" && source == sourceHeitao {
 		items, more, err := d.fetchHeitaoCatalogPage(ctx, page, "", query)
+		if err != nil {
+			return result, err
+		}
+		for _, drama := range items {
+			result.Items = append(result.Items, nativeNormalize(drama))
+		}
+		result.HasMore = more
+		return result, nil
+	}
+	if query != "" && source == sourceMissav {
+		items, more, err := d.fetchMissavCatalogPage(ctx, page, "", query)
+		if err != nil {
+			return result, err
+		}
+		for _, drama := range items {
+			result.Items = append(result.Items, nativeNormalize(drama))
+		}
+		result.HasMore = more
+		return result, nil
+	}
+	if query != "" && source == sourceSupjav {
+		items, more, err := d.fetchSupjavCatalogPage(ctx, page, "", query)
 		if err != nil {
 			return result, err
 		}
@@ -876,6 +898,10 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		items, result.HasMore, err = d.fetchHanxiaoquanCatalogPage(ctx, page, category, "")
 	case sourceHeitao:
 		items, result.HasMore, err = d.fetchHeitaoCatalogPage(ctx, page, category, "")
+	case sourceMissav:
+		items, result.HasMore, err = d.fetchMissavCatalogPage(ctx, page, category, "")
+	case sourceSupjav:
+		items, result.HasMore, err = d.fetchSupjavCatalogPage(ctx, page, category, "")
 	case sourceHuangguoVideo:
 		address := fmt.Sprintf("%s/videos?page=%d", d.providerBaseURL(source), page)
 		if category != "" {
@@ -969,6 +995,10 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		raw, chapters, err = engine.downloader.fetchHeitaoDetailWithFallback(
 			ctx, sourceID, lookupSourceID, drama.Title,
 		)
+	case sourceMissav:
+		raw, chapters, err = engine.downloader.fetchMissavDetail(ctx, sourceID)
+	case sourceSupjav:
+		raw, chapters, err = engine.downloader.fetchSupjavDetail(ctx, sourceID)
 	default:
 		title, chapters, err = engine.downloader.GetHuangguoChapters(ctx, source, sourceID)
 	}
