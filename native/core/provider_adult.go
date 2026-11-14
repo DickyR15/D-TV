@@ -303,12 +303,12 @@ func adultMediaCandidates(document *html.Node, rawBody, pageURL string) []string
 		add(firstNonEmpty(providerHTMLAttr(node, "src"), providerHTMLAttr(node, "data-src")))
 	}
 
-	// Fallback URLs are also embedded in script strings. Extract URL-like
-	// tokens without assuming an extension is followed immediately by a
-	// delimiter; add() parses and validates the URL path and scheme.
+	// Scan raw page text for inline JavaScript URL fallbacks. Extract every
+	// absolute URL token, then let add() validate protocol and media extension.
 	body := strings.ReplaceAll(rawBody, "\\/", "/")
 	body = strings.ReplaceAll(body, "\\u0026", "&")
-	for _, match := range regexp.MustCompile(`(?i)https?://[^[:space:]"'<>\\]+`).FindAllString(body, -1) {
+	mediaToken := regexp.MustCompile(`(?i)https?://[^[:space:]"'<>\\]+`)
+	for _, match := range mediaToken.FindAllString(body, -1) {
 		add(strings.TrimRight(match, ".,);]"))
 	}
 	return candidates
