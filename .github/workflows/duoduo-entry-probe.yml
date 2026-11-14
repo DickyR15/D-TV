@@ -1025,6 +1025,13 @@ jobs:
                       "address": "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
                       "label": "Distributor poster for Obsessed (2014)",
                   },
+                  "88129": {
+                      "aliases": {"緊急呼救第一季", "紧急呼救第一季", "緊急呼救 第一季", "紧急呼救 第一季"},
+                      "year": "2018",
+                      "address": "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
+                      "label": "TVmaze exact 9-1-1 Season 1 artwork (2018)",
+                  },
+
                   "92722": {
                       "aliases": {"謊言第一季", "谎言第一季"},
                       "year": "2020",
