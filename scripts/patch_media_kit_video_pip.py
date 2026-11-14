@@ -183,13 +183,15 @@ def patch_texture_hw(package: Path, template: Path) -> None:
     // If MPV is already paused, its render callback may not fire again.
     // Seed PiP once from the last completed texture frame; subsequent frames
     // arrive through TextureHW.render() as MPV continues playback.
-    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250)) { [weak self, weak renderer] in
-      guard let self, let renderer,
-            let current = self.textureContexts.current else { return }
-      renderer.appendFrame(
-        from: current.pixelBuffer,
-        positionSeconds: positionSeconds
-      )
+    if !playing {
+      DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250)) { [weak self, weak renderer] in
+        guard let self, let renderer,
+              let current = self.textureContexts.current else { return }
+        renderer.appendFrame(
+          from: current.pixelBuffer,
+          positionSeconds: positionSeconds
+        )
+      }
     }
   }
 
@@ -250,9 +252,10 @@ def patch_texture_hw(package: Path, template: Path) -> None:
         text,
         "    mpv_render_context_render(renderContext, &params)\n\n    glFlush()\n",
         """    mpv_render_context_render(renderContext, &params)
+    glFlush()
 
-    // Copy the just-rendered MPV frame to a separate bounded pixel-buffer pool.
-    // PiP must never retain a buffer that Flutter's three-buffer texture ring reuses.
+    // Copy the just-rendered MPV frame to a separate bounded pixel-buffer pool
+    // before the source buffer re-enters Flutter's reusable texture ring.
     if #available(iOS 15.0, *) {
       pipLock.lock()
       let sampleBufferRenderer = pipRenderer
@@ -273,8 +276,6 @@ def patch_texture_hw(package: Path, template: Path) -> None:
         }
       }
     }
-
-    glFlush()
 """,
         "TextureHW frame tap",
     )
