@@ -135,39 +135,6 @@ func TestSupjavRequestsTaiwanTraditionalChinese(t *testing.T) {
 	}
 }
 
-func TestAdultProviderCanonicalURLs(t *testing.T) {
-	d := &Downloader{cfg: defaultConfig()}
-	if got, want := d.missavDetailAddress("DLDSS-581"), "https://missav.ws/dldss-581/"; got != want {
-		t.Fatalf("MissAV detail URL = %q, want %q", got, want)
-	}
-	if got, want := d.missavCatalogAddress(1, "DLDSS-581"), "https://missav.ws/search/DLDSS-581"; got != want {
-		t.Fatalf("MissAV search URL = %q, want %q", got, want)
-	}
-	if got, want := d.missavCatalogAddress(2, ""), "https://missav.ws/zh/release?page=2"; got != want {
-		t.Fatalf("MissAV page 2 URL = %q, want %q", got, want)
-	}
-	if got, want := d.supjavCatalogAddress(1, "SSIS-001"), "https://supjav.com/zh/?s=SSIS-001"; got != want {
-		t.Fatalf("Supjav search URL = %q, want %q", got, want)
-	}
-	if got, want := d.supjavCatalogAddress(2, ""), "https://supjav.com/zh/page/2/"; got != want {
-		t.Fatalf("Supjav page 2 URL = %q, want %q", got, want)
-	}
-}
-
-func TestSupjavRequestsTaiwanTraditionalChinese(t *testing.T) {
-	var gotLanguage string
-	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
-		gotLanguage = request.Header.Get("Accept-Language")
-		return sourceFixtureResponse(request, http.StatusOK, "<html><body></body></html>"), nil
-	})
-	if _, _, err := d.fetchSupjavCatalogPage(context.Background(), 1, "", ""); err != nil {
-		t.Fatalf("Supjav fixture request failed: %v", err)
-	}
-	if !strings.Contains(gotLanguage, "zh-TW") || !strings.Contains(gotLanguage, "zh-Hant") {
-		t.Fatalf("Supjav Accept-Language = %q, want zh-TW and zh-Hant", gotLanguage)
-	}
-}
-
 func TestMissavAndSupjavAreRecognizedAdvancedProviders(t *testing.T) {
 	for _, testCase := range []struct {
 		source string
