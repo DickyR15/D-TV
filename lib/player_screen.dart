@@ -189,6 +189,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _pictureInPictureHandoff = false;
   bool _pictureInPictureResumePlaying = false;
   bool _pictureInPictureRestoreBusy = false;
+  int _pictureInPictureSurfaceRevision = 0;
   int? _pendingPictureInPictureRestorePositionMs;
   double _pictureInPictureResumePosition = 0;
   String? _pictureInPictureStateSignature;
@@ -713,7 +714,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (call.method == 'pictureInPictureChanged') {
         final arguments = call.arguments;
         final active = arguments is Map && arguments['active'] == true;
+        final changed = active != _pictureInPictureActive;
         _setPictureInPictureStatus(active: active, delayHiddenPause: !active);
+        if (changed) _scheduleAndroidPictureInPictureSurfaceRefresh();
       } else if (call.method == 'pictureInPictureRestored') {
         final arguments = call.arguments;
         final positionMs = arguments is Map
@@ -758,6 +761,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     unawaited(_refreshPictureInPictureStatus());
   }
 
+  Future<void> _refreshAndroidPictureInPictureSurface() async {
+    if (!Platform.isAndroid || !mounted || _closed) return;
+    setState(() => _pictureInPictureSurfaceRevision++);
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+  }
+
+  void _scheduleAndroidPictureInPictureSurfaceRefresh() {
+    if (!Platform.isAndroid) return;
+    Future<void>.delayed(const Duration(milliseconds: 180), () async {
+      if (!mounted || _closed) return;
+      await _refreshAndroidPictureInPictureSurface();
+    });
+  }
+
   Future<void> _restorePictureInPictureHandoff() async {
     if (!_pictureInPictureHandoff ||
         _pictureInPictureRestoreBusy ||
@@ -776,6 +794,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               .timeout(const Duration(seconds: 3));
         } catch (_) {}
       }
+      _playIntent = _pictureInPictureResumePlaying;
       await _player
           .seek(Duration(milliseconds: positionMs.clamp(0, 1 << 31).toInt()))
           .timeout(const Duration(seconds: 5));
@@ -809,7 +828,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
 
     final position = _currentPosition;
-    final wasPlaying = _playIntent && _player.state.playing;
+    final wasPlaying = _playIntent;
     final ratio = _aspectRatio.isFinite && _aspectRatio > 0
         ? _aspectRatio.clamp(1 / 2.39, 2.39).toDouble()
         : 16 / 9;
@@ -1425,6 +1444,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _interactions.cancel();
     _syncPictureInPicture();
+    await _refreshAndroidPictureInPictureSurface();
     final rawRatio = _aspectRatio.isFinite && _aspectRatio > 0
         ? _aspectRatio
         : 16 / 9;
@@ -3659,6 +3679,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget _videoOutput({required BoxFit fit, required Widget controls}) {
     if (_player is LunaExoPlayer) {
       return LunaExoVideoView(
+        key: ValueKey('pip-exo-surface-$_pictureInPictureSurfaceRevision'),
         player: _player as LunaExoPlayer,
         fit: fit,
         controls: (_) => controls,
@@ -3679,6 +3700,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       // Do not apply an extra scale to iOS landscape playback. BoxFit.contain
       // keeps the entire frame visible, including subtitles near the bottom.
       return Video(
+        key: ValueKey('pip-video-surface-$_pictureInPictureSurfaceRevision'),
         controller: _video!,
         fit: fit,
         fill: Colors.black,
@@ -3699,6 +3721,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               child: Transform.scale(
                 scale: 1.08,
                 child: Video(
+                  key: ValueKey('pip-video-blur-$_pictureInPictureSurfaceRevision'),
                   controller: _video!,
                   fit: BoxFit.cover,
                   fill: Colors.black,
@@ -3717,6 +3740,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         ),
         Positioned.fill(
           child: Video(
+            key: ValueKey('pip-video-main-$_pictureInPictureSurfaceRevision'),
             controller: _video!,
             fit: fit,
             fill: Colors.transparent,
