@@ -760,7 +760,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
-\tif query != "" && source == sourceHeitao {
+	if query != "" && source == sourceHeitao {
 		items, more, err := d.fetchHeitaoCatalogPage(ctx, page, "", query)
 		if err != nil {
 			return result, err
