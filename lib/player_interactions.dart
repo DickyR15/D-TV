@@ -84,6 +84,7 @@ class PlayerInteractions extends ChangeNotifier {
   Duration? _seekHoldPendingTarget;
   int _seekHoldDirection = 0;
   bool _seekHoldRunning = false;
+  Future<void> _seekHoldWork = Future<void>.value();
   Timer? _hintTimer;
   Future<void> _rates = Future<void>.value();
   final Set<int> _pointers = {};
@@ -129,6 +130,7 @@ class PlayerInteractions extends ChangeNotifier {
   bool get boosting => _boosting;
   bool get suppressTap => DateTime.now().isBefore(_ignoreTapUntil);
   Future<void> get pendingRates => _rates;
+  Future<void> get pendingSeeks => _seekHoldWork;
 
   void hint(String message, {bool persistent = false}) {
     if (_disposed) return;
@@ -258,7 +260,7 @@ class PlayerInteractions extends ChangeNotifier {
   void _scheduleSeekHold() {
     if (_disposed || _seekHoldRunning || _seekHoldPendingTarget == null) return;
     _seekHoldRunning = true;
-    unawaited(() async {
+    _seekHoldWork = () async {
       while (!_disposed && _seekHoldPendingTarget != null) {
         final target = _seekHoldPendingTarget!;
         _seekHoldPendingTarget = null;
@@ -278,7 +280,8 @@ class PlayerInteractions extends ChangeNotifier {
       if (!_disposed && _seekHoldPendingTarget != null) {
         _scheduleSeekHold();
       }
-    }());
+    }();
+    unawaited(_seekHoldWork);
   }
 
   void cancel() {
