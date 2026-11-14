@@ -223,22 +223,7 @@ jobs:
                   parsed = urlsplit(address)
                   if parsed.scheme not in ("http", "https") or not parsed.netloc:
                       return False, "invalid media URL"
-                  # Some Duoduo HLS paths contain Chinese episode names. Encode
-                  # path/query as UTF-8 before urllib builds the HTTP request.
-                  encoded_path = quote(parsed.path, safe="/%:@!          def safe_probe_media(address, referer):
-              try:
-                  return probe_media(address, referer)
-              except (URLError, TimeoutError, socket.timeout, OSError, http.client.HTTPException) as exc:
-                  return False, (
-                      f"upstream network unavailable: {type(exc).__name__}: "
-                      f"{str(exc)[:140]}"
-                  )
-'()*+,;=-._~")
-                  encoded_query = quote(parsed.query, safe="=&?/:;+,%@-._~")
-                  address = parsed._replace(
-                      path=encoded_path, query=encoded_query
-                  ).geturl()
-                  return probe_media(address, referer)
+                  return probe_media(normalize_http_url(address), referer)
               except (
                   URLError, TimeoutError, socket.timeout, OSError,
                   http.client.HTTPException, UnicodeError, ValueError,
