@@ -202,7 +202,7 @@ func parseMissavCards(document *html.Node, pageURL string) []Drama {
 func (d *Downloader) missavCatalogAddress(page int, query string) string {
 	base := strings.TrimRight(d.providerBaseURL(sourceMissav), "/")
 	if query != "" {
-		return base + "/zh/search/" + url.PathEscape(strings.TrimSpace(query))
+		return base + "/search/" + url.PathEscape(strings.TrimSpace(query))
 	}
 	address := base + "/zh/release"
 	if page > 1 {
