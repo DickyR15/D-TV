@@ -740,13 +740,23 @@ func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
 
 func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 	const poster = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2932687546.jpg"
+	const edge = "https://wsrv.nl/?url=img9.doubanio.com%2Fview%2Fphoto%2Fs_ratio_poster%2Fpublic%2Fp2932687546.jpg&w=440&h=660&fit=inside&output=webp&q=80"
 	imageBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
 	var seenReferer string
+	var originCalls, edgeCalls int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
-		if request.URL.String() != poster {
+		if request.URL.Host == "wsrv.nl" {
+			edgeCalls++
+			if request.URL.String() != edge {
+				t.Fatalf("unexpected edge poster request: %s", request.URL)
+			}
+			seenReferer = request.Header.Get("Referer")
+		} else if request.URL.String() == poster {
+			originCalls++
+			t.Fatalf("fast edge response should avoid unnecessary origin request")
+		} else {
 			t.Fatalf("unexpected poster request: %s", request.URL)
 		}
-		seenReferer = request.Header.Get("Referer")
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header: http.Header{"Content-Type": []string{"image/jpeg"}},
@@ -771,8 +781,8 @@ func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if seenReferer != "https://323433ssdfd.top/play/137937" {
-		t.Fatalf("poster Referer = %q, want the work's official play page", seenReferer)
+	if seenReferer != "https://wsrv.nl/" || edgeCalls != 1 || originCalls != 0 {
+		t.Fatalf("edge/origin calls = %d/%d with Referer %q", edgeCalls, originCalls, seenReferer)
 	}
 	cached, err := os.ReadFile(path)
 	if err != nil {
@@ -782,7 +792,6 @@ func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 		t.Fatalf("native cover cache did not save a valid image: %d bytes", len(cached))
 	}
 }
-
 func TestExternalPosterAddressUsesBangumiWhenDoubanIDIsMissing(t *testing.T) {
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Host != "api.bgm.tv" {
