@@ -196,6 +196,7 @@ class LocalStore extends ChangeNotifier {
   int _epoch = 0;
   int _failures = 0;
   Map<String, bool> _sourceSwitches = {};
+  List<String> _advancedSourceOrder = <String>[];
   bool _advancedSourcesUnlocked = false;
   int _sourceAccessEpoch = 0;
   DateTime _retryAfter = DateTime(2000);
@@ -479,10 +480,34 @@ class LocalStore extends ChangeNotifier {
       SourceSite.isAvailable(source) &&
       profile.allows(source) &&
       sourceEnabled(source);
-  List<SourceSite> get sources =>
-      SourceSite.values.where((site) => allowsSource(site.id)).toList();
+  /// Current advanced sources in the administrator's saved display order.
+  List<SourceSite> get advancedSources {
+    final available = SourceSite.restrictedValues
+        .where((site) => SourceSite.isAvailable(site.id))
+        .toList();
+    final byId = {for (final site in available) site.id: site};
+    final ordered = <SourceSite>[];
+    for (final id in _advancedSourceOrder) {
+      final source = byId[id];
+      if (source != null) ordered.add(source);
+    }
+    for (final source in available) {
+      if (!ordered.any((item) => item.id == source.id)) ordered.add(source);
+    }
+    return List.unmodifiable(ordered);
+  }
+
+  List<SourceSite> get sources => [
+    for (final site in SourceSite.primaryValues)
+      if (allowsSource(site.id)) site,
+    for (final site in advancedSources)
+      if (allowsSource(site.id)) site,
+  ];
+
   List<SourceSite> get permittedSources => [
-    for (final site in SourceSite.values)
+    for (final site in SourceSite.primaryValues)
+      if (!locked && profile.allows(site.id)) site,
+    for (final site in advancedSources)
       if (!locked && profile.allows(site.id)) site,
   ];
 
@@ -537,6 +562,23 @@ class LocalStore extends ChangeNotifier {
     } catch (_) {
       _sourceSwitches = {};
     }
+    try {
+      final rawOrder = _string('advancedSourceOrder');
+      final decoded = rawOrder == null ? const <dynamic>[] : jsonDecode(rawOrder);
+      final allowed = SourceSite.restrictedValues
+          .where((source) => SourceSite.isAvailable(source.id))
+          .map((source) => source.id)
+          .toSet();
+      final seen = <String>{};
+      _advancedSourceOrder = decoded is List
+          ? decoded
+                .whereType<String>()
+                .where((id) => allowed.contains(id) && seen.add(id))
+                .toList()
+          : <String>[];
+    } catch (_) {
+      _advancedSourceOrder = <String>[];
+    }
   }
 
   Future<void> setSourceEnabled(String source, bool enabled) {
@@ -555,6 +597,33 @@ class LocalStore extends ChangeNotifier {
       final switches = {..._sourceSwitches, source: enabled};
       await _commit({'sourceSwitches': jsonEncode(switches)});
       _sourceSwitches = switches;
+      _notify();
+    });
+  }
+
+  /// Persists the complete advanced-source order. The operation is protected
+  /// by the same administrator unlock and session epoch as source switches.
+  Future<void> reorderAdvancedSources(List<String> sourceIds) {
+    final epoch = _epoch;
+    final sourceAccessEpoch = _sourceAccessEpoch;
+    final availableIds = SourceSite.restrictedValues
+        .where((source) => SourceSite.isAvailable(source.id))
+        .map((source) => source.id)
+        .toList();
+    final requestedIds = sourceIds.toSet();
+    if (sourceIds.length != availableIds.length ||
+        requestedIds.length != sourceIds.length ||
+        availableIds.any((id) => !requestedIds.contains(id))) {
+      return Future.error(StateError('進階片源排序資料無效'));
+    }
+    return _queue(() async {
+      _requireAdmin();
+      if (epoch != _epoch) throw StateError('目前使用者已變更，請重試');
+      if (!_advancedSourcesUnlocked || sourceAccessEpoch != _sourceAccessEpoch) {
+        throw StateError('請先輸入管理員密碼解鎖進階片源');
+      }
+      await _commit({'advancedSourceOrder': jsonEncode(sourceIds)});
+      _advancedSourceOrder = List<String>.of(sourceIds);
       _notify();
     });
   }
