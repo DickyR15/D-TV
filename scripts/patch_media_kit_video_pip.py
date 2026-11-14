@@ -136,6 +136,25 @@ def patch_texture_hw(package: Path, template: Path) -> None:
     }
   }
 
+  public static func completeDTVPiPSkip(handle: Int64) {
+    dtvInstanceLock.lock()
+    let instance = dtvInstances[Int(handle)]?.value
+    dtvInstanceLock.unlock()
+
+    guard let instance else { return }
+    if #available(iOS 15.0, *) {
+      instance.completeDTVPiPSkip()
+    }
+  }
+
+  @available(iOS 15.0, *)
+  private func completeDTVPiPSkip() {
+    pipLock.lock()
+    let renderer = pipRenderer
+    pipLock.unlock()
+    renderer?.completePendingSkip()
+  }
+
   @available(iOS 15.0, *)
   private func updateDTVPiP(
     playing: Bool,
@@ -386,6 +405,8 @@ def patch_plugin(package: Path) -> None:
       handleDTVPiPStop(call.arguments, result)
     case "DTVPiP.PlaybackStateChanged":
       handleDTVPiPPlaybackStateChanged(call.arguments, result)
+    case "DTVPiP.SeekCompleted":
+      handleDTVPiPSeekCompleted(call.arguments, result)
     case "DTVPiP.Status":
       result([
         "supported": AVPictureInPictureController.isPictureInPictureSupported()
@@ -479,6 +500,23 @@ def patch_plugin(package: Path) -> None:
       playing: playing,
       positionSeconds: Double(positionMs) / 1000.0
     )
+    result(nil)
+  }
+
+  private func handleDTVPiPSeekCompleted(
+    _ arguments: Any?,
+    _ result: FlutterResult
+  ) {
+    guard let args = arguments as? [String: Any],
+          let handle = (args["handle"] as? NSNumber)?.int64Value else {
+      result(FlutterError(
+        code: "DTV_PIP_INVALID_HANDLE",
+        message: "缺少 MPV 播放器識別碼",
+        details: nil
+      ))
+      return
+    }
+    TextureHW.completeDTVPiPSkip(handle: handle)
     result(nil)
   }
 
