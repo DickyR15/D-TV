@@ -312,6 +312,11 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 			want: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
 		},
 		{
+			name: "Duoduo 88129 緊急呼救第一季 uses TVmaze Season 1 key art",
+			drama: nativeDrama{ID: "duoduo:88129", Title: "紧急呼救 第一季", Category: "剧集", OnlineDate: "2018"},
+			want: "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
+		},
+		{
 			name: "Duoduo 1192 奉子成婚 uses the official 2025 anime key visual",
 			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
 			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
@@ -359,6 +364,11 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 			want: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
 		},
 		{
+			name: "9-1-1 Season 1 exact Duoduo record",
+			drama: nativeDrama{ID: "duoduo:88129", Title: "緊急呼救第一季", Category: "劇集", OnlineDate: "2018"},
+			want: "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
+		},
+		{
 			name: "奉子成婚 2025 Japanese anime",
 			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
 			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
@@ -403,6 +413,10 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{ID: "duoduo:59902", Title: "明星大偵探 第一季", Category: "綜藝", OnlineDate: "2016"},
 		{ID: "duoduo:78012", Title: "人間中毒", Category: "電影", OnlineDate: "2014"},
 		{ID: "duoduo:78011", Title: "其他作品", Category: "電影", OnlineDate: "2014"},
+		{ID: "duoduo:88129", Title: "緊急呼救第二季", Category: "劇集", OnlineDate: "2018"},
+		{ID: "duoduo:88129", Title: "緊急呼救第一季", Category: "電影", OnlineDate: "2018"},
+		{ID: "duoduo:88129", Title: "緊急呼救第一季", Category: "劇集", OnlineDate: "2017"},
+		{ID: "duoduo:88128", Title: "緊急呼救第一季", Category: "劇集", OnlineDate: "2018"},
 		{ID: "duoduo:1192", Title: "奉子不成婚", Category: "電影", OnlineDate: "2016"},
 		{ID: "duoduo:66453", Title: "逆愛2後會無期", Category: "愛情", OnlineDate: "2014"},
 		{ID: "duoduo:66452", Title: "其他作品", Category: "愛情", OnlineDate: "2014"},
