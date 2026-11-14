@@ -3282,9 +3282,9 @@ jobs:
               )
               probe_ok = False
               for line_name, (episode_title, address) in direct_by_line.items():
-                  ok, message = probe_media(address, detail_base + "/")
+                  ok, message = safe_probe_media(address, detail_base + "/")
                   if not ok:
-                      retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                      retry_ok, retry_message = safe_probe_media(address, "https://duoduozhuiju.com/")
                       if retry_ok:
                           ok, message = retry_ok, retry_message
                       else:
