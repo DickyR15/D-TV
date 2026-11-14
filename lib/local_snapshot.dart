@@ -187,6 +187,7 @@ class LocalSnapshot {
       'themeAccent',
       'pureBlackTheme',
       'sourceSwitches',
+      'advancedSourceOrder',
       'ignoredUpdateVersion',
       'checkForUpdatesOnStartup',
     ]) {
@@ -274,6 +275,7 @@ class LocalSnapshot {
       'themeAccent',
       'pureBlackTheme',
       'sourceSwitches',
+      'advancedSourceOrder',
       'ignoredUpdateVersion',
       'checkForUpdatesOnStartup',
     ]) {
