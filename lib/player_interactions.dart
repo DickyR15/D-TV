@@ -106,7 +106,7 @@ class PlayerInteractions extends ChangeNotifier {
     }
     if (!persistent && message.isNotEmpty) {
       _hintTimer = Timer(const Duration(milliseconds: 1200), () {
-        hint(_boosting ? '3 倍速 · 鬆開恢復' : '', persistent: true);
+        hint(_boosting ? '${_playerHoldBoostSpeed.toStringAsFixed(0)} 倍速播放中 · 鬆開恢復' : '', persistent: true);
       });
     }
   }
