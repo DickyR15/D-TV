@@ -67,6 +67,45 @@ void main() {
     });
   });
 
+
+  test('preserves official poster fallback candidates across season grouping and model roundtrips', () {
+    final first = Drama.fromJson(const {
+      'id': 'duoduo:701',
+      'source': 'duoduo',
+      'sourceId': '701',
+      'title': '芝加哥烈焰第一季',
+      'cover': 'https://img.example.test/chicago-primary.jpg',
+      'coverCandidates': [
+        'https://img.example.test/chicago-thumb.jpg',
+        'https://img.example.test/chicago-detail.jpg',
+      ],
+    });
+    expect(first.coverCandidates, [
+      'https://img.example.test/chicago-thumb.jpg',
+      'https://img.example.test/chicago-detail.jpg',
+    ]);
+    expect(first.toJson()['coverCandidates'], first.coverCandidates);
+    final grouped = first.withSeriesIdentity(
+      groupId: 'duoduo-series:芝加哥烈焰:季',
+      seasonNumber: 1,
+      seasonUnit: '季',
+      displayTitle: '芝加哥烈焰',
+    );
+    expect(grouped.coverCandidates, first.coverCandidates);
+    final fresh = Drama(
+      id: first.id, source: first.source, sourceId: first.sourceId,
+      title: first.title, cover: first.cover,
+      coverCandidates: const ['https://img.example.test/chicago-large.jpg'],
+    );
+    final merged = first.merge(fresh);
+    expect(merged.coverCandidates, [
+      'https://img.example.test/chicago-large.jpg',
+      'https://img.example.test/chicago-thumb.jpg',
+      'https://img.example.test/chicago-detail.jpg',
+    ]);
+    expect(Drama.fromJson(merged.toJson()).coverCandidates, merged.coverCandidates);
+  });
+
   test('Duoduo seasons use one saved favorite for the entire series', () async {
     SharedPreferences.setMockInitialValues({});
     final store = testStore(await SharedPreferences.getInstance());

@@ -990,7 +990,7 @@ class _DetailScreenState extends State<DetailScreen> {
     final details = <String>[
       if (season.drama.episodes > 0) '共 ${season.drama.episodes} 集',
       if (season.upcoming) '即將上線',
-      if (!season.playable && !season.upcoming) '暫不可播放',
+      if (!season.playable && !season.upcoming) '集數待確認',
       if (watched != null && !current) '有觀看紀錄',
     ];
     final text = [
@@ -1026,7 +1026,10 @@ class _DetailScreenState extends State<DetailScreen> {
           ),
         ),
         selected: current,
-        onSelected: current || !season.playable
+        // Missing catalogue counts do not prove that a season is unavailable.
+        // The official season detail + aggregate resolver decides whether it
+        // has direct media, just as it does when opened from search results.
+        onSelected: current || season.upcoming
             ? null
             : (_) => _openSeriesDrama(season.drama),
       ),

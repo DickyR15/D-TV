@@ -141,6 +141,7 @@ class Drama {
     this.seriesSeasonUnit = '',
     this.description = '',
     this.cover = '',
+    this.coverCandidates = const [],
     this.episodes = 0,
     this.episodesVerified = false,
     this.category = '',
@@ -169,6 +170,7 @@ class Drama {
   final String title;
   final String description;
   final String cover;
+  final List<String> coverCandidates;
   final int episodes;
   final bool episodesVerified;
   bool get canShowEpisodeCount =>
@@ -209,6 +211,12 @@ class Drama {
       title: json['title'] as String? ?? '短劇',
       description: json['description'] as String? ?? '',
       cover: json['cover'] as String? ?? '',
+      coverCandidates: (json['coverCandidates'] as List? ?? const [])
+          .whereType<String>()
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList(growable: false),
       episodes: intValue(json['episodes']),
       episodesVerified: json['episodesVerified'] == true,
       category: originalSource == 'duoduo' &&
@@ -242,6 +250,7 @@ class Drama {
     'title': title,
     'description': description,
     'cover': cover,
+    if (coverCandidates.isNotEmpty) 'coverCandidates': coverCandidates,
     'episodes': episodes,
     'episodesVerified': episodesVerified,
     'category': category,
@@ -265,6 +274,7 @@ class Drama {
     title: title,
     description: description,
     cover: cover,
+    coverCandidates: coverCandidates,
     episodes: episodes,
     episodesVerified: episodesVerified,
     category: category,
@@ -293,6 +303,7 @@ class Drama {
     title: displayTitle ?? title,
     description: description,
     cover: cover,
+    coverCandidates: coverCandidates,
     episodes: episodes,
     episodesVerified: episodesVerified,
     category: category,
@@ -323,6 +334,14 @@ class Drama {
             const {'影視', '影视'}.contains(category)
         ? ''
         : category;
+    final mergedCoverCandidates = <String>[];
+    final seenCoverCandidates = <String>{};
+    for (final candidate in [...fresh.coverCandidates, ...coverCandidates]) {
+      final normalized = candidate.trim();
+      if (normalized.isNotEmpty && seenCoverCandidates.add(normalized)) {
+        mergedCoverCandidates.add(normalized);
+      }
+    }
     return Drama(
       id: id.isEmpty ? fresh.id : id,
       source: fresh.source.isEmpty ? source : fresh.source,
@@ -339,6 +358,7 @@ class Drama {
       title: fresh.title.isEmpty || fresh.title == '短劇' ? title : fresh.title,
       description: fresh.description.isEmpty ? description : fresh.description,
       cover: fresh.cover.isEmpty ? cover : fresh.cover,
+      coverCandidates: mergedCoverCandidates,
       episodes: fresh.episodes > 0 ? fresh.episodes : episodes,
       episodesVerified:
           episodesVerified ||

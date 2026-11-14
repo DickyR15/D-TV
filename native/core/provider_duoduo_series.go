@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+const (
+	duoduoSeriesCatalogTimeout = 10 * time.Second
+	duoduoSeriesHydrationTimeout = 30 * time.Second
+	duoduoSeasonHydrationTimeout = 12 * time.Second
+)
+
 var (
 	duoduoChineseSeasonTitle = regexp.MustCompile(`(?i)^(.+?)\s*第\s*([0-9]{1,3}|[零〇一二三四五六七八九十百]+)\s*(季|部)\s*$`)
 	duoduoEnglishSeasonTitle = regexp.MustCompile(`(?i)^(.+?)\s+(?:season\s*([0-9]{1,3})|s([0-9]{1,3}))\s*$`)
@@ -241,8 +247,8 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 		return nil, nil
 	}
 	baseKey := duoduoSeriesTitleKey(base)
-	searchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+	catalogCtx, cancelCatalog := context.WithTimeout(ctx, duoduoSeriesCatalogTimeout)
+	defer cancelCatalog()
 
 	byNumber := make(map[int]Drama)
 	var unnumbered *Drama
@@ -253,7 +259,7 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 	unitMismatch := false
 	for page := 1; page <= 3; page++ {
 		items, more, err := downloader.fetchDuoduoCatalogPage(
-			searchCtx, page, "", base, "hits",
+			catalogCtx, page, "", base, "hits",
 		)
 		if err != nil {
 			if len(byNumber) == 0 {
@@ -322,6 +328,12 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 			needsHydration = append(needsHydration, number)
 		}
 	}
+	// Do not reuse the short catalogue-search context for detail hydration.
+	// Sort the season queue and give each official detail+aggregate lookup its
+	// own bounded context, so slow siblings do not get randomly marked missing.
+	sort.Ints(needsHydration)
+	hydrationCtx, cancelHydration := context.WithTimeout(ctx, duoduoSeriesHydrationTimeout)
+	defer cancelHydration()
 	results := make(chan hydratedSeason, len(needsHydration))
 	var workers sync.WaitGroup
 	semaphore := make(chan struct{}, 3)
@@ -332,10 +344,14 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 			defer workers.Done()
 			select {
 			case semaphore <- struct{}{}:
-			case <-searchCtx.Done():
+			case <-hydrationCtx.Done():
 				return
 			}
-			hydrated := downloader.hydrateDuoduoSeriesSeason(searchCtx, item)
+			seasonCtx, cancelSeason := context.WithTimeout(
+				hydrationCtx, duoduoSeasonHydrationTimeout,
+			)
+			hydrated := downloader.hydrateDuoduoSeriesSeason(seasonCtx, item)
+			cancelSeason()
 			<-semaphore
 			results <- hydratedSeason{number: number, drama: hydrated}
 		}(number, item)

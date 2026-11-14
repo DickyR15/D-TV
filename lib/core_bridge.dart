@@ -781,13 +781,15 @@ class NativeRepository extends AppRepository {
     }),
   );
 
+  String _coverCacheKey(Drama drama) =>
+      '${drama.stableId}\u0000${drama.cover}\u0000${drama.coverCandidates.join('\u0001')}';
+
   @override
-  bool coverCached(Drama drama) =>
-      _coverPaths.containsKey('${drama.stableId}\u0000${drama.cover}');
+  bool coverCached(Drama drama) => _coverPaths.containsKey(_coverCacheKey(drama));
 
   @override
   Future<String> cover(Drama drama, {bool force = false}) async {
-    final key = '${drama.stableId}\u0000${drama.cover}';
+    final key = _coverCacheKey(drama);
     final known = force ? null : _coverPaths[key];
     if (known != null) {
       _authorize(drama.source);

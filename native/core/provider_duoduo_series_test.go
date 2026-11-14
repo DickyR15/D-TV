@@ -2,8 +2,12 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestDuoduoSeriesTitleRequiresExplicitSeasonMarker(t *testing.T) {
@@ -226,5 +230,90 @@ func TestFetchDuoduoSeriesSeasonsUsesSearchPlaybackResolverForPlayableFlag(t *te
 	if first.Drama.ID != "duoduo:900" || !first.Playable || first.Upcoming ||
 		duoduoDramaEpisodeCount(duoduoDramaFromNative(first.Drama)) < 2 {
 		t.Fatalf("season with aggregate playback URLs was incorrectly unavailable: %+v", first)
+	}
+}
+
+func TestFetchDuoduoChicagoFireSeasonsHydrateWithIndependentDetailBudget(t *testing.T) {
+	var mu sync.Mutex
+	var catalogDeadline time.Time
+	hydrated := map[string]bool{}
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			if deadline, ok := request.Context().Deadline(); ok {
+				mu.Lock()
+				catalogDeadline = deadline
+				mu.Unlock()
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[
+					{"vod_id":901,"vod_name":"芝加哥烈焰第一季","vod_remarks":"已完結"},
+					{"vod_id":902,"vod_name":"芝加哥烈焰第二季","vod_remarks":"已完結"}
+				]
+			}`), nil
+		case "/api.php/web/vod/get_detail":
+			id := request.URL.Query().Get("vod_id")
+			if deadline, ok := request.Context().Deadline(); ok {
+				mu.Lock()
+				if !deadline.After(catalogDeadline.Add(time.Second)) {
+					t.Errorf("season %s reused the short catalogue deadline", id)
+				}
+				hydrated[id] = true
+				mu.Unlock()
+			}
+			season := "第一季"
+			poster := "https://img.example.test/chicago-fire-s1.jpg"
+			if id == "902" {
+				season = "第二季"
+				poster = "https://img.example.test/chicago-fire-s2.jpg"
+			} else if id != "901" {
+				t.Fatalf("unexpected Chicago Fire detail ID: %s", id)
+			}
+			body := fmt.Sprintf(`{
+				"code":200,
+				"data":[{
+					"vod_id":%s,
+					"vod_name":"芝加哥烈焰%s",
+					"vod_pic_detail":%q,
+					"vod_total":2,
+					"vod_remarks":"已完結"
+				}]
+			}`, id, season, poster)
+			return sourceFixtureResponse(request, http.StatusOK, body), nil
+		case "/api.php/web/internal/search_aggregate":
+			id := request.URL.Query().Get("vod_id")
+			if id != "901" && id != "902" {
+				t.Fatalf("unexpected Chicago Fire aggregate ID: %s", id)
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[{
+					"site_key":"direct",
+					"site_name":"官方直連",
+					"decode_status":0,
+					"vod_play_url":"第1集$https://media.example.test/chicago-e1.m3u8#第2集$https://media.example.test/chicago-e2.m3u8"
+				}]
+			}`), nil
+		default:
+			t.Fatalf("unexpected Chicago Fire endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+	current := nativeDrama{ID:"duoduo:902", Source:sourceDuoduo, SourceID:"902", Title:"芝加哥烈焰第二季"}
+	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
+	if err != nil { t.Fatal(err) }
+	if len(seasons) != 2 { t.Fatalf("expected two seasons, got %+v",seasons) }
+	mu.Lock()
+	defer mu.Unlock()
+	for _, season := range seasons {
+		id := strings.TrimPrefix(season.Drama.ID,"duoduo:")
+		if !hydrated[id] { t.Errorf("season %s was not hydrated",id) }
+		if !season.Playable || season.Upcoming || season.Drama.Episodes != 2 {
+			t.Errorf("season %s unavailable: %+v",id,season)
+		}
+		want := "https://img.example.test/chicago-fire-s1.jpg"
+		if id=="902" { want="https://img.example.test/chicago-fire-s2.jpg" }
+		if season.Drama.Cover != want { t.Errorf("season %s poster %q, want %q",id,season.Drama.Cover,want) }
 	}
 }
