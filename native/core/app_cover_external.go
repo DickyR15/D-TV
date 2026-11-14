@@ -743,7 +743,16 @@ func (d *Downloader) aniListPosterAddress(ctx context.Context, drama nativeDrama
 		}
 	}
 	if len(matches) == 1 {
-		for _, address := range matches {
+		for showID, address := range matches {
+			// A season page must use TVmaze's season-specific artwork when
+			// available; the show-level image is only a fallback.
+			if _, seasonNumber, _, hasSeason := duoduoSeriesTitle(drama.Title); hasSeason {
+				if seasonAddress, seasonErr := d.tvMazeSeasonPosterAddress(
+					searchCtx, showID, seasonNumber,
+				); seasonErr == nil && seasonAddress != "" {
+					return seasonAddress, nil
+				}
+			}
 			return address, nil
 		}
 	}
