@@ -15,6 +15,7 @@ type Drama struct {
 	SeriesSeasonNumber int               `json:"seriesSeasonNumber,omitempty"`
 	SeriesSeasonUnit  string             `json:"seriesSeasonUnit,omitempty"`
 	DoubanID          string             `json:"doubanId,omitempty"`
+	IMDbID            string             `json:"imdbId,omitempty"`
 	Title             string             `json:"title"`
 	Name              string             `json:"name"`
 	Desc              string             `json:"desc"`

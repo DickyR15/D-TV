@@ -337,7 +337,7 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 		tags = append(tags, area)
 	}
 	episodeCount := duoduoEpisodeCountFromRow(row)
-	return Drama{
+	drama := Drama{
 		ID: providerDramaID(sourceDuoduo, id), Source: sourceDuoduo, SourceID: id,
 		Title: truncate(title, 512), Name: truncate(title, 512),
 		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
@@ -345,9 +345,15 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 		CategoryName: category,
 		Remark: truncate(remarks, 96), Score: duoduoString(row["vod_douban_score"]),
 		Heat: duoduoString(row["vod_hits"]), OnlineDate: year,
-		DoubanID: duoduoString(row["vod_douban_id"]),
+		DoubanID: duoduoString(row["vod_douban_id"]), IMDbID: duoduoIMDbIDFromRow(row),
 		Episodes: episodeCount, TotalEpisode: episodeCount, EpisodeCount: episodeCount, Tags: tags,
 	}
+	if base, number, unit, ok := duoduoSeriesTitle(title); ok {
+		drama.SeriesGroupID = duoduoCanonicalSeriesGroupID(base, unit, drama.IMDbID, drama.DoubanID)
+		drama.SeriesSeasonNumber = number
+		drama.SeriesSeasonUnit = unit
+	}
+	return drama
 }
 
 func htmlUnescapeDuoduo(value string) string {

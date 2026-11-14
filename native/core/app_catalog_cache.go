@@ -221,6 +221,9 @@ func mergeNativeDrama(previous, fresh nativeDrama) nativeDrama {
 	if fresh.DoubanID == "" {
 		fresh.DoubanID = previous.DoubanID
 	}
+	if fresh.IMDbID == "" {
+		fresh.IMDbID = previous.IMDbID
+	}
 	if fresh.Title == "" || fresh.Title == "短剧" {
 		fresh.Title = previous.Title
 	} else if fresh.Title == "片名取得失敗" || fresh.Title == "片名获取失败" {

@@ -87,6 +87,7 @@ type nativeDrama struct {
 	SeriesSeasonNumber int `json:"seriesSeasonNumber,omitempty"`
 	SeriesSeasonUnit string `json:"seriesSeasonUnit,omitempty"`
 	DoubanID       string   `json:"doubanId,omitempty"`
+	IMDbID         string   `json:"imdbId,omitempty"`
 	Title          string   `json:"title"`
 	Description    string   `json:"description"`
 	Cover          string   `json:"cover"`
@@ -367,7 +368,7 @@ func nativeNormalize(drama Drama) nativeDrama {
 		SeriesGroupID: strings.TrimSpace(drama.SeriesGroupID),
 		SeriesSeasonNumber: drama.SeriesSeasonNumber,
 		SeriesSeasonUnit: strings.TrimSpace(drama.SeriesSeasonUnit),
-		DoubanID: strings.TrimSpace(drama.DoubanID), Title: drama.DisplayTitle(),
+		DoubanID: strings.TrimSpace(drama.DoubanID), IMDbID: duoduoNormalizeIMDbID(drama.IMDbID), Title: drama.DisplayTitle(),
 		Description: firstNonEmpty(drama.Desc, drama.Intro), Cover: cover, CoverCandidates: candidates, Episodes: episodes,
 		EpisodesVerified: drama.EpisodesVerified || episodes > 0,
 		Category: nativeDramaCategory(drama), VIP: drama.VIP,

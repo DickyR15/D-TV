@@ -142,6 +142,7 @@ func duoduoDramaFromNative(drama nativeDrama) Drama {
 		ID: drama.ID, Source: drama.Source, SourceID: drama.SourceID,
 		Title: drama.Title, Name: drama.Title, Desc: drama.Description,
 		Cover: drama.Cover, CoverCandidates: append([]string(nil), drama.CoverCandidates...),
+		DoubanID: drama.DoubanID, IMDbID: drama.IMDbID,
 		Episodes: drama.Episodes, Category: drama.Category,
 		Heat: drama.Heat, Views: drama.Views, OnlineDate: drama.OnlineDate,
 		Tags: append([]string(nil), drama.Tags...), ReleaseStatus: drama.ReleaseStatus,
@@ -253,72 +254,48 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 	if parsedBase, number, parsedUnit, found := duoduoSeriesTitle(current.Title); found {
 		base, currentNumber, unit = parsedBase, number, parsedUnit
 	}
-	if base == "" {
-		return nil, nil
-	}
-	baseKey := duoduoSeriesTitleKey(base)
+	if base == "" { return nil, nil }
 	catalogCtx, cancelCatalog := context.WithTimeout(ctx, duoduoSeriesCatalogTimeout)
 	defer cancelCatalog()
 
 	byNumber := make(map[int]Drama)
 	var unnumbered *Drama
-	if currentNumber == 0 {
-		item := duoduoDramaFromNative(current)
-		unnumbered = &item
-	}
-	unitMismatch := false
-	for page := 1; page <= 3; page++ {
-		items, more, err := downloader.fetchDuoduoCatalogPage(
-			catalogCtx, page, "", base, "hits",
-		)
-		if err != nil {
-			if len(byNumber) == 0 {
-				return nil, err
+	if currentNumber == 0 { item := duoduoDramaFromNative(current); unnumbered = &item }
+	seenIDs := make(map[string]bool)
+	for queryIndex, searchTitle := range duoduoSeriesSearchTitles(base) {
+		pageLimit := 3
+		if queryIndex > 0 { pageLimit = 1 }
+		for page := 1; page <= pageLimit; page++ {
+			items, more, err := downloader.fetchDuoduoCatalogPage(catalogCtx, page, "", searchTitle, "hits")
+			if err != nil {
+				if len(byNumber) == 0 && queryIndex == 0 { return nil, err }
+				break
 			}
-			break
-		}
-		for _, item := range items {
-			if item.ID == "" || item.Source != sourceDuoduo {
-				continue
-			}
-			itemBase, number, itemUnit, hasSeason := duoduoSeriesTitle(item.DisplayTitle())
-			if !hasSeason {
-				if duoduoSeriesTitleKey(item.DisplayTitle()) == baseKey {
-					copy := item
-					unnumbered = &copy
+			for _, item := range items {
+				if item.ID == "" || item.Source != sourceDuoduo || seenIDs[item.ID] { continue }
+				seenIDs[item.ID] = true
+				itemBase, number, itemUnit, hasSeason := duoduoSeriesTitle(item.DisplayTitle())
+				if !hasSeason {
+					if duoduoSameSeriesIdentity(base, item.DisplayTitle(), current.IMDbID, current.DoubanID, item.IMDbID, item.DoubanID) {
+						copy := item
+						if unnumbered == nil { unnumbered = &copy } else {
+							merged := duoduoMergeDuplicateSeasonCandidates(*unnumbered, copy)
+							unnumbered = &merged
+						}
+					}
+					continue
 				}
-				continue
+				if !duoduoSameSeriesIdentity(base, itemBase, current.IMDbID, current.DoubanID, item.IMDbID, item.DoubanID) { continue }
+				if unit == "" { unit = itemUnit } else if itemUnit != unit { continue }
+				if existing, found := byNumber[number]; found {
+					byNumber[number] = duoduoMergeDuplicateSeasonCandidates(existing, item)
+				} else { byNumber[number] = item }
 			}
-			if duoduoSeriesTitleKey(itemBase) != baseKey {
-				continue
-			}
-			if unit == "" {
-				unit = itemUnit
-			} else if itemUnit != unit {
-				unitMismatch = true
-				continue
-			}
-			if existing, found := byNumber[number]; found && existing.ID != item.ID {
-				return nil, nil
-			}
-			item.SeriesGroupID = duoduoSeriesGroupID(base, unit)
-			item.SeriesSeasonNumber = number
-			item.SeriesSeasonUnit = unit
-			byNumber[number] = item
-		}
-		if !more || len(items) == 0 {
-			break
+			if !more || len(items) == 0 { break }
 		}
 	}
-	// Do not mix "season" and "part" labels for a title family unless the
-	// catalogue provides an explicit, consistent numbering unit.
-	if unitMismatch || unit == "" {
-		return nil, nil
-	}
-	groupID := duoduoSeriesGroupID(base, unit)
-
-	// An unsuffixed title is treated as season/part 1 only when at least one
-	// explicitly numbered sibling exists in the same exact title family.
+	if unit == "" { return nil, nil }
+	groupID := duoduoCanonicalSeriesGroupID(base, unit, current.IMDbID, current.DoubanID)
 	if _, hasFirst := byNumber[1]; !hasFirst && unnumbered != nil && len(byNumber) > 0 {
 		unnumbered.SeriesGroupID = groupID
 		unnumbered.SeriesSeasonNumber = 1
@@ -326,26 +303,9 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 		byNumber[1] = *unnumbered
 	}
 
-	// Enrich incomplete catalogue rows using each season's own official detail
-	// endpoint. Keep current-detail artwork/count only when the official IDs match.
-	type hydratedSeason struct {
-		number int
-		drama Drama
-	}
+	type hydratedSeason struct { number int; drama Drama }
 	needsHydration := make([]int, 0, len(byNumber))
-	for number, item := range byNumber {
-		// The currently opened season has already passed through the normal
-		// detail + aggregate resolver. Every sibling must use its own official
-		// season ID too, even when catalogue poster/count fields look complete:
-		// those fields can be stale and do not prove a usable playback route.
-		if item.ID == current.ID {
-			continue
-		}
-		needsHydration = append(needsHydration, number)
-	}
-	// Do not reuse the short catalogue-search context for detail hydration.
-	// Sort the season queue and give each official detail+aggregate lookup its
-	// own bounded context, so slow siblings do not get randomly marked missing.
+	for number, item := range byNumber { if item.ID != current.ID { needsHydration = append(needsHydration, number) } }
 	sort.Ints(needsHydration)
 	hydrationCtx, cancelHydration := context.WithTimeout(ctx, duoduoSeriesHydrationTimeout)
 	defer cancelHydration()
@@ -357,75 +317,45 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 		workers.Add(1)
 		go func(number int, item Drama) {
 			defer workers.Done()
-			select {
-			case semaphore <- struct{}{}:
-			case <-hydrationCtx.Done():
-				return
-			}
-			seasonCtx, cancelSeason := context.WithTimeout(
-				hydrationCtx, duoduoSeasonHydrationTimeout,
-			)
+			select { case semaphore <- struct{}{}: case <-hydrationCtx.Done(): return }
+			seasonCtx, cancelSeason := context.WithTimeout(hydrationCtx, duoduoSeasonHydrationTimeout)
 			hydrated := downloader.hydrateDuoduoSeriesSeason(seasonCtx, item)
 			cancelSeason()
 			<-semaphore
 			results <- hydratedSeason{number: number, drama: hydrated}
 		}(number, item)
 	}
-	go func() {
-		workers.Wait()
-		close(results)
-	}()
-	for result := range results {
-		byNumber[result.number] = result.drama
-	}
+	go func() { workers.Wait(); close(results) }()
+	for result := range results { byNumber[result.number] = result.drama }
 
 	currentItem := duoduoDramaFromNative(current)
 	if currentNumber > 0 {
-		if existing, found := byNumber[currentNumber]; found && existing.ID == currentItem.ID {
-			byNumber[currentNumber] = duoduoMergeSameSeasonMetadata(existing, currentItem)
-		} else {
-			currentItem.SeriesGroupID = groupID
-			currentItem.SeriesSeasonNumber = currentNumber
-			currentItem.SeriesSeasonUnit = unit
-			byNumber[currentNumber] = currentItem
-		}
-	} else if first, found := byNumber[1]; found && first.ID == currentItem.ID {
-		byNumber[1] = duoduoMergeSameSeasonMetadata(first, currentItem)
+		currentItem.SeriesGroupID = groupID
+		currentItem.SeriesSeasonNumber = currentNumber
+		currentItem.SeriesSeasonUnit = unit
+		if existing, found := byNumber[currentNumber]; found {
+			byNumber[currentNumber] = duoduoMergeDuplicateSeasonCandidates(existing, currentItem)
+		} else { byNumber[currentNumber] = currentItem }
+	} else if first, found := byNumber[1]; found {
+		byNumber[1] = duoduoMergeDuplicateSeasonCandidates(first, currentItem)
 	}
-	if len(byNumber) < 2 {
-		return nil, nil
-	}
+	if len(byNumber) < 2 { return nil, nil }
 
 	numbers := make([]int, 0, len(byNumber))
-	for number := range byNumber {
-		numbers = append(numbers, number)
-	}
+	for number := range byNumber { numbers = append(numbers, number) }
 	sort.Ints(numbers)
 	seasons := make([]nativeDramaSeason, 0, len(numbers))
 	for _, number := range numbers {
 		item := byNumber[number]
-		item.SeriesGroupID = groupID
-		item.SeriesSeasonNumber = number
-		item.SeriesSeasonUnit = unit
+		item.SeriesGroupID, item.SeriesSeasonNumber, item.SeriesSeasonUnit = groupID, number, unit
 		episodeCount := duoduoDramaEpisodeCount(item)
 		upcoming := duoduoSeasonMarkedUpcoming(item.Remark)
 		native := nativeNormalize(item)
-		native.Episodes = episodeCount
-		native.EpisodesVerified = episodeCount > 0
-		native.SeriesGroupID = groupID
-		native.SeriesSeasonNumber = number
-		native.SeriesSeasonUnit = unit
-		label := fmt.Sprintf("第%d%s", number, unit)
+		native.Episodes, native.EpisodesVerified = episodeCount, episodeCount > 0
+		native.SeriesGroupID, native.SeriesSeasonNumber, native.SeriesSeasonUnit = groupID, number, unit
 		seasons = append(seasons, nativeDramaSeason{
-			Drama: native,
-			Number: number,
-			Label: label,
-			Subtitle: item.Remark,
-			Upcoming: upcoming,
-			// A missing catalogue count is incomplete metadata, not proof that
-			// the season is unavailable. Let the normal detail/aggregate resolver
-			// decide whether playback can actually start.
-			Playable: !upcoming,
+			Drama: native, Number: number, Label: fmt.Sprintf("第%d%s", number, unit),
+			Subtitle: item.Remark, Upcoming: upcoming, Playable: !upcoming,
 		})
 	}
 	return seasons, nil

@@ -10,6 +10,45 @@ import (
 	"time"
 )
 
+func TestDuoduoSeriesAliasesAndExternalIDsAreSafe(t *testing.T) {
+	if duoduoVerifiedSeriesAliasKey("芝加哥急救") != "chicago-med" ||
+		duoduoVerifiedSeriesAliasKey("芝加哥醫院") != "chicago-med" ||
+		duoduoVerifiedSeriesAliasKey("芝加哥医院") != "chicago-med" ||
+		duoduoVerifiedSeriesAliasKey("Chicago Med") != "chicago-med" {
+		t.Fatal("verified Chicago Med aliases did not resolve to one identity")
+	}
+	if duoduoVerifiedSeriesAliasKey("芝加哥烈焰") != "" || duoduoVerifiedSeriesAliasKey("芝加哥警署") != "" {
+		t.Fatal("other Chicago franchises must remain separate")
+	}
+	if !duoduoSameSeriesIdentity("示例劇", "Example Show", "tt12345678", "", "tt12345678", "") {
+		t.Fatal("matching IMDb IDs should join alternate localized titles")
+	}
+	if duoduoSameSeriesIdentity("示例劇", "Example Show", "tt12345678", "", "tt87654321", "") {
+		t.Fatal("different IMDb IDs must remain separate")
+	}
+	if duoduoCanonicalSeriesGroupID("芝加哥急救", "季", "", "") != duoduoCanonicalSeriesGroupID("芝加哥醫院", "季", "", "") {
+		t.Fatal("verified aliases must generate one stable group ID")
+	}
+	if duoduoCanonicalSeriesGroupID("芝加哥烈焰", "季", "", "") == duoduoCanonicalSeriesGroupID("芝加哥醫院", "季", "", "") {
+		t.Fatal("other Chicago shows were incorrectly grouped")
+	}
+}
+
+func TestDuoduoIMDbIDExtractionAndSeasonIdentity(t *testing.T) {
+	drama := duoduoDramaFromRow(map[string]any{
+		"vod_id": "1234", "vod_name": "示例作品第二季",
+		"vod_content": "<p>原名 Example Show. IMDb: tt12345678</p>",
+		"vod_douban_id": "987654",
+	})
+	if drama.IMDbID != "tt12345678" || drama.DoubanID != "987654" {
+		t.Fatalf("external IDs were not retained: %+v", drama)
+	}
+	if drama.SeriesSeasonNumber != 2 || drama.SeriesSeasonUnit != "季" ||
+		drama.SeriesGroupID != "duoduo-series:imdb:tt12345678:季" {
+		t.Fatalf("external identity was not applied to season row: %+v", drama)
+	}
+}
+
 func TestDuoduoSeriesTitleRequiresExplicitSeasonMarker(t *testing.T) {
 	tests := []struct {
 		title string
@@ -98,6 +137,54 @@ func TestFetchDuoduoSeriesSeasonsMatchesExactBaseTitle(t *testing.T) {
 	}
 	if seasons[0].Drama.SeriesGroupID != seasons[1].Drama.SeriesGroupID {
 		t.Fatalf("related seasons do not share a stable group ID: %+v", seasons)
+	}
+}
+
+func TestFetchDuoduoSeriesSeasonsMergesVerifiedLocalizedAliases(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			switch request.URL.Query().Get("wd") {
+			case "芝加哥醫院":
+				return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[
+					{"vod_id":912,"vod_name":"芝加哥醫院第十二季","vod_pic":"https://img.example.test/med12.jpg","vod_remarks":"21集"},
+					{"vod_id":913,"vod_name":"芝加哥醫院第12季","vod_remarks":"21集"}
+				]}`), nil
+			case "芝加哥急救":
+				return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[
+					{"vod_id":901,"vod_name":"芝加哥急救第一季","vod_pic":"https://img.example.test/med1.jpg","vod_remarks":"18集"},
+					{"vod_id":904,"vod_name":"芝加哥醫院第1季"},
+					{"vod_id":902,"vod_name":"芝加哥急救第二季","vod_pic":"https://img.example.test/med2.jpg","vod_remarks":"23集"},
+					{"vod_id":990,"vod_name":"芝加哥烈焰第一季","vod_pic":"https://img.example.test/fire1.jpg","vod_remarks":"24集"}
+				]}`), nil
+			default:
+				return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[]}`), nil
+			}
+		case "/api.php/web/vod/get_detail":
+			id := request.URL.Query().Get("vod_id")
+			title := map[string]string{"901":"芝加哥急救第一季","902":"芝加哥急救第二季"}[id]
+			if title == "" { t.Fatalf("unexpected sibling detail ID: %s", id) }
+			return sourceFixtureResponse(request, http.StatusOK, fmt.Sprintf(`{"code":200,"data":[{"vod_id":%s,"vod_name":%q,"vod_remarks":"已完結"}],"vodplayer":[]}`, id, title)), nil
+		case "/api.php/web/internal/search_aggregate":
+			return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[]}`), nil
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+	current := nativeDrama{ID:"duoduo:912", Source:sourceDuoduo, SourceID:"912",
+		Title:"芝加哥醫院第十二季", Episodes:21, Cover:"https://img.example.test/med12.jpg"}
+	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
+	if err != nil { t.Fatal(err) }
+	if len(seasons) != 3 { t.Fatalf("expected seasons 1, 2 and 12, got %+v", seasons) }
+	want := []struct{id string; number int}{{"duoduo:901",1},{"duoduo:902",2},{"duoduo:912",12}}
+	for i, expected := range want {
+		if seasons[i].Drama.ID != expected.id || seasons[i].Number != expected.number {
+			t.Fatalf("season %d mismatch: got %+v want %+v", i, seasons[i], expected)
+		}
+		if seasons[i].Drama.SeriesGroupID != "duoduo-series:alias:chicago-med:季" {
+			t.Fatalf("season %d group ID mismatch: %+v", i, seasons[i])
+		}
 	}
 }
 

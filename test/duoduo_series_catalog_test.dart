@@ -50,12 +50,12 @@ void main() {
       expect(chinese.single.seriesSeasonNumber, 10);
     });
 
-    test('keeps duplicates, mixed units, and similar titles separate', () {
+    test('collapses duplicate season rows but keeps mixed units and similar titles separate', () {
       expect(collapseDuoduoSeriesCatalogItems([
         const Drama(id: 'duoduo:501', source: 'duoduo', title: '同名第一季'),
         const Drama(id: 'duoduo:502', source: 'duoduo', title: '同名第1季'),
         const Drama(id: 'duoduo:503', source: 'duoduo', title: '同名第二季'),
-      ]), hasLength(3));
+      ]), hasLength(1));
       expect(collapseDuoduoSeriesCatalogItems([
         const Drama(id: 'duoduo:511', source: 'duoduo', title: '混合系列第一季'),
         const Drama(id: 'duoduo:512', source: 'duoduo', title: '混合系列第二部'),
@@ -67,6 +67,21 @@ void main() {
     });
   });
 
+  test('groups verified Chicago Med aliases and deduplicates repeated seasons', () {
+    const seriesId = 'duoduo-series:alias:chicago-med:季';
+    final result = collapseDuoduoSeriesCatalogItems([
+      const Drama(id:'duoduo:912',source:'duoduo',title:'芝加哥醫院第12季',seriesGroupId:seriesId,seriesSeasonNumber:12,seriesSeasonUnit:'季',cover:'med12.jpg',episodes:21),
+      const Drama(id:'duoduo:901',source:'duoduo',title:'芝加哥急救第一季',seriesGroupId:seriesId,seriesSeasonNumber:1,seriesSeasonUnit:'季',cover:'med1.jpg',episodes:18),
+      const Drama(id:'duoduo:902',source:'duoduo',title:'芝加哥急救第二季',seriesGroupId:seriesId,seriesSeasonNumber:2,seriesSeasonUnit:'季',cover:'med2.jpg',episodes:23),
+      const Drama(id:'duoduo:904',source:'duoduo',title:'芝加哥醫院第2季',seriesGroupId:seriesId,seriesSeasonNumber:2,seriesSeasonUnit:'季'),
+      const Drama(id:'duoduo:990',source:'duoduo',title:'芝加哥烈焰第一季',cover:'fire1.jpg'),
+    ]);
+    expect(result,hasLength(2));
+    expect(result.first.seriesGroupId,seriesId);
+    expect(result.first.id,'duoduo:901');
+    expect(result.first.title,'芝加哥急救');
+    expect(result.last.id,'duoduo:990');
+  });
 
   test('preserves official poster fallback candidates across season grouping and model roundtrips', () {
     final first = Drama.fromJson(const {
