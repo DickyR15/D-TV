@@ -502,6 +502,14 @@ class _LanDevicesState extends State<_LanDevices> {
   }
 
   Future<void> _start() async {
+    // Opening the device sheet must not throw merely because LAN sync is off.
+    // Keep the actionable setting hint, but skip listener/discovery startup.
+    if (!link.enabled || !link.autoSync) {
+      if (mounted) {
+        setState(() => _error = '請先開啟「區域網路自動同步」');
+      }
+      return;
+    }
     try {
       await link.ensureEnabled();
       if (widget.change) await link.rescan();
