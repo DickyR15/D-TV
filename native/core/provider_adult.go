@@ -303,13 +303,13 @@ func adultMediaCandidates(document *html.Node, rawBody, pageURL string) []string
 		add(firstNonEmpty(providerHTMLAttr(node, "src"), providerHTMLAttr(node, "data-src")))
 	}
 
-	// Some provider pages keep fallback media URLs in inline scripts instead
-	// of video/source elements. Scan the raw document after structural media
-	// nodes so the primary player URL keeps precedence over script fallbacks.
+	// Fallback URLs are also embedded in script strings. Extract URL-like
+	// tokens without assuming an extension is followed immediately by a
+	// delimiter; add() parses and validates the URL path and scheme.
 	body := strings.ReplaceAll(rawBody, "\\/", "/")
 	body = strings.ReplaceAll(body, "\\u0026", "&")
-	for _, match := range reMissavMediaURL.FindAllString(body, -1) {
-		add(match)
+	for _, match := range regexp.MustCompile(`(?i)(?:https?:)?//[^\\s"'<>\\]+`).FindAllString(body, -1) {
+		add(strings.TrimRight(match, ".,);]"))
 	}
 	return candidates
 }
