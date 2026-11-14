@@ -15,11 +15,13 @@ import 'diary_service.dart';
 import 'television_playback_info.dart';
 import 'contained_slider.dart';
 import 'playback_controls_visibility.dart';
+import 'player_interactions.dart';
 
 class TelevisionControls extends StatefulWidget {
   const TelevisionControls({
     super.key,
     required this.player,
+    required this.interactions,
     required this.title,
     required this.enabled,
     required this.showOnPlaybackReady,
@@ -37,6 +39,7 @@ class TelevisionControls extends StatefulWidget {
     this.showClock = true,
   });
   final Player player;
+  final PlayerInteractions interactions;
   final String title;
   final bool enabled;
   final bool showOnPlaybackReady;
@@ -83,6 +86,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
   @override
   void initState() {
     super.initState();
+    widget.interactions.addListener(_interactionChanged);
     _visible = widget.showOnPlaybackReady;
     _controlsVisibility.synchronize(
       generation: widget.playbackGeneration,
@@ -136,6 +140,10 @@ class TelevisionControlsState extends State<TelevisionControls> {
   @override
   void didUpdateWidget(covariant TelevisionControls oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.interactions != oldWidget.interactions) {
+      oldWidget.interactions.removeListener(_interactionChanged);
+      widget.interactions.addListener(_interactionChanged);
+    }
     final playbackChanged =
         widget.playbackGeneration != oldWidget.playbackGeneration;
     final readinessChanged =
@@ -169,6 +177,10 @@ class TelevisionControlsState extends State<TelevisionControls> {
       _syncInfoTimer();
       if (_visible) unawaited(_refreshPlaybackInfo());
     }
+  }
+
+  void _interactionChanged() {
+    if (mounted) setState(() {});
   }
 
   void _syncInfoTimer() {
@@ -424,6 +436,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
 
   @override
   void dispose() {
+    widget.interactions.removeListener(_interactionChanged);
     _hideTimer?.cancel();
     _seekTimer?.cancel();
     _infoTimer?.cancel();
@@ -464,11 +477,53 @@ class TelevisionControlsState extends State<TelevisionControls> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.enabled ? _show : null,
+          onLongPressStart: widget.enabled
+              ? (details) {
+                  final direction =
+                      details.localPosition.dx < MediaQuery.sizeOf(context).width / 2
+                      ? -1
+                      : 1;
+                  widget.interactions.beginSeekHold(direction);
+                  _show();
+                }
+              : null,
+          onLongPressEnd: widget.enabled
+              ? (_) => widget.interactions.endSeekHold()
+              : null,
+          onLongPressCancel: widget.enabled
+              ? () => widget.interactions.endSeekHold(silent: true)
+              : null,
           child: Stack(
             fit: StackFit.expand,
             children: [
               if (state.buffering && widget.enabled)
                 const Center(child: CircularProgressIndicator()),
+              if (widget.interactions.feedback.isNotEmpty)
+                IgnorePointer(
+                  child: Center(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: .82),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 14,
+                        ),
+                        child: Text(
+                          widget.interactions.feedback,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               if (_seekHint && !_visible)
                 Center(
                   child: DecoratedBox(
