@@ -67,6 +67,16 @@ void main() {
     });
   });
 
+  test('IMDb identity survives the model JSON roundtrip', () {
+    const drama = Drama(
+      id: 'duoduo:801',
+      source: 'duoduo',
+      title: 'Example Show 第一季',
+      imdbId: 'tt12345678',
+    );
+    expect(Drama.fromJson(drama.toJson()).imdbId, 'tt12345678');
+  });
+
   test('groups verified Chicago Med aliases and deduplicates repeated seasons', () {
     const seriesId = 'duoduo-series:alias:chicago-med:季';
     final result = collapseDuoduoSeriesCatalogItems([

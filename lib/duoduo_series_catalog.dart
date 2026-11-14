@@ -140,7 +140,9 @@ List<Drama> collapseDuoduoSeriesCatalogItems(Iterable<Drama> sourceItems) {
       .replaceFirst(RegExp(r'\s*第\s*([0-9]{1,3}|[零〇一二三四五六七八九十百]+)\s*(季|部)$'),'')
       .replaceFirst(RegExp(r'\s+(?:season|s)\s*[0-9]{1,3}$',caseSensitive:false),'');
     representatives[entry.key]=chosen.withSeriesIdentity(groupId:entry.key,seasonNumber:firstNumber,seasonUnit:family.unit,displayTitle:displayTitle);
-    for(final index in indexes.values)membership[index]=entry.key;
+    for(final indices in family.members.values) {
+      for(final index in indices) membership[index]=entry.key;
+    }
   }
   if(representatives.isEmpty)return items;
   final result=<Drama>[], emitted=<String>{};

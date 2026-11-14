@@ -146,6 +146,7 @@ class Drama {
     this.episodesVerified = false,
     this.category = '',
     this.doubanId = '',
+    this.imdbId = '',
     bool? vip,
     this.heat = '',
     this.views = '',
@@ -177,6 +178,7 @@ class Drama {
       episodes > 0 && (source != 'hongguo' || episodesVerified);
   final String category;
   final String doubanId;
+  final String imdbId;
   final bool? vipStatus;
   bool get vip => vipStatus == true;
   final String heat;
@@ -224,6 +226,7 @@ class Drama {
           ? ''
           : json['category'] as String? ?? '',
       doubanId: json['doubanId'] as String? ?? '',
+      imdbId: json['imdbId'] as String? ?? '',
       vip: json['vip'] == true
           ? true
           : json['vip'] == false &&
@@ -255,6 +258,7 @@ class Drama {
     'episodesVerified': episodesVerified,
     'category': category,
     'doubanId': doubanId,
+    if (imdbId.isNotEmpty) 'imdbId': imdbId,
     'vip': vipStatus,
     'heat': heat,
     'views': views,
@@ -279,6 +283,7 @@ class Drama {
     episodesVerified: episodesVerified,
     category: category,
     doubanId: doubanId,
+    imdbId: imdbId,
     vip: vipStatus,
     heat: heat,
     views: views,
@@ -308,6 +313,7 @@ class Drama {
     episodesVerified: episodesVerified,
     category: category,
     doubanId: doubanId,
+    imdbId: imdbId,
     vip: vipStatus,
     heat: heat,
     views: views,
@@ -377,6 +383,7 @@ class Drama {
           ? currentCategory
           : fresh.category,
       doubanId: fresh.doubanId.isEmpty ? doubanId : fresh.doubanId,
+      imdbId: fresh.imdbId.isEmpty ? imdbId : fresh.imdbId,
       vip: fresh.vipStatus ?? vipStatus,
       heat: fresh.heat.isEmpty ? heat : fresh.heat,
       views: fresh.views.isEmpty ? views : fresh.views,
