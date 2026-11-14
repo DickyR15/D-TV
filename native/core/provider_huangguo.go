@@ -32,6 +32,8 @@ const (
 	sourceDuoduo          = "duoduo"
 	sourceHanxiaoquan     = "hanxiaoquan"
 	sourceHeitao          = "heitao"
+	sourceMissav          = "missav"
+	sourceSupjav          = "supjav"
 
 	providerMaxBodyBytes = 20 * 1024 * 1024
 	providerTimeout      = 12 * time.Second
@@ -96,7 +98,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceHeitao:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceHeitao, sourceMissav, sourceSupjav:
 		return true
 	default:
 		return false
@@ -129,6 +131,10 @@ func canonicalProviderSource(source string) string {
 		return sourceHanxiaoquan
 	case "heitao", "heitaodj.com", "www.heitaodj.com":
 		return sourceHeitao
+	case "missav", "missav.ws", "www.missav.ws":
+		return sourceMissav
+	case "supjav", "supjav.com", "www.supjav.com":
+		return sourceSupjav
 	default:
 		return strings.TrimSpace(source)
 	}
@@ -246,6 +252,12 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 		return drama.DisplayTitle(), chapters, err
 	case sourceHeitao:
 		drama, chapters, err := d.fetchHeitaoDetail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
+	case sourceMissav:
+		drama, chapters, err := d.fetchMissavDetail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
+	case sourceSupjav:
+		drama, chapters, err := d.fetchSupjavDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
 	case sourceCloudFront:
 		return d.fetchLegacyChapters(ctx, sourceID)
