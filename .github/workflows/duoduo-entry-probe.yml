@@ -1306,6 +1306,7 @@ jobs:
 
           target_failures = []
           target_upstream_unavailable = []
+          verified_poster_addresses = {}
           for vod_id in TARGET_POSTER_IDS:
               try:
                   api_base, detail_payload = api("/api.php/web/vod/get_detail", {"vod_id": vod_id})
@@ -1437,10 +1438,12 @@ jobs:
                       f"fields={[label for label, _ in candidates[:16]]}"
                   )
                   poster_ok = False
+                  validated_poster_address = ""
                   for label, address in candidates[:16]:
                       print(f"  candidate source={label} url={address[:260]}")
                       if targeted_image_ok(address, play_url, root_url):
                           poster_ok = True
+                          validated_poster_address = address
                           break
                   if not poster_ok:
                       try:
@@ -1448,6 +1451,7 @@ jobs:
                           if bangumi_address:
                               poster_ok = targeted_image_ok(bangumi_address, play_url, root_url)
                               if poster_ok:
+                                  validated_poster_address = bangumi_address
                                   print(f"PASS: Bangumi exact-match fallback poster validated for id={vod_id}")
                       except Exception as exc:
                           print(
@@ -1461,6 +1465,7 @@ jobs:
                           print(f"  verified exact-record artwork candidate={verified_address}")
                           poster_ok = targeted_image_ok(verified_address, play_url, root_url)
                           if poster_ok:
+                              validated_poster_address = verified_address
                               print(f"PASS: exact source-record artwork validated for id={vod_id}")
                   if not poster_ok:
                       source_poster = poster_address(row.get("vod_pic"))
@@ -1500,6 +1505,11 @@ jobs:
                           target_failures.append(vod_id)
                           print(f"FAIL: official poster not validated for id={vod_id}")
                   else:
+                      if validated_poster_address:
+                          verified_poster_addresses[vod_id] = (
+                              normalize_target_title(title),
+                              validated_poster_address,
+                          )
                       print(f"PASS: official poster validated for id={vod_id}")
               except Exception as exc:
                   target_failures.append(vod_id)
@@ -2534,7 +2544,16 @@ jobs:
                       f"fields={[label for label, _ in candidates[:16]]}"
                   )
                   poster_ok = False
+                  cached_poster = verified_poster_addresses.get(vod_id)
+                  if cached_poster and cached_poster[0] == normalize_target_title(title):
+                      cached_address = cached_poster[1]
+                      print(f"  revalidate same-run poster id={vod_id} url={cached_address[:260]}")
+                      poster_ok = targeted_image_ok(cached_address, play_url, root_url)
+                      if poster_ok:
+                          print(f"PASS: same-run verified poster bytes revalidated for id={vod_id}")
                   for label, address in candidates[:16]:
+                      if poster_ok:
+                          break
                       print(f"  candidate source={label} url={address[:260]}")
                       if targeted_image_ok(address, play_url, root_url):
                           poster_ok = True
