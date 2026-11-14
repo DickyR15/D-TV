@@ -225,7 +225,9 @@ void main() {
     expect(reorderList, findsOneWidget);
     final initial = store.advancedSources.map((source) => source.id).toList();
     final widget = tester.widget<ReorderableListView>(reorderList);
-    widget.onReorder(1, 0);
+    final onReorder = widget.onReorder;
+    expect(onReorder, isNotNull);
+    onReorder!(1, 0);
     await tester.pumpAndSettle();
     expect(
       store.advancedSources.map((source) => source.id).take(2).toList(),
