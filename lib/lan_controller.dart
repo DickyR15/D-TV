@@ -19,6 +19,32 @@ export 'lan_sync_models.dart';
 part 'lan_sync.dart';
 part 'lan_playback.dart';
 
+String lanPublicErrorMessage(Object failure) {
+  final raw = failure is StateError
+      ? failure.message.toString()
+      : lanPublicErrorMessage(failure);
+  final firstLine = raw.split(RegExp(r'[\\r\\n]')).first.trim();
+  final message = firstLine
+      .replaceFirst(RegExp(r'^Bad state:\\s*'), '')
+      .trim();
+  final hasChinese = RegExp(r'[\\u3400-\\u9fff]').hasMatch(message);
+  final looksInternal = RegExp(
+    r'bad state|exception|stack|trace|socketexception|formatexception|stateerror|package:|#\\d+',
+    caseSensitive: false,
+  ).hasMatch(message);
+  if (message.isNotEmpty && hasChinese && !looksInternal) return message;
+  if (failure is TimeoutException) {
+    return '連線逾時，請確認兩臺裝置位於同一個網路後重試。';
+  }
+  if (failure is SocketException) {
+    return '網路連線失敗，請檢查 Wi-Fi 或區域網路權限後重試。';
+  }
+  if (failure is FormatException) {
+    return '裝置資料格式不相容，請更新兩端應用程式後重試。';
+  }
+  return '裝置互聯暫時無法使用，請確認兩臺裝置都已開啟區域網路自動同步，並連線至同一個網路。';
+}
+
 class LanController extends ChangeNotifier with WidgetsBindingObserver {
   LanController(this.repository, this.store, {required this.kind}) {
     store.addListener(_storeChanged);
@@ -234,7 +260,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
             .then((_) => _reconcile());
         unawaited(
           _lifecycle.catchError((Object failure) {
-            error = failure.toString();
+            error = lanPublicErrorMessage(failure);
             _notify();
           }),
         );
@@ -250,7 +276,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         }
       }
     } catch (failure) {
-      error = failure.toString();
+      error = lanPublicErrorMessage(failure);
       _notify();
     }
   }
@@ -618,7 +644,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       throw lastError ?? StateError('裝置尚未取得可用位址');
     } catch (failure) {
       if (run == _run) {
-        error = failure.toString();
+        error = lanPublicErrorMessage(failure);
         if (connection?.peer.id != peer.id) {
           _selected = '';
           await _native(
@@ -702,7 +728,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       }
       await connect(peer, automatic: true);
     } catch (failure) {
-      error = failure.toString();
+      error = lanPublicErrorMessage(failure);
       _retryAt = DateTime.now().add(const Duration(seconds: 15));
       _notify();
     }
@@ -777,7 +803,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
         }
       } catch (failure) {
         if (_disposed || run != _run) return;
-        error = failure.toString();
+        error = lanPublicErrorMessage(failure);
         _notify();
         await Future<void>.delayed(const Duration(seconds: 1));
       }
@@ -990,7 +1016,7 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
       if (connection == remote) {
         connection = null;
         _syncTicket++;
-        error = failure.toString();
+        error = lanPublicErrorMessage(failure);
         syncMessage = '連線中斷，重連後補齊';
         _retryAt = DateTime.now().add(const Duration(seconds: 5));
         _notify();
