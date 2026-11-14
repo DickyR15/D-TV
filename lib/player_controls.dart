@@ -360,6 +360,22 @@ class _PlayerControlsState extends State<PlayerControls> {
                   widget.onTogglePlayback();
                   _show();
                 },
+                onLongPressStart: widget.enabled
+                    ? (details) {
+                        final direction =
+                            details.localPosition.dx < constraints.maxWidth / 2
+                            ? -1
+                            : 1;
+                        widget.interactions.beginSeekHold(direction);
+                        _show();
+                      }
+                    : null,
+                onLongPressEnd: widget.enabled
+                    ? (_) => widget.interactions.endSeekHold()
+                    : null,
+                onLongPressCancel: widget.enabled
+                    ? () => widget.interactions.endSeekHold(silent: true)
+                    : null,
               ),
             ),
             if (state.buffering && widget.enabled)
