@@ -180,18 +180,23 @@ func (downloader *Downloader) hydrateDuoduoSeriesSeason(ctx context.Context, cat
 		(duoduoDramaHasOfficialCover(catalog) && duoduoDramaEpisodeCount(catalog) > 0) {
 		return catalog
 	}
-	detail, row, payload, _, err := downloader.fetchDuoduoDetailRow(ctx, catalog.SourceID)
+
+	// Resolve the season through the same detail + aggregate parser used by
+	// search-result playback. Catalog rows can omit the episode count even
+	// though search playback can resolve direct URLs from search_aggregate.
+	detail, chapters, err := downloader.fetchDuoduoDetailWithCategory(
+		ctx, catalog.SourceID, catalog.CategoryName,
+	)
 	if err != nil || detail.ID != catalog.ID || detail.SourceID != catalog.SourceID {
 		return catalog
 	}
 	catalog = duoduoMergeSameSeasonMetadata(catalog, detail)
-	if duoduoDramaEpisodeCount(catalog) == 0 {
+	if duoduoDramaEpisodeCount(catalog) == 0 && len(chapters) > 0 {
 		maxEpisode := 0
-		for _, line := range duoduoParseDetailLines(row, duoduoRows(payload["vodplayer"])) {
-			for _, episode := range line.Episodes {
-				if episode.Index > maxEpisode {
-					maxEpisode = episode.Index
-				}
+		for index, chapter := range chapters {
+			number := duoduoEpisodeNumber(chapter.Title, index+1)
+			if number > maxEpisode {
+				maxEpisode = number
 			}
 		}
 		if maxEpisode > 0 {
