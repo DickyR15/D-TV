@@ -344,7 +344,7 @@ func TestDuoduoMergeSameSeasonMetadataPreservesPreviousPosterCandidates(t *testi
 		"https://img.example.test/catalog-original.jpg",
 		"https://img.example.test/catalog-alt.jpg",
 	}
-	if !reflect.DeepEqual(merged.CoverCandidates, want) {
+	if strings.Join(merged.CoverCandidates, "|") != strings.Join(want, "|") {
 		t.Fatalf("merged poster candidates = %#v, want %#v", merged.CoverCandidates, want)
 	}
 }
