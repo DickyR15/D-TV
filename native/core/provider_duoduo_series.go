@@ -163,12 +163,16 @@ func duoduoMergeSameSeasonMetadata(catalog, detail Drama) Drama {
 		catalog.SourceID == "" || catalog.SourceID != detail.SourceID {
 		return catalog
 	}
-	if duoduoDramaHasOfficialCover(detail) {
-		catalog.Cover = detail.Cover
-		catalog.CoverURL = detail.CoverURL
-		catalog.CoverCandidates = nativeUniqueCoverAddresses(
-			append(append([]string{}, detail.CoverCandidates...), catalog.CoverCandidates...)...,
-		)
+	detailAddresses := nativeCoverAddressesFromDrama(detail)
+	if len(detailAddresses) > 0 {
+		// Keep the previous primary and alternate URLs as lower-priority
+		// candidates when the official detail endpoint refreshes the main poster.
+		previousAddresses := nativeCoverAddressesFromDrama(catalog)
+		catalog.Cover = detailAddresses[0]
+		catalog.CoverURL = detailAddresses[0]
+		candidates := append([]string{}, detailAddresses[1:]...)
+		candidates = append(candidates, previousAddresses...)
+		catalog.CoverCandidates = nativeUniqueCoverAddresses(candidates...)
 	}
 	if count := duoduoDramaEpisodeCount(detail); count > duoduoDramaEpisodeCount(catalog) {
 		catalog.Episodes = count
@@ -393,6 +397,7 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 		item.SeriesSeasonNumber = number
 		item.SeriesSeasonUnit = unit
 		episodeCount := duoduoDramaEpisodeCount(item)
+		upcoming := duoduoSeasonMarkedUpcoming(item.Remark)
 		native := nativeNormalize(item)
 		native.Episodes = episodeCount
 		native.EpisodesVerified = episodeCount > 0
@@ -405,8 +410,11 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 			Number: number,
 			Label: label,
 			Subtitle: item.Remark,
-			Upcoming: episodeCount <= 0 && duoduoSeasonMarkedUpcoming(item.Remark),
-			Playable: episodeCount > 0,
+			Upcoming: upcoming,
+			// A missing catalogue count is incomplete metadata, not proof that
+			// the season is unavailable. Let the normal detail/aggregate resolver
+			// decide whether playback can actually start.
+			Playable: !upcoming,
 		})
 	}
 	return seasons, nil
