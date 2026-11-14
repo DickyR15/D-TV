@@ -10,6 +10,8 @@ const Map<String, String> _twPhrases = {
   // Supjav uses its Chinese-language catalogue; normalize common labels to Taiwan wording.
   '视频列表': '影片清單',
   '視頻列表': '影片清單',
+  '影片列表': '影片清單',
+  '視頻詳情': '影片詳情',
   '播放列表': '播放清單',
   '搜索': '搜尋',
   '上映时间': '上映日期',
