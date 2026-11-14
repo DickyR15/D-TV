@@ -360,3 +360,108 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 	}
 	return seasons, nil
 }
+
+// fetchDuoduoAlternateSeasonPlayback looks for another upstream record only
+// when the current row belongs to a verified localized series alias and has
+// an explicit season number. It never joins by a fuzzy/similar title.
+func (downloader *Downloader) fetchDuoduoAlternateSeasonPlayback(
+	ctx context.Context,
+	current Drama,
+	requestedSourceID string,
+	catalogCategory string,
+) ([]Chapter, error) {
+	base, seasonNumber, seasonUnit, ok := duoduoSeriesTitle(current.DisplayTitle())
+	if !ok || duoduoVerifiedSeriesAliasKey(base) == "" {
+		return nil, errDuoduoNoDirectPlayback
+	}
+
+	searchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	candidateIDs := make([]string, 0, 8)
+	seenIDs := map[string]bool{requestedSourceID: true}
+	for queryIndex, searchTitle := range duoduoSeriesSearchTitles(base) {
+		pageLimit := 1
+		if queryIndex == 0 {
+			pageLimit = 2
+		}
+		for page := 1; page <= pageLimit; page++ {
+			if err := searchCtx.Err(); err != nil {
+				return nil, err
+			}
+			items, more, err := downloader.fetchDuoduoCatalogPage(
+				searchCtx, page, "", searchTitle, "hits",
+			)
+			if err != nil {
+				if searchCtx.Err() != nil {
+					return nil, searchCtx.Err()
+				}
+				break
+			}
+			for _, item := range items {
+				if item.Source != sourceDuoduo || item.SourceID == "" || seenIDs[item.SourceID] {
+					continue
+				}
+				candidateBase, candidateNumber, candidateUnit, hasSeason :=
+					duoduoSeriesTitle(item.DisplayTitle())
+				if !hasSeason || candidateNumber != seasonNumber || candidateUnit != seasonUnit {
+					continue
+				}
+				if !duoduoSameSeriesIdentity(
+					base, candidateBase,
+					current.IMDbID, current.DoubanID,
+					item.IMDbID, item.DoubanID,
+				) {
+					continue
+				}
+				seenIDs[item.SourceID] = true
+				candidateIDs = append(candidateIDs, item.SourceID)
+				if len(candidateIDs) >= 8 {
+					break
+				}
+			}
+			if len(candidateIDs) >= 8 || !more || len(items) == 0 {
+				break
+			}
+		}
+		if len(candidateIDs) >= 8 {
+			break
+		}
+	}
+
+	for _, candidateID := range candidateIDs {
+		if err := searchCtx.Err(); err != nil {
+			return nil, err
+		}
+		_, chapters, err := downloader.fetchDuoduoDetailDirectOnly(
+			searchCtx, candidateID, catalogCategory,
+		)
+		if err != nil || len(chapters) == 0 {
+			continue
+		}
+
+		// The app keeps the originally selected catalogue identity for favorites
+		// and watch history. Direct media URLs are self-contained, so rewrite the
+		// chapter identity to the requested season while retaining the working
+		// candidate URL and its official Referer.
+		seenEpisodes := make(map[int]bool, len(chapters))
+		result := make([]Chapter, 0, len(chapters))
+		for index, chapter := range chapters {
+			number := duoduoEpisodeNumber(chapter.Title, index+1)
+			if number < 1 || number > 100000 || seenEpisodes[number] ||
+				!duoduoDirectMediaURL(chapter.VideoURL) {
+				continue
+			}
+			seenEpisodes[number] = true
+			chapter.ID = providerChapterID(sourceDuoduo, requestedSourceID, strconv.Itoa(number))
+			chapter.Source = sourceDuoduo
+			result = append(result, chapter)
+		}
+		if len(result) > 0 {
+			return result, nil
+		}
+	}
+
+	return nil, errDuoduoNoDirectPlayback
+}
+
