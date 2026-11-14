@@ -608,7 +608,7 @@ jobs:
                       )
 
           print("\n=== USER-REPORTED MISSING POSTERS ===")
-          TARGET_POSTER_IDS = ("54635", "151850", "1625", "49704", "1206", "157219", "101901", "1192", "73988")
+          TARGET_POSTER_IDS = ("54635", "151850", "1625", "49704", "1206", "157219", "101901", "1192", "73988", "131229")
           TARGET_POSTER_TITLES = [
               {
                   "label": "怪奇物語 第一季",
@@ -749,6 +749,19 @@ jobs:
                       "緊急呼救 第1季", "紧急呼救第1季",
                       "9-1-1 Season 1", "911 Season 1",
                       "9-1-1 第一季", "9-1-1第一季", "911第一季",
+                  ),
+              },
+              {
+                  "label": "芝加哥醫院 第一季",
+                  "queries": (
+                      "芝加哥醫院第1季", "芝加哥醫院 第一季",
+                      "芝加哥医院第1季", "芝加哥医院 第一季",
+                      "Chicago Med Season 1", "Chicago Med S01",
+                  ),
+                  "aliases": (
+                      "芝加哥醫院第1季", "芝加哥醫院 第一季",
+                      "芝加哥医院第1季", "芝加哥医院 第一季",
+                      "Chicago Med Season 1", "Chicago Med S01",
                   ),
               },
               {
@@ -2847,4 +2860,177 @@ jobs:
               "PASS: Chicago Fire exact search IDs match their official detail IDs; "
               "season 1 and season 5 both expose direct episode data through the shared detail+aggregate resolver."
           )
+
+          print("\\n=== USER-REPORTED CHICAGO MED S1 PLAYBACK: 131229 ===")
+          chicago_med_id = "131229"
+          med_base, med_payload = api(
+              "/api.php/web/vod/get_detail", {"vod_id": chicago_med_id}
+          )
+          med_rows = response_rows(med_payload.get("data"))
+          if not med_rows:
+              raise RuntimeError("Chicago Med S1 id=131229 returned no official detail row")
+          med = med_rows[0]
+          med_title = row_title(med)
+          med_returned_id = row_id(med)
+          if med_returned_id != chicago_med_id:
+              raise RuntimeError(
+                  f"Chicago Med requested detail identity mismatch: requested={chicago_med_id} returned={med_returned_id}"
+              )
+          if "芝加哥醫院" not in med_title and "芝加哥医院" not in med_title and "Chicago Med" not in med_title:
+              raise RuntimeError(
+                  f"Chicago Med id=131229 official title mismatch: {med_title!r}"
+              )
+
+          def safe_media_kind(address):
+              parsed = urlsplit(str(address or "").strip())
+              if parsed.scheme not in ("http", "https") or not parsed.hostname:
+                  return "invalid"
+              suffix = parsed.path.lower().rsplit(".", 1)[-1] if "." in parsed.path.rsplit("/", 1)[-1] else "none"
+              return f"{parsed.hostname}{parsed.path[-48:]} [ext={suffix}]"
+
+          med_player_rows = response_rows(med_payload.get("vodplayer"))
+          med_player_by_from = {
+              str(player.get("from") or "").strip(): player
+              for player in med_player_rows if str(player.get("from") or "").strip()
+          }
+          med_detail_lines = []
+          med_direct = []
+          med_non_direct = []
+          med_names = split_source_groups(med.get("vod_play_from"), comma_fallback=True)
+          med_blocks = split_source_groups(med.get("vod_play_url"))
+          for index, name in enumerate(med_names[:len(med_blocks)]):
+              player = med_player_by_from.get(name.strip(), {})
+              decode_status = str(player.get("decode_status") or "0")
+              entries = []
+              for episode in med_blocks[index].split("#"):
+                  if "$" not in episode:
+                      continue
+                  episode_title, address = episode.split("$", 1)
+                  address = address.strip()
+                  if not address:
+                      continue
+                  record = (episode_title.strip(), address, name)
+                  entries.append(record)
+                  if decode_status == "0" and (
+                      urlsplit(address).path.lower().endswith(".m3u8")
+                      or urlsplit(address).path.lower().endswith(".mp4")
+                  ):
+                      med_direct.append(record)
+                  else:
+                      med_non_direct.append((decode_status, episode_title.strip(), address, name))
+              med_detail_lines.append({
+                  "from": name,
+                  "show": str(player.get("show") or name),
+                  "decode_status": decode_status,
+                  "episodes": len(entries),
+                  "direct_urls": sum(
+                      1 for _, address, _ in entries
+                      if decode_status == "0" and (
+                          urlsplit(address).path.lower().endswith(".m3u8")
+                          or urlsplit(address).path.lower().endswith(".mp4")
+                      )
+                  ),
+                  "non_direct_samples": [
+                      safe_media_kind(address)
+                      for _, address, _ in entries[:2]
+                      if not (
+                          decode_status == "0" and (
+                              urlsplit(address).path.lower().endswith(".m3u8")
+                              or urlsplit(address).path.lower().endswith(".mp4")
+                          )
+                      )
+                  ],
+              })
+
+          _, med_aggregate_payload = api(
+              "/api.php/web/internal/search_aggregate", {"vod_id": chicago_med_id}
+          )
+          med_aggregate_rows = response_rows(med_aggregate_payload.get("data"))
+          med_aggregate_summary = []
+          for line in med_aggregate_rows:
+              decode_status = str(line.get("decode_status") or "0")
+              raw = str(line.get("vod_play_url") or "")
+              entries = []
+              for episode in raw.split("#"):
+                  if "$" not in episode:
+                      continue
+                  episode_title, address = episode.split("$", 1)
+                  address = address.strip()
+                  if not address:
+                      continue
+                  entries.append((episode_title.strip(), address))
+                  if decode_status == "0" and (
+                      urlsplit(address).path.lower().endswith(".m3u8")
+                      or urlsplit(address).path.lower().endswith(".mp4")
+                  ):
+                      med_direct.append((episode_title.strip(), address, "aggregate"))
+                  else:
+                      med_non_direct.append((decode_status, episode_title.strip(), address, "aggregate"))
+              med_aggregate_summary.append({
+                  "site_key": str(line.get("site_key") or ""),
+                  "site_name": str(line.get("site_name") or ""),
+                  "decode_status": decode_status,
+                  "episodes": len(entries),
+                  "direct_urls": sum(
+                      1 for _, address in entries
+                      if decode_status == "0" and (
+                          urlsplit(address).path.lower().endswith(".m3u8")
+                          or urlsplit(address).path.lower().endswith(".mp4")
+                      )
+                  ),
+                  "non_direct_samples": [
+                      safe_media_kind(address)
+                      for _, address in entries[:2]
+                      if not (
+                          decode_status == "0" and (
+                              urlsplit(address).path.lower().endswith(".m3u8")
+                              or urlsplit(address).path.lower().endswith(".mp4")
+                          )
+                      )
+                  ],
+              })
+
+          direct_unique = {}
+          for title, address, origin in med_direct:
+              direct_unique.setdefault(address, (title, origin))
+          print(
+              f"CHICAGO_MED id={med_returned_id} title={med_title!r} "
+              f"remarks={str(med.get('vod_remarks') or '')!r} "
+              f"poster_fields={[key for key in ('vod_pic','vod_pic_thumb','vod_pic_detail','vod_pic_big','vod_pic_original','vod_pic_slide') if med.get(key)]}"
+          )
+          print(
+              f"CHICAGO_MED detail_player_rows={len(med_player_rows)} "
+              f"detail_lines={med_detail_lines!r}"
+          )
+          print(
+              f"CHICAGO_MED aggregate_lines={len(med_aggregate_rows)} "
+              f"aggregate_summary={med_aggregate_summary!r}"
+          )
+          print(
+              f"CHICAGO_MED direct_urls={len(direct_unique)} "
+              f"non_direct_entries={len(med_non_direct)} "
+              f"non_direct_samples={[{'decode_status': row[0], 'line': row[3], 'media': safe_media_kind(row[2])} for row in med_non_direct[:8]]!r}"
+          )
+          if not direct_unique:
+              raise RuntimeError(
+                  "Chicago Med S1 id=131229 has no D-TV-compatible direct detail/aggregate URL; "
+                  "inspect the redacted decode-status and URL-kind summaries above."
+              )
+          med_probe_ok = False
+          for episode_title, address in list(direct_unique.values())[:3]:
+              ok, message = probe_media(address, med_base + "/")
+              if not ok:
+                  retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
+                  if retry_ok:
+                      ok, message = retry_ok, retry_message
+                  else:
+                      message += f"; public-entry retry failed: {retry_message}"
+              print(
+                  f"CHICAGO_MED_MEDIA episode={episode_title!r} "
+                  f"media={safe_media_kind(address)} ok={ok} {message}"
+              )
+              med_probe_ok = med_probe_ok or ok
+          if not med_probe_ok:
+              raise RuntimeError("Chicago Med S1 id=131229 direct media URLs did not pass the bounded public media probe")
+          print("PASS: Chicago Med S1 id=131229 has validated official direct playback data.")
           PY
