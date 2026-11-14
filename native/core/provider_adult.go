@@ -308,7 +308,7 @@ func adultMediaCandidates(document *html.Node, rawBody, pageURL string) []string
 	// delimiter; add() parses and validates the URL path and scheme.
 	body := strings.ReplaceAll(rawBody, "\\/", "/")
 	body = strings.ReplaceAll(body, "\\u0026", "&")
-	for _, match := range regexp.MustCompile(`(?i)(?:https?:)?//[^\\s"'<>\\]+`).FindAllString(body, -1) {
+	for _, match := range regexp.MustCompile(`(?i)https?://[^[:space:]"'<>\\]+`).FindAllString(body, -1) {
 		add(strings.TrimRight(match, ".,);]"))
 	}
 	return candidates
