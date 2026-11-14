@@ -210,41 +210,38 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     stateLock.unlock()
 
     guard shouldAppend else { return }
+    defer { finishPendingFrame() }
 
-    // Serialize Core Image copies and format-description changes. The MPV
-    // renderer's source pixel buffers are recycled by Flutter's texture ring,
-    // so this queue must create a separate retained output buffer per sample.
-    frameQueue.async { [weak self] in
+    // Copy synchronously before TextureHW returns this CVPixelBuffer to
+    // Flutter's reusable three-buffer texture ring. The PiP sample owns a
+    // separate pooled buffer after this copy completes.
+    guard let sampleBuffer = frameQueue.sync(execute: {
+      makeSampleBuffer(from: source, positionSeconds: positionSeconds)
+    }) else {
+      return
+    }
+
+    let needsTimelineReset = previousTime != nil &&
+      positionSeconds.isFinite &&
+      abs(positionSeconds - previousTime!) > 0.75
+
+    DispatchQueue.main.async { [weak self] in
       guard let self else { return }
-      defer { self.finishPendingFrame() }
+      guard self.enabled, let layer = self.displayLayer else { return }
 
-      guard let sampleBuffer = self.makeSampleBuffer(
-        from: source,
-        positionSeconds: positionSeconds
-      ) else { return }
-
-      let needsTimelineReset = previousTime != nil &&
-        positionSeconds.isFinite &&
-        abs(positionSeconds - previousTime!) > 0.75
-
-      DispatchQueue.main.async { [weak self] in
-        guard let self else { return }
-        guard self.enabled, let layer = self.displayLayer else { return }
-
-        if needsTimelineReset {
-          layer.flush()
-          if let timebase = self.timebase, positionSeconds.isFinite {
-            CMTimebaseSetTime(
-              timebase,
-              time: CMTime(seconds: max(0, positionSeconds), preferredTimescale: 600)
-            )
-            CMTimebaseSetRate(timebase, rate: self.paused ? 0 : 1)
-          }
+      if needsTimelineReset {
+        layer.flush()
+        if let timebase = self.timebase, positionSeconds.isFinite {
+          CMTimebaseSetTime(
+            timebase,
+            time: CMTime(seconds: max(0, positionSeconds), preferredTimescale: 600)
+          )
+          CMTimebaseSetRate(timebase, rate: self.paused ? 0 : 1)
         }
+      }
 
-        if layer.isReadyForMoreMediaData {
-          layer.enqueue(sampleBuffer)
-        }
+      if layer.isReadyForMoreMediaData {
+        layer.enqueue(sampleBuffer)
       }
     }
   }
