@@ -291,6 +291,9 @@ def patch_texture_sw(package: Path, template: Path) -> None:
         text,
         """    mpv_render_context_render(renderContext, &params)
 
+    textureContexts.pushAsReady(textureContext!)""",
+        """    mpv_render_context_render(renderContext, &params)
+
     // Copy the completed MPV frame before this buffer returns to Flutter's
     // three-buffer texture ring. The PiP renderer owns a separate buffer pool.
     if #available(iOS 15.0, *) {
@@ -315,32 +318,6 @@ def patch_texture_sw(package: Path, template: Path) -> None:
     }
 
     textureContexts.pushAsReady(textureContext!)""",
-        """    mpv_render_context_render(renderContext, &params)
-    glFlush()
-
-    // Copy the just-rendered MPV frame to a separate bounded pixel-buffer pool
-    // before the source buffer re-enters Flutter's reusable texture ring.
-    if #available(iOS 15.0, *) {
-      pipLock.lock()
-      let sampleBufferRenderer = pipRenderer
-      pipLock.unlock()
-      if let sampleBufferRenderer {
-        var mediaTime: Double = 0
-        let timeStatus = mpv_get_property(
-          handle,
-          "time-pos",
-          MPV_FORMAT_DOUBLE,
-          &mediaTime
-        )
-        if timeStatus >= 0 && mediaTime.isFinite {
-          sampleBufferRenderer.appendFrame(
-            from: textureContext!.pixelBuffer,
-            positionSeconds: mediaTime
-          )
-        }
-      }
-    }
-""",
         "TextureSW frame tap",
     )
 
