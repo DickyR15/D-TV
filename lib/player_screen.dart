@@ -186,6 +186,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _pictureInPictureActive = false;
   bool _pictureInPictureRequested = false;
   bool _pictureInPictureHandlerInstalled = false;
+  bool _pictureInPictureHandoff = false;
+  bool _pictureInPictureResumePlaying = false;
+  bool _pictureInPictureRestoreBusy = false;
+  int? _pendingPictureInPictureRestorePositionMs;
+  double _pictureInPictureResumePosition = 0;
   String? _pictureInPictureStateSignature;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   String _loadingMessage = '正在準備播放';
@@ -232,6 +237,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _desktopMiniWasFullscreen = false;
   bool get _canUsePictureInPicture => supportsPictureInPicture(
     android: defaultTargetPlatform == TargetPlatform.android,
+    ios: defaultTargetPlatform == TargetPlatform.iOS,
     systemSupported: _pictureInPictureSupported,
     television: _television,
   );
@@ -701,13 +707,34 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _configurePictureInPicture() {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
+    if (!Platform.isAndroid && !Platform.isIOS) return;
     _pictureInPictureHandlerInstalled = true;
     AppDevice.channel.setMethodCallHandler((call) async {
       if (call.method == 'pictureInPictureChanged') {
         final arguments = call.arguments;
         final active = arguments is Map && arguments['active'] == true;
         _setPictureInPictureStatus(active: active, delayHiddenPause: !active);
+      } else if (call.method == 'pictureInPictureRestored') {
+        final arguments = call.arguments;
+        final positionMs = arguments is Map
+            ? (arguments['positionMs'] as num?)?.toInt()
+            : null;
+        _pendingPictureInPictureRestorePositionMs = positionMs;
+        _setPictureInPictureStatus(active: false, requested: false);
+        if (_lifecycleState == AppLifecycleState.resumed) {
+          unawaited(_restorePictureInPictureHandoff());
+        }
+      } else if (call.method == 'pictureInPictureError') {
+        final message = call.arguments?.toString();
+        _notice(message == null || message.isEmpty
+            ? '子母畫面啟動失敗'
+            : '子母畫面啟動失敗：$message');
+        _pendingPictureInPictureRestorePositionMs =
+            (_pictureInPictureResumePosition * 1000).round();
+        _setPictureInPictureStatus(active: false, requested: false);
+        if (_lifecycleState == AppLifecycleState.resumed) {
+          unawaited(_restorePictureInPictureHandoff());
+        }
       } else if (call.method == 'pictureInPicturePending') {
         _handlePictureInPicturePending();
       } else if (call.method == 'pictureInPictureAction') {
@@ -729,6 +756,107 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
     });
     unawaited(_refreshPictureInPictureStatus());
+  }
+
+  Future<void> _restorePictureInPictureHandoff() async {
+    if (!_pictureInPictureHandoff ||
+        _pictureInPictureRestoreBusy ||
+        _closed ||
+        _lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    _pictureInPictureRestoreBusy = true;
+    final positionMs = _pendingPictureInPictureRestorePositionMs ??
+        (_pictureInPictureResumePosition * 1000).round();
+    try {
+      if (Platform.isIOS) {
+        try {
+          await AppDevice.channel
+              .invokeMethod<Map<dynamic, dynamic>>('finishPictureInPicture')
+              .timeout(const Duration(seconds: 3));
+        } catch (_) {}
+      }
+      await _player
+          .seek(Duration(milliseconds: positionMs.clamp(0, 1 << 31)))
+          .timeout(const Duration(seconds: 5));
+      if (_pictureInPictureResumePlaying) {
+        await _player.play().timeout(const Duration(seconds: 5));
+      } else {
+        await _player.pause().timeout(const Duration(seconds: 5));
+      }
+      DiaryService.add(
+        '[PiP] restored platform=${Platform.operatingSystem} positionMs=$positionMs resume=$_pictureInPictureResumePlaying',
+      );
+    } catch (error) {
+      DiaryService.add('[PiP] restore_failed error=$error');
+      _notice('子母畫面已關閉，但主播放器恢復失敗，請重新開啟播放頁');
+    } finally {
+      _pictureInPictureHandoff = false;
+      _pictureInPictureRestoreBusy = false;
+      _pendingPictureInPictureRestorePositionMs = null;
+      _setPictureInPictureStatus(active: false, requested: false);
+    }
+  }
+
+  Future<void> _enterIosPictureInPicture() async {
+    final plan = _plan;
+    if (plan == null || _closed || _loading || _error != null) return;
+    final uri = Uri.tryParse(plan.url);
+    if (uri == null ||
+        !const {'http', 'https', 'file'}.contains(uri.scheme.toLowerCase())) {
+      _notice('目前片源格式無法使用 iOS 原生子母畫面');
+      return;
+    }
+
+    final position = _currentPosition;
+    final wasPlaying = _playIntent && _player.state.playing;
+    final ratio = _aspectRatio.isFinite && _aspectRatio > 0
+        ? _aspectRatio.clamp(1 / 2.39, 2.39).toDouble()
+        : 16 / 9;
+    final width = ratio >= 1 ? (1000 * ratio).round() : 1000;
+    final height = ratio >= 1 ? 1000 : (1000 / ratio).round();
+    _pictureInPictureResumePosition = position;
+    _pictureInPictureResumePlaying = wasPlaying;
+    _pictureInPictureHandoff = true;
+    _pendingPictureInPictureRestorePositionMs = null;
+    _interactions.cancel();
+    _setPictureInPictureStatus(requested: true);
+    try {
+      await _player.pause().timeout(const Duration(seconds: 3));
+      await AppDevice.channel.invokeMethod<void>('preparePictureInPicture', {
+        'url': plan.url,
+        'headers': plan.headers,
+        'positionMs': (position * 1000).round(),
+        'width': width,
+        'height': height,
+      }).timeout(const Duration(seconds: 13));
+      final status = await AppDevice.channel
+          .invokeMapMethod<String, dynamic>('enterPictureInPicture')
+          .timeout(const Duration(seconds: 3));
+      if (status?['requested'] != true) {
+        throw PlatformException(
+          code: 'PIP_NOT_STARTED',
+          message: 'iOS 沒有確認進入子母畫面',
+        );
+      }
+      _setPictureInPictureStatus(
+        supported: status?['supported'] == true,
+        active: status?['active'] == true,
+        requested: status?['active'] != true,
+      );
+      DiaryService.add('[PiP] iOS native AVPlayer handoff started');
+    } catch (error) {
+      DiaryService.add('[PiP] iOS handoff failed error=$error');
+      try {
+        await AppDevice.channel.invokeMethod<void>('cancelPictureInPicture');
+      } catch (_) {}
+      _pendingPictureInPictureRestorePositionMs = (position * 1000).round();
+      _setPictureInPictureStatus(active: false, requested: false);
+      if (_lifecycleState == AppLifecycleState.resumed) {
+        await _restorePictureInPictureHandoff();
+      }
+      _notice('iOS 子母畫面無法啟動；已恢復原播放器。');
+    }
   }
 
   void _handlePictureInPicturePending() {
@@ -779,7 +907,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _refreshPictureInPictureStatus() async {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
+    if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
       final status = await AppDevice.channel.invokeMapMethod<String, dynamic>(
         'pictureInPictureStatus',
@@ -1291,6 +1419,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         _panelOpen) {
       return;
     }
+    if (Platform.isIOS) {
+      await _enterIosPictureInPicture();
+      return;
+    }
     _interactions.cancel();
     _syncPictureInPicture();
     final rawRatio = _aspectRatio.isFinite && _aspectRatio > 0
@@ -1698,6 +1830,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       'session=${_plan == null ? 'none' : playbackDiagnosticId(_plan!.session)}',
     );
     _applyLifecycleVisibility();
+    if (state == AppLifecycleState.resumed &&
+        _pictureInPictureHandoff &&
+        _pendingPictureInPictureRestorePositionMs != null) {
+      unawaited(_restorePictureInPictureHandoff());
+    }
   }
 
   Future<void> _releasePlayback(String session, String reason) async {
