@@ -344,35 +344,24 @@ func TestDuoduoKeepsAllPosterCandidatesInsideNestedFields(t *testing.T) {
 	}
 }
 
-func TestDuoduoPosterRaceStartsProxyWhenOriginIsSlow(t *testing.T) {
+func TestDuoduoPosterRaceStartsOriginFallbackWhenEdgeIsSlow(t *testing.T) {
 	const image = "\x89PNG\r\n\x1a\nposter"
 	var originCalls, proxyCalls atomic.Int32
-	client := &http.Client{
-		Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
-			switch request.URL.Hostname() {
-			case "origin.example.test":
-				originCalls.Add(1)
-				<-request.Context().Done()
-				return nil, request.Context().Err()
-			case "wsrv.nl":
-				proxyCalls.Add(1)
-				body := []byte(image)
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Header: http.Header{"Content-Type": []string{"image/png"}},
-					Body: io.NopCloser(bytes.NewReader(body)),
-					ContentLength: int64(len(body)),
-					Request: request,
-				}, nil
-			default:
-				return nil, fmt.Errorf("unexpected poster host: %s", request.URL.Hostname())
-			}
-		}),
-	}
-	cache := &nativeCoverCache{
-		downloader: &Downloader{client: client},
-		failures: map[string]time.Time{},
-	}
+	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Hostname() {
+		case "origin.example.test":
+			originCalls.Add(1)
+			body := []byte(image)
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/png"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
+		case "wsrv.nl":
+			proxyCalls.Add(1)
+			<-request.Context().Done()
+			return nil, request.Context().Err()
+		default:
+			return nil, fmt.Errorf("unexpected poster host: %s", request.URL.Hostname())
+		}
+	})}
+	cache := &nativeCoverCache{downloader: &Downloader{client: client}, failures: map[string]time.Time{}}
 	drama := nativeDrama{ID: "duoduo:54635", Source: sourceDuoduo, Title: "測試海報"}
 	origin := "https://origin.example.test/poster.jpg"
 	attempts := []duoduoPosterAttempt{
@@ -382,39 +371,28 @@ func TestDuoduoPosterRaceStartsProxyWhenOriginIsSlow(t *testing.T) {
 	started := time.Now()
 	data, nextIndex, err := cache.downloadDuoduoPosterPair(context.Background(), drama, attempts)
 	if err != nil || nextIndex != 2 || !bytes.Equal(data, []byte(image)) {
-		t.Fatalf("proxy race result = %q, next=%d, err=%v", data, nextIndex, err)
+		t.Fatalf("origin fallback result = %q, next=%d, err=%v", data, nextIndex, err)
 	}
 	if originCalls.Load() != 1 || proxyCalls.Load() != 1 {
-		t.Fatalf("origin/proxy calls = %d/%d, want 1/1", originCalls.Load(), proxyCalls.Load())
+		t.Fatalf("origin/edge calls = %d/%d, want 1/1", originCalls.Load(), proxyCalls.Load())
 	}
-	if elapsed := time.Since(started); elapsed < nativeCoverDuoduoProxyHedgeDelay ||
-		elapsed > nativeCoverDuoduoProxyHedgeDelay+time.Second {
-		t.Fatalf("slow-origin fallback took %v, expected near the %v hedge window", elapsed, nativeCoverDuoduoProxyHedgeDelay)
+	if elapsed := time.Since(started); elapsed < nativeCoverDuoduoOriginHedgeDelay || elapsed > nativeCoverDuoduoOriginHedgeDelay+time.Second {
+		t.Fatalf("origin fallback took %v, expected near the %v hedge window", elapsed, nativeCoverDuoduoOriginHedgeDelay)
 	}
 }
-
-func TestDuoduoPosterRaceDoesNotStartProxyWhenOriginIsFast(t *testing.T) {
+func TestDuoduoPosterRaceDoesNotStartOriginWhenEdgeIsFast(t *testing.T) {
 	const image = "\x89PNG\r\n\x1a\nposter"
-	var proxyCalls atomic.Int32
-	client := &http.Client{
-		Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
-			if request.URL.Hostname() == "wsrv.nl" {
-				proxyCalls.Add(1)
-			}
-			body := []byte(image)
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Header: http.Header{"Content-Type": []string{"image/png"}},
-				Body: io.NopCloser(bytes.NewReader(body)),
-				ContentLength: int64(len(body)),
-				Request: request,
-			}, nil
-		}),
-	}
-	cache := &nativeCoverCache{
-		downloader: &Downloader{client: client},
-		failures: map[string]time.Time{},
-	}
+	var originCalls, proxyCalls atomic.Int32
+	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Hostname() == "wsrv.nl" {
+			proxyCalls.Add(1)
+		} else if request.URL.Hostname() == "origin.example.test" {
+			originCalls.Add(1)
+		}
+		body := []byte(image)
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/png"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
+	})}
+	cache := &nativeCoverCache{downloader: &Downloader{client: client}, failures: map[string]time.Time{}}
 	drama := nativeDrama{ID: "duoduo:54636", Source: sourceDuoduo, Title: "快速海報"}
 	origin := "https://origin.example.test/poster.jpg"
 	attempts := []duoduoPosterAttempt{
@@ -423,10 +401,44 @@ func TestDuoduoPosterRaceDoesNotStartProxyWhenOriginIsFast(t *testing.T) {
 	}
 	data, nextIndex, err := cache.downloadDuoduoPosterPair(context.Background(), drama, attempts)
 	if err != nil || nextIndex != 2 || !bytes.Equal(data, []byte(image)) {
-		t.Fatalf("fast-origin race result = %q, next=%d, err=%v", data, nextIndex, err)
+		t.Fatalf("fast-edge race result = %q, next=%d, err=%v", data, nextIndex, err)
 	}
-	if proxyCalls.Load() != 0 {
-		t.Fatalf("fast origin unnecessarily started wsrv.nl %d times", proxyCalls.Load())
+	if proxyCalls.Load() != 1 || originCalls.Load() != 0 {
+		t.Fatalf("edge/origin calls = %d/%d, want 1/0", proxyCalls.Load(), originCalls.Load())
+	}
+}
+func TestDuoduoPosterRaceFallsBackImmediatelyWhenEdgeFails(t *testing.T) {
+	const image = "\x89PNG\r\n\x1a\nposter"
+	var originCalls, proxyCalls atomic.Int32
+	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Hostname() == "wsrv.nl" {
+			proxyCalls.Add(1)
+			return &http.Response{StatusCode: http.StatusBadGateway, Header: http.Header{"Content-Type": []string{"text/html"}}, Body: io.NopCloser(strings.NewReader("bad gateway")), Request: request}, nil
+		}
+		if request.URL.Hostname() == "origin.example.test" {
+			originCalls.Add(1)
+			body := []byte(image)
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/png"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
+		}
+		return nil, fmt.Errorf("unexpected poster host: %s", request.URL.Hostname())
+	})}
+	cache := &nativeCoverCache{downloader: &Downloader{client: client}, failures: map[string]time.Time{}}
+	drama := nativeDrama{ID: "duoduo:54638", Source: sourceDuoduo, Title: "備援海報"}
+	origin := "https://origin.example.test/poster.jpg"
+	attempts := []duoduoPosterAttempt{
+		{address: origin, referer: "https://duoduozhuiju.com/play/54638"},
+		{address: duoduoPosterProxyURL(origin), referer: "https://wsrv.nl/"},
+	}
+	started := time.Now()
+	data, nextIndex, err := cache.downloadDuoduoPosterPair(context.Background(), drama, attempts)
+	if err != nil || nextIndex != 2 || !bytes.Equal(data, []byte(image)) {
+		t.Fatalf("edge-failure fallback result = %q, next=%d, err=%v", data, nextIndex, err)
+	}
+	if originCalls.Load() != 1 || proxyCalls.Load() != 1 {
+		t.Fatalf("origin/edge calls = %d/%d, want 1/1", originCalls.Load(), proxyCalls.Load())
+	}
+	if elapsed := time.Since(started); elapsed > nativeCoverDuoduoOriginHedgeDelay {
+		t.Fatalf("origin fallback waited %v after edge failure", elapsed)
 	}
 }
 
