@@ -14,6 +14,7 @@ final class DTVSampleBufferPiPRenderer: NSObject,
   private let eventHandler: EventHandler
   private let ciContext = CIContext(options: [.cacheIntermediates: false])
   private let stateLock = NSLock()
+  private let frameQueue = DispatchQueue(label: "com.dickyr15.dtv.sample-buffer-pip.frames", qos: .userInitiated)
 
   private var enabled = false
   private var paused = false
@@ -82,10 +83,7 @@ final class DTVSampleBufferPiPRenderer: NSObject,
           sampleBufferDisplayLayer: layer,
           playbackDelegate: self
         )
-        guard let controller = AVPictureInPictureController(contentSource: source) else {
-          completion(self.error("無法建立 iOS Sample Buffer 子母畫面控制器"))
-          return
-        }
+        let controller = AVPictureInPictureController(contentSource: source)
         controller.delegate = self
         controller.canStartPictureInPictureAutomaticallyFromInline = false
         self.contentSource = source
@@ -211,35 +209,41 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     stateLock.unlock()
 
     guard shouldAppend else { return }
-    guard let sampleBuffer = makeSampleBuffer(
-      from: source,
-      positionSeconds: positionSeconds
-    ) else {
-      finishPendingFrame()
-      return
-    }
 
-    let needsTimelineReset = previousTime != nil &&
-      positionSeconds.isFinite &&
-      positionSeconds < previousTime! - 0.35
-
-    DispatchQueue.main.async { [weak self] in
+    // Serialize Core Image copies and format-description changes. The MPV
+    // renderer's source pixel buffers are recycled by Flutter's texture ring,
+    // so this queue must create a separate retained output buffer per sample.
+    frameQueue.async { [weak self] in
       guard let self else { return }
       defer { self.finishPendingFrame() }
-      guard self.enabled, let layer = self.displayLayer else { return }
 
-      if needsTimelineReset {
-        layer.flush()
-        if let timebase = self.timebase, positionSeconds.isFinite {
-          CMTimebaseSetTime(
-            timebase,
-            time: CMTime(seconds: max(0, positionSeconds), preferredTimescale: 600)
-          )
+      guard let sampleBuffer = self.makeSampleBuffer(
+        from: source,
+        positionSeconds: positionSeconds
+      ) else { return }
+
+      let needsTimelineReset = previousTime != nil &&
+        positionSeconds.isFinite &&
+        abs(positionSeconds - previousTime!) > 0.75
+
+      DispatchQueue.main.async { [weak self] in
+        guard let self else { return }
+        guard self.enabled, let layer = self.displayLayer else { return }
+
+        if needsTimelineReset {
+          layer.flush()
+          if let timebase = self.timebase, positionSeconds.isFinite {
+            CMTimebaseSetTime(
+              timebase,
+              time: CMTime(seconds: max(0, positionSeconds), preferredTimescale: 600)
+            )
+            CMTimebaseSetRate(timebase, rate: self.paused ? 0 : 1)
+          }
         }
-      }
 
-      if layer.isReadyForMoreMediaData {
-        layer.enqueue(sampleBuffer)
+        if layer.isReadyForMoreMediaData {
+          layer.enqueue(sampleBuffer)
+        }
       }
     }
   }
@@ -417,7 +421,7 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     _ pictureInPictureController: AVPictureInPictureController
   ) -> CMTimeRange {
     guard durationSeconds.isFinite, durationSeconds > 0 else {
-      return CMTimeRange(start: .zero, duration: .indefinite)
+      return CMTimeRange(start: .zero, duration: .positiveInfinity)
     }
     return CMTimeRange(
       start: .zero,
