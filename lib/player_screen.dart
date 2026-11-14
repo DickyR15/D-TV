@@ -247,6 +247,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     portraitBlurBackground: _portraitBlurBackground,
     televisionDecoder: _televisionDecoder,
     autoPictureInPicture: widget.store.playbackPreferences.autoPictureInPicture,
+    aspectRatio: _playbackAspectRatio,
     desktopAlwaysOnTop: widget.store.playbackPreferences.desktopAlwaysOnTop,
     showTelevisionNetworkSpeed: _showTelevisionNetworkSpeed,
     showTelevisionClock: _showTelevisionClock,
@@ -1838,21 +1839,25 @@ class _PlayerScreenState extends State<PlayerScreen>
     final position = _currentPosition;
     final androidRedFruit = Platform.isAndroid &&
         const {'hongguo', 'redfruit'}.contains(widget.detail.drama.source);
+    final duoduoSource = widget.detail.drama.source == 'duoduo';
     final action = current.local
         ? PlaybackRecoveryAction.stop
         : _recovery.next(
             current,
-            // Android's ExoPlayer must not serially retry a long list of Red
-            // Fruit routes and then recreate itself into another retry loop.
-            // Try two alternates, refresh once, then surface a retryable error.
+            // Duoduo aggregates can expose many routes. Keep one alternate and
+            // one refresh, then surface a retryable error instead of cycling
+            // through a long route list while the viewer cannot easily exit.
             allowPlayerRecreate: !androidRedFruit &&
+                !duoduoSource &&
                 !widget.recoveryRestarted &&
                 widget.handoff == null &&
                 widget.playerFactory == null &&
                 widget.videoBuilder == null,
-            alternativeAttemptLimit: androidRedFruit ? 2 : null,
+            alternativeAttemptLimit: androidRedFruit ? 2 : duoduoSource ? 1 : null,
             recoveryDurationLimit: androidRedFruit
                 ? const Duration(seconds: 75)
+                : duoduoSource
+                ? const Duration(seconds: 35)
                 : null,
           );
     DiaryService.add(
@@ -3224,6 +3229,16 @@ class _PlayerScreenState extends State<PlayerScreen>
       Navigator.of(context).maybePop();
       return;
     }
+    // A single Back action must remain available while resolving a stream
+    // or showing an error; do not turn it into a fullscreen/orientation toggle.
+    if (playbackBackShouldExitImmediately(
+      loading: _loading,
+      hasError: _error != null,
+    )) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+
     // While an asynchronous dialog is opening, don't pop the video route.
     if (_panelOpen) return;
 

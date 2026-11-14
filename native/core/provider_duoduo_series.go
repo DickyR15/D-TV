@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -144,7 +145,81 @@ func duoduoDramaFromNative(drama nativeDrama) Drama {
 	}
 }
 
+func duoduoDramaHasOfficialCover(drama Drama) bool {
+	return len(providerCoverAddresses(drama.Cover, duoduoPublicEntryURL)) > 0 ||
+		len(providerCoverAddresses(drama.CoverURL, duoduoPublicEntryURL)) > 0 ||
+		len(drama.CoverCandidates) > 0
+}
+
+func duoduoMergeSameSeasonMetadata(catalog, detail Drama) Drama {
+	if catalog.ID == "" || catalog.ID != detail.ID ||
+		catalog.Source != sourceDuoduo || detail.Source != sourceDuoduo ||
+		catalog.SourceID == "" || catalog.SourceID != detail.SourceID {
+		return catalog
+	}
+	if duoduoDramaHasOfficialCover(detail) {
+		catalog.Cover = detail.Cover
+		catalog.CoverURL = detail.CoverURL
+		catalog.CoverCandidates = nativeUniqueCoverAddresses(
+			append(append([]string{}, detail.CoverCandidates...), catalog.CoverCandidates...)...,
+		)
+	}
+	if count := duoduoDramaEpisodeCount(detail); count > duoduoDramaEpisodeCount(catalog) {
+		catalog.Episodes = count
+		catalog.EpisodeCount = count
+		catalog.TotalEpisode = count
+	}
+	if strings.TrimSpace(catalog.Remark) == "" {
+		catalog.Remark = detail.Remark
+	}
+	return catalog
+}
+
+func (downloader *Downloader) hydrateDuoduoSeriesSeason(ctx context.Context, catalog Drama) Drama {
+	if catalog.Source != sourceDuoduo || catalog.SourceID == "" ||
+		(duoduoDramaHasOfficialCover(catalog) && duoduoDramaEpisodeCount(catalog) > 0) {
+		return catalog
+	}
+	detail, row, payload, _, err := downloader.fetchDuoduoDetailRow(ctx, catalog.SourceID)
+	if err != nil || detail.ID != catalog.ID || detail.SourceID != catalog.SourceID {
+		return catalog
+	}
+	catalog = duoduoMergeSameSeasonMetadata(catalog, detail)
+	if duoduoDramaEpisodeCount(catalog) == 0 {
+		maxEpisode := 0
+		for _, line := range duoduoParseDetailLines(row, duoduoRows(payload["vodplayer"])) {
+			for _, episode := range line.Episodes {
+				if episode.Index > maxEpisode {
+					maxEpisode = episode.Index
+				}
+			}
+		}
+		if maxEpisode > 0 {
+			catalog.Episodes = maxEpisode
+			catalog.EpisodeCount = maxEpisode
+			catalog.TotalEpisode = maxEpisode
+		}
+	}
+	return catalog
+}
+
+func duoduoSeasonMarkedUpcoming(remark string) bool {
+	value := strings.ToLower(strings.TrimSpace(remark))
+	for _, marker := range []string{
+		"即将上线", "即將上線", "待上线", "待上線", "即将播出", "即將播出",
+		"敬请期待", "敬請期待", "尚未开播", "尚未開播", "未开播", "未開播",
+	} {
+		if strings.Contains(value, strings.ToLower(marker)) {
+			return true
+		}
+	}
+	return false
+}
+
 // fetchDuoduoSeriesSeasons uses the provider's title search only to discover
+// candidates. A season is accepted only when its normalized base title and an
+// explicit season/part number match exactly. Ambiguous duplicate season numbers
+// are rejected instead of silently joining unrelated records.// fetchDuoduoSeriesSeasons uses the provider's title search only to discover
 // candidates. A season is accepted only when its normalized base title and an
 // explicit season/part number match exactly. Ambiguous duplicate season numbers
 // are rejected instead of silently joining unrelated records.
@@ -230,16 +305,56 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 		byNumber[1] = *unnumbered
 	}
 
-	// Retain the selected season if the upstream search endpoint omitted it
-	// from its first pages; its ID and metadata came from the exact detail row.
-	if currentNumber > 0 {
-		if _, found := byNumber[currentNumber]; !found {
-			item := duoduoDramaFromNative(current)
-			item.SeriesGroupID = groupID
-			item.SeriesSeasonNumber = currentNumber
-			item.SeriesSeasonUnit = unit
-			byNumber[currentNumber] = item
+	// Enrich incomplete catalogue rows using each season's own official detail
+	// endpoint. Keep current-detail artwork/count only when the official IDs match.
+	type hydratedSeason struct {
+		number int
+		drama Drama
+	}
+	needsHydration := make([]int, 0, len(byNumber))
+	for number, item := range byNumber {
+		if !duoduoDramaHasOfficialCover(item) || duoduoDramaEpisodeCount(item) <= 0 {
+			needsHydration = append(needsHydration, number)
 		}
+	}
+	results := make(chan hydratedSeason, len(needsHydration))
+	var workers sync.WaitGroup
+	semaphore := make(chan struct{}, 3)
+	for _, number := range needsHydration {
+		item := byNumber[number]
+		workers.Add(1)
+		go func(number int, item Drama) {
+			defer workers.Done()
+			select {
+			case semaphore <- struct{}{}:
+			case <-searchCtx.Done():
+				return
+			}
+			hydrated := downloader.hydrateDuoduoSeriesSeason(searchCtx, item)
+			<-semaphore
+			results <- hydratedSeason{number: number, drama: hydrated}
+		}(number, item)
+	}
+	go func() {
+		workers.Wait()
+		close(results)
+	}()
+	for result := range results {
+		byNumber[result.number] = result.drama
+	}
+
+	currentItem := duoduoDramaFromNative(current)
+	if currentNumber > 0 {
+		if existing, found := byNumber[currentNumber]; found && existing.ID == currentItem.ID {
+			byNumber[currentNumber] = duoduoMergeSameSeasonMetadata(existing, currentItem)
+		} else {
+			currentItem.SeriesGroupID = groupID
+			currentItem.SeriesSeasonNumber = currentNumber
+			currentItem.SeriesSeasonUnit = unit
+			byNumber[currentNumber] = currentItem
+		}
+	} else if first, found := byNumber[1]; found && first.ID == currentItem.ID {
+		byNumber[1] = duoduoMergeSameSeasonMetadata(first, currentItem)
 	}
 	if len(byNumber) < 2 {
 		return nil, nil
@@ -269,7 +384,7 @@ func (downloader *Downloader) fetchDuoduoSeriesSeasons(
 			Number: number,
 			Label: label,
 			Subtitle: item.Remark,
-			Upcoming: episodeCount <= 0,
+			Upcoming: episodeCount <= 0 && duoduoSeasonMarkedUpcoming(item.Remark),
 			Playable: episodeCount > 0,
 		})
 	}

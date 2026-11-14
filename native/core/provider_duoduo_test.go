@@ -46,6 +46,55 @@ func TestDuoduoParsesOnlyPublicDirectPlaybackLines(t *testing.T) {
 	}
 }
 
+func TestFetchDuoduoSeriesSeasonsHydratesMissingSeasonPosterAndEpisodeCount(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[
+					{"vod_id":901,"vod_name":"緊急呼救第一季","vod_remarks":"已完結"},
+					{"vod_id":902,"vod_name":"緊急呼救第二季","vod_pic":"https://img.example.test/s2.jpg","vod_total":18,"vod_remarks":"已完結"}
+				]
+			}`), nil
+		case "/api.php/web/vod/get_detail":
+			if request.URL.Query().Get("vod_id") != "901" {
+				t.Fatalf("unexpected detail ID: %s", request.URL.Query().Get("vod_id"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[{
+					"vod_id":901,
+					"vod_name":"緊急呼救第一季",
+					"vod_pic_detail":"https://img.example.test/s1-detail.jpg",
+					"vod_total":10,
+					"vod_remarks":"已完結"
+				}]
+			}`), nil
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+
+	current := nativeDrama{
+		ID: "duoduo:902", Source: sourceDuoduo, SourceID: "902",
+		Title: "緊急呼救第二季", Episodes: 18,
+	}
+	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seasons) != 2 {
+		t.Fatalf("expected two seasons, got %+v", seasons)
+	}
+	first := seasons[0]
+	if first.Drama.ID != "duoduo:901" || first.Drama.Cover != "https://img.example.test/s1-detail.jpg" ||
+		first.Drama.Episodes != 10 || !first.Playable || first.Upcoming {
+		t.Fatalf("season-one detail metadata was not hydrated: %+v", first)
+	}
+}
+
 func TestDuoduoPosterUsesOfficialPlayPageRefererBeforeHomepage(t *testing.T) {
 	downloader := &Downloader{
 		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
@@ -144,6 +193,51 @@ func TestDuoduoPosterFallbackSupportsExtendedArtworkFields(t *testing.T) {
 			want := "https://img.example.test/" + field + ".jpg"
 			if got := duoduoDramaFromRow(row).Cover; got != want {
 				t.Fatalf("fallback field %q produced %q, want %q", field, got, want)
+			}
+		})
+	}
+}
+
+func TestDuoduoPosterFallbackDiscoversLateImageFields(t *testing.T) {
+	for _, field := range []string{
+		"vod_pic_detail", "vod_big_pic", "cover_img", "poster_src",
+		"image_path", "thumbnail_url",
+	} {
+		t.Run(field, func(t *testing.T) {
+			row := map[string]any{
+				"vod_id": 78320,
+				"vod_name": "延遲海報欄位",
+				field: "https://img.example.test/" + field + ".jpg",
+			}
+			want := "https://img.example.test/" + field + ".jpg"
+			if got := duoduoDramaFromRow(row).Cover; got != want {
+				t.Fatalf("late artwork field %q produced %q, want %q", field, got, want)
+			}
+		})
+	}
+}
+
+func TestDuoduoDramaFromRowReadsOfficialEpisodeTotalAliases(t *testing.T) {
+	for _, test := range []struct {
+		field string
+		value any
+	}{
+		{"vod_total", 18},
+		{"vod_total_episode", "18"},
+		{"vod_episode_count", "共18集"},
+		{"episode_count", 18},
+		{"episodes", "更新至18集"},
+		{"vod_remarks", "已完結 18集"},
+	} {
+		t.Run(test.field, func(t *testing.T) {
+			row := map[string]any{
+				"vod_id": 78330,
+				"vod_name": "緊急呼救第一季",
+				test.field: test.value,
+			}
+			drama := duoduoDramaFromRow(row)
+			if duoduoDramaEpisodeCount(drama) != 18 {
+				t.Fatalf("episode count from %s = %v, want 18", test.field, drama.Episodes)
 			}
 		})
 	}

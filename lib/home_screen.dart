@@ -960,18 +960,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } else {
       _loading = false;
     }
-    // Check only release builds. The request is delayed so the first screen
-    // and ranking data are not held up by the GitHub API.
+    // Check after the first frame so Home is visible immediately, without
+    // making users wait six seconds for the startup update check.
     if (kReleaseMode &&
         (Platform.isAndroid ||
             Platform.isWindows ||
             Platform.isMacOS ||
             Platform.isIOS) &&
         widget.store.checkForUpdatesOnStartup) {
-      _appUpdateCheckTimer = Timer(
-        const Duration(seconds: 6),
-        () => unawaited(_checkForAppUpdate()),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_checkForAppUpdate());
+      });
     }
   }
 

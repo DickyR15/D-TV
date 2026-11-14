@@ -247,17 +247,57 @@ func duoduoEpisodeNumber(title string, fallback int) int {
 
 func duoduoPosterAddressesFromRow(row map[string]any) []string {
 	var addresses []string
-	for _, field := range []string{
+	preferred := []string{
 		"vod_pic", "vod_pic_thumb", "vod_pic_url", "vod_pic_slide",
 		"vod_pic_screenshot", "vod_pic_local", "vod_pic_original",
 		"vod_pic_big", "vod_pic_small", "vod_pic_720", "vod_pic_1080",
 		"vod_pic_cover", "vod_pic_poster", "vod_pic_img",
 		"cover", "cover_url", "cover_image", "poster", "poster_url",
 		"image", "image_url", "thumbnail", "thumb", "pic", "pic_url", "img",
-	} {
+	}
+	seen := make(map[string]bool, len(preferred))
+	for _, field := range preferred {
+		seen[field] = true
+		addresses = append(addresses, providerCoverAddresses(row[field], duoduoPublicEntryURL)...)
+	}
+
+	// Some Duoduo responses expose artwork only in late/detail-specific fields
+	// (for example vod_pic_detail or cover_img). Discover only image-like keys;
+	// sort them so candidate order stays deterministic across map iterations.
+	var additional []string
+	for field := range row {
+		key := strings.ToLower(strings.TrimSpace(field))
+		if seen[field] {
+			continue
+		}
+		if strings.Contains(key, "pic") ||
+			strings.Contains(key, "cover") ||
+			strings.Contains(key, "poster") ||
+			strings.Contains(key, "image") ||
+			strings.Contains(key, "thumbnail") ||
+			strings.Contains(key, "thumb") ||
+			strings.Contains(key, "img") {
+			additional = append(additional, field)
+		}
+	}
+	sort.Strings(additional)
+	for _, field := range additional {
 		addresses = append(addresses, providerCoverAddresses(row[field], duoduoPublicEntryURL)...)
 	}
 	return nativeUniqueCoverAddresses(addresses...)
+}
+
+func duoduoEpisodeCountFromRow(row map[string]any) int {
+	for _, field := range []string{
+		"vod_total", "vod_total_episode", "vod_episode_count", "vod_episodes",
+		"total_episode", "totalEpisode", "episode_count", "episodeCount",
+		"chapter_count", "chapterCount", "episodes", "total",
+	} {
+		if count := duoduoEpisodeValueCount(row[field]); count > 0 {
+			return count
+		}
+	}
+	return duoduoEpisodeValueCount(row["vod_remarks"])
 }
 
 func duoduoSynopsisFromRow(row map[string]any) string {
@@ -296,15 +336,7 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 		}
 		tags = append(tags, area)
 	}
-	episodeCount := 0
-	if match := reEpisodeNumber.FindStringSubmatch(remarks); len(match) > 0 {
-		for index := 1; index < len(match); index++ {
-			if match[index] != "" {
-				episodeCount, _ = strconv.Atoi(match[index])
-				break
-			}
-		}
-	}
+	episodeCount := duoduoEpisodeCountFromRow(row)
 	return Drama{
 		ID: providerDramaID(sourceDuoduo, id), Source: sourceDuoduo, SourceID: id,
 		Title: truncate(title, 512), Name: truncate(title, 512),
@@ -314,7 +346,7 @@ func duoduoDramaFromRow(row map[string]any) Drama {
 		Remark: truncate(remarks, 96), Score: duoduoString(row["vod_douban_score"]),
 		Heat: duoduoString(row["vod_hits"]), OnlineDate: year,
 		DoubanID: duoduoString(row["vod_douban_id"]),
-		TotalEpisode: episodeCount, EpisodeCount: episodeCount, Tags: tags,
+		Episodes: episodeCount, TotalEpisode: episodeCount, EpisodeCount: episodeCount, Tags: tags,
 	}
 }
 
