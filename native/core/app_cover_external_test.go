@@ -6,6 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	stdimage "image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,6 +31,45 @@ func posterLookupJSONResponse(request *http.Request, body string) *http.Response
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Request:    request,
 	}
+}
+
+
+func posterTestCanvas(seed uint8) *stdimage.RGBA {
+	canvas := stdimage.NewRGBA(stdimage.Rect(0, 0, 2, 2))
+	for y := 0; y < 2; y++ {
+		for x := 0; x < 2; x++ {
+			canvas.SetRGBA(x, y, color.RGBA{
+				R: seed, G: seed + 16, B: seed + 32, A: 255,
+			})
+		}
+	}
+	return canvas
+}
+
+func posterTestJPEGVariant(t *testing.T, seed uint8) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	if err := jpeg.Encode(&buffer, posterTestCanvas(seed), &jpeg.Options{Quality: 85}); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
+}
+
+func posterTestJPEG(t *testing.T) []byte {
+	return posterTestJPEGVariant(t, 42)
+}
+
+func posterTestPNGVariant(t *testing.T, seed uint8) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, posterTestCanvas(seed)); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
+}
+
+func posterTestPNG(t *testing.T) []byte {
+	return posterTestPNGVariant(t, 42)
 }
 
 func TestDoubanPosterAddressUsesMobileDetailAndOfficialSubjectID(t *testing.T) {
@@ -459,7 +502,7 @@ func TestNativeNormalizeRetainsAlternativePosterFields(t *testing.T) {
 }
 
 func TestNativeCoverLoadTriesCatalogueVariantBeforeMetadataRepair(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var requests []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		requests = append(requests, request.URL.Host)
@@ -531,7 +574,7 @@ func TestMergeNativeDramaKeepsOriginalAndFallbackCoversSeparate(t *testing.T) {
 }
 
 func TestNativeCoverLoadPrefersHealthyOriginalBeforeFallback(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var originalCalls, fallbackCalls int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Host {
@@ -575,7 +618,7 @@ func TestNativeCoverLoadPrefersHealthyOriginalBeforeFallback(t *testing.T) {
 }
 
 func TestNativeCoverLoadPrefersProviderPosterOverExternalPoster(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var requests []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		requests = append(requests, request.URL.Host)
@@ -626,7 +669,7 @@ func TestNativeCoverLoadPrefersProviderPosterOverExternalPoster(t *testing.T) {
 }
 
 func TestNativeCoverLoadUsesFallbackOnlyAfterOriginalFails(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var requests []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		requests = append(requests, request.URL.Host)
@@ -715,7 +758,7 @@ func TestNativeMergeCoverRepairMetadataPrefersFreshIdentifiers(t *testing.T) {
 }
 
 func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
-	imageBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
+	imageBytes := posterTestJPEG(t)
 	var seenReferer string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Host != "img9.doubanio.com" {
@@ -755,7 +798,7 @@ func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
 func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 	const poster = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2932687546.jpg"
 	edge := duoduoPosterProxyURL(poster)
-	imageBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
+	imageBytes := posterTestJPEG(t)
 	var seenReferer, seenAddress string
 	var originCalls, edgeCalls int
 	var unexpectedURLs []string
@@ -1000,7 +1043,7 @@ func TestExternalPosterAddressFallsBackToBangumiWhenDoubanIsDenied(t *testing.T)
 }
 
 func TestNativeCoverExternalDownloadFailureFallsBackToBangumi(t *testing.T) {
-	image := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0, 1}
+	image := posterTestJPEG(t)
 	var bangumiCalls int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Host {
@@ -1059,7 +1102,7 @@ func TestNativeCoverExternalDownloadFailureFallsBackToBangumi(t *testing.T) {
 }
 
 func TestNativeCoverExternalDownloadFailureRetriesVerifiedOfficialProgrammePoster(t *testing.T) {
-	image := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0, 1}
+	image := posterTestJPEG(t)
 	cases := []struct {
 		name      string
 		drama     nativeDrama
@@ -1247,7 +1290,7 @@ func TestExternalPosterAddressUsesDoubanSuggestionAfterBangumiMiss(t *testing.T)
 func TestLoadAlternativeAddressHTTP404EvictsExpiredStaleBytes(t *testing.T) {
 	const address = "https://img.example.test/stale-poster.jpg"
 	const referer = "https://heitaodj.com/"
-	image := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 1}
+	image := posterTestJPEG(t)
 	downloader := &Downloader{
 		client: &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 			return &http.Response{
@@ -1295,8 +1338,8 @@ func TestLoadAlternativeAddressHTTP404EvictsExpiredStaleBytes(t *testing.T) {
 }
 
 func TestLoadAlternativeAddressForcedRetryReDownloadsFreshCache(t *testing.T) {
-	firstImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 1}
-	secondImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 2}
+	firstImage := posterTestJPEGVariant(t, 1)
+	secondImage := posterTestJPEGVariant(t, 2)
 	var calls int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		calls++
@@ -1395,7 +1438,7 @@ func TestDuoduoYongshengOfficialArtworkRejectsWrongSourceTypeAndYear(t *testing.
 
 func TestDuoduoYongshengOfficialArtworkOverridesAntiHotlinkCache(t *testing.T) {
 	const officialHost = "i0.hdslb.com"
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var officialRequests, originalRequests int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Host {
@@ -1413,7 +1456,7 @@ func TestDuoduoYongshengOfficialArtworkOverridesAntiHotlinkCache(t *testing.T) {
 			}, nil
 		case "original.example.test":
 			originalRequests++
-			placeholder := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 1, 1, 1, 1}
+			placeholder := posterTestPNGVariant(t, 2)
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header: http.Header{"Content-Type": []string{"image/png"}},
