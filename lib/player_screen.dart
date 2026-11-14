@@ -9,6 +9,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
+const _iosSampleBufferPipChannel = MethodChannel('duanju/mediakit_pip');
+
 import 'app_layout.dart';
 import 'app_orientation.dart';
 import 'player_fullscreen_layout_policy.dart';
@@ -738,6 +740,14 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (_lifecycleState == AppLifecycleState.resumed) {
           unawaited(_restorePictureInPictureHandoff());
         }
+      } else if (call.method == 'mpvPictureInPictureError') {
+        final message = call.arguments?.toString();
+        _setPictureInPictureStatus(active: false, requested: false);
+        unawaited(
+          _fallbackFromIosSampleBufferPiP(
+            message == null || message.isEmpty ? '未知原生影格錯誤' : message,
+          ),
+        );
       } else if (call.method == 'pictureInPicturePending') {
         _handlePictureInPicturePending();
       } else if (call.method == 'pictureInPictureAction') {
@@ -746,6 +756,36 @@ class _PlayerScreenState extends State<PlayerScreen>
         switch (action) {
           case 'toggle':
             _togglePlayback();
+            break;
+          case 'setPlaying':
+            final playing = arguments is Map && arguments['playing'] == true;
+            _playIntent = playing;
+            try {
+              if (playing) {
+                await _player.play();
+              } else {
+                await _player.pause();
+              }
+              await _notifyIosSampleBufferPiPPlaybackState(playing: playing);
+            } catch (error) {
+              DiaryService.add('[PiP] MPV playback command failed error=$error');
+            }
+            break;
+          case 'seekBy':
+            final seconds = arguments is Map
+                ? (arguments['seconds'] as num?)?.toDouble() ?? 0
+                : 0.0;
+            if (seconds.isFinite && seconds != 0) {
+              final durationSeconds = _player.state.duration.inMilliseconds / 1000;
+              final upperBound = durationSeconds > 0
+                  ? durationSeconds
+                  : double.infinity;
+              final target = (_currentPosition + seconds)
+                  .clamp(0.0, upperBound)
+                  .toDouble();
+              await _seekTo(Duration(milliseconds: (target * 1000).round()));
+              await _notifyIosSampleBufferPiPPlaybackState();
+            }
             break;
           case 'previous':
             if (_index > 0) unawaited(_play(_index - 1));
@@ -818,6 +858,89 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _enterIosPictureInPicture() async {
+    if (_closed || _loading || _error != null) return;
+
+    final position = _currentPosition;
+    final wasPlaying = _playIntent;
+    final ratio = _aspectRatio.isFinite && _aspectRatio > 0
+        ? _aspectRatio.clamp(1 / 2.39, 2.39).toDouble()
+        : 16 / 9;
+    final width = ratio >= 1 ? (1000 * ratio).round() : 1000;
+    final height = ratio >= 1 ? 1000 : (1000 / ratio).round();
+
+    _pictureInPictureResumePosition = position;
+    _pictureInPictureResumePlaying = wasPlaying;
+    _pictureInPictureHandoff = false;
+    _pendingPictureInPictureRestorePositionMs = null;
+    _interactions.cancel();
+    _setPictureInPictureStatus(requested: true);
+
+    try {
+      final platform = _player.platform;
+      if (platform == null) {
+        throw PlatformException(
+          code: 'PIP_MPV_HANDLE',
+          message: '無法取得目前 MPV 播放器識別碼',
+        );
+      }
+      final handle = await platform.handle.timeout(
+        const Duration(seconds: 4),
+      );
+      final status = await _iosSampleBufferPipChannel
+          .invokeMapMethod<String, dynamic>('DTVPiP.Start', {
+            'handle': handle,
+            'width': width,
+            'height': height,
+            'positionMs': (position * 1000).round(),
+            'durationMs': _player.state.duration.inMilliseconds,
+            'playing': wasPlaying,
+          })
+          .timeout(const Duration(seconds: 15));
+
+      if (status?['started'] != true) {
+        throw PlatformException(
+          code: 'PIP_SAMPLE_BUFFER_NOT_STARTED',
+          message: 'iOS 沒有確認 MPV 影格子母畫面已啟動',
+        );
+      }
+
+      _setPictureInPictureStatus(
+        supported: true,
+        active: false,
+        requested: true,
+      );
+      DiaryService.add(
+        '[PiP] iOS MPV Sample Buffer source started '
+        'handle=$handle ratio=${ratio.toStringAsFixed(3)}',
+      );
+    } catch (error) {
+      DiaryService.add('[PiP] iOS Sample Buffer attempt failed error=$error');
+      _setPictureInPictureStatus(active: false, requested: false);
+      await _fallbackFromIosSampleBufferPiP(
+        playbackDiagnosticError(error),
+      );
+    }
+  }
+
+  Future<void> _fallbackFromIosSampleBufferPiP(String reason) async {
+    if (_closed || !mounted || !Platform.isIOS) return;
+    try {
+      final handle = await _player.platform?.handle;
+      if (handle != null) {
+        await _iosSampleBufferPipChannel.invokeMethod<void>(
+          'DTVPiP.Stop',
+          {'handle': handle},
+        );
+      }
+    } catch (_) {}
+
+    if (_closed || !mounted) return;
+    DiaryService.add('[PiP] switching to AVPlayer fallback reason=$reason');
+    _setPictureInPictureStatus(active: false, requested: false);
+    await _enterIosAVPlayerPictureInPicture();
+  }
+
+  Future<void> _enterIosAVPlayerPictureInPicture() async {
     final plan = _plan;
     if (plan == null || _closed || _loading || _error != null) return;
     final uri = Uri.tryParse(plan.url);
@@ -928,9 +1051,12 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _refreshPictureInPictureStatus() async {
     if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
-      final status = await AppDevice.channel.invokeMapMethod<String, dynamic>(
-        'pictureInPictureStatus',
-      );
+      final status = Platform.isIOS
+          ? await _iosSampleBufferPipChannel
+              .invokeMapMethod<String, dynamic>('DTVPiP.Status')
+          : await AppDevice.channel.invokeMapMethod<String, dynamic>(
+              'pictureInPictureStatus',
+            );
       if (!mounted || _closed) return;
       _setPictureInPictureStatus(
         supported: status?['supported'] == true,
@@ -945,6 +1071,26 @@ class _PlayerScreenState extends State<PlayerScreen>
       if (mounted && !_closed) {
         _setPictureInPictureStatus(supported: false, active: false);
       }
+    }
+  }
+
+  Future<void> _notifyIosSampleBufferPiPPlaybackState({
+    bool? playing,
+  }) async {
+    if (!Platform.isIOS || _closed) return;
+    try {
+      final handle = await _player.platform?.handle;
+      if (handle == null) return;
+      await _iosSampleBufferPipChannel.invokeMethod<void>(
+        'DTVPiP.PlaybackStateChanged',
+        {
+          'handle': handle,
+          'playing': playing ?? _player.state.playing,
+          'positionMs': (_currentPosition * 1000).round(),
+        },
+      );
+    } catch (error) {
+      DiaryService.add('[PiP] playback state sync failed error=$error');
     }
   }
 
