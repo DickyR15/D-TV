@@ -2901,6 +2901,17 @@ jobs:
                   )
               return f"{parsed.hostname}{parsed.path[-48:]} [ext={suffix}]"
 
+          def is_direct_http_media(address):
+              parsed = urlsplit(str(address or "").strip())
+              return (
+                  parsed.scheme.lower() in ("http", "https")
+                  and bool(parsed.hostname)
+                  and (
+                      parsed.path.lower().endswith(".m3u8")
+                      or parsed.path.lower().endswith(".mp4")
+                  )
+              )
+
           med_player_rows = response_rows(med_payload.get("vodplayer"))
           med_player_by_from = {
               str(player.get("from") or "").strip(): player
@@ -2924,10 +2935,7 @@ jobs:
                       continue
                   record = (episode_title.strip(), address, name)
                   entries.append(record)
-                  if decode_status == "0" and (
-                      urlsplit(address).path.lower().endswith(".m3u8")
-                      or urlsplit(address).path.lower().endswith(".mp4")
-                  ):
+                  if decode_status == "0" and is_direct_http_media(address):
                       med_direct.append(record)
                   else:
                       med_non_direct.append((decode_status, episode_title.strip(), address, name))
@@ -2938,10 +2946,7 @@ jobs:
                   "episodes": len(entries),
                   "direct_urls": sum(
                       1 for _, address, _ in entries
-                      if decode_status == "0" and (
-                          urlsplit(address).path.lower().endswith(".m3u8")
-                          or urlsplit(address).path.lower().endswith(".mp4")
-                      )
+                      if decode_status == "0" and is_direct_http_media(address)
                   ),
                   "non_direct_samples": [
                       safe_media_kind(address)
@@ -2972,10 +2977,7 @@ jobs:
                   if not address:
                       continue
                   entries.append((episode_title.strip(), address))
-                  if decode_status == "0" and (
-                      urlsplit(address).path.lower().endswith(".m3u8")
-                      or urlsplit(address).path.lower().endswith(".mp4")
-                  ):
+                  if decode_status == "0" and is_direct_http_media(address):
                       med_direct.append((episode_title.strip(), address, "aggregate"))
                   else:
                       med_non_direct.append((decode_status, episode_title.strip(), address, "aggregate"))
@@ -2986,10 +2988,7 @@ jobs:
                   "episodes": len(entries),
                   "direct_urls": sum(
                       1 for _, address in entries
-                      if decode_status == "0" and (
-                          urlsplit(address).path.lower().endswith(".m3u8")
-                          or urlsplit(address).path.lower().endswith(".mp4")
-                      )
+                      if decode_status == "0" and is_direct_http_media(address)
                   ),
                   "non_direct_samples": [
                       safe_media_kind(address)
@@ -3030,7 +3029,7 @@ jobs:
                   "inspect the redacted decode-status and URL-kind summaries above."
               )
           med_probe_ok = False
-          for episode_title, address in list(direct_unique.values())[:3]:
+          for address, (episode_title, origin) in list(direct_unique.items())[:3]:
               ok, message = probe_media(address, med_base + "/")
               if not ok:
                   retry_ok, retry_message = probe_media(address, "https://duoduozhuiju.com/")
@@ -3039,7 +3038,7 @@ jobs:
                   else:
                       message += f"; public-entry retry failed: {retry_message}"
               print(
-                  f"CHICAGO_MED_MEDIA episode={episode_title!r} "
+                  f"CHICAGO_MED_MEDIA episode={episode_title!r} line={origin!r} "
                   f"media={safe_media_kind(address)} ok={ok} {message}"
               )
               med_probe_ok = med_probe_ok or ok
