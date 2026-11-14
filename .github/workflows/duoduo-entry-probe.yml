@@ -389,6 +389,7 @@ jobs:
                           row_candidate_count = 0
                           for field in (
                               "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                              "vod_pic_detail", "vod_pic_big", "vod_pic_original",
                               "vod_pic_slide", "vod_pic_screenshot",
                               "cover", "cover_url", "poster", "image", "thumbnail",
                           ):
@@ -520,6 +521,7 @@ jobs:
                           alternatives = []
                           for field in (
                               "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                              "vod_pic_detail", "vod_pic_big", "vod_pic_original",
                               "vod_pic_slide", "vod_pic_screenshot",
                               "cover", "cover_url", "poster", "image", "thumbnail",
                           ):
@@ -1304,8 +1306,9 @@ jobs:
                   candidates = []
                   seen = set()
                   for field in (
-                      "vod_pic", "vod_pic_thumb", "vod_pic_url", "vod_pic_slide",
-                      "vod_pic_screenshot", "cover", "cover_url", "poster", "image",
+                      "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                      "vod_pic_detail", "vod_pic_big", "vod_pic_original",
+                      "vod_pic_slide", "vod_pic_screenshot", "cover", "cover_url", "poster", "image",
                       "thumbnail", "thumb", "pic", "img", "picture",
                   ):
                       address = poster_address(row.get(field))
@@ -2400,8 +2403,9 @@ jobs:
                   candidates = []
                   seen = set()
                   for field in (
-                      "vod_pic", "vod_pic_thumb", "vod_pic_url", "vod_pic_slide",
-                      "vod_pic_screenshot", "cover", "cover_url", "poster", "image",
+                      "vod_pic", "vod_pic_thumb", "vod_pic_url",
+                      "vod_pic_detail", "vod_pic_big", "vod_pic_original",
+                      "vod_pic_slide", "vod_pic_screenshot", "cover", "cover_url", "poster", "image",
                       "thumbnail", "thumb", "pic", "img", "picture",
                   ):
                       address = poster_address(row.get(field))
