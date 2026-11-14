@@ -756,11 +756,13 @@ jobs:
                   "queries": (
                       "芝加哥醫院第1季", "芝加哥醫院 第一季",
                       "芝加哥医院第1季", "芝加哥医院 第一季",
+                      "芝加哥急救第一季", "芝加哥急救 第一季",
                       "Chicago Med Season 1", "Chicago Med S01",
                   ),
                   "aliases": (
                       "芝加哥醫院第1季", "芝加哥醫院 第一季",
                       "芝加哥医院第1季", "芝加哥医院 第一季",
+                      "芝加哥急救第一季", "芝加哥急救 第一季",
                       "Chicago Med Season 1", "Chicago Med S01",
                   ),
               },
@@ -2876,7 +2878,7 @@ jobs:
               raise RuntimeError(
                   f"Chicago Med requested detail identity mismatch: requested={chicago_med_id} returned={med_returned_id}"
               )
-          if "芝加哥醫院" not in med_title and "芝加哥医院" not in med_title and "Chicago Med" not in med_title:
+          if not any(alias in med_title for alias in ("芝加哥醫院", "芝加哥医院", "芝加哥急救", "Chicago Med")):
               raise RuntimeError(
                   f"Chicago Med id=131229 official title mismatch: {med_title!r}"
               )
