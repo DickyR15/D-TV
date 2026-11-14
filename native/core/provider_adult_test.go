@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -134,6 +135,112 @@ func TestSupjavRequestsTaiwanTraditionalChinese(t *testing.T) {
 		t.Fatalf("Supjav Accept-Language = %q, want zh-TW and zh-Hant", gotLanguage)
 	}
 }
+
+
+func TestMissavPlaybackResolverExtractsDirectMP4(t *testing.T) {
+	const detailURL = "https://missav.ws/dldss-581/"
+	var pageSeen bool
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host != "missav.ws" || request.URL.Path != "/dldss-581/" {
+			return nil, fmt.Errorf("unexpected MissAV request: %s", request.URL)
+		}
+		if request.Header.Get("Referer") != "https://missav.ws/zh/" {
+			t.Errorf("MissAV detail Referer = %q", request.Header.Get("Referer"))
+		}
+		pageSeen = true
+		return sourceFixtureResponse(request, http.StatusOK, `<html><body>
+<video><source src="https://media.example.test/dldss-581.mp4"></video>
+</body></html>`), nil
+	})
+
+	media, err := d.resolveProviderMedia(context.Background(), Task{
+		DramaID: "missav:dldss-581",
+		Chapter: Chapter{ID: "missav:dldss-581:1", Source: sourceMissav, PageURL: detailURL},
+	})
+	if err != nil {
+		t.Fatalf("resolve MissAV playback: %v", err)
+	}
+	if !pageSeen {
+		t.Fatal("MissAV detail page was not requested")
+	}
+	if media.URL != "https://media.example.test/dldss-581.mp4" {
+		t.Fatalf("MissAV media URL = %q", media.URL)
+	}
+	if media.Referer != detailURL {
+		t.Fatalf("MissAV media Referer = %q, want %q", media.Referer, detailURL)
+	}
+}
+
+func TestSupjavPlaybackResolverUsesTVEndpointAndLoadsPlaylist(t *testing.T) {
+	const (
+		detailURL   = "https://supjav.com/187772.html"
+		encodedLink = "TV-ENCODED-LINK"
+		reversed    = "KNIL-DEDOCNE-VT"
+		playlistURL = "https://media.example.test/master.m3u8?token=fixture"
+	)
+	var pageSeen, endpointSeen, playlistSeen bool
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "supjav.com":
+			if request.URL.Path != "/187772.html" {
+				return nil, fmt.Errorf("unexpected Supjav detail path: %s", request.URL.Path)
+			}
+			language := request.Header.Get("Accept-Language")
+			if !strings.Contains(language, "zh-TW") || !strings.Contains(language, "zh-Hant") {
+				t.Errorf("Supjav Accept-Language = %q, want zh-TW and zh-Hant", language)
+			}
+			if request.Header.Get("Referer") != "https://supjav.com/zh/" {
+				t.Errorf("Supjav detail Referer = %q", request.Header.Get("Referer"))
+			}
+			pageSeen = true
+			return sourceFixtureResponse(request, http.StatusOK,
+				`<html><body><a data-link="${encodedLink}">TV</a></body></html>`), nil
+		case "lk1.supremejav.com":
+			if request.URL.Path != "/supjav.php" {
+				return nil, fmt.Errorf("unexpected Supjav playback path: %s", request.URL.Path)
+			}
+			if got := request.URL.Query().Get("c"); got != reversed {
+				t.Errorf("Supjav playback token = %q, want reversed token %q", got, reversed)
+			}
+			if request.Header.Get("Referer") != "https://supjav.com/zh/" {
+				t.Errorf("Supjav playback Referer = %q", request.Header.Get("Referer"))
+			}
+			endpointSeen = true
+			return sourceFixtureResponse(request, http.StatusOK,
+				`<script>var urlPlay = "${playlistURL}";</script>`), nil
+		case "media.example.test":
+			if request.URL.Path != "/master.m3u8" || request.URL.Query().Get("token") != "fixture" {
+				return nil, fmt.Errorf("unexpected Supjav playlist URL: %s", request.URL)
+			}
+			if request.Header.Get("Referer") != "https://supjav.com/zh/" {
+				t.Errorf("Supjav playlist Referer = %q", request.Header.Get("Referer"))
+			}
+			playlistSeen = true
+			return sourceFixtureResponse(request, http.StatusOK,
+				"#EXTM3U\n#EXTINF:4,\nsegment.ts\n#EXT-X-ENDLIST\n"), nil
+		default:
+			return nil, fmt.Errorf("unexpected Supjav host: %s", request.URL.Host)
+		}
+	})
+
+	media, err := d.resolveProviderMedia(context.Background(), Task{
+		DramaID: "supjav:187772",
+		Chapter: Chapter{ID: "supjav:187772:1", Source: sourceSupjav, PageURL: detailURL},
+	})
+	if err != nil {
+		t.Fatalf("resolve Supjav playback: %v", err)
+	}
+	if !pageSeen || !endpointSeen || !playlistSeen {
+		t.Fatalf("Supjav playback stages: detail=%t endpoint=%t playlist=%t", pageSeen, endpointSeen, playlistSeen)
+	}
+	if media.URL != playlistURL {
+		t.Fatalf("Supjav media URL = %q, want %q", media.URL, playlistURL)
+	}
+	if !strings.HasPrefix(media.Playlist, "#EXTM3U") {
+		t.Fatalf("Supjav playlist was not retained: %q", media.Playlist)
+	}
+}
+
 
 func TestMissavAndSupjavAreRecognizedAdvancedProviders(t *testing.T) {
 	for _, testCase := range []struct {
