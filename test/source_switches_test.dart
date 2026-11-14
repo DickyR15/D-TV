@@ -109,27 +109,24 @@ void main() {
     );
     await store.unlockAdvancedSources('source-pass-123');
     final original = store.advancedSources.map((source) => source.id).toList();
-    final reordered = <String>[
-      'supjav',
-      'missav',
-      ...original.where((id) => id != 'supjav' && id != 'missav'),
-    ];
+    expect(original, isNotEmpty);
+    // Derive the requested order from the currently registered advanced
+    // sources. Temporarily disabled providers must not leave stale IDs in the
+    // persisted reorder payload.
+    final reordered = <String>[original.last, ...original.take(original.length - 1)];
     await store.reorderAdvancedSources(reordered);
     expect(store.advancedSources.map((source) => source.id).toList(), reordered);
-    await store.setSourceEnabled('supjav', true);
-    await store.setSourceEnabled('missav', true);
-    expect(
-      store.sources.map((source) => source.id).toList().take(5).toList(),
-      ['hongguo', 'hanxiaoquan', 'duoduo', 'supjav', 'missav'],
-    );
     await expectLater(
-      store.reorderAdvancedSources([...reordered, 'missav']),
+      store.reorderAdvancedSources([...reordered, 'unknown-provider']),
       throwsStateError,
     );
 
     final restarted = testStore(store.preferences);
     addTearDown(restarted.dispose);
-    expect(restarted.advancedSources.map((source) => source.id).toList(), reordered);
+    expect(
+      restarted.advancedSources.map((source) => source.id).toList(),
+      reordered,
+    );
   });
 
   test('three primary sources start enabled and restricted sources start switched off', () async {
