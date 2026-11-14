@@ -18,6 +18,7 @@ on:
       - "ios/Runner/AppDelegate.swift"
       - "test/app_update_service_test.dart"
       - "test/catalog_sort_test.dart"
+      - "scripts/**"
       - "lib/**"
       - "native/**"
       - "test/**"
