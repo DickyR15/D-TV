@@ -95,8 +95,10 @@ func TestAdultProviderDetailIDsAndPlaybackParsing(t *testing.T) {
 <script>const backup = "https://media.example.test/backup.mp4";</script>
 </body></html>`)
 	media := adultMediaCandidates(mediaPage, "", "https://missav.ws/zh/dldss-569")
-	if len(media) != 1 || media[0] != "https://media.example.test/stream/index.m3u8?token=abc" {
-		t.Fatalf("adult direct media extraction = %#v", media)
+	if len(media) != 2 ||
+		media[0] != "https://media.example.test/stream/index.m3u8?token=abc" ||
+		media[1] != "https://media.example.test/backup.mp4" {
+		t.Fatalf("adult direct media extraction or fallback order = %#v", media)
 	}
 }
 
