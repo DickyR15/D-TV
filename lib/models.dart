@@ -336,7 +336,12 @@ class Drama {
         : category;
     final mergedCoverCandidates = <String>[];
     final seenCoverCandidates = <String>{};
-    for (final candidate in [...fresh.coverCandidates, ...coverCandidates]) {
+    for (final candidate in [
+      ...fresh.coverCandidates,
+      if (fresh.cover.isNotEmpty && cover.isNotEmpty && cover != fresh.cover)
+        cover,
+      ...coverCandidates,
+    ]) {
       final normalized = candidate.trim();
       if (normalized.isNotEmpty && seenCoverCandidates.add(normalized)) {
         mergedCoverCandidates.add(normalized);
