@@ -174,7 +174,7 @@ func duoduoMergeSameSeasonMetadata(catalog, detail Drama) Drama {
 		candidates = append(candidates, previousAddresses...)
 		catalog.CoverCandidates = nativeUniqueCoverAddresses(candidates...)
 	}
-	if count := duoduoDramaEpisodeCount(detail); count > duoduoDramaEpisodeCount(catalog) {
+	if count := duoduoDramaEpisodeCount(detail); count > 0 {
 		catalog.Episodes = count
 		catalog.EpisodeCount = count
 		catalog.TotalEpisode = count
@@ -194,10 +194,13 @@ func (downloader *Downloader) hydrateDuoduoSeriesSeason(ctx context.Context, cat
 	// Resolve the season through the same detail + aggregate parser used by
 	// search-result playback. Catalog rows can omit the episode count even
 	// though search playback can resolve direct URLs from search_aggregate.
-	detail, chapters, err := downloader.fetchDuoduoDetailWithCategory(
+	detail, chapters, _ := downloader.fetchDuoduoDetailWithCategory(
 		ctx, catalog.SourceID, catalog.CategoryName,
 	)
-	if err != nil || detail.ID != catalog.ID || detail.SourceID != catalog.SourceID {
+	// Detail identity and poster/count metadata remain useful even when the
+	// aggregate currently has no public direct line. Keep the season card
+	// enriched; the normal detail resolver will re-check playback when opened.
+	if detail.ID != catalog.ID || detail.SourceID != catalog.SourceID {
 		return catalog
 	}
 	catalog = duoduoMergeSameSeasonMetadata(catalog, detail)

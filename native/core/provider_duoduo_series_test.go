@@ -325,6 +325,7 @@ func TestDuoduoMergeSameSeasonMetadataPreservesPreviousPosterCandidates(t *testi
 		Cover: "https://img.example.test/catalog-main.jpg",
 		CoverURL: "https://img.example.test/catalog-original.jpg",
 		CoverCandidates: []string{"https://img.example.test/catalog-alt.jpg"},
+		Episodes: 24, EpisodeCount: 24, TotalEpisode: 24,
 	}
 	detail := Drama{
 		ID: "duoduo:950", Source: sourceDuoduo, SourceID: "950",
@@ -332,10 +333,14 @@ func TestDuoduoMergeSameSeasonMetadataPreservesPreviousPosterCandidates(t *testi
 		Cover: "https://img.example.test/detail-main.jpg",
 		CoverURL: "https://img.example.test/detail-original.jpg",
 		CoverCandidates: []string{"https://img.example.test/detail-alt.jpg"},
+		Episodes: 18, EpisodeCount: 18, TotalEpisode: 18,
 	}
 	merged := duoduoMergeSameSeasonMetadata(catalog, detail)
 	if merged.Cover != "https://img.example.test/detail-main.jpg" {
 		t.Fatalf("refreshed detail poster = %q", merged.Cover)
+	}
+	if merged.Episodes != 18 || merged.EpisodeCount != 18 || merged.TotalEpisode != 18 {
+		t.Fatalf("official season detail count did not replace stale catalogue count: %+v", merged)
 	}
 	want := []string{
 		"https://img.example.test/detail-original.jpg",
@@ -401,3 +406,61 @@ func TestFetchDuoduoSeriesSeasonsAllowsMissingEpisodeCountUnlessExplicitlyUpcomi
 	}
 }
 
+
+
+func TestFetchDuoduoSeriesSeasonsKeepsOfficialMetadataWhenAggregateHasNoDirectLines(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[
+					{"vod_id":960,"vod_name":"芝加哥醫院第一季","vod_remarks":"已完結"},
+					{"vod_id":961,"vod_name":"芝加哥醫院第二季","vod_pic":"https://img.example.test/med-s2.jpg","vod_total":10,"vod_remarks":"已完結"}
+				]
+			}`), nil
+		case "/api.php/web/vod/get_detail":
+			if request.URL.Query().Get("vod_id") != "960" {
+				t.Fatalf("unexpected detail ID: %s", request.URL.Query().Get("vod_id"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[{
+					"vod_id":960,
+					"vod_name":"芝加哥醫院第一季",
+					"vod_pic_detail":"https://img.example.test/med-s1-detail.jpg",
+					"vod_total":18,
+					"vod_remarks":"全18集",
+					"vod_play_from":"",
+					"vod_play_url":""
+				}],
+				"vodplayer":[]
+			}`), nil
+		case "/api.php/web/internal/search_aggregate":
+			if request.URL.Query().Get("vod_id") != "960" {
+				t.Fatalf("unexpected aggregate ID: %s", request.URL.Query().Get("vod_id"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[]}`), nil
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+	current := nativeDrama{
+		ID: "duoduo:961", Source: sourceDuoduo, SourceID: "961",
+		Title: "芝加哥醫院第二季", Episodes: 10,
+	}
+	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seasons) != 2 {
+		t.Fatalf("expected two seasons, got %+v", seasons)
+	}
+	first := seasons[0]
+	if first.Drama.ID != "duoduo:960" ||
+		first.Drama.Cover != "https://img.example.test/med-s1-detail.jpg" ||
+		first.Drama.Episodes != 18 || !first.Playable || first.Upcoming {
+		t.Fatalf("official detail poster/count were lost when aggregate had no direct line: %+v", first)
+	}
+}

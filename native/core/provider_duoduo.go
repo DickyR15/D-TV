@@ -712,9 +712,9 @@ func (d *Downloader) fetchDuoduoDetailWithCategory(ctx context.Context, sourceID
 	lines := duoduoMergePlayLines(detailLines, aggregateLines)
 	if len(lines) == 0 {
 		if aggregateErr != nil {
-			return Drama{}, nil, fmt.Errorf("多多追劇已取得影片資料，但目前沒有可直接播放的線路：%w", aggregateErr)
+			return drama, nil, fmt.Errorf("多多追劇已取得影片資料，但目前沒有可直接播放的線路：%w", aggregateErr)
 		}
-		return Drama{}, nil, errors.New("多多追劇目前沒有可直接播放的影片線路")
+		return drama, nil, errors.New("多多追劇目前沒有可直接播放的影片線路")
 	}
 	// Merge every direct playback line into one canonical chapter per episode.
 	// The first available line is the preferred URL; other lines for the same
