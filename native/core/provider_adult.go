@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html"
+	htmlstd "html"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -26,6 +26,33 @@ var (
 	reSupjavPlayerURL = regexp.MustCompile(`(?is)urlPlay[^\r\n]{0,256}?(https?://[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?)`)
 )
 
+func (d *Downloader) fetchAdultProviderDocument(ctx context.Context, address, referer string) (*html.Node, string, string, error) {
+	responses := &playbackResponseURLs{}
+	pageContext := context.WithValue(ctx, playbackResponseURLsKey{}, responses)
+	body, err := d.fetchProviderText(pageContext, address, referer)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if len(body) > 4<<20 {
+		return nil, "", "", errors.New("片源頁面過大")
+	}
+	if actual, found := responses.values.Load(address); found {
+		address = actual.(string)
+	}
+	document, err := html.Parse(strings.NewReader(body))
+	if err != nil {
+		return nil, "", "", err
+	}
+	return document, address, body, nil
+}
+
+func adultAdditionalCoverCandidates(covers []string) []string {
+	if len(covers) < 2 {
+		return nil
+	}
+	return append([]string(nil), covers[1:]...)
+}
+
 func adultPageMeta(document *html.Node, keys ...string) string {
 	wanted := map[string]bool{}
 	for _, key := range keys {
@@ -40,7 +67,7 @@ func adultPageMeta(document *html.Node, keys ...string) string {
 		)))
 		if wanted[key] {
 			if value := strings.TrimSpace(providerHTMLAttr(node, "content")); value != "" {
-				return html.UnescapeString(value)
+				return htmlstd.UnescapeString(value)
 			}
 		}
 	}
@@ -138,7 +165,7 @@ func missavDramaFromCard(anchor *html.Node, pageURL string) (Drama, bool) {
 		ID: providerDramaID(sourceMissav, sourceID), Source: sourceMissav, SourceID: sourceID,
 		Title: truncate(title, 512), Name: truncate(title, 512),
 		Cover: firstNonEmpty(covers...), CoverURL: firstNonEmpty(covers...),
-		CoverCandidates: append([]string(nil), covers[1:]...),
+		CoverCandidates: adultAdditionalCoverCandidates(covers),
 		ChannelName: "MissAV", CategoryName: "影片", TotalEpisode: 1, EpisodeCount: 1,
 	}, true
 }
@@ -187,7 +214,7 @@ func (d *Downloader) fetchMissavCatalogPage(ctx context.Context, page int, categ
 		return []Drama{drama}, false, nil
 	}
 	address := d.missavCatalogAddress(page, query)
-	document, pageURL, err := d.fetchProviderPage(ctx, address, d.providerBaseURL(sourceMissav)+"/zh/", "")
+	document, pageURL, _, err := d.fetchAdultProviderDocument(ctx, address, d.providerBaseURL(sourceMissav)+"/zh/")
 	if err != nil {
 		return nil, false, err
 	}
@@ -202,7 +229,7 @@ func (d *Downloader) fetchMissavDetail(ctx context.Context, sourceID string) (Dr
 	}
 	site := strings.TrimRight(d.providerBaseURL(sourceMissav), "/")
 	address := site + "/zh/" + url.PathEscape(sourceID)
-	document, pageURL, err := d.fetchProviderPage(ctx, address, site+"/zh/", "")
+	document, pageURL, _, err := d.fetchAdultProviderDocument(ctx, address, site+"/zh/")
 	if err != nil {
 		return Drama{}, nil, err
 	}
@@ -232,7 +259,7 @@ func adultMediaCandidates(document *html.Node, rawBody, pageURL string) []string
 	seen := map[string]bool{}
 	var candidates []string
 	add := func(raw string) {
-		raw = strings.TrimSpace(html.UnescapeString(strings.ReplaceAll(raw, "\\/", "/")))
+		raw = strings.TrimSpace(htmlstd.UnescapeString(strings.ReplaceAll(raw, "\\/", "/")))
 		if raw == "" {
 			return
 		}
@@ -278,11 +305,7 @@ func (d *Downloader) resolveMissavMedia(ctx context.Context, task Task) (provide
 	if pageURL == "" {
 		pageURL = site + "/zh/" + url.PathEscape(sourceID)
 	}
-	document, actualURL, err := d.fetchProviderPage(ctx, pageURL, site+"/zh/", "")
-	if err != nil {
-		return providerMedia{}, err
-	}
-	body, err := d.fetchProviderText(ctx, actualURL, site+"/zh/")
+	document, actualURL, body, err := d.fetchAdultProviderDocument(ctx, pageURL, site+"/zh/")
 	if err != nil {
 		return providerMedia{}, err
 	}
@@ -493,7 +516,7 @@ func (d *Downloader) resolveSupjavMedia(ctx context.Context, task Task) (provide
 		}
 		match = []string{"", candidates[0]}
 	}
-	mediaURL := resolveProviderURL(endpoint.String(), html.UnescapeString(match[1]))
+	mediaURL := resolveProviderURL(endpoint.String(), htmlstd.UnescapeString(match[1]))
 	return d.prepareWebProviderMedia(ctx, providerMedia{
 		URL: mediaURL, Referer: site+"/zh/",
 	}, "Supjav")
