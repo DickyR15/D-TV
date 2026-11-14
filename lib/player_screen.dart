@@ -777,7 +777,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         } catch (_) {}
       }
       await _player
-          .seek(Duration(milliseconds: positionMs.clamp(0, 1 << 31)))
+          .seek(Duration(milliseconds: positionMs.clamp(0, 1 << 31).toInt()))
           .timeout(const Duration(seconds: 5));
       if (_pictureInPictureResumePlaying) {
         await _player.play().timeout(const Duration(seconds: 5));
