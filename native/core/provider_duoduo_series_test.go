@@ -40,27 +40,44 @@ func TestDuoduoSeriesTitleRequiresExplicitSeasonMarker(t *testing.T) {
 
 func TestFetchDuoduoSeriesSeasonsMatchesExactBaseTitle(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
-		if request.URL.Path != "/api.php/web/search/index" {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			if request.URL.Query().Get("wd") != "測試系列" {
+				t.Fatalf("series search keyword = %q", request.URL.Query().Get("wd"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[
+					{"vod_id":100,"vod_name":"測試系列第一季","vod_pic":"https://img.example.test/1.jpg","vod_remarks":"12集"},
+					{"vod_id":101,"vod_name":"測試系列第二季","vod_pic":"https://img.example.test/2.jpg","vod_remarks":"24集"},
+					{"vod_id":102,"vod_name":"測試系列外傳第三季","vod_remarks":"8集"},
+					{"vod_id":103,"vod_name":"測試系列番外篇","vod_remarks":"6集"},
+					{"vod_id":104,"vod_name":"測試系列 第二季 完整版","vod_remarks":"10集"}
+				]
+			}`), nil
+		case "/api.php/web/vod/get_detail":
+			if request.URL.Query().Get("vod_id") != "100" {
+				t.Fatalf("only the sibling season should be hydrated, unexpected detail ID: %s", request.URL.Query().Get("vod_id"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[{"vod_id":100,"vod_name":"測試系列第一季","vod_remarks":"12集"}],
+				"vodplayer":[]
+			}`), nil
+		case "/api.php/web/internal/search_aggregate":
+			if request.URL.Query().Get("vod_id") != "100" {
+				t.Fatalf("unexpected aggregate ID: %s", request.URL.Query().Get("vod_id"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[]}`), nil
+		default:
 			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
 		}
-		if request.URL.Query().Get("wd") != "測試系列" {
-			t.Fatalf("series search keyword = %q", request.URL.Query().Get("wd"))
-		}
-		return sourceFixtureResponse(request, http.StatusOK, `{
-			"code":200,
-			"data":[
-				{"vod_id":100,"vod_name":"測試系列第一季","vod_pic":"https://img.example.test/1.jpg","vod_remarks":"12集"},
-				{"vod_id":101,"vod_name":"測試系列第二季","vod_pic":"https://img.example.test/2.jpg","vod_remarks":"24集"},
-				{"vod_id":102,"vod_name":"測試系列外傳第三季","vod_remarks":"8集"},
-				{"vod_id":103,"vod_name":"測試系列番外篇","vod_remarks":"6集"},
-				{"vod_id":104,"vod_name":"測試系列 第二季 完整版","vod_remarks":"10集"}
-			]
-		}`), nil
 	})
 
 	current := nativeDrama{
 		ID: "duoduo:101", Source: sourceDuoduo, SourceID: "101",
-		Title: "測試系列第二季", Episodes: 24,
+		Title: "測試系列第二季", Episodes: 24, Cover: "https://img.example.test/2.jpg",
 	}
 	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
 	if err != nil {
@@ -254,6 +271,9 @@ func TestFetchDuoduoChicagoFireSeasonsHydrateWithIndependentDetailBudget(t *test
 			}`), nil
 		case "/api.php/web/vod/get_detail":
 			id := request.URL.Query().Get("vod_id")
+			if id != "901" {
+				t.Fatalf("current opened season 902 must reuse its already-resolved metadata; unexpected sibling detail ID: %s", id)
+			}
 			if deadline, ok := request.Context().Deadline(); ok {
 				mu.Lock()
 				if !deadline.After(catalogDeadline.Add(time.Second)) {
@@ -262,29 +282,21 @@ func TestFetchDuoduoChicagoFireSeasonsHydrateWithIndependentDetailBudget(t *test
 				hydrated[id] = true
 				mu.Unlock()
 			}
-			season := "第一季"
-			poster := "https://img.example.test/chicago-fire-s1.jpg"
-			if id == "902" {
-				season = "第二季"
-				poster = "https://img.example.test/chicago-fire-s2.jpg"
-			} else if id != "901" {
-				t.Fatalf("unexpected Chicago Fire detail ID: %s", id)
-			}
-			body := fmt.Sprintf(`{
+			return sourceFixtureResponse(request, http.StatusOK, `{
 				"code":200,
 				"data":[{
-					"vod_id":%s,
-					"vod_name":"芝加哥烈焰%s",
-					"vod_pic_detail":%q,
+					"vod_id":901,
+					"vod_name":"芝加哥烈焰第一季",
+					"vod_pic_detail":"https://img.example.test/chicago-fire-s1.jpg",
 					"vod_total":2,
 					"vod_remarks":"已完結"
-				}]
-			}`, id, season, poster)
-			return sourceFixtureResponse(request, http.StatusOK, body), nil
+				}],
+				"vodplayer":[]
+			}`), nil
 		case "/api.php/web/internal/search_aggregate":
 			id := request.URL.Query().Get("vod_id")
-			if id != "901" && id != "902" {
-				t.Fatalf("unexpected Chicago Fire aggregate ID: %s", id)
+			if id != "901" {
+				t.Fatalf("current opened season 902 must not be redundantly re-resolved; unexpected aggregate ID: %s", id)
 			}
 			return sourceFixtureResponse(request, http.StatusOK, `{
 				"code":200,
@@ -300,21 +312,36 @@ func TestFetchDuoduoChicagoFireSeasonsHydrateWithIndependentDetailBudget(t *test
 			return nil, nil
 		}
 	})
-	current := nativeDrama{ID:"duoduo:902", Source:sourceDuoduo, SourceID:"902", Title:"芝加哥烈焰第二季"}
+	current := nativeDrama{
+		ID: "duoduo:902", Source: sourceDuoduo, SourceID: "902",
+		Title: "芝加哥烈焰第二季",
+		Cover: "https://img.example.test/chicago-fire-s2.jpg",
+		Episodes: 2, EpisodesVerified: true,
+	}
 	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
-	if err != nil { t.Fatal(err) }
-	if len(seasons) != 2 { t.Fatalf("expected two seasons, got %+v",seasons) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seasons) != 2 {
+		t.Fatalf("expected two seasons, got %+v", seasons)
+	}
 	mu.Lock()
 	defer mu.Unlock()
+	if !hydrated["901"] || hydrated["902"] {
+		t.Errorf("only the unopened sibling season should be hydrated: %+v", hydrated)
+	}
 	for _, season := range seasons {
-		id := strings.TrimPrefix(season.Drama.ID,"duoduo:")
-		if !hydrated[id] { t.Errorf("season %s was not hydrated",id) }
+		id := strings.TrimPrefix(season.Drama.ID, "duoduo:")
 		if !season.Playable || season.Upcoming || season.Drama.Episodes != 2 {
-			t.Errorf("season %s unavailable: %+v",id,season)
+			t.Errorf("season %s unavailable: %+v", id, season)
 		}
 		want := "https://img.example.test/chicago-fire-s1.jpg"
-		if id=="902" { want="https://img.example.test/chicago-fire-s2.jpg" }
-		if season.Drama.Cover != want { t.Errorf("season %s poster %q, want %q",id,season.Drama.Cover,want) }
+		if id == "902" {
+			want = "https://img.example.test/chicago-fire-s2.jpg"
+		}
+		if season.Drama.Cover != want {
+			t.Errorf("season %s poster %q, want %q", id, season.Drama.Cover, want)
+		}
 	}
 }
 
