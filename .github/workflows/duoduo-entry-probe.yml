@@ -465,7 +465,7 @@ jobs:
                   proxy = "https://wsrv.nl/?url=" + quote(target, safe="") + "&w=440&h=660&fit=inside&output=webp&q=80"
                   try:
                       proxy_status, _, proxy_type, proxy_body = request(
-                          proxy, "https://images.weserv.nl/", limit=2048,
+                          proxy, "https://wsrv.nl/", limit=2048,
                           timeout=8, byte_range="bytes=0-2047"
                       )
                       proxy_ok = proxy_status in (200, 206) and bool(proxy_body) and (
