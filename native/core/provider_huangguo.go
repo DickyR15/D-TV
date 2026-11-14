@@ -372,6 +372,9 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 				req.Header.Set("Referer", referer)
 			}
 			req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9")
+			if language, ok := ctx.Value(providerTextAcceptLanguageKey{}).(string); ok && language != "" {
+				req.Header.Set("Accept-Language", language)
+			}
 			if cookie, ok := ctx.Value(providerTextCookieKey{}).(string); ok && cookie != "" {
 				req.Header.Set("Cookie", cookie)
 			}
