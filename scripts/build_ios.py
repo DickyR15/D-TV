@@ -121,6 +121,9 @@ def main():
     if not flutter or not shutil.which('pod'):
         raise SystemExit('請安裝 Flutter 和 CocoaPods。')
     run([flutter, 'pub', 'get'])
+    # Patch the pinned media_kit_video iOS renderer so PiP receives frames
+    # from the existing MPV session instead of opening the stream a second time.
+    run([sys.executable, str(root / 'scripts' / 'patch_media_kit_video_pip.py')])
     run(['pod', 'install'], cwd=root / 'ios')
     output = root / 'dist' / 'ios'
     output.mkdir(parents=True, exist_ok=True)
