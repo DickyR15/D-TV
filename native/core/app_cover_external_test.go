@@ -754,7 +754,7 @@ func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
 
 func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 	const poster = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2932687546.jpg"
-	const edge = "https://wsrv.nl/?url=img9.doubanio.com%2Fview%2Fphoto%2Fs_ratio_poster%2Fpublic%2Fp2932687546.jpg&w=440&h=660&fit=inside&output=webp&q=80"
+	edge := duoduoPosterProxyURL(poster)
 	imageBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
 	var seenReferer string
 	var originCalls, edgeCalls int
