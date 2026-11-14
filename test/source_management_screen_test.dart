@@ -231,6 +231,15 @@ void main() {
       store.advancedSources.map((source) => source.id).take(2).toList(),
       [initial[1], initial[0]],
     );
+
+    // Re-create the store over the same persisted preferences to simulate
+    // leaving the app and reopening it after the administrator reorders sources.
+    final restarted = testStore(store.preferences);
+    addTearDown(restarted.dispose);
+    expect(
+      restarted.advancedSources.map((source) => source.id).toList(),
+      [initial[1], initial[0], ...initial.skip(2)],
+    );
   });
 
   testWidgets('advanced source toggles are hidden until admin password is verified', (
