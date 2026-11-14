@@ -518,3 +518,60 @@ func TestAllRepairedDuoduoPostersReuseExternalFallbackBeforeSourceCache(t *testi
 		t.Fatalf("cached repaired poster made network requests: source=%d fallback=%d", primaryRequests, fallbackRequests)
 	}
 }
+
+
+func TestDuoduoPosterPairSkipsCooledEdgeNodeAndUsesOrigin(t *testing.T) {
+	fixture, err := os.ReadFile("../../test/fixtures/cover.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const originURL = "https://img.example.test/poster.jpg"
+	proxyURL := duoduoPosterProxyURL(originURL)
+	var originRequests, edgeRequests int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Hostname() {
+		case "img.example.test":
+			originRequests++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(fixture)),
+				ContentLength: int64(len(fixture)),
+				Request: request,
+			}, nil
+		case "wsrv.nl":
+			edgeRequests++
+			return posterLookupJSONResponse(request, "unexpected edge request"), nil
+		default:
+			t.Fatalf("unexpected poster node: %s", request.URL.Hostname())
+			return nil, errors.New("unexpected poster node")
+		}
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	cache.noteCoverNodeFailure(proxyURL, &nativeCoverHTTPStatusError{StatusCode: http.StatusServiceUnavailable})
+
+	data, nextIndex, err := cache.downloadDuoduoPosterPair(
+		context.Background(),
+		nativeDrama{ID: "duoduo:123", Source: sourceDuoduo, Title: "節點冷卻測試"},
+		[]duoduoPosterAttempt{
+			{address: originURL, referer: "https://source.example.test/play/123"},
+			{address: proxyURL, referer: "https://wsrv.nl/"},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nextIndex != 2 {
+		t.Fatalf("next fallback index = %d, want 2", nextIndex)
+	}
+	if edgeRequests != 0 || originRequests != 1 {
+		t.Fatalf("requests = edge:%d origin:%d, want edge:0 origin:1", edgeRequests, originRequests)
+	}
+	if string(data) == "" {
+		t.Fatal("origin fallback returned an empty poster")
+	}
+	if cache.coverNodeOnCooldown(proxyURL) {
+		t.Fatal("successful origin request should not clear the unrelated edge node cooldown")
+	}
+}

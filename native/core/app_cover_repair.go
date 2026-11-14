@@ -570,6 +570,7 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 		if force {
 			for _, attempt := range attempts {
 				cache.clearCoverFailure(attempt.address, attempt.referer)
+				cache.clearCoverNodeFailure(attempt.address)
 			}
 		}
 		data, startIndex, downloadErr = cache.downloadDuoduoPosterPair(requestCtx, drama, attempts)
@@ -584,6 +585,10 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 			if force {
 				cache.clearCoverFailure(attempt.address, attempt.referer)
 			}
+			if !force && cache.coverNodeOnCooldown(attempt.address) {
+				downloadErr = errors.New("海報節點暫時冷卻，略過重複請求")
+				continue
+			}
 			if !force && cache.coverOnCooldown(attempt.address, attempt.referer) {
 				downloadErr = errors.New("海報網址暫時冷卻，略過重複請求")
 				continue
@@ -597,9 +602,11 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 			cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, downloadErr)
 			if downloadErr == nil {
 				cache.clearCoverFailure(attempt.address, attempt.referer)
+				cache.clearCoverNodeFailure(attempt.address)
 				break
 			}
 			cache.noteCoverFailure(attempt.address, attempt.referer, downloadErr)
+			cache.noteCoverNodeFailure(attempt.address, downloadErr)
 		}
 	}
 	<-cache.slots

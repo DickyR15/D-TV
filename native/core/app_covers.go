@@ -82,8 +82,9 @@ type nativeCoverCache struct {
 	mu          sync.Mutex
 	entries     map[string]nativeCoverEntry
 	pending     map[string]*nativeCoverCall
-	failures    map[string]time.Time
-	slots       chan struct{}
+	failures     map[string]time.Time
+	nodeFailures map[string]time.Time
+	slots        chan struct{}
 	repairSlots chan struct{}
 	repairs     map[string]*nativeCoverRepair
 	size        int64
@@ -94,7 +95,8 @@ func newNativeCoverCache(directory string, downloader *Downloader) *nativeCoverC
 	cache := &nativeCoverCache{
 		directory: filepath.Join(directory, "covers-v1"), downloader: downloader,
 		entries: map[string]nativeCoverEntry{}, pending: map[string]*nativeCoverCall{},
-		failures: map[string]time.Time{},
+		failures:     map[string]time.Time{},
+		nodeFailures: map[string]time.Time{},
 		// Match the six-request Flutter scheduler for the first visible grid.
 		slots: make(chan struct{}, 6), limit: nativeCoverCacheBytes,
 		repairSlots: make(chan struct{}, nativeCoverRepairConcurrency), repairs: map[string]*nativeCoverRepair{},
@@ -403,12 +405,14 @@ func (cache *nativeCoverCache) downloadDuoduoPosterPair(
 	}
 
 	eligible := [2]bool{
-		!cache.coverOnCooldown(attempts[0].address, attempts[0].referer),
-		!cache.coverOnCooldown(attempts[1].address, attempts[1].referer),
+		!cache.coverOnCooldown(attempts[0].address, attempts[0].referer) &&
+			!cache.coverNodeOnCooldown(attempts[0].address),
+		!cache.coverOnCooldown(attempts[1].address, attempts[1].referer) &&
+			!cache.coverNodeOnCooldown(attempts[1].address),
 	}
 	nextIndex := 2
 	if !eligible[0] && !eligible[1] {
-		return nil, nextIndex, errors.New("多多海報原始網址與代理網址均在冷卻中")
+		return nil, nextIndex, errors.New("多多海報原始網址與代理節點均在冷卻中")
 	}
 
 	type attemptResult struct {
@@ -439,8 +443,10 @@ func (cache *nativeCoverCache) downloadDuoduoPosterPair(
 			cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, requestErr)
 			if requestErr == nil {
 				cache.clearCoverFailure(attempt.address, attempt.referer)
+				cache.clearCoverNodeFailure(attempt.address)
 			} else if !errors.Is(requestErr, context.Canceled) {
 				cache.noteCoverFailure(attempt.address, attempt.referer, requestErr)
+				cache.noteCoverNodeFailure(attempt.address, requestErr)
 			}
 			results <- attemptResult{data: data, err: requestErr}
 		}()
@@ -649,6 +655,10 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 					break
 				}
 				attempt := attempts[index]
+				if cache.coverNodeOnCooldown(attempt.address) {
+					err = errors.New("海報節點暫時冷卻，略過重複請求")
+					continue
+				}
 				if cache.coverOnCooldown(attempt.address, attempt.referer) {
 					err = errors.New("海報網址暫時冷卻，略過重複請求")
 					continue
@@ -662,9 +672,11 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 				cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, err)
 				if err == nil {
 					cache.clearCoverFailure(attempt.address, attempt.referer)
+					cache.clearCoverNodeFailure(attempt.address)
 					break
 				}
 				cache.noteCoverFailure(attempt.address, attempt.referer, err)
+				cache.noteCoverNodeFailure(attempt.address, err)
 			}
 		}
 

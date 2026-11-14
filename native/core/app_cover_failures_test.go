@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -79,5 +80,59 @@ func TestPermanentMissingCoverOnlyTreatsNotFoundAsPermanent(t *testing.T) {
 	}
 	if isPermanentMissingCover(errors.New("timeout")) {
 		t.Fatal("network timeout must not invalidate a cached poster")
+	}
+}
+
+
+func TestNativeCoverNodeCooldownClassifiesOnlyTransientHostFailures(t *testing.T) {
+	tests := []struct {
+		name string
+		err error
+		want time.Duration
+	}{
+		{name: "not found is URL-specific", err: &nativeCoverHTTPStatusError{StatusCode: 404}, want: 0},
+		{name: "forbidden is referer-specific", err: &nativeCoverHTTPStatusError{StatusCode: 403}, want: 0},
+		{name: "rate limited", err: &nativeCoverHTTPStatusError{StatusCode: 429}, want: 2 * time.Minute},
+		{name: "server unavailable", err: &nativeCoverHTTPStatusError{StatusCode: 503}, want: 90 * time.Second},
+		{name: "request timeout", err: context.DeadlineExceeded, want: 90 * time.Second},
+		{name: "invalid image is not a host outage", err: errors.New("站源未返回有效海報"), want: 0},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := nativeCoverNodeCooldown(test.err); got != test.want {
+				t.Fatalf("node cooldown = %s, want %s", got, test.want)
+			}
+		})
+	}
+}
+
+func TestNativeCoverNodeCooldownIsSharedByHostAndCanBeCleared(t *testing.T) {
+	cache := &nativeCoverCache{nodeFailures: make(map[string]time.Time)}
+	first := "https://wsrv.nl/?url=cdn.example.test/first.jpg"
+	second := "https://wsrv.nl/?url=cdn.example.test/second.jpg"
+	other := "https://origin.example.test/poster.jpg"
+
+	cache.noteCoverNodeFailure(first, &nativeCoverHTTPStatusError{StatusCode: 503})
+	if !cache.coverNodeOnCooldown(second) {
+		t.Fatal("a second URL on the same image node did not inherit the cooldown")
+	}
+	if cache.coverNodeOnCooldown(other) {
+		t.Fatal("a different image node inherited the wsrv.nl cooldown")
+	}
+	cache.clearCoverNodeFailure(second)
+	if cache.coverNodeOnCooldown(first) {
+		t.Fatal("successful request did not clear the node cooldown")
+	}
+}
+
+func TestNativeCoverNodeCooldownExpires(t *testing.T) {
+	cache := &nativeCoverCache{nodeFailures: map[string]time.Time{
+		"wsrv.nl": time.Now().Add(-time.Second),
+	}}
+	if cache.coverNodeOnCooldown("https://wsrv.nl/?url=example.test/poster.jpg") {
+		t.Fatal("expired node failure remained on cooldown")
+	}
+	if _, ok := cache.nodeFailures["wsrv.nl"]; ok {
+		t.Fatal("expired node failure was not removed")
 	}
 }
