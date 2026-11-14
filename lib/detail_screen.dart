@@ -48,6 +48,8 @@ class _DetailScreenState extends State<DetailScreen> {
   int _generation = 0;
   int _episodePage = 0;
   String _selectedPlayLine = '';
+  bool _expandedDescription = false;
+  bool _episodesExpanded = false;
   final _episodeAnchor = GlobalKey();
   final _detailScroll = ScrollController();
   final _startPlayFocus = FocusNode(debugLabel: 'detail-start-play');
@@ -506,7 +508,7 @@ class _DetailScreenState extends State<DetailScreen> {
                       .skip(start)
                       .take(episodePageSize)
                       .toList();
-                  const showEpisodes = true;
+                  final showEpisodes = _episodesExpanded;
                   return CustomScrollView(
                     controller: _detailScroll,
                     slivers: [
@@ -524,6 +526,13 @@ class _DetailScreenState extends State<DetailScreen> {
                       else ...[
                         SliverToBoxAdapter(child: _seriesSelector(drama)),
                         SliverToBoxAdapter(child: _playLineSelector(playLines)),
+                        SliverToBoxAdapter(
+                          child: _episodeSummary(
+                            episodes,
+                            currentNumber: resumeEpisodeNumber,
+                            expanded: showEpisodes,
+                          ),
+                        ),
                         if (showEpisodes) ...[
                           SliverToBoxAdapter(
                             child: EpisodeRangeBar(
@@ -726,6 +735,52 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
+  Widget _episodeSummary(
+    List<Episode> episodes, {
+    required int? currentNumber,
+    required bool expanded,
+  }) {
+    final colors = Theme.of(context).colorScheme;
+    final current = currentNumber == null ? '' : ' · 目前第 $currentNumber 集';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      child: Material(
+        color: colors.surfaceContainer,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => setState(() => _episodesExpanded = !expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.grid_view_rounded, color: colors.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '選集 · ${episodes.length} 集$current',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(expanded ? '收起' : '展開'),
+                const SizedBox(width: 2),
+                Icon(
+                  expanded
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _locateEpisode(int index) {
     final episodes = _detail!.episodes;
     setState(() {
@@ -879,11 +934,23 @@ class _DetailScreenState extends State<DetailScreen> {
               ],
             ),
           ),
-        if (drama.description.trim().isNotEmpty) ...[
+        if (drama.description.isNotEmpty) ...[
           const SizedBox(height: 12),
           Text(
             uiTraditional(drama.description),
+            maxLines: _expandedDescription ? null : 3,
+            overflow: _expandedDescription
+                ? TextOverflow.visible
+                : TextOverflow.ellipsis,
             style: TextStyle(color: colors.onSurfaceVariant, height: 1.6),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () =>
+                  setState(() => _expandedDescription = !_expandedDescription),
+              child: Text(_expandedDescription ? '收起簡介' : '展開簡介'),
+            ),
           ),
         ],
         if (_detail?.warning.isNotEmpty == true)
