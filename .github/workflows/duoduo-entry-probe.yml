@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "native/core/provider_duoduo.go"
+      - "native/core/provider_duoduo_series.go"
+      - "native/core/provider_duoduo_series_test.go"
       - "native/core/provider_duoduo_test.go"
       - "native/core/app_cover_metadata.go"
       - "native/core/app_cover_external.go"
@@ -705,6 +707,22 @@ jobs:
                       "迷離時空（原版）第一季",
                       "迷离时空(原版) 第一季",
                       "迷离时空（原版）第一季",
+                  ),
+              },
+              {
+                  "label": "緊急呼救 第一季",
+                  "queries": (
+                      "緊急呼救 第一季", "緊急呼救第一季",
+                      "紧急呼救 第一季", "紧急呼救第一季",
+                      "緊急呼救 第1季", "紧急呼救第1季",
+                      "9-1-1 Season 1", "911 Season 1", "9-1-1 第一季",
+                  ),
+                  "aliases": (
+                      "緊急呼救 第一季", "緊急呼救第一季",
+                      "紧急呼救 第一季", "紧急呼救第一季",
+                      "緊急呼救 第1季", "紧急呼救第1季",
+                      "9-1-1 Season 1", "911 Season 1",
+                      "9-1-1 第一季", "9-1-1第一季", "911第一季",
                   ),
               },
           ]
@@ -1544,6 +1562,126 @@ jobs:
           print(f"SINGLE_INFERNO_PLAYBACK_PROBES={single_inferno_ok}/{single_inferno_checked}")
           if not single_inferno_ok:
               raise RuntimeError("單身即地獄 第五季 currently has no validated public direct playback line")
+
+          print("\\n=== USER-REPORTED SERIES PLAYBACK: 緊急呼救 第一季 ===")
+          nine_one_one_ids = target_title_ids.get("緊急呼救 第一季", [])
+          if not nine_one_one_ids:
+              raise RuntimeError("緊急呼救 第一季 was not resolved in Duoduo catalogue/search")
+          nine_one_one_checked = 0
+          nine_one_one_ok = 0
+          for vod_id in nine_one_one_ids:
+              api_base, detail_payload = api(
+                  "/api.php/web/vod/get_detail", {"vod_id": vod_id}
+              )
+              detail_rows = response_rows(detail_payload.get("data"))
+              if not detail_rows:
+                  raise RuntimeError(f"緊急呼救 第一季 id={vod_id}: no detail row")
+              row = detail_rows[0]
+              title = row_title(row)
+              expected = {
+                  normalize_target_title(value) for value in (
+                      "緊急呼救 第一季", "緊急呼救第一季",
+                      "紧急呼救 第一季", "紧急呼救第一季",
+                      "緊急呼救 第1季", "紧急呼救第1季",
+                      "9-1-1 Season 1", "911 Season 1",
+                      "9-1-1 第一季", "9-1-1第一季", "911第一季",
+                  )
+              }
+              if normalize_target_title(title) not in expected:
+                  raise RuntimeError(
+                      f"緊急呼救 第一季 detail title mismatch: id={vod_id} title={title!r}"
+                  )
+              names = split_source_groups(row.get("vod_play_from"), comma_fallback=True)
+              blocks = split_source_groups(row.get("vod_play_url"))
+              player_rows = response_rows(detail_payload.get("vodplayer"))
+              player_by_from = {
+                  str(player.get("from") or "").strip(): player
+                  for player in player_rows if str(player.get("from") or "").strip()
+              }
+              detail_direct = []
+              detail_episode_count = 0
+              for index, name in enumerate(names[:len(blocks)]):
+                  player = player_by_from.get(name.strip(), {})
+                  if str(player.get("decode_status") or "0") != "0":
+                      continue
+                  for episode in blocks[index].split("#"):
+                      if "$" not in episode:
+                          continue
+                      episode_title, address = episode.split("$", 1)
+                      address = address.strip()
+                      if not address:
+                          continue
+                      detail_episode_count += 1
+                      if urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
+                          detail_direct.append((
+                              f"{player.get('show') or name} [{name.strip()}]",
+                              episode_title.strip(), address
+                          ))
+              _, aggregate_payload = api(
+                  "/api.php/web/internal/search_aggregate", {"vod_id": vod_id}
+              )
+              aggregate_rows = response_rows(aggregate_payload.get("data"))
+              aggregate_direct = []
+              for line in aggregate_rows:
+                  if str(line.get("decode_status")) != "0":
+                      continue
+                  for episode in str(line.get("vod_play_url") or "").split("#"):
+                      if "$" not in episode:
+                          continue
+                      episode_title, address = episode.split("$", 1)
+                      address = address.strip()
+                      if address and urlsplit(address).path.lower().endswith((".m3u8", ".mp4")):
+                          aggregate_direct.append((
+                              f"{line.get('site_name') or line.get('site_key') or 'aggregate'} "
+                              f"[{line.get('site_key') or line.get('vod_play_from') or 'no-key'}]",
+                              episode_title.strip(), address
+                          ))
+              direct = []
+              seen = set()
+              for item in detail_direct + aggregate_direct:
+                  identity = (item[0].strip().casefold(), item[2])
+                  if identity not in seen:
+                      seen.add(identity)
+                      direct.append(item)
+              print(
+                  f"NINE_ONE_ONE_SEASON_ONE id={vod_id} title={title!r} "
+                  f"detail_episodes={detail_episode_count} aggregate_rows={len(aggregate_rows)} "
+                  f"detail_direct={len(detail_direct)} aggregate_direct={len(aggregate_direct)}"
+              )
+              if not direct:
+                  raise RuntimeError(
+                      f"緊急呼救 第一季 id={vod_id}: detail and aggregate contain no direct HLS/MP4 links"
+                  )
+              probe_candidates = []
+              seen_probe_lines = set()
+              for item in direct:
+                  line_name, episode_title, address = item
+                  host = (urlsplit(address).hostname or "").casefold()
+                  identity = (line_name.strip().casefold(), host)
+                  if identity not in seen_probe_lines:
+                      seen_probe_lines.add(identity)
+                      probe_candidates.append(item)
+              for line_name, episode_title, address in probe_candidates[:12]:
+                  nine_one_one_checked += 1
+                  ok, message = safe_probe_media(address, api_base + "/")
+                  referer = "active-api-mirror"
+                  if not ok:
+                      retry_ok, retry_message = safe_probe_media(address, "https://duoduozhuiju.com/")
+                      if retry_ok:
+                          ok, message, referer = retry_ok, retry_message, "public-entry"
+                      else:
+                          message += f"; public-entry retry failed: {retry_message}"
+                  print(
+                      f"NINE_ONE_ONE_MEDIA line={line_name!r} episode={episode_title!r} "
+                      f"host={urlsplit(address).netloc} referer={referer} ok={ok} {message}"
+                  )
+                  if ok:
+                      nine_one_one_ok += 1
+          print(
+              f"NINE_ONE_ONE_SEASON_ONE_PLAYBACK_PROBES={nine_one_one_ok}/{nine_one_one_checked}"
+          )
+          if not nine_one_one_ok:
+              raise RuntimeError("緊急呼救 第一季 has no validated public direct playback line")
 
           print("\n=== CROSS-CATEGORY SEARCH / DETAIL SAMPLES ===")
           candidates = []
