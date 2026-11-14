@@ -9,6 +9,8 @@ import 'package:media_kit/media_kit.dart';
 import 'app_layout.dart';
 import 'widgets.dart';
 
+const double _playerHoldBoostSpeed = 2.0;
+
 enum SwipeAction { none, brightness, episode }
 
 class GestureHudState {
@@ -136,8 +138,8 @@ class PlayerInteractions extends ChangeNotifier {
       }
       _boosting = true;
       _held = true;
-      unawaited(_setRate(3));
-      hint('3 倍速 · 鬆開恢復', persistent: true);
+      unawaited(_setRate(_playerHoldBoostSpeed));
+      hint('${_playerHoldBoostSpeed.toStringAsFixed(0)} 倍速播放中 · 鬆開恢復', persistent: true);
     });
   }
 
