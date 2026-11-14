@@ -55,6 +55,16 @@ jobs:
           dns_unavailable_hosts = set()
 
           def request(url, referer, limit=262144, timeout=12, byte_range=None, user_agent=UA):
+              parsed = urlsplit(url)
+              if parsed.scheme in ("http", "https") and parsed.netloc:
+                  # URL-encode Unicode path/query components, including nested
+                  # HLS segment URIs discovered after the first playlist fetch.
+                  url = parsed._replace(
+                      path=quote(parsed.path, safe="/%:@!          def request(url, referer, limit=262144, timeout=12, byte_range=None, user_agent=UA):
+              headers = {
+'()*+,;=-._~"),
+                      query=quote(parsed.query, safe="=&?/:;+,%@-._~"),
+                  ).geturl()
               headers = {
                   "User-Agent": user_agent,
                   "Accept": "application/json,application/vnd.apple.mpegurl,*/*",
