@@ -70,6 +70,8 @@ func validNativeCategory(source, category string) bool {
 		return validHanxiaoquanCategory(category)
 	case sourceHeitao:
 		return validHeitaoCategory(category)
+	case sourceMissav, sourceSupjav:
+		return false
 	}
 	return false
 }
@@ -85,7 +87,7 @@ func (engine *nativeEngine) nativeCategories(ctx context.Context, source string,
 		return all, nil
 	case sourceHuangguoAI:
 		return append(all, nativeAICategories...), nil
-	case sourceHuangdou:
+	case sourceHuangdou, sourceMissav, sourceSupjav:
 		return all, nil
 	}
 	engine.mu.Lock()
