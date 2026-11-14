@@ -229,8 +229,8 @@ void main() {
       isFalse,
     );
     for (final values in [
-      (android: false, ios: false, systemSupported: true, playing: true, enabled: true),
-      (android: false, ios: true, systemSupported: true, playing: true, enabled: true),
+      (android: false, systemSupported: true, playing: true, enabled: true),
+      (android: false, systemSupported: true, playing: true, enabled: true),
       (android: true, systemSupported: false, playing: true, enabled: true),
       (android: true, systemSupported: true, playing: false, enabled: true),
       (android: true, systemSupported: true, playing: true, enabled: false),
