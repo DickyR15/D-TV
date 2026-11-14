@@ -9,11 +9,7 @@ import 'lan_controller.dart';
 import 'local_store.dart';
 import 'widgets.dart';
 
-String _lanErrorMessage(Object error) {
-  final raw = error is StateError ? error.message.toString() : error.toString();
-  return raw.replaceFirst(RegExp(r'^Bad state:\s*'), '');
-}
-
+String _lanErrorMessage(Object error) => lanPublicErrorMessage(error);
 IconData lanDeviceIcon(String kind) => switch (kind) {
   'tv' => Icons.tv_rounded,
   'computer' => Icons.computer_rounded,
@@ -422,7 +418,7 @@ class _LanSyncScreenState extends State<LanSyncScreen> {
                   enabled: remote != null && controlsEnabled,
                   onTap: remote != null && controlsEnabled ? _manual : null,
                 ),
-                if (_error ?? link.error case final message?)
+                if ((_error ?? (link.error == null ? null : _lanErrorMessage(link.error!))) case final message?)
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Text(
@@ -546,6 +542,13 @@ class _LanDevicesState extends State<_LanDevices> {
 
   Future<void> _connect(LanPeer? peer) async {
     if (_busy) return;
+    if (!link.enabled || !link.autoSync) {
+      setState(() {
+        _error = '請先在設定中開啟「區域網路自動同步」，再連線其他裝置。';
+        _selected = false;
+      });
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -622,7 +625,7 @@ class _LanDevicesState extends State<_LanDevices> {
                 ),
                 IconButton(
                   tooltip: '重新搜尋',
-                  onPressed: _busy ? null : link.rescan,
+                  onPressed: _busy || !link.enabled || !link.autoSync ? null : link.rescan,
                   icon: const Icon(Icons.refresh_rounded),
                 ),
                 IconButton(
@@ -689,7 +692,7 @@ class _LanDevicesState extends State<_LanDevices> {
                           : () => _connect(peer),
                     ),
                   ),
-                if (_error ?? link.error case final message?)
+                if ((_error ?? (link.error == null ? null : _lanErrorMessage(link.error!))) case final message?)
                   Padding(
                     padding: const EdgeInsets.all(12),
                     child: Text(
