@@ -93,6 +93,57 @@ void main() {
     expect(heitao.onlineSearch, isTrue);
   });
 
+  test('MissAV and Supjav are registered as advanced searchable sources', () {
+    for (final id in ['missav', 'supjav']) {
+      final source = SourceSite.byId(id);
+      expect(SourceSite.isKnown(id), isTrue);
+      expect(SourceSite.isRestricted(id), isTrue);
+      expect(source.pagedSearch, isTrue);
+      expect(source.onlineSearch, isTrue);
+    }
+    expect(SourceSite.byId('missav').name, 'MissAV');
+    expect(SourceSite.byId('supjav').name, 'Supjav');
+  });
+
+  test('advanced source drag order is password protected and persists', () async {
+    if (!allSourcesEnabled) return;
+    final store = await create();
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+    await expectLater(
+      store.reorderAdvancedSources(store.advancedSources.map((s) => s.id).toList()),
+      throwsStateError,
+    );
+    await store.unlockAdvancedSources('source-pass-123');
+    final original = store.advancedSources.map((source) => source.id).toList();
+    final reordered = <String>[
+      'supjav',
+      'missav',
+      ...original.where((id) => id != 'supjav' && id != 'missav'),
+    ];
+    await store.reorderAdvancedSources(reordered);
+    expect(store.advancedSources.map((source) => source.id).toList(), reordered);
+    await store.setSourceEnabled('supjav', true);
+    await store.setSourceEnabled('missav', true);
+    expect(
+      store.sources.map((source) => source.id).toList().take(5).toList(),
+      ['hongguo', 'hanxiaoquan', 'duoduo', 'supjav', 'missav'],
+    );
+    await expectLater(
+      store.reorderAdvancedSources([...reordered, 'missav']),
+      throwsStateError,
+    );
+
+    final restarted = testStore(store.preferences);
+    addTearDown(restarted.dispose);
+    expect(restarted.advancedSources.map((source) => source.id).toList(), reordered);
+  });
+
   test('three primary sources start enabled and restricted sources start switched off', () async {
     final store = await create();
     expect(
