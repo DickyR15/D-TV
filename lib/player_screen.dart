@@ -3305,6 +3305,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         // Stop pending episode transitions before disposing native MPV.
         await _operations.catchError((Object _) {});
         await _interactions.pendingRates.catchError((Object _) {});
+        await _interactions.pendingSeeks.catchError((Object _) {});
         await progressSaved;
         await subscriptionsClosed;
         await enhancementClosed.catchError((Object _) {});
