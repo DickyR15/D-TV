@@ -34,6 +34,35 @@ void main() {
     expect(merged.stableId, 'duoduo:137937');
   });
 
+  test('Drama merge retains the replaced primary poster as a fallback', () {
+    const cached = Drama(
+      id: 'duoduo:poster-merge',
+      source: 'duoduo',
+      sourceId: 'poster-merge',
+      title: '海報候選保留',
+      cover: 'https://img.example.test/catalog-main.jpg',
+      coverCandidates: ['https://img.example.test/catalog-alt.jpg'],
+    );
+    const refreshed = Drama(
+      id: 'duoduo:poster-merge',
+      source: 'duoduo',
+      sourceId: 'poster-merge',
+      title: '海報候選保留',
+      cover: 'https://img.example.test/detail-main.jpg',
+      coverCandidates: ['https://img.example.test/detail-alt.jpg'],
+    );
+
+    final merged = cached.merge(refreshed);
+    expect(merged.cover, 'https://img.example.test/detail-main.jpg');
+    expect(merged.coverCandidates, [
+      'https://img.example.test/detail-alt.jpg',
+      'https://img.example.test/catalog-main.jpg',
+      'https://img.example.test/catalog-alt.jpg',
+    ]);
+    final roundTrip = Drama.fromJson(merged.toJson());
+    expect(roundTrip.coverCandidates, merged.coverCandidates);
+  });
+
   test('Drama keeps provider poster badges through JSON and merge', () {
     final cached = Drama.fromJson({
       'id': 'heitao:123',
