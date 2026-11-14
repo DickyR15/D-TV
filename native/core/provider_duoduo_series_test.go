@@ -317,3 +317,87 @@ func TestFetchDuoduoChicagoFireSeasonsHydrateWithIndependentDetailBudget(t *test
 		if season.Drama.Cover != want { t.Errorf("season %s poster %q, want %q",id,season.Drama.Cover,want) }
 	}
 }
+
+func TestDuoduoMergeSameSeasonMetadataPreservesPreviousPosterCandidates(t *testing.T) {
+	catalog := Drama{
+		ID: "duoduo:950", Source: sourceDuoduo, SourceID: "950",
+		Title: "測試系列第一季",
+		Cover: "https://img.example.test/catalog-main.jpg",
+		CoverURL: "https://img.example.test/catalog-original.jpg",
+		CoverCandidates: []string{"https://img.example.test/catalog-alt.jpg"},
+	}
+	detail := Drama{
+		ID: "duoduo:950", Source: sourceDuoduo, SourceID: "950",
+		Title: "測試系列第一季",
+		Cover: "https://img.example.test/detail-main.jpg",
+		CoverURL: "https://img.example.test/detail-original.jpg",
+		CoverCandidates: []string{"https://img.example.test/detail-alt.jpg"},
+	}
+	merged := duoduoMergeSameSeasonMetadata(catalog, detail)
+	if merged.Cover != "https://img.example.test/detail-main.jpg" {
+		t.Fatalf("refreshed detail poster = %q", merged.Cover)
+	}
+	want := []string{
+		"https://img.example.test/detail-original.jpg",
+		"https://img.example.test/detail-alt.jpg",
+		"https://img.example.test/catalog-main.jpg",
+		"https://img.example.test/catalog-original.jpg",
+		"https://img.example.test/catalog-alt.jpg",
+	}
+	if !reflect.DeepEqual(merged.CoverCandidates, want) {
+		t.Fatalf("merged poster candidates = %#v, want %#v", merged.CoverCandidates, want)
+	}
+}
+
+func TestFetchDuoduoSeriesSeasonsAllowsMissingEpisodeCountUnlessExplicitlyUpcoming(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[
+					{"vod_id":951,"vod_name":"測試系列第一季","vod_remarks":"即將上線"},
+					{"vod_id":952,"vod_name":"測試系列第二季","vod_remarks":"已完結"}
+				]
+			}`), nil
+		case "/api.php/web/vod/get_detail":
+			id := request.URL.Query().Get("vod_id")
+			season := "第二季"
+			if id == "951" {
+				season = "第一季"
+			} else if id != "952" {
+				t.Fatalf("unexpected season detail ID: %s", id)
+			}
+			body := fmt.Sprintf(`{
+				"code":200,
+				"data":[{"vod_id":%s,"vod_name":"測試系列%s","vod_remarks":"%s"}],
+				"vodplayer":[]
+			}`, id, season, map[string]string{"951":"即將上線","952":"已完結"}[id])
+			return sourceFixtureResponse(request, http.StatusOK, body), nil
+		case "/api.php/web/internal/search_aggregate":
+			return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[]}`), nil
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+	current := nativeDrama{
+		ID: "duoduo:952", Source: sourceDuoduo, SourceID: "952",
+		Title: "測試系列第二季",
+	}
+	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seasons) != 2 {
+		t.Fatalf("expected two seasons, got %+v", seasons)
+	}
+	if seasons[0].Number != 1 || !seasons[0].Upcoming || seasons[0].Playable {
+		t.Fatalf("official upcoming season should remain disabled: %+v", seasons[0])
+	}
+	if seasons[1].Number != 2 || seasons[1].Upcoming || !seasons[1].Playable ||
+		seasons[1].Drama.Episodes != 0 {
+		t.Fatalf("missing episode count was incorrectly treated as unavailable: %+v", seasons[1])
+	}
+}
+
