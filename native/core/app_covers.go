@@ -515,8 +515,9 @@ func duoduoPosterAttempts(address, referer string) []duoduoPosterAttempt {
 		})
 	}
 	add(address, referer)
-	// Give the original poster a short direct attempt, then try the globally
-	// cached, resized WebP variant before slower legacy Referer permutations.
+	// Keep the original poster and its globally cached WebP edge variant at
+	// the front of the route list; the pair downloader prefers the edge and
+	// immediately falls back to the origin on an edge error.
 	if proxyURL := duoduoPosterProxyURL(address); proxyURL != "" {
 		add(proxyURL, "https://wsrv.nl/")
 	}
