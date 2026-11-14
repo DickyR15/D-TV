@@ -28,6 +28,8 @@ var duoduoAPIHosts = []string{
 	"dduotv01.top",
 }
 
+var errDuoduoNoDirectPlayback = errors.New("多多追劇目前沒有可直接播放的影片線路")
+
 type duoduoPlayEpisode struct {
 	Title string
 	URL   string
@@ -718,9 +720,9 @@ func (d *Downloader) fetchDuoduoDetailWithCategory(ctx context.Context, sourceID
 	lines := duoduoMergePlayLines(detailLines, aggregateLines)
 	if len(lines) == 0 {
 		if aggregateErr != nil {
-			return drama, nil, fmt.Errorf("多多追劇已取得影片資料，但目前沒有可直接播放的線路：%w", aggregateErr)
+			return drama, nil, fmt.Errorf("%w（備援播放線路查詢失敗：%v）", errDuoduoNoDirectPlayback, aggregateErr)
 		}
-		return drama, nil, errors.New("多多追劇目前沒有可直接播放的影片線路")
+		return drama, nil, errDuoduoNoDirectPlayback
 	}
 	// Merge every direct playback line into one canonical chapter per episode.
 	// The first available line is the preferred URL; other lines for the same
@@ -755,7 +757,7 @@ func (d *Downloader) fetchDuoduoDetailWithCategory(ctx context.Context, sourceID
 		}
 	}
 	if len(choices) == 0 {
-		return Drama{}, nil, errors.New("多多追劇目前沒有可用的直接播放集數")
+		return Drama{}, nil, fmt.Errorf("%w：目前沒有可用的直接播放集數", errDuoduoNoDirectPlayback)
 	}
 	numbers := make([]int, 0, len(choices))
 	maxEpisodes := 0

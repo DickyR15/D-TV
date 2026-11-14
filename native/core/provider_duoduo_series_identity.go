@@ -62,21 +62,41 @@ func duoduoSeriesSearchTitles(base string) []string {
 
 func duoduoCanonicalSeriesGroupID(base, unit, imdbID, doubanID string) string {
 	identity := ""
-	if alias := duoduoVerifiedSeriesAliasKey(base); alias != "" { identity = "alias:" + alias
-	} else if id := duoduoNormalizeIMDbID(imdbID); id != "" { identity = "imdb:" + id
-	} else { return duoduoSeriesGroupID(base, unit) }
+	if alias := duoduoVerifiedSeriesAliasKey(base); alias != "" {
+		identity = "alias:" + alias
+	} else if id := duoduoNormalizeIMDbID(imdbID); id != "" {
+		identity = "imdb:" + id
+	} else if id := duoduoNormalizeDoubanID(doubanID); id != "" {
+		identity = "douban:" + id
+	} else {
+		return duoduoSeriesGroupID(base, unit)
+	}
 	return "duoduo-series:" + identity + ":" + unit
 }
 
 func duoduoSameSeriesIdentity(currentBase, candidateBase string, currentIMDbID, currentDoubanID, candidateIMDbID, candidateDoubanID string) bool {
-	currentAlias, candidateAlias := duoduoVerifiedSeriesAliasKey(currentBase), duoduoVerifiedSeriesAliasKey(candidateBase)
-	if currentAlias != "" && candidateAlias != "" { return currentAlias == candidateAlias }
-	// Preserve exact-base matching where the provider assigns per-season IDs.
-	if duoduoSeriesTitleKey(currentBase) == duoduoSeriesTitleKey(candidateBase) { return true }
 	currentIMDb, candidateIMDb := duoduoNormalizeIMDbID(currentIMDbID), duoduoNormalizeIMDbID(candidateIMDbID)
-	if currentIMDb != "" && candidateIMDb != "" { return currentIMDb == candidateIMDb }
+	if currentIMDb != "" && candidateIMDb != "" && currentIMDb != candidateIMDb {
+		return false
+	}
 	currentDouban, candidateDouban := duoduoNormalizeDoubanID(currentDoubanID), duoduoNormalizeDoubanID(candidateDoubanID)
-	if currentDouban != "" && candidateDouban != "" { return currentDouban == candidateDouban }
+	if currentDouban != "" && candidateDouban != "" && currentDouban != candidateDouban {
+		return false
+	}
+	currentAlias, candidateAlias := duoduoVerifiedSeriesAliasKey(currentBase), duoduoVerifiedSeriesAliasKey(candidateBase)
+	if currentAlias != "" || candidateAlias != "" {
+		return currentAlias != "" && currentAlias == candidateAlias
+	}
+	// Preserve exact-base matching where the provider assigns per-season IDs.
+	if duoduoSeriesTitleKey(currentBase) == duoduoSeriesTitleKey(candidateBase) {
+		return true
+	}
+	if currentIMDb != "" && candidateIMDb != "" {
+		return currentIMDb == candidateIMDb
+	}
+	if currentDouban != "" && candidateDouban != "" {
+		return currentDouban == candidateDouban
+	}
 	return false
 }
 

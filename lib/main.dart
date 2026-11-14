@@ -26,6 +26,7 @@ import 'player_screen.dart';
 import 'video_enhancement_assets.dart';
 import 'diary_service.dart';
 import 'app_navigation.dart';
+import 'dtv_launch_animation.dart';
 import 'ui_localization.dart';
 
 Future<void> main(List<String> args) async {
@@ -84,6 +85,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   SharedPreferences? _desktopPreferences;
   Timer? _desktopWindowSaveTimer;
   bool _restoringDesktopWindow = false;
+  bool _showStartupOverlay = true;
   late final _desktopWindowListener = _DesktopWindowListener(
     onGeometryChanged: _scheduleDesktopWindowSave,
     onClose: () => unawaited(_saveDesktopWindowState()),
@@ -103,6 +105,11 @@ class _AppBootstrapState extends State<AppBootstrap>
       _desktopWindowSaveTimer = null;
       unawaited(_saveDesktopWindowState());
     });
+  }
+
+  void _onStartupAnimationFinished() {
+    if (!mounted || !_showStartupOverlay) return;
+    setState(() => _showStartupOverlay = false);
   }
 
   Future<bool> _isOnConnectedDisplay(Rect bounds) async {
@@ -369,6 +376,8 @@ class _AppBootstrapState extends State<AppBootstrap>
     version: device.version,
     navigatorKey: navigator,
     systemAccentColors: systemAccentColors,
+    showStartupOverlay: _showStartupOverlay,
+    onStartupAnimationFinished: _onStartupAnimationFinished,
   );
 }
 
@@ -413,6 +422,8 @@ class DuanjuApp extends StatelessWidget {
     this.version = appVersion,
     this.navigatorKey,
     this.systemAccentColors = (light: null, dark: null),
+    this.showStartupOverlay = true,
+    this.onStartupAnimationFinished,
   });
   final AppRepository repository;
   final LocalStore? store;
@@ -423,6 +434,8 @@ class DuanjuApp extends StatelessWidget {
   final String version;
   final GlobalKey<NavigatorState>? navigatorKey;
   final SystemAccentColors systemAccentColors;
+  final bool showStartupOverlay;
+  final VoidCallback? onStartupAnimationFinished;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -478,7 +491,10 @@ class DuanjuApp extends StatelessWidget {
             : FocusHighlightStrategy.automatic,
       );
       final theme = Theme.of(context);
-      return AnnotatedRegion<SystemUiOverlayStyle>(
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          AnnotatedRegion<SystemUiOverlayStyle>(
         value: AppTheme.systemBars(theme.brightness),
         child: ColoredBox(
           color: theme.scaffoldBackgroundColor,
@@ -524,6 +540,16 @@ class DuanjuApp extends StatelessWidget {
             ),
           ),
         ),
+          ),
+          if (showStartupOverlay)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DtvLaunchAnimation(
+                  onCompleted: onStartupAnimationFinished,
+                ),
+              ),
+            ),
+        ],
       );
     },
     home: AnimatedSwitcher(
@@ -564,7 +590,7 @@ class DuanjuApp extends StatelessWidget {
                 backgroundColor: const Color(0xFF0B0D12),
                 body: Center(
                   child: bootstrapError == null
-                      ? const DtvLaunchAnimation()
+                      ? const CircularProgressIndicator(strokeWidth: 2)
                       : Padding(
                           padding: const EdgeInsets.all(32),
                           child: Column(
@@ -588,281 +614,4 @@ class DuanjuApp extends StatelessWidget {
             ),
     ),
   );
-}
-
-
-/// A cinematic D TV brand reveal shown while the app initializes.
-class DtvLaunchAnimation extends StatefulWidget {
-  const DtvLaunchAnimation({super.key});
-
-  @override
-  State<DtvLaunchAnimation> createState() => _DtvLaunchAnimationState();
-}
-
-class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
-    with TickerProviderStateMixin {
-  late final AnimationController _entrance = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1500),
-  );
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1700),
-  );
-  late final Listenable _animation = Listenable.merge([_entrance, _pulse]);
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(
-      _entrance.forward().whenComplete(() {
-        if (mounted) _pulse.repeat(reverse: true);
-      }),
-    );
-  }
-
-  @override
-  void dispose() {
-    _entrance.dispose();
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _animation,
-    builder: (context, _) {
-      final reveal = Curves.easeOutBack.transform(_entrance.value);
-      final glow = Curves.easeInOut.transform(_pulse.value);
-      final wordOpacity =
-          ((_entrance.value - 0.28) / 0.42).clamp(0.0, 1.0).toDouble();
-      final lineOpacity =
-          ((_entrance.value - 0.12) / 0.68).clamp(0.0, 1.0).toDouble();
-
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 260,
-              height: 224,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            const Color(0xFF087EFF).withValues(
-                              alpha: 0.13 + 0.15 * glow,
-                            ),
-                            const Color(0x00087EFF),
-                          ],
-                          stops: const [0.0, 1.0],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Transform.scale(
-                    scale: 0.70 + 0.33 * reveal,
-                    child: SizedBox(
-                      width: 170,
-                      height: 170,
-                      child: CustomPaint(
-                        painter: _DtvMarkPainter(phase: glow),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 18,
-                    child: Opacity(
-                      opacity: lineOpacity,
-                      child: Container(
-                        width: 218 * lineOpacity,
-                        height: 2,
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Color(0x0039D8FF),
-                              Color(0xEE39D8FF),
-                              Color(0x0039D8FF),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 2),
-            Opacity(
-              opacity: wordOpacity,
-              child: Transform.translate(
-                offset: Offset(0, 12 * (1 - wordOpacity)),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'D TV',
-                      style: TextStyle(
-                        color: Color(0xFFF1F6FA),
-                        fontSize: 34,
-                        height: 1,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 5.5,
-                        shadows: [
-                          Shadow(color: Color(0x8833BFFF), blurRadius: 18),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '短劇・漫劇・AI 劇  |  精彩隨選即播',
-                      style: TextStyle(
-                        color: const Color(0xFF8BDFFF).withValues(
-                          alpha: 0.82 + 0.18 * glow,
-                        ),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
-class _DtvMarkPainter extends CustomPainter {
-  const _DtvMarkPainter({required this.phase});
-  final double phase;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final side = size.width < size.height ? size.width : size.height;
-    final dx = (size.width - side) / 2;
-    final dy = (size.height - side) / 2;
-    canvas.save();
-    canvas.translate(dx, dy);
-    canvas.scale(side / 192.0);
-    final rect = const Rect.fromLTWH(0, 0, 192, 192);
-
-    // Keep the same vector geometry as Android's native dtv_mark.xml.
-    final outer = Path()
-      ..moveTo(34, 21)
-      ..lineTo(96, 21)
-      ..cubicTo(137, 21, 158, 49, 158, 96)
-      ..cubicTo(158, 143, 137, 171, 96, 171)
-      ..lineTo(34, 171)
-      ..close();
-
-    canvas.drawPath(
-      outer,
-      Paint()
-        ..color = const Color(0xFF087EFF).withValues(alpha: 0.25 + 0.12 * phase)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4.0 + 2.0 * phase),
-    );
-
-    canvas.saveLayer(rect, Paint());
-    canvas.drawPath(
-      outer,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFEAF1F7),
-            Color(0xFFE0EAF2),
-            Color(0xFF718CA4),
-            Color(0xFFB5CDE0),
-          ],
-          stops: [0.0, 0.28, 0.65, 1.0],
-        ).createShader(rect),
-    );
-
-    final highlight = Path()
-      ..moveTo(37, 21)
-      ..lineTo(93, 21)
-      ..cubicTo(108, 21, 120, 25, 130, 34)
-      ..lineTo(111, 47)
-      ..cubicTo(101, 40, 91, 38, 77, 38)
-      ..lineTo(37, 38)
-      ..close();
-    canvas.drawPath(highlight, Paint()..color = Colors.white.withValues(alpha: 0.92));
-
-    final lowerShade = Path()
-      ..moveTo(35, 147)
-      ..lineTo(65, 135)
-      ..lineTo(96, 135)
-      ..cubicTo(119, 135, 134, 124, 143, 106)
-      ..lineTo(152, 132)
-      ..cubicTo(141, 159, 122, 173, 96, 173)
-      ..lineTo(35, 173)
-      ..close();
-    canvas.drawPath(lowerShade, Paint()..color = const Color(0xFF718CA4));
-
-    final inner = Path()
-      ..moveTo(65, 51)
-      ..lineTo(96, 51)
-      ..cubicTo(121, 51, 136, 68, 136, 96)
-      ..cubicTo(136, 124, 121, 141, 96, 141)
-      ..lineTo(65, 141)
-      ..close();
-    canvas.drawPath(inner, Paint()..color = const Color(0xFF071322));
-
-    final play = Path()
-      ..moveTo(77, 70)
-      ..lineTo(77, 122)
-      ..lineTo(119, 96)
-      ..close();
-    canvas.drawPath(
-      play,
-      Paint()
-        ..color = const Color(0xFF087EFF)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3.0 + 1.5 * phase),
-    );
-    canvas.drawPath(
-      play,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF53F3FF), Color(0xFF00CFFF), Color(0xFF2787FF)],
-        ).createShader(rect),
-    );
-
-    final playHighlight = Path()
-      ..moveTo(80, 73)
-      ..lineTo(80, 95)
-      ..lineTo(99, 84)
-      ..close();
-    canvas.drawPath(playHighlight, Paint()..color = const Color(0xFF53F3FF));
-
-    final shine = Path()
-      ..moveTo(38, 23)
-      ..lineTo(92, 23)
-      ..cubicTo(109, 23, 121, 28, 132, 38);
-    canvas.drawPath(
-      shine,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.1
-        ..strokeCap = StrokeCap.round
-        ..color = Colors.white.withValues(alpha: 0.36 + 0.24 * phase),
-    );
-
-    canvas.restore();
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_DtvMarkPainter oldDelegate) => oldDelegate.phase != phase;
 }

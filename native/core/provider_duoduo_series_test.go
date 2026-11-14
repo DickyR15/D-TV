@@ -646,3 +646,24 @@ func TestFetchDuoduoSeriesHydratesCompleteCatalogueSeasonFromOfficialDetailAndAg
 		t.Fatalf("official sibling detail + aggregate did not replace stale catalogue metadata: %+v", first)
 	}
 }
+
+
+func TestDuoduoSeriesIdentityUsesDoubanWhenIMDbIsMissing(t *testing.T) {
+	got := duoduoCanonicalSeriesGroupID("Example Series", "季", "", "douban:1234567")
+	want := "duoduo-series:douban:1234567:季"
+	if got != want {
+		t.Fatalf("canonical group ID = %q, want %q", got, want)
+	}
+	if !duoduoSameSeriesIdentity("Example Series", "Example Series", "", "1234567", "", "douban:1234567") {
+		t.Fatal("matching Douban identity should preserve the same series")
+	}
+}
+
+func TestDuoduoSeriesIdentityRejectsConflictingOfficialIDs(t *testing.T) {
+	if duoduoSameSeriesIdentity(
+		"Chicago Med", "芝加哥醫院",
+		"tt1234567", "111111", "tt7654321", "222222",
+	) {
+		t.Fatal("conflicting official IDs must never merge as one series")
+	}
+}

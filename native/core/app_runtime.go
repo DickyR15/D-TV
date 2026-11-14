@@ -973,6 +973,23 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		title, chapters, err = engine.downloader.GetHuangguoChapters(ctx, source, sourceID)
 	}
 	if err != nil {
+		// A Duoduo item can have valid official metadata and complete season
+		// information even when this particular season has no public direct
+		// playback line. Return the metadata instead of aborting the detail
+		// request, so the UI can still load the series selector and switch seasons.
+		if source == sourceDuoduo && errors.Is(err, errDuoduoNoDirectPlayback) {
+			if raw.ID == drama.ID && raw.SourceID == sourceID {
+				drama = mergeNativeDrama(drama, nativeNormalize(raw))
+				if episodeCount := duoduoDramaEpisodeCount(raw); episodeCount > 0 {
+					drama.Episodes = episodeCount
+				}
+			}
+			return map[string]any{
+				"drama": drama,
+				"chapters": []Chapter{},
+				"warning": publicError(err).Error(),
+			}, nil
+		}
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			if hasStale {
 				stale.Drama = mergeNativeDrama(stale.Drama, drama)
