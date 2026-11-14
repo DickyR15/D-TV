@@ -10,6 +10,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"net"
 	"net/http"
@@ -330,9 +334,9 @@ func duoduoPosterProxyURL(address string) string {
 	target := strings.TrimPrefix(parsed.String(), parsed.Scheme+"://")
 
 	// wsrv.nl resizes and caches images behind Cloudflare's global network.
-	// Keep a portrait-safe bounding box and return WebP at poster-card size:
-	// this avoids downloading multi-megapixel originals just to render a 440px
-	// catalogue tile. The original provider URL remains the first attempt.
+	// Keep a portrait-safe bounding box and return JPEG so the Go cache can
+	// fully decode and reject corrupt edge responses before they reach Flutter.
+	// The edge is attempted first; the origin remains the immediate fallback.
 	proxy, err := url.Parse("https://wsrv.nl/")
 	if err != nil {
 		return ""
@@ -342,7 +346,7 @@ func duoduoPosterProxyURL(address string) string {
 	query.Set("w", "440")
 	query.Set("h", "660")
 	query.Set("fit", "inside")
-	query.Set("output", "webp")
+	query.Set("output", "jpg")
 	query.Set("q", "80")
 	proxy.RawQuery = query.Encode()
 	return proxy.String()
@@ -716,7 +720,7 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 	}
 	request.Header.Set("User-Agent", userAgent)
 	request.Header.Set("Referer", referer)
-	request.Header.Set("Accept", "image/webp,image/jpeg,image/png,image/gif,*/*;q=0.5")
+	request.Header.Set("Accept", "image/jpeg,image/png,image/gif,*/*;q=0.5")
 	request.Header.Set("Sec-Fetch-Mode", "no-cors")
 	request.Header.Set("Sec-Fetch-Dest", "image")
 	client := *cache.downloader.client
@@ -749,8 +753,8 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 		return nil, errors.New("海報檔案過大")
 	}
 	data = nativeDecodeCover(data)
-	if !nativeIsCoverImage(data) {
-		return nil, errors.New("站源未返回有效海报")
+	if err := nativeValidateCoverImage(data); err != nil {
+		return nil, err
 	}
 	return data, nil
 }
@@ -833,6 +837,33 @@ func nativeDecodeCover(data []byte) []byte {
 		return plain
 	}
 	return data
+}
+
+func nativeValidateCoverImage(data []byte) error {
+	if !nativeIsCoverImage(data) {
+		return errors.New("站源未返回有效海報")
+	}
+	config, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		// WebP/AVIF/HEIC/BMP are accepted by signature here. Duoduo's
+		// preferred wsrv.nl path is normalized to JPEG and fully decoded.
+		if format == "" {
+			return nil
+		}
+		return fmt.Errorf("海報影像標頭解碼失敗：%w", err)
+	}
+	if config.Width <= 0 || config.Height <= 0 ||
+		config.Width > 8192 || config.Height > 8192 ||
+		int64(config.Width)*int64(config.Height) > 20_000_000 {
+		return errors.New("海報影像尺寸無效")
+	}
+	if _, format, err = image.Decode(bytes.NewReader(data)); err != nil {
+		if format == "" {
+			return nil
+		}
+		return fmt.Errorf("海報影像解碼失敗：%w", err)
+	}
+	return nil
 }
 
 func nativeIsCoverImage(data []byte) bool {
