@@ -147,6 +147,18 @@ def patch_texture_hw(package: Path, template: Path) -> None:
       playing: playing,
       completion: completion
     )
+
+    // If MPV is already paused, its render callback may not fire again.
+    // Seed PiP once from the last completed texture frame; subsequent frames
+    // arrive through TextureHW.render() as MPV continues playback.
+    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250)) { [weak self, weak renderer] in
+      guard let self, let renderer,
+            let current = self.textureContexts.current else { return }
+      renderer.appendFrame(
+        from: current.pixelBuffer,
+        positionSeconds: positionSeconds
+      )
+    }
   }
 
   @available(iOS 15.0, *)
@@ -413,10 +425,23 @@ def patch_plugin(package: Path) -> None:
   }
 
 """
+    class_suffix = """  private func handleExitNativeFullscreenMethodCall(
+    _: Any?,
+    _ result: FlutterResult
+  ) {
+    if utils == nil {
+      return result(FlutterMethodNotImplemented)
+    }
+
+    utils?.exitNativeFullscreen()
+    result(nil)
+  }
+}
+"""
     text = replace_exact(
         text,
-        "\n}\n",
-        "\n" + methods + "}\n",
+        class_suffix,
+        class_suffix[:-2] + methods + "}\n",
         "MediaKitVideoPlugin PiP handlers",
     )
 
