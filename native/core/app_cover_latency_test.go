@@ -188,7 +188,7 @@ func TestDuoduoCoverFailoverUsesBoundedBudgets(t *testing.T) {
 	}
 }
 
-func TestDuoduoPosterProxyUsesResizedWebPOnGlobalEdgeCache(t *testing.T) {
+func TestDuoduoPosterProxyUsesResizedJPEGOnGlobalEdgeCache(t *testing.T) {
 	const origin = "https://img.example.test/poster.jpg?token=a&size=original"
 	proxyAddress := duoduoPosterProxyURL(origin)
 	parsed, err := url.Parse(proxyAddress)
@@ -203,7 +203,7 @@ func TestDuoduoPosterProxyUsesResizedWebPOnGlobalEdgeCache(t *testing.T) {
 		t.Fatalf("original poster URL was not preserved: %q", query.Get("url"))
 	}
 	if query.Get("w") != "440" || query.Get("h") != "660" ||
-		query.Get("fit") != "inside" || query.Get("output") != "webp" ||
+		query.Get("fit") != "inside" || query.Get("output") != "jpg" ||
 		query.Get("q") != "80" {
 		t.Fatalf("unexpected poster resize parameters: %v", query)
 	}
