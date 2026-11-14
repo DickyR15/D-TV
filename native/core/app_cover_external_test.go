@@ -1291,6 +1291,35 @@ func TestAniListPosterAddressUsesExactAnimeTitleAndYear(t *testing.T) {
 	if address != expected { t.Fatalf("AniList poster = %q, want %q", address, expected) }
 }
 
+func TestAniListPosterAddressDoesNotTreatAniListIDAsTVMazeShowID(t *testing.T) {
+	const expected = "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx12345-season.jpg"
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPost || request.URL.Host != "graphql.anilist.co" {
+			t.Fatalf("AniList season lookup used a non-AniList endpoint: %s", request.URL.String())
+		}
+		var payload struct {
+			Query string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		body := `{"data":{"Page":{"media":[{"id":12345,"title":{"native":"葬送のフリーレン","romaji":"Sousou no Frieren","english":"Frieren: Beyond Journey's End"},"synonyms":["葬送的芙莉蓮 第二季"],"startDate":{"year":2023},"coverImage":{"extraLarge":"` + expected + `"}}]}}}`
+		return posterLookupJSONResponse(request, body), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.aniListPosterAddress(
+		context.Background(),
+		nativeDrama{Title: "葬送的芙莉蓮 第二季", Category: "動漫", OnlineDate: "2023"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != expected {
+		t.Fatalf("AniList season poster = %q, want %q", address, expected)
+	}
+}
+
 func TestTVMazePosterAddressUsesExactTVTitleAndYear(t *testing.T) {
 	const expected = "https://static.tvmaze.com/uploads/images/original_untouched/1/3456.jpg"
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
