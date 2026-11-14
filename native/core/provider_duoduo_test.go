@@ -1213,3 +1213,100 @@ func TestDuoduoSynopsisRemovesHTMLMarkup(t *testing.T) {
 		})
 	}
 }
+
+func TestDuoduoDetailFallsBackToPlayableVerifiedSameSeasonAlias(t *testing.T) {
+	downloader := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			switch request.URL.Query().Get("wd") {
+			case "芝加哥醫院":
+				return sourceFixtureResponse(request, http.StatusOK, `{
+					"code":200,
+					"data":[
+						{"vod_id":912,"vod_name":"芝加哥醫院第十二季","vod_remarks":"21集"},
+						{"vod_id":913,"vod_name":"芝加哥急救第十二季","vod_remarks":"21集"}
+					]
+				}`), nil
+			default:
+				return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[]}`), nil
+			}
+		case "/api.php/web/vod/get_detail":
+			id := request.URL.Query().Get("vod_id")
+			switch id {
+			case "912":
+				return sourceFixtureResponse(request, http.StatusOK, `{
+					"code":200,
+					"data":[{
+						"vod_id":912,
+						"vod_name":"芝加哥醫院第十二季",
+						"vod_remarks":"21集",
+						"vod_play_from":"NBY",
+						"vod_play_url":"第1集$https://player.example.test/private/1"
+					}],
+					"vodplayer":[{"from":"NBY","show":"青山藍光","decode_status":1}]
+				}`), nil
+			case "913":
+				return sourceFixtureResponse(request, http.StatusOK, `{
+					"code":200,
+					"data":[{
+						"vod_id":913,
+						"vod_name":"芝加哥急救第十二季",
+						"vod_remarks":"21集",
+						"vod_play_from":"NBY",
+						"vod_play_url":"第1集$https://player.example.test/private/1"
+					}],
+					"vodplayer":[{"from":"NBY","show":"青山藍光","decode_status":1}]
+				}`), nil
+			default:
+				t.Fatalf("unexpected Chicago Med detail ID: %s", id)
+				return nil, nil
+			}
+		case "/api.php/web/internal/search_aggregate":
+			switch request.URL.Query().Get("vod_id") {
+			case "912":
+				return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[]}`), nil
+			case "913":
+				return sourceFixtureResponse(request, http.StatusOK, `{
+					"code":200,
+					"data":[{
+						"site_key":"chicago-med-direct",
+						"site_name":"芝加哥急救直連",
+						"decode_status":0,
+						"vod_play_url":"第1集$https://media.example.test/med-s12e1.m3u8#第2集$https://media.example.test/med-s12e2.m3u8"
+					}]
+				}`), nil
+			default:
+				t.Fatalf("unexpected Chicago Med aggregate ID: %s", request.URL.Query().Get("vod_id"))
+				return nil, nil
+			}
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+
+	drama, chapters, err := downloader.fetchDuoduoDetailWithCategory(
+		context.Background(), "912", "劇集",
+	)
+	if err != nil {
+		t.Fatalf("same-season verified alias should supply public direct playback: %v", err)
+	}
+	if drama.ID != "duoduo:912" || drama.SourceID != "912" {
+		t.Fatalf("fallback must preserve the selected catalogue identity: %+v", drama)
+	}
+	if len(chapters) != 2 {
+		t.Fatalf("expected two fallback episodes, got %+v", chapters)
+	}
+	if chapters[0].ID != providerChapterID(sourceDuoduo, "912", "1") ||
+		chapters[1].ID != providerChapterID(sourceDuoduo, "912", "2") {
+		t.Fatalf("fallback chapters must use the selected season identity: %+v", chapters)
+	}
+	if chapters[0].VideoURL != "https://media.example.test/med-s12e1.m3u8" ||
+		chapters[1].VideoURL != "https://media.example.test/med-s12e2.m3u8" {
+		t.Fatalf("fallback direct URLs were not retained: %+v", chapters)
+	}
+	if drama.Episodes != 2 || !drama.EpisodesVerified {
+		t.Fatalf("playable episode metadata was not updated from the fallback: %+v", drama)
+	}
+}
+
