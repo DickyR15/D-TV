@@ -486,7 +486,7 @@ jobs:
                   target = parsed.netloc + parsed.path + (
                       ("?" + parsed.query) if parsed.query else ""
                   )
-                  proxy = "https://wsrv.nl/?url=" + quote(target, safe="") + "&w=440&h=660&fit=inside&output=webp&q=80"
+                  proxy = "https://wsrv.nl/?url=" + quote(target, safe="") + "&w=440&h=660&fit=inside&output=jpg&q=80"
                   try:
                       proxy_status, _, proxy_type, proxy_body = request(
                           proxy, "https://wsrv.nl/", limit=2048,
