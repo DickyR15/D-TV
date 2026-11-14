@@ -13,6 +13,12 @@ import (
 	"golang.org/x/net/html"
 )
 
+type providerTextAcceptLanguageKey struct{}
+
+func supjavTraditionalContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, providerTextAcceptLanguageKey{}, "zh-TW,zh-Hant;q=0.9,zh;q=0.8")
+}
+
 const (
 	missavDefaultBaseURL = "https://missav.ws"
 	supjavDefaultBaseURL = "https://supjav.com"
@@ -411,6 +417,7 @@ func (d *Downloader) supjavCatalogAddress(page int, query string) string {
 }
 
 func (d *Downloader) fetchSupjavCatalogPage(ctx context.Context, page int, category, query string) ([]Drama, bool, error) {
+	ctx = supjavTraditionalContext(ctx)
 	if page < 1 || page > 10000 || strings.TrimSpace(category) != "" || len(query) > 160 {
 		return nil, false, errors.New("Supjav 目錄查詢參數無效")
 	}
@@ -424,6 +431,7 @@ func (d *Downloader) fetchSupjavCatalogPage(ctx context.Context, page int, categ
 }
 
 func (d *Downloader) fetchSupjavDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
+	ctx = supjavTraditionalContext(ctx)
 	sourceID = strings.TrimSpace(sourceID)
 	if !webProviderNumericID.MatchString(sourceID) {
 		return Drama{}, nil, errors.New("Supjav 影片 ID 無效")
@@ -476,6 +484,7 @@ func supjavTVLink(document *html.Node) string {
 }
 
 func (d *Downloader) resolveSupjavMedia(ctx context.Context, task Task) (providerMedia, error) {
+	ctx = supjavTraditionalContext(ctx)
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
 	if !valid || source != sourceSupjav || !webProviderNumericID.MatchString(sourceID) {
 		return providerMedia{}, errors.New("Supjav 播放資訊無效，請重新整理詳情")
