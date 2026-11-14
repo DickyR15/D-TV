@@ -302,6 +302,10 @@ func adultMediaCandidates(document *html.Node, rawBody, pageURL string) []string
 	}) {
 		add(firstNonEmpty(providerHTMLAttr(node, "src"), providerHTMLAttr(node, "data-src")))
 	}
+
+	// Some provider pages keep fallback media URLs in inline scripts instead
+	// of video/source elements. Scan the raw document after structural media
+	// nodes so the primary player URL keeps precedence over script fallbacks.
 	body := strings.ReplaceAll(rawBody, "\\/", "/")
 	body = strings.ReplaceAll(body, "\\u0026", "&")
 	for _, match := range reMissavMediaURL.FindAllString(body, -1) {
@@ -309,7 +313,6 @@ func adultMediaCandidates(document *html.Node, rawBody, pageURL string) []string
 	}
 	return candidates
 }
-
 func (d *Downloader) resolveMissavMedia(ctx context.Context, task Task) (providerMedia, error) {
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
 	if !valid || source != sourceMissav || !reMissavSourceID.MatchString(sourceID) {
