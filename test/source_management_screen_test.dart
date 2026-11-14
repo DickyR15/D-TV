@@ -194,6 +194,45 @@ void main() {
     },
   );
 
+  testWidgets('advanced source list supports drag reordering after password unlock', (tester) async {
+    if (!allSourcesEnabled) return;
+
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: SourceManagementScreen(store: store)),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('advanced-source-password')),
+      'source-pass-123',
+    );
+    final unlockButton = find.byKey(const ValueKey('unlock-advanced-sources'));
+    await tester.ensureVisible(unlockButton);
+    await tester.pumpAndSettle();
+    await tester.tap(unlockButton);
+    await tester.pumpAndSettle();
+
+    final reorderList = find.byKey(const ValueKey('advanced-source-reorder-list'));
+    expect(reorderList, findsOneWidget);
+    final initial = store.advancedSources.map((source) => source.id).toList();
+    final widget = tester.widget<ReorderableListView>(reorderList);
+    widget.onReorder(1, 0);
+    await tester.pumpAndSettle();
+    expect(
+      store.advancedSources.map((source) => source.id).take(2).toList(),
+      [initial[1], initial[0]],
+    );
+  });
+
   testWidgets('advanced source toggles are hidden until admin password is verified', (
     tester,
   ) async {
