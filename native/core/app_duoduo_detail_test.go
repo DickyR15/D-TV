@@ -77,7 +77,7 @@ func TestNativeDetailKeepsDuoduoMetadataAndLoadsSeriesWithoutDirectPlayback(t *t
 	if err != nil {
 		t.Fatalf("series seasons should still load: %v", err)
 	}
-	seasonMap := seasonPayload.(map[string]any)
+	seasonMap := seasonPayload
 	seasons, ok := seasonMap["items"].([]nativeDramaSeason)
 	if !ok || len(seasons) != 2 {
 		t.Fatalf("expected both official seasons even without a direct route on the open season: %#v", seasonMap["items"])
