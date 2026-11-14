@@ -478,6 +478,20 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		address: "https://img.its-new.co.kr/uploaded/poster/264/poster_368.jpg",
 	},
 	{
+		// Duoduo ID 88129 is the exact 9-1-1 Season 1 catalogue entry (2018).
+		// TVmaze lists this season separately and provides season-specific key art.
+		// Restrict the poster to this exact source ID, title, TV category and year.
+		title: "緊急呼救第一季",
+		titleAliases: []string{"紧急呼救第一季", "緊急呼救 第一季", "紧急呼救 第一季"},
+		source: sourceDuoduo,
+		sourceID: "88129",
+		year: "2018",
+		workType: "tv",
+		preferred: true,
+		overrideProvider: true,
+		address: "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
+	},
+	{
 		// Duoduo ID 1192 is the 2025 Japanese anime デキちゃうまで婚.
 		// Use the official programme site's key visual because the source CDN
 		// has no public DNS record. Require the exact ID, anime category and year.
@@ -546,6 +560,12 @@ func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficia
 			// Anime artwork must match the exact source, programme title,
 			// category and release year to avoid selecting a different season.
 			if !nativePosterIsAnime(drama) || year == "" || year != candidate.year {
+				continue
+			}
+		} else if candidate.workType == "tv" {
+			// Season-specific TV artwork is accepted only for the exact TV
+			// catalogue entry and its verified premiere year.
+			if !nativePosterIsTVSeries(drama) || year == "" || year != candidate.year {
 				continue
 			}
 		} else if candidate.source == "" && candidate.sourceID == "" {
