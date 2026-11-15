@@ -45,6 +45,38 @@ void main() {
     });
   });
 
+  group('three-lane vertical swipe controls', () {
+    test('left adjusts brightness, centre changes episode, right adjusts volume', () {
+      expect(
+        playerSwipeZoneForPosition(x: 60, width: 400),
+        PlayerSwipeZone.brightness,
+      );
+      expect(
+        playerSwipeZoneForPosition(x: 200, width: 400),
+        PlayerSwipeZone.episode,
+      );
+      expect(
+        playerSwipeZoneForPosition(x: 340, width: 400),
+        PlayerSwipeZone.volume,
+      );
+    });
+
+    test('invalid touch coordinates do not trigger a playback action', () {
+      expect(
+        playerSwipeZoneForPosition(x: -1, width: 400),
+        PlayerSwipeZone.none,
+      );
+      expect(
+        playerSwipeZoneForPosition(x: 401, width: 400),
+        PlayerSwipeZone.none,
+      );
+      expect(
+        playerSwipeZoneForPosition(x: 100, width: 0),
+        PlayerSwipeZone.none,
+      );
+    });
+  });
+
   group('vertical volume and brightness gesture policy', () {
     test('swiping up increases brightness or volume', () {
       expect(
