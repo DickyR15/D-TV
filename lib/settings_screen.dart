@@ -380,7 +380,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 focusNode: _deviceInterconnectFocus,
                 leading: const Icon(Icons.devices_rounded),
                 title: const Text('裝置互聯'),
-                subtitle: const Text('透過區域網路同步收藏清單，讓其他裝置保持一致'),
+                subtitle: const Text('透過區域網路同步收藏'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => openLanSync(context),
               ),
