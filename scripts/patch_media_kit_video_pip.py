@@ -11,7 +11,8 @@ from urllib.parse import unquote, urljoin, urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MARKER = "DTV_SAMPLE_BUFFER_PIP_PATCH_V2"
+MARKER = "DTV_SAMPLE_BUFFER_PIP_PATCH_V3"
+PREVIOUS_MARKER = "DTV_SAMPLE_BUFFER_PIP_PATCH_V2"
 LEGACY_MARKER = "DTV_SAMPLE_BUFFER_PIP_PATCH_V1"
 EXPECTED_VERSION = "2.0.1"
 
@@ -57,12 +58,13 @@ def patch_texture_sw(package: Path, template: Path) -> None:
     # Reuse that single compiled source when it exists; copying another one
     # under common/ would define DTVSampleBufferPiPRenderer twice.
     legacy_destination = package / "ios/Classes/plugin/DTVSampleBufferPiPRenderer.swift"
-    if MARKER in text:
-        # A restored pub cache may already contain V2-patched TextureSW.swift.
-        # Keep its generated renderer in sync with the checked-in template.
+    if MARKER in text or PREVIOUS_MARKER in text:
+        # Upgrade restored V2 caches without applying the TextureSW patch twice.
         target = legacy_destination if legacy_destination.exists() else destination
         if not target.exists() or target.read_bytes() != template.read_bytes():
             shutil.copy2(template, target)
+        if PREVIOUS_MARKER in text:
+            path.write_text(text.replace(PREVIOUS_MARKER, MARKER), encoding="utf-8")
         return
 
     text = replace_exact(
@@ -82,6 +84,51 @@ def patch_texture_sw(package: Path, template: Path) -> None:
   private static let dtvInstanceLock = NSLock()
   private static var dtvInstances: [Int: WeakTextureSW] = [:]
 
+  public static func prepareDTVPiP(
+    handle: Int64,
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    dtvInstanceLock.lock()
+    let instance = dtvInstances[Int(handle)]?.value
+    dtvInstanceLock.unlock()
+
+    guard let instance else {
+      completion(NSError(
+        domain: "DTVSampleBufferPiP",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "找不到目前 MPV 的 iOS 影格輸出"]
+      ))
+      return
+    }
+
+    guard #available(iOS 15.0, *) else {
+      completion(NSError(
+        domain: "DTVSampleBufferPiP",
+        code: 3,
+        userInfo: [NSLocalizedDescriptionKey: "Sample Buffer 子母畫面需要 iOS 15 或更新版本"]
+      ))
+      return
+    }
+
+    instance.prepareDTVPiP(
+      width: width,
+      height: height,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: eventHandler,
+      completion: completion
+    )
+  }
+
   public static func startDTVPiP(
     handle: Int64,
     width: Int,
@@ -89,6 +136,7 @@ def patch_texture_sw(package: Path, template: Path) -> None:
     positionSeconds: Double,
     durationSeconds: Double,
     playing: Bool,
+    autoStart: Bool,
     eventHandler: @escaping (String, Any?) -> Void,
     completion: @escaping (Error?) -> Void
   ) {
@@ -120,6 +168,7 @@ def patch_texture_sw(package: Path, template: Path) -> None:
       positionSeconds: positionSeconds,
       durationSeconds: durationSeconds,
       playing: playing,
+      autoStart: autoStart,
       eventHandler: eventHandler,
       completion: completion
     )
@@ -194,6 +243,7 @@ def patch_texture_sw(package: Path, template: Path) -> None:
     positionSeconds: Double,
     durationSeconds: Double,
     playing: Bool,
+    autoStart: Bool,
     eventHandler: @escaping (String, Any?) -> Void,
     completion: @escaping (Error?) -> Void
   ) {
@@ -214,6 +264,7 @@ def patch_texture_sw(package: Path, template: Path) -> None:
       positionSeconds: positionSeconds,
       durationSeconds: durationSeconds,
       playing: playing,
+      automaticallyFromInline: autoStart,
       completion: completion
     )
 
@@ -244,6 +295,39 @@ def patch_texture_sw(package: Path, template: Path) -> None:
         positionSeconds: seedPosition
       )
     }
+  }
+
+  @available(iOS 15.0, *)
+  private func prepareDTVPiP(
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    pipLock.lock()
+    let renderer: DTVSampleBufferPiPRenderer
+    if let existing = pipRenderer {
+      renderer = existing
+    } else {
+      let created = DTVSampleBufferPiPRenderer(eventHandler: eventHandler)
+      pipRenderer = created
+      renderer = created
+    }
+    pipLock.unlock()
+
+    renderer.prepareForAutomaticStart(
+      width: width,
+      height: height,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      completion: completion
+    )
   }
 
   @available(iOS 15.0, *)
@@ -356,7 +440,81 @@ def patch_plugin(package: Path) -> None:
         return
     if LEGACY_MARKER in text:
         text = text.replace("TextureHW.", "TextureSW.")
-        text = text.replace(LEGACY_MARKER, MARKER)
+        text = text.replace(LEGACY_MARKER, PREVIOUS_MARKER)
+    if PREVIOUS_MARKER in text:
+        text = replace_exact(
+            text,
+            '    case "DTVPiP.Start":\n',
+            '    case "DTVPiP.Prepare":\n      handleDTVPiPPrepare(call.arguments, result)\n    case "DTVPiP.Start":\n',
+            "MediaKitVideoPlugin automatic PiP method routing",
+        )
+        text = replace_exact(
+            text,
+            '    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true\n\n    TextureSW.startDTVPiP(',
+            '    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true\n    let autoStart = (args["autoStart"] as? NSNumber)?.boolValue ?? false\n\n    TextureSW.startDTVPiP(',
+            "MediaKitVideoPlugin upgrade start autoStart argument",
+        )
+        text = replace_exact(
+            text,
+            '      durationSeconds: Double(durationMs) / 1000.0,\n      playing: playing,\n      eventHandler: { [weak self] method, payload in',
+            '      durationSeconds: Double(durationMs) / 1000.0,\n      playing: playing,\n      autoStart: autoStart,\n      eventHandler: { [weak self] method, payload in',
+            "MediaKitVideoPlugin upgrade start autoStart pass",
+        )
+        prepare_handler = """  private func handleDTVPiPPrepare(
+    _ arguments: Any?,
+    _ result: @escaping FlutterResult
+  ) {
+    guard let args = arguments as? [String: Any],
+          let handle = (args["handle"] as? NSNumber)?.int64Value else {
+      result(FlutterError(
+        code: "DTV_PIP_INVALID_HANDLE",
+        message: "缺少 MPV 播放器識別碼",
+        details: nil
+      ))
+      return
+    }
+    let width = max(1, (args["width"] as? NSNumber)?.intValue ?? 16)
+    let height = max(1, (args["height"] as? NSNumber)?.intValue ?? 9)
+    let positionMs = max(0, (args["positionMs"] as? NSNumber)?.int64Value ?? 0)
+    let durationMs = max(0, (args["durationMs"] as? NSNumber)?.int64Value ?? 0)
+    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true
+    let autoStart = (args["autoStart"] as? NSNumber)?.boolValue ?? true
+
+    TextureSW.prepareDTVPiP(
+      handle: handle,
+      width: width,
+      height: height,
+      positionSeconds: Double(positionMs) / 1000.0,
+      durationSeconds: Double(durationMs) / 1000.0,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: { [weak self] method, payload in
+        DispatchQueue.main.async {
+          self?.deviceChannel.invokeMethod(method, arguments: payload)
+        }
+      },
+      completion: { error in
+        if let error {
+          result(FlutterError(
+            code: "DTV_PIP_PREPARE_FAILED",
+            message: error.localizedDescription,
+            details: nil
+          ))
+        } else {
+          result(["prepared": true, "autoStart": autoStart, "source": "mpv-sample-buffer"])
+        }
+      }
+    )
+  }
+
+"""
+        text = replace_exact(
+            text,
+            "  private func handleDTVPiPStart(",
+            prepare_handler + "  private func handleDTVPiPStart(",
+            "MediaKitVideoPlugin upgrade prepare handler",
+        )
+        text = text.replace(PREVIOUS_MARKER, MARKER)
         path.write_text(text, encoding="utf-8")
         return
 
@@ -448,6 +606,8 @@ def patch_plugin(package: Path) -> None:
     case "VideoOutputManager.Create":
 """,
         """    switch call.method {
+    case "DTVPiP.Prepare":
+      handleDTVPiPPrepare(call.arguments, result)
     case "DTVPiP.Start":
       handleDTVPiPStart(call.arguments, result)
     case "DTVPiP.Stop":
@@ -466,6 +626,53 @@ def patch_plugin(package: Path) -> None:
     )
 
     methods = """
+  private func handleDTVPiPPrepare(
+    _ arguments: Any?,
+    _ result: @escaping FlutterResult
+  ) {
+    guard let args = arguments as? [String: Any],
+          let handle = (args["handle"] as? NSNumber)?.int64Value else {
+      result(FlutterError(
+        code: "DTV_PIP_INVALID_HANDLE",
+        message: "缺少 MPV 播放器識別碼",
+        details: nil
+      ))
+      return
+    }
+    let width = max(1, (args["width"] as? NSNumber)?.intValue ?? 16)
+    let height = max(1, (args["height"] as? NSNumber)?.intValue ?? 9)
+    let positionMs = max(0, (args["positionMs"] as? NSNumber)?.int64Value ?? 0)
+    let durationMs = max(0, (args["durationMs"] as? NSNumber)?.int64Value ?? 0)
+    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true
+    let autoStart = (args["autoStart"] as? NSNumber)?.boolValue ?? true
+
+    TextureSW.prepareDTVPiP(
+      handle: handle,
+      width: width,
+      height: height,
+      positionSeconds: Double(positionMs) / 1000.0,
+      durationSeconds: Double(durationMs) / 1000.0,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: { [weak self] method, payload in
+        DispatchQueue.main.async {
+          self?.deviceChannel.invokeMethod(method, arguments: payload)
+        }
+      },
+      completion: { error in
+        if let error {
+          result(FlutterError(
+            code: "DTV_PIP_PREPARE_FAILED",
+            message: error.localizedDescription,
+            details: nil
+          ))
+        } else {
+          result(["prepared": true, "autoStart": autoStart, "source": "mpv-sample-buffer"])
+        }
+      }
+    )
+  }
+
   private func handleDTVPiPStart(
     _ arguments: Any?,
     _ result: @escaping FlutterResult
@@ -485,6 +692,7 @@ def patch_plugin(package: Path) -> None:
     let positionMs = max(0, (args["positionMs"] as? NSNumber)?.int64Value ?? 0)
     let durationMs = max(0, (args["durationMs"] as? NSNumber)?.int64Value ?? 0)
     let playing = (args["playing"] as? NSNumber)?.boolValue ?? true
+    let autoStart = (args["autoStart"] as? NSNumber)?.boolValue ?? false
 
     TextureSW.startDTVPiP(
       handle: handle,
@@ -493,6 +701,7 @@ def patch_plugin(package: Path) -> None:
       positionSeconds: Double(positionMs) / 1000.0,
       durationSeconds: Double(durationMs) / 1000.0,
       playing: playing,
+      autoStart: autoStart,
       eventHandler: { [weak self] method, payload in
         DispatchQueue.main.async {
           self?.deviceChannel.invokeMethod(method, arguments: payload)

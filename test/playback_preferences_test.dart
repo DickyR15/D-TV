@@ -238,6 +238,16 @@ void main() {
     );
     expect(
       shouldAutoEnterPictureInPicture(
+        android: false,
+        ios: true,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldAutoEnterPictureInPicture(
         android: true,
         systemSupported: true,
         playing: true,

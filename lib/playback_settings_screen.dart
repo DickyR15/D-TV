@@ -430,6 +430,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               ),
             if (supportsPictureInPicture(
               android: Platform.isAndroid,
+              ios: Platform.isIOS,
               systemSupported: _pictureInPictureSupported,
               television: AppLayout.isTelevisionDevice(context),
             ))

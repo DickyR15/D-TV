@@ -192,6 +192,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _pictureInPictureHandoff = false;
   bool _pictureInPictureResumePlaying = false;
   bool _pictureInPictureRestoreBusy = false;
+  bool _iosAutoPictureInPicturePrepared = false;
+  String? _iosPictureInPicturePreparationSignature;
+  int _iosPictureInPicturePreparationEpoch = 0;
   int _pictureInPictureSurfaceRevision = 0;
   int? _pendingPictureInPictureRestorePositionMs;
   double _pictureInPictureResumePosition = 0;
@@ -227,7 +230,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       Platform.isWindows || _televisionDecoderApplies;
   AppOrientationController? _orientationController;
   bool get _pictureInPictureVisible =>
-      _pictureInPictureActive || _pictureInPictureRequested;
+      _pictureInPictureActive ||
+      _pictureInPictureRequested ||
+      (Platform.isIOS &&
+          _iosAutoPictureInPicturePrepared &&
+          _lifecycleState != AppLifecycleState.resumed);
   bool get _desktopMiniPlayerSupported => supportsDesktopMiniPlayer(
     isWindows: Platform.isWindows,
     isMacOS: Platform.isMacOS,
@@ -720,7 +727,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         final arguments = call.arguments;
         final active = arguments is Map && arguments['active'] == true;
         final changed = active != _pictureInPictureActive;
-        _setPictureInPictureStatus(active: active, delayHiddenPause: !active);
+        _setPictureInPictureStatus(
+          active: active,
+          requested: false,
+          delayHiddenPause: !active,
+        );
         if (changed) _scheduleAndroidPictureInPictureSurfaceRefresh();
       } else if (call.method == 'pictureInPictureRestored') {
         final arguments = call.arguments;
@@ -911,6 +922,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             'positionMs': (position * 1000).round(),
             'durationMs': _player.state.duration.inMilliseconds,
             'playing': wasPlaying,
+            'autoStart': widget.store.playbackPreferences.autoPictureInPicture,
           })
           .timeout(const Duration(seconds: 15));
 
@@ -1057,6 +1069,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _syncPictureInPicture() {
+    if (Platform.isIOS) {
+      _syncIosAutomaticPictureInPicture();
+      return;
+    }
     if (defaultTargetPlatform != TargetPlatform.android ||
         !_pictureInPictureSupported) {
       return;
@@ -1091,6 +1107,130 @@ class _PlayerScreenState extends State<PlayerScreen>
         _pictureInPictureStateSignature = null;
       }),
     );
+  }
+
+  bool get _shouldPrepareIosAutomaticPictureInPicture {
+    final preferences = widget.store.playbackPreferences;
+    return Platform.isIOS &&
+        !_closed &&
+        !_television &&
+        _canUsePictureInPicture &&
+        _pictureInPictureSupported &&
+        preferences.autoPictureInPicture &&
+        !_loading &&
+        _error == null &&
+        _playIntent &&
+        _player.state.playing;
+  }
+
+  void _syncIosAutomaticPictureInPicture() {
+    if (!Platform.isIOS || _closed) return;
+    if (!_shouldPrepareIosAutomaticPictureInPicture) {
+      _iosPictureInPicturePreparationEpoch++;
+      _iosPictureInPicturePreparationSignature = null;
+      if (!_pictureInPictureActive &&
+          !_pictureInPictureRequested &&
+          _iosAutoPictureInPicturePrepared) {
+        _iosAutoPictureInPicturePrepared = false;
+        unawaited(_stopIosAutomaticPictureInPicturePreparation());
+      }
+      return;
+    }
+
+    final ratio = _aspectRatio.isFinite && _aspectRatio > 0
+        ? _aspectRatio.clamp(1 / 2.39, 2.39).toDouble()
+        : 16 / 9;
+    final width = ratio >= 1 ? (1000 * ratio).round() : 1000;
+    final height = ratio >= 1 ? 1000 : (1000 / ratio).round();
+    final durationMs = _player.state.duration.inMilliseconds;
+    final signature = '$_generation:$_index:$width:$height:$durationMs';
+    if (_iosPictureInPicturePreparationSignature == signature) return;
+    _iosPictureInPicturePreparationSignature = signature;
+    final epoch = ++_iosPictureInPicturePreparationEpoch;
+    unawaited(_prepareIosAutomaticPictureInPicture(
+      epoch: epoch,
+      signature: signature,
+      width: width,
+      height: height,
+    ));
+  }
+
+  Future<void> _prepareIosAutomaticPictureInPicture({
+    required int epoch,
+    required String signature,
+    required int width,
+    required int height,
+  }) async {
+    try {
+      final platform = _player.platform;
+      if (platform == null) throw StateError('MPV 播放器平台尚未就緒');
+      final handle = await platform.handle.timeout(const Duration(seconds: 4));
+      if (epoch != _iosPictureInPicturePreparationEpoch ||
+          !_shouldPrepareIosAutomaticPictureInPicture) {
+        return;
+      }
+      final positionMs = (_currentPosition * 1000).round();
+      final durationMs = _player.state.duration.inMilliseconds;
+      DiaryService.add(
+        '[PiP] iOS automatic preparation begin handle=$handle '
+        'positionMs=$positionMs durationMs=$durationMs',
+      );
+      final status = await _iosSampleBufferPipChannel
+          .invokeMapMethod<String, dynamic>('DTVPiP.Prepare', {
+            'handle': handle,
+            'width': width,
+            'height': height,
+            'positionMs': positionMs,
+            'durationMs': durationMs,
+            'playing': _player.state.playing,
+            'autoStart': true,
+          })
+          .timeout(const Duration(seconds: 8));
+      if (epoch != _iosPictureInPicturePreparationEpoch ||
+          !_shouldPrepareIosAutomaticPictureInPicture) {
+        if (!_pictureInPictureActive && !_pictureInPictureRequested) {
+          await _iosSampleBufferPipChannel.invokeMethod<void>(
+            'DTVPiP.Stop',
+            {'handle': handle},
+          );
+        }
+        return;
+      }
+      if (status?['prepared'] != true || status?['autoStart'] != true) {
+        throw PlatformException(
+          code: 'PIP_AUTO_PREPARE_FAILED',
+          message: 'iOS 未確認自動子母畫面已完成準備',
+        );
+      }
+      _iosAutoPictureInPicturePrepared = true;
+      DiaryService.add(
+        '[PiP] iOS automatic preparation ready signature=$signature',
+      );
+      if (mounted && !_closed) setState(() {});
+    } catch (error) {
+      if (epoch == _iosPictureInPicturePreparationEpoch) {
+        _iosAutoPictureInPicturePrepared = false;
+        _iosPictureInPicturePreparationSignature = null;
+      }
+      DiaryService.add('[PiP] iOS automatic preparation failed error=$error');
+    }
+  }
+
+  Future<void> _stopIosAutomaticPictureInPicturePreparation() async {
+    try {
+      final handle = await _player.platform?.handle.timeout(
+        const Duration(seconds: 2),
+      );
+      if (handle != null) {
+        await _iosSampleBufferPipChannel.invokeMethod<void>(
+          'DTVPiP.Stop',
+          {'handle': handle},
+        ).timeout(const Duration(seconds: 3));
+      }
+      DiaryService.add('[PiP] iOS automatic preparation stopped');
+    } catch (error) {
+      DiaryService.add('[PiP] iOS automatic preparation stop failed error=$error');
+    }
   }
 
   Future<void> _refreshPictureInPictureStatus() async {
@@ -2076,6 +2216,18 @@ class _PlayerScreenState extends State<PlayerScreen>
       'route=${_plan?.routeIndex ?? -1}/${_plan?.routeCount ?? 0} '
       'session=${_plan == null ? 'none' : playbackDiagnosticId(_plan!.session)}',
     );
+    if (Platform.isIOS &&
+        state != AppLifecycleState.resumed &&
+        _iosAutoPictureInPicturePrepared &&
+        !_pictureInPictureActive) {
+      _setPictureInPictureStatus(requested: true);
+      DiaryService.add('[PiP] iOS background transition with automatic PiP prepared');
+    } else if (Platform.isIOS &&
+        state == AppLifecycleState.resumed &&
+        _pictureInPictureRequested &&
+        !_pictureInPictureActive) {
+      _setPictureInPictureStatus(requested: false);
+    }
     _applyLifecycleVisibility();
     if (state == AppLifecycleState.resumed &&
         _pictureInPictureHandoff &&
@@ -3963,7 +4115,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         // media_kit_video pauses by default when the app backgrounds. During
         // iOS PiP, MPV must keep rendering frames for AVSampleBufferDisplayLayer.
         pauseUponEnteringBackgroundMode:
-            !(Platform.isIOS && _pictureInPictureVisible),
+            !(Platform.isIOS &&
+                (_pictureInPictureVisible || _iosAutoPictureInPicturePrepared)),
         controls: (_) => controls,
       );
     }

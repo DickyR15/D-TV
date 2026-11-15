@@ -76,6 +76,7 @@ bool supportsPictureInPicture({
 /// PiP auto-entry is only enabled while a supported Android player is running.
 bool shouldAutoEnterPictureInPicture({
   required bool android,
+  bool ios = false,
   required bool systemSupported,
   required bool playing,
   required bool enabled,
@@ -83,6 +84,7 @@ bool shouldAutoEnterPictureInPicture({
 }) =>
     supportsPictureInPicture(
       android: android,
+      ios: ios,
       systemSupported: systemSupported,
       television: television,
     ) &&

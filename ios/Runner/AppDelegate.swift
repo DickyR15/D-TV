@@ -16,6 +16,7 @@ import AVFoundation
   private var pipItemStatusObservation: NSKeyValueObservation?
   private var pipPrepareTimeout: DispatchWorkItem?
   private var pendingPipPrepareResult: FlutterResult?
+  private var originalScreenBrightness: CGFloat?
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -32,6 +33,26 @@ import AVFoundation
       channel.setMethodCallHandler { [weak self] call, result in
         guard let self else { result(FlutterMethodNotImplemented); return }
         switch call.method {
+        case "getBrightness":
+          result(Double(self.activeMainScreen()?.brightness ?? 0.5))
+        case "setBrightness":
+          guard let args = call.arguments as? [String: Any],
+                let raw = args["brightness"] as? NSNumber,
+                let screen = self.activeMainScreen() else {
+            result(FlutterError(code: "BRIGHTNESS_UNAVAILABLE", message: "無法取得 iPhone 螢幕亮度", details: nil))
+            return
+          }
+          if self.originalScreenBrightness == nil {
+            self.originalScreenBrightness = screen.brightness
+          }
+          screen.brightness = CGFloat(raw.doubleValue).clamped(to: 0.01...1.0)
+          result(true)
+        case "resetBrightness":
+          if let screen = self.activeMainScreen(), let original = self.originalScreenBrightness {
+            screen.brightness = original
+            self.originalScreenBrightness = nil
+          }
+          result(true)
         case "pictureInPictureStatus":
           result([
             "supported": AVPictureInPictureController.isPictureInPictureSupported(),
@@ -129,6 +150,12 @@ import AVFoundation
       }
     }
   }
+  private func activeMainScreen() -> UIScreen? {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    return scenes.first(where: { $0.activationState == .foregroundActive })?.screen
+      ?? scenes.first?.screen
+  }
+
   private func pipCurrentPositionMilliseconds() -> Int64 {
     guard let player = pipPlayer else { return 0 }
     let seconds = player.currentTime().seconds
@@ -209,7 +236,7 @@ import AVFoundation
     }
     controller.delegate = self
     if #available(iOS 14.2, *) {
-      controller.canStartPictureInPictureAutomaticallyFromInline = false
+      controller.canStartPictureInPictureAutomaticallyFromInline = args["autoStart"] as? Bool ?? false
     }
 
     pipPlayer = player

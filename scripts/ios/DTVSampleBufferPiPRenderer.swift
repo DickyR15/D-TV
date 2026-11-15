@@ -64,12 +64,135 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     super.init()
   }
 
+  func prepareForAutomaticStart(
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    completion: @escaping (Error?) -> Void
+  ) {
+    DispatchQueue.main.async {
+      guard AVPictureInPictureController.isPictureInPictureSupported() else {
+        completion(self.error("此 iOS 裝置不支援系統子母畫面"))
+        return
+      }
+
+      self.durationSeconds = durationSeconds.isFinite ? max(0, durationSeconds) : 0
+      self.stateLock.lock()
+      self.paused = !playing
+      self.enabled = true
+      self.lastMediaTime = nil
+      self.appendedFrameCount = 0
+      self.enqueuedFrameCount = 0
+      self.stateLock.unlock()
+
+      do {
+        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        try AVAudioSession.sharedInstance().setActive(true)
+      } catch {
+        completion(error)
+        return
+      }
+
+      guard self.ensureDisplayLayer(width: width, height: height, positionSeconds: positionSeconds) else {
+        completion(self.error("找不到目前的 iOS 視窗，無法準備自動子母畫面"))
+        return
+      }
+      guard self.ensureController(autoStart: autoStart) else {
+        completion(self.error("無法建立 iOS 自動子母畫面控制器"))
+        return
+      }
+
+      self.diagnose(
+        "automatic PiP preparation waiting first frame autoStart=\(autoStart) " +
+        "playing=\(playing) position=\(positionSeconds)"
+      )
+      self.waitForAutomaticPreparation(attempt: 0, completion: completion)
+    }
+  }
+
+  private func waitForAutomaticPreparation(
+    attempt: Int,
+    completion: @escaping (Error?) -> Void
+  ) {
+    guard let controller else {
+      completion(error("iOS 子母畫面控制器不存在"))
+      return
+    }
+    let possible = controller.isPictureInPicturePossible
+    let timebaseReady = displayLayer?.controlTimebase != nil
+    let displayReady: Bool
+    if #available(iOS 17.4, *) {
+      displayReady = displayLayer?.isReadyForDisplay ?? false
+    } else {
+      displayReady = hasEnqueuedFirstFrame
+    }
+    if controllerSettled && possible && timebaseReady && hasEnqueuedFirstFrame && displayReady {
+      controller.invalidatePlaybackState()
+      diagnose("automatic PiP ready possible=true timebase=true firstFrame=true")
+      completion(nil)
+      return
+    }
+    guard attempt < maximumStartReadinessAttempts else {
+      diagnose(
+        "automatic PiP preparation timeout controllerSettled=\(controllerSettled) " +
+        "possible=\(possible) timebase=\(timebaseReady) firstFrame=\(hasEnqueuedFirstFrame) " +
+        "displayReady=\(displayReady)"
+      )
+      completion(error("iOS 自動子母畫面尚未取得可顯示影格"))
+      return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + startReadinessRetryInterval) { [weak self] in
+      self?.waitForAutomaticPreparation(attempt: attempt + 1, completion: completion)
+    }
+  }
+
+  private func ensureController(autoStart: Bool) -> Bool {
+    if let controller {
+      controller.canStartPictureInPictureAutomaticallyFromInline = autoStart
+      return true
+    }
+    guard let layer = displayLayer else { return false }
+    let source = AVPictureInPictureController.ContentSource(
+      sampleBufferDisplayLayer: layer,
+      playbackDelegate: self
+    )
+    let controller = AVPictureInPictureController(contentSource: source)
+    controller.delegate = self
+    controller.canStartPictureInPictureAutomaticallyFromInline = autoStart
+    contentSource = source
+    self.controller = controller
+    controllerSettled = false
+    possibleObservation = controller.observe(
+      \.isPictureInPicturePossible,
+      options: [.initial, .new]
+    ) { [weak self] observed, _ in
+      self?.diagnose(
+        "isPictureInPicturePossible=\(observed.isPictureInPicturePossible) " +
+        "layerStatus=\(String(describing: self?.displayLayer?.status))"
+      )
+      DispatchQueue.main.async {
+        self?.startWhenPossible()
+      }
+    }
+    DispatchQueue.main.async { [weak self, weak controller] in
+      guard let self, let controller, self.controller === controller else { return }
+      self.controllerSettled = true
+      self.diagnose("controller settled after main-queue turn")
+      self.startWhenPossible()
+    }
+    return true
+  }
+
   func start(
     width: Int,
     height: Int,
     positionSeconds: Double,
     durationSeconds: Double,
     playing: Bool,
+    automaticallyFromInline: Bool,
     completion: @escaping (Error?) -> Void
   ) {
     DispatchQueue.main.async {
@@ -114,42 +237,9 @@ final class DTVSampleBufferPiPRenderer: NSObject,
         "error=\(self.displayLayer?.error?.localizedDescription ?? "none")"
       )
 
-      if self.controller == nil {
-        guard let layer = self.displayLayer else {
-          completion(self.error("無法建立 iOS 影格顯示層"))
-          return
-        }
-        let source = AVPictureInPictureController.ContentSource(
-          sampleBufferDisplayLayer: layer,
-          playbackDelegate: self
-        )
-        let controller = AVPictureInPictureController(contentSource: source)
-        controller.delegate = self
-        controller.canStartPictureInPictureAutomaticallyFromInline = false
-        self.contentSource = source
-        self.controller = controller
-        self.controllerSettled = false
-        self.possibleObservation = controller.observe(
-          \.isPictureInPicturePossible,
-          options: [.initial, .new]
-        ) { [weak self] observed, _ in
-          self?.diagnose(
-            "isPictureInPicturePossible=\(observed.isPictureInPicturePossible) " +
-            "layerStatus=\(String(describing: self?.displayLayer?.status))"
-          )
-          DispatchQueue.main.async {
-            self?.startWhenPossible()
-          }
-        }
-
-        // Do not start in the same main-queue turn as controller creation.
-        // Plezy documents that AVKit can silently discard that request.
-        DispatchQueue.main.async { [weak self, weak controller] in
-          guard let self, let controller, self.controller === controller else { return }
-          self.controllerSettled = true
-          self.diagnose("controller settled after main-queue turn")
-          self.startWhenPossible()
-        }
+      guard self.ensureController(autoStart: automaticallyFromInline) else {
+        completion(self.error("無法建立 iOS 影格顯示層"))
+        return
       }
 
       guard self.pendingStart == nil else {
@@ -741,8 +831,9 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     _ pictureInPictureController: AVPictureInPictureController
   ) {
     stateLock.lock()
-    enabled = false
+    enabled = pictureInPictureController.canStartPictureInPictureAutomaticallyFromInline
     stateLock.unlock()
+    diagnose("PiP stopped; keep frame tap prepared=\(pictureInPictureController.canStartPictureInPictureAutomaticallyFromInline)")
     eventHandler("pictureInPictureChanged", ["active": false])
   }
 
