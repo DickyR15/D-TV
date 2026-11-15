@@ -130,8 +130,8 @@ void main() {
       seriesGroupId: 'synopsis-series',
     );
     final repository = _SeriesFixtureRepository(const []);
-    await tester.view.setPhysicalSize(const Size(1920, 1080));
-    await tester.view.setDevicePixelRatio(1);
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
