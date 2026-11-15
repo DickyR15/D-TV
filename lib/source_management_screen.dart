@@ -41,6 +41,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     debugLabel: 'source-management-password',
   );
   final Map<String, FocusNode> _advancedFocusNodes = <String, FocusNode>{};
+  final Map<String, FocusNode> _advancedSwitchFocusNodes = <String, FocusNode>{};
   Timer? _tvReorderHoldTimer;
   String? _tvPendingReorderSourceId;
   String? _tvSelectedReorderSourceId;
@@ -82,6 +83,9 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     _passwordFocus.dispose();
     _tvReorderHoldTimer?.cancel();
     for (final node in _advancedFocusNodes.values) {
+      node.dispose();
+    }
+    for (final node in _advancedSwitchFocusNodes.values) {
       node.dispose();
     }
     super.dispose();
@@ -210,6 +214,12 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         () => FocusNode(debugLabel: 'source-management-$sourceId'),
       );
 
+  FocusNode _advancedSwitchFocus(String sourceId) =>
+      _advancedSwitchFocusNodes.putIfAbsent(
+        sourceId,
+        () => FocusNode(debugLabel: 'source-switch-$sourceId'),
+      );
+
   bool _isTvConfirmKey(LogicalKeyboardKey key) => {
     LogicalKeyboardKey.select,
     LogicalKeyboardKey.enter,
@@ -272,7 +282,8 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
       final wasShortPress = _tvPendingReorderSourceId == source.id;
       _tvPendingReorderSourceId = null;
       _tvReorderHoldTimer?.cancel();
-      if (wasShortPress) {
+      if (wasShortPress &&
+          _advancedSwitchFocus(source.id).hasFocus) {
         unawaited(_toggle(source, !widget.store.sourceEnabled(source.id)));
       }
       return KeyEventResult.handled;
@@ -284,10 +295,13 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     final isTelevision = AppLayout.isTelevision(context);
     final selectedForReorder = _tvSelectedReorderSourceId == source.id;
     final colors = Theme.of(context).colorScheme;
+    final enabled = widget.store.sourceEnabled(source.id);
     return ReorderableDelayedDragStartListener(
       key: ValueKey('reorderable-source-${source.id}'),
       index: index,
       child: Focus(
+        key: ValueKey('source-row-focus-${source.id}'),
+        focusNode: isTelevision ? _advancedSourceFocus(source.id) : null,
         onKeyEvent: (node, event) => _advancedSourceKey(source, index, event),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
@@ -297,11 +311,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                 : null,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: SwitchListTile(
-            key: ValueKey('source-switch-${source.id}'),
-            focusNode: isTelevision
-                ? _advancedSourceFocus(source.id)
-                : null,
+          child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 8),
             title: Text(uiTraditional(source.name)),
             subtitle: Text(
@@ -309,10 +319,16 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                   ? '已選取：使用遙控器方向鍵移動，按確認完成'
                   : uiTraditional(source.description),
             ),
-            value: widget.store.sourceEnabled(source.id),
-            onChanged: _busy || _ordering || _busySourceIds.contains(source.id)
-                ? null
-                : (value) => _toggle(source, value),
+            trailing: Switch(
+              key: ValueKey('source-switch-${source.id}'),
+              focusNode: isTelevision
+                  ? _advancedSwitchFocus(source.id)
+                  : null,
+              value: enabled,
+              onChanged: _busy || _ordering || _busySourceIds.contains(source.id)
+                  ? null
+                  : (value) => _toggle(source, value),
+            ),
           ),
         ),
       ),
