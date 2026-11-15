@@ -350,10 +350,17 @@ class PlayerInteractions extends ChangeNotifier {
     _swipeAction = SwipeAction.none;
 
     if (_swipeEnabled && width > 0) {
-      // Match the upstream player: left half adjusts brightness, right half volume.
-      _swipeAction = event.localPosition.dx < width / 2
-          ? SwipeAction.brightness
-          : SwipeAction.volume;
+      // Preserve the original vertical episode gesture in the centre lane:
+      // left = brightness, centre = previous/next episode, right = volume.
+      _swipeAction = switch (playerSwipeZoneForPosition(
+        x: event.localPosition.dx,
+        width: width,
+      )) {
+        PlayerSwipeZone.brightness => SwipeAction.brightness,
+        PlayerSwipeZone.episode => SwipeAction.episode,
+        PlayerSwipeZone.volume => SwipeAction.volume,
+        PlayerSwipeZone.none => SwipeAction.none,
+      };
       if (_swipeAction == SwipeAction.volume) {
         _initialVolume = player.state.volume.clamp(0.0, 100.0);
         _volumeReady = true;
