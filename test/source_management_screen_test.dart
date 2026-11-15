@@ -449,6 +449,10 @@ void main() {
     tester,
   ) async {
     if (!allSourcesEnabled) return;
+    tester.view.physicalSize = const Size(1280, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     SharedPreferences.setMockInitialValues({});
     final store = testStore(await SharedPreferences.getInstance());
     addTearDown(store.dispose);
@@ -486,6 +490,7 @@ void main() {
       of: firstTile,
       matching: find.text(SourceSite.byId(firstId).name),
     );
+    await tester.pumpAndSettle();
     await tester.ensureVisible(firstTile);
     await tester.ensureVisible(secondTile);
     await tester.pumpAndSettle();
