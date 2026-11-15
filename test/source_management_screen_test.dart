@@ -185,8 +185,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      final firstAdvanced = tester.widget<SwitchListTile>(
-        find.byKey(const ValueKey('source-switch-huangdou')),
+      final firstAdvanced = tester.widget<Focus>(
+        find.byKey(const ValueKey('source-row-focus-huangdou')),
       );
       expect(firstAdvanced.focusNode!.hasPrimaryFocus, isTrue);
 
@@ -484,17 +484,21 @@ void main() {
 
     final initialOrder = store.advancedSourceOrder;
     final firstId = initialOrder.first;
-    final row = find.byKey(ValueKey('source-switch-$firstId'));
-    final reorderable = find.byKey(ValueKey('reorderable-source-$firstId'));
+    final secondId = initialOrder[1];
+    final firstSwitch = find.byKey(ValueKey('source-switch-$firstId'));
+    final secondSwitch = find.byKey(ValueKey('source-switch-$secondId'));
+    final firstRow = find.byKey(ValueKey('reorderable-source-$firstId'));
+    final secondRow = find.byKey(ValueKey('reorderable-source-$secondId'));
     final title = find.descendant(
-      of: reorderable,
+      of: firstRow,
       matching: find.text(SourceSite.byId(firstId).name),
     );
-    await tester.ensureVisible(row);
+    await tester.ensureVisible(firstRow);
+    await tester.ensureVisible(secondRow);
     await tester.pumpAndSettle();
 
     final listener =
-        tester.widget<ReorderableDelayedDragStartListener>(reorderable);
+        tester.widget<ReorderableDelayedDragStartListener>(firstRow);
     expect(listener.index, 0);
     expect(listener.child, isA<Focus>());
     final focus = listener.child as Focus;
@@ -503,18 +507,28 @@ void main() {
     expect(container.child, isA<ListTile>());
     expect(find.byIcon(Icons.drag_indicator_rounded), findsNothing);
 
-    // A short press on the title area does not toggle or reorder the source.
-    await tester.tap(title);
+    // Long-pressing anywhere on the row (including the title) starts reorder.
+    final gesture = await tester.startGesture(tester.getCenter(title));
+    await tester.pump(const Duration(milliseconds: 650));
+    await gesture.moveTo(tester.getCenter(secondRow));
+    await tester.pump(const Duration(milliseconds: 350));
+    await gesture.up();
     await tester.pumpAndSettle();
-    expect(store.sourceEnabled(firstId), isFalse);
-    expect(store.advancedSourceOrder, initialOrder);
+    expect(
+      store.advancedSourceOrder.take(2).toList(),
+      [secondId, firstId],
+    );
 
-    // The switch on the right remains an independent short-press control.
-    final toggle = find.descendant(of: row, matching: find.byType(Switch));
+    // The right-hand switch remains an independent short-press control.
+    final toggle = find.byKey(ValueKey('source-switch-$firstId'));
+    expect(tester.widget<Switch>(toggle).value, isFalse);
     await tester.tap(toggle);
     await tester.pumpAndSettle();
     expect(store.sourceEnabled(firstId), isTrue);
-    expect(store.advancedSourceOrder, initialOrder);
+    expect(
+      store.advancedSourceOrder.take(2).toList(),
+      [secondId, firstId],
+    );
     expect(tester.takeException(), isNull);
   });
 
