@@ -358,7 +358,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
           Text(
             widget.mobile
                 ? '上下滑切集；長按畫面臨時 3 倍速，鬆開恢復。豎屏輕點暫停，橫屏輕點顯示控制；雙擊播放或暫停。'
-                : '空格：播放 / 暫停\n左右鍵：後退 / 快進 5 秒\n長按右鍵或畫面：臨時 3 倍速\n上下鍵：音量 ±5%，M：靜音\nF、F11、Ctrl+F：全屏\nEsc：先關閉選單，再退出全屏',
+                : '空格：播放 / 暫停\n左右鍵：後退 / 快進 5 秒\n長按右鍵或畫面：臨時 3 倍速\n上下鍵：音量 ±5%，M：靜音\nF、F11、Ctrl+F：全螢幕\nEsc：先關閉選單，再退出全螢幕',
             style: helperStyle.copyWith(height: 1.6),
           ),
         ],
