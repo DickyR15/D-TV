@@ -63,6 +63,12 @@ D TV 中由 DickyR15 創作的原創修改及新增內容，其著作權由相�
 
 ## 文件
 
+- [文件索引](docs/README.md)
+- [D TV 1.0.6 發布說明](docs/RELEASE-1.0.6.md)
+- [1.0.6 之後的開發路線圖](docs/ROADMAP-NEXT.md)
+- [PlaybackSession 架構評估（1.0.3 歷史文件）](docs/PLAYBACK-SESSION-ANALYSIS-1.0.3.md)
+- [1.0.3 歷史開發規劃](docs/ROADMAP-1.0.3.md)
+- [片源管理說明](docs/SOURCE-MANAGEMENT.md)
 - [著作權與授權說明](COPYRIGHT.md)
 - [上游來源與修改聲明](UPSTREAM-NOTICE.md)
 - [OpenCC 字典來源與授權](OPENCC-NOTICE.md)
