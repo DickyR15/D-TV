@@ -109,7 +109,7 @@ void main() {
     final pipFinder = find.byKey(
       const ValueKey('playback-picture-in-picture-enabled'),
     );
-    await tester.ensureVisible(pipFinder);
+    await tester.scrollUntilVisible(pipFinder, 120);
     await tester.pumpAndSettle();
     expect(tester.widget<SwitchListTile>(pipFinder).value, isTrue);
 
