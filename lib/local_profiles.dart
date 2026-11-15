@@ -118,18 +118,8 @@ Future<String> hashProfilePin(String pin, String salt) async {
         'deriveProfilePinHash',
         {'pin': pin, 'salt': salt},
       );
-      if (nativeHash != null && RegExp(r'^[a-f0-9]{64}
-
-Future<bool> checkProfilePin(LocalProfile profile, String pin) async {
-  if (!profile.protected) return true;
-  final actual = await hashProfilePin(pin, profile.salt);
-  var difference = actual.length ^ profile.pinHash.length;
-  for (var i = 0; i < actual.length && i < profile.pinHash.length; i++) {
-    difference |= actual.codeUnitAt(i) ^ profile.pinHash.codeUnitAt(i);
-  }
-  return difference == 0;
-}
-).hasMatch(nativeHash)) {
+      if (nativeHash != null &&
+          RegExp(r'^[a-f0-9]{64}$').hasMatch(nativeHash)) {
         return nativeHash;
       }
     } on MissingPluginException {
