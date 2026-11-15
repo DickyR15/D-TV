@@ -15,6 +15,12 @@ void main() {
   const drama = Drama(id: 'hongguo:1', source: 'hongguo', title: '合成短劇');
   const denied = Drama(id: 'huangdou:2', source: 'huangdou', title: '受限合成短劇');
 
+  test('password hash keeps the existing PBKDF2-HMAC-SHA256 output', () async {
+    expect(
+      await hashProfilePin('DTV-test-pass', '00112233445566778899aabbccddeeff'),
+      '4c36e4abb7e9af61fc93a7f7b98622db084c6544dfe1201dd1daaa44cc30b962',
+    );
+  });
   test(
     'profiles require an admin password, isolate records and lock on restart',
     () async {
