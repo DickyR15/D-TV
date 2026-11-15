@@ -2032,6 +2032,32 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (position >= _lanFirstPosition! + .15) handoff.acknowledge(position);
   }
 
+  Future<void> _stopForLan() async {
+    final generation = _generation;
+    await _serialize(() async {
+      if (_closed ||
+          generation != _generation ||
+          widget.store.profileEpoch != _profileEpoch) {
+        return;
+      }
+      _playIntent = false;
+      _interactions.cancel();
+      _enhancement.suspend();
+      _health.reset();
+      await _player.pause().timeout(
+        _playbackStopTimeout,
+        onTimeout: () => throw TimeoutException(
+          '暫停播放器逾時（區域播放交接）',
+          _playbackStopTimeout,
+        ),
+      );
+      await _saveProgressForPlayback(
+        flush: true,
+        reason: 'lan_handoff',
+      );
+    });
+  }
+
   Future<void> _pushToDevice() async {
     if (_panelOpen ||
         _closed ||
