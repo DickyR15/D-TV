@@ -2281,10 +2281,34 @@ class _PlayerScreenState extends State<PlayerScreen>
       '[PlaybackLifecycle] from=${previous.name} to=${state.name} '
       'generation=$_generation foreground=$_foreground intended=$_playIntent '
       'playing=${playerState.playing} buffering=${playerState.buffering} '
+      'pipActive=$_pictureInPictureActive pipRequested=$_pictureInPictureRequested '
       'positionMs=${playerState.position.inMilliseconds} '
       'route=${_plan?.routeIndex ?? -1}/${_plan?.routeCount ?? 0} '
       'session=${_plan == null ? 'none' : playbackDiagnosticId(_plan!.session)}',
     );
+    // Android 12+ auto-enter PiP does not call onUserLeaveHint. The Activity
+    // can therefore report paused before onPictureInPictureModeChanged(true).
+    // Detect the same state that enabled native auto-enter and mark the PiP
+    // transition pending before ordinary background handling can pause MPV.
+    final androidAutoPipTransition = state == AppLifecycleState.paused &&
+        !_pictureInPictureActive &&
+        playbackLifecycleShouldRetainAndroidPictureInPicture(
+          android: Platform.isAndroid,
+          systemSupported: _pictureInPictureSupported,
+          playing: !_loading &&
+              _error == null &&
+              _playIntent &&
+              playerState.playing,
+          enabled: widget.store.playbackPreferences.autoPictureInPicture,
+          television: _television,
+        );
+    if (androidAutoPipTransition && !_pictureInPictureRequested) {
+      _pictureInPictureExitTimer?.cancel();
+      DiaryService.add(
+        '[PiP] Android auto-enter transition detected before native mode callback; retaining playback',
+      );
+      _setPictureInPictureStatus(requested: true);
+    }
     if (Platform.isIOS &&
         state != AppLifecycleState.resumed &&
         _iosAutoPictureInPicturePrepared &&
@@ -4154,6 +4178,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _videoOutput({required BoxFit fit, required Widget controls}) {
+    final retainVideoOutputInBackground =
+        Platform.isAndroid && _pictureInPictureVisible ||
+        Platform.isIOS &&
+            (_pictureInPictureVisible || _iosAutoPictureInPicturePrepared);
     if (_player is LunaExoPlayer) {
       return LunaExoVideoView(
         key: ValueKey('pip-exo-surface-$_pictureInPictureSurfaceRevision'),
@@ -4183,9 +4211,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         fill: Colors.black,
         // media_kit_video pauses by default when the app backgrounds. During
         // iOS PiP, MPV must keep rendering frames for AVSampleBufferDisplayLayer.
-        pauseUponEnteringBackgroundMode:
-            !(Platform.isIOS &&
-                (_pictureInPictureVisible || _iosAutoPictureInPicturePrepared)),
+        // Keep MPV's texture and decoder attached while Android's auto
+        // PiP transition briefly backgrounds the Activity. Manual PiP marks
+        // the same state before requesting the native transition.
+        pauseUponEnteringBackgroundMode: !retainVideoOutputInBackground,
         controls: (_) => controls,
       );
     }
@@ -4226,6 +4255,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             controller: _video!,
             fit: fit,
             fill: Colors.transparent,
+            pauseUponEnteringBackgroundMode: !retainVideoOutputInBackground,
             controls: (_) => controls,
           ),
         ),
