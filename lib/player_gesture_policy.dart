@@ -14,23 +14,6 @@ PlayerSwipeZone playerSwipeZoneForPosition({
   return PlayerSwipeZone.volume;
 }
 
-enum PlayerSwipeZone { brightness, volume, episode }
-
-PlayerSwipeZone playerSwipeZoneForPosition({
-  required double x,
-  required double width,
-  double brightnessEnd = 0.35,
-  double volumeEnd = 0.70,
-}) {
-  if (!width.isFinite || width <= 0 || !x.isFinite) {
-    return PlayerSwipeZone.episode;
-  }
-  final position = (x / width).clamp(0.0, 1.0);
-  if (position < brightnessEnd) return PlayerSwipeZone.brightness;
-  if (position < volumeEnd) return PlayerSwipeZone.volume;
-  return PlayerSwipeZone.episode;
-}
-
 bool supportsPlayerTouchGestures({
   required bool android,
   required bool ios,
