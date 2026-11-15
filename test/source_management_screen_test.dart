@@ -473,11 +473,9 @@ void main() {
       find.byKey(const ValueKey('advanced-source-password')),
       'source-pass-123',
     );
-    final unlock = find.byKey(const ValueKey('unlock-advanced-sources'));
-    await tester.ensureVisible(unlock);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    await tester.tap(unlock);
-    await tester.pumpAndSettle();
+    expect(store.advancedSourcesUnlocked, isTrue);
 
     final initial = store.advancedSourceOrder;
     final firstId = initial[0];
