@@ -303,6 +303,7 @@ class PlayerInteractions extends ChangeNotifier {
     required bool swipeEnabled,
     double width = 0.0,
     required double height,
+    double bottomEdgeExclusion = 0.0,
   }) {
     _pointers.add(event.pointer);
     if (_pointers.length != 1 || _cancelUntilRelease) {
@@ -313,7 +314,12 @@ class PlayerInteractions extends ChangeNotifier {
     _pointer = event.pointer;
     _origin = _lastPosition = event.localPosition;
     _started = event.timeStamp;
-    _swipeEnabled = swipeEnabled && event.kind == PointerDeviceKind.touch;
+    // Keep the iOS Home-indicator / Android system-gesture edge clear. A
+    // vertical swipe that starts here must not be interpreted as changing episode.
+    final swipeableHeight = math.max(0.0, height - bottomEdgeExclusion);
+    _swipeEnabled = swipeEnabled &&
+        event.kind == PointerDeviceKind.touch &&
+        event.localPosition.dy < swipeableHeight;
     _swipeThreshold = math.max(30, math.min(80, height * .08));
     _viewHeight = height;
     _moved = _held = false;
