@@ -7,9 +7,10 @@ PlayerSwipeZone playerSwipeZoneForPosition({
   if (!x.isFinite || !width.isFinite || width <= 0 || x < 0 || x > width) {
     return PlayerSwipeZone.none;
   }
-  // Keep a wide centre lane for the original episode up/down gesture.
-  if (x < width * 0.30) return PlayerSwipeZone.brightness;
-  if (x < width * 0.70) return PlayerSwipeZone.episode;
+  // Match the requested 35% / 30% / 35% layout:
+  // left = brightness, centre = previous/next episode, right = volume.
+  if (x < width * 0.35) return PlayerSwipeZone.brightness;
+  if (x < width * 0.65) return PlayerSwipeZone.episode;
   return PlayerSwipeZone.volume;
 }
 
