@@ -191,12 +191,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 
   Future<void> _switch(LocalProfile profile) async {
     if (_busy) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
     try {
       if (profile.protected) {
+        // The modal itself blocks duplicate submits. Do not show an indeterminate
+        // progress bar behind it, which can also prevent TV focus transitions
+        // from settling while the password dialog is open.
         final switched = await showDialog<bool>(
           context: context,
           builder: (_) => _PasswordDialog(
@@ -207,13 +206,17 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         );
         if (!mounted || switched != true) return;
       } else {
+        setState(() {
+          _busy = true;
+          _error = null;
+        });
         await widget.store.switchProfile(profile.id);
       }
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && _busy) setState(() => _busy = false);
     }
   }
 
