@@ -62,6 +62,9 @@ void main() {
         download: true,
         pin: 'locked-admin-password',
       );
+      final visitor = store.profiles.firstWhere(
+        (profile) => profile.name == '訪客',
+      );
       store.lock();
 
       await tester.pumpWidget(
@@ -423,7 +426,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const ValueKey('profile-open-visitor')));
+      await tester.tap(find.byKey(ValueKey('profile-open-${visitor.id}')));
       await tester.pumpAndSettle();
 
       final loginFinder = find.byKey(
