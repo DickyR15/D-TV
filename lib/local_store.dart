@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -221,12 +222,27 @@ class LocalStore extends ChangeNotifier {
       _configurationError = null;
       _locked = !_assumeAuthenticated && forceLogin && profile.protected;
       _loadSourceSwitches();
-      _loadLibrary();
-      _loadSeriesCandidates();
-      _queue(() => _moveSeriesCandidates().catchError((Object _) {}));
+      // A locked startup only needs the profile directory and source switches.
+      // Defer potentially large library parsing and legacy series-cache
+      // migration until after successful authentication.
+      if (!_locked) {
+        _loadLibrary();
+        _loadSeriesCandidates();
+        _scheduleSeriesCandidateMigration();
+      }
     } catch (_) {
       _block('本機使用者設定損毀，已鎖定存取。原始紀錄已保留，請重新讀取或從備份還原。');
     }
+  }
+
+  void _scheduleSeriesCandidateMigration() {
+    if (_locked || _configurationError != null || _disposed) return;
+    unawaited(
+      Future<void>.microtask(() {
+        if (_locked || _configurationError != null || _disposed) return;
+        return _queue(() => _moveSeriesCandidates().catchError((Object _) {}));
+      }),
+    );
   }
 
   static List<LocalProfile> _readProfiles(dynamic records) {
@@ -1867,6 +1883,7 @@ class LocalStore extends ChangeNotifier {
       _loadSeriesCandidates();
       _epoch++;
       _notify();
+      _scheduleSeriesCandidateMigration();
     });
   }
   void lock() {
