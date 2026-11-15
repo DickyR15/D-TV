@@ -64,6 +64,166 @@ def patch_texture_sw(package: Path, template: Path) -> None:
         if not target.exists() or target.read_bytes() != template.read_bytes():
             shutil.copy2(template, target)
         if PREVIOUS_MARKER in text:
+            prepare_registry = """
+  public static func prepareDTVPiP(
+    handle: Int64,
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    dtvInstanceLock.lock()
+    let instance = dtvInstances[Int(handle)]?.value
+    dtvInstanceLock.unlock()
+    guard let instance else {
+      completion(NSError(
+        domain: "DTVSampleBufferPiP",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "找不到目前 MPV 的 iOS 影格輸出"]
+      ))
+      return
+    }
+    guard #available(iOS 15.0, *) else {
+      completion(NSError(
+        domain: "DTVSampleBufferPiP",
+        code: 3,
+        userInfo: [NSLocalizedDescriptionKey: "Sample Buffer 子母畫面需要 iOS 15 或更新版本"]
+      ))
+      return
+    }
+    instance.prepareDTVPiP(
+      width: width,
+      height: height,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: eventHandler,
+      completion: completion
+    )
+  }
+
+"""
+            text = replace_exact(
+                text,
+                "  public static func startDTVPiP(",
+                prepare_registry + "  public static func startDTVPiP(",
+                "TextureSW V2 upgrade prepare registry",
+            )
+            text = replace_exact(
+                text,
+                """    durationSeconds: Double,
+    playing: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    dtvInstanceLock.lock()""",
+                """    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    dtvInstanceLock.lock()""",
+                "TextureSW V2 upgrade static autoStart parameter",
+            )
+            text = replace_exact(
+                """      durationSeconds: durationSeconds,
+      playing: playing,
+      eventHandler: eventHandler,
+      completion: completion
+    )
+  }
+
+  public static func stopDTVPiP""",
+                """      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: eventHandler,
+      completion: completion
+    )
+  }
+
+  public static func stopDTVPiP""",
+                "TextureSW V2 upgrade static autoStart forwarding",
+            )
+            prepare_instance = """
+  @available(iOS 15.0, *)
+  private func prepareDTVPiP(
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    pipLock.lock()
+    let renderer: DTVSampleBufferPiPRenderer
+    if let existing = pipRenderer {
+      renderer = existing
+    } else {
+      let created = DTVSampleBufferPiPRenderer(eventHandler: eventHandler)
+      pipRenderer = created
+      renderer = created
+    }
+    pipLock.unlock()
+    renderer.prepareForAutomaticStart(
+      width: width,
+      height: height,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      completion: completion
+    )
+  }
+
+"""
+            text = replace_exact(
+                text,
+                "  @available(iOS 15.0, *)\n  private func stopDTVPiP()",
+                prepare_instance + "  @available(iOS 15.0, *)\n  private func stopDTVPiP()",
+                "TextureSW V2 upgrade prepare instance",
+            )
+            text = replace_exact(
+                text,
+                """    durationSeconds: Double,
+    playing: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    pipLock.lock()""",
+                """    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    pipLock.lock()""",
+                "TextureSW V2 upgrade instance autoStart parameter",
+            )
+            text = replace_exact(
+                """      durationSeconds: durationSeconds,
+      playing: playing,
+      completion: completion
+    )
+
+    // Seed SampleBuffer PiP""",
+                """      durationSeconds: durationSeconds,
+      playing: playing,
+      automaticallyFromInline: autoStart,
+      completion: completion
+    )
+
+    // Seed SampleBuffer PiP""",
+                "TextureSW V2 upgrade renderer autoStart forwarding",
+            )
             path.write_text(text.replace(PREVIOUS_MARKER, MARKER), encoding="utf-8")
         return
 
