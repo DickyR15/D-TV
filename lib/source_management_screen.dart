@@ -1,4 +1,6 @@
-import 'dart:io' show Platform;
+import 'dart:async';
+
+import 'package:flutter/services.dart';
 
 import 'package:flutter/material.dart';
 
@@ -38,9 +40,10 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   final _passwordFocus = FocusNode(
     debugLabel: 'source-management-password',
   );
-  final _firstAdvancedFocus = FocusNode(
-    debugLabel: 'source-management-first-advanced-source',
-  );
+  final Map<String, FocusNode> _advancedFocusNodes = <String, FocusNode>{};
+  Timer? _tvReorderHoldTimer;
+  String? _tvPendingReorderSourceId;
+  String? _tvSelectedReorderSourceId;
   bool _unlocked = false;
   bool _busy = false;
   bool _ordering = false;
@@ -55,10 +58,10 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     if (_initialFocusScheduled || !AppLayout.isTelevision(context)) return;
     _initialFocusScheduled = true;
     if (widget.store.locked || !widget.store.profile.admin) return;
-    final hasAdvancedSources = SourceSite.restrictedValues.any(
-      (source) => SourceSite.isAvailable(source.id),
-    );
-    final target = !hasAdvancedSources
+    final firstAdvanced = widget.store.advancedSourceOrder
+        .where(SourceSite.isAvailable)
+        .firstOrNull;
+    final target = firstAdvanced == null
         ? _firstGeneralFocus
         : widget.store.administratorPasswordConfigured
         ? _passwordFocus
@@ -77,7 +80,10 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     _firstGeneralFocus.dispose();
     _setupPasswordFocus.dispose();
     _passwordFocus.dispose();
-    _firstAdvancedFocus.dispose();
+    _tvReorderHoldTimer?.cancel();
+    for (final node in _advancedFocusNodes.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -94,12 +100,15 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         _unlocked = true;
         _password.clear();
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _firstAdvancedFocus.context != null &&
-            _firstAdvancedFocus.canRequestFocus) {
-          _firstAdvancedFocus.requestFocus();
-        }
-      });
+      final firstAdvanced = _visibleAdvancedSourceIds.firstOrNull;
+      if (firstAdvanced != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final node = _advancedSourceFocus(firstAdvanced);
+          if (mounted && node.context != null && node.canRequestFocus) {
+            node.requestFocus();
+          }
+        });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = sourceManagementErrorMessage(error));
     } finally {
@@ -195,54 +204,118 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     _saveAdvancedOrder(order);
   }
 
+  FocusNode _advancedSourceFocus(String sourceId) =>
+      _advancedFocusNodes.putIfAbsent(
+        sourceId,
+        () => FocusNode(debugLabel: 'source-management-$sourceId'),
+      );
+
+  bool _isTvConfirmKey(LogicalKeyboardKey key) => {
+    LogicalKeyboardKey.select,
+    LogicalKeyboardKey.enter,
+    LogicalKeyboardKey.numpadEnter,
+    LogicalKeyboardKey.gameButtonA,
+  }.contains(key);
+
+  KeyEventResult _advancedSourceKey(
+    SourceSite source,
+    int index,
+    KeyEvent event,
+  ) {
+    if (!AppLayout.isTelevision(context)) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final selectedId = _tvSelectedReorderSourceId;
+    if (selectedId != null) {
+      if ((key == LogicalKeyboardKey.escape ||
+              key == LogicalKeyboardKey.goBack) &&
+          event is KeyDownEvent) {
+        setState(() => _tvSelectedReorderSourceId = null);
+        return KeyEventResult.handled;
+      }
+      if (_isTvConfirmKey(key) && event is KeyDownEvent) {
+        setState(() => _tvSelectedReorderSourceId = null);
+        return KeyEventResult.handled;
+      }
+      if ((key == LogicalKeyboardKey.arrowUp ||
+              key == LogicalKeyboardKey.arrowDown) &&
+          (event is KeyDownEvent || event is KeyRepeatEvent)) {
+        if (selectedId == source.id) {
+          _moveAdvancedSource(
+            index,
+            key == LogicalKeyboardKey.arrowUp ? -1 : 1,
+          );
+        }
+        return KeyEventResult.handled;
+      }
+      if (_isTvConfirmKey(key) && event is KeyRepeatEvent) {
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    if (!_isTvConfirmKey(key)) return KeyEventResult.ignored;
+    if (event is KeyDownEvent) {
+      if (_busy || _ordering || _busySourceIds.contains(source.id)) {
+        return KeyEventResult.handled;
+      }
+      _tvReorderHoldTimer?.cancel();
+      _tvPendingReorderSourceId = source.id;
+      _tvReorderHoldTimer = Timer(const Duration(milliseconds: 500), () {
+        if (!mounted || _tvPendingReorderSourceId != source.id) return;
+        _tvPendingReorderSourceId = null;
+        setState(() => _tvSelectedReorderSourceId = source.id);
+      });
+      return KeyEventResult.handled;
+    }
+    if (event is KeyRepeatEvent) return KeyEventResult.handled;
+    if (event is KeyUpEvent) {
+      final wasShortPress = _tvPendingReorderSourceId == source.id;
+      _tvPendingReorderSourceId = null;
+      _tvReorderHoldTimer?.cancel();
+      if (wasShortPress) {
+        unawaited(_toggle(source, !widget.store.sourceEnabled(source.id)));
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   Widget _advancedSourceTile(SourceSite source, {required int index}) {
     final isTelevision = AppLayout.isTelevision(context);
-    final isTouchDevice = Platform.isAndroid || Platform.isIOS;
-    final dragHandle = Icon(
-      Icons.drag_indicator_rounded,
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-    );
-    final Widget handle = isTelevision
-        ? Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                key: ValueKey('source-move-up-${source.id}'),
-                tooltip: '將${source.name}上移',
-                visualDensity: VisualDensity.compact,
-                onPressed: _ordering || index == 0
-                    ? null
-                    : () => _moveAdvancedSource(index, -1),
-                icon: const Icon(Icons.arrow_upward_rounded),
-              ),
-              IconButton(
-                key: ValueKey('source-move-down-${source.id}'),
-                tooltip: '將${source.name}下移',
-                visualDensity: VisualDensity.compact,
-                onPressed: _ordering || index == _visibleAdvancedSourceIds.length - 1
-                    ? null
-                    : () => _moveAdvancedSource(index, 1),
-                icon: const Icon(Icons.arrow_downward_rounded),
-              ),
-            ],
-          )
-        : _ordering
-        ? dragHandle
-        : isTouchDevice
-        ? ReorderableDelayedDragStartListener(index: index, child: dragHandle)
-        : ReorderableDragStartListener(index: index, child: dragHandle);
-
-    return SwitchListTile(
-      key: ValueKey('source-switch-${source.id}'),
-      focusNode: index == 0 ? _firstAdvancedFocus : null,
-      contentPadding: EdgeInsets.zero,
-      title: Text(uiTraditional(source.name)),
-      subtitle: Text(uiTraditional(source.description)),
-      value: widget.store.sourceEnabled(source.id),
-      secondary: handle,
-      onChanged: _busy || _ordering || _busySourceIds.contains(source.id)
-          ? null
-          : (value) => _toggle(source, value),
+    final selectedForReorder = _tvSelectedReorderSourceId == source.id;
+    final colors = Theme.of(context).colorScheme;
+    return ReorderableDelayedDragStartListener(
+      key: ValueKey('reorderable-source-${source.id}'),
+      index: index,
+      child: Focus(
+        onKeyEvent: (node, event) => _advancedSourceKey(source, index, event),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          decoration: BoxDecoration(
+            border: selectedForReorder
+                ? Border.all(color: colors.primary, width: 2)
+                : null,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: SwitchListTile(
+            key: ValueKey('source-switch-${source.id}'),
+            focusNode: isTelevision
+                ? _advancedSourceFocus(source.id)
+                : null,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            title: Text(uiTraditional(source.name)),
+            subtitle: Text(
+              selectedForReorder
+                  ? '已選取：使用遙控器方向鍵移動，按確認完成'
+                  : uiTraditional(source.description),
+            ),
+            value: widget.store.sourceEnabled(source.id),
+            onChanged: _busy || _ordering || _busySourceIds.contains(source.id)
+                ? null
+                : (value) => _toggle(source, value),
+          ),
+        ),
+      ),
     );
   }
 
@@ -389,8 +462,8 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                 const SizedBox(height: 4),
                 Text(
                   AppLayout.isTelevision(context)
-                      ? '使用右側上移／下移按鈕調整片源順序。'
-                      : '拖曳每個片源右側的把手即可調整順序。',
+                      ? '長按整個片源列選取，再使用遙控器方向鍵移動；短按確認可切換開關。'
+                      : '長按整個片源列即可拖曳移動；短按右側開關可切換片源。',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
@@ -429,6 +502,27 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                       sliver: SliverReorderableList(
                         itemCount: advanced.length,
                         onReorder: _ordering ? (_, __) {} : _reorderAdvanced,
+                        proxyDecorator: (child, index, animation) =>
+                            AnimatedBuilder(
+                              animation: animation,
+                              builder: (context, _) => Material(
+                                type: MaterialType.transparency,
+                                color: Colors.transparent,
+                                elevation: 0,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.8),
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: child,
+                                ),
+                              ),
+                            ),
                         itemBuilder: (context, index) => _advancedSourceTile(
                           advanced[index],
                           index: index,
