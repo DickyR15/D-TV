@@ -3,17 +3,32 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'core_bridge.dart';
+import 'google_cast.dart';
 
 class CastDevice {
-  const CastDevice({required this.id, required this.name});
+  const CastDevice({
+    required this.id,
+    required this.name,
+    this.isGoogleCast = false,
+    this.payload = const {},
+  });
 
   final String id;
   final String name;
+  final bool isGoogleCast;
+  final Map<String, dynamic> payload;
 
-  factory CastDevice.fromJson(Map<String, dynamic> json) => CastDevice(
-    id: json['id'] as String? ?? '',
-    name: json['name'] as String? ?? '未知裝置',
-  );
+  String get protocolLabel => isGoogleCast ? 'Google Cast' : 'DLNA／UPnP';
+
+  factory CastDevice.fromJson(Map<String, dynamic> json) {
+    final isGoogleCast = json['transport'] == 'google_cast';
+    return CastDevice(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '未知裝置',
+      isGoogleCast: isGoogleCast,
+      payload: Map<String, dynamic>.unmodifiable(json),
+    );
+  }
 }
 
 Future<CastDevice?> showCastDevicePicker(
@@ -45,7 +60,7 @@ class _CastDevicePicker extends StatelessWidget {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('正在搜尋區域網路中的 DLNA 裝置…'),
+                  Text('正在搜尋區域網路中的 Google Cast 與 DLNA 裝置…'),
                 ],
               ),
             );
@@ -67,7 +82,7 @@ class _CastDevicePicker extends StatelessWidget {
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Text(
-                '找不到支援 DLNA／UPnP 的裝置。請確認播放裝置與電視連線至同一個區域網路，並確認電視已開啟投屏或媒體接收功能。',
+                '找不到支援 Google Cast 或 DLNA／UPnP 的裝置。請確認手機／電腦與電視連線至同一個區域網路，且路由器沒有封鎖多播探索。',
               ),
             );
           }
@@ -83,7 +98,7 @@ class _CastDevicePicker extends StatelessWidget {
                   key: ValueKey('cast-device-${device.id}'),
                   leading: const Icon(Icons.tv_rounded),
                   title: Text(device.name),
-                  subtitle: const Text('DLNA／UPnP'),
+                  subtitle: Text(device.protocolLabel),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => Navigator.pop(context, device),
                 );
@@ -111,6 +126,177 @@ Future<void> showCastPlaybackControls(
   barrierDismissible: true,
   builder: (_) => _CastPlaybackDialog(repository: repository, device: device),
 );
+
+Future<void> showGoogleCastPlaybackControls(
+  BuildContext context, {
+  required CastDevice device,
+}) => showDialog<void>(
+  context: context,
+  barrierDismissible: true,
+  builder: (_) => _GoogleCastPlaybackDialog(device: device),
+);
+
+class _GoogleCastPlaybackDialog extends StatefulWidget {
+  const _GoogleCastPlaybackDialog({required this.device});
+
+  final CastDevice device;
+
+  @override
+  State<_GoogleCastPlaybackDialog> createState() =>
+      _GoogleCastPlaybackDialogState();
+}
+
+class _GoogleCastPlaybackDialogState extends State<_GoogleCastPlaybackDialog> {
+  final _controller = GoogleCastController.instance;
+  bool _busy = false;
+  String? _error;
+  double? _dragValue;
+
+  String _clock(Duration value) {
+    final seconds = value.inSeconds.clamp(0, 359999);
+    final minutes = seconds ~/ 60;
+    final tail = (seconds % 60).toString().padLeft(2, '0');
+    return minutes >= 60
+        ? '${minutes ~/ 60}:${(minutes % 60).toString().padLeft(2, '0')}:$tail'
+        : '$minutes:$tail';
+  }
+
+  Future<void> _command(Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+      if (mounted) setState(() => _error = null);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: Listenable.merge([
+      _controller.position,
+      _controller.duration,
+      _controller.isPlaying,
+    ]),
+    builder: (context, _) {
+      final position = _controller.position.value;
+      final duration = _controller.duration.value;
+      final maximum = duration.inMilliseconds > 0
+          ? duration.inMilliseconds.toDouble()
+          : 1.0;
+      final sliderValue = (_dragValue ?? position.inMilliseconds.toDouble())
+          .clamp(0.0, maximum);
+      final playing = _controller.isPlaying.value;
+      return AlertDialog(
+        title: const Text('傳送播放'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.cast_connected_rounded, size: 30),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(widget.device.name,
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const Text('透過 Google Cast 播放'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (_error case final error?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    error,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Slider(
+                value: sliderValue,
+                max: maximum,
+                onChanged: !_busy && duration.inMilliseconds > 0
+                    ? (next) => setState(() => _dragValue = next)
+                    : null,
+                onChangeEnd: (next) {
+                  setState(() => _dragValue = null);
+                  unawaited(
+                    _command(
+                      () => _controller.seek(
+                        Duration(milliseconds: next.round()),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_clock(Duration(milliseconds: sliderValue.round()))),
+                  Text(_clock(duration)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton.filled(
+                    tooltip: playing ? '暫停' : '繼續播放',
+                    onPressed: _busy
+                        ? null
+                        : () => unawaited(
+                              _command(
+                                playing
+                                    ? _controller.pause
+                                    : _controller.resume,
+                              ),
+                            ),
+                    icon: Icon(
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    ),
+                    iconSize: 30,
+                  ),
+                  const SizedBox(width: 24),
+                  IconButton(
+                    tooltip: '結束投屏',
+                    onPressed: _busy
+                        ? null
+                        : () => unawaited(
+                              _command(() async {
+                                await _controller.stop();
+                                if (mounted) Navigator.pop(context);
+                              }),
+                            ),
+                    icon: const Icon(Icons.stop_circle_outlined),
+                    iconSize: 30,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('關閉'),
+          ),
+        ],
+      );
+    },
+  );
+}
 
 class _CastPlaybackDialog extends StatefulWidget {
   const _CastPlaybackDialog({required this.repository, required this.device});

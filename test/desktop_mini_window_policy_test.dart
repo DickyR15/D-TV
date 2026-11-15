@@ -17,7 +17,7 @@ void main() {
         isMacOS: true,
         secondaryPlayer: false,
       ),
-      isFalse,
+      isTrue,
     );
     expect(
       supportsDesktopMiniPlayer(

@@ -17,6 +17,7 @@ import 'app_theme.dart';
 import 'back_safe_dialog.dart';
 import 'core_bridge.dart';
 import 'cast_screen.dart';
+import 'google_cast.dart';
 import 'desktop_mini_window_policy.dart';
 import 'diary_service.dart';
 import 'playback_diagnostics.dart';
@@ -2066,13 +2067,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         widget.mediaId != null) {
       return;
     }
-    // The current iOS build does not have the Apple multicast entitlement
-    // required for reliable SSDP discovery. Never fall back to LAN sync here:
-    // casting and watch-history synchronization are separate features.
-    if (Platform.isIOS) {
-      _notice('目前 iOS 版尚未支援 DLNA／UPnP 裝置搜尋；收藏同步與傳送播放是不同功能，不會互相替代。');
-      return;
-    }
+    // iOS投屏入口已依需求移除；裝置互聯僅負責收藏與觀看進度同步。
+    if (Platform.isIOS) return;
     final generation = _generation;
     final index = _index;
     bool current() =>
@@ -2093,7 +2089,33 @@ class _PlayerScreenState extends State<PlayerScreen>
             );
             multicastLockAcquired = true;
           }
-          return await widget.repository.cast('discover');
+          List<dynamic> dlnaItems = const [];
+          List<Map<String, dynamic>> googleCastItems = const [];
+          try {
+            final result = await widget.repository.cast('discover');
+            dlnaItems = (result['items'] as List? ?? const []).toList();
+          } catch (error) {
+            DiaryService.add(
+              '[Cast] dlna_discovery_failed error=${playbackDiagnosticError(error)}',
+            );
+          }
+          if (Platform.isAndroid || Platform.isWindows) {
+            try {
+              googleCastItems =
+                  await GoogleCastController.instance.discover();
+            } catch (error) {
+              DiaryService.add(
+                '[Cast] google_cast_discovery_failed error=${playbackDiagnosticError(error)}',
+              );
+            }
+          }
+          final items = <dynamic>[...dlnaItems, ...googleCastItems];
+          items.sort((a, b) {
+            final nameA = a is Map ? (a['name'] ?? '').toString() : '';
+            final nameB = b is Map ? (b['name'] ?? '').toString() : '';
+            return nameA.toLowerCase().compareTo(nameB.toLowerCase());
+          });
+          return {'items': items};
         } finally {
           if (multicastLockAcquired) {
             try {
@@ -2114,14 +2136,37 @@ class _PlayerScreenState extends State<PlayerScreen>
         discovery: discoverCastDevices(),
       );
       if (device == null || !current()) return;
-      await widget.repository.cast(
-        'play',
-        device: device.id,
-        drama: widget.detail.drama,
-        episode: widget.detail.episodes[index],
-        quality: _requestedQuality,
-        startMs: (_currentPosition * 1000).round(),
-      );
+      final startMs = (_currentPosition * 1000).round();
+      if (device.isGoogleCast) {
+        final plan = await widget.repository.prepareHandoff(
+          widget.detail.drama,
+          widget.detail.episodes[index],
+          quality: _requestedQuality,
+        );
+        if (!current()) return;
+        if (plan == null || plan.url.isEmpty) {
+          throw StateError('目前片源無法取得可投放的播放網址');
+        }
+        if (plan.local || plan.decryptionKey.isNotEmpty) {
+          throw StateError('此影片需要本機播放或解密，目前無法使用 Google Cast');
+        }
+        await GoogleCastController.instance.play(
+          deviceJson: device.payload,
+          plan: plan,
+          title:
+              '${uiTraditional(widget.detail.drama.title)} · 第 ${widget.detail.episodes[index].number} 集',
+          startMs: startMs,
+        );
+      } else {
+        await widget.repository.cast(
+          'play',
+          device: device.id,
+          drama: widget.detail.drama,
+          episode: widget.detail.episodes[index],
+          quality: _requestedQuality,
+          startMs: startMs,
+        );
+      }
       if (!current()) return;
       _playIntent = false;
       await _player.pause().timeout(
@@ -2130,11 +2175,15 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
       await _saveProgress(flush: true);
       if (!current()) return;
-      await showCastPlaybackControls(
-        context,
-        repository: widget.repository,
-        device: device,
-      );
+      if (device.isGoogleCast) {
+        await showGoogleCastPlaybackControls(context, device: device);
+      } else {
+        await showCastPlaybackControls(
+          context,
+          repository: widget.repository,
+          device: device,
+        );
+      }
     } catch (error) {
       if (mounted && !_closed) {
         ScaffoldMessenger.of(
@@ -4494,7 +4543,9 @@ class _PlayerScreenState extends State<PlayerScreen>
             aspectRatioLabel: playbackAspectRatioLabel(_playbackAspectRatio),
             sleepTimerLabel: _sleepTimerLabel,
             cinemaMode: _cinemaMode,
-            onPush: widget.mediaId == null && !widget.desktopMiniPlayer
+            onPush: !Platform.isIOS &&
+                    widget.mediaId == null &&
+                    !widget.desktopMiniPlayer
                 ? _pushToDevice
                 : null,
             onPictureInPicture: _canUsePictureInPicture
