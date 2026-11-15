@@ -716,6 +716,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         recentSearches: widget.store.recentSearches,
         onCancel: () => unawaited(widget.repository.cancelSuggestions()),
         onPhoneSearch: () => unawaited(_openPhoneSearch()),
+        onClearRecentSearches: () =>
+            unawaited(widget.store.clearRecentSearches()),
         suggestions: _searchSuggestions ? widget.repository.suggestions : null,
       ),
     );
