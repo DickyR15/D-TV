@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -6,6 +7,7 @@ import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/core_bridge.dart';
 import 'package:hgtv/detail_screen.dart';
 import 'package:hgtv/models.dart';
+import 'package:hgtv/remote_widgets.dart';
 
 import 'fixtures.dart';
 
@@ -88,13 +90,22 @@ void main() {
         const ValueKey('official-season-hongguo:1002'),
       );
       expect(upcomingChipFinder, findsOneWidget);
-      expect(
-        tester.widget<ChoiceChip>(upcomingChipFinder).onSelected,
-        isNotNull,
+      final upcomingButton = tester.widget<RemoteButton>(
+        upcomingChipFinder,
       );
+      expect(upcomingButton.onPressed, isNotNull);
+      final currentButton = tester.widget<RemoteButton>(
+        find.byKey(const ValueKey('official-season-hongguo:1001')),
+      );
+      expect(currentButton.focusNode!.hasFocus, isTrue);
 
-      await tester.ensureVisible(upcomingChipFinder);
-      await tester.tap(upcomingChipFinder);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<RemoteButton>(upcomingChipFinder).focusNode!.hasFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 
       expect(repository.lastDetailId, upcomingSeason.id);
