@@ -103,7 +103,7 @@ void main() {
   test('native season lookup is currently limited to Redfruit and Duoduo', () {
     expect(supportsNativeSeriesSeasons('hongguo'), isTrue);
     expect(supportsNativeSeriesSeasons('duoduo'), isTrue);
-    for (final source in SourceSite.values) {
+    for (final source in SourceSite.knownValues) {
       if (source.id == 'hongguo' || source.id == 'duoduo') continue;
       expect(
         supportsNativeSeriesSeasons(source.id),
