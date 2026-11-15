@@ -238,9 +238,9 @@ class LocalStore extends ChangeNotifier {
   void _scheduleSeriesCandidateMigration() {
     if (_locked || _configurationError != null || _disposed) return;
     unawaited(
-      Future<void>.microtask(() {
+      Future<void>.microtask(() async {
         if (_locked || _configurationError != null || _disposed) return;
-        return _queue(() => _moveSeriesCandidates().catchError((Object _) {}));
+        await _queue(() => _moveSeriesCandidates().catchError((Object _) {}));
       }),
     );
   }
