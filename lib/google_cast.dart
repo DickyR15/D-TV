@@ -50,11 +50,19 @@ class GoogleCastController {
   bool get isConnected => _session != null;
 
   Future<List<Map<String, dynamic>>> discover() async {
-    final devices = await _service
-        .startDiscovery()
-        .first
-        .timeout(const Duration(seconds: 12));
-    return devices
+    var latestDevices = <dc.CastDevice>[];
+    final discovery = _service
+        .startDiscovery(timeout: const Duration(seconds: 10))
+        .timeout(
+          const Duration(seconds: 12),
+          onTimeout: (sink) => sink.close(),
+        );
+    await for (final devices in discovery) {
+      // The provider emits a new snapshot whenever another Cast receiver is
+      // found. Keep the latest snapshot instead of stopping at the first TV.
+      latestDevices = devices;
+    }
+    return latestDevices
         .where((device) => device.protocol == dc.CastProtocol.chromecast)
         .map((device) {
           final payload = Map<String, dynamic>.from(device.toJson());
