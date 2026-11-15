@@ -247,6 +247,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   );
   bool _desktopMiniActive = false;
   bool _desktopMiniHovered = false;
+  bool _cinemaMode = false;
   double? _desktopMiniSeekValue;
   Rect? _desktopMiniRestoreBounds;
   bool _desktopMiniWasMaximized = false;
@@ -3456,6 +3457,18 @@ class _PlayerScreenState extends State<PlayerScreen>
     ).showSnackBar(SnackBar(content: Text(uiTraditional(message))));
   }
 
+  String get _sleepTimerLabel => _sleepAtEpisodeEnd
+      ? '本集'
+      : _sleepMinutes > 0
+      ? '${_sleepMinutes}分'
+      : '關閉';
+
+  void _toggleCinemaMode() {
+    if (!Platform.isWindows && !Platform.isMacOS) return;
+    if (_closed || _desktopMiniActive) return;
+    setState(() => _cinemaMode = !_cinemaMode);
+  }
+
   void _clearSleepTimer() {
     _sleepTimer?.cancel();
     _sleepTimer = null;
@@ -4124,11 +4137,17 @@ class _PlayerScreenState extends State<PlayerScreen>
           canRequestFocus: !_television,
           skipTraversal: _television,
           child: Scaffold(
-            backgroundColor: fullscreen || pictureInPicture || _desktopMiniActive
+            backgroundColor:
+                fullscreen || pictureInPicture || _desktopMiniActive || _cinemaMode
                 ? Colors.black
                 : theme.scaffoldBackgroundColor,
             appBar:
-                widget.desktopMiniPlayer || pictureInPicture || _desktopMiniActive || fullscreen || _mobile
+                widget.desktopMiniPlayer ||
+                    pictureInPicture ||
+                    _desktopMiniActive ||
+                    fullscreen ||
+                    _mobile ||
+                    _cinemaMode
                 ? null
                 : AppBar(
                     title: Text(
@@ -4138,7 +4157,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                     ),
                     actions: [
                       IconButton(
-                        tooltip: '旋轉與全屏',
+                        tooltip: '全螢幕',
                         onPressed: _rotate,
                         icon: const Icon(Icons.screen_rotation_alt_rounded),
                       ),
@@ -4160,7 +4179,11 @@ class _PlayerScreenState extends State<PlayerScreen>
                             (_formFactor == FormFactor.pad ||
                                 _formFactor == FormFactor.window) &&
                             constraints.maxWidth >= 840;
-                        if (widget.desktopMiniPlayer || fullscreen || _desktopMiniActive) {
+                        if (widget.desktopMiniPlayer ||
+                            fullscreen ||
+                            _desktopMiniActive ||
+                            (_cinemaMode &&
+                                (Platform.isWindows || Platform.isMacOS))) {
                           // PiP is a dedicated video surface, not a miniature
                           // copy of the full desktop player with its side panel.
                           return _videoPane(context);
@@ -4424,6 +4447,13 @@ class _PlayerScreenState extends State<PlayerScreen>
             onSpeed: () => _openPanel(PlayerMenuSection.speed),
             onQuality: () => _openPanel(PlayerMenuSection.quality),
             onSettings: () => _openPanel(PlayerMenuSection.settings),
+            onAspectRatio: () => _openPanel(PlayerMenuSection.aspectRatio),
+            onSleepTimer: () => _openPanel(PlayerMenuSection.sleepTimer),
+            onCinemaMode:
+                Platform.isWindows || Platform.isMacOS ? _toggleCinemaMode : null,
+            aspectRatioLabel: playbackAspectRatioLabel(_playbackAspectRatio),
+            sleepTimerLabel: _sleepTimerLabel,
+            cinemaMode: _cinemaMode,
             onPush: widget.mediaId == null && !widget.desktopMiniPlayer
                 ? _pushToDevice
                 : null,
