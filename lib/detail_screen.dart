@@ -114,6 +114,10 @@ class _DetailScreenState extends State<DetailScreen> {
       _seriesSeasonsError = null;
       _seriesSeasonsLoading = _supportsSeriesSeasons(requestedDrama.source);
     });
+    // Load series seasons independently from episode details. Some providers
+    // return an empty episode list for a valid season while still exposing
+    // the official series relationship.
+    unawaited(_loadSeriesSeasons(requestedDrama, generation));
     try {
       final detail = await widget.repository.detail(requestedDrama);
       if (!mounted ||
@@ -164,7 +168,6 @@ class _DetailScreenState extends State<DetailScreen> {
       });
       widget.repository.catalogUpdates.publish(merged, retryCover: true);
       _prepareDetailPlayback(merged, visibleEpisodes, resumeIndex);
-      unawaited(_loadSeriesSeasons(merged, generation));
       unawaited(_supplement(merged, generation));
       await saveUserChange(context, () => widget.store.refreshDrama(merged));
       if (mounted &&
@@ -243,7 +246,7 @@ class _DetailScreenState extends State<DetailScreen> {
       if (!mounted ||
           generation != _generation ||
           _profileEpoch != widget.store.profileEpoch ||
-          _detail?.drama.id != drama.id) {
+          _activeDrama.id != drama.id) {
         return;
       }
       if (seasons.isNotEmpty) {
@@ -260,7 +263,7 @@ class _DetailScreenState extends State<DetailScreen> {
       if (!mounted ||
           generation != _generation ||
           _profileEpoch != widget.store.profileEpoch ||
-          _detail?.drama.id != drama.id) {
+          _activeDrama.id != drama.id) {
         return;
       }
       setState(() {
@@ -272,7 +275,7 @@ class _DetailScreenState extends State<DetailScreen> {
       if (!mounted ||
           generation != _generation ||
           _profileEpoch != widget.store.profileEpoch ||
-          _detail?.drama.id != drama.id) {
+          _activeDrama.id != drama.id) {
         return;
       }
       setState(() {
@@ -482,19 +485,23 @@ class _DetailScreenState extends State<DetailScreen> {
                         ),
                         const VerticalDivider(width: 1),
                         Expanded(
-                          child: _loading || _error != null || episodes.isEmpty
+                          child: _loading
                               ? _episodeStatus()
                               : Column(
                                   children: [
                                     _seriesSelector(drama),
-                                    _playLineSelector(playLines),
-                                    Expanded(
-                                      child: EpisodeBrowser(
-                                        episodes: episodes,
-                                        currentNumber: resumeEpisodeNumber,
-                                        onSelected: (index) => _play(index),
+                                    if (_error != null || episodes.isEmpty)
+                                      Expanded(child: _episodeStatus())
+                                    else ...[
+                                      _playLineSelector(playLines),
+                                      Expanded(
+                                        child: EpisodeBrowser(
+                                          episodes: episodes,
+                                          currentNumber: resumeEpisodeNumber,
+                                          onSelected: (index) => _play(index),
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ],
                                 ),
                         ),
@@ -515,64 +522,71 @@ class _DetailScreenState extends State<DetailScreen> {
                           child: _overview(drama),
                         ),
                       ),
-                      if (_loading || _error != null || episodes.isEmpty)
+                      if (_loading)
                         SliverFillRemaining(
                           hasScrollBody: false,
                           child: _episodeStatus(),
                         )
                       else ...[
                         SliverToBoxAdapter(child: _seriesSelector(drama)),
-                        SliverToBoxAdapter(child: _playLineSelector(playLines)),
-                        SliverToBoxAdapter(
-                          child: _episodeSummary(
-                            episodes,
-                            currentNumber: resumeEpisodeNumber,
+                        if (_error != null || episodes.isEmpty)
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: _episodeStatus(),
+                          )
+                        else ...[
+                          SliverToBoxAdapter(child: _playLineSelector(playLines)),
+                          SliverToBoxAdapter(
+                            child: _episodeSummary(
+                              episodes,
+                              currentNumber: resumeEpisodeNumber,
+                            ),
                           ),
-                        ),
-                        SliverToBoxAdapter(
-                          child: EpisodeRangeBar(
-                            key: _episodeAnchor,
-                            episodes: episodes,
-                            page: _episodePage,
-                            title: '分組',
-                            currentNumber: resumeEpisodeNumber,
-                            onLocate: _locateEpisode,
+                          SliverToBoxAdapter(
+                            child: EpisodeRangeBar(
+                              key: _episodeAnchor,
+                              episodes: episodes,
+                              page: _episodePage,
+                              title: '分組',
+                              currentNumber: resumeEpisodeNumber,
+                              onLocate: _locateEpisode,
+                            ),
                           ),
-                        ),
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                          sliver: SliverGrid(
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: _episodeColumns(
-                                    constraints.maxWidth,
-                                    episodes,
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                            sliver: SliverGrid(
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: _episodeColumns(
+                                      constraints.maxWidth,
+                                      episodes,
+                                    ),
+                                    mainAxisExtent: math.max(
+                                      54,
+                                      MediaQuery.textScalerOf(
+                                            context,
+                                          ).scale(20) +
+                                          30,
+                                    ),
+                                    crossAxisSpacing: 10,
+                                    mainAxisSpacing: 10,
                                   ),
-                                  mainAxisExtent: math.max(
-                                    54,
-                                    MediaQuery.textScalerOf(
-                                          context,
-                                        ).scale(20) +
-                                        30,
-                                  ),
-                                  crossAxisSpacing: 10,
-                                  mainAxisSpacing: 10,
-                                ),
-                            delegate: SliverChildBuilderDelegate((
-                              context,
-                              index,
-                            ) {
-                              final episode = visible[index];
-                              return RemoteEpisodeButton(
-                                key: ValueKey('episode-${episode.number}'),
-                                number: episode.number,
-                                vip: episode.vip,
-                                current: episode.number == resumeEpisodeNumber,
-                                onPressed: () => _play(start + index),
-                              );
-                            }, childCount: visible.length),
+                              delegate: SliverChildBuilderDelegate((
+                                context,
+                                index,
+                              ) {
+                                final episode = visible[index];
+                                return RemoteEpisodeButton(
+                                  key: ValueKey('episode-${episode.number}'),
+                                  number: episode.number,
+                                  vip: episode.vip,
+                                  current: episode.number == resumeEpisodeNumber,
+                                  onPressed: () => _play(start + index),
+                                );
+                              }, childCount: visible.length),
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ],
                   );
@@ -1068,9 +1082,10 @@ class _DetailScreenState extends State<DetailScreen> {
         // Missing catalogue counts do not prove that a season is unavailable.
         // The official season detail + aggregate resolver decides whether it
         // has direct media, just as it does when opened from search results.
-        onSelected: current || season.upcoming
-            ? null
-            : (_) => _openSeriesDrama(season.drama),
+        // Upcoming seasons remain selectable so viewers can inspect their
+        // details and return to another season; playback still depends on the
+        // selected season's available episode data.
+        onSelected: current ? null : (_) => _openSeriesDrama(season.drama),
       ),
     );
   }
