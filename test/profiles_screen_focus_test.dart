@@ -62,6 +62,12 @@ void main() {
         download: true,
         pin: 'locked-admin-password',
       );
+      await store.saveProfile(
+        id: 'visitor',
+        name: '訪客',
+        sources: const ['hongguo'],
+        download: false,
+      );
       final visitor = store.profiles.firstWhere(
         (profile) => profile.name == '訪客',
       );
