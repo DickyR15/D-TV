@@ -10,9 +10,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"strconv"
-	"net"
-	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
@@ -307,10 +304,10 @@ func (engine *nativeEngine) castPlay(ctx context.Context, input nativeInput) (an
 	previous, previousToken, wasActive := engine.cast.device, engine.cast.token, engine.cast.active
 	engine.cast.mu.Unlock()
 	if !known {
-		return nil, errors.New("投屏投屏裝置已失效，請重新搜尋")
+		return nil, errors.New("投屏裝置已失效，請重新搜尋")
 	}
 	if strings.TrimSpace(input.Drama.ID) == "" || strings.TrimSpace(input.Chapter.ID) == "" {
-		return nil, errors.New("剧集資訊無效")
+		return nil, errors.New("劇集資訊無效")
 	}
 	task := Task{DramaID: input.Drama.ID, DramaTitle: input.Drama.Title, Chapter: input.Chapter, Index: input.Index}
 	resolved, err := engine.downloader.resolveproviderMedia(ctx, task)
