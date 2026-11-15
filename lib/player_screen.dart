@@ -3763,7 +3763,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     final theme = Theme.of(context);
     final title = uiTraditional(widget.detail.drama.title);
     final fullscreen = _showFullscreen;
-    final pictureInPicture = _pictureInPictureVisible;
+    // Keep the full playback page and controls visible while PiP is only
+    // requested. Switch to the compact video-only layout after AVKit confirms
+    // pictureInPictureControllerDidStartPictureInPicture.
+    final pictureInPicture = _pictureInPictureActive;
     final iosPiPPending =
         Platform.isIOS && _pictureInPictureRequested && !_pictureInPictureActive;
     return PopScope(
