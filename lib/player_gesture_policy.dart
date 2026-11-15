@@ -1,3 +1,18 @@
+enum PlayerSwipeZone { brightness, episode, volume, none }
+
+PlayerSwipeZone playerSwipeZoneForPosition({
+  required double x,
+  required double width,
+}) {
+  if (!x.isFinite || !width.isFinite || width <= 0 || x < 0 || x > width) {
+    return PlayerSwipeZone.none;
+  }
+  // Keep a wide centre lane for the original episode up/down gesture.
+  if (x < width * 0.30) return PlayerSwipeZone.brightness;
+  if (x < width * 0.70) return PlayerSwipeZone.episode;
+  return PlayerSwipeZone.volume;
+}
+
 bool supportsPlayerTouchGestures({
   required bool android,
   required bool ios,
@@ -11,8 +26,17 @@ double playerVerticalSwipeValue({
   required double height,
   required double maximumValue,
 }) {
-  if (!height.isFinite || height <= 0 || !maximumValue.isFinite || maximumValue <= 0) {
-    return initialValue.clamp(0.0, maximumValue > 0 ? maximumValue : 1.0).toDouble();
+  if (!initialValue.isFinite ||
+      !height.isFinite ||
+      height <= 0 ||
+      !maximumValue.isFinite ||
+      maximumValue <= 0) {
+    final safeMaximum = maximumValue.isFinite && maximumValue > 0
+        ? maximumValue
+        : 1.0;
+    return (initialValue.isFinite ? initialValue : 0.0)
+        .clamp(0.0, safeMaximum)
+        .toDouble();
   }
   final delta = (originY - currentY) / (height * 0.6) * maximumValue;
   return (initialValue + delta).clamp(0.0, maximumValue).toDouble();
@@ -25,15 +49,17 @@ double playerPinchZoomScale({
   double minimumScale = 1.0,
   double maximumScale = 3.0,
 }) {
+  final lowerBound = minimumScale.isFinite ? minimumScale : 1.0;
+  final upperBound = maximumScale.isFinite && maximumScale >= lowerBound
+      ? maximumScale
+      : lowerBound;
+  final safeScale = initialScale.isFinite ? initialScale : lowerBound;
   if (!initialDistance.isFinite ||
       initialDistance <= 0 ||
-      !currentDistance.isFinite ||
-      !minimumScale.isFinite ||
-      !maximumScale.isFinite ||
-      maximumScale < minimumScale) {
-    return initialScale.clamp(minimumScale, maximumScale).toDouble();
+      !currentDistance.isFinite) {
+    return safeScale.clamp(lowerBound, upperBound).toDouble();
   }
-  return (initialScale * currentDistance / initialDistance)
-      .clamp(minimumScale, maximumScale)
+  return (safeScale * currentDistance / initialDistance)
+      .clamp(lowerBound, upperBound)
       .toDouble();
 }
