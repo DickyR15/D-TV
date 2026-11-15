@@ -1151,7 +1151,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  bool get _shouldPrepareIosAutomaticPictureInPicture {
+  bool get _shouldRetainIosAutomaticPictureInPicture {
     final preferences = widget.store.playbackPreferences;
     return Platform.isIOS &&
         !_closed &&
@@ -1161,13 +1161,26 @@ class _PlayerScreenState extends State<PlayerScreen>
         preferences.autoPictureInPicture &&
         !_loading &&
         _error == null &&
-        _playIntent &&
-        _player.state.playing;
+        _playIntent;
   }
+
+  bool get _shouldPrepareIosAutomaticPictureInPicture =>
+      _shouldRetainIosAutomaticPictureInPicture && _player.state.playing;
 
   void _syncIosAutomaticPictureInPicture() {
     if (!Platform.isIOS || _closed) return;
     if (!_shouldPrepareIosAutomaticPictureInPicture) {
+      // MPV can briefly report playing=false while VideoToolbox recovers from
+      // a decoder-session reset. Keep the already-created AVKit controller
+      // alive while playback intent and auto-PiP preference remain enabled.
+      if (_shouldRetainIosAutomaticPictureInPicture &&
+          (_iosAutoPictureInPicturePrepared ||
+              _iosPictureInPicturePreparationSignature != null)) {
+        DiaryService.add(
+          '[PiP] keep automatic controller during transient MPV pause',
+        );
+        return;
+      }
       _iosPictureInPicturePreparationEpoch++;
       _iosPictureInPicturePreparationSignature = null;
       if (!_pictureInPictureActive &&
@@ -1243,7 +1256,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           })
           .timeout(const Duration(seconds: 8));
       if (epoch != _iosPictureInPicturePreparationEpoch ||
-          !_shouldPrepareIosAutomaticPictureInPicture) {
+          !_shouldRetainIosAutomaticPictureInPicture) {
         if (!_pictureInPictureActive && !_pictureInPictureRequested) {
           await _iosSampleBufferPipChannel.invokeMethod<void>(
             'DTVPiP.Stop',
