@@ -158,7 +158,7 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 		if source, sourceID, valid := splitProviderDramaID(task.DramaID); valid {
 			_, chapters, err := d.GetHuangguoChapters(ctx, source, sourceID)
 			if err != nil {
-				return providerMedia{}, fmt.Errorf("刷新旧任务播放地址失败: %w", err)
+				return providerMedia{}, fmt.Errorf("重新取得舊任務播放網址失敗：%w", err)
 			}
 			matched := false
 			for _, fresh := range chapters {
@@ -179,7 +179,7 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 		if valid {
 			sequence, err := strconv.Atoi(chapter.EpisodeString(task.Index))
 			if err != nil || sequence < 1 {
-				return providerMedia{}, fmt.Errorf("黄豆集数无效")
+				return providerMedia{}, fmt.Errorf("黃豆集數無效")
 			}
 			client := newHuangdouAPIClient(d)
 			media, err = d.resolveHuangdouPlayback(ctx, client, sourceID, sequence)
@@ -215,16 +215,16 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 		media.Referer = pageURL
 	}
 	if !isProviderHTTPMediaURL(media.URL) {
-		return providerMedia{}, fmt.Errorf("%s 未返回有效播放地址，请刷新章节或确认站点访问权限", chapter.Source)
+		return providerMedia{}, fmt.Errorf("%s 未提供有效的播放網址，請重新整理分集或確認片源存取權限", chapter.Source)
 	}
 	parsed, _ := url.Parse(media.URL)
 	if strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
 		playlist, finalURL, err := d.fetchMediaPlaylist(ctx, media.URL, media.Referer)
 		if err != nil {
-			return providerMedia{}, fmt.Errorf("获取播放列表失败: %w", err)
+			return providerMedia{}, fmt.Errorf("取得播放清單失敗：%w", err)
 		}
 		if !strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(playlist, "\ufeff")), "#EXTM3U") {
-			return providerMedia{}, fmt.Errorf("站点未返回有效 M3U8，可能需要登录或链接已失效")
+			return providerMedia{}, fmt.Errorf("片源未提供有效的 M3U8 播放清單，可能需要登入或連結已失效")
 		}
 		if duration := m3u8Duration(playlist); duration > 0 {
 			media.Duration = duration

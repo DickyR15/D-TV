@@ -30,7 +30,7 @@ func redactErrorString(s string) string {
 	return rePublicURL.ReplaceAllStringFunc(s, func(raw string) string {
 		u, err := url.Parse(raw)
 		if err != nil {
-			return "[无效 URL 已隐藏]"
+			return "[無效的 URL 已隱藏]"
 		}
 		if u.Host == "" {
 			return raw

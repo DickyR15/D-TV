@@ -2,6 +2,72 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/playback_preferences.dart';
 
 void main() {
+  test('TV network speed and clock visibility preferences are independent', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.showTelevisionNetworkSpeed, isTrue);
+    expect(defaults.showTelevisionClock, isTrue);
+
+    final speedOff = defaults.copyWith(showTelevisionNetworkSpeed: false);
+    expect(speedOff.showTelevisionNetworkSpeed, isFalse);
+    expect(speedOff.showTelevisionClock, isTrue);
+    final speedRestored = PlaybackPreferences.fromJson(speedOff.toJson());
+    expect(speedRestored.showTelevisionNetworkSpeed, isFalse);
+    expect(speedRestored.showTelevisionClock, isTrue);
+
+    final clockOff = defaults.copyWith(showTelevisionClock: false);
+    expect(clockOff.showTelevisionNetworkSpeed, isTrue);
+    expect(clockOff.showTelevisionClock, isFalse);
+    final clockRestored = PlaybackPreferences.fromJson(clockOff.toJson());
+    expect(clockRestored.showTelevisionNetworkSpeed, isTrue);
+    expect(clockRestored.showTelevisionClock, isFalse);
+  });
+
+  test('PiP is enabled by default and can be independently disabled', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.pictureInPictureEnabled, isTrue);
+
+    final disabled = defaults.copyWith(pictureInPictureEnabled: false);
+    expect(disabled.pictureInPictureEnabled, isFalse);
+    expect(
+      PlaybackPreferences.fromJson(disabled.toJson()).pictureInPictureEnabled,
+      isFalse,
+    );
+    expect(
+      PlaybackPreferences.fromJson(const {'autoPictureInPicture': true})
+          .pictureInPictureEnabled,
+      isTrue,
+      reason: 'legacy auto-entry preference must not disable PiP itself',
+    );
+  });
+
+  test('desktop always-on-top defaults off and persists', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.desktopAlwaysOnTop, isFalse);
+
+    final enabled = defaults.copyWith(desktopAlwaysOnTop: true);
+    expect(enabled.desktopAlwaysOnTop, isTrue);
+    expect(
+      PlaybackPreferences.fromJson(enabled.toJson()).desktopAlwaysOnTop,
+      isTrue,
+    );
+    expect(
+      PlaybackPreferences.fromJson(
+        enabled.copyWith(desktopAlwaysOnTop: false).toJson(),
+      ).desktopAlwaysOnTop,
+      isFalse,
+    );
+  });
+
+  test('1.1x playback speed is available and persists', () {
+    expect(playbackSpeeds, contains(1.1));
+    final preferences = PlaybackPreferences.fromJson(const {'speed': 1.1});
+    expect(preferences.speed, 1.1);
+    expect(
+      PlaybackPreferences.fromJson(preferences.toJson()).speed,
+      1.1,
+    );
+  });
+
   test('legacy danmaku preference is ignored and omitted from saved settings', () {
     final restored = PlaybackPreferences.fromJson(const {'danmaku': true});
     expect(restored.toJson().containsKey('danmaku'), isFalse);
@@ -124,7 +190,7 @@ void main() {
   });
 
 
-  test('Picture-in-Picture is available on supported Android phones but not TVs', () {
+  test('Picture-in-Picture is available on supported Android and iOS phones but not TVs', () {
     expect(
       supportsPictureInPicture(android: true, systemSupported: true),
       isTrue,
@@ -138,7 +204,20 @@ void main() {
       isFalse,
     );
     expect(
+      supportsPictureInPicture(android: false, ios: true, systemSupported: true),
+      isTrue,
+    );
+    expect(
       supportsPictureInPicture(android: false, systemSupported: true),
+      isFalse,
+    );
+    expect(
+      supportsPictureInPicture(
+        android: false,
+        ios: true,
+        systemSupported: true,
+        television: true,
+      ),
       isFalse,
     );
     expect(
@@ -159,6 +238,16 @@ void main() {
     );
     expect(
       shouldAutoEnterPictureInPicture(
+        android: false,
+        ios: true,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldAutoEnterPictureInPicture(
         android: true,
         systemSupported: true,
         playing: true,
@@ -168,6 +257,7 @@ void main() {
       isFalse,
     );
     for (final values in [
+      (android: false, systemSupported: true, playing: true, enabled: true),
       (android: false, systemSupported: true, playing: true, enabled: true),
       (android: true, systemSupported: false, playing: true, enabled: true),
       (android: true, systemSupported: true, playing: false, enabled: true),

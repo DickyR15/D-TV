@@ -9,11 +9,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:screen_retriever/screen_retriever.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 import 'desktop_window_state.dart';
-import 'desktop_mini_player.dart';
-import 'desktop_mini_player_bridge.dart';
 
 import 'core_bridge.dart';
 import 'device_registration.dart';
@@ -43,39 +40,6 @@ Future<void> main(List<String> args) async {
   }
   MediaKit.ensureInitialized();
   VideoEnhancementAssets.registerLicenses();
-
-  if (desktop) {
-    String currentWindowArguments = '';
-    try {
-      final currentWindow = await WindowController.fromCurrentEngine();
-      currentWindowArguments = currentWindow.arguments;
-    } catch (_) {
-      // Keep the main application usable if multi-window support is unavailable.
-    }
-    final miniPlayerArguments =
-        DesktopMiniPlayerArguments.tryParse(currentWindowArguments);
-    if (miniPlayerArguments != null) {
-      windowManager.waitUntilReadyToShow(
-        const WindowOptions(
-          size: Size(660, 390),
-          center: true,
-          title: 'D TV 小窗播放器',
-        ),
-        () async {
-          await windowManager.setMinimumSize(const Size(480, 300));
-          await windowManager.setResizable(true);
-          await windowManager.setAlwaysOnTop(true);
-          await windowManager.show();
-          await windowManager.focus();
-        },
-      );
-      runApp(DesktopMiniPlayerApp(arguments: miniPlayerArguments));
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_initializeUiLocalizationSafely());
-      });
-      return;
-    }
-  }
 
   if (desktop) {
     windowManager.waitUntilReadyToShow(
@@ -204,9 +168,11 @@ class _AppBootstrapState extends State<AppBootstrap>
       final maximized = await windowManager.isMaximized();
       final minimized = await windowManager.isMinimized();
       if (fullScreen || maximized || minimized) return;
-      final current = DesktopWindowState.fromRect(
-        await windowManager.getBounds(),
-      );
+      final bounds = await windowManager.getBounds();
+      // The original desktop window has a 900x560 minimum. A smaller frame
+      // is the in-place mini-player and must never replace the saved main size.
+      if (bounds.width < 900 || bounds.height < 560) return;
+      final current = DesktopWindowState.fromRect(bounds);
       if (current != null) {
         await preferences.setString(
           DesktopWindowState.preferencesKey,
@@ -221,6 +187,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   final navigator = GlobalKey<NavigatorState>();
   LocalStore? store;
   Object? error;
+  bool repositoryReady = false;
   SystemAccentColors systemAccentColors = (light: null, dark: null);
   late AppDevice device = widget.device;
 
@@ -317,76 +284,112 @@ class _AppBootstrapState extends State<AppBootstrap>
   }
 
   Future<void> _initialize() async {
-    setState(() {
-      error = null;
-    });
+    if (mounted) {
+      setState(() {
+        error = null;
+        repositoryReady = false;
+      });
+    }
     try {
       final preferences = await SharedPreferences.getInstance();
       await _restoreDesktopWindowState(preferences);
-      await _refreshDevice();
-      final accents = await AppDevice.systemAccentColors();
-      unawaited(_logStartupRendering());
-      await repository.initialize();
-      final localStore = await LocalStore.open(preferences);
-      if (mounted) {
+
+      // Start device/theme discovery alongside local profile loading. Neither
+      // operation needs to block the first locked-profile frame.
+      final deviceReady = _refreshDevice();
+      final accentsReady = AppDevice.systemAccentColors();
+
+      // Load local profiles before initializing the playback core. A locked
+      // Android TV can show its login screen immediately instead of waiting
+      // for native player initialization and proxy/download setup.
+      final LocalStore localStore;
+      final existingStore = store;
+      if (existingStore == null) {
+        final openedStore = await LocalStore.open(preferences);
+        if (!mounted) {
+          openedStore.dispose();
+          return;
+        }
+        localStore = openedStore;
         setState(() {
-          systemAccentColors = accents;
-          store = localStore;
-          repository.access = store;
-          MediaLibrary.attach(repository, store!);
-          LanController.current?.dispose();
-          final link = LanController(
-            repository,
-            store!,
-            kind: (device.television || device.emulator)
-                ? 'tv'
-                : Platform.isWindows || Platform.isMacOS
-                ? 'computer'
-                : 'phone',
-          );
-          LanController.current = link;
-          link.openPlayback = (request) async {
-            final epoch = request.profileEpoch;
-            if (request.cancelled ||
-                !mounted ||
-                store!.locked ||
-                !link.receiving ||
-                store!.profileEpoch != epoch ||
-                !store!.allowsSource(request.detail.drama.source)) {
-              throw StateError('當前使用者不能接收播放');
-            }
-            await link.playbackHost?.stop();
-            if (request.cancelled ||
-                !mounted ||
-                store!.locked ||
-                store!.profileEpoch != epoch ||
-                !link.receiving) {
-              throw StateError('播放接收已取消');
-            }
-            final navigation = navigator.currentState;
-            if (navigation == null) throw StateError('接收裝置介面尚未就緒');
-            unawaited(
-              navigation.pushAndRemoveUntil<void>(
-                MaterialPageRoute<void>(
-                  builder: (_) => PlayerScreen(
-                    detail: request.detail,
-                    initialIndex: request.index,
-                    initialPosition: request.position,
-                    repository: repository,
-                    store: store!,
-                    handoff: request,
-                  ),
-                ),
-                (route) => route.isFirst,
-              ),
-            );
-          };
+          store = openedStore;
+          repository.access = openedStore;
+        });
+      } else {
+        localStore = existingStore;
+        setState(() {
+          repository.access = existingStore;
         });
       }
+
+      await deviceReady;
+      final accents = await accentsReady;
+      if (!mounted) return;
+      setState(() => systemAccentColors = accents);
+      unawaited(_logStartupRendering());
+
+      // Home and playback remain gated until initialize() completes, while
+      // ProfilesScreen remains usable during this background setup.
+      await repository.initialize();
+      if (!mounted) return;
+
+      setState(() {
+        repository.access = localStore;
+        MediaLibrary.attach(repository, localStore);
+        LanController.current?.dispose();
+        final link = LanController(
+          repository,
+          localStore,
+          kind: (device.television || device.emulator)
+              ? 'tv'
+              : Platform.isWindows || Platform.isMacOS
+              ? 'computer'
+              : 'phone',
+        );
+        LanController.current = link;
+        link.openPlayback = (request) async {
+          final epoch = request.profileEpoch;
+          if (request.cancelled ||
+              !mounted ||
+              localStore.locked ||
+              !link.receiving ||
+              localStore.profileEpoch != epoch ||
+              !localStore.allowsSource(request.detail.drama.source)) {
+            throw StateError('目前使用者無法接收播放內容');
+          }
+          await link.playbackHost?.stop();
+          if (request.cancelled ||
+              !mounted ||
+              localStore.locked ||
+              localStore.profileEpoch != epoch ||
+              !link.receiving) {
+            throw StateError('播放接收已取消');
+          }
+          final navigation = navigator.currentState;
+          if (navigation == null) throw StateError('接收裝置介面尚未就緒');
+          unawaited(
+            navigation.pushAndRemoveUntil<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => PlayerScreen(
+                  detail: request.detail,
+                  initialIndex: request.index,
+                  initialPosition: request.position,
+                  repository: repository,
+                  store: localStore,
+                  handoff: request,
+                ),
+              ),
+              (route) => route.isFirst,
+            ),
+          );
+        };
+        repositoryReady = true;
+      });
     } catch (failure) {
       if (mounted) {
         setState(() {
           error = failure;
+          repositoryReady = false;
         });
       }
     }
@@ -398,6 +401,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     store: store,
     bootstrapError: error?.toString(),
     onRetry: _initialize,
+    repositoryReady: repositoryReady,
     television: device.television,
     emulator: device.emulator,
     version: device.version,
@@ -442,6 +446,7 @@ class DuanjuApp extends StatelessWidget {
     this.store,
     this.bootstrapError,
     this.onRetry,
+    this.repositoryReady = false,
     this.television = false,
     this.emulator = false,
     this.version = appVersion,
@@ -452,6 +457,7 @@ class DuanjuApp extends StatelessWidget {
   final LocalStore? store;
   final String? bootstrapError;
   final VoidCallback? onRetry;
+  final bool repositoryReady;
   final bool television;
   final bool emulator;
   final String version;
@@ -512,7 +518,10 @@ class DuanjuApp extends StatelessWidget {
             : FocusHighlightStrategy.automatic,
       );
       final theme = Theme.of(context);
-      return AnnotatedRegion<SystemUiOverlayStyle>(
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          AnnotatedRegion<SystemUiOverlayStyle>(
         value: AppTheme.systemBars(theme.brightness),
         child: ColoredBox(
           color: theme.scaffoldBackgroundColor,
@@ -522,6 +531,7 @@ class DuanjuApp extends StatelessWidget {
             child: AppLayout(
               television: tv,
               detectedTelevision: television,
+              detectedEmulator: emulator,
               formFactor: formFactor,
               version: version,
               child: Theme(
@@ -558,6 +568,8 @@ class DuanjuApp extends StatelessWidget {
             ),
           ),
         ),
+          ),
+        ],
       );
     },
     home: AnimatedSwitcher(
@@ -579,17 +591,52 @@ class DuanjuApp extends StatelessWidget {
                     key: ValueKey('locked-${store!.profileEpoch}'),
                     child: ProfilesScreen(store: store!, locked: true),
                   )
-                : DeviceRegistrationGate(
-                    repository: repository,
-                    store: store!,
-                    child: HomeScreen(
-                      key: ValueKey(
-                        'profile-${store!.profile.id}-${store!.profileEpoch}',
-                      ),
-                      repository: repository,
-                      store: store!,
-                    ),
-                  )
+                : repositoryReady
+                    ? DeviceRegistrationGate(
+                        repository: repository,
+                        store: store!,
+                        child: HomeScreen(
+                          key: ValueKey(
+                            'profile-${store!.profile.id}-${store!.profileEpoch}',
+                          ),
+                          repository: repository,
+                          store: store!,
+                        ),
+                      )
+                    : KeyedSubtree(
+                        key: ValueKey(
+                          bootstrapError == null
+                              ? 'bootstrap-loading'
+                              : 'bootstrap-error',
+                        ),
+                        child: Scaffold(
+                          backgroundColor: const Color(0xFF0B0D12),
+                          body: Center(
+                            child: bootstrapError == null
+                                ? const CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  )
+                                : Padding(
+                                    padding: const EdgeInsets.all(32),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          bootstrapError!,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(fontSize: 16),
+                                        ),
+                                        const SizedBox(height: 20),
+                                        FilledButton(
+                                          onPressed: onRetry,
+                                          child: const Text('重新開啟'),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      )
           : KeyedSubtree(
               key: ValueKey<String>(
                 bootstrapError == null ? 'bootstrap-loading' : 'bootstrap-error',
@@ -598,7 +645,7 @@ class DuanjuApp extends StatelessWidget {
                 backgroundColor: const Color(0xFF0B0D12),
                 body: Center(
                   child: bootstrapError == null
-                      ? const DtvLaunchAnimation()
+                      ? const CircularProgressIndicator(strokeWidth: 2)
                       : Padding(
                           padding: const EdgeInsets.all(32),
                           child: Column(
@@ -622,281 +669,4 @@ class DuanjuApp extends StatelessWidget {
             ),
     ),
   );
-}
-
-
-/// A cinematic D TV brand reveal shown while the app initializes.
-class DtvLaunchAnimation extends StatefulWidget {
-  const DtvLaunchAnimation({super.key});
-
-  @override
-  State<DtvLaunchAnimation> createState() => _DtvLaunchAnimationState();
-}
-
-class _DtvLaunchAnimationState extends State<DtvLaunchAnimation>
-    with TickerProviderStateMixin {
-  late final AnimationController _entrance = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1500),
-  );
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1700),
-  );
-  late final Listenable _animation = Listenable.merge([_entrance, _pulse]);
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(
-      _entrance.forward().whenComplete(() {
-        if (mounted) _pulse.repeat(reverse: true);
-      }),
-    );
-  }
-
-  @override
-  void dispose() {
-    _entrance.dispose();
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _animation,
-    builder: (context, _) {
-      final reveal = Curves.easeOutBack.transform(_entrance.value);
-      final glow = Curves.easeInOut.transform(_pulse.value);
-      final wordOpacity =
-          ((_entrance.value - 0.28) / 0.42).clamp(0.0, 1.0).toDouble();
-      final lineOpacity =
-          ((_entrance.value - 0.12) / 0.68).clamp(0.0, 1.0).toDouble();
-
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 260,
-              height: 224,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            const Color(0xFF087EFF).withValues(
-                              alpha: 0.13 + 0.15 * glow,
-                            ),
-                            const Color(0x00087EFF),
-                          ],
-                          stops: const [0.0, 1.0],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Transform.scale(
-                    scale: 0.70 + 0.33 * reveal,
-                    child: SizedBox(
-                      width: 170,
-                      height: 170,
-                      child: CustomPaint(
-                        painter: _DtvMarkPainter(phase: glow),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 18,
-                    child: Opacity(
-                      opacity: lineOpacity,
-                      child: Container(
-                        width: 218 * lineOpacity,
-                        height: 2,
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Color(0x0039D8FF),
-                              Color(0xEE39D8FF),
-                              Color(0x0039D8FF),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 2),
-            Opacity(
-              opacity: wordOpacity,
-              child: Transform.translate(
-                offset: Offset(0, 12 * (1 - wordOpacity)),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'D TV',
-                      style: TextStyle(
-                        color: Color(0xFFF1F6FA),
-                        fontSize: 34,
-                        height: 1,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 5.5,
-                        shadows: [
-                          Shadow(color: Color(0x8833BFFF), blurRadius: 18),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '短劇・漫劇・AI 劇  |  精彩隨選即播',
-                      style: TextStyle(
-                        color: const Color(0xFF8BDFFF).withValues(
-                          alpha: 0.82 + 0.18 * glow,
-                        ),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
-class _DtvMarkPainter extends CustomPainter {
-  const _DtvMarkPainter({required this.phase});
-  final double phase;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final side = size.width < size.height ? size.width : size.height;
-    final dx = (size.width - side) / 2;
-    final dy = (size.height - side) / 2;
-    canvas.save();
-    canvas.translate(dx, dy);
-    canvas.scale(side / 192.0);
-    final rect = const Rect.fromLTWH(0, 0, 192, 192);
-
-    // Keep the same vector geometry as Android's native dtv_mark.xml.
-    final outer = Path()
-      ..moveTo(34, 21)
-      ..lineTo(96, 21)
-      ..cubicTo(137, 21, 158, 49, 158, 96)
-      ..cubicTo(158, 143, 137, 171, 96, 171)
-      ..lineTo(34, 171)
-      ..close();
-
-    canvas.drawPath(
-      outer,
-      Paint()
-        ..color = const Color(0xFF087EFF).withValues(alpha: 0.25 + 0.12 * phase)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4.0 + 2.0 * phase),
-    );
-
-    canvas.saveLayer(rect, Paint());
-    canvas.drawPath(
-      outer,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFEAF1F7),
-            Color(0xFFE0EAF2),
-            Color(0xFF718CA4),
-            Color(0xFFB5CDE0),
-          ],
-          stops: [0.0, 0.28, 0.65, 1.0],
-        ).createShader(rect),
-    );
-
-    final highlight = Path()
-      ..moveTo(37, 21)
-      ..lineTo(93, 21)
-      ..cubicTo(108, 21, 120, 25, 130, 34)
-      ..lineTo(111, 47)
-      ..cubicTo(101, 40, 91, 38, 77, 38)
-      ..lineTo(37, 38)
-      ..close();
-    canvas.drawPath(highlight, Paint()..color = Colors.white.withValues(alpha: 0.92));
-
-    final lowerShade = Path()
-      ..moveTo(35, 147)
-      ..lineTo(65, 135)
-      ..lineTo(96, 135)
-      ..cubicTo(119, 135, 134, 124, 143, 106)
-      ..lineTo(152, 132)
-      ..cubicTo(141, 159, 122, 173, 96, 173)
-      ..lineTo(35, 173)
-      ..close();
-    canvas.drawPath(lowerShade, Paint()..color = const Color(0xFF718CA4));
-
-    final inner = Path()
-      ..moveTo(65, 51)
-      ..lineTo(96, 51)
-      ..cubicTo(121, 51, 136, 68, 136, 96)
-      ..cubicTo(136, 124, 121, 141, 96, 141)
-      ..lineTo(65, 141)
-      ..close();
-    canvas.drawPath(inner, Paint()..color = const Color(0xFF071322));
-
-    final play = Path()
-      ..moveTo(77, 70)
-      ..lineTo(77, 122)
-      ..lineTo(119, 96)
-      ..close();
-    canvas.drawPath(
-      play,
-      Paint()
-        ..color = const Color(0xFF087EFF)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3.0 + 1.5 * phase),
-    );
-    canvas.drawPath(
-      play,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF53F3FF), Color(0xFF00CFFF), Color(0xFF2787FF)],
-        ).createShader(rect),
-    );
-
-    final playHighlight = Path()
-      ..moveTo(80, 73)
-      ..lineTo(80, 95)
-      ..lineTo(99, 84)
-      ..close();
-    canvas.drawPath(playHighlight, Paint()..color = const Color(0xFF53F3FF));
-
-    final shine = Path()
-      ..moveTo(38, 23)
-      ..lineTo(92, 23)
-      ..cubicTo(109, 23, 121, 28, 132, 38);
-    canvas.drawPath(
-      shine,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.1
-        ..strokeCap = StrokeCap.round
-        ..color = Colors.white.withValues(alpha: 0.36 + 0.24 * phase),
-    );
-
-    canvas.restore();
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_DtvMarkPainter oldDelegate) => oldDelegate.phase != phase;
 }

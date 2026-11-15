@@ -87,3 +87,31 @@ Future<WindowController> createDesktopMiniPlayerWindow({
   await controller.show();
   return controller;
 }
+
+
+/// Serializes shutdown of the independent PiP engine. The main window must not
+/// resume its MPV instance until the mini-player has finished disposing its
+/// own native player; closing the OS window is always the final step.
+class DesktopMiniPlayerShutdown {
+  Future<void>? _closing;
+
+  Future<void> close({
+    required Future<void> Function() disposePlayer,
+    required Future<void> Function() notifyMainWindow,
+    required Future<void> Function() closeWindow,
+  }) => _closing ??= _run(
+    disposePlayer: disposePlayer,
+    notifyMainWindow: notifyMainWindow,
+    closeWindow: closeWindow,
+  );
+
+  Future<void> _run({
+    required Future<void> Function() disposePlayer,
+    required Future<void> Function() notifyMainWindow,
+    required Future<void> Function() closeWindow,
+  }) async {
+    await disposePlayer();
+    await notifyMainWindow();
+    await closeWindow();
+  }
+}

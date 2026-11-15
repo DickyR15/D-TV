@@ -178,7 +178,8 @@ class AppDevice {
   }
 
   static Future<double> getBrightness() async {
-    if (defaultTargetPlatform != TargetPlatform.android) return 0.5;
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) return 0.5;
     try {
       final value = await channel.invokeMethod<double>('getBrightness');
       return (value ?? 0.5).clamp(0.0, 1.0);
@@ -188,7 +189,8 @@ class AppDevice {
   }
 
   static Future<void> setBrightness(double brightness) async {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) return;
     try {
       await channel.invokeMethod('setBrightness', {
         'brightness': brightness.clamp(0.01, 1.0),
@@ -197,7 +199,8 @@ class AppDevice {
   }
 
   static Future<void> resetBrightness() async {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) return;
     try {
       await channel.invokeMethod('resetBrightness');
     } catch (_) {}
@@ -267,6 +270,7 @@ class AppLayout extends InheritedWidget {
     super.key,
     required this.television,
     this.detectedTelevision,
+    this.detectedEmulator = false,
     this.formFactor,
     this.version = appVersion,
     required super.child,
@@ -277,6 +281,8 @@ class AppLayout extends InheritedWidget {
   final bool television;
   /// Physical device classification, independent of the user-selected layout.
   final bool? detectedTelevision;
+  /// Physical Android emulator identity, independent of the selected UI mode.
+  final bool detectedEmulator;
   final FormFactor? formFactor;
   final String version;
 
@@ -354,6 +360,10 @@ class AppLayout extends InheritedWidget {
     final layout = context.dependOnInheritedWidgetOfExactType<AppLayout>();
     return layout?.detectedTelevision ?? layout?.television ?? false;
   }
+
+  static bool isAndroidEmulator(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<AppLayout>()?.detectedEmulator ??
+      false;
   static bool isPhone(BuildContext context) =>
       formFactorOf(context) == FormFactor.phone;
   static bool isPad(BuildContext context) =>
@@ -370,6 +380,13 @@ class AppLayout extends InheritedWidget {
     bool? desktopPlatform,
   }) {
     final desktop = desktopPlatform ?? isDesktopPlatform;
+    if (mode == 'auto') {
+      final detectedLabel = currentFactor == null
+          ? null
+          : _displayModeLabels[currentFactor.name];
+      if (detectedLabel == null) return _displayModeLabels['auto']!;
+      return '${_displayModeLabels['auto']}・目前使用$detectedLabel模式';
+    }
     final key = mode == 'standard'
         ? currentFactor?.name ?? 'auto'
         : mode == 'window' && !desktop
@@ -421,6 +438,7 @@ class AppLayout extends InheritedWidget {
   bool updateShouldNotify(AppLayout oldWidget) =>
       television != oldWidget.television ||
       detectedTelevision != oldWidget.detectedTelevision ||
+      detectedEmulator != oldWidget.detectedEmulator ||
       formFactor != oldWidget.formFactor ||
       version != oldWidget.version;
 }

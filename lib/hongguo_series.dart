@@ -91,6 +91,20 @@ HongguoSeriesInfo? hongguoSeriesInfo(Drama drama, {String? unit}) {
   if (drama.source != SourceSite.hongguo.id) return null;
   final title = drama.title.trim();
   final match = _seasonSuffix.firstMatch(title);
+  if (drama.seriesSeasonNumber > 0) {
+    final base = match == null ? title : title.substring(0, match.start).trim();
+    final officialUnit = {'季', '部'}.contains(drama.seriesSeasonUnit)
+        ? drama.seriesSeasonUnit
+        : match?[2] ?? unit ?? '季';
+    if (base.isEmpty) return null;
+    return HongguoSeriesInfo(
+      baseTitle: base,
+      key: normalizedSearchText(base),
+      season: drama.seriesSeasonNumber,
+      unit: officialUnit,
+      explicit: true,
+    );
+  }
   if (match == null) {
     if (unit == null || title.isEmpty) return null;
     return HongguoSeriesInfo(
@@ -118,6 +132,40 @@ List<HongguoSeriesEntry> hongguoSeriesEntries(
   Iterable<Drama> candidates,
 ) {
   if (anchor.source != SourceSite.hongguo.id) return const [];
+
+  // Prefer the official group identifier from the season API. This avoids
+  // merging unrelated productions that happen to share a title.
+  if (anchor.seriesGroupId.isNotEmpty) {
+    final byId = <String, HongguoSeriesEntry>{};
+    for (final drama in [anchor, ...candidates]) {
+      if (drama.source != SourceSite.hongguo.id ||
+          drama.seriesGroupId != anchor.seriesGroupId ||
+          drama.id.isEmpty) {
+        continue;
+      }
+      final info = hongguoSeriesInfo(
+        drama,
+        unit: anchor.seriesSeasonUnit.isEmpty
+            ? '季'
+            : anchor.seriesSeasonUnit,
+      );
+      if (info == null) continue;
+      byId[drama.id] = HongguoSeriesEntry(
+        drama: drama,
+        season: info.season,
+        unit: info.unit,
+      );
+    }
+    final officialEntries = byId.values.toList()
+      ..sort((a, b) {
+        final season = a.season.compareTo(b.season);
+        return season != 0
+            ? season
+            : naturalTitleCompare(a.drama.title, b.drama.title);
+      });
+    return officialEntries.length > 1 ? officialEntries : const [];
+  }
+
   var anchorInfo = hongguoSeriesInfo(anchor);
   String key, unit;
   int anchorSeason;

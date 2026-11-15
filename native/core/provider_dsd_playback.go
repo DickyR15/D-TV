@@ -34,7 +34,7 @@ func parseDSDPlayer(document *html.Node) (map[string]any, bool, error) {
 			decoder.UseNumber()
 			var player map[string]any
 			if decoder.Decode(&player) != nil || player == nil {
-				return nil, true, errors.New("帝果播放器参数格式无效")
+				return nil, true, errors.New("帝果播放器參數格式無效")
 			}
 			if player["id"] != nil && player["url"] != nil {
 				return player, true, nil
@@ -48,7 +48,7 @@ func dsdPlayerIdentity(player map[string]any, sourceID string) (int, int, error)
 	line, lineValid := webProviderInteger(player["sid"], 1000000)
 	episode, episodeValid := webProviderInteger(player["nid"], 1000000)
 	if mapString(player, "id") != sourceID || !lineValid || line < 1 || !episodeValid || episode < 1 {
-		return 0, 0, errors.New("帝果播放器与请求视频不符")
+		return 0, 0, errors.New("帝果播放器與要求的影片不符")
 	}
 	return line, episode, nil
 }
@@ -77,7 +77,7 @@ func dsdDetailIdentity(document *html.Node, sourceID string, player map[string]a
 			return nil
 		}
 	}
-	return errors.New("帝果未返回所请求视频的详情")
+	return errors.New("帝果未提供要求影片的詳情")
 }
 
 func parseDSDDetail(document *html.Node, pageURL, sourceID, site string) (Drama, []Chapter, error) {
@@ -106,7 +106,7 @@ func parseDSDDetail(document *html.Node, pageURL, sourceID, site string) (Drama,
 		}
 	}
 	if title == "" {
-		return Drama{}, nil, errors.New("帝果详情缺少视频名称")
+		return Drama{}, nil, errors.New("帝果詳情缺少影片名稱")
 	}
 	cover := firstNonEmpty(providerCoverAddress(player["poster"], pageURL), dsdCardCover(box, pageURL))
 	description := truncate(providerHTMLText(providerHTMLFirstClass(info, "desc")), 12000)
@@ -149,7 +149,7 @@ func parseDSDDetail(document *html.Node, pageURL, sourceID, site string) (Drama,
 	addEpisode(mapString(player, "link_pre"), "")
 	addEpisode(mapString(player, "link_next"), "")
 	if len(chapters) > 10000 {
-		return Drama{}, nil, errors.New("帝果分集目录过大")
+		return Drama{}, nil, errors.New("帝果集數目錄過大")
 	}
 	sort.SliceStable(chapters, func(i, j int) bool {
 		left, _ := strconv.Atoi(chapters[i].EpisodeString(i + 1))
@@ -165,7 +165,7 @@ func parseDSDDetail(document *html.Node, pageURL, sourceID, site string) (Drama,
 
 func (d *Downloader) fetchDSDDetail(ctx context.Context, sourceID string) (Drama, []Chapter, error) {
 	if !webProviderNumericID.MatchString(sourceID) {
-		return Drama{}, nil, errors.New("帝果视频 ID 无效")
+		return Drama{}, nil, errors.New("帝果影片 ID 無效")
 	}
 	site := d.providerBaseURL(sourceDSD)
 	document, address, err := d.fetchProviderPage(ctx, dsdEpisodePage(site, sourceID, 1, 1), site+"/", dsdUserAgent)
@@ -185,7 +185,7 @@ func dsdIssuedMedia(player map[string]any, pageURL string) (string, error) {
 	case "1":
 		decoded, err := url.PathUnescape(address)
 		if err != nil {
-			return "", errors.New("帝果播放地址编码无效")
+			return "", errors.New("帝果播放網址編碼無效")
 		}
 		address = decoded
 	case "2":
@@ -194,23 +194,23 @@ func dsdIssuedMedia(player map[string]any, pageURL string) (string, error) {
 			decoded, err = base64.RawStdEncoding.DecodeString(address)
 		}
 		if err != nil {
-			return "", errors.New("帝果播放地址编码无效")
+			return "", errors.New("帝果播放網址編碼無效")
 		}
 		address, err = url.PathUnescape(string(decoded))
 		if err != nil {
-			return "", errors.New("帝果播放地址编码无效")
+			return "", errors.New("帝果播放網址編碼無效")
 		}
 	default:
-		return "", errors.New("帝果播放地址编码已变化")
+		return "", errors.New("帝果播放網址編碼已變更")
 	}
 	address = resolveProviderURL(pageURL, address)
 	parsed, err := url.Parse(address)
 	if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil {
-		return "", errors.New("帝果播放地址无效")
+		return "", errors.New("帝果播放網址無效")
 	}
 	path := strings.ToLower(parsed.Path)
 	if !strings.HasSuffix(path, ".m3u8") && !strings.HasSuffix(path, ".mp4") {
-		return "", errors.New("帝果暂未提供可直接播放的媒体")
+		return "", errors.New("帝果目前未提供可直接播放的媒體")
 	}
 	return address, nil
 }
@@ -485,14 +485,14 @@ func (d *Downloader) signDSDMedia(ctx context.Context, address, pageURL, site st
 	resolved := resolveProviderURL(dsdVplayerReferer(site), signed)
 	parsed, err := url.Parse(resolved)
 	if err != nil || !isProviderHTTPMediaURL(resolved) || parsed.User != nil {
-		return "", false, errors.New("帝果播放签名地址无效")
+		return "", false, errors.New("帝果播放簽章網址無效")
 	}
 	path := strings.ToLower(parsed.Path)
 	if !strings.HasSuffix(path, ".m3u8") && !strings.HasSuffix(path, ".mp4") {
-		return "", false, errors.New("帝果签名后未返回可播放媒体")
+		return "", false, errors.New("帝果簽章後未提供可播放的媒體")
 	}
 	if providerMediaOrigin(parsed) == "" || pageURL == "" {
-		return "", false, errors.New("帝果播放签名缺少来源信息")
+		return "", false, errors.New("帝果播放簽章缺少來源資訊")
 	}
 	return resolved, true, nil
 }
@@ -513,16 +513,16 @@ func (d *Downloader) resolveDSDMedia(ctx context.Context, task Task) (providerMe
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
 	prefix := providerChapterID(sourceDSD, sourceID, "")
 	if !valid || source != sourceDSD || !webProviderNumericID.MatchString(sourceID) || !strings.HasPrefix(task.Chapter.ID, prefix) {
-		return providerMedia{}, errors.New("帝果播放信息无效，请刷新详情")
+		return providerMedia{}, errors.New("帝果播放資訊無效，請重新整理詳情")
 	}
 	parts := strings.Split(strings.TrimPrefix(task.Chapter.ID, prefix), "-")
 	if len(parts) != 2 {
-		return providerMedia{}, errors.New("帝果播放分集无效")
+		return providerMedia{}, errors.New("帝果播放集數無效")
 	}
 	line, lineValid := webProviderInteger(parts[0], 1000000)
 	episode, episodeValid := webProviderInteger(parts[1], 1000000)
 	if !lineValid || line < 1 || !episodeValid || episode < 1 {
-		return providerMedia{}, errors.New("帝果播放分集无效")
+		return providerMedia{}, errors.New("帝果播放集數無效")
 	}
 	site := d.providerBaseURL(sourceDSD)
 	document, pageURL, err := d.fetchProviderPage(ctx, dsdEpisodePage(site, sourceID, line, episode), site+"/", dsdUserAgent)
@@ -540,10 +540,10 @@ func (d *Downloader) resolveDSDMedia(ctx context.Context, task Task) (providerMe
 	if found {
 		actualLine, actualEpisode, _ := dsdPlayerIdentity(player, sourceID)
 		if line != actualLine || episode != actualEpisode {
-			return providerMedia{}, errors.New("帝果返回的播放地址与请求分集不符")
+			return providerMedia{}, errors.New("帝果回傳的播放網址與要求的集數不符")
 		}
 		if preview, valid := webProviderInteger(player["trysee"], 86400); valid && preview > 0 {
-			return providerMedia{}, errors.New("帝果仅提供试看，暂未取得正片播放地址")
+			return providerMedia{}, errors.New("帝果僅提供試看，目前尚未取得完整影片的播放網址")
 		}
 		address, err = dsdIssuedMedia(player, pageURL)
 		if err != nil {
@@ -552,14 +552,14 @@ func (d *Downloader) resolveDSDMedia(ctx context.Context, task Task) (providerMe
 	}
 	if address == "" {
 		if line != 1 || episode != 1 {
-			return providerMedia{}, errors.New("帝果未提供该分集的播放地址")
+			return providerMedia{}, errors.New("帝果未提供此集的播放網址")
 		}
 		box := providerHTMLFirstClass(document, "video-box")
 		cover := firstNonEmpty(providerCoverAddress(player["poster"], pageURL), dsdCardCover(box, pageURL))
 		address = dsdMediaFromPagePath(cover, pageURL)
 	}
 	if address == "" {
-		return providerMedia{}, errors.New("帝果未提供播放地址，请重试或确认站源权限")
+		return providerMedia{}, errors.New("帝果未提供播放網址，請重試或確認片源權限")
 	}
 	signed, signedByVplayer, err := d.signDSDMedia(ctx, address, pageURL, site)
 	if err != nil {

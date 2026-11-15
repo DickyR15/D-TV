@@ -35,7 +35,7 @@ const (
 
 var (
 	yeguoBackupSites      = []string{"https://as.vgbyziuz.cc", "https://anyway.vgbyziuz.cc", "https://analyze.buxefaex.cc"}
-	errYeguoDecode        = errors.New("野果接口响应校验或解码失败")
+	errYeguoDecode        = errors.New("野果介面回應驗證或解碼失敗")
 	yeguoModuleImport     = regexp.MustCompile(`(?s)import\s*\{([^{};]+)\}\s*from\s*["'\x60]([^"'\x60]+)["'\x60]`)
 	yeguoScriptBaseCall   = regexp.MustCompile(`baseURL:([a-zA-Z_$][a-zA-Z0-9_$]*)\([a-zA-Z_$]?[a-zA-Z0-9_$]*\)`)
 	yeguoPublicField      = regexp.MustCompile(`\b(version|mode|padding|key|iv|sign_key)\s*:\s*(?:[a-zA-Z_$][a-zA-Z0-9_$]*\(\s*)?["'\x60]([^"'\x60\\\r\n]{1,512})["'\x60]`)
@@ -269,7 +269,7 @@ func (client *yeguoAPIClient) requestClient() *http.Client {
 			Transport: transport,
 			CheckRedirect: func(request *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
-					return errors.New("野果接口重定向次数过多")
+					return errors.New("野果介面重新導向次數過多")
 				}
 				return nil
 			},
@@ -339,7 +339,7 @@ func yeguoAPIBase(document *html.Node, configured string) (string, error) {
 func yeguoValidAPIBase(base string) (string, error) {
 	address, err := url.Parse(base)
 	if err != nil || !isProviderHTTPMediaURL(base) || address.User != nil || address.RawQuery != "" || address.Fragment != "" {
-		return "", errors.New("野果页面未提供有效的接口入口")
+		return "", errors.New("野果頁面未提供有效的介面入口")
 	}
 	return strings.TrimRight(base, "/"), nil
 }
@@ -470,7 +470,7 @@ func (client *yeguoAPIClient) discoverConfigurationAt(ctx context.Context, site 
 		}
 	}
 	if entry == "" {
-		return nil, errors.New("野果页面未提供接口配置脚本")
+		return nil, errors.New("野果頁面未提供介面設定指令碼")
 	}
 	entryBody, err := d.fetchProviderText(ctx, entry, pageURL)
 	if err != nil {
@@ -518,7 +518,7 @@ func (client *yeguoAPIClient) discoverConfigurationAt(ctx context.Context, site 
 		}
 	}
 	if access == nil {
-		return nil, errors.Join(errors.New("野果接口配置已变化，暂时无法解码，请稍后重试"), lastErr)
+		return nil, errors.Join(errors.New("野果介面設定已變更，目前無法解碼，請稍後重試"), lastErr)
 	}
 	if apiBase == "" {
 		return nil, baseErr
@@ -630,7 +630,7 @@ func (client *yeguoAPIClient) call(ctx context.Context, route string, parameters
 		}
 		request, err := http.NewRequestWithContext(ctx, method, address, requestBody)
 		if err != nil {
-			return nil, errors.New("野果接口地址无效")
+			return nil, errors.New("野果介面網址無效")
 		}
 		request.Header.Set("User-Agent", userAgent)
 		if method == http.MethodPost {
@@ -654,7 +654,7 @@ func (client *yeguoAPIClient) call(ctx context.Context, route string, parameters
 			return nil, client.downloader.catalogResponseError(request, response, body)
 		}
 		if readErr != nil || len(body) > 8<<20 {
-			return nil, errors.New("野果接口数据过大或读取失败")
+			return nil, errors.New("野果介面資料過大或讀取失敗")
 		}
 		payload, err := decodeYeguoResponse(body, access)
 		if errors.Is(err, errYeguoDecode) && attempt == 0 {
@@ -670,13 +670,13 @@ func (client *yeguoAPIClient) call(ctx context.Context, route string, parameters
 		}
 		if mapString(payload, "status") != "1" {
 			if mapString(payload, "status") == "-1" {
-				return nil, errors.New("野果当前内容需要站源授权")
+				return nil, errors.New("野果目前內容需要片源授權")
 			}
 			return nil, fmt.Errorf("野果请求未完成：%s", firstNonEmpty(truncate(cleanText(mapString(payload, "msg")), 180), "请稍后重试"))
 		}
 		data, valid := payload["data"].(map[string]any)
 		if !valid {
-			return nil, errors.New("野果返回的数据格式无效")
+			return nil, errors.New("野果回傳的資料格式無效")
 		}
 		return data, nil
 	}

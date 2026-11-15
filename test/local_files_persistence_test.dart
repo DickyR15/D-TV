@@ -224,4 +224,60 @@ void main() {
       isTrue,
     );
   });
+  test('temporarily unreadable history is preserved and read-only until reload', () async {
+    final preferences = await freshPreferences();
+    final legacy = LocalStore(preferences);
+    await legacy.toggleFavorite(favorite);
+    await legacy.saveWatch(
+      entry(favorite, episode: 1, position: 10),
+    );
+    legacy.dispose();
+
+    final directory = await Directory.systemTemp.createTemp('dtv-files-locked-');
+    addTearDown(() => directory.delete(recursive: true));
+    final first = await LocalStore.open(
+      preferences,
+      storageDirectory: directory,
+    );
+    final historyFile = File(
+      path.join(directory.path, 'users', 'default', 'history.json'),
+    );
+    final lastGood = await historyFile.readAsString();
+    first.dispose();
+
+    final backupFile = File('${historyFile.path}.bak');
+    await backupFile.writeAsString(lastGood);
+    await historyFile.delete();
+    await Directory(historyFile.path).create();
+
+    final restored = await LocalStore.open(
+      preferences,
+      storageDirectory: directory,
+    );
+    addTearDown(restored.dispose);
+
+    expect(restored.configurationError, isNull);
+    expect(restored.watched(favorite.id)?.position, 10);
+    expect(restored.hasUnavailableLocalDataFiles, isTrue);
+    await expectLater(
+      restored.saveWatch(
+        entry(favorite, episode: 2, position: 48),
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(await Directory(historyFile.path).exists(), isTrue);
+    expect(await backupFile.readAsString(), lastGood);
+
+    await Directory(historyFile.path).delete(recursive: true);
+    await historyFile.writeAsString(lastGood);
+    await restored.reload();
+
+    expect(restored.hasUnavailableLocalDataFiles, isFalse);
+    expect(restored.watched(favorite.id)?.position, 10);
+    await restored.saveWatch(
+      entry(favorite, episode: 2, position: 48),
+    );
+    expect(restored.watched(favorite.id)?.position, 48);
+  });
+
 }

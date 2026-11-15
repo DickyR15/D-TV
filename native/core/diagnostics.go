@@ -121,7 +121,7 @@ func (downloader *Downloader) recordDiagnostic(event diagnosticEvent) {
 	event.DramaTitle = truncate(redactConfiguredString(&downloader.cfg, event.DramaTitle), 256)
 	if err := downloader.diagnostics.write(event); err != nil {
 		downloader.diagnostics.warningOnce.Do(func() {
-			fmt.Fprintf(os.Stderr, "诊断日志保存失败：%v\n", publicError(err))
+			fmt.Fprintf(os.Stderr, "診斷日誌儲存失敗：%v\n", publicError(err))
 		})
 	}
 }

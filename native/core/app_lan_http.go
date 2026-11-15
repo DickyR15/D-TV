@@ -22,13 +22,13 @@ func (link *nativeLANServer) request(parent context.Context, input nativeLANInpu
 		return nil, err
 	}
 	if !probe && (!nativeLANPin.MatchString(input.Pin) || !nativeLANID.MatchString(input.DeviceID)) {
-		return nil, errors.New("目标设备证书无效")
+		return nil, errors.New("目標裝置憑證無效")
 	}
 	if probe {
 		input.Path = "hello"
 	}
 	if !nativeLANPath(input.Path) || len(input.Payload) > nativeLANLimit-16384 || !nativeLANID.MatchString(input.RequestID) {
-		return nil, errors.New("设备请求无效")
+		return nil, errors.New("裝置要求無效")
 	}
 	ctx, cancel := context.WithTimeout(parent, 55*time.Second)
 	defer cancel()
@@ -36,12 +36,12 @@ func (link *nativeLANServer) request(parent context.Context, input nativeLANInpu
 	select {
 	case <-link.done:
 		link.mu.Unlock()
-		return nil, errors.New("设备接收已关闭")
+		return nil, errors.New("裝置接收功能已關閉")
 	default:
 	}
 	if len(link.requests) >= 8 || link.requests[input.RequestID] != nil {
 		link.mu.Unlock()
-		return nil, errors.New("设备连接正忙，请稍后重试")
+		return nil, errors.New("裝置連線忙碌中，請稍後重試")
 	}
 	link.requests[input.RequestID] = cancel
 	now := time.Now()
@@ -64,7 +64,7 @@ func (link *nativeLANServer) request(parent context.Context, input nativeLANInpu
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-link.done:
-			return nil, errors.New("设备接收已关闭")
+			return nil, errors.New("裝置接收功能已關閉")
 		}
 	}
 	var observedPin, observedID string
@@ -77,20 +77,20 @@ func (link *nativeLANServer) request(parent context.Context, input nativeLANInpu
 			InsecureSkipVerify: true,
 			VerifyConnection: func(state tls.ConnectionState) error {
 				if len(state.PeerCertificates) != 1 {
-					return errors.New("设备证书无效")
+					return errors.New("裝置憑證無效")
 				}
 				cert := state.PeerCertificates[0]
 				observedPin, observedID = nativeLANFingerprint(cert), cert.Subject.CommonName
 				if !nativeLANID.MatchString(observedID) || time.Now().Before(cert.NotBefore) ||
 					time.Now().After(cert.NotAfter) ||
 					cert.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature) != nil {
-					return errors.New("设备证书无效或已过期")
+					return errors.New("裝置憑證無效或已過期")
 				}
 				if input.Pin != "" && subtle.ConstantTimeCompare([]byte(input.Pin), []byte(observedPin)) != 1 {
-					return errors.New("设备证书已改变，请在设备列表中核对后重新配对")
+					return errors.New("裝置憑證已變更，請在裝置清單中核對後重新配對")
 				}
 				if input.DeviceID != "" && input.DeviceID != observedID {
-					return errors.New("设备身份与已记住的目标不一致")
+					return errors.New("裝置身分與已記住的目標不一致")
 				}
 				return nil
 			},
@@ -98,7 +98,7 @@ func (link *nativeLANServer) request(parent context.Context, input nativeLANInpu
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error {
-		return errors.New("设备连接不接受重定向")
+		return errors.New("裝置連線不接受重新導向")
 	}}
 	body := input.Payload
 	if len(body) == 0 {
@@ -116,12 +116,12 @@ func (link *nativeLANServer) request(parent context.Context, input nativeLANInpu
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("局域网连接失败：%w", err)
+		return nil, fmt.Errorf("區域網路連線失敗：%w", err)
 	}
 	defer response.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(response.Body, nativeLANLimit+1))
 	if err != nil || len(data) > nativeLANLimit {
-		return nil, errors.New("对方返回的数据过大或传输中断")
+		return nil, errors.New("對方回傳的資料過大或傳輸中斷")
 	}
 	var envelope struct {
 		OK    bool            `json:"ok"`
@@ -129,19 +129,19 @@ func (link *nativeLANServer) request(parent context.Context, input nativeLANInpu
 		Data  json.RawMessage `json:"data"`
 	}
 	if json.Unmarshal(data, &envelope) != nil {
-		return nil, errors.New("对方设备的协议版本不兼容")
+		return nil, errors.New("對方裝置的協定版本不相容")
 	}
 	if response.StatusCode != http.StatusOK || !envelope.OK {
 		message := envelope.Error
 		if message == "" || len(message) > 1000 {
-			message = "对方未接受连接，请重新选择设备"
+			message = "對方未接受連線，請重新選擇裝置"
 		}
 		return nil, errors.New(message)
 	}
 	if probe {
 		var info map[string]any
 		if json.Unmarshal(envelope.Data, &info) != nil || info["deviceId"] != observedID || info["pin"] != observedPin {
-			return nil, errors.New("设备身份响应不一致")
+			return nil, errors.New("裝置身分回應不一致")
 		}
 		info["address"] = address
 		return info, nil
@@ -177,12 +177,12 @@ func (link *nativeLANServer) serve(w http.ResponseWriter, request *http.Request)
 	if err != nil || !nativeLANPrivate(host) || request.Method != http.MethodPost ||
 		request.URL.RawQuery != "" || request.Header.Get("Origin") != "" ||
 		request.TLS == nil || len(request.TLS.PeerCertificates) != 1 {
-		nativeLANWrite(w, http.StatusForbidden, nil, errors.New("不接受此设备请求"))
+		nativeLANWrite(w, http.StatusForbidden, nil, errors.New("不接受此裝置要求"))
 		return
 	}
 	path := strings.TrimPrefix(request.URL.Path, "/zgj/v1/")
 	if !strings.HasPrefix(request.URL.Path, "/zgj/v1/") || !nativeLANPath(path) {
-		nativeLANWrite(w, http.StatusNotFound, nil, errors.New("设备操作不存在"))
+		nativeLANWrite(w, http.StatusNotFound, nil, errors.New("裝置操作不存在"))
 		return
 	}
 	cert := request.TLS.PeerCertificates[0]
@@ -191,14 +191,14 @@ func (link *nativeLANServer) serve(w http.ResponseWriter, request *http.Request)
 		request.Header.Get("X-Zgj-Device") != peerID ||
 		time.Now().Before(cert.NotBefore) || time.Now().After(cert.NotAfter) ||
 		cert.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature) != nil {
-		nativeLANWrite(w, http.StatusForbidden, nil, errors.New("设备身份校验失败"))
+		nativeLANWrite(w, http.StatusForbidden, nil, errors.New("裝置身分驗證失敗"))
 		return
 	}
 	select {
 	case link.slots <- struct{}{}:
 		defer func() { <-link.slots }()
 	default:
-		nativeLANWrite(w, http.StatusTooManyRequests, nil, errors.New("设备正忙，请稍后重试"))
+		nativeLANWrite(w, http.StatusTooManyRequests, nil, errors.New("裝置忙碌中，請稍後重試"))
 		return
 	}
 	link.mu.Lock()
@@ -227,11 +227,11 @@ func (link *nativeLANServer) serve(w http.ResponseWriter, request *http.Request)
 	}
 	link.mu.Unlock()
 	if rate.count > 30 || len(request.Header.Get("Authorization")) > 128 {
-		nativeLANWrite(w, http.StatusTooManyRequests, nil, errors.New("设备请求过于频繁"))
+		nativeLANWrite(w, http.StatusTooManyRequests, nil, errors.New("裝置要求過於頻繁"))
 		return
 	}
 	if !allowed {
-		nativeLANWrite(w, http.StatusUnauthorized, nil, errors.New("连接或用户会话已失效，请重新连接"))
+		nativeLANWrite(w, http.StatusUnauthorized, nil, errors.New("連線或使用者工作階段已失效，請重新連線"))
 		return
 	}
 	if path == "hello" {
@@ -240,7 +240,7 @@ func (link *nativeLANServer) serve(w http.ResponseWriter, request *http.Request)
 	}
 	data, err := io.ReadAll(http.MaxBytesReader(w, request.Body, nativeLANLimit-16384))
 	if err != nil || !json.Valid(data) {
-		nativeLANWrite(w, http.StatusBadRequest, nil, errors.New("设备记录格式或大小无效"))
+		nativeLANWrite(w, http.StatusBadRequest, nil, errors.New("裝置紀錄格式或大小無效"))
 		return
 	}
 	id, err := nativeLANRandom(16)

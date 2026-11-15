@@ -2,7 +2,7 @@ import 'package:flutter/painting.dart';
 
 import 'video_enhancement_preferences.dart';
 
-const playbackSpeeds = [.5, .75, 1.0, 1.25, 1.5, 2.0, 3.0];
+const playbackSpeeds = [.5, .75, 1.0, 1.1, 1.25, 1.5, 2.0, 3.0];
 
 enum TelevisionDecoder { automatic, optimized, hardware, software }
 
@@ -65,16 +65,18 @@ String? playbackHwdecFor({
   return null;
 }
 
-/// Whether the current Android device exposes the system Picture-in-Picture API.
+/// Whether the current Android or iOS device exposes the system Picture-in-Picture API.
 bool supportsPictureInPicture({
   required bool android,
+  bool ios = false,
   required bool systemSupported,
   bool television = false,
-}) => android && !television && systemSupported;
+}) => (android || ios) && !television && systemSupported;
 
 /// PiP auto-entry is only enabled while a supported Android player is running.
 bool shouldAutoEnterPictureInPicture({
   required bool android,
+  bool ios = false,
   required bool systemSupported,
   required bool playing,
   required bool enabled,
@@ -82,6 +84,7 @@ bool shouldAutoEnterPictureInPicture({
 }) =>
     supportsPictureInPicture(
       android: android,
+      ios: ios,
       systemSupported: systemSupported,
       television: television,
     ) &&
@@ -98,7 +101,11 @@ class PlaybackPreferences {
     this.portraitBlurBackground = false,
     this.televisionDecoder = TelevisionDecoder.automatic,
     this.autoPictureInPicture = false,
+    this.pictureInPictureEnabled = true,
     this.aspectRatio = PlaybackAspectRatio.automatic,
+    this.desktopAlwaysOnTop = false,
+    this.showTelevisionNetworkSpeed = true,
+    this.showTelevisionClock = true,
   });
 
   final double speed;
@@ -109,7 +116,11 @@ class PlaybackPreferences {
   final bool portraitBlurBackground;
   final TelevisionDecoder televisionDecoder;
   final bool autoPictureInPicture;
+  final bool pictureInPictureEnabled;
   final PlaybackAspectRatio aspectRatio;
+  final bool desktopAlwaysOnTop;
+  final bool showTelevisionNetworkSpeed;
+  final bool showTelevisionClock;
 
   // Fresh installs enable next-episode preloading on phones and TVs.
   // A saved explicit choice (including false) always takes precedence.
@@ -124,7 +135,11 @@ class PlaybackPreferences {
     bool? portraitBlurBackground,
     TelevisionDecoder? televisionDecoder,
     bool? autoPictureInPicture,
+    bool? pictureInPictureEnabled,
     PlaybackAspectRatio? aspectRatio,
+    bool? desktopAlwaysOnTop,
+    bool? showTelevisionNetworkSpeed,
+    bool? showTelevisionClock,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
@@ -134,7 +149,13 @@ class PlaybackPreferences {
     portraitBlurBackground: portraitBlurBackground ?? this.portraitBlurBackground,
     televisionDecoder: televisionDecoder ?? this.televisionDecoder,
     autoPictureInPicture: autoPictureInPicture ?? this.autoPictureInPicture,
+    pictureInPictureEnabled:
+        pictureInPictureEnabled ?? this.pictureInPictureEnabled,
     aspectRatio: aspectRatio ?? this.aspectRatio,
+    desktopAlwaysOnTop: desktopAlwaysOnTop ?? this.desktopAlwaysOnTop,
+    showTelevisionNetworkSpeed:
+        showTelevisionNetworkSpeed ?? this.showTelevisionNetworkSpeed,
+    showTelevisionClock: showTelevisionClock ?? this.showTelevisionClock,
   );
 
   Map<String, dynamic> toJson() => {
@@ -146,7 +167,11 @@ class PlaybackPreferences {
     'portraitBlurBackground': portraitBlurBackground,
     'televisionDecoderMode': televisionDecoder.name,
     'autoPictureInPicture': autoPictureInPicture,
+    'pictureInPictureEnabled': pictureInPictureEnabled,
     'aspectRatioMode': aspectRatio.name,
+    'desktopAlwaysOnTop': desktopAlwaysOnTop,
+    'showTelevisionNetworkSpeed': showTelevisionNetworkSpeed,
+    'showTelevisionClock': showTelevisionClock,
   };
 
   factory PlaybackPreferences.fromJson(Map<String, dynamic> value) {
@@ -175,7 +200,13 @@ class PlaybackPreferences {
       portraitBlurBackground: value['portraitBlurBackground'] as bool? ?? false,
       televisionDecoder: decoder,
       autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
+      pictureInPictureEnabled:
+          value['pictureInPictureEnabled'] as bool? ?? true,
       aspectRatio: aspectRatio,
+      desktopAlwaysOnTop: value['desktopAlwaysOnTop'] as bool? ?? false,
+      showTelevisionNetworkSpeed:
+          value['showTelevisionNetworkSpeed'] as bool? ?? true,
+      showTelevisionClock: value['showTelevisionClock'] as bool? ?? true,
     );
   }
 }

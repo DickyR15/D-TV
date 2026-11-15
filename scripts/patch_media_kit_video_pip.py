@@ -1,0 +1,995 @@
+#!/usr/bin/env python3
+"""Apply D TV's iOS Sample Buffer PiP extension to the pinned media_kit_video package."""
+
+from __future__ import annotations
+
+import json
+import re
+import shutil
+from pathlib import Path
+from urllib.parse import unquote, urljoin, urlparse
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MARKER = "DTV_SAMPLE_BUFFER_PIP_PATCH_V3"
+PREVIOUS_MARKER = "DTV_SAMPLE_BUFFER_PIP_PATCH_V2"
+LEGACY_MARKER = "DTV_SAMPLE_BUFFER_PIP_PATCH_V1"
+EXPECTED_VERSION = "2.0.1"
+
+
+def package_root() -> Path:
+    config_path = ROOT / ".dart_tool" / "package_config.json"
+    if not config_path.is_file():
+        raise SystemExit("找不到 .dart_tool/package_config.json，請先執行 flutter pub get。")
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    for package in config.get("packages", []):
+        if package.get("name") != "media_kit_video":
+            continue
+        root_uri = urljoin(config_path.resolve().as_uri(), package["rootUri"])
+        parsed = urlparse(root_uri)
+        if parsed.scheme != "file":
+            raise SystemExit("media_kit_video package root 不是本機 file URI。")
+        path = Path(unquote(parsed.path)).resolve()
+        return path
+
+    raise SystemExit("Flutter package graph 中找不到 media_kit_video。")
+
+
+def replace_exact(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"無法安全套用 {label}：預期 1 個位置，實際找到 {count} 個。")
+    return text.replace(old, new, 1)
+
+
+def patch_texture_sw(package: Path, template: Path) -> None:
+    # D TV sets enableHardwareAcceleration=false on iOS, so media_kit_video
+    # renders through TextureSW. PiP must tap this active software renderer.
+    path = package / "ios/Classes/plugin/common/TextureSW.swift"
+    if not path.is_file():
+        raise SystemExit(
+            "media_kit_video 2.0.1 缺少預期的 iOS TextureSW.swift："
+            + str(path)
+        )
+    text = path.read_text(encoding="utf-8")
+    destination = path.parent / "DTVSampleBufferPiPRenderer.swift"
+    # A previous V1 build placed the same Swift class beside TextureHW.swift.
+    # Reuse that single compiled source when it exists; copying another one
+    # under common/ would define DTVSampleBufferPiPRenderer twice.
+    legacy_destination = package / "ios/Classes/plugin/DTVSampleBufferPiPRenderer.swift"
+    if MARKER in text or PREVIOUS_MARKER in text:
+        # Upgrade restored V2 caches without applying the TextureSW patch twice.
+        target = legacy_destination if legacy_destination.exists() else destination
+        if not target.exists() or target.read_bytes() != template.read_bytes():
+            shutil.copy2(template, target)
+        if PREVIOUS_MARKER in text:
+            prepare_registry = """
+  public static func prepareDTVPiP(
+    handle: Int64,
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    dtvInstanceLock.lock()
+    let instance = dtvInstances[Int(handle)]?.value
+    dtvInstanceLock.unlock()
+    guard let instance else {
+      completion(NSError(
+        domain: "DTVSampleBufferPiP",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "找不到目前 MPV 的 iOS 影格輸出"]
+      ))
+      return
+    }
+    guard #available(iOS 15.0, *) else {
+      completion(NSError(
+        domain: "DTVSampleBufferPiP",
+        code: 3,
+        userInfo: [NSLocalizedDescriptionKey: "Sample Buffer 子母畫面需要 iOS 15 或更新版本"]
+      ))
+      return
+    }
+    instance.prepareDTVPiP(
+      width: width,
+      height: height,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: eventHandler,
+      completion: completion
+    )
+  }
+
+"""
+            text = replace_exact(
+                text,
+                "  public static func startDTVPiP(",
+                prepare_registry + "  public static func startDTVPiP(",
+                "TextureSW V2 upgrade prepare registry",
+            )
+            text = replace_exact(
+                text,
+                """    durationSeconds: Double,
+    playing: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    dtvInstanceLock.lock()""",
+                """    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    dtvInstanceLock.lock()""",
+                "TextureSW V2 upgrade static autoStart parameter",
+            )
+            text = replace_exact(
+                """      durationSeconds: durationSeconds,
+      playing: playing,
+      eventHandler: eventHandler,
+      completion: completion
+    )
+  }
+
+  public static func stopDTVPiP""",
+                """      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: eventHandler,
+      completion: completion
+    )
+  }
+
+  public static func stopDTVPiP""",
+                "TextureSW V2 upgrade static autoStart forwarding",
+            )
+            prepare_instance = """
+  @available(iOS 15.0, *)
+  private func prepareDTVPiP(
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    pipLock.lock()
+    let renderer: DTVSampleBufferPiPRenderer
+    if let existing = pipRenderer {
+      renderer = existing
+    } else {
+      let created = DTVSampleBufferPiPRenderer(eventHandler: eventHandler)
+      pipRenderer = created
+      renderer = created
+    }
+    pipLock.unlock()
+    renderer.prepareForAutomaticStart(
+      width: width,
+      height: height,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      completion: completion
+    )
+  }
+
+"""
+            text = replace_exact(
+                text,
+                "  @available(iOS 15.0, *)\n  private func stopDTVPiP()",
+                prepare_instance + "  @available(iOS 15.0, *)\n  private func stopDTVPiP()",
+                "TextureSW V2 upgrade prepare instance",
+            )
+            text = replace_exact(
+                text,
+                """    durationSeconds: Double,
+    playing: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    pipLock.lock()""",
+                """    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    pipLock.lock()""",
+                "TextureSW V2 upgrade instance autoStart parameter",
+            )
+            text = replace_exact(
+                """      durationSeconds: durationSeconds,
+      playing: playing,
+      completion: completion
+    )
+
+    // Seed SampleBuffer PiP""",
+                """      durationSeconds: durationSeconds,
+      playing: playing,
+      automaticallyFromInline: autoStart,
+      completion: completion
+    )
+
+    // Seed SampleBuffer PiP""",
+                "TextureSW V2 upgrade renderer autoStart forwarding",
+            )
+            path.write_text(text.replace(PREVIOUS_MARKER, MARKER), encoding="utf-8")
+        return
+
+    text = replace_exact(
+        text,
+        "#if canImport(Flutter)\n",
+        "import AVFoundation\nimport AVKit\nimport CoreImage\nimport CoreMedia\nimport CoreVideo\nimport Foundation\n\n#if canImport(Flutter)\n",
+        "TextureSW imports",
+    )
+
+    registry_code = """
+  // D TV bridges the already-rendered MPV frames into AVKit's sample-buffer PiP.
+  private final class WeakTextureSW {
+    weak var value: TextureSW?
+    init(_ value: TextureSW) { self.value = value }
+  }
+
+  private static let dtvInstanceLock = NSLock()
+  private static var dtvInstances: [Int: WeakTextureSW] = [:]
+
+  public static func prepareDTVPiP(
+    handle: Int64,
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    dtvInstanceLock.lock()
+    let instance = dtvInstances[Int(handle)]?.value
+    dtvInstanceLock.unlock()
+
+    guard let instance else {
+      completion(NSError(
+        domain: "DTVSampleBufferPiP",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "找不到目前 MPV 的 iOS 影格輸出"]
+      ))
+      return
+    }
+
+    guard #available(iOS 15.0, *) else {
+      completion(NSError(
+        domain: "DTVSampleBufferPiP",
+        code: 3,
+        userInfo: [NSLocalizedDescriptionKey: "Sample Buffer 子母畫面需要 iOS 15 或更新版本"]
+      ))
+      return
+    }
+
+    instance.prepareDTVPiP(
+      width: width,
+      height: height,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: eventHandler,
+      completion: completion
+    )
+  }
+
+  public static func startDTVPiP(
+    handle: Int64,
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    dtvInstanceLock.lock()
+    let instance = dtvInstances[Int(handle)]?.value
+    dtvInstanceLock.unlock()
+
+    guard let instance else {
+      completion(NSError(
+        domain: "DTVSampleBufferPiP",
+        code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "找不到目前 MPV 的 iOS 影格輸出"]
+      ))
+      return
+    }
+
+    guard #available(iOS 15.0, *) else {
+      completion(NSError(
+        domain: "DTVSampleBufferPiP",
+        code: 3,
+        userInfo: [NSLocalizedDescriptionKey: "Sample Buffer 子母畫面需要 iOS 15 或更新版本"]
+      ))
+      return
+    }
+
+    instance.startDTVPiP(
+      width: width,
+      height: height,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: eventHandler,
+      completion: completion
+    )
+  }
+
+  public static func stopDTVPiP(handle: Int64) {
+    dtvInstanceLock.lock()
+    let instance = dtvInstances[Int(handle)]?.value
+    dtvInstanceLock.unlock()
+
+    guard let instance else { return }
+    if #available(iOS 15.0, *) {
+      instance.stopDTVPiP()
+    }
+  }
+
+  public static func updateDTVPiP(
+    handle: Int64,
+    playing: Bool,
+    positionSeconds: Double
+  ) {
+    dtvInstanceLock.lock()
+    let instance = dtvInstances[Int(handle)]?.value
+    dtvInstanceLock.unlock()
+
+    guard let instance else { return }
+    if #available(iOS 15.0, *) {
+      instance.updateDTVPiP(
+        playing: playing,
+        positionSeconds: positionSeconds
+      )
+    }
+  }
+
+  public static func completeDTVPiPSkip(handle: Int64) {
+    dtvInstanceLock.lock()
+    let instance = dtvInstances[Int(handle)]?.value
+    dtvInstanceLock.unlock()
+
+    guard let instance else { return }
+    if #available(iOS 15.0, *) {
+      instance.completeDTVPiPSkip()
+    }
+  }
+
+  @available(iOS 15.0, *)
+  private func completeDTVPiPSkip() {
+    pipLock.lock()
+    let renderer = pipRenderer
+    pipLock.unlock()
+    renderer?.completePendingSkip()
+  }
+
+  @available(iOS 15.0, *)
+  private func updateDTVPiP(
+    playing: Bool,
+    positionSeconds: Double
+  ) {
+    pipLock.lock()
+    let renderer = pipRenderer
+    pipLock.unlock()
+    renderer?.updatePlaybackState(
+      playing: playing,
+      positionSeconds: positionSeconds
+    )
+  }
+
+  @available(iOS 15.0, *)
+  private func startDTVPiP(
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    pipLock.lock()
+    let renderer: DTVSampleBufferPiPRenderer
+    if let existing = pipRenderer {
+      renderer = existing
+    } else {
+      let created = DTVSampleBufferPiPRenderer(eventHandler: eventHandler)
+      pipRenderer = created
+      renderer = created
+    }
+    pipLock.unlock()
+
+    renderer.start(
+      width: width,
+      height: height,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      playing: playing,
+      automaticallyFromInline: autoStart,
+      completion: completion
+    )
+
+    // Seed SampleBuffer PiP for both playing and paused sessions. Waiting for
+    // the next MPV render callback can leave AVKit's display layer empty on
+    // some iOS paths, so enqueue the latest completed texture frame first.
+    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(180)) { [weak self, weak renderer] in
+      guard let self, let renderer else { return }
+      guard let current = self.textureContexts.current else {
+        renderer.reportDiagnostic("initial frame seed skipped: no current TextureSW frame")
+        return
+      }
+      var seedPosition = positionSeconds
+      let timeStatus = mpv_get_property(
+        self.handle,
+        "time-pos",
+        MPV_FORMAT_DOUBLE,
+        &seedPosition
+      )
+      if timeStatus < 0 || !seedPosition.isFinite {
+        seedPosition = positionSeconds
+      }
+      renderer.reportDiagnostic(
+        "seeding initial frame playing=\(playing) position=\(seedPosition)"
+      )
+      renderer.appendFrame(
+        from: current.pixelBuffer,
+        positionSeconds: seedPosition
+      )
+    }
+  }
+
+  @available(iOS 15.0, *)
+  private func prepareDTVPiP(
+    width: Int,
+    height: Int,
+    positionSeconds: Double,
+    durationSeconds: Double,
+    playing: Bool,
+    autoStart: Bool,
+    eventHandler: @escaping (String, Any?) -> Void,
+    completion: @escaping (Error?) -> Void
+  ) {
+    pipLock.lock()
+    let renderer: DTVSampleBufferPiPRenderer
+    if let existing = pipRenderer {
+      renderer = existing
+    } else {
+      let created = DTVSampleBufferPiPRenderer(eventHandler: eventHandler)
+      pipRenderer = created
+      renderer = created
+    }
+    pipLock.unlock()
+
+    renderer.prepareForAutomaticStart(
+      width: width,
+      height: height,
+      positionSeconds: positionSeconds,
+      durationSeconds: durationSeconds,
+      playing: playing,
+      autoStart: autoStart,
+      completion: completion
+    )
+  }
+
+  @available(iOS 15.0, *)
+  private func stopDTVPiP() {
+    pipLock.lock()
+    let renderer = pipRenderer
+    pipRenderer = nil
+    pipLock.unlock()
+    renderer?.stop()
+  }
+
+"""
+    text = replace_exact(
+        text,
+        "  public typealias UpdateCallback = () -> Void\n",
+        "  public typealias UpdateCallback = () -> Void\n" + registry_code,
+        "TextureSW D TV registry methods",
+    )
+
+    text = replace_exact(
+        text,
+        "  private var textureContexts = SwappableObjectManager<TextureSWContext>(\n",
+        "  private let pipLock = NSLock()\n  @available(iOS 15.0, *)\n  private var pipRenderer: DTVSampleBufferPiPRenderer?\n  private var textureContexts = SwappableObjectManager<TextureSWContext>(\n",
+        "TextureSW PiP state",
+    )
+
+    text = replace_exact(
+        text,
+        "    super.init()\n\n    DispatchQueue.main.async {\n      self.initMPV()\n    }\n",
+        """    super.init()
+
+    Self.dtvInstanceLock.lock()
+    Self.dtvInstances[Int(bitPattern: handle)] = WeakTextureSW(self)
+    Self.dtvInstanceLock.unlock()
+
+    DispatchQueue.main.async {
+      self.initMPV()
+    }
+""",
+        "TextureSW instance registration",
+    )
+
+    text = replace_exact(
+        text,
+        """  deinit {
+    disposePixelBuffer()
+    disposeMPV()
+  }""",
+        """  deinit {
+    if #available(iOS 15.0, *) {
+      stopDTVPiP()
+    }
+    Self.dtvInstanceLock.lock()
+    Self.dtvInstances.removeValue(forKey: Int(bitPattern: handle))
+    Self.dtvInstanceLock.unlock()
+    disposePixelBuffer()
+    disposeMPV()
+  }""",
+        "TextureSW instance cleanup",
+    )
+
+    text = replace_exact(
+        text,
+        """    mpv_render_context_render(renderContext, &params)
+
+    textureContexts.pushAsReady(textureContext!)""",
+        """    mpv_render_context_render(renderContext, &params)
+
+    // Copy the completed MPV frame before this buffer returns to Flutter's
+    // three-buffer texture ring. The PiP renderer owns a separate buffer pool.
+    if #available(iOS 15.0, *) {
+      pipLock.lock()
+      let sampleBufferRenderer = pipRenderer
+      pipLock.unlock()
+      if let sampleBufferRenderer {
+        var mediaTime: Double = 0
+        let timeStatus = mpv_get_property(
+          handle,
+          "time-pos",
+          MPV_FORMAT_DOUBLE,
+          &mediaTime
+        )
+        if timeStatus >= 0 && mediaTime.isFinite {
+          sampleBufferRenderer.appendFrame(
+            from: textureContext!.pixelBuffer,
+            positionSeconds: mediaTime
+          )
+        }
+      }
+    }
+
+    textureContexts.pushAsReady(textureContext!)""",
+        "TextureSW frame tap",
+    )
+
+    path.write_text(text + "\n// " + MARKER + "\n", encoding="utf-8")
+    if not legacy_destination.exists():
+        shutil.copy2(template, destination)
+
+
+def patch_plugin(package: Path) -> None:
+    path = package / "ios/Classes/plugin/common/MediaKitVideoPlugin.swift"
+    if not path.is_file():
+        raise SystemExit(
+            "media_kit_video 2.0.1 缺少預期的 iOS MediaKitVideoPlugin.swift："
+            + str(path)
+        )
+    text = path.read_text(encoding="utf-8")
+    if MARKER in text:
+        return
+    if LEGACY_MARKER in text:
+        text = text.replace("TextureHW.", "TextureSW.")
+        text = text.replace(LEGACY_MARKER, PREVIOUS_MARKER)
+    if PREVIOUS_MARKER in text:
+        text = replace_exact(
+            text,
+            '    case "DTVPiP.Start":\n',
+            '    case "DTVPiP.Prepare":\n      handleDTVPiPPrepare(call.arguments, result)\n    case "DTVPiP.Start":\n',
+            "MediaKitVideoPlugin automatic PiP method routing",
+        )
+        text = replace_exact(
+            text,
+            '    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true\n\n    TextureSW.startDTVPiP(',
+            '    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true\n    let autoStart = (args["autoStart"] as? NSNumber)?.boolValue ?? false\n\n    TextureSW.startDTVPiP(',
+            "MediaKitVideoPlugin upgrade start autoStart argument",
+        )
+        text = replace_exact(
+            text,
+            '      durationSeconds: Double(durationMs) / 1000.0,\n      playing: playing,\n      eventHandler: { [weak self] method, payload in',
+            '      durationSeconds: Double(durationMs) / 1000.0,\n      playing: playing,\n      autoStart: autoStart,\n      eventHandler: { [weak self] method, payload in',
+            "MediaKitVideoPlugin upgrade start autoStart pass",
+        )
+        prepare_handler = """  private func handleDTVPiPPrepare(
+    _ arguments: Any?,
+    _ result: @escaping FlutterResult
+  ) {
+    guard let args = arguments as? [String: Any],
+          let handle = (args["handle"] as? NSNumber)?.int64Value else {
+      result(FlutterError(
+        code: "DTV_PIP_INVALID_HANDLE",
+        message: "缺少 MPV 播放器識別碼",
+        details: nil
+      ))
+      return
+    }
+    let width = max(1, (args["width"] as? NSNumber)?.intValue ?? 16)
+    let height = max(1, (args["height"] as? NSNumber)?.intValue ?? 9)
+    let positionMs = max(0, (args["positionMs"] as? NSNumber)?.int64Value ?? 0)
+    let durationMs = max(0, (args["durationMs"] as? NSNumber)?.int64Value ?? 0)
+    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true
+    let autoStart = (args["autoStart"] as? NSNumber)?.boolValue ?? true
+
+    TextureSW.prepareDTVPiP(
+      handle: handle,
+      width: width,
+      height: height,
+      positionSeconds: Double(positionMs) / 1000.0,
+      durationSeconds: Double(durationMs) / 1000.0,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: { [weak self] method, payload in
+        DispatchQueue.main.async {
+          self?.deviceChannel.invokeMethod(method, arguments: payload)
+        }
+      },
+      completion: { error in
+        if let error {
+          result(FlutterError(
+            code: "DTV_PIP_PREPARE_FAILED",
+            message: error.localizedDescription,
+            details: nil
+          ))
+        } else {
+          result(["prepared": true, "autoStart": autoStart, "source": "mpv-sample-buffer"])
+        }
+      }
+    )
+  }
+
+"""
+        text = replace_exact(
+            text,
+            "  private func handleDTVPiPStart(",
+            prepare_handler + "  private func handleDTVPiPStart(",
+            "MediaKitVideoPlugin upgrade prepare handler",
+        )
+        text = text.replace(PREVIOUS_MARKER, MARKER)
+        path.write_text(text, encoding="utf-8")
+        return
+
+    text = replace_exact(
+        text,
+        "#endif\n\npublic class MediaKitVideoPlugin",
+        "#endif\n\nimport AVKit\n\npublic class MediaKitVideoPlugin",
+        "MediaKitVideoPlugin AVKit import",
+    )
+
+    text = replace_exact(
+        text,
+        """    let channel = FlutterMethodChannel(
+      name: CHANNEL_NAME,
+      binaryMessenger: binaryMessenger
+    )
+    let instance = MediaKitVideoPlugin(
+      registry: registry,
+      channel: channel,
+      utils: utils
+    )
+    registrar.addMethodCallDelegate(instance, channel: channel)
+""",
+        """    let channel = FlutterMethodChannel(
+      name: CHANNEL_NAME,
+      binaryMessenger: binaryMessenger
+    )
+    let pipChannel = FlutterMethodChannel(
+      name: "duanju/mediakit_pip",
+      binaryMessenger: binaryMessenger
+    )
+    let deviceChannel = FlutterMethodChannel(
+      name: "duanju/device",
+      binaryMessenger: binaryMessenger
+    )
+    let instance = MediaKitVideoPlugin(
+      registry: registry,
+      channel: channel,
+      pipChannel: pipChannel,
+      deviceChannel: deviceChannel,
+      utils: utils
+    )
+    registrar.addMethodCallDelegate(instance, channel: channel)
+    registrar.addMethodCallDelegate(instance, channel: pipChannel)
+""",
+        "MediaKitVideoPlugin PiP channels",
+    )
+
+    text = replace_exact(
+        text,
+        "  private let channel: FlutterMethodChannel\n  private let videoOutputManager: VideoOutputManager\n  private let utils: UtilsProtocol?\n",
+        """  private let channel: FlutterMethodChannel
+  private let pipChannel: FlutterMethodChannel
+  private let deviceChannel: FlutterMethodChannel
+  private let videoOutputManager: VideoOutputManager
+  private let utils: UtilsProtocol?
+""",
+        "MediaKitVideoPlugin channel properties",
+    )
+
+    text = replace_exact(
+        text,
+        """  init(
+    registry: FlutterTextureRegistry,
+    channel: FlutterMethodChannel,
+    utils: UtilsProtocol?
+  ) {
+    self.channel = channel
+    videoOutputManager = VideoOutputManager(
+""",
+        """  init(
+    registry: FlutterTextureRegistry,
+    channel: FlutterMethodChannel,
+    pipChannel: FlutterMethodChannel,
+    deviceChannel: FlutterMethodChannel,
+    utils: UtilsProtocol?
+  ) {
+    self.channel = channel
+    self.pipChannel = pipChannel
+    self.deviceChannel = deviceChannel
+    videoOutputManager = VideoOutputManager(
+""",
+        "MediaKitVideoPlugin initializer",
+    )
+
+    text = replace_exact(
+        text,
+        """    switch call.method {
+    case "VideoOutputManager.Create":
+""",
+        """    switch call.method {
+    case "DTVPiP.Prepare":
+      handleDTVPiPPrepare(call.arguments, result)
+    case "DTVPiP.Start":
+      handleDTVPiPStart(call.arguments, result)
+    case "DTVPiP.Stop":
+      handleDTVPiPStop(call.arguments, result)
+    case "DTVPiP.PlaybackStateChanged":
+      handleDTVPiPPlaybackStateChanged(call.arguments, result)
+    case "DTVPiP.SeekCompleted":
+      handleDTVPiPSeekCompleted(call.arguments, result)
+    case "DTVPiP.Status":
+      result([
+        "supported": AVPictureInPictureController.isPictureInPictureSupported()
+      ])
+    case "VideoOutputManager.Create":
+""",
+        "MediaKitVideoPlugin PiP method routing",
+    )
+
+    methods = """
+  private func handleDTVPiPPrepare(
+    _ arguments: Any?,
+    _ result: @escaping FlutterResult
+  ) {
+    guard let args = arguments as? [String: Any],
+          let handle = (args["handle"] as? NSNumber)?.int64Value else {
+      result(FlutterError(
+        code: "DTV_PIP_INVALID_HANDLE",
+        message: "缺少 MPV 播放器識別碼",
+        details: nil
+      ))
+      return
+    }
+    let width = max(1, (args["width"] as? NSNumber)?.intValue ?? 16)
+    let height = max(1, (args["height"] as? NSNumber)?.intValue ?? 9)
+    let positionMs = max(0, (args["positionMs"] as? NSNumber)?.int64Value ?? 0)
+    let durationMs = max(0, (args["durationMs"] as? NSNumber)?.int64Value ?? 0)
+    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true
+    let autoStart = (args["autoStart"] as? NSNumber)?.boolValue ?? true
+
+    TextureSW.prepareDTVPiP(
+      handle: handle,
+      width: width,
+      height: height,
+      positionSeconds: Double(positionMs) / 1000.0,
+      durationSeconds: Double(durationMs) / 1000.0,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: { [weak self] method, payload in
+        DispatchQueue.main.async {
+          self?.deviceChannel.invokeMethod(method, arguments: payload)
+        }
+      },
+      completion: { error in
+        if let error {
+          result(FlutterError(
+            code: "DTV_PIP_PREPARE_FAILED",
+            message: error.localizedDescription,
+            details: nil
+          ))
+        } else {
+          result(["prepared": true, "autoStart": autoStart, "source": "mpv-sample-buffer"])
+        }
+      }
+    )
+  }
+
+  private func handleDTVPiPStart(
+    _ arguments: Any?,
+    _ result: @escaping FlutterResult
+  ) {
+    guard let args = arguments as? [String: Any],
+          let handle = (args["handle"] as? NSNumber)?.int64Value else {
+      result(FlutterError(
+        code: "DTV_PIP_INVALID_HANDLE",
+        message: "缺少 MPV 播放器識別碼",
+        details: nil
+      ))
+      return
+    }
+
+    let width = max(1, (args["width"] as? NSNumber)?.intValue ?? 16)
+    let height = max(1, (args["height"] as? NSNumber)?.intValue ?? 9)
+    let positionMs = max(0, (args["positionMs"] as? NSNumber)?.int64Value ?? 0)
+    let durationMs = max(0, (args["durationMs"] as? NSNumber)?.int64Value ?? 0)
+    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true
+    let autoStart = (args["autoStart"] as? NSNumber)?.boolValue ?? false
+
+    TextureSW.startDTVPiP(
+      handle: handle,
+      width: width,
+      height: height,
+      positionSeconds: Double(positionMs) / 1000.0,
+      durationSeconds: Double(durationMs) / 1000.0,
+      playing: playing,
+      autoStart: autoStart,
+      eventHandler: { [weak self] method, payload in
+        DispatchQueue.main.async {
+          self?.deviceChannel.invokeMethod(method, arguments: payload)
+        }
+      },
+      completion: { error in
+        if let error {
+          result(FlutterError(
+            code: "DTV_PIP_START_FAILED",
+            message: error.localizedDescription,
+            details: nil
+          ))
+        } else {
+          result(["started": true, "source": "mpv-sample-buffer"])
+        }
+      }
+    )
+  }
+
+  private func handleDTVPiPStop(
+    _ arguments: Any?,
+    _ result: FlutterResult
+  ) {
+    guard let args = arguments as? [String: Any],
+          let handle = (args["handle"] as? NSNumber)?.int64Value else {
+      result(FlutterError(
+        code: "DTV_PIP_INVALID_HANDLE",
+        message: "缺少 MPV 播放器識別碼",
+        details: nil
+      ))
+      return
+    }
+    TextureSW.stopDTVPiP(handle: handle)
+    result(nil)
+  }
+
+  private func handleDTVPiPPlaybackStateChanged(
+    _ arguments: Any?,
+    _ result: FlutterResult
+  ) {
+    guard let args = arguments as? [String: Any],
+          let handle = (args["handle"] as? NSNumber)?.int64Value else {
+      result(FlutterError(
+        code: "DTV_PIP_INVALID_HANDLE",
+        message: "缺少 MPV 播放器識別碼",
+        details: nil
+      ))
+      return
+    }
+    let playing = (args["playing"] as? NSNumber)?.boolValue ?? true
+    let positionMs = max(0, (args["positionMs"] as? NSNumber)?.int64Value ?? 0)
+    TextureSW.updateDTVPiP(
+      handle: handle,
+      playing: playing,
+      positionSeconds: Double(positionMs) / 1000.0
+    )
+    result(nil)
+  }
+
+  private func handleDTVPiPSeekCompleted(
+    _ arguments: Any?,
+    _ result: FlutterResult
+  ) {
+    guard let args = arguments as? [String: Any],
+          let handle = (args["handle"] as? NSNumber)?.int64Value else {
+      result(FlutterError(
+        code: "DTV_PIP_INVALID_HANDLE",
+        message: "缺少 MPV 播放器識別碼",
+        details: nil
+      ))
+      return
+    }
+    TextureSW.completeDTVPiPSkip(handle: handle)
+    result(nil)
+  }
+
+"""
+    class_suffix = """  private func handleExitNativeFullscreenMethodCall(
+    _: Any?,
+    _ result: FlutterResult
+  ) {
+    if utils == nil {
+      return result(FlutterMethodNotImplemented)
+    }
+
+    utils?.exitNativeFullscreen()
+    result(nil)
+  }
+}
+"""
+    text = replace_exact(
+        text,
+        class_suffix,
+        class_suffix[:-2] + methods + "}\n",
+        "MediaKitVideoPlugin PiP handlers",
+    )
+
+    path.write_text(text + "\n// " + MARKER + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    package = package_root()
+    pubspec = (package / "pubspec.yaml").read_text(encoding="utf-8")
+    version_match = re.search(r"^version:\s*([^\s]+)", pubspec, re.MULTILINE)
+    version = version_match.group(1) if version_match else "unknown"
+    if version != EXPECTED_VERSION:
+        raise SystemExit(
+            f"media_kit_video 版本不符：預期 {EXPECTED_VERSION}，實際 {version}；停止套用以免破壞其他版本。"
+        )
+
+    template = ROOT / "scripts" / "ios" / "DTVSampleBufferPiPRenderer.swift"
+    if not template.is_file():
+        raise SystemExit("找不到 DTVSampleBufferPiPRenderer.swift 樣板。")
+
+    podspec = package / "ios" / "media_kit_video.podspec"
+    if not podspec.is_file():
+        raise SystemExit("找不到 media_kit_video iOS Podspec。")
+    podspec_text = podspec.read_text(encoding="utf-8")
+    if "Classes/plugin/**/*.swift" not in podspec_text:
+        raise SystemExit(
+            "media_kit_video 2.0.1 Podspec 未包含 Classes/plugin/**/*.swift；"
+            "停止套用以避免 PiP 原生檔案未被編譯。"
+        )
+
+    patch_texture_sw(package, template)
+    patch_plugin(package)
+    print(f"已套用 D TV Sample Buffer PiP 原生擴充：media_kit_video {version}")
+
+
+if __name__ == "__main__":
+    main()

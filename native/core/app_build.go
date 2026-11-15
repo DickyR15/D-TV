@@ -4,7 +4,7 @@ import "errors"
 
 var buildAllSources = "false"
 
-var errNativeBuildSource = errors.New("当前版本不包含此站源")
+var errNativeBuildSource = errors.New("目前版本不包含此片源")
 
 func nativePrimarySource(source string) bool {
 	switch canonicalProviderSource(source) {
@@ -68,6 +68,11 @@ func nativeAuthorizeInput(input nativeInput) error {
 			return errNativeBuildSource
 		}
 		if (input.Action == "resolve" || input.Action == "preload" || input.Action == "prepareHandoff") && !nativeChapterAvailable(input.Drama, input.Chapter) {
+			return errNativeBuildSource
+		}
+	case "cast":
+		if input.Command == "play" &&
+			(!nativeDramaAvailable(input.Drama) || !nativeChapterAvailable(input.Drama, input.Chapter)) {
 			return errNativeBuildSource
 		}
 	}

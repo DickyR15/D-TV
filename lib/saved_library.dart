@@ -52,7 +52,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空觀看記錄？'),
-        content: const Text('這會刪除當前使用者的觀看進度，收藏與新集數提醒會保留。'),
+        content: const Text('這會刪除目前使用者的觀看進度，收藏與新集數提醒會保留。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),

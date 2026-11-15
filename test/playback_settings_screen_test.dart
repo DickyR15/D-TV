@@ -84,6 +84,46 @@ void main() {
     );
   });
 
+  testWidgets('PiP enable setting is visible on supported phones and persists', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppLayout(
+          television: false,
+          formFactor: FormFactor.phone,
+          child: PlaybackSettingsScreen(
+            store: store,
+            pictureInPictureSupported: true,
+            portraitBlurSupported: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final pipFinder = find.byKey(
+      const ValueKey('playback-picture-in-picture-enabled'),
+    );
+    await tester.scrollUntilVisible(pipFinder, 120);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(pipFinder).value, isTrue);
+
+    await tester.tap(pipFinder);
+    await tester.pumpAndSettle();
+    expect(store.playbackPreferences.pictureInPictureEnabled, isFalse);
+    expect(
+      PlaybackPreferences.fromJson(store.playbackPreferences.toJson())
+          .pictureInPictureEnabled,
+      isFalse,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('portrait devices keep blur off by default until rotated landscape', (
     tester,
   ) async {
@@ -110,9 +150,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final blur = tester.widget<SwitchListTile>(
-      find.byKey(const ValueKey('playback-portrait-blur-background')),
+    final blurFinder = find.byKey(
+      const ValueKey('playback-portrait-blur-background'),
     );
+    await tester.scrollUntilVisible(blurFinder, 160);
+    await tester.pumpAndSettle();
+    final blur = tester.widget<SwitchListTile>(blurFinder);
     expect(blur.value, isFalse);
     expect(store.needsPortraitBlurLandscapeDefaultMigration, isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -177,9 +220,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final blur = tester.widget<SwitchListTile>(
-      find.byKey(const ValueKey('playback-portrait-blur-background')),
+    final blurFinder = find.byKey(
+      const ValueKey('playback-portrait-blur-background'),
     );
+    await tester.scrollUntilVisible(blurFinder, 120);
+    await tester.pumpAndSettle();
+    final blur = tester.widget<SwitchListTile>(blurFinder);
     expect(blur.value, isTrue);
     expect(blur.onChanged, isNotNull);
     expect((blur.title as Text).data, '直式影片模糊背景');
@@ -192,6 +238,29 @@ void main() {
         allOf(contains('橫式畫面播放直式影片'), contains('不另開解碼器')),
       ),
     );
+
+    final networkFinder = find.byKey(
+      const ValueKey('playback-tv-network-speed'),
+    );
+    await tester.scrollUntilVisible(networkFinder, 120);
+    await tester.pumpAndSettle();
+    final network = tester.widget<SwitchListTile>(networkFinder);
+    final clockFinder = find.byKey(const ValueKey('playback-tv-clock'));
+    await tester.scrollUntilVisible(clockFinder, 120);
+    await tester.pumpAndSettle();
+    final clock = tester.widget<SwitchListTile>(clockFinder);
+    expect(network.value, isTrue);
+    expect(clock.value, isTrue);
+    await tester.ensureVisible(networkFinder);
+    await tester.tap(networkFinder);
+    await tester.pumpAndSettle();
+    expect(store.playbackPreferences.showTelevisionNetworkSpeed, isFalse);
+    expect(store.playbackPreferences.showTelevisionClock, isTrue);
+    await tester.ensureVisible(clockFinder);
+    await tester.tap(clockFinder);
+    await tester.pumpAndSettle();
+    expect(store.playbackPreferences.showTelevisionNetworkSpeed, isFalse);
+    expect(store.playbackPreferences.showTelevisionClock, isFalse);
   });
 
 

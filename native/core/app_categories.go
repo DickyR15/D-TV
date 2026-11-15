@@ -145,7 +145,7 @@ func (engine *nativeEngine) nativeCategories(ctx context.Context, source string,
 			all = append(all, categories...)
 		}
 	default:
-		return nil, errors.New("请选择有效站源")
+		return nil, errors.New("請選擇有效的片源")
 	}
 	if err != nil {
 		return nil, err

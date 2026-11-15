@@ -114,14 +114,14 @@ func (d *Downloader) fetchHuangguoPreviewToken(ctx context.Context, origin, refe
 		ExpiresIn int64  `json:"expires_in"`
 	}
 	if json.Unmarshal(body, &result) != nil || !result.OK || result.Token == "" || !validLegacyToken(result.Token) {
-		return "", time.Time{}, errors.New("黄果视频未返回有效播放凭证，请稍后重试")
+		return "", time.Time{}, errors.New("黃果影片未提供有效的播放憑證，請稍後重試")
 	}
 	expiry := time.Now().Add(time.Duration(max(30, min(result.ExpiresIn, 1800))) * time.Second)
 	if result.ExpiresAt > 0 {
 		expiry = time.Unix(result.ExpiresAt, 0)
 	}
 	if !expiry.After(time.Now()) {
-		return "", time.Time{}, errors.New("黄果视频播放凭证已过期，请检查设备时间")
+		return "", time.Time{}, errors.New("黃果影片播放憑證已過期，請檢查裝置時間")
 	}
 	return result.Token, expiry, nil
 }
@@ -145,7 +145,7 @@ func (d *Downloader) doMediaRequestWithClient(request *http.Request, client *htt
 		if keyRequest {
 			token, err := d.huangguoPreviewToken(request.Context(), origin, request.Header.Get("Referer"))
 			if err != nil {
-				return nil, fmt.Errorf("获取播放凭证失败: %w", err)
+				return nil, fmt.Errorf("取得播放憑證失敗：%w", err)
 			}
 			request.Header.Set("X-Preview-Token", token)
 		}
@@ -173,12 +173,12 @@ func (d *Downloader) doMediaRequestWithClient(request *http.Request, client *htt
 		observeSourceResponse(request.Context(), response)
 		return response, nil
 	}
-	return nil, errors.New("播放凭证刷新失败")
+	return nil, errors.New("播放憑證重新整理失敗")
 }
 
 func (d *Downloader) fetchMediaPlaylist(ctx context.Context, address, referer string) (string, string, error) {
 	if !isProviderHTTPMediaURL(address) {
-		return "", "", errors.New("播放列表地址无效")
+		return "", "", errors.New("播放清單網址無效")
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
@@ -192,7 +192,7 @@ func (d *Downloader) fetchMediaPlaylist(ctx context.Context, address, referer st
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, (4<<20)+1))
 	if err != nil || len(body) > 4<<20 {
-		return "", "", errors.New("播放列表过大或读取失败")
+		return "", "", errors.New("播放清單過大或讀取失敗")
 	}
 	if response.StatusCode != http.StatusOK || catalogResponseBlockReason(response, body) != "" {
 		return "", "", d.catalogResponseError(request, response, body)
@@ -203,7 +203,7 @@ func (d *Downloader) fetchMediaPlaylist(ctx context.Context, address, referer st
 		if json.Unmarshal(body, &envelope) == nil && strings.Trim(string(envelope.Code), `"`) == "5005" {
 			return "", "", &legacyAPIError{code: "5005", message: "播放会话已失效"}
 		}
-		return "", "", errors.New("站源未返回有效的播放列表，链接可能已失效")
+		return "", "", errors.New("片源未提供有效的播放清單，連結可能已失效")
 	}
 	finalURL := address
 	if response.Request != nil && response.Request.URL != nil {

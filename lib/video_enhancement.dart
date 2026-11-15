@@ -24,7 +24,7 @@ class VideoEnhancementController extends ChangeNotifier {
     final native = player.platform;
     supported = video != null && native is NativePlayer && Platform.isWindows;
     if (!supported) {
-      _status = '當前平臺暫不支援畫質增強';
+      _status = '目前平台暫不支援畫質增強';
       return;
     }
     _mpv = VideoEnhancementMpv(native as NativePlayer);
@@ -112,7 +112,7 @@ class VideoEnhancementController extends ChangeNotifier {
     VideoEnhancementContent.general => false,
   };
   String get status => _status;
-  String get contentLabel => animation ? '當前按動漫增強' : '當前按通用畫面增強';
+  String get contentLabel => animation ? '目前依照動漫內容增強' : '目前依照一般畫面增強';
   String get detail {
     final source = videoDisplaySize(player.state.videoParams);
     final output = _applied?.output;

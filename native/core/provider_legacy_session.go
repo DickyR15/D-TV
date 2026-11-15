@@ -155,7 +155,7 @@ func (d *Downloader) bootstrapLegacySession(ctx context.Context, state legacySes
 	if needsProtocol && (!validLegacyProtocol(protocol) || time.Since(state.UpdatedAt) > 24*time.Hour) {
 		script, err := d.fetchLegacyFrontendScript(ctx)
 		if err != nil {
-			return access, state, fmt.Errorf("获取黄果官网协议失败: %w", publicError(err))
+			return access, state, fmt.Errorf("取得黃果官方網站協定失敗：%w", publicError(err))
 		}
 		protocol, err = parseLegacyProtocol(script)
 		if err != nil {
@@ -169,7 +169,7 @@ func (d *Downloader) bootstrapLegacySession(ctx context.Context, state legacySes
 		ParamIV:      firstNonEmpty(d.cfg.ParamIV, protocol.ParamIV),
 	}
 	if !validLegacyProtocol(access.legacyProtocol) || !validLegacyToken(access.Token) {
-		return access, state, errors.New("黄果 API 协议配置无效，请更新应用后重试")
+		return access, state, errors.New("黃果 API 協定設定無效，請更新應用程式後重試")
 	}
 	if access.Anonymous {
 		if state.DeviceID == "" {
@@ -185,20 +185,20 @@ func (d *Downloader) bootstrapLegacySession(ctx context.Context, state legacySes
 				"devID": access.DeviceID, "sysType": "ios", "isAppStore": false,
 			}, access)
 			if err != nil {
-				return access, state, fmt.Errorf("黄果访客登录失败: %w", err)
+				return access, state, fmt.Errorf("黃果訪客登入失敗：%w", err)
 			}
 			var login struct {
 				Token string `json:"token"`
 			}
 			if json.Unmarshal(payload, &login) != nil || login.Token == "" || !validLegacyToken(login.Token) {
-				return access, state, errors.New("黄果访客登录未返回有效令牌")
+				return access, state, errors.New("黃果訪客登入未提供有效權杖")
 			}
 			access.Token, state.Token = login.Token, login.Token
 		}
 	}
 	if access.Anonymous {
 		if err := d.saveLegacySession(state); err != nil {
-			fmt.Println("黄果访客会话未能保存，本次会话仍可使用")
+			fmt.Println("黃果訪客工作階段無法儲存，本次工作階段仍可使用")
 		}
 	}
 	return access, state, nil
@@ -219,7 +219,7 @@ func parseLegacyProtocol(script string) (legacyProtocol, error) {
 	}
 	protocol := legacyProtocol{InterfaceKey: value("interfaceKey"), ParamKey: value("parameterKey"), ParamIV: value("parameterIv")}
 	if !validLegacyProtocol(protocol) {
-		return legacyProtocol{}, errors.New("黄果官网协议已变化，无法识别当前接口参数")
+		return legacyProtocol{}, errors.New("黃果官方網站協定已變更，無法辨識目前的介面參數")
 	}
 	return protocol, nil
 }

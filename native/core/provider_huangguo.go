@@ -410,7 +410,7 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 		}
 	}
 	if len(candidates) > 1 && lastErr != nil {
-		return "", fmt.Errorf("黄果来源请求失败：已尝试 %d 个域名，最后错误：%w", tried, lastErr)
+		return "", fmt.Errorf("黃果來源要求失敗：已嘗試 %d 個網域，最後錯誤：%w", tried, lastErr)
 	}
 	return "", lastErr
 }

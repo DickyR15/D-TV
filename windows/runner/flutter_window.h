@@ -25,12 +25,20 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  void EnterMiniWindow(double aspect, const flutter::EncodableMap& args);
+  flutter::EncodableValue ExitMiniWindow();
+  void KeepMiniAspect(WPARAM edge, RECT* frame);
+
   // The project to run.
   flutter::DartProject project_;
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> device_channel_;
+  bool mini_ = false;
+  double mini_aspect_ = 16.0 / 9.0;
+  LONG style_before_mini_ = 0;
+  WINDOWPLACEMENT placement_before_mini_{};
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

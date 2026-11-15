@@ -152,10 +152,10 @@ VideoEnhancementDecision chooseVideoEnhancement({
     return const VideoEnhancementDecision(original, null, '等待播放畫面');
   }
   if (!videoHasSafeEnhancementColor(parameters, opaque8Bit: opaque8Bit)) {
-    return const VideoEnhancementDecision(original, null, '當前色彩或位深保持原畫');
+    return const VideoEnhancementDecision(original, null, '目前色彩或位元深度維持原畫');
   }
   if (!gpu) {
-    return const VideoEnhancementDecision(original, null, '當前渲染環境保持原畫');
+    return const VideoEnhancementDecision(original, null, '目前的繪圖環境維持原畫');
   }
   if (costLimit < 1 ||
       rejected.contains(VideoEnhancementBackend.scaling) ||
@@ -189,7 +189,7 @@ VideoEnhancementDecision chooseVideoEnhancement({
   final scaling = VideoEnhancementDecision(
     VideoEnhancementBackend.scaling,
     output,
-    targetScale <= 1 ? '當前尺寸無需超分，使用高質量縮放' : '',
+    targetScale <= 1 ? '目前尺寸不需要超解析，使用高品質縮放' : '',
   );
   final ratio = math.min(
     output.width / source.width,

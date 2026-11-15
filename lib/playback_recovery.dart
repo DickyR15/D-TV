@@ -2,6 +2,16 @@ import 'models.dart';
 
 enum PlaybackRecoveryAction { alternative, refresh, recreatePlayer, stop }
 
+/// A completion event without duration metadata is not automatically a failure.
+/// Some short-drama sources omit duration but still report a valid final position.
+bool playbackCompletionNeedsRecovery({
+  required Duration duration,
+  required Duration position,
+}) {
+  if (duration <= Duration.zero) return position <= Duration.zero;
+  return position < duration - const Duration(seconds: 2);
+}
+
 class PlaybackRecovery {
   PlaybackRecovery({
     DateTime Function()? now,

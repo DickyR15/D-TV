@@ -44,11 +44,11 @@ func (query hongguoRecommendationQuery) validate() error {
 		known = known || query.Genre == feed.key
 	}
 	if !known || query.Offset < 0 || query.Offset > 1_000_000 || len(query.SessionID) > 4096 || strings.ContainsAny(query.SessionID, "\r\n\x00") || len(query.Seen) > 540 {
-		return errors.New("推荐分类或分页参数无效，请重新获取")
+		return errors.New("推薦分類或分頁參數無效，請重新取得")
 	}
 	for _, id := range query.Seen {
 		if !hongguoNumericID.MatchString(strings.TrimPrefix(id, "hongguo:")) {
-			return errors.New("推荐分页含无效剧集 ID")
+			return errors.New("推薦分頁包含無效的劇集 ID")
 		}
 	}
 	return nil
@@ -101,7 +101,7 @@ func (downloader *Downloader) fetchHongguoRecommendations(ctx context.Context, q
 	hasMore, paginationOK := data["has_more"].(bool)
 	next, parseErr := strconv.Atoi(mapString(data, "next_offset"))
 	if !valid || !paginationOK || hasMore && parseErr != nil {
-		return page, errors.New("红果推荐数据格式异常，已保留上次位置")
+		return page, errors.New("紅果推薦資料格式異常，已保留上次位置")
 	}
 	validRows := 0
 	for _, row := range rows {
@@ -120,14 +120,14 @@ func (downloader *Downloader) fetchHongguoRecommendations(ctx context.Context, q
 		return hongguoRecommendationPage{}, errors.New("红果推荐未返回可识别的剧集")
 	}
 	if hasMore && (next <= query.Offset || next > 1_000_000 || len(page.Dramas) == 0) {
-		return hongguoRecommendationPage{}, errors.New("红果推荐分页未前进，可重试或重新获取")
+		return hongguoRecommendationPage{}, errors.New("紅果推薦分頁未前進，可重試或重新取得")
 	}
 	page.NextOffset, page.HasMore, page.SessionID = next, hasMore, mapString(data, "session_id")
 	if !hasMore && (next < query.Offset || next > 1_000_000) {
 		page.NextOffset = query.Offset
 	}
 	if len(page.SessionID) > 4096 || strings.ContainsAny(page.SessionID, "\r\n\x00") {
-		return hongguoRecommendationPage{}, errors.New("红果推荐分页标记无效")
+		return hongguoRecommendationPage{}, errors.New("紅果推薦分頁標記無效")
 	}
 	return page, ctx.Err()
 }
@@ -160,7 +160,7 @@ func (downloader *Downloader) fetchHongguoFeedRecommendations(ctx context.Contex
 			}
 		}
 		if tab == nil {
-			return hongguoRecommendationPage{}, errors.New("红果推荐数据格式异常，已保留上次位置")
+			return hongguoRecommendationPage{}, errors.New("紅果推薦資料格式異常，已保留上次位置")
 		}
 		if page.SessionID == "" {
 			page.SessionID = mapString(tab, "session_id")
@@ -192,10 +192,10 @@ func (downloader *Downloader) fetchHongguoFeedRecommendations(ctx context.Contex
 		return hongguoRecommendationPage{}, errors.New("红果推荐未返回可识别的剧集")
 	}
 	if len(page.Dramas) == 0 || page.NextOffset > 1_000_000 {
-		return hongguoRecommendationPage{}, errors.New("红果推荐分页未前进，可重试或重新获取")
+		return hongguoRecommendationPage{}, errors.New("紅果推薦分頁未前進，可重試或重新取得")
 	}
 	if len(page.SessionID) > 4096 || strings.ContainsAny(page.SessionID, "\r\n\x00") {
-		return hongguoRecommendationPage{}, errors.New("红果推荐分页标记无效")
+		return hongguoRecommendationPage{}, errors.New("紅果推薦分頁標記無效")
 	}
 	return page, ctx.Err()
 }

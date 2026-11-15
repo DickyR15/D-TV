@@ -11,11 +11,14 @@ Future<void> showDramaActions(
   required Drama drama,
   required LocalStore store,
   VoidCallback? onContinue,
+  VoidCallback? onDetails,
   bool history = false,
 }) async {
   final epoch = store.profileEpoch;
   final following = store.following(drama.id);
   final choices = <(String, String, IconData)>[
+    if (onDetails != null)
+      ('details', '作品詳情', Icons.info_outline_rounded),
     if (onContinue != null && store.watched(drama.id) != null)
       ('continue', '繼續觀看', Icons.play_arrow_rounded),
     ('favorite', following == null ? '加入收藏' : '取消收藏', Icons.bookmark_outline),
@@ -72,6 +75,8 @@ Future<void> showDramaActions(
     return;
   }
   switch (choice) {
+    case 'details':
+      onDetails?.call();
     case 'continue':
       onContinue?.call();
     case 'favorite':

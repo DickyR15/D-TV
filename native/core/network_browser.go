@@ -44,6 +44,19 @@ func newHuangguoBrowserTransport(base http.RoundTripper, downloader *Downloader)
 }
 
 func (transport *huangguoBrowserTransport) matches(request *http.Request) bool {
+	if request.Method == http.MethodPost && request.URL.Path == "/api/playback/request" &&
+		(request.URL.Scheme == "http" || request.URL.Scheme == "https") {
+		host := strings.ToLower(request.URL.Hostname())
+		if host == "huangguoai.com" || host == "huangguoai.io" {
+			return true
+		}
+		for _, domain := range huangguoAIMirrorDomains {
+			if host == domain || strings.HasSuffix(host, "."+domain) {
+				return true
+			}
+		}
+		return false
+	}
 	return (request.Method == http.MethodGet || request.Method == http.MethodHead) &&
 		(request.URL.Scheme == "http" || request.URL.Scheme == "https") &&
 		(strings.EqualFold(request.URL.Host, transport.host) || strings.EqualFold(request.URL.Hostname(), "huangguo.video"))
@@ -151,7 +164,7 @@ func (transport *huangguoBrowserTransport) RoundTrip(request *http.Request) (*ht
 	}
 	client, err := transport.client(request)
 	if err != nil {
-		return nil, fmt.Errorf("黄果浏览器客户端初始化失败：%w", publicError(err))
+		return nil, fmt.Errorf("黃果瀏覽器用戶端初始化失敗：%w", publicError(err))
 	}
 	upstream, err := fhttp.NewRequestWithContext(request.Context(), request.Method, request.URL.String(), request.Body)
 	if err != nil {

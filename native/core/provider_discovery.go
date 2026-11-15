@@ -30,7 +30,7 @@ func (d *Downloader) apiEndpoint(ctx context.Context) (string, error) {
 	configured := strings.TrimRight(firstNonEmpty(d.cfg.APIBase, defaultAPIBase), "/")
 	parsed, err := url.Parse(configured)
 	if err != nil || !isProviderHTTPMediaURL(configured) {
-		return "", errors.New("API 地址无效")
+		return "", errors.New("API 網址無效")
 	}
 	if !strings.HasSuffix(strings.ToLower(parsed.Hostname()), ".cloudfront.net") {
 		d.apiBase = configured
@@ -93,7 +93,7 @@ func (d *Downloader) probeAPIHost(ctx context.Context, host string) error {
 		Code int `json:"code"`
 	}
 	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 64*1024)).Decode(&envelope) != nil || envelope.Code != 200 {
-		return fmt.Errorf("%s API 健康检查失败 (HTTP %d)", request.URL.Hostname(), response.StatusCode)
+		return fmt.Errorf("%s API 健康檢查失敗（HTTP %d）", request.URL.Hostname(), response.StatusCode)
 	}
 	return nil
 }
@@ -106,7 +106,7 @@ func (d *Downloader) discoverAPIHosts(ctx context.Context) ([]string, error) {
 	if hosts := parseAPIHosts(body); len(hosts) > 0 {
 		return hosts, nil
 	}
-	return nil, errors.New("官网前端未提供可识别的 API 地址，请稍后重试或更新应用")
+	return nil, errors.New("官方網站前端未提供可辨識的 API 網址，請稍後重試或更新應用程式")
 }
 
 func (d *Downloader) fetchLegacyFrontendScript(ctx context.Context) (string, error) {

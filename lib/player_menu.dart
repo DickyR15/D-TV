@@ -9,7 +9,7 @@ import 'video_enhancement.dart';
 import 'video_enhancement_settings.dart';
 import 'diary_service.dart';
 
-enum PlayerMenuSection { episodes, speed, quality, settings }
+enum PlayerMenuSection { episodes, speed, quality, aspectRatio, sleepTimer, settings }
 
 class PlayerMenu extends StatefulWidget {
   const PlayerMenu({
@@ -29,6 +29,9 @@ class PlayerMenu extends StatefulWidget {
     this.preloadStatus = '',
     this.enhancement,
     this.onCompareEnhancement,
+    this.sleepMinutes = 0,
+    this.sleepAtEpisodeEnd = false,
+    this.onSleepTimer,
   });
 
   final PlayerMenuSection section;
@@ -43,6 +46,9 @@ class PlayerMenu extends StatefulWidget {
   final String preloadStatus;
   final VideoEnhancementController? enhancement;
   final VoidCallback? onCompareEnhancement;
+  final int sleepMinutes;
+  final bool sleepAtEpisodeEnd;
+  final Future<void> Function(int minutes, bool episodeEnd)? onSleepTimer;
   final ValueChanged<int> onEpisode;
   final Future<void> Function(PlaybackPreferences) onPreferences;
   final Future<void> Function() onFavorite;
@@ -79,6 +85,8 @@ class _PlayerMenuState extends State<PlayerMenu> {
       PlayerMenuSection.episodes => '選集 · 共 ${widget.episodes.length} 集',
       PlayerMenuSection.speed => '播放倍速',
       PlayerMenuSection.quality => '畫質',
+      PlayerMenuSection.aspectRatio => '畫面比例',
+      PlayerMenuSection.sleepTimer => '睡眠計時',
       PlayerMenuSection.settings => '播放設定',
     };
     return Dialog(
@@ -143,6 +151,10 @@ class _PlayerMenuState extends State<PlayerMenu> {
   Widget _settings() {
     final preferences = widget.preferences;
     final all = widget.section == PlayerMenuSection.settings;
+    final showAspectRatio =
+        all || widget.section == PlayerMenuSection.aspectRatio;
+    final showSleepTimer =
+        all || widget.section == PlayerMenuSection.sleepTimer;
     final colors = Theme.of(context).colorScheme;
     final helperStyle = TextStyle(
       fontSize: 13,
@@ -187,7 +199,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             widget.local
                 ? '本集正在播放本地原畫，畫質偏好用於後續線上播放。'
                 : widget.actualQuality > 0
-                ? '當前播放 ${widget.actualQuality}P'
+                ? '目前播放畫質 ${widget.actualQuality}P'
                 : '使用源站可用畫質',
             style: helperStyle,
           ),
@@ -219,6 +231,67 @@ class _PlayerMenuState extends State<PlayerMenu> {
                 style: helperStyle,
               ),
             ),
+          const SizedBox(height: 20),
+        ],
+        if (showAspectRatio) ...[
+          const Text('畫面比例'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final ratio in PlaybackAspectRatio.values)
+                ChoiceChip(
+                  key: ValueKey('menu-aspect-${ratio.name}'),
+                  label: Text(playbackAspectRatioLabel(ratio)),
+                  selected: ratio == preferences.aspectRatio,
+                  onSelected: _busy
+                      ? null
+                      : (_) => _run(
+                          () => widget.onPreferences(
+                            preferences.copyWith(aspectRatio: ratio),
+                          ),
+                        ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
+        if (showSleepTimer && widget.onSleepTimer != null) ...[
+          const Text('睡眠計時'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                key: const ValueKey('sleep-timer-off'),
+                label: const Text('關閉'),
+                selected: widget.sleepMinutes == 0 && !widget.sleepAtEpisodeEnd,
+                onSelected: _busy
+                    ? null
+                    : (_) => _run(() => widget.onSleepTimer!(0, false)),
+              ),
+              ChoiceChip(
+                key: const ValueKey('sleep-timer-episode'),
+                label: const Text('本集結束'),
+                selected: widget.sleepAtEpisodeEnd,
+                onSelected: _busy
+                    ? null
+                    : (_) => _run(() => widget.onSleepTimer!(0, true)),
+              ),
+              for (final minutes in [15, 30, 60, 90])
+                ChoiceChip(
+                  key: ValueKey('sleep-timer-$minutes'),
+                  label: Text('$minutes 分鐘'),
+                  selected: widget.sleepMinutes == minutes &&
+                      !widget.sleepAtEpisodeEnd,
+                  onSelected: _busy
+                      ? null
+                      : (_) => _run(() => widget.onSleepTimer!(minutes, false)),
+                ),
+            ],
+          ),
           const SizedBox(height: 20),
         ],
         if ((all || widget.section == PlayerMenuSection.quality) &&
@@ -253,7 +326,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             key: const ValueKey('player-auto-advance'),
             contentPadding: EdgeInsets.zero,
             title: const Text('自動連播'),
-            subtitle: const Text('關閉後，播放結束停在當前集'),
+            subtitle: const Text('關閉後，播放結束後停留在目前集數'),
             value: preferences.autoAdvance,
             onChanged: _busy
                 ? null
@@ -285,7 +358,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
           Text(
             widget.mobile
                 ? '上下滑切集；長按畫面臨時 3 倍速，鬆開恢復。豎屏輕點暫停，橫屏輕點顯示控制；雙擊播放或暫停。'
-                : '空格：播放 / 暫停\n左右鍵：後退 / 快進 5 秒\n長按右鍵或畫面：臨時 3 倍速\n上下鍵：音量 ±5%，M：靜音\nF、F11、Ctrl+F：全屏\nEsc：先關閉選單，再退出全屏',
+                : '空格：播放 / 暫停\n左右鍵：後退 / 快進 5 秒\n長按右鍵或畫面：臨時 3 倍速\n上下鍵：音量 ±5%，M：靜音\nF、F11、Ctrl+F：全螢幕\nEsc：先關閉選單，再退出全螢幕',
             style: helperStyle.copyWith(height: 1.6),
           ),
         ],

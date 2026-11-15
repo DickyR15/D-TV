@@ -886,7 +886,31 @@ class _RankingsScreenState extends State<RankingsScreen> {
     _ => uiTraditional(board?.name ?? '榜單'),
   };
 
+  bool _detailRouteActive = false;
+
   void _openDrama(RankingItem item) {
+    if (_detailRouteActive || !mounted) return;
+    _detailRouteActive = true;
+    CoverRequestScheduler.pauseBackground();
+    unawaited(
+      Navigator.of(context)
+          .push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => DetailScreen(
+                drama: item.drama,
+                repository: widget.repository,
+                store: widget.store,
+              ),
+            ),
+          )
+          .whenComplete(() {
+            _detailRouteActive = false;
+            CoverRequestScheduler.resumeBackground();
+          }),
+    );
+  }
+
+  void _continueDrama(RankingItem item) {
     CoverRequestScheduler.pauseBackground();
     unawaited(
       openPlaybackDirectly(
@@ -1129,7 +1153,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
           context,
           drama: item.drama,
           store: widget.store,
-          onContinue: () => _openDrama(item),
+          onContinue: () => _continueDrama(item),
         ),
         label: '第 ${item.rank} 名，${uiTraditional(item.drama.title)}，長按開啟標記選單',
         padding: const EdgeInsets.all(2),
@@ -1148,7 +1172,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
           context,
           drama: item.drama,
           store: widget.store,
-          onContinue: () => _openDrama(item),
+          onContinue: () => _continueDrama(item),
         ),
         borderRadius: BorderRadius.circular(14),
         child: card,

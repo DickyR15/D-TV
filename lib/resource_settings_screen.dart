@@ -184,12 +184,12 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                         onChanged: (_) => _scheduleSave(),
                         onEditingComplete: () => _scheduleSave(delay: Duration.zero),
                         decoration: InputDecoration(
-                          labelText: '代理地址',
+                          labelText: '代理伺服器位址',
                           hintText: 'http://127.0.0.1:7890',
                           helperText: '支援 HTTP、HTTPS、SOCKS5；僅儲存在本機，不會納入設定備份。',
                           helperMaxLines: 3,
                           suffixIcon: IconButton(
-                            tooltip: _showProxy ? '隱藏代理地址' : '顯示代理地址',
+                            tooltip: _showProxy ? '隱藏代理伺服器位址' : '顯示代理伺服器位址',
                             onPressed: () =>
                                 setState(() => _showProxy = !_showProxy),
                             icon: Icon(

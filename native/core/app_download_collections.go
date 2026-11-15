@@ -76,12 +76,12 @@ func (manager *nativeDownloads) controlBatch(ids []string, command string) (nati
 func (manager *nativeDownloads) controlBatchExpected(ctx context.Context, ids []string, command string, expected map[string]string) (nativeDownloadControlResult, error) {
 	result := nativeDownloadControlResult{Completed: []string{}, Failures: map[string]string{}}
 	if len(ids) == 0 || len(ids) > 500 {
-		return result, errors.New("请选择 1 至 500 个下载任务")
+		return result, errors.New("請選取 1 至 500 個下載任務")
 	}
 	switch command {
 	case "pause", "resume", "remove", "archive", "restore":
 	default:
-		return result, errors.New("批量下载操作无效")
+		return result, errors.New("批次下載操作無效")
 	}
 	seen := map[string]bool{}
 	for _, id := range ids {
@@ -94,7 +94,7 @@ func (manager *nativeDownloads) controlBatchExpected(ctx context.Context, ids []
 			continue
 		}
 		if expected != nil && expected[id] == "" {
-			result.Failures[id] = "原分集校验信息缺失，已保留文件"
+			result.Failures[id] = "原分集驗證資訊缺失，已保留檔案"
 			continue
 		}
 		if err := manager.controlExpected(id, command, expected[id]); err != nil {

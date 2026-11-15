@@ -27,16 +27,16 @@ func decodeHongguoBase64(value string) ([]byte, error) {
 
 func hongguoContentKey(value string) ([]byte, error) {
 	if len(value) > 1024 {
-		return nil, errors.New("红果媒体密钥数据过长")
+		return nil, errors.New("紅果媒體金鑰資料過長")
 	}
 	raw, err := decodeHongguoBase64(value)
 	if err != nil || len(raw) < 3 {
-		return nil, errors.New("红果媒体密钥编码无效")
+		return nil, errors.New("紅果媒體金鑰編碼無效")
 	}
 	tagLength := int(raw[0]^raw[1]^raw[2]) - 48
 	contentLength := len(raw) - tagLength - 1
 	if tagLength < 1 || contentLength < 33 || contentLength >= len(raw) {
-		return nil, errors.New("红果媒体密钥结构无效")
+		return nil, errors.New("紅果媒體金鑰結構無效")
 	}
 	seed := raw[len(raw)-tagLength-2] ^ raw[len(raw)-tagLength-1]
 	tag := make([]byte, tagLength)
@@ -44,7 +44,7 @@ func hongguoContentKey(value string) ([]byte, error) {
 		tag[index] = raw[len(raw)-tagLength+index] ^ seed
 	}
 	if string(tag) == "app_v2" || string(tag) == "web_v2" {
-		return nil, errors.New("红果媒体密钥版本暂不支持")
+		return nil, errors.New("紅果媒體金鑰版本目前不受支援")
 	}
 	decoded := make([]byte, contentLength)
 	previousEven, previousOdd := byte(250), byte(85)
@@ -60,11 +60,11 @@ func hongguoContentKey(value string) ([]byte, error) {
 	}
 	padding, err := strconv.ParseUint(string(decoded[:1]), 36, 8)
 	if err != nil || contentLength-int(padding)-1 != 32 {
-		return nil, errors.New("红果媒体密钥内容无效")
+		return nil, errors.New("紅果媒體金鑰內容無效")
 	}
 	key, err := hex.DecodeString(string(decoded[1:33]))
 	if err != nil || len(key) != aes.BlockSize {
-		return nil, fmt.Errorf("红果媒体密钥不是有效的 AES-128 密钥")
+		return nil, fmt.Errorf("紅果媒體金鑰不是有效的 AES-128 金鑰")
 	}
 	return key, nil
 }

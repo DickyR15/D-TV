@@ -8,8 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -117,6 +120,11 @@ func (cache *nativeCoverCache) coverOnCooldown(address, referer string) bool {
 	return false
 }
 
+func isPermanentMissingCover(err error) bool {
+	var statusErr *nativeCoverHTTPStatusError
+	return errors.As(err, &statusErr) && (statusErr.StatusCode == 404 || statusErr.StatusCode == 410)
+}
+
 func (cache *nativeCoverCache) noteCoverFailure(address, referer string, err error) {
 	if err == nil || errors.Is(err, context.Canceled) {
 		return
@@ -156,5 +164,112 @@ func (cache *nativeCoverCache) clearCoverFailure(address, referer string) {
 		delete(cache.failures, key)
 		cache.persistCoverFailuresLocked()
 	}
+	cache.mu.Unlock()
+}
+
+
+// nativeCoverNodeKey groups requests by image host, so a transient outage on a
+// CDN edge is not retried independently for every poster URL.
+func nativeCoverNodeKey(address string) string {
+	parsed, err := url.Parse(strings.TrimSpace(address))
+	if err != nil || parsed == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+}
+
+// Only host-wide failures cool a node. 404/410 and hotlink 401/403 remain
+// URL+Referer scoped because they can describe one image or one access policy.
+func nativeCoverNodeCooldown(err error) time.Duration {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return 0
+	}
+	var statusErr *nativeCoverHTTPStatusError
+	if errors.As(err, &statusErr) {
+		switch {
+		case statusErr.StatusCode == 429:
+			return 2 * time.Minute
+		case statusErr.StatusCode >= 500 && statusErr.StatusCode <= 599:
+			return 90 * time.Second
+		default:
+			return 0
+		}
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return 90 * time.Second
+	}
+	var networkErr net.Error
+	if errors.As(err, &networkErr) {
+		return 90 * time.Second
+	}
+	return 0
+}
+
+func (cache *nativeCoverCache) coverNodeOnCooldown(address string) bool {
+	if cache == nil {
+		return false
+	}
+	key := nativeCoverNodeKey(address)
+	if key == "" {
+		return false
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	until, found := cache.nodeFailures[key]
+	if !found {
+		return false
+	}
+	if time.Now().Before(until) {
+		return true
+	}
+	delete(cache.nodeFailures, key)
+	return false
+}
+
+func (cache *nativeCoverCache) noteCoverNodeFailure(address string, err error) {
+	if cache == nil || err == nil || errors.Is(err, context.Canceled) {
+		return
+	}
+	key := nativeCoverNodeKey(address)
+	cooldown := nativeCoverNodeCooldown(err)
+	if key == "" || cooldown <= 0 {
+		return
+	}
+	now := time.Now()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if cache.nodeFailures == nil {
+		cache.nodeFailures = make(map[string]time.Time)
+	}
+	if len(cache.nodeFailures) >= 256 {
+		for candidate, until := range cache.nodeFailures {
+			if !now.Before(until) {
+				delete(cache.nodeFailures, candidate)
+			}
+		}
+		if len(cache.nodeFailures) >= 256 {
+			var oldestKey string
+			var oldest time.Time
+			for candidate, until := range cache.nodeFailures {
+				if oldestKey == "" || until.Before(oldest) {
+					oldestKey, oldest = candidate, until
+				}
+			}
+			delete(cache.nodeFailures, oldestKey)
+		}
+	}
+	cache.nodeFailures[key] = now.Add(cooldown)
+}
+
+func (cache *nativeCoverCache) clearCoverNodeFailure(address string) {
+	if cache == nil {
+		return
+	}
+	key := nativeCoverNodeKey(address)
+	if key == "" {
+		return
+	}
+	cache.mu.Lock()
+	delete(cache.nodeFailures, key)
 	cache.mu.Unlock()
 }

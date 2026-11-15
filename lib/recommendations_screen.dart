@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 
 import 'catalog_filters.dart';
 import 'core_bridge.dart';
+import 'detail_screen.dart';
 import 'local_store.dart';
 import 'models.dart';
-import 'playback_launch_screen.dart';
 import 'widgets.dart';
 import 'ui_localization.dart';
 
@@ -26,6 +26,30 @@ class RecommendationsScreen extends StatefulWidget {
 }
 
 class _RecommendationsScreenState extends State<RecommendationsScreen> {
+  bool _detailRouteActive = false;
+
+  void _openDramaDetails(Drama drama) {
+    if (!mounted || _detailRouteActive) return;
+    _detailRouteActive = true;
+    CoverRequestScheduler.pauseBackground();
+    unawaited(
+      Navigator.of(context)
+          .push<void>(
+            MaterialPageRoute<void>(
+              builder: (_) => DetailScreen(
+                drama: drama,
+                repository: widget.repository,
+                store: widget.store,
+              ),
+            ),
+          )
+          .whenComplete(() {
+            _detailRouteActive = false;
+            CoverRequestScheduler.resumeBackground();
+          }),
+    );
+  }
+
   static const _genres = [
     CatalogCategory('short_play', '真人劇'),
     CatalogCategory('comic_series', '漫劇'),
@@ -197,14 +221,7 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
                                 key: ValueKey(drama.id),
                                 drama: drama,
                                 repository: widget.repository,
-                                onTap: () => unawaited(
-                                  openPlaybackDirectly(
-                                    context,
-                                    drama: drama,
-                                    repository: widget.repository,
-                                    store: widget.store,
-                                  ),
-                                ),
+                                onTap: () => _openDramaDetails(drama),
                               );
                             }, childCount: _items.length),
                           ),
@@ -225,7 +242,7 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
                                     )
                                   : TextButton(
                                       onPressed: () => _load(force: true),
-                                      child: const Text('本輪推薦已看完，重新整理獲取新推薦'),
+                                      child: const Text('本輪推薦已看完，重新整理以取得新推薦'),
                                     ),
                             ),
                           ),

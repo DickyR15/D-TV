@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:hgtv/app_build.dart';
 import 'package:hgtv/app_layout.dart';
+import 'package:hgtv/models.dart';
 import 'package:hgtv/source_management_screen.dart';
 
 import 'fixtures.dart';
@@ -184,15 +185,69 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      final firstAdvanced = tester.widget<SwitchListTile>(
-        find.byKey(const ValueKey('source-switch-huangdou')),
+      final firstAdvanced = tester.widget<Focus>(
+        find.byKey(const ValueKey('source-row-focus-huangdou')),
       );
       expect(firstAdvanced.focusNode!.hasPrimaryFocus, isTrue);
+      final firstRow = tester.widget<AnimatedContainer>(
+        find.descendant(
+          of: find.byKey(const ValueKey('reorderable-source-huangdou')),
+          matching: find.byType(AnimatedContainer),
+        ),
+      );
+      expect(firstRow.decoration, isA<BoxDecoration>());
+      expect((firstRow.decoration as BoxDecoration).border, isNotNull);
+      expect(
+        find.textContaining('目前焦點：黃豆'),
+        findsOneWidget,
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
     },
   );
+
+  testWidgets('TV password gate exposes a visible D-pad unlock action', (tester) async {
+    if (!allSourcesEnabled) return;
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      AppLayout(
+        television: true,
+        formFactor: FormFactor.television,
+        child: MaterialApp(home: SourceManagementScreen(store: store)),
+      ),
+    );
+    await tester.pump();
+
+    final password = tester.widget<TextField>(
+      find.byKey(const ValueKey('advanced-source-password')),
+    );
+    expect(password.focusNode!.hasPrimaryFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    final unlock = tester.widget<FilledButton>(
+      find.byKey(const ValueKey('unlock-advanced-sources')),
+    );
+    expect(unlock.focusNode!.hasPrimaryFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(password.focusNode!.hasPrimaryFocus, isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
 
   testWidgets('advanced source toggles are hidden until admin password is verified', (
     tester,
@@ -324,4 +379,201 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  test('advanced source order persists and controls permitted source ordering', () async {
+    if (!allSourcesEnabled) return;
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = testStore(preferences);
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+    await store.unlockAdvancedSources('source-pass-123');
+
+    final order = store.advancedSourceOrder.reversed.toList();
+    await store.setAdvancedSourceOrder(order);
+    expect(store.advancedSourceOrder, order);
+    expect(
+      store.permittedSources
+          .where((source) => SourceSite.isRestricted(source.id))
+          .map((source) => source.id)
+          .toList(),
+      order,
+    );
+
+    final restored = testStore(preferences);
+    addTearDown(restored.dispose);
+    expect(restored.advancedSourceOrder, order);
+    await restored.switchProfile('default', pin: 'source-pass-123');
+    expect(
+      restored.permittedSources
+          .where((source) => SourceSite.isRestricted(source.id))
+          .map((source) => source.id)
+          .toList(),
+      order,
+    );
+  });
+
+  testWidgets('TV advanced sources use hold-to-select, D-pad reorder and short-press toggle', (
+    tester,
+  ) async {
+    if (!allSourcesEnabled) return;
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      AppLayout(
+        television: true,
+        formFactor: FormFactor.television,
+        child: MaterialApp(home: SourceManagementScreen(store: store)),
+      ),
+    );
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const ValueKey('advanced-source-password')),
+      'source-pass-123',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+
+    final initial = store.advancedSourceOrder;
+    final firstSource = initial.first;
+    final firstTile = find.byKey(ValueKey('source-switch-$firstSource'));
+    await tester.ensureVisible(firstTile);
+    await tester.pumpAndSettle();
+    final firstFocus = tester
+        .widget<Focus>(find.byKey(ValueKey('source-row-focus-$firstSource')))
+        .focusNode!;
+    firstFocus.requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(find.text('已選取排序：使用遙控器方向鍵移動，按確認完成'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(
+      store.advancedSourceOrder.take(2).toList(),
+      [initial[1], initial[0]],
+    );
+    expect(
+      find.byKey(ValueKey('source-move-down-$firstSource')),
+      findsNothing,
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('已選取排序：使用遙控器方向鍵移動，按確認完成'), findsNothing);
+
+    final shortPressSource = store.advancedSourceOrder.first;
+    expect(store.sourceEnabled(shortPressSource), isFalse);
+    final shortPressTile = find.byKey(
+      ValueKey('source-switch-$shortPressSource'),
+    );
+    await tester.ensureVisible(shortPressTile);
+    final shortPressFocus = tester.widget<Switch>(shortPressTile).focusNode!;
+    shortPressFocus.requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(store.sourceEnabled(shortPressSource), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('advanced source whole row is draggable while right switch toggles', (
+    tester,
+  ) async {
+    if (!allSourcesEnabled) return;
+    tester.view.physicalSize = const Size(1280, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      AppLayout(
+        television: false,
+        formFactor: FormFactor.phone,
+        child: MaterialApp(
+          home: SourceManagementScreen(store: store),
+        ),
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('advanced-source-password')),
+      'source-pass-123',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(store.advancedSourcesUnlocked, isTrue);
+
+    final initialOrder = store.advancedSourceOrder;
+    final firstId = initialOrder.first;
+    final firstRow = find.byKey(ValueKey('reorderable-source-$firstId'));
+    final firstSwitch = find.byKey(ValueKey('source-switch-$firstId'));
+    final title = find.descendant(
+      of: firstRow,
+      matching: find.text(SourceSite.byId(firstId).name),
+    );
+    await tester.ensureVisible(firstRow);
+    await tester.pumpAndSettle();
+
+    // The delayed drag recognizer wraps the complete row, not just a handle.
+    final listener =
+        tester.widget<ReorderableDelayedDragStartListener>(firstRow);
+    expect(listener.index, 0);
+    expect(listener.child, isA<Focus>());
+    final focus = listener.child as Focus;
+    expect(focus.child, isA<AnimatedContainer>());
+    final rowContainer = focus.child as AnimatedContainer;
+    expect(rowContainer.child, isA<ListTile>());
+    final listTile = rowContainer.child as ListTile;
+    expect(listTile.title, isA<Text>());
+    expect(listTile.subtitle, isA<Text>());
+    expect(listTile.trailing, isA<Switch>());
+    expect(find.byIcon(Icons.drag_indicator_rounded), findsNothing);
+
+    // A short tap on the title does not alter order or source state.
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(store.sourceEnabled(firstId), isFalse);
+    expect(store.advancedSourceOrder, initialOrder);
+
+    // A short tap on the right-hand switch toggles the source.
+    expect(tester.widget<Switch>(firstSwitch).value, isFalse);
+    await tester.tap(firstSwitch);
+    await tester.pumpAndSettle();
+    expect(store.sourceEnabled(firstId), isTrue);
+    expect(store.advancedSourceOrder, initialOrder);
+    expect(tester.takeException(), isNull);
+  });
 }

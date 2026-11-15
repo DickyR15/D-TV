@@ -188,7 +188,7 @@ func TestDuoduoCoverFailoverUsesBoundedBudgets(t *testing.T) {
 	}
 }
 
-func TestDuoduoPosterProxyUsesResizedWebPOnGlobalEdgeCache(t *testing.T) {
+func TestDuoduoPosterProxyUsesResizedJPEGOnGlobalEdgeCache(t *testing.T) {
 	const origin = "https://img.example.test/poster.jpg?token=a&size=original"
 	proxyAddress := duoduoPosterProxyURL(origin)
 	parsed, err := url.Parse(proxyAddress)
@@ -203,7 +203,7 @@ func TestDuoduoPosterProxyUsesResizedWebPOnGlobalEdgeCache(t *testing.T) {
 		t.Fatalf("original poster URL was not preserved: %q", query.Get("url"))
 	}
 	if query.Get("w") != "440" || query.Get("h") != "660" ||
-		query.Get("fit") != "inside" || query.Get("output") != "webp" ||
+		query.Get("fit") != "inside" || query.Get("output") != "jpg" ||
 		query.Get("q") != "80" {
 		t.Fatalf("unexpected poster resize parameters: %v", query)
 	}
@@ -231,8 +231,8 @@ func TestDuoduoPosterAttemptsReserveTimeForResizedProxy(t *testing.T) {
 	if got := nativeCoverAttemptTimeout(sourceDuoduo, "https://img.example.test/poster.jpg"); got != 2500*time.Millisecond {
 		t.Fatalf("origin attempt timeout = %s, want 2.5s", got)
 	}
-	if got := nativeCoverAttemptTimeout(sourceDuoduo, "https://wsrv.nl/?url=example.test/poster.jpg"); got != 9*time.Second {
-		t.Fatalf("resized proxy timeout = %s, want 9s", got)
+	if got := nativeCoverAttemptTimeout(sourceDuoduo, "https://wsrv.nl/?url=example.test/poster.jpg"); got != 6*time.Second {
+		t.Fatalf("resized proxy timeout = %s, want 6s", got)
 	}
 	if got := nativeCoverAttemptTimeout(sourceHongguo, "https://img.example.test/poster.jpg"); got != 12*time.Second {
 		t.Fatalf("other source timeout = %s, want unchanged 12s", got)
@@ -516,5 +516,62 @@ func TestAllRepairedDuoduoPostersReuseExternalFallbackBeforeSourceCache(t *testi
 	}
 	if primaryRequests != 0 || fallbackRequests != 0 {
 		t.Fatalf("cached repaired poster made network requests: source=%d fallback=%d", primaryRequests, fallbackRequests)
+	}
+}
+
+
+func TestDuoduoPosterPairSkipsCooledEdgeNodeAndUsesOrigin(t *testing.T) {
+	fixture, err := os.ReadFile("../../test/fixtures/cover.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const originURL = "https://img.example.test/poster.jpg"
+	proxyURL := duoduoPosterProxyURL(originURL)
+	var originRequests, edgeRequests int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Hostname() {
+		case "img.example.test":
+			originRequests++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(fixture)),
+				ContentLength: int64(len(fixture)),
+				Request: request,
+			}, nil
+		case "wsrv.nl":
+			edgeRequests++
+			return posterLookupJSONResponse(request, "unexpected edge request"), nil
+		default:
+			t.Fatalf("unexpected poster node: %s", request.URL.Hostname())
+			return nil, errors.New("unexpected poster node")
+		}
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	cache.noteCoverNodeFailure(proxyURL, &nativeCoverHTTPStatusError{StatusCode: http.StatusServiceUnavailable})
+
+	data, nextIndex, err := cache.downloadDuoduoPosterPair(
+		context.Background(),
+		nativeDrama{ID: "duoduo:123", Source: sourceDuoduo, Title: "節點冷卻測試"},
+		[]duoduoPosterAttempt{
+			{address: originURL, referer: "https://source.example.test/play/123"},
+			{address: proxyURL, referer: "https://wsrv.nl/"},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nextIndex != 2 {
+		t.Fatalf("next fallback index = %d, want 2", nextIndex)
+	}
+	if edgeRequests != 0 || originRequests != 1 {
+		t.Fatalf("requests = edge:%d origin:%d, want edge:0 origin:1", edgeRequests, originRequests)
+	}
+	if string(data) == "" {
+		t.Fatal("origin fallback returned an empty poster")
+	}
+	if !cache.coverNodeOnCooldown(proxyURL) {
+		t.Fatal("successful origin request incorrectly cleared the unrelated edge node cooldown")
 	}
 }

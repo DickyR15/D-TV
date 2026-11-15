@@ -80,7 +80,7 @@ func (resolver *dnsResolver) lookupEntry(ctx context.Context, host, subnet strin
 }
 
 func (resolver *dnsResolver) query(ctx context.Context, host, subnet string) (dnsCacheEntry, error) {
-	lastErr := errors.New("DoH 未返回可用的公网 IP 地址")
+	lastErr := errors.New("DoH 未提供可用的公用 IP 位址")
 	for _, endpoint := range resolver.endpoints {
 		for _, recordType := range []string{"A", "AAAA"} {
 			if err := ctx.Err(); err != nil {
@@ -139,7 +139,7 @@ func (resolver *dnsResolver) query(ctx context.Context, host, subnet string) (dn
 				address := net.ParseIP(answer.Data)
 				if address == nil || (recordType == "A" && address.To4() == nil) ||
 					(recordType == "AAAA" && (address.To4() != nil || address.To16() == nil)) {
-					addressErr = errors.New("DoH 返回無效 IP 地址")
+					addressErr = errors.New("DoH 回傳無效的 IP 位址")
 					break
 				}
 				entry.addresses = append(entry.addresses, address.String())
@@ -151,7 +151,7 @@ func (resolver *dnsResolver) query(ctx context.Context, host, subnet string) (dn
 				addressErr = validateCDNAddresses(entry.addresses)
 			}
 			if addressErr != nil {
-				lastErr = fmt.Errorf("DoH 未返回可用的公网 IP 地址：%w", addressErr)
+				lastErr = fmt.Errorf("DoH 未提供可用的公用 IP 位址：%w", addressErr)
 				continue
 			}
 			if len(entry.addresses) == 0 {

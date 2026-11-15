@@ -20,7 +20,7 @@ type huangdouDetailCall struct {
 
 func (d *Downloader) huangdouDetail(ctx context.Context, id string) (map[string]any, error) {
 	if !rankingSourceID.MatchString(id) {
-		return nil, errors.New("无效的黄豆剧集 ID")
+		return nil, errors.New("無效的黃豆劇集 ID")
 	}
 	d.providerMu.Lock()
 	if cached, found := d.huangdouDetails[id]; found && time.Now().Before(cached.expiresAt) {

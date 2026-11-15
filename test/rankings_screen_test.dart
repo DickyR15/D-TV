@@ -553,4 +553,46 @@ void main() {
     expect(repository.rankingCalls, 0);
   });
 
+  testWidgets(
+    'selecting a Red Fruit hot-ranking poster opens details before playback',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await tester.binding.setSurfaceSize(const Size(1280, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final repository = _RankingRepository();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppLayout(
+            television: false,
+            formFactor: FormFactor.window,
+            child: RankingsScreen(
+              repository: repository,
+              store: store,
+              initialGroup: 'hongguo',
+              initialBoardId: 'hongguo-hot',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final firstPoster = find.byKey(
+        const ValueKey('rank-1-hongguo:rank-1'),
+      );
+      expect(firstPoster, findsOneWidget);
+      await tester.tap(firstPoster);
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      // Match the original-app flow: show the work details first. Playback
+      // starts only after the user activates the Play button on this page.
+      expect(find.text('合成榜單1'), findsAtLeastNWidgets(1));
+      expect(find.byKey(const ValueKey('start-play')), findsOneWidget);
+      expect(find.text('播放'), findsOneWidget);
+    },
+  );
+
 }

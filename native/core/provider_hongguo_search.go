@@ -64,7 +64,7 @@ func reportHongguoSearchProgress(ctx context.Context, entry hongguoSearchEntry) 
 func hongguoSearchKeyword(keyword string) (string, error) {
 	keyword = norm.NFKC.String(strings.TrimSpace(keyword))
 	if keyword == "" || !utf8.ValidString(keyword) || utf8.RuneCountInString(keyword) > 80 || strings.IndexFunc(keyword, unicode.IsControl) >= 0 {
-		return "", errors.New("请输入 1 至 80 个字符的搜索词")
+		return "", errors.New("請輸入 1 至 80 個字元的搜尋關鍵字")
 	}
 	return keyword, nil
 }
@@ -100,7 +100,7 @@ func (downloader *Downloader) searchHongguoDramasProgress(ctx context.Context, k
 		}
 		if len(client.searchPending) >= hongguoSearchPendingLimit {
 			client.mu.Unlock()
-			return hongguoSearchEntry{}, errors.New("红果搜索请求较多，请稍后重试")
+			return hongguoSearchEntry{}, errors.New("紅果搜尋要求過多，請稍後重試")
 		}
 		pending := &hongguoSearchCall{done: make(chan struct{}), changed: make(chan struct{})}
 		client.searchPending[keyword] = pending
@@ -165,7 +165,7 @@ func (downloader *Downloader) fetchHongguoSearch(ctx context.Context, keyword st
 	names, namesErr := downloader.fetchHongguoSearchNames(ctx, keyword)
 	if err := ctx.Err(); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) && len(names) > 0 {
-			return hongguoSearchEntry{Dramas: names, Total: len(names), Warning: "搜索已到时限，已保留名称匹配结果，可重试"}, nil
+			return hongguoSearchEntry{Dramas: names, Total: len(names), Warning: "搜尋已達時間限制，已保留名稱比對結果，可重試"}, nil
 		}
 		return hongguoSearchEntry{}, err
 	}
@@ -204,7 +204,7 @@ func (downloader *Downloader) fetchHongguoSearch(ctx context.Context, keyword st
 		return false
 	})
 	if pageErr != nil {
-		entry.Warning = "红果综合搜索暂不可用，已保留名称匹配结果，可重试"
+		entry.Warning = "紅果綜合搜尋暫不可用，已保留名稱比對結果，可重試"
 	} else if namesErr != nil {
 		entry.Warning = "红果名称检索暂不可用，结果可能缺少部分剧集，可重试"
 	}
@@ -212,7 +212,7 @@ func (downloader *Downloader) fetchHongguoSearch(ctx context.Context, keyword st
 		if entry.Warning != "" {
 			entry.Warning += "；"
 		}
-		entry.Warning += "部分季数暂未补齐，已保留当前结果，可重试"
+		entry.Warning += "部分季數尚未補齊，已保留目前結果，可重試"
 	}
 	if entry.Total < len(entry.Dramas) {
 		entry.Total = len(entry.Dramas)
@@ -306,7 +306,7 @@ func hongguoTitleSearchRank(title, query string) int {
 
 func (downloader *Downloader) fetchHongguoSearchPage(ctx context.Context, keyword string, pageNum int) (hongguoSearchEntry, error) {
 	if pageNum < 1 {
-		return hongguoSearchEntry{}, errors.New("红果搜索页码无效")
+		return hongguoSearchEntry{}, errors.New("紅果搜尋頁碼無效")
 	}
 	client := downloader.hongguoClient()
 	offset := strconv.Itoa((pageNum - 1) * hongguoSearchPageSize)
@@ -317,13 +317,13 @@ func (downloader *Downloader) fetchHongguoSearchPage(ctx context.Context, keywor
 		cursor, found := client.searchCursors[keyword]
 		client.mu.Unlock()
 		if !found || !time.Now().Before(cursor.ExpiresAt) {
-			return hongguoSearchEntry{}, errors.New("红果搜索游标已过期，请重新搜索")
+			return hongguoSearchEntry{}, errors.New("紅果搜尋游標已過期，請重新搜尋")
 		}
 		if cursor.Page != pageNum-1 {
-			return hongguoSearchEntry{}, errors.New("红果搜索必须按顺序续载，请先载入上一页")
+			return hongguoSearchEntry{}, errors.New("紅果搜尋必須依序續載，請先載入上一頁")
 		}
 		if !cursor.HasMore {
-			return hongguoSearchEntry{}, errors.New("红果搜索已没有更多结果")
+			return hongguoSearchEntry{}, errors.New("紅果搜尋已沒有更多結果")
 		}
 		previous = cursor
 		if cursor.NextOffset != "" {
@@ -347,7 +347,7 @@ func (downloader *Downloader) fetchHongguoSearchPage(ctx context.Context, keywor
 		}
 	}
 	if tab == nil {
-		return hongguoSearchEntry{}, errors.New("红果搜索未返回有效结果")
+		return hongguoSearchEntry{}, errors.New("紅果搜尋未提供有效結果")
 	}
 	cells := anyList(tab["data"])
 	entry := hongguoSearchEntry{Dramas: make([]Drama, 0, len(cells)), HasMore: tab["has_more"] == true}
@@ -376,7 +376,7 @@ func (downloader *Downloader) fetchHongguoSearchPage(ctx context.Context, keywor
 		}
 	}
 	if len(cells) > 0 && recognized == 0 {
-		return hongguoSearchEntry{}, errors.New("红果搜索结果中没有可识别的剧集")
+		return hongguoSearchEntry{}, errors.New("紅果搜尋結果中沒有可辨識的劇集")
 	}
 	entry.Total, _ = strconv.Atoi(mapString(tab, "total", "total_count"))
 	if entry.Total < len(entry.Dramas) {
@@ -385,7 +385,7 @@ func (downloader *Downloader) fetchHongguoSearchPage(ctx context.Context, keywor
 	nextOffset := mapString(tab, "next_offset")
 	if nextOffset == "" && entry.HasMore {
 		if len(cells) == 0 {
-			return hongguoSearchEntry{}, errors.New("红果搜索分页游标缺失，已停止续载以避免重复结果")
+			return hongguoSearchEntry{}, errors.New("紅果搜尋分頁游標缺失，已停止續載以避免重複結果")
 		}
 		nextOffset = strconv.Itoa((pageNum-1)*hongguoSearchPageSize + len(cells))
 	}
@@ -393,7 +393,7 @@ func (downloader *Downloader) fetchHongguoSearchPage(ctx context.Context, keywor
 	passback := firstNonEmpty(mapString(tab, "passback", "next_passback"), previous.Passback)
 	if pageNum > 1 && entry.HasMore &&
 		nextOffset == previous.NextOffset && passback == previous.Passback && searchID == previous.SearchID {
-		return hongguoSearchEntry{}, errors.New("红果搜索分页游标未前进，已停止续载以避免重复结果")
+		return hongguoSearchEntry{}, errors.New("紅果搜尋分頁游標未前進，已停止續載以避免重複結果")
 	}
 	downloader.storeHongguoSearchCursor(keyword, hongguoSearchCursor{
 		Page: pageNum, SearchID: searchID, Passback: passback, NextOffset: nextOffset,

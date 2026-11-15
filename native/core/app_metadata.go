@@ -16,7 +16,7 @@ func nativeNeedsExtraMetadata(drama nativeDrama) bool {
 func (engine *nativeEngine) nativeExtraMetadata(ctx context.Context, drama nativeDrama) (nativeDrama, error) {
 	source, id, valid := splitProviderDramaID(drama.ID)
 	if !valid {
-		return drama, errors.New("剧集信息无效")
+		return drama, errors.New("劇集資訊無效")
 	}
 	if !nativeNeedsExtraMetadata(drama) {
 		return drama, nil
@@ -27,7 +27,7 @@ func (engine *nativeEngine) nativeExtraMetadata(ctx context.Context, drama nativ
 	switch source {
 	case sourceHongguo:
 		if !hongguoNumericID.MatchString(id) {
-			return drama, errors.New("红果剧集 ID 无效")
+			return drama, errors.New("紅果劇集 ID 無效")
 		}
 		body, err := engine.downloader.fetchProviderText(ctx, hongguoBaseURL+"/detail?series_id="+url.QueryEscape(id), hongguoBaseURL+"/")
 		if err != nil {

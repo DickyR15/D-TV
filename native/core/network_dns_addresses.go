@@ -31,20 +31,20 @@ func protectedCDNHost(host string) bool {
 
 func validateCDNAddresses(addresses []string) error {
 	if len(addresses) == 0 {
-		return errors.New("CDN 没有可用的公网地址")
+		return errors.New("CDN 沒有可用的公用位址")
 	}
 	for _, value := range addresses {
 		address, err := netip.ParseAddr(value)
 		if err != nil || address.Zone() != "" {
-			return errors.New("CDN 返回无效地址")
+			return errors.New("CDN 回傳無效的位址")
 		}
 		address = address.Unmap()
 		if !address.IsGlobalUnicast() || address.IsPrivate() {
-			return fmt.Errorf("CDN 返回非公网地址：%s", address)
+			return fmt.Errorf("CDN 回傳非公用位址：%s", address)
 		}
 		for _, network := range nonPublicCDNNetworks {
 			if network.Contains(address) {
-				return fmt.Errorf("CDN 返回保留地址：%s", address)
+				return fmt.Errorf("CDN 回傳保留位址：%s", address)
 			}
 		}
 	}

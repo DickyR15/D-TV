@@ -33,4 +33,126 @@ void main() {
       isFalse,
     );
   });
+  test('desktop mini-player starts as a normal resizable window', () {
+    expect(
+      playbackWindowStartsFullscreen(desktopMiniPlayer: true),
+      isFalse,
+    );
+    expect(
+      playbackWindowStartsFullscreen(desktopMiniPlayer: false),
+      isTrue,
+    );
+  });
+
+  test('Android auto-PiP background transition retains active playback', () {
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+      ),
+      isTrue,
+    );
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: false,
+        enabled: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: true,
+        enabled: false,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: true,
+        systemSupported: false,
+        playing: true,
+        enabled: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+        television: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: false,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+      ),
+      isFalse,
+    );
+  });
+  test('Android PiP Surface refresh waits for the foreground restore state', () {
+    expect(
+      playbackShouldRefreshAndroidPipSurface(
+        android: true,
+        pendingRestore: true,
+        activityResumed: true,
+        pictureInPictureActive: false,
+        pictureInPictureRequested: false,
+      ),
+      isTrue,
+    );
+    expect(
+      playbackShouldRefreshAndroidPipSurface(
+        android: true,
+        pendingRestore: true,
+        activityResumed: false,
+        pictureInPictureActive: false,
+        pictureInPictureRequested: false,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackShouldRefreshAndroidPipSurface(
+        android: true,
+        pendingRestore: true,
+        activityResumed: true,
+        pictureInPictureActive: true,
+        pictureInPictureRequested: false,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackShouldRefreshAndroidPipSurface(
+        android: true,
+        pendingRestore: true,
+        activityResumed: true,
+        pictureInPictureActive: false,
+        pictureInPictureRequested: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackShouldRefreshAndroidPipSurface(
+        android: false,
+        pendingRestore: true,
+        activityResumed: true,
+        pictureInPictureActive: false,
+        pictureInPictureRequested: false,
+      ),
+      isFalse,
+    );
+  });
+
+
 }

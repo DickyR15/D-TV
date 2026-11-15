@@ -23,7 +23,7 @@ func (engine *nativeEngine) suggestions(ctx context.Context, query string) ([]st
 func nativeParseSuggestions(body []byte) ([]string, error) {
 	var result map[string]json.RawMessage
 	if json.Unmarshal(body, &result) != nil {
-		return nil, errors.New("搜索联想暂不可用")
+		return nil, errors.New("搜尋聯想暫不可用")
 	}
 	list := result["suggest_list"]
 	if len(list) == 0 {
@@ -39,7 +39,7 @@ func nativeParseSuggestions(body []byte) ([]string, error) {
 		Name string `json:"name"`
 	}
 	if json.Unmarshal(list, &entries) != nil {
-		return nil, errors.New("搜索联想暂不可用")
+		return nil, errors.New("搜尋聯想暫不可用")
 	}
 	names, seen := []string{}, map[string]bool{}
 	for _, entry := range entries {

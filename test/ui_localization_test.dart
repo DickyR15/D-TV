@@ -30,6 +30,29 @@ void main() {
     );
   });
 
+  test('normalizes Taiwan push and playback URL terminology', () {
+    expect(
+      uiTraditional('消息推送、推送通知、推送播放、本機地址、對方的本機地址、播放地址、獲取播放地址、登錄憑證'),
+      '訊息推播、推播通知、傳送播放內容、本機位址、對方的本機位址、播放網址、取得播放網址、登入憑證',
+    );
+    expect(
+      uiTraditional('未返回有效播放地址，請刷新章節或確認站點存取權限'),
+      '未提供有效的播放網址，請重新整理分集或確認片源存取權限',
+    );
+  });
+
+  test('uses Taiwan terminology for notifications and device playback handoff', () {
+    expect(uiTraditional('站點存取權限'), '片源存取權限');
+    expect(
+      uiTraditional('消息推送、推送通知、推送播放、本機地址、播放地址、獲取播放地址'),
+      '訊息推播、推播通知、傳送播放內容、本機位址、播放網址、取得播放網址',
+    );
+    expect(
+      uiTraditional('當前使用者、許可權、網絡、視頻、搜索、缓存、文件夹、默认'),
+      '目前使用者、權限、網路、影片、搜尋、快取、資料夾、預設',
+    );
+  });
+
   test('removes Dart Bad state prefixes from user-visible messages', () {
     expect(uiTraditional('Bad state: 密碼不正確'), '密碼不正確');
     expect(uiTraditional('Bad state: Bad state: 密碼不正確'), '密碼不正確');
@@ -128,6 +151,33 @@ void main() {
 
   test('uses Taiwan wording for QR code terminology', () {
     expect(uiTraditional('二維碼、掃碼、手機'), 'QR Code、掃描、手機');
+  });
+
+  test('converts official season labels and returned metadata to Taiwan Traditional Chinese', () {
+    final season = DramaSeason.fromJson({
+      'drama': {
+        'id': 'hongguo:7628202881140657177',
+        'source': 'hongguo',
+        'sourceId': '7628202881140657177',
+        'title': '万妖图录传第二季',
+        'description': '即将上线',
+        'episodes': 53,
+      },
+      'number': 2,
+      'label': '第2季',
+      'subtitle': '即将上线 · 共53集 · 435万热度',
+      'upcoming': false,
+      'playable': true,
+    });
+
+    expect(uiTraditional(season.drama.title), '萬妖圖錄傳第二季');
+    expect(uiTraditional(season.drama.description), '即將上線');
+    expect(
+      uiTraditional(season.subtitle),
+      '即將上線 · 共53集 · 435萬熱度',
+    );
+    expect(season.number, 2);
+    expect(season.playable, isTrue);
   });
 
   test('keeps source identifiers and Latin labels untouched', () {

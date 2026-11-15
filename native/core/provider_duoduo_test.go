@@ -5,13 +5,20 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestDuoduoParsesOnlyPublicDirectPlaybackLines(t *testing.T) {
@@ -36,6 +43,68 @@ func TestDuoduoParsesOnlyPublicDirectPlaybackLines(t *testing.T) {
 	if lines[0].Episodes[0].URL != "https://media.example.test/1.m3u8?token=a" ||
 		lines[0].Episodes[1].URL != "https://media.example.test/2.mp4" {
 		t.Fatalf("direct media URLs were not retained: %+v", lines[0].Episodes)
+	}
+}
+
+func TestFetchDuoduoSeriesSeasonsHydratesMissingSeasonPosterAndEpisodeCount(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[
+					{"vod_id":901,"vod_name":"緊急呼救第一季","vod_remarks":"已完結"},
+					{"vod_id":902,"vod_name":"緊急呼救第二季","vod_pic":"https://img.example.test/s2.jpg","vod_total":18,"vod_remarks":"已完結"}
+				]
+			}`), nil
+		case "/api.php/web/internal/search_aggregate":
+			if request.URL.Query().Get("vod_id") != "901" {
+				t.Fatalf("unexpected aggregate ID: %s", request.URL.Query().Get("vod_id"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[{
+					"site_key":"season-one-direct",
+					"site_name":"第一季直連",
+					"decode_status":0,
+					"vod_play_url":"第1集$https://media.example.test/s1e1.m3u8#第2集$https://media.example.test/s1e2.m3u8#第3集$https://media.example.test/s1e3.m3u8#第4集$https://media.example.test/s1e4.m3u8#第5集$https://media.example.test/s1e5.m3u8#第6集$https://media.example.test/s1e6.m3u8#第7集$https://media.example.test/s1e7.m3u8#第8集$https://media.example.test/s1e8.m3u8#第9集$https://media.example.test/s1e9.m3u8#第10集$https://media.example.test/s1e10.m3u8"
+				}]
+			}`), nil
+		case "/api.php/web/vod/get_detail":
+			if request.URL.Query().Get("vod_id") != "901" {
+				t.Fatalf("unexpected detail ID: %s", request.URL.Query().Get("vod_id"))
+			}
+			return sourceFixtureResponse(request, http.StatusOK, `{
+				"code":200,
+				"data":[{
+					"vod_id":901,
+					"vod_name":"緊急呼救第一季",
+					"vod_pic_detail":"https://img.example.test/s1-detail.jpg",
+					"vod_total":10,
+					"vod_remarks":"已完結"
+				}]
+			}`), nil
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+
+	current := nativeDrama{
+		ID: "duoduo:902", Source: sourceDuoduo, SourceID: "902",
+		Title: "緊急呼救第二季", Episodes: 18,
+	}
+	seasons, err := d.fetchDuoduoSeriesSeasons(context.Background(), current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seasons) != 2 {
+		t.Fatalf("expected two seasons, got %+v", seasons)
+	}
+	first := seasons[0]
+	if first.Drama.ID != "duoduo:901" || first.Drama.Cover != "https://img.example.test/s1-detail.jpg" ||
+		first.Drama.Episodes != 10 || !first.Playable || first.Upcoming {
+		t.Fatalf("season-one detail metadata was not hydrated: %+v", first)
 	}
 }
 
@@ -67,6 +136,12 @@ func TestDuoduoPosterUsesOfficialPlayPageRefererBeforeHomepage(t *testing.T) {
 		t.Fatalf("homepage Referer compatibility retry was lost: %+v", attempts)
 	}
 }
+type posterTestRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTrip posterTestRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
 func TestDuoduoPosterFallbackFields(t *testing.T) {
 	cases := []struct {
 		name string
@@ -117,6 +192,70 @@ func TestDuoduoPosterFallbackFields(t *testing.T) {
 	}
 }
 
+func TestDuoduoPosterFallbackSupportsExtendedArtworkFields(t *testing.T) {
+	for _, field := range []string{
+		"vod_pic_original", "vod_pic_big", "vod_pic_cover",
+		"cover_image", "poster_url", "image_url", "pic_url",
+	} {
+		t.Run(field, func(t *testing.T) {
+			row := map[string]any{
+				"vod_id": 78301,
+				"vod_name": "擴充海報欄位",
+				field: "https://img.example.test/" + field + ".jpg",
+			}
+			want := "https://img.example.test/" + field + ".jpg"
+			if got := duoduoDramaFromRow(row).Cover; got != want {
+				t.Fatalf("fallback field %q produced %q, want %q", field, got, want)
+			}
+		})
+	}
+}
+
+func TestDuoduoPosterFallbackDiscoversLateImageFields(t *testing.T) {
+	for _, field := range []string{
+		"vod_pic_detail", "vod_big_pic", "cover_img", "poster_src",
+		"image_path", "thumbnail_url",
+	} {
+		t.Run(field, func(t *testing.T) {
+			row := map[string]any{
+				"vod_id": 78320,
+				"vod_name": "延遲海報欄位",
+				field: "https://img.example.test/" + field + ".jpg",
+			}
+			want := "https://img.example.test/" + field + ".jpg"
+			if got := duoduoDramaFromRow(row).Cover; got != want {
+				t.Fatalf("late artwork field %q produced %q, want %q", field, got, want)
+			}
+		})
+	}
+}
+
+func TestDuoduoDramaFromRowReadsOfficialEpisodeTotalAliases(t *testing.T) {
+	for _, test := range []struct {
+		field string
+		value any
+	}{
+		{"vod_total", 18},
+		{"vod_total_episode", "18"},
+		{"vod_episode_count", "共18集"},
+		{"episode_count", 18},
+		{"episodes", "更新至18集"},
+		{"vod_remarks", "已完結 18集"},
+	} {
+		t.Run(test.field, func(t *testing.T) {
+			row := map[string]any{
+				"vod_id": 78330,
+				"vod_name": "緊急呼救第一季",
+				test.field: test.value,
+			}
+			drama := duoduoDramaFromRow(row)
+			if duoduoDramaEpisodeCount(drama) != 18 {
+				t.Fatalf("episode count from %s = %v, want 18", test.field, drama.Episodes)
+			}
+		})
+	}
+}
+
 func TestDuoduoPosterRecoveryHandlesBaiduWrappersAndUnknownCDNs(t *testing.T) {
 	const wrapped = "https://gimg0.baidu.com/gimg/app=2001&n=0&g=0n&fmt=jpeg&src=https%3A%2F%2Fi0.hdslb.com%2Fbfs%2Fbangumi%2Fimage%2F0af10a0c3258186e96fde4406b384c13dd643d8f.png"
 	const source = "https://i0.hdslb.com/bfs/bangumi/image/0af10a0c3258186e96fde4406b384c13dd643d8f.png"
@@ -147,6 +286,32 @@ func TestDuoduoPosterRecoveryHandlesBaiduWrappersAndUnknownCDNs(t *testing.T) {
 	}
 }
 
+func TestDuoduoDramaFromRowPreservesAlternatePostersForNativeCache(t *testing.T) {
+	row := map[string]any{
+		"vod_id": 78296, "vod_name": "測試影片",
+		"vod_pic": "https://broken.example.test/main.jpg",
+		"vod_pic_thumb": "https://working.example.test/thumb.jpg",
+		"vod_pic_slide": "https://working.example.test/slide.jpg",
+		"vod_pic_original": "https://working.example.test/original.jpg",
+	}
+	drama := duoduoDramaFromRow(row)
+	if drama.Cover != "https://broken.example.test/main.jpg" {
+		t.Fatalf("primary poster = %v", drama.Cover)
+	}
+	want := []string{
+		"https://working.example.test/thumb.jpg",
+		"https://working.example.test/slide.jpg",
+		"https://working.example.test/original.jpg",
+	}
+	if !reflect.DeepEqual(drama.CoverCandidates, want) {
+		t.Fatalf("Duoduo alternate poster candidates = %#v, want %#v", drama.CoverCandidates, want)
+	}
+	native := nativeNormalize(drama)
+	if !reflect.DeepEqual(native.CoverCandidates, want) {
+		t.Fatalf("native poster candidates = %#v, want %#v", native.CoverCandidates, want)
+	}
+}
+
 func TestDuoduoKeepsAlternatePosterFieldsForRetry(t *testing.T) {
 	row := map[string]any{
 		"vod_id": 78296,
@@ -164,8 +329,195 @@ func TestDuoduoKeepsAlternatePosterFieldsForRetry(t *testing.T) {
 	}
 }
 
+func TestDuoduoKeepsAllPosterCandidatesInsideNestedFields(t *testing.T) {
+	row := map[string]any{
+		"vod_id": 78298,
+		"vod_name": "多圖海報作品",
+		"vod_pic": []any{
+			"https://img.example.test/main.jpg",
+			map[string]any{"url": "https://img.example.test/second.webp"},
+			"https://img.example.test/main.jpg",
+		},
+		"vod_pic_thumb": map[string]any{
+			"thumbnailUrl": []any{
+				"https://img.example.test/thumb-a.jpg",
+				"https://img.example.test/thumb-b.jpg",
+			},
+		},
+	}
+	addresses := duoduoPosterAddressesFromRow(row)
+	want := []string{
+		"https://img.example.test/main.jpg",
+		"https://img.example.test/second.webp",
+		"https://img.example.test/thumb-a.jpg",
+		"https://img.example.test/thumb-b.jpg",
+	}
+	if !reflect.DeepEqual(addresses, want) {
+		t.Fatalf("nested poster candidates = %+v, want %+v", addresses, want)
+	}
+}
+
+func TestDuoduoPosterRaceStartsOriginFallbackWhenEdgeIsSlow(t *testing.T) {
+	image := posterTestJPEGVariant(t, 71)
+	var originCalls, proxyCalls atomic.Int32
+	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Hostname() {
+		case "origin.example.test":
+			originCalls.Add(1)
+			body := image
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
+		case "wsrv.nl":
+			proxyCalls.Add(1)
+			<-request.Context().Done()
+			return nil, request.Context().Err()
+		default:
+			return nil, fmt.Errorf("unexpected poster host: %s", request.URL.Hostname())
+		}
+	})}
+	cache := &nativeCoverCache{downloader: &Downloader{client: client}, failures: map[string]time.Time{}}
+	drama := nativeDrama{ID: "duoduo:54635", Source: sourceDuoduo, Title: "測試海報"}
+	origin := "https://origin.example.test/poster.jpg"
+	attempts := []duoduoPosterAttempt{
+		{address: origin, referer: "https://duoduozhuiju.com/play/54635"},
+		{address: duoduoPosterProxyURL(origin), referer: "https://wsrv.nl/"},
+	}
+	started := time.Now()
+	data, nextIndex, err := cache.downloadDuoduoPosterPair(context.Background(), drama, attempts)
+	if err != nil || nextIndex != 2 || !bytes.Equal(data, image) {
+		t.Fatalf("origin fallback result = %q, next=%d, err=%v", data, nextIndex, err)
+	}
+	if originCalls.Load() != 1 || proxyCalls.Load() != 1 {
+		t.Fatalf("origin/edge calls = %d/%d, want 1/1", originCalls.Load(), proxyCalls.Load())
+	}
+	if elapsed := time.Since(started); elapsed < nativeCoverDuoduoOriginHedgeDelay || elapsed > nativeCoverDuoduoOriginHedgeDelay+time.Second {
+		t.Fatalf("origin fallback took %v, expected near the %v hedge window", elapsed, nativeCoverDuoduoOriginHedgeDelay)
+	}
+}
+func TestDuoduoPosterRaceDoesNotStartOriginWhenEdgeIsFast(t *testing.T) {
+	image := posterTestJPEGVariant(t, 72)
+	var originCalls, proxyCalls atomic.Int32
+	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Hostname() == "wsrv.nl" {
+			proxyCalls.Add(1)
+		} else if request.URL.Hostname() == "origin.example.test" {
+			originCalls.Add(1)
+		}
+		body := []byte(image)
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
+	})}
+	cache := &nativeCoverCache{downloader: &Downloader{client: client}, failures: map[string]time.Time{}}
+	drama := nativeDrama{ID: "duoduo:54636", Source: sourceDuoduo, Title: "快速海報"}
+	origin := "https://origin.example.test/poster.jpg"
+	attempts := []duoduoPosterAttempt{
+		{address: origin, referer: "https://duoduozhuiju.com/play/54636"},
+		{address: duoduoPosterProxyURL(origin), referer: "https://wsrv.nl/"},
+	}
+	data, nextIndex, err := cache.downloadDuoduoPosterPair(context.Background(), drama, attempts)
+	if err != nil || nextIndex != 2 || !bytes.Equal(data, []byte(image)) {
+		t.Fatalf("fast-edge race result = %q, next=%d, err=%v", data, nextIndex, err)
+	}
+	if proxyCalls.Load() != 1 || originCalls.Load() != 0 {
+		t.Fatalf("edge/origin calls = %d/%d, want 1/0", proxyCalls.Load(), originCalls.Load())
+	}
+}
+func TestDuoduoPosterRaceFallsBackImmediatelyWhenEdgeFails(t *testing.T) {
+	image := posterTestJPEGVariant(t, 73)
+	var originCalls, proxyCalls atomic.Int32
+	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Hostname() == "wsrv.nl" {
+			proxyCalls.Add(1)
+			return &http.Response{StatusCode: http.StatusBadGateway, Header: http.Header{"Content-Type": []string{"text/html"}}, Body: io.NopCloser(strings.NewReader("bad gateway")), Request: request}, nil
+		}
+		if request.URL.Hostname() == "origin.example.test" {
+			originCalls.Add(1)
+			body := []byte(image)
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"image/jpeg"}}, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
+		}
+		return nil, fmt.Errorf("unexpected poster host: %s", request.URL.Hostname())
+	})}
+	cache := &nativeCoverCache{downloader: &Downloader{client: client}, failures: map[string]time.Time{}}
+	drama := nativeDrama{ID: "duoduo:54638", Source: sourceDuoduo, Title: "備援海報"}
+	origin := "https://origin.example.test/poster.jpg"
+	attempts := []duoduoPosterAttempt{
+		{address: origin, referer: "https://duoduozhuiju.com/play/54638"},
+		{address: duoduoPosterProxyURL(origin), referer: "https://wsrv.nl/"},
+	}
+	started := time.Now()
+	data, nextIndex, err := cache.downloadDuoduoPosterPair(context.Background(), drama, attempts)
+	if err != nil || nextIndex != 2 || !bytes.Equal(data, []byte(image)) {
+		t.Fatalf("edge-failure fallback result = %q, next=%d, err=%v", data, nextIndex, err)
+	}
+	if originCalls.Load() != 1 || proxyCalls.Load() != 1 {
+		t.Fatalf("origin/edge calls = %d/%d, want 1/1", originCalls.Load(), proxyCalls.Load())
+	}
+	if elapsed := time.Since(started); elapsed > nativeCoverDuoduoOriginHedgeDelay {
+		t.Fatalf("origin fallback waited %v after edge failure", elapsed)
+	}
+}
+
+func TestDuoduoStaleCachedPosterReturnsImmediatelyWhileRefreshing(t *testing.T) {
+	image := posterTestPNG(t)
+	client := &http.Client{
+		Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusNotFound,
+				Header: http.Header{},
+				Body: io.NopCloser(strings.NewReader("not found")),
+				Request: request,
+			}, nil
+		}),
+	}
+	downloader := &Downloader{client: client}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	drama := nativeDrama{
+		ID: "duoduo:54637", Source: sourceDuoduo,
+		Title: "快取海報", Cover: "https://origin.example.test/cached.jpg",
+	}
+	referer := nativeCoverRefererForDrama(downloader, drama, drama.Cover)
+	digest := sha256.Sum256([]byte(sourceDuoduo + "\x00" + drama.Cover + "\x00" + referer))
+	key := hex.EncodeToString(digest[:])
+	path := filepath.Join(cache.directory, key+".img")
+	if err := os.MkdirAll(cache.directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, image, 0600); err != nil {
+		t.Fatal(err)
+	}
+	cache.mu.Lock()
+	cache.entries[key] = nativeCoverEntry{
+		size: int64(len(image)),
+		updatedAt: time.Now().Add(-nativeCoverTTL-time.Minute),
+		usedAt: time.Now(),
+	}
+	cache.size += int64(len(image))
+	cache.mu.Unlock()
+
+	started := time.Now()
+	got, err := cache.loadAddress(context.Background(), drama, false)
+	if err != nil || got != path {
+		t.Fatalf("stale cache result = %q, err=%v; want cached path %q", got, err, path)
+	}
+	if elapsed := time.Since(started); elapsed > 200*time.Millisecond {
+		t.Fatalf("stale cached poster waited %v instead of returning immediately", elapsed)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		cache.mu.Lock()
+		pending := len(cache.pending)
+		cache.mu.Unlock()
+		if pending == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("background cached-poster refresh did not finish")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func TestNativeDecodeCoverUnwrapsGzipImageBodies(t *testing.T) {
-	image := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0}
+	image := posterTestPNG(t)
 	var compressed bytes.Buffer
 	writer := gzip.NewWriter(&compressed)
 	if _, err := writer.Write(image); err != nil {
@@ -235,7 +587,7 @@ func TestDuoduoMapsMovieMetadataAndCategories(t *testing.T) {
 	if drama.ID != "duoduo:78296" || drama.Source != sourceDuoduo ||
 		drama.Title != "流浪地球（特別版）" || drama.CategoryName != "电影" || drama.DoubanID != "20502443" ||
 		drama.Cover != "https://images.example.test/poster.jpg" ||
-		!strings.Contains(drama.Desc, "<p>科幻電影</p>") {
+		drama.Desc != "科幻電影" || drama.Intro != "科幻電影" || strings.Contains(drama.Desc, "<p>") {
 		t.Fatalf("Duoduo metadata mapping is incomplete: %+v", drama)
 	}
 	if !validNativeCategory(sourceDuoduo, "1") || !validNativeCategory(sourceDuoduo, "4") ||
@@ -641,7 +993,7 @@ func TestDuoduoPosterProxySupportsPublicCDNsAndRejectsUnsafeHosts(t *testing.T) 
 		}
 		query := parsed.Query()
 		if query.Get("url") == "" || query.Get("w") != "440" ||
-			query.Get("h") != "660" || query.Get("output") != "webp" {
+			query.Get("h") != "660" || query.Get("output") != "jpg" {
 			t.Fatalf("poster proxy is missing resize parameters: address=%q proxy=%q", address, proxy)
 		}
 	}
@@ -811,3 +1163,150 @@ func TestDuoduoMovieDetectionUsesExplicitRemarkOnlyWhenCategoryIsMissing(t *test
     t.Fatal("ordinary episodic update remark was mistaken for a movie")
   }
 }
+
+
+func TestDuoduoSynopsisRemovesHTMLMarkup(t *testing.T) {
+	cases := []struct {
+		name string
+		row  map[string]any
+		want string
+	}{
+		{
+			name: "paragraphs and entities",
+			row: map[string]any{
+				"vod_id": 78296, "vod_name": "測試短劇",
+				"vod_content": "<p>第一段</p><p>第二段 &amp; 更多</p><p> </p>",
+			},
+			want: "第一段 第二段 & 更多",
+		},
+		{
+			name: "escaped paragraph markup",
+			row: map[string]any{
+				"vod_id": 78297, "vod_name": "測試短劇",
+				"vod_content": "&lt;p&gt;這是簡介&lt;/p&gt;",
+			},
+			want: "這是簡介",
+		},
+		{
+			name: "empty paragraphs do not become visible tags",
+			row: map[string]any{
+				"vod_id": 78298, "vod_name": "測試短劇",
+				"vod_content": "<p> </p><p>&nbsp;</p>",
+			},
+			want: "",
+		},
+		{
+			name: "blurb fallback",
+			row: map[string]any{
+				"vod_id": 78299, "vod_name": "測試短劇",
+				"vod_content": "<p> </p>", "vod_blurb": "<div>備用簡介</div>",
+			},
+			want: "備用簡介",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			drama := duoduoDramaFromRow(tc.row)
+			if drama.Desc != tc.want || drama.Intro != tc.want {
+				t.Fatalf("synopsis = %q / %q, want %q", drama.Desc, drama.Intro, tc.want)
+			}
+		})
+	}
+}
+
+func TestDuoduoDetailFallsBackToPlayableVerifiedSameSeasonAlias(t *testing.T) {
+	downloader := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/api.php/web/search/index":
+			switch request.URL.Query().Get("wd") {
+			case "芝加哥醫院":
+				return sourceFixtureResponse(request, http.StatusOK, `{
+					"code":200,
+					"data":[
+						{"vod_id":912,"vod_name":"芝加哥醫院第十二季","vod_remarks":"21集"},
+						{"vod_id":913,"vod_name":"芝加哥急救第十二季","vod_remarks":"21集"}
+					]
+				}`), nil
+			default:
+				return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[]}`), nil
+			}
+		case "/api.php/web/vod/get_detail":
+			id := request.URL.Query().Get("vod_id")
+			switch id {
+			case "912":
+				return sourceFixtureResponse(request, http.StatusOK, `{
+					"code":200,
+					"data":[{
+						"vod_id":912,
+						"vod_name":"芝加哥醫院第十二季",
+						"vod_remarks":"21集",
+						"vod_play_from":"NBY",
+						"vod_play_url":"第1集$https://player.example.test/private/1"
+					}],
+					"vodplayer":[{"from":"NBY","show":"青山藍光","decode_status":1}]
+				}`), nil
+			case "913":
+				return sourceFixtureResponse(request, http.StatusOK, `{
+					"code":200,
+					"data":[{
+						"vod_id":913,
+						"vod_name":"芝加哥急救第十二季",
+						"vod_remarks":"21集",
+						"vod_play_from":"NBY",
+						"vod_play_url":"第1集$https://player.example.test/private/1"
+					}],
+					"vodplayer":[{"from":"NBY","show":"青山藍光","decode_status":1}]
+				}`), nil
+			default:
+				t.Fatalf("unexpected Chicago Med detail ID: %s", id)
+				return nil, nil
+			}
+		case "/api.php/web/internal/search_aggregate":
+			switch request.URL.Query().Get("vod_id") {
+			case "912":
+				return sourceFixtureResponse(request, http.StatusOK, `{"code":200,"data":[]}`), nil
+			case "913":
+				return sourceFixtureResponse(request, http.StatusOK, `{
+					"code":200,
+					"data":[{
+						"site_key":"chicago-med-direct",
+						"site_name":"芝加哥急救直連",
+						"decode_status":0,
+						"vod_play_url":"第1集$https://media.example.test/med-s12e1.m3u8#第2集$https://media.example.test/med-s12e2.m3u8"
+					}]
+				}`), nil
+			default:
+				t.Fatalf("unexpected Chicago Med aggregate ID: %s", request.URL.Query().Get("vod_id"))
+				return nil, nil
+			}
+		default:
+			t.Fatalf("unexpected Duoduo endpoint: %s", request.URL.String())
+			return nil, nil
+		}
+	})
+
+	drama, chapters, err := downloader.fetchDuoduoDetailWithCategory(
+		context.Background(), "912", "劇集",
+	)
+	if err != nil {
+		t.Fatalf("same-season verified alias should supply public direct playback: %v", err)
+	}
+	if drama.ID != "duoduo:912" || drama.SourceID != "912" {
+		t.Fatalf("fallback must preserve the selected catalogue identity: %+v", drama)
+	}
+	if len(chapters) != 2 {
+		t.Fatalf("expected two fallback episodes, got %+v", chapters)
+	}
+	if chapters[0].ID != providerChapterID(sourceDuoduo, "912", "1") ||
+		chapters[1].ID != providerChapterID(sourceDuoduo, "912", "2") {
+		t.Fatalf("fallback chapters must use the selected season identity: %+v", chapters)
+	}
+	if chapters[0].VideoURL != "https://media.example.test/med-s12e1.m3u8" ||
+		chapters[1].VideoURL != "https://media.example.test/med-s12e2.m3u8" {
+		t.Fatalf("fallback direct URLs were not retained: %+v", chapters)
+	}
+	if drama.Episodes != 2 || !drama.EpisodesVerified {
+		t.Fatalf("playable episode metadata was not updated from the fallback: %+v", drama)
+	}
+}
+

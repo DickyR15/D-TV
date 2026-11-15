@@ -102,7 +102,7 @@ class MergePlan {
         audio?.audio['codec_name'] == 'aac' && ac.any((change) => change);
     if (canonicalAac) ac = List.filled(probes.length, true);
     if (vc.any((v) => v) && !{'h264', 'hevc'}.contains(video.videoCodec)) {
-      throw AppFailure('多數分集為 ${video.videoCodec}，當前不能將其他格式轉換為此編碼；原檔案已保留。');
+      throw AppFailure('多數分集為 ${video.videoCodec}，目前無法將其他格式轉換為此編碼；原檔案已保留。');
     }
     for (var i = 0; i < probes.length; i++) {
       if (!vc[i]) continue;

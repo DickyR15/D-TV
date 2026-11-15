@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'core_bridge.dart';
+import 'duoduo_series_catalog.dart';
 import 'models.dart';
 import 'ranking_search_cache.dart';
 import 'ui_localization.dart';
@@ -405,8 +406,14 @@ class CatalogBrowser {
           return left.title.compareTo(right.title);
         });
       }
+      final displayItems =
+          queryText.isEmpty &&
+              group.sources.length == 1 &&
+              group.sources.single.id == 'duoduo'
+          ? collapseDuoduoSeriesCatalogItems(visibleItems)
+          : visibleItems;
       return CatalogPage(
-        visibleItems,
+        displayItems,
         hasMore: sourceOrder.any((source) => session.entries[source]!.hasMore),
         page: sourceOrder.fold<int>(
           1,

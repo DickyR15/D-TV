@@ -41,7 +41,7 @@ func (proxy nativeSystemProxy) resolve(request *http.Request) (*url.URL, error) 
 	}
 	if address == "" {
 		if proxy.PAC && proxy.PACURL == "" {
-			return nil, errors.New("系统使用自动代理脚本，请在网络设置中配置手动代理或选择直连")
+			return nil, errors.New("系統使用自動代理設定檔，請在網路設定中設定手動代理或選擇直接連線")
 		}
 		return http.ProxyFromEnvironment(request)
 	}

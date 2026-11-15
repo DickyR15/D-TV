@@ -3,6 +3,37 @@ import 'package:hgtv/playback_recovery.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('unknown-duration completion is valid after playback has progressed', () {
+    expect(
+      playbackCompletionNeedsRecovery(
+        duration: Duration.zero,
+        position: Duration.zero,
+      ),
+      isTrue,
+    );
+    expect(
+      playbackCompletionNeedsRecovery(
+        duration: Duration.zero,
+        position: const Duration(seconds: 12),
+      ),
+      isFalse,
+    );
+    expect(
+      playbackCompletionNeedsRecovery(
+        duration: const Duration(seconds: 100),
+        position: const Duration(seconds: 97),
+      ),
+      isTrue,
+    );
+    expect(
+      playbackCompletionNeedsRecovery(
+        duration: const Duration(seconds: 100),
+        position: const Duration(seconds: 99),
+      ),
+      isFalse,
+    );
+  });
+
   PlaybackPlan route(int index, {int count = 3}) => PlaybackPlan(
     url: 'https://media.test/$index.mp4',
     session: 'session-$index',

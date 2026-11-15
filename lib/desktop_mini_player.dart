@@ -33,7 +33,11 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
   final NativeRepository _repository = NativeRepository();
   LocalStore? _store;
   Object? _error;
+  final DesktopMiniPlayerShutdown _shutdown = DesktopMiniPlayerShutdown();
+  Completer<void>? _playerDisposed;
   bool _closing = false;
+  bool _restoreMainWindowOnClose = true;
+  String? _closeError;
   int _episodeIndex = 0;
   double _position = 0;
   DateTime _lastProgressMessage = DateTime.fromMillisecondsSinceEpoch(0);
@@ -71,7 +75,11 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
   Future<void> _channelReady() async {
     await desktopMiniPlayerChannel.setMethodCallHandler((call) async {
       if (call.method == 'close') {
-        unawaited(_closeMiniPlayer());
+        final arguments = call.arguments;
+        if (arguments is Map && arguments['restoreMain'] == false) {
+          _restoreMainWindowOnClose = false;
+        }
+        unawaited(_closeMiniPlayer().catchError((Object _) {}));
         return true;
       }
       return null;
@@ -131,24 +139,62 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
     );
   }
 
+  Future<void> _disposePlayerBeforeHandoff() async {
+    if (_store == null) return;
+    final disposed = Completer<void>();
+    _playerDisposed = disposed;
+    if (mounted) setState(() => _closing = true);
+
+    // Give the host one frame to unmount PlayerScreen. Its completion callback
+    // is fired only after the underlying media_kit MPV player is disposed.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!disposed.isCompleted) {
+      await disposed.future.timeout(const Duration(seconds: 15));
+    }
+  }
+
+  void _onPlayerDisposed() {
+    final disposed = _playerDisposed;
+    if (disposed != null && !disposed.isCompleted) {
+      disposed.complete();
+    }
+  }
+
+  Future<void> _notifyMainWindow() async {
+    if (!_restoreMainWindowOnClose) return;
+    await desktopMiniPlayerChannel.invokeMethod<void>('mini_closed', {
+      'index': _episodeIndex,
+      'position': _position,
+    });
+  }
+
+  Future<void> _closeNativeWindow() async {
+    await windowManager.setPreventClose(false);
+    await windowManager.close();
+  }
+
   Future<void> _closeMiniPlayer() async {
-    if (_closing) return;
-    _closing = true;
     try {
-      await desktopMiniPlayerChannel.invokeMethod<void>('mini_closed', {
-        'index': _episodeIndex,
-        'position': _position,
-      });
-    } catch (_) {}
-    try {
-      await windowManager.setPreventClose(false);
-      await windowManager.close();
-    } catch (_) {}
+      await _shutdown.close(
+        disposePlayer: _disposePlayerBeforeHandoff,
+        notifyMainWindow: _notifyMainWindow,
+        closeWindow: _closeNativeWindow,
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _closing = true;
+          _closeError =
+              '小窗播放器尚未完成安全釋放，主視窗暫不會啟動第二個播放器。請關閉 D-TV 後重新開啟。';
+        });
+      }
+      rethrow;
+    }
   }
 
   @override
   void onWindowClose() {
-    unawaited(_closeMiniPlayer());
+    unawaited(_closeMiniPlayer().catchError((Object _) {}));
   }
 
   @override
@@ -177,25 +223,44 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
                 child: Row(
                   children: [
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'D TV 小窗播放器',
+                        uiTraditional(widget.arguments.detail.drama.title),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
                     TextButton.icon(
-                      onPressed: _closeMiniPlayer,
-                      icon: const Icon(Icons.open_in_full_rounded, size: 16),
-                      label: const Text('恢復主視窗'),
+                      onPressed: _closing
+                          ? null
+                          : () => unawaited(
+                                _closeMiniPlayer().catchError((Object _) {}),
+                              ),
+                      icon: Icon(
+                        _closing
+                            ? Icons.hourglass_top_rounded
+                            : Icons.open_in_full_rounded,
+                        size: 16,
+                      ),
+                      label: Text(_closing ? '正在恢復…' : '恢復主視窗'),
                     ),
                     const SizedBox(width: 6),
                   ],
                 ),
               ),
               Expanded(
-                child: store == null
+                child: _closing
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Text(
+                            _closeError ?? '正在安全釋放小窗播放器…',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : store == null
                     ? Center(
                         child: _error == null
                             ? const CircularProgressIndicator()
@@ -219,8 +284,11 @@ class _DesktopMiniPlayerAppState extends State<DesktopMiniPlayerApp>
                             repository: _repository,
                             store: store,
                             desktopMiniPlayer: true,
-                            onBackOverride: () => unawaited(_closeMiniPlayer()),
+                            onBackOverride: () => unawaited(
+                              _closeMiniPlayer().catchError((Object _) {}),
+                            ),
                             onProgress: _progressChanged,
+                            onPlaybackDisposed: _onPlayerDisposed,
                           ),
                         ),
                       ),

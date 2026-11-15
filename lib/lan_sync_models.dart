@@ -28,7 +28,7 @@ String lanHash(Object? value) =>
     sha256.convert(utf8.encode(lanJSON(value))).toString();
 
 Map<String, dynamic> lanMap(Object? value) {
-  if (value is! Map) throw const FormatException('裝置返回的記錄格式無效');
+  if (value is! Map) throw const FormatException('裝置回傳的紀錄格式無效');
   return Map<String, dynamic>.from(value);
 }
 
@@ -37,7 +37,7 @@ String lanText(Object? value, int limit, {bool empty = false}) {
       (!empty && value.trim().isEmpty) ||
       value.length > limit ||
       value.contains(RegExp(r'[\x00-\x08\x0b\x0c\x0e-\x1f]'))) {
-    throw const FormatException('裝置返回的文字欄位無效');
+    throw const FormatException('裝置回傳的文字欄位無效');
   }
   return value;
 }
@@ -181,7 +181,7 @@ Drama lanDrama(Object? input) {
   final row = lanMap(input);
   final source = lanText(row['source'], 32);
   if (!SourceSite.isKnown(source)) {
-    throw const FormatException('記錄站源無效');
+    throw const FormatException('紀錄片源無效');
   }
   final id = lanText(row['id'], 512);
   final sourceId = lanText(row['sourceId'], 450, empty: true);
@@ -219,7 +219,7 @@ Drama lanDrama(Object? input) {
     if (uri == null ||
         !{'http', 'https'}.contains(uri.scheme) ||
         uri.userInfo.isNotEmpty) {
-      throw const FormatException('劇目封面地址無效');
+      throw const FormatException('劇目封面網址無效');
     }
   }
   return Drama.fromJson(row);

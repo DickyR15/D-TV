@@ -63,7 +63,7 @@ func parseHuangguoSortDetail(body, pageURL string, patch Drama) (Drama, error) {
 		}
 	}
 	if !matched {
-		return patch, fmt.Errorf("黄果详情没有返回所请求剧集的元数据")
+		return patch, fmt.Errorf("黃果詳情未提供要求劇集的中繼資料")
 	}
 	if nativeNormalize(patch).Cover == "" {
 		for _, tag := range coverMetaTag.FindAllString(body, -1) {

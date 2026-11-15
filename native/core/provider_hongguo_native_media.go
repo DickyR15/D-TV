@@ -14,7 +14,7 @@ import (
 
 func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoID string) (providerMedia, error) {
 	if !hongguoNumericID.MatchString(videoID) {
-		return providerMedia{}, errors.New("红果视频 ID 无效")
+		return providerMedia{}, errors.New("紅果影片 ID 無效")
 	}
 	payload := map[string]any{
 		"video_id": videoID, "content_type": 1,
@@ -33,7 +33,7 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 		decoder := json.NewDecoder(strings.NewReader(encoded))
 		decoder.UseNumber()
 		if err := decoder.Decode(&model); err != nil {
-			return providerMedia{}, errors.New("红果 App 播放信息格式异常")
+			return providerMedia{}, errors.New("紅果 App 播放資訊格式異常")
 		}
 	}
 	if len(model) == 0 {
@@ -46,6 +46,26 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 		}
 	}
 	return selectHongguoAppMedia(model)
+}
+
+
+func hongguoMediaShortEdgeQuality(width, height, definition int) int {
+	// The visible resolution label is the shorter image edge. Prefer actual
+	// dimensions over definition metadata, which may describe the long edge
+	// for portrait video (for example, 720x1280 reported as "1280P").
+	if width > 0 && height > 0 {
+		return min(width, height)
+	}
+	if definition > 0 {
+		return definition
+	}
+	if width > 0 {
+		return width
+	}
+	if height > 0 {
+		return height
+	}
+	return 0
 }
 
 func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
@@ -91,13 +111,11 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 				continue
 			}
 		}
+		width, _ := strconv.Atoi(mapString(meta, "vwidth"))
 		height, _ := strconv.Atoi(mapString(meta, "vheight"))
-		if definition, err := strconv.Atoi(hongguoQualityNumber.FindString(mapString(meta, "definition"))); err == nil && definition > 0 {
-			height = definition
-		} else if width, _ := strconv.Atoi(mapString(meta, "vwidth")); width > 0 && (height == 0 || width < height) {
-			height = width
-		}
-		media.Quality = height
+		definition, _ := strconv.Atoi(hongguoQualityNumber.FindString(mapString(meta, "definition")))
+		media.Quality = hongguoMediaShortEdgeQuality(width, height, definition)
+		height = media.Quality
 		quality := height * 10
 		if codec == "h264" || codec == "avc1" {
 			quality++
@@ -116,12 +134,12 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 		return selected, nil
 	}
 	if keyErr != nil {
-		return providerMedia{}, fmt.Errorf("红果 App 媒体密钥不可用: %w", keyErr)
+		return providerMedia{}, fmt.Errorf("紅果 App 媒體金鑰無法使用：%w", keyErr)
 	}
 	if hasH266Variant {
 		return providerMedia{}, errHongguoH266Only
 	}
-	return providerMedia{}, errors.New("红果 App 未返回兼容的媒体，已跳过不支持的编码")
+	return providerMedia{}, errors.New("紅果 App 未提供相容的媒體，已略過不支援的編碼")
 }
 
 func hongguoMediaAddresses(info map[string]any) []string {

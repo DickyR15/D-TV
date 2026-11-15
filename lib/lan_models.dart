@@ -182,7 +182,7 @@ class LanPlaybackIntent {
         position < 0 ||
         position > 604800 ||
         row['playing'] is! bool) {
-      throw const FormatException('推送播放資訊無效');
+      throw const FormatException('傳送播放資訊無效');
     }
     return LanPlaybackIntent(
       drama: drama,
