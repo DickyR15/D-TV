@@ -532,6 +532,8 @@ class _PasswordDialogState extends State<_PasswordDialog> {
         FocusTraversalOrder(
           order: const NumericFocusOrder(2),
           child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
             onKeyEvent: (node, event) => _actionKey(
               event,
               left: _cancelFocus,
@@ -548,6 +550,8 @@ class _PasswordDialogState extends State<_PasswordDialog> {
         FocusTraversalOrder(
           order: const NumericFocusOrder(3),
           child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
             onKeyEvent: (node, event) => _actionKey(
               event,
               left: _cancelFocus,
