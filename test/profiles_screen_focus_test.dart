@@ -451,10 +451,17 @@ void main() {
       expect(cancelFinder, findsOneWidget);
       expect(pinFinder, findsOneWidget);
       expect(
-        tester.widget<FilledButton>(loginFinder).focusNode!.hasPrimaryFocus,
+        tester.widget<TextField>(pinFinder).focusNode!.hasPrimaryFocus,
         isTrue,
       );
 
+      await tester.enterText(pinFinder, 'wrong-password');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        tester.widget<FilledButton>(loginFinder).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.pump();
       expect(
@@ -468,15 +475,6 @@ void main() {
         isTrue,
       );
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-      await tester.pump();
-      expect(
-        tester.widget<TextField>(pinFinder).focusNode!.hasPrimaryFocus,
-        isTrue,
-      );
-      await tester.enterText(pinFinder, 'wrong-password');
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 
