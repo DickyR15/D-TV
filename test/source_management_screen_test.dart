@@ -465,7 +465,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
     await tester.pump();
-    expect(find.text('已選取：使用遙控器方向鍵移動，按確認完成'), findsOneWidget);
+    expect(find.text('已選取排序：使用遙控器方向鍵移動，按確認完成'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
@@ -481,7 +481,7 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
-    expect(find.text('已選取：使用遙控器方向鍵移動，按確認完成'), findsNothing);
+    expect(find.text('已選取排序：使用遙控器方向鍵移動，按確認完成'), findsNothing);
 
     final shortPressSource = store.advancedSourceOrder.first;
     expect(store.sourceEnabled(shortPressSource), isFalse);
