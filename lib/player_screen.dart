@@ -16,6 +16,7 @@ import 'player_fullscreen_layout_policy.dart';
 import 'app_theme.dart';
 import 'back_safe_dialog.dart';
 import 'core_bridge.dart';
+import 'cast_screen.dart';
 import 'desktop_mini_window_policy.dart';
 import 'diary_service.dart';
 import 'playback_diagnostics.dart';
@@ -38,7 +39,6 @@ import 'widgets.dart';
 import 'ui_localization.dart';
 import 'sources_screen.dart';
 import 'lan_controller.dart';
-import 'lan_screen.dart';
 import 'video_enhancement.dart';
 import 'video_enhancement_preferences.dart';
 import 'video_output_size.dart';
@@ -2032,40 +2032,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (position >= _lanFirstPosition! + .15) handoff.acknowledge(position);
   }
 
-  Future<void> _stopForLan() async {
-    final generation = _generation;
-    await _serialize(() async {
-      if (_closed ||
-          generation != _generation ||
-          widget.store.profileEpoch != _profileEpoch) {
-        return;
-      }
-      _playIntent = false;
-      _interactions.cancel();
-      _enhancement.suspend();
-      _health.reset();
-      await _player.pause().timeout(
-        _playbackStopTimeout,
-        onTimeout: () => throw TimeoutException(
-          '暫停播放器逾時（區域播放交接）',
-          _playbackStopTimeout,
-        ),
-      );
-      await _saveProgressForPlayback(
-        flush: true,
-        reason: 'lan_handoff',
-      );
-    });
-  }
-
   Future<void> _pushToDevice() async {
-    final link = LanController.current;
-    if (link == null ||
-        _panelOpen ||
+    if (_panelOpen ||
         _closed ||
         _loading ||
         _error != null ||
         widget.mediaId != null) {
+      return;
+    }
+    // The current iOS build does not have the Apple multicast entitlement
+    // required for reliable SSDP discovery. Never fall back to LAN sync here:
+    // casting and watch-history synchronization are separate features.
+    if (Platform.isIOS) {
+      _notice('目前 iOS 版尚未支援 DLNA／UPnP 裝置搜尋；收藏同步與傳送播放是不同功能，不會互相替代。');
       return;
     }
     final generation = _generation;
@@ -2079,21 +2058,31 @@ class _PlayerScreenState extends State<PlayerScreen>
     _interactions.cancel();
     setState(() => _panelOpen = true);
     try {
-      await showLanPush(
+      final device = await showCastDevicePicker(
         context,
-        link,
-        snapshot: () => LanPlaybackIntent(
-          drama: widget.detail.drama,
-          episodeID: widget.detail.episodes[index].id,
-          episode: widget.detail.episodes[index].number,
-          position: _currentPosition,
-        ),
-        stillCurrent: current,
-        onAccepted: () async {
-          if (!current()) throw StateError('本機播放內容已變更');
-          await _stopForLan();
-          if (!current()) throw StateError('本機播放內容已變更');
-        },
+        discovery: widget.repository.cast('discover'),
+      );
+      if (device == null || !current()) return;
+      await widget.repository.cast(
+        'play',
+        device: device.id,
+        drama: widget.detail.drama,
+        episode: widget.detail.episodes[index],
+        quality: _requestedQuality,
+        startMs: (_currentPosition * 1000).round(),
+      );
+      if (!current()) return;
+      _playIntent = false;
+      await _player.pause().timeout(
+        _playbackStopTimeout,
+        onTimeout: () => throw TimeoutException('暫停本機播放器逾時'),
+      );
+      await _saveProgress(flush: true);
+      if (!current()) return;
+      await showCastPlaybackControls(
+        context,
+        repository: widget.repository,
+        device: device,
       );
     } catch (error) {
       if (mounted && !_closed) {
