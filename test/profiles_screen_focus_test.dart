@@ -455,6 +455,21 @@ void main() {
         isTrue,
       );
 
+      // Once focus has moved to the Login action (and the TV keyboard is
+      // dismissed), selecting the password field again must restore its focus.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        tester.widget<FilledButton>(loginFinder).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.tap(pinFinder);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(pinFinder).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+
       await tester.enterText(pinFinder, 'wrong-password');
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
