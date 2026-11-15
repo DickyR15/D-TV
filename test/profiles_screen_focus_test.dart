@@ -413,6 +413,9 @@ void main() {
         download: false,
         pin: 'visitor-password',
       );
+      final visitor = store.profiles.firstWhere(
+        (profile) => profile.name == '訪客',
+      );
       store.lock();
 
       await tester.pumpWidget(
@@ -475,7 +478,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 
-      expect(store.profile.id, 'visitor');
+      expect(store.profile.name, '訪客');
       expect(pinFinder, findsNothing);
       expect(tester.takeException(), isNull);
     },
