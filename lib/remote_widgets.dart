@@ -788,11 +788,13 @@ class TelevisionSearchDialog extends StatefulWidget {
     this.recentSearches = const [],
     this.onCancel,
     this.onPhoneSearch,
+    this.onClearRecentSearches,
   });
   final Future<List<String>> Function(String)? suggestions;
   final List<String> recentSearches;
   final VoidCallback? onCancel;
   final VoidCallback? onPhoneSearch;
+  final VoidCallback? onClearRecentSearches;
   final String initialValue;
   final String title;
 
@@ -810,6 +812,11 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
   );
   final FocusNode _cancelFocus = FocusNode(debugLabel: 'tv-drama-search-cancel');
   final FocusNode _submitFocus = FocusNode(debugLabel: 'tv-drama-search-submit');
+  final FocusNode _clearRecentFocus = FocusNode(
+    debugLabel: 'tv-drama-search-clear-recent',
+  );
+  final List<FocusNode> _recentSearchFocusNodes = [];
+  late List<String> _recentSearches;
   Timer? _debounce;
   int _generation = 0;
   List<String> _results = [];
@@ -820,8 +827,31 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
   @override
   void initState() {
     super.initState();
+    _recentSearches = List<String>.of(widget.recentSearches);
+    _syncRecentSearchFocusNodes();
     if (_query.trim().isNotEmpty) {
       _fetchSuggestions(_query.trim());
+    }
+  }
+
+  void _syncRecentSearchFocusNodes() {
+    while (_recentSearchFocusNodes.length < _recentSearches.length) {
+      final index = _recentSearchFocusNodes.length;
+      _recentSearchFocusNodes.add(
+        FocusNode(debugLabel: 'tv-drama-search-recent-$index'),
+      );
+    }
+    while (_recentSearchFocusNodes.length > _recentSearches.length) {
+      _recentSearchFocusNodes.removeLast().dispose();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant TelevisionSearchDialog oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.recentSearches != widget.recentSearches) {
+      _recentSearches = List<String>.of(widget.recentSearches);
+      _syncRecentSearchFocusNodes();
     }
   }
 
@@ -834,6 +864,11 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
     _phoneSearchFocus.dispose();
     _cancelFocus.dispose();
     _submitFocus.dispose();
+    _clearRecentFocus.dispose();
+    for (final node in _recentSearchFocusNodes) {
+      node.dispose();
+    }
+    _recentSearchFocusNodes.clear();
     widget.onCancel?.call();
     super.dispose();
   }
@@ -845,8 +880,15 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _queryFocus.unfocus();
       SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-      (widget.onPhoneSearch != null ? _phoneSearchFocus : _cancelFocus)
-          .requestFocus();
+      if (_recentSearches.isNotEmpty) {
+        final target = _recentSearchFocusNodes.first;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) target.requestFocus();
+        });
+      } else {
+        (widget.onPhoneSearch != null ? _phoneSearchFocus : _cancelFocus)
+            .requestFocus();
+      }
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -927,6 +969,50 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
     Navigator.of(context).pop(query);
   }
 
+  void _clearRecentSearches() {
+    widget.onClearRecentSearches?.call();
+    setState(() {
+      _recentSearches = [];
+      _syncRecentSearchFocusNodes();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _queryFocus.requestFocus();
+    });
+  }
+
+  KeyEventResult _recentSearchKey(int index, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _queryFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+        index == _recentSearches.length - 1 &&
+        widget.onClearRecentSearches != null) {
+      _clearRecentFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _clearRecentKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+        _recentSearchFocusNodes.isNotEmpty) {
+      _recentSearchFocusNodes.last.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _queryFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   void _usePhoneSearch() {
     final callback = widget.onPhoneSearch;
     if (callback == null) return;
@@ -945,8 +1031,8 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
             190)
         .clamp(140.0, 430.0)
         .toDouble();
-    final showRecent =
-        query.isEmpty && widget.recentSearches.isNotEmpty && !keyboardVisible;
+    final hasRecent = query.isEmpty && _recentSearches.isNotEmpty;
+    final showRecent = hasRecent && !keyboardVisible;
     return AlertDialog(
       titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
       contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
@@ -1011,7 +1097,7 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
               children: [
                 Expanded(
                   child: Text(
-                    showRecent
+                    hasRecent
                         ? '最近搜尋'
                         : query.isEmpty
                         ? '輸入劇名或演員名字即可搜尋'
@@ -1033,19 +1119,73 @@ class _TelevisionSearchDialogState extends State<TelevisionSearchDialog> {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: showRecent
-                  ? SingleChildScrollView(
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final item in widget.recentSearches)
-                            RemoteButton(
-                              key: ValueKey('recent-search-$item'),
-                              label: uiTraditional(item),
-                              onPressed: () => _submit(item),
-                            ),
-                        ],
+              child: hasRecent
+                  ? Visibility(
+                      visible: showRecent,
+                      maintainState: true,
+                      child: FocusTraversalGroup(
+                        policy: OrderedTraversalPolicy(),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (var index = 0;
+                                      index < _recentSearches.length;
+                                      index++)
+                                    FocusTraversalOrder(
+                                      order: NumericFocusOrder(index + 1),
+                                      child: Focus(
+                                        canRequestFocus: false,
+                                        skipTraversal: true,
+                                        onKeyEvent: (node, event) =>
+                                            _recentSearchKey(index, event),
+                                        child: RemoteButton(
+                                          key: ValueKey(
+                                            'recent-search-${_recentSearches[index]}',
+                                          ),
+                                          focusNode:
+                                              _recentSearchFocusNodes[index],
+                                          label: uiTraditional(
+                                            _recentSearches[index],
+                                          ),
+                                          onPressed: () => _submit(
+                                            _recentSearches[index],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              if (widget.onClearRecentSearches != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: FocusTraversalOrder(
+                                    order: NumericFocusOrder(
+                                      _recentSearches.length + 1,
+                                    ),
+                                    child: Focus(
+                                      canRequestFocus: false,
+                                      skipTraversal: true,
+                                      onKeyEvent: _clearRecentKey,
+                                      child: RemoteButton(
+                                        key: const ValueKey(
+                                          'tv-drama-search-clear-recent',
+                                        ),
+                                        focusNode: _clearRecentFocus,
+                                        label: '清除搜尋紀錄',
+                                        icon: Icons.delete_outline_rounded,
+                                        onPressed: _clearRecentSearches,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     )
                   : query.isEmpty
