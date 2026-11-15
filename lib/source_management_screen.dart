@@ -175,7 +175,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     final order = _visibleAdvancedSourceIds;
     if (oldIndex < 0 || oldIndex >= order.length) return;
     if (newIndex > oldIndex) newIndex--;
-    final target = newIndex.clamp(0, order.length - 1);
+    final target = newIndex.clamp(0, order.length - 1).toInt();
     if (target == oldIndex) return;
     final moved = order.removeAt(oldIndex);
     order.insert(target, moved);
