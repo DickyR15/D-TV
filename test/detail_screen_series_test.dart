@@ -24,6 +24,9 @@ class _SeriesFixtureRepository extends FixtureRepository {
   }
 
   @override
+  Future<String> cover(Drama drama, {bool force = false}) async => '';
+
+  @override
   Future<List<DramaSeason>> seasons(Drama drama) async => seasonRows;
 }
 
@@ -95,7 +98,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repository.lastDetailId, upcomingSeason.id);
-      expect(find.text('測試系列第二季'), findsOneWidget);
+      expect(
+        find.widgetWithText(AppBar, '測試系列第二季'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );
