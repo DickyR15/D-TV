@@ -345,6 +345,9 @@ class _PlayerControlsState extends State<PlayerControls> {
                   swipeEnabled: widget.swipeEnabled,
                   width: constraints.maxWidth,
                   height: constraints.maxHeight,
+                  bottomEdgeExclusion: widget.swipeEnabled
+                      ? MediaQuery.viewPaddingOf(context).bottom + 12
+                      : 0,
                 );
               },
               onPointerMove: widget.interactions.pointerMove,
