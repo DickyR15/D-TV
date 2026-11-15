@@ -7,10 +7,10 @@ PlayerSwipeZone playerSwipeZoneForPosition({
   if (!x.isFinite || !width.isFinite || width <= 0 || x < 0 || x > width) {
     return PlayerSwipeZone.none;
   }
-  // Match the requested 35% / 30% / 35% layout:
-  // left = brightness, centre = previous/next episode, right = volume.
-  if (x < width * 0.35) return PlayerSwipeZone.brightness;
-  if (x < width * 0.65) return PlayerSwipeZone.episode;
+  // Match the requested 10% / 80% / 10% layout:
+  // left edge = brightness, centre = previous/next episode, right edge = volume.
+  if (x < width * 0.10) return PlayerSwipeZone.brightness;
+  if (x < width * 0.90) return PlayerSwipeZone.episode;
   return PlayerSwipeZone.volume;
 }
 
