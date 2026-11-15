@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:isolate';
+import 'dart:io' as io;
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 
 import 'models.dart';
 
@@ -107,8 +109,37 @@ String _derivePin(String pin, String salt) {
   return result.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 }
 
-Future<String> hashProfilePin(String pin, String salt) =>
-    Isolate.run(() => _derivePin(pin, salt));
+const MethodChannel _profileCryptoChannel = MethodChannel('duanju/device');
+
+Future<String> hashProfilePin(String pin, String salt) async {
+  if (io.Platform.isAndroid) {
+    try {
+      final nativeHash = await _profileCryptoChannel.invokeMethod<String>(
+        'deriveProfilePinHash',
+        {'pin': pin, 'salt': salt},
+      );
+      if (nativeHash != null && RegExp(r'^[a-f0-9]{64}
+
+Future<bool> checkProfilePin(LocalProfile profile, String pin) async {
+  if (!profile.protected) return true;
+  final actual = await hashProfilePin(pin, profile.salt);
+  var difference = actual.length ^ profile.pinHash.length;
+  for (var i = 0; i < actual.length && i < profile.pinHash.length; i++) {
+    difference |= actual.codeUnitAt(i) ^ profile.pinHash.codeUnitAt(i);
+  }
+  return difference == 0;
+}
+).hasMatch(nativeHash)) {
+        return nativeHash;
+      }
+    } on MissingPluginException {
+      // Flutter tests and alternate Android hosts use the compatible Dart path.
+    } on PlatformException {
+      // Preserve password access if the native accelerator is unavailable.
+    }
+  }
+  return Isolate.run(() => _derivePin(pin, salt));
+}
 
 Future<bool> checkProfilePin(LocalProfile profile, String pin) async {
   if (!profile.protected) return true;
