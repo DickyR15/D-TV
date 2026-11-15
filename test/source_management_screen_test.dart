@@ -445,4 +445,72 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('advanced source rows can be dragged by holding the title area', (
+    tester,
+  ) async {
+    if (!allSourcesEnabled) return;
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      AppLayout(
+        television: false,
+        formFactor: FormFactor.phone,
+        child: MaterialApp(
+          home: SourceManagementScreen(store: store),
+        ),
+      ),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('advanced-source-password')),
+      'source-pass-123',
+    );
+    final unlock = find.byKey(const ValueKey('unlock-advanced-sources'));
+    await tester.ensureVisible(unlock);
+    await tester.pumpAndSettle();
+    await tester.tap(unlock);
+    await tester.pumpAndSettle();
+
+    final initial = store.advancedSourceOrder;
+    final firstId = initial[0];
+    final secondId = initial[1];
+    final firstTile = find.byKey(ValueKey('source-switch-$firstId'));
+    final secondTile = find.byKey(ValueKey('source-switch-$secondId'));
+    final title = find.descendant(
+      of: firstTile,
+      matching: find.text(SourceSite.byId(firstId).name),
+    );
+    await tester.ensureVisible(firstTile);
+    await tester.ensureVisible(secondTile);
+    await tester.pumpAndSettle();
+    expect(
+      find.ancestor(
+        of: firstTile,
+        matching: find.byType(ReorderableDelayedDragStartListener),
+      ),
+      findsOneWidget,
+    );
+
+    final gesture = await tester.startGesture(tester.getCenter(title));
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveTo(tester.getCenter(secondTile) + const Offset(0, 18));
+    await tester.pump(const Duration(milliseconds: 300));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(
+      store.advancedSourceOrder.take(2).toList(),
+      [secondId, firstId],
+    );
+    expect(tester.takeException(), isNull);
+  });
+
 }
