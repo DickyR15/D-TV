@@ -193,6 +193,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _pictureInPictureResumePlaying = false;
   bool _pictureInPictureRestoreBusy = false;
   bool _iosAutoPictureInPicturePrepared = false;
+  bool _iosVideoToolboxSoftwareFallbackApplied = false;
+  Future<void> _iosAutomaticPipPreparationQueue = Future<void>.value();
   String? _iosPictureInPicturePreparationSignature;
   int _iosPictureInPicturePreparationEpoch = 0;
   int _pictureInPictureSurfaceRevision = 0;
@@ -473,6 +475,20 @@ class _PlayerScreenState extends State<PlayerScreen>
         DiaryService.add(
           '[MPV] level=${log.level} prefix=${playbackDiagnosticLogText(log.prefix)} generation=$_generation text=$text',
         );
+        final lowerLog = log.text.toLowerCase();
+        if (Platform.isIOS &&
+            !_iosVideoToolboxSoftwareFallbackApplied &&
+            log.prefix.toLowerCase().contains('ffmpeg/video') &&
+            lowerLog.contains('hevc:') &&
+            (lowerLog.contains('invalid session') ||
+                lowerLog.contains('hardware accelerator failed'))) {
+          _iosVideoToolboxSoftwareFallbackApplied = true;
+          unawaited(
+            _switchIosToSoftwareVideoDecoding(
+              reason: playbackDiagnosticLogText(log.text),
+            ),
+          );
+        }
         if (_acceptErrors &&
             mounted &&
             playbackDiagnosticLogRequiresRecovery(
@@ -717,6 +733,31 @@ class _PlayerScreenState extends State<PlayerScreen>
         (widget.store.profileEpoch != _profileEpoch ||
             widget.store.locked ||
             !widget.store.allowsSource('hongguo'))) {
+    }
+  }
+
+  Future<void> _switchIosToSoftwareVideoDecoding({
+    required String reason,
+  }) async {
+    if (!Platform.isIOS) return;
+    final platform = _player.platform;
+    if (platform is! NativePlayer) {
+      DiaryService.add(
+        '[MPV] iOS VideoToolbox fallback skipped: native MPV platform unavailable',
+      );
+      return;
+    }
+    try {
+      await platform
+          .setProperty('hwdec', 'no')
+          .timeout(const Duration(seconds: 3));
+      DiaryService.add(
+        '[MPV] iOS VideoToolbox HEVC session failed; switched to software decoding reason=$reason',
+      );
+    } catch (error) {
+      DiaryService.add(
+        '[MPV] iOS software-decoder fallback failed error=$error',
+      );
     }
   }
 
@@ -1148,12 +1189,26 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (_iosPictureInPicturePreparationSignature == signature) return;
     _iosPictureInPicturePreparationSignature = signature;
     final epoch = ++_iosPictureInPicturePreparationEpoch;
-    unawaited(_prepareIosAutomaticPictureInPicture(
-      epoch: epoch,
-      signature: signature,
-      width: width,
-      height: height,
-    ));
+    _iosAutomaticPipPreparationQueue =
+        _iosAutomaticPipPreparationQueue.then((_) async {
+          if (epoch != _iosPictureInPicturePreparationEpoch ||
+              !_shouldPrepareIosAutomaticPictureInPicture) {
+            DiaryService.add(
+              '[PiP] skipped stale queued automatic preparation signature=$signature',
+            );
+            return;
+          }
+          await _prepareIosAutomaticPictureInPicture(
+            epoch: epoch,
+            signature: signature,
+            width: width,
+            height: height,
+          );
+        }).catchError((Object error) {
+          DiaryService.add(
+            '[PiP] automatic preparation queue failed error=$error',
+          );
+        });
   }
 
   Future<void> _prepareIosAutomaticPictureInPicture({
