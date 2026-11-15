@@ -553,23 +553,28 @@ class LocalStore extends ChangeNotifier {
       (_sourceSwitches[source] ?? !SourceSite.isRestricted(source));
 
   /// Validates the existing administrator password for advanced source settings.
-  Future<void> unlockAdvancedSources(String pin) {
+  Future<void> unlockAdvancedSources(String pin) async {
+    // Password derivation is CPU-bound. Do not put it inside the serialized
+    // storage-write queue: a pending library migration or profile write must
+    // not make the TV password screen appear frozen.
+    _requireAdmin();
     final requestEpoch = _sourceAccessEpoch;
     final profileEpoch = _epoch;
-    return _queue(() async {
-      _requireAdmin();
-      final admin = _profiles.firstWhere((candidate) => candidate.admin);
-      if (!admin.protected) throw StateError('請先為管理員設定密碼');
-      await _checkPin(admin, pin);
-      if (requestEpoch != _sourceAccessEpoch ||
-          profileEpoch != _epoch ||
-          locked ||
-          !profile.admin) {
-        throw StateError('管理員身分已變更，請重新驗證');
-      }
-      _advancedSourcesUnlocked = true;
-      _notify();
-    });
+    final admin = _profiles.firstWhere((candidate) => candidate.admin);
+    if (!admin.protected) throw StateError('請先為管理員設定密碼');
+    await _checkPin(admin, pin);
+
+    final currentAdmin = _profiles.firstWhere((candidate) => candidate.admin);
+    if (requestEpoch != _sourceAccessEpoch ||
+        profileEpoch != _epoch ||
+        locked ||
+        !profile.admin ||
+        currentAdmin.salt != admin.salt ||
+        currentAdmin.pinHash != admin.pinHash) {
+      throw StateError('管理員身分已變更，請重新驗證');
+    }
+    _advancedSourcesUnlocked = true;
+    _notify();
   }
 
   /// Revokes advanced source access when the management screen is closed.
@@ -1825,20 +1830,45 @@ class LocalStore extends ChangeNotifier {
     _failures = 0;
   }
 
-  Future<void> switchProfile(String id, {String pin = ''}) => _queue(() async {
-    if (_configurationError != null) throw StateError('本機使用者設定損毀，請先還原');
+  Future<void> switchProfile(String id, {String pin = ''}) async {
+    if (_configurationError != null) {
+      throw StateError('本機使用者設定損毀，請先還原');
+    }
+    final profileEpoch = _epoch;
+    final sourceAccessEpoch = _sourceAccessEpoch;
     final target = _profiles.firstWhere((profile) => profile.id == id);
+
+    // Verify the password before joining the write queue. This keeps the
+    // TV login responsive even while older local-data migrations are writing.
     await _checkPin(target, pin);
-    await _commit({'activeProfile': id});
-    _current = id;
-    _locked = false;
-    _sourceAccessEpoch++;
-    _advancedSourcesUnlocked = false;
-    _loadLibrary();
-    _loadSeriesCandidates();
-    _epoch++;
-    _notify();
-  });
+
+    await _queue(() async {
+      if (_configurationError != null) {
+        throw StateError('本機使用者設定損毀，請先還原');
+      }
+      if (profileEpoch != _epoch ||
+          sourceAccessEpoch != _sourceAccessEpoch) {
+        throw StateError('使用者設定已變更，請重新登入');
+      }
+      final currentTarget = _profiles.firstWhere(
+        (profile) => profile.id == id,
+        orElse: () => throw StateError('使用者不存在，請重新登入'),
+      );
+      if (currentTarget.salt != target.salt ||
+          currentTarget.pinHash != target.pinHash) {
+        throw StateError('使用者密碼已變更，請重新登入');
+      }
+      await _commit({'activeProfile': id});
+      _current = id;
+      _locked = false;
+      _sourceAccessEpoch++;
+      _advancedSourcesUnlocked = false;
+      _loadLibrary();
+      _loadSeriesCandidates();
+      _epoch++;
+      _notify();
+    });
+  }
   void lock() {
     final wasAdvancedUnlocked = _advancedSourcesUnlocked;
     _sourceAccessEpoch++;
