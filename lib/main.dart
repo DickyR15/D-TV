@@ -293,9 +293,11 @@ class _AppBootstrapState extends State<AppBootstrap>
     try {
       final preferences = await SharedPreferences.getInstance();
       await _restoreDesktopWindowState(preferences);
-      await _refreshDevice();
-      final accents = await AppDevice.systemAccentColors();
-      unawaited(_logStartupRendering());
+
+      // Start device/theme discovery alongside local profile loading. Neither
+      // operation needs to block the first locked-profile frame.
+      final deviceReady = _refreshDevice();
+      final accentsReady = AppDevice.systemAccentColors();
 
       // Load local profiles before initializing the playback core. A locked
       // Android TV can show its login screen immediately instead of waiting
@@ -310,17 +312,21 @@ class _AppBootstrapState extends State<AppBootstrap>
         }
         localStore = openedStore;
         setState(() {
-          systemAccentColors = accents;
           store = openedStore;
           repository.access = openedStore;
         });
       } else {
         localStore = existingStore;
         setState(() {
-          systemAccentColors = accents;
           repository.access = existingStore;
         });
       }
+
+      await deviceReady;
+      final accents = await accentsReady;
+      if (!mounted) return;
+      setState(() => systemAccentColors = accents);
+      unawaited(_logStartupRendering());
 
       // Home and playback remain gated until initialize() completes, while
       // ProfilesScreen remains usable during this background setup.
