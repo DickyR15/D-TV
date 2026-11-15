@@ -356,7 +356,10 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         final advanced = [
           for (final id in advancedOrder) SourceSite.byId(id),
         ];
-        final children = <Widget>[
+        final hasAdvancedSources = SourceSite.restrictedValues.any(
+          (source) => SourceSite.isAvailable(source.id),
+        );
+        final mainContent = <Widget>[
           if (widget.store.locked || !widget.store.profile.admin) ...[
             const Icon(Icons.lock_outline_rounded, size: 40),
             const SizedBox(height: 12),
@@ -371,16 +374,12 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
               '預設開啟 ${general.length} 個一般片源：${generalNames}。關閉片源只會將其隱藏，不會刪除收藏及觀看紀錄。',
             ),
             const SizedBox(height: 8),
-            for (final source in general)
+            for (var index = 0; index < general.length; index++)
               _sourceTile(
-                source,
-                focusNode: source.id == general.firstOrNull?.id
-                    ? _firstGeneralFocus
-                    : null,
+                general[index],
+                focusNode: index == 0 ? _firstGeneralFocus : null,
               ),
-            if (SourceSite.restrictedValues.any(
-              (source) => SourceSite.isAvailable(source.id),
-            )) ...[
+            if (hasAdvancedSources) ...[
               const Divider(height: 28),
               if (unlocked) ...[
                 Text(
@@ -395,54 +394,82 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 8),
-                ReorderableListView.builder(
-                  key: const ValueKey('advanced-source-reorder-list'),
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  buildDefaultDragHandles: false,
-                  itemCount: advanced.length,
-                  onReorder: _ordering ? (_, __) {} : _reorderAdvanced,
-                  itemBuilder: (context, index) => _advancedSourceTile(
-                    advanced[index],
-                    index: index,
-                  ),
-                ),
-                if (_ordering)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: LinearProgressIndicator(),
-                  ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    key: const ValueKey('lock-advanced-sources'),
-                    onPressed: _ordering ? null : _lock,
-                    icon: const Icon(Icons.lock_outline_rounded),
-                    label: const Text('立即上鎖'),
-                  ),
-                ),
-              ] else
+              ] else ...[
                 _passwordGate(),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                uiTraditional(_error!),
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    uiTraditional(_error!),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
             ],
           ],
         ];
+        final isAdmin = !widget.store.locked && widget.store.profile.admin;
         return Scaffold(
           appBar: AppBar(title: const Text('片源管理')),
           body: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 720),
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: children,
+              child: CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.all(20),
+                    sliver: SliverList(
+                      delegate: SliverChildListDelegate(mainContent),
+                    ),
+                  ),
+                  if (isAdmin && unlocked && advanced.isNotEmpty)
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      sliver: SliverReorderableList(
+                        itemCount: advanced.length,
+                        onReorder: _ordering ? (_, __) {} : _reorderAdvanced,
+                        itemBuilder: (context, index) => _advancedSourceTile(
+                          advanced[index],
+                          index: index,
+                        ),
+                      ),
+                    ),
+                  if (isAdmin && unlocked)
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_ordering)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child: LinearProgressIndicator(),
+                              ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                key: const ValueKey('lock-advanced-sources'),
+                                onPressed: _ordering ? null : _lock,
+                                icon: const Icon(Icons.lock_outline_rounded),
+                                label: const Text('立即上鎖'),
+                              ),
+                            ),
+                            if (_error != null) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                uiTraditional(_error!),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
