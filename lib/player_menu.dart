@@ -9,7 +9,7 @@ import 'video_enhancement.dart';
 import 'video_enhancement_settings.dart';
 import 'diary_service.dart';
 
-enum PlayerMenuSection { episodes, speed, quality, settings }
+enum PlayerMenuSection { episodes, speed, quality, aspectRatio, sleepTimer, settings }
 
 class PlayerMenu extends StatefulWidget {
   const PlayerMenu({
@@ -85,6 +85,8 @@ class _PlayerMenuState extends State<PlayerMenu> {
       PlayerMenuSection.episodes => '選集 · 共 ${widget.episodes.length} 集',
       PlayerMenuSection.speed => '播放倍速',
       PlayerMenuSection.quality => '畫質',
+      PlayerMenuSection.aspectRatio => '畫面比例',
+      PlayerMenuSection.sleepTimer => '睡眠計時',
       PlayerMenuSection.settings => '播放設定',
     };
     return Dialog(
@@ -149,6 +151,10 @@ class _PlayerMenuState extends State<PlayerMenu> {
   Widget _settings() {
     final preferences = widget.preferences;
     final all = widget.section == PlayerMenuSection.settings;
+    final showAspectRatio =
+        all || widget.section == PlayerMenuSection.aspectRatio;
+    final showSleepTimer =
+        all || widget.section == PlayerMenuSection.sleepTimer;
     final colors = Theme.of(context).colorScheme;
     final helperStyle = TextStyle(
       fontSize: 13,
@@ -227,7 +233,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
             ),
           const SizedBox(height: 20),
         ],
-        if (all) ...[
+        if (showAspectRatio) ...[
           const Text('畫面比例'),
           const SizedBox(height: 8),
           Wrap(
@@ -251,7 +257,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
           ),
           const SizedBox(height: 20),
         ],
-        if (all && widget.onSleepTimer != null) ...[
+        if (showSleepTimer && widget.onSleepTimer != null) ...[
           const Text('睡眠計時'),
           const SizedBox(height: 8),
           Wrap(
