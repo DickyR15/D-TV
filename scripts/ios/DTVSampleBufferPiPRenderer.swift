@@ -35,6 +35,17 @@ final class DTVSampleBufferPiPRenderer: NSObject,
   private var startTimeout: DispatchWorkItem?
   private var pendingStart: ((Error?) -> Void)?
   private var pendingSkipCompletion: (@Sendable () -> Void)?
+  // AVKit may silently drop startPictureInPicture() in the same main-queue
+  // turn in which its controller was created, even when isPictureInPicturePossible
+  // already reports true. Plezy's MPV PiP implementation guards this explicitly.
+  private var controllerSettled = false
+  // A manual start is issued once only, after a real sample has reached the layer.
+  private var startIssued = false
+  private var hasEnqueuedFirstFrame = false
+  private var startReadinessAttempts = 0
+  private var startReadinessRetry: DispatchWorkItem?
+  private let maximumStartReadinessAttempts = 40
+  private let startReadinessRetryInterval = DispatchTimeInterval.milliseconds(50)
   private var appendedFrameCount = 0
   private var enqueuedFrameCount = 0
 
@@ -72,6 +83,11 @@ final class DTVSampleBufferPiPRenderer: NSObject,
         "position=\(positionSeconds) controllerExists=\(self.controller != nil)"
       )
       self.durationSeconds = durationSeconds.isFinite ? max(0, durationSeconds) : 0
+      self.startIssued = false
+      self.hasEnqueuedFirstFrame = false
+      self.startReadinessAttempts = 0
+      self.startReadinessRetry?.cancel()
+      self.startReadinessRetry = nil
       self.stateLock.lock()
       self.paused = !playing
       self.enabled = true
@@ -112,6 +128,7 @@ final class DTVSampleBufferPiPRenderer: NSObject,
         controller.canStartPictureInPictureAutomaticallyFromInline = false
         self.contentSource = source
         self.controller = controller
+        self.controllerSettled = false
         self.possibleObservation = controller.observe(
           \.isPictureInPicturePossible,
           options: [.initial, .new]
@@ -120,10 +137,18 @@ final class DTVSampleBufferPiPRenderer: NSObject,
             "isPictureInPicturePossible=\(observed.isPictureInPicturePossible) " +
             "layerStatus=\(String(describing: self?.displayLayer?.status))"
           )
-          guard observed.isPictureInPicturePossible else { return }
           DispatchQueue.main.async {
             self?.startWhenPossible()
           }
+        }
+
+        // Do not start in the same main-queue turn as controller creation.
+        // Plezy documents that AVKit can silently discard that request.
+        DispatchQueue.main.async { [weak self, weak controller] in
+          guard let self, let controller, self.controller === controller else { return }
+          self.controllerSettled = true
+          self.diagnose("controller settled after main-queue turn")
+          self.startWhenPossible()
         }
       }
 
@@ -132,10 +157,10 @@ final class DTVSampleBufferPiPRenderer: NSObject,
         return
       }
       self.pendingStart = completion
-      self.scheduleStartTimeout()
-      if self.controller?.isPictureInPicturePossible == true {
-        self.startWhenPossible()
-      }
+      self.startReadinessAttempts = 0
+      // startWhenPossible waits for all four conditions: controller settled,
+      // AVKit says possible, a timebase exists, and the first frame is display-ready.
+      self.startWhenPossible()
     }
   }
 
@@ -288,11 +313,20 @@ final class DTVSampleBufferPiPRenderer: NSObject,
         self.enqueuedFrameCount += 1
         let count = self.enqueuedFrameCount
         self.stateLock.unlock()
-        if count == 1 {
+        if !self.hasEnqueuedFirstFrame {
+          self.hasEnqueuedFirstFrame = true
+          let displayReady: Bool
+          if #available(iOS 17.4, *) {
+            displayReady = layer.isReadyForDisplay
+          } else {
+            displayReady = true
+          }
           self.diagnose(
-            "first sample enqueued layerStatus=\(String(describing: layer.status)) " +
+            "first sample enqueued count=\(count) displayReady=\(displayReady) " +
+            "layerStatus=\(String(describing: layer.status)) " +
             "layerError=\(layer.error?.localizedDescription ?? "none")"
           )
+          self.startWhenPossible()
         }
       } else {
         self.stateLock.lock()
@@ -405,7 +439,24 @@ final class DTVSampleBufferPiPRenderer: NSObject,
       sampleTiming: &timing,
       sampleBufferOut: &sampleBuffer
     )
-    guard status == noErr else { return nil }
+    guard status == noErr, let sampleBuffer else { return nil }
+
+    // MPV already paces its frames. Mark samples for immediate display rather
+    // than asking AVSampleBufferDisplayLayer to schedule them a second time.
+    if let attachments = CMSampleBufferGetSampleAttachmentsArray(
+      sampleBuffer,
+      createIfNecessary: true
+    ), CFArrayGetCount(attachments) > 0 {
+      let dictionary = unsafeBitCast(
+        CFArrayGetValueAtIndex(attachments, 0),
+        to: CFMutableDictionary.self
+      )
+      CFDictionarySetValue(
+        dictionary,
+        Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+        Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
+      )
+    }
     return sampleBuffer
   }
 
@@ -421,6 +472,12 @@ final class DTVSampleBufferPiPRenderer: NSObject,
       guard let self, let completion = self.pendingStart else { return }
       let possible = self.controller?.isPictureInPicturePossible ?? false
       let active = self.controller?.isPictureInPictureActive ?? false
+      let displayReady: Bool
+      if #available(iOS 17.4, *) {
+        displayReady = self.displayLayer?.isReadyForDisplay ?? false
+      } else {
+        displayReady = self.hasEnqueuedFirstFrame
+      }
       let layerStatus = self.displayLayer.map { String(describing: $0.status) } ?? "nil"
       let layerError = self.displayLayer?.error?.localizedDescription ?? "none"
       self.stateLock.lock()
@@ -429,23 +486,90 @@ final class DTVSampleBufferPiPRenderer: NSObject,
       self.enabled = false
       self.stateLock.unlock()
       self.diagnose(
-        "start timeout possible=\(possible) active=\(active) layerStatus=\(layerStatus) " +
-        "layerError=\(layerError) appendedFrames=\(appended) enqueuedFrames=\(enqueued)"
+        "start timeout controllerSettled=\(self.controllerSettled) startIssued=\(self.startIssued) " +
+        "possible=\(possible) active=\(active) hasFrame=\(self.hasEnqueuedFirstFrame) " +
+        "displayReady=\(displayReady) timebase=\(self.displayLayer?.controlTimebase != nil) " +
+        "layerStatus=\(layerStatus) layerError=\(layerError) " +
+        "appendedFrames=\(appended) enqueuedFrames=\(enqueued)"
       )
       self.pendingStart = nil
+      self.startIssued = false
       self.startTimeout = nil
+      self.startReadinessRetry?.cancel()
+      self.startReadinessRetry = nil
       completion(self.error("iOS 子母畫面啟動逾時，已保留原播放器"))
     }
     startTimeout = timeout
     DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
   }
 
+  private func failStartReadiness() {
+    guard let completion = pendingStart else { return }
+    let possible = controller?.isPictureInPicturePossible ?? false
+    let displayReady: Bool
+    if #available(iOS 17.4, *) {
+      displayReady = displayLayer?.isReadyForDisplay ?? false
+    } else {
+      displayReady = hasEnqueuedFirstFrame
+    }
+    diagnose(
+      "start readiness failed controllerSettled=\(controllerSettled) possible=\(possible) " +
+      "hasFrame=\(hasEnqueuedFirstFrame) displayReady=\(displayReady) " +
+      "timebase=\(displayLayer?.controlTimebase != nil) attempts=\(startReadinessAttempts)"
+    )
+    pendingStart = nil
+    startIssued = false
+    startReadinessRetry?.cancel()
+    startReadinessRetry = nil
+    completion(error("iOS 子母畫面等待首張可顯示影格逾時"))
+  }
+
   private func startWhenPossible() {
-    guard let controller, controller.isPictureInPicturePossible else { return }
-    guard pendingStart != nil else { return }
-    // Do not report success here. AVKit may still reject the request.
-    // The MethodChannel completes only from didStart / failedToStart.
-    diagnose("calling startPictureInPicture active=\(controller.isPictureInPictureActive)")
+    guard Thread.isMainThread else {
+      DispatchQueue.main.async { [weak self] in self?.startWhenPossible() }
+      return
+    }
+    guard let controller, pendingStart != nil, !startIssued else { return }
+    guard controllerSettled else { return }
+
+    let possible = controller.isPictureInPicturePossible
+    let timebaseReady = displayLayer?.controlTimebase != nil
+    let displayReady: Bool
+    if #available(iOS 17.4, *) {
+      displayReady = displayLayer?.isReadyForDisplay ?? false
+    } else {
+      displayReady = hasEnqueuedFirstFrame
+    }
+
+    guard possible, timebaseReady, hasEnqueuedFirstFrame, displayReady else {
+      guard startReadinessRetry == nil else { return }
+      guard startReadinessAttempts < maximumStartReadinessAttempts else {
+        failStartReadiness()
+        return
+      }
+      let retry = DispatchWorkItem { [weak self] in
+        guard let self else { return }
+        self.startReadinessRetry = nil
+        self.startReadinessAttempts += 1
+        self.startWhenPossible()
+      }
+      startReadinessRetry = retry
+      DispatchQueue.main.asyncAfter(
+        deadline: .now() + startReadinessRetryInterval,
+        execute: retry
+      )
+      return
+    }
+
+    startReadinessRetry?.cancel()
+    startReadinessRetry = nil
+    startIssued = true
+    controller.invalidatePlaybackState()
+    diagnose(
+      "AVKit start gate passed controllerSettled=true possible=true timebase=true " +
+      "hasFrame=true displayReady=true attempts=\(startReadinessAttempts)"
+    )
+    // Keep pendingStart until didStart / failedToStart; this call is issued once.
     controller.startPictureInPicture()
     scheduleStartTimeout()
   }
@@ -483,6 +607,11 @@ final class DTVSampleBufferPiPRenderer: NSObject,
   func stop() {
     DispatchQueue.main.async {
       self.diagnose("stop requested active=\(self.controller?.isPictureInPictureActive ?? false)")
+      self.startReadinessRetry?.cancel()
+      self.startReadinessRetry = nil
+      self.startIssued = false
+      self.controllerSettled = false
+      self.hasEnqueuedFirstFrame = false
       self.stateLock.lock()
       self.enabled = false
       self.stateLock.unlock()
@@ -599,8 +728,11 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     diagnose("AVKit delegate didStart")
     let completion = pendingStart
     pendingStart = nil
+    startIssued = false
     startTimeout?.cancel()
     startTimeout = nil
+    startReadinessRetry?.cancel()
+    startReadinessRetry = nil
     eventHandler("pictureInPictureChanged", ["active": true])
     completion?(nil)
   }
@@ -621,8 +753,11 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     diagnose("AVKit delegate failedToStart error=\(error.localizedDescription)")
     let completion = pendingStart
     pendingStart = nil
+    startIssued = false
     startTimeout?.cancel()
     startTimeout = nil
+    startReadinessRetry?.cancel()
+    startReadinessRetry = nil
     stateLock.lock()
     enabled = false
     stateLock.unlock()
