@@ -300,22 +300,25 @@ class _AppBootstrapState extends State<AppBootstrap>
       // Load local profiles before initializing the playback core. A locked
       // Android TV can show its login screen immediately instead of waiting
       // for native player initialization and proxy/download setup.
-      var localStore = store;
-      if (localStore == null) {
-        localStore = await LocalStore.open(preferences);
+      final LocalStore localStore;
+      final existingStore = store;
+      if (existingStore == null) {
+        final openedStore = await LocalStore.open(preferences);
         if (!mounted) {
-          localStore.dispose();
+          openedStore.dispose();
           return;
         }
+        localStore = openedStore;
         setState(() {
           systemAccentColors = accents;
-          store = localStore;
-          repository.access = localStore;
+          store = openedStore;
+          repository.access = openedStore;
         });
       } else {
+        localStore = existingStore;
         setState(() {
           systemAccentColors = accents;
-          repository.access = localStore;
+          repository.access = existingStore;
         });
       }
 
