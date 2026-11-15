@@ -129,6 +129,8 @@ type nativeInput struct {
 	Quality          int                     `json:"quality"`
 	Session          string                  `json:"session"`
 	Sequence         int64                   `json:"sequence"`
+	Device            string                  `json:"device"`
+	StartMS           int64                   `json:"startMs"`
 	Force            bool                    `json:"force"`
 	CacheOnly        bool                    `json:"cacheOnly"`
 }
@@ -190,6 +192,7 @@ type nativeEngine struct {
 	sourceSaveError  error
 	covers           *nativeCoverCache
 	stream           *nativeStreamServer
+	cast             nativeCast
 	playbacks        map[string]nativePlaybackChoice
 	playbackMu       sync.Mutex
 	playbackSequence int64
@@ -542,6 +545,8 @@ func nativeDispatch(input nativeInput) (any, error) {
 	switch input.Action {
 	case "lan":
 		return engine.nativeLAN(ctx, input.Command, input.LAN)
+	case "cast":
+		return engine.nativeCast(ctx, input)
 	case "updateSystemProxy":
 		return true, engine.updateSystemProxy(input.SystemProxy)
 	case "resourceSettings":
