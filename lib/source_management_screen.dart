@@ -43,6 +43,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   final _unlockButtonFocus = FocusNode(
     debugLabel: 'source-management-unlock-button',
   );
+  final Map<String, FocusNode> _generalFocusNodes = <String, FocusNode>{};
   final Map<String, FocusNode> _advancedFocusNodes = <String, FocusNode>{};
   final Map<String, FocusNode> _advancedSwitchFocusNodes = <String, FocusNode>{};
   Timer? _tvReorderHoldTimer;
@@ -67,6 +68,15 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     _setupPasswordFocus.addListener(_onFocusChanged);
     _passwordFocus.addListener(_onFocusChanged);
     _unlockButtonFocus.addListener(_onFocusChanged);
+  }
+
+  FocusNode _generalSourceFocus(String sourceId) {
+    if (sourceId == SourceSite.primaryValues.first.id) return _firstGeneralFocus;
+    return _generalFocusNodes.putIfAbsent(sourceId, () {
+      final node = FocusNode(debugLabel: 'source-general-$sourceId');
+      node.addListener(_onFocusChanged);
+      return node;
+    });
   }
 
   @override
@@ -98,6 +108,9 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     _setupPasswordFocus.dispose();
     _passwordFocus.dispose();
     _unlockButtonFocus.dispose();
+    for (final node in _generalFocusNodes.values) {
+      node.dispose();
+    }
     _tvReorderHoldTimer?.cancel();
     for (final node in _advancedFocusNodes.values) {
       node.dispose();
@@ -447,30 +460,30 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
             FocusTraversalOrder(
               order: const NumericFocusOrder(1),
               child: TextField(
-              key: const ValueKey('advanced-source-password'),
-              controller: _password,
-              focusNode: _passwordFocus,
-              autofocus: AppLayout.isTelevision(context),
-              enabled: !_busy,
-              obscureText: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _unlock(),
-              decoration: const InputDecoration(
-                labelText: '管理員密碼',
-                border: OutlineInputBorder(),
-              ),
+                key: const ValueKey('advanced-source-password'),
+                controller: _password,
+                focusNode: _passwordFocus,
+                autofocus: AppLayout.isTelevision(context),
+                enabled: !_busy,
+                obscureText: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _unlock(),
+                decoration: const InputDecoration(
+                  labelText: '管理員密碼',
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
             const SizedBox(height: 12),
             FocusTraversalOrder(
               order: const NumericFocusOrder(2),
               child: FilledButton.icon(
-              key: const ValueKey('unlock-advanced-sources'),
-              focusNode: _unlockButtonFocus,
-              onPressed: _busy ? null : _unlock,
-              icon: const Icon(Icons.lock_open_rounded),
-              label: Text(_busy ? '正在驗證…' : '解鎖'),
-            ),
+                key: const ValueKey('unlock-advanced-sources'),
+                focusNode: _unlockButtonFocus,
+                onPressed: _busy ? null : _unlock,
+                icon: const Icon(Icons.lock_open_rounded),
+                label: Text(_busy ? '正在驗證…' : '解鎖'),
+              ),
             ),
             const SizedBox(height: 8),
 
@@ -518,7 +531,9 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
             for (var index = 0; index < general.length; index++)
               _sourceTile(
                 general[index],
-                focusNode: index == 0 ? _firstGeneralFocus : null,
+                focusNode: AppLayout.isTelevision(context)
+                    ? _generalSourceFocus(general[index].id)
+                    : null,
               ),
             if (hasAdvancedSources) ...[
               const Divider(height: 28),
