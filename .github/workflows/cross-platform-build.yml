@@ -527,14 +527,14 @@ jobs:
           )
           cp "$android_apk" "$macos_dmg" "$ios_ipa" release-files/
 
-          # Generate SHA-256 checksums for every distributable platform package.
+          # Match checksum order to GitHub's alphabetical Release Assets order.
           (
             cd release-files
             sha256sum \
               "DTV-${version}-Android.apk" \
-              "DTV-${version}-Windows-Portable.zip" \
-              "DTV-${version}-macOS.dmg" \
               "DTV-${version}-iOS.ipa" \
+              "DTV-${version}-macOS.dmg" \
+              "DTV-${version}-Windows-Portable.zip" \
               > SHA256SUMS.txt
           )
 
@@ -579,7 +579,7 @@ jobs:
 
             ### SHA-256 檔案完整性驗證
 
-            以下為本次發布附件的 SHA-256 校驗碼。下載後可使用 SHA256SUMS.txt 進行比對。
+            以下為本次發布附件的 SHA-256 校驗碼，順序與下方 Assets 檔名排序一致。下載後可使用 SHA256SUMS.txt 進行比對。
 
             ```text
             ${{ steps.release-files.outputs.checksums }}
@@ -588,11 +588,12 @@ jobs:
             此版本已通過四平台建置、檔案檢查及 SHA-256 校驗。
 
             完整更新內容與使用說明請參閱 [README](https://github.com/DickyR15/D-TV#) 及 [CHANGELOG](https://github.com/DickyR15/D-TV/blob/main/CHANGELOG.md)。
+          # GitHub displays these assets alphabetically by filename.
           files: |
             release-files/DTV-${{ steps.release-files.outputs.version }}-Android.apk
-            release-files/DTV-${{ steps.release-files.outputs.version }}-Windows-Portable.zip
-            release-files/DTV-${{ steps.release-files.outputs.version }}-macOS.dmg
             release-files/DTV-${{ steps.release-files.outputs.version }}-iOS.ipa
+            release-files/DTV-${{ steps.release-files.outputs.version }}-macOS.dmg
+            release-files/DTV-${{ steps.release-files.outputs.version }}-Windows-Portable.zip
             release-files/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
