@@ -459,18 +459,26 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
             const SizedBox(height: 12),
             FocusTraversalOrder(
               order: const NumericFocusOrder(1),
-              child: TextField(
-                key: const ValueKey('advanced-source-password'),
-                controller: _password,
-                focusNode: _passwordFocus,
-                autofocus: AppLayout.isTelevision(context),
-                enabled: !_busy,
-                obscureText: true,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _unlock(),
-                decoration: const InputDecoration(
-                  labelText: '管理員密碼',
-                  border: OutlineInputBorder(),
+              child: Shortcuts(
+                shortcuts: <ShortcutActivator, Intent>{
+                  SingleActivator(LogicalKeyboardKey.arrowDown):
+                      const NextFocusIntent(),
+                  SingleActivator(LogicalKeyboardKey.arrowUp):
+                      const PreviousFocusIntent(),
+                },
+                child: TextField(
+                  key: const ValueKey('advanced-source-password'),
+                  controller: _password,
+                  focusNode: _passwordFocus,
+                  autofocus: AppLayout.isTelevision(context),
+                  enabled: !_busy,
+                  obscureText: true,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _unlock(),
+                  decoration: const InputDecoration(
+                    labelText: '管理員密碼',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ),
             ),
