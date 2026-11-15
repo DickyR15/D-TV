@@ -503,8 +503,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     final secondTileSize = tester.getSize(secondTile);
     await gesture.moveTo(
-      tester.getCenter(secondTile) +
-          Offset(0, secondTileSize.height / 2 + 24),
+      tester.getCenter(secondTile) + Offset(0, secondTileSize.height * 0.4),
     );
     await tester.pump(const Duration(milliseconds: 700));
     await gesture.up();
