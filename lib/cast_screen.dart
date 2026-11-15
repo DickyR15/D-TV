@@ -153,8 +153,8 @@ class _CastPlaybackDialogState extends State<_CastPlaybackDialog> {
       if (!mounted) return;
       setState(() {
         _state = result['state'] as String? ?? 'stopped';
-        _positionMs = (result['positionMs'] as num? ?? 0).round().clamp(0, 1 << 52);
-        _durationMs = (result['durationMs'] as num? ?? 0).round().clamp(0, 1 << 52);
+        _positionMs = (result['positionMs'] as num? ?? 0).round().clamp(0, 1 << 52).toInt();
+        _durationMs = (result['durationMs'] as num? ?? 0).round().clamp(0, 1 << 52).toInt();
         _error = null;
       });
     } catch (error) {
