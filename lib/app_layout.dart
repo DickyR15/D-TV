@@ -362,7 +362,7 @@ class AppLayout extends InheritedWidget {
   }
 
   static bool isAndroidEmulator(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<AppLayout>()?.detectedEmulator ??
+      context.getInheritedWidgetOfExactType<AppLayout>()?.detectedEmulator ??
       false;
   static bool isPhone(BuildContext context) =>
       formFactorOf(context) == FormFactor.phone;

@@ -481,7 +481,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(pinFinder, findsOneWidget);
-      expect(find.textContaining('錯誤'), findsOneWidget);
+      expect(find.text('密碼不正確'), findsOneWidget);
       expect(
         tester.widget<TextField>(pinFinder).focusNode!.hasPrimaryFocus,
         isTrue,
