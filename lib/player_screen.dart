@@ -2084,9 +2084,34 @@ class _PlayerScreenState extends State<PlayerScreen>
     _interactions.cancel();
     setState(() => _panelOpen = true);
     try {
+      Future<Map<String, dynamic>> discoverCastDevices() async {
+        var multicastLockAcquired = false;
+        try {
+          if (Platform.isAndroid) {
+            await AppDevice.channel.invokeMethod<void>(
+              'acquireCastMulticastLock',
+            );
+            multicastLockAcquired = true;
+          }
+          return await widget.repository.cast('discover');
+        } finally {
+          if (multicastLockAcquired) {
+            try {
+              await AppDevice.channel.invokeMethod<void>(
+                'releaseCastMulticastLock',
+              );
+            } catch (error) {
+              DiaryService.add(
+                '[Cast] multicast_lock_release_failed error=${playbackDiagnosticError(error)}',
+              );
+            }
+          }
+        }
+      }
+
       final device = await showCastDevicePicker(
         context,
-        discovery: widget.repository.cast('discover'),
+        discovery: discoverCastDevices(),
       );
       if (device == null || !current()) return;
       await widget.repository.cast(
