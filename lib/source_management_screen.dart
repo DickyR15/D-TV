@@ -43,6 +43,8 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   );
   bool _unlocked = false;
   bool _busy = false;
+  bool _ordering = false;
+  List<String>? _pendingAdvancedOrder;
   bool _initialFocusScheduled = false;
   final Set<String> _busySourceIds = <String>{};
   String? _error;
@@ -140,6 +142,108 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         setState(() => _busySourceIds.remove(source.id));
       }
     }
+  }
+
+  List<String> get _visibleAdvancedSourceIds =>
+      (_pendingAdvancedOrder ?? widget.store.advancedSourceOrder)
+          .where(SourceSite.isAvailable)
+          .toList();
+
+  Future<void> _saveAdvancedOrder(List<String> order) async {
+    if (_busy || _ordering || !widget.store.advancedSourcesUnlocked) return;
+    setState(() {
+      _ordering = true;
+      _pendingAdvancedOrder = List<String>.of(order);
+      _error = null;
+    });
+    try {
+      await widget.store.setAdvancedSourceOrder(order);
+    } catch (error) {
+      if (mounted) setState(() => _error = sourceManagementErrorMessage(error));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _ordering = false;
+          _pendingAdvancedOrder = null;
+        });
+      }
+    }
+  }
+
+  void _reorderAdvanced(int oldIndex, int newIndex) {
+    if (_ordering || oldIndex == newIndex) return;
+    final order = _visibleAdvancedSourceIds;
+    if (oldIndex < 0 || oldIndex >= order.length) return;
+    if (newIndex > oldIndex) newIndex--;
+    final target = newIndex.clamp(0, order.length - 1);
+    if (target == oldIndex) return;
+    final moved = order.removeAt(oldIndex);
+    order.insert(target, moved);
+    _saveAdvancedOrder(order);
+  }
+
+  void _moveAdvancedSource(int index, int delta) {
+    if (_ordering) return;
+    final order = _visibleAdvancedSourceIds;
+    final target = index + delta;
+    if (index < 0 || index >= order.length ||
+        target < 0 || target >= order.length) {
+      return;
+    }
+    final moved = order.removeAt(index);
+    order.insert(target, moved);
+    _saveAdvancedOrder(order);
+  }
+
+  Widget _advancedSourceTile(SourceSite source, {required int index}) {
+    final isTelevision = AppLayout.isTelevision(context);
+    final isTouchDevice = Platform.isAndroid || Platform.isIOS;
+    final dragHandle = Icon(
+      Icons.drag_indicator_rounded,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    final Widget handle = isTelevision
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                key: ValueKey('source-move-up-${source.id}'),
+                tooltip: '將${source.name}上移',
+                visualDensity: VisualDensity.compact,
+                onPressed: _ordering || index == 0
+                    ? null
+                    : () => _moveAdvancedSource(index, -1),
+                icon: const Icon(Icons.arrow_upward_rounded),
+              ),
+              IconButton(
+                key: ValueKey('source-move-down-${source.id}'),
+                tooltip: '將${source.name}下移',
+                visualDensity: VisualDensity.compact,
+                onPressed: _ordering || index == _visibleAdvancedSourceIds.length - 1
+                    ? null
+                    : () => _moveAdvancedSource(index, 1),
+                icon: const Icon(Icons.arrow_downward_rounded),
+              ),
+            ],
+          )
+        : _ordering
+        ? dragHandle
+        : isTouchDevice
+        ? ReorderableDelayedDragStartListener(index: index, child: dragHandle)
+        : ReorderableDragStartListener(index: index, child: dragHandle);
+
+    return SwitchListTile(
+      key: ValueKey('source-switch-${source.id}'),
+      focusNode: index == 0 ? _firstAdvancedFocus : null,
+      contentPadding: EdgeInsets.zero,
+      title: Text(uiTraditional(source.name)),
+      subtitle: Text(uiTraditional(source.description)),
+      value: widget.store.sourceEnabled(source.id),
+      secondary: handle,
+      onChanged: _busy || _ordering || _busySourceIds.contains(source.id)
+          ? null
+          : (value) => _toggle(source, value),
+    );
   }
 
   void _lock() {
@@ -242,13 +346,95 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         .where((source) => SourceSite.isAvailable(source.id))
         .toList();
     final generalNames = general.map((source) => source.name).join('、');
-    final advanced = SourceSite.restrictedValues
-        .where((source) => SourceSite.isAvailable(source.id))
-        .toList();
     return AnimatedBuilder(
       animation: widget.store,
       builder: (context, _) {
         final unlocked = _unlocked && widget.store.advancedSourcesUnlocked;
+        final advancedOrder = unlocked
+            ? _visibleAdvancedSourceIds
+            : <String>[];
+        final advanced = [
+          for (final id in advancedOrder) SourceSite.byId(id),
+        ];
+        final children = <Widget>[
+          if (widget.store.locked || !widget.store.profile.admin) ...[
+            const Icon(Icons.lock_outline_rounded, size: 40),
+            const SizedBox(height: 12),
+            const Text('只有已登入的管理員可以管理片源。'),
+          ] else ...[
+            Text(
+              '一般片源',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '預設開啟 ${general.length} 個一般片源：${generalNames}。關閉片源只會將其隱藏，不會刪除收藏及觀看紀錄。',
+            ),
+            const SizedBox(height: 8),
+            for (final source in general)
+              _sourceTile(
+                source,
+                focusNode: source.id == general.firstOrNull?.id
+                    ? _firstGeneralFocus
+                    : null,
+              ),
+            if (SourceSite.restrictedValues.any(
+              (source) => SourceSite.isAvailable(source.id),
+            )) ...[
+              const Divider(height: 28),
+              if (unlocked) ...[
+                Text(
+                  '進階片源',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  AppLayout.isTelevision(context)
+                      ? '使用右側上移／下移按鈕調整片源順序。'
+                      : '拖曳每個片源右側的把手即可調整順序。',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                ReorderableListView.builder(
+                  key: const ValueKey('advanced-source-reorder-list'),
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  itemCount: advanced.length,
+                  onReorder: _ordering ? (_, __) {} : _reorderAdvanced,
+                  itemBuilder: (context, index) => _advancedSourceTile(
+                    advanced[index],
+                    index: index,
+                  ),
+                ),
+                if (_ordering)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const ValueKey('lock-advanced-sources'),
+                    onPressed: _ordering ? null : _lock,
+                    icon: const Icon(Icons.lock_outline_rounded),
+                    label: const Text('立即上鎖'),
+                  ),
+                ),
+              ] else
+                _passwordGate(),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                uiTraditional(_error!),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ],
+          ],
+        ];
         return Scaffold(
           appBar: AppBar(title: const Text('片源管理')),
           body: Center(
@@ -256,62 +442,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
               constraints: const BoxConstraints(maxWidth: 720),
               child: ListView(
                 padding: const EdgeInsets.all(20),
-                children: [
-                  if (widget.store.locked || !widget.store.profile.admin) ...[
-                    const Icon(Icons.lock_outline_rounded, size: 40),
-                    const SizedBox(height: 12),
-                    const Text('只有已登入的管理員可以管理片源。'),
-                  ] else ...[
-                    Text(
-                      '一般片源',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '預設開啟 ${general.length} 個一般片源：$generalNames。關閉片源只會將其隱藏，不會刪除收藏及觀看紀錄。',
-                    ),
-                    const SizedBox(height: 8),
-                    for (var index = 0; index < general.length; index++)
-                      _sourceTile(
-                        general[index],
-                        focusNode: index == 0 ? _firstGeneralFocus : null,
-                      ),
-                    if (advanced.isNotEmpty) ...[
-                      const Divider(height: 28),
-                      if (unlocked) ...[
-                        Text(
-                          '進階片源',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        for (var index = 0; index < advanced.length; index++)
-                          _sourceTile(
-                            advanced[index],
-                            focusNode: index == 0 ? _firstAdvancedFocus : null,
-                          ),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            key: const ValueKey('lock-advanced-sources'),
-                            onPressed: _lock,
-                            icon: const Icon(Icons.lock_outline_rounded),
-                            label: const Text('立即上鎖'),
-                          ),
-                        ),
-                      ] else
-                        _passwordGate(),
-                    ],
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        uiTraditional(_error!),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ],
-                  ],
-                ],
+                children: children,
               ),
             ),
           ),
