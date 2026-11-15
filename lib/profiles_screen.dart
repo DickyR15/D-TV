@@ -452,32 +452,118 @@ class _PasswordDialog extends StatefulWidget {
 
 class _PasswordDialogState extends State<_PasswordDialog> {
   final _pin = TextEditingController();
+  final FocusNode _pinFocus = FocusNode(debugLabel: 'profile-password-input');
+  final FocusNode _cancelFocus = FocusNode(debugLabel: 'profile-password-cancel');
+  final FocusNode _loginFocus = FocusNode(debugLabel: 'profile-password-submit');
+
+  bool get _television => AppLayout.isTelevision(context);
+
+  void _submit() {
+    Navigator.pop(context, _pin.text);
+  }
+
+  KeyEventResult _pinKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _loginFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _actionKey(
+    KeyEvent event, {
+    required FocusNode left,
+    required FocusNode right,
+  }) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _pinFocus.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      left.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      right.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   void dispose() {
     _pin.dispose();
+    _pinFocus.dispose();
+    _cancelFocus.dispose();
+    _loginFocus.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text('登入 ${widget.name}'),
-    content: TextField(
-      controller: _pin,
-      autofocus: true,
-      obscureText: true,
-      decoration: const InputDecoration(labelText: '密碼'),
-      onSubmitted: (value) => Navigator.pop(context, value),
+  Widget build(BuildContext context) => FocusTraversalGroup(
+    policy: OrderedTraversalPolicy(),
+    child: AlertDialog(
+      title: Text('登入 ${widget.name}'),
+      content: FocusTraversalOrder(
+        order: const NumericFocusOrder(1),
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _pinKey,
+          child: TextField(
+            key: const ValueKey('profile-password-input'),
+            controller: _pin,
+            focusNode: _pinFocus,
+            autofocus: !_television,
+            obscureText: true,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(labelText: '密碼'),
+            onSubmitted: (_) => _submit(),
+          ),
+        ),
+      ),
+      actions: [
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(2),
+          child: Focus(
+            onKeyEvent: (node, event) => _actionKey(
+              event,
+              left: _cancelFocus,
+              right: _loginFocus,
+            ),
+            child: TextButton(
+              key: const ValueKey('profile-password-cancel'),
+              focusNode: _cancelFocus,
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+          ),
+        ),
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(3),
+          child: Focus(
+            onKeyEvent: (node, event) => _actionKey(
+              event,
+              left: _cancelFocus,
+              right: _loginFocus,
+            ),
+            child: FilledButton(
+              key: const ValueKey('profile-password-submit'),
+              focusNode: _loginFocus,
+              autofocus: _television,
+              onPressed: _submit,
+              child: const Text('登入'),
+            ),
+          ),
+        ),
+      ],
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
-      ),
-      FilledButton(
-        onPressed: () => Navigator.pop(context, _pin.text),
-        child: const Text('登入'),
-      ),
-    ],
   );
 }
 
