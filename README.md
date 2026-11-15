@@ -19,19 +19,20 @@
 - 分類瀏覽、繁體中文關鍵字搜尋與手機 QR Code 搜尋
 - 收藏、觀看紀錄及繼續觀看
 - Android TV 遙控器焦點導覽；海報短按播放、長按立即開啟操作選單
-- 線上串流播放與播放來源管理
+- 線上串流播放、播放來源管理及跨平台進階片源排序
+- Android／Windows 支援 Google Cast，並保留 DLNA／UPnP 投放
 - 介面配色、播放設定、畫面調整及跨平台操作介面
 - 使用者管理、設定備份與還原
 - 不提供影片下載功能
 
 ## 下載正式版
 
-最新正式版為 **D TV 1.0.3（2026-11-08）**，支援 Android／Android TV、Windows x64、macOS 與 iOS。請前往 [D TV 1.0.3 正式版 Releases](https://github.com/DickyR15/D-TV/releases/tag/v1.0.3)，依照裝置下載對應檔案：
+最新正式版為 **D TV 1.0.6（2026-11-16）**，支援 Android／Android TV、Windows x64、macOS 與 iOS。請前往 [D TV 1.0.6 正式版 Releases](https://github.com/DickyR15/D-TV/releases/tag/v1.0.6)，依照裝置下載對應檔案：
 
-- **Android／Android TV**：`DTV-1.0.3-Android.apk`（單一 Universal APK，包含 ARM64、ARMv7 與 x86_64）
-- **Windows x64**：`DTV-1.0.3-Windows-Portable.zip`（解壓縮後執行，無須安裝）
-- **macOS**：`DTV-1.0.3-macOS.dmg`（支援 Apple Silicon 與 Intel）
-- **iOS**：`DTV-1.0.3-iOS.ipa`（未簽章，需使用 AltStore、Sideloadly 等工具自行簽署後側載安裝）
+- **Android／Android TV**：`DTV-1.0.6-Android.apk`（單一 Universal APK，包含 ARM64、ARMv7 與 x86_64）
+- **Windows x64**：`DTV-1.0.6-Windows-Portable.zip`（解壓縮後執行，無須安裝）
+- **macOS**：`DTV-1.0.6-macOS.dmg`（支援 Apple Silicon 與 Intel）
+- **iOS**：`DTV-1.0.6-iOS.ipa`（未簽章，需使用 AltStore、Sideloadly 等工具自行簽署後側載安裝）
 
 Releases 同時提供 `SHA256SUMS.txt`，可用來核對下載檔案的 SHA-256 完整性。Android Universal APK 包含 `arm64-v8a`、`armeabi-v7a` 與 `x86_64` 三種 ABI，更新時使用正式簽署金鑰；若安裝時出現簽章不相容，請勿先移除舊版，以免遺失本機資料，應先確認安裝檔來源及簽署憑證。
 
