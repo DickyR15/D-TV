@@ -26,6 +26,7 @@ import android.content.res.Configuration
 import android.graphics.Rect
 import android.graphics.drawable.Icon
 import android.net.ConnectivityManager
+import android.net.wifi.WifiManager
 import android.net.Uri
 import android.util.Rational
 import android.view.InputDevice
@@ -61,6 +62,7 @@ open class MainActivity : FlutterActivity() {
     private var headroomReadAt = 0L
     private var thermalHeadroom: Double? = null
     private var deviceChannel: MethodChannel? = null
+    private var castMulticastLock: WifiManager.MulticastLock? = null
     private val cryptoExecutor = Executors.newSingleThreadExecutor()
     private var pictureInPicture: PlayerPictureInPicture? = null
     private var pictureInPictureReceiver: BroadcastReceiver? = null
@@ -609,6 +611,30 @@ open class MainActivity : FlutterActivity() {
                 registerPictureInPictureReceiver()
                 channel.setMethodCallHandler { call, result ->
                     when (call.method) {
+                        "acquireCastMulticastLock" -> {
+                            runCatching {
+                                val wifi = getSystemService(Context.WIFI_SERVICE) as WifiManager
+                                val lock = castMulticastLock ?: wifi.createMulticastLock("dtv-dlna-discovery").apply {
+                                    setReferenceCounted(false)
+                                }
+                                if (!lock.isHeld) lock.acquire()
+                                castMulticastLock = lock
+                            }.onSuccess {
+                                result.success(true)
+                            }.onFailure { error ->
+                                result.error("multicast_lock_failed", "無法啟用 DLNA 裝置搜尋：${error.message}", null)
+                            }
+                        }
+                        "releaseCastMulticastLock" -> {
+                            runCatching {
+                                castMulticastLock?.takeIf { it.isHeld }?.release()
+                                castMulticastLock = null
+                            }.onSuccess {
+                                result.success(null)
+                            }.onFailure { error ->
+                                result.error("multicast_unlock_failed", "無法釋放 DLNA 搜尋資源：${error.message}", null)
+                            }
+                        }
                         "deriveProfilePinHash" -> {
                             val pin = call.argument<String>("pin")
                             val salt = call.argument<String>("salt")
@@ -1005,6 +1031,10 @@ open class MainActivity : FlutterActivity() {
         pictureInPictureReceiver?.let { receiver -> runCatching { unregisterReceiver(receiver) } }
         pictureInPictureReceiver = null
         pictureInPicture = null
+        runCatching {
+            castMulticastLock?.takeIf { it.isHeld }?.release()
+            castMulticastLock = null
+        }
         deviceChannel?.setMethodCallHandler(null)
         deviceChannel = null
         cryptoExecutor.shutdownNow()
