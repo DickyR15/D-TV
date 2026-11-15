@@ -598,6 +598,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           // arrives (portrait dramas stay portrait; landscape video rotates).
           _syncFullscreenOrientationForVideo();
           _scheduleSystemUi();
+          _syncPictureInPicture();
         }
         unawaited(_logVideoOutput(parameters));
       }),

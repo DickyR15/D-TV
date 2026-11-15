@@ -45,7 +45,7 @@ import AVFoundation
           if self.originalScreenBrightness == nil {
             self.originalScreenBrightness = screen.brightness
           }
-          screen.brightness = CGFloat(raw.doubleValue).clamped(to: 0.01...1.0)
+          screen.brightness = min(max(CGFloat(raw.doubleValue), 0.01), 1.0)
           result(true)
         case "resetBrightness":
           if let screen = self.activeMainScreen(), let original = self.originalScreenBrightness {
