@@ -40,6 +40,9 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   final _passwordFocus = FocusNode(
     debugLabel: 'source-management-password',
   );
+  final _unlockButtonFocus = FocusNode(
+    debugLabel: 'source-management-unlock-button',
+  );
   final Map<String, FocusNode> _advancedFocusNodes = <String, FocusNode>{};
   final Map<String, FocusNode> _advancedSwitchFocusNodes = <String, FocusNode>{};
   Timer? _tvReorderHoldTimer;
@@ -52,6 +55,19 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   bool _initialFocusScheduled = false;
   final Set<String> _busySourceIds = <String>{};
   String? _error;
+
+  void _onFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _firstGeneralFocus.addListener(_onFocusChanged);
+    _setupPasswordFocus.addListener(_onFocusChanged);
+    _passwordFocus.addListener(_onFocusChanged);
+    _unlockButtonFocus.addListener(_onFocusChanged);
+  }
 
   @override
   void didChangeDependencies() {
@@ -81,6 +97,7 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     _firstGeneralFocus.dispose();
     _setupPasswordFocus.dispose();
     _passwordFocus.dispose();
+    _unlockButtonFocus.dispose();
     _tvReorderHoldTimer?.cancel();
     for (final node in _advancedFocusNodes.values) {
       node.dispose();
@@ -209,16 +226,18 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   }
 
   FocusNode _advancedSourceFocus(String sourceId) =>
-      _advancedFocusNodes.putIfAbsent(
-        sourceId,
-        () => FocusNode(debugLabel: 'source-management-$sourceId'),
-      );
+      _advancedFocusNodes.putIfAbsent(sourceId, () {
+        final node = FocusNode(debugLabel: 'source-management-$sourceId');
+        node.addListener(_onFocusChanged);
+        return node;
+      });
 
   FocusNode _advancedSwitchFocus(String sourceId) =>
-      _advancedSwitchFocusNodes.putIfAbsent(
-        sourceId,
-        () => FocusNode(debugLabel: 'source-switch-$sourceId'),
-      );
+      _advancedSwitchFocusNodes.putIfAbsent(sourceId, () {
+        final node = FocusNode(debugLabel: 'source-switch-$sourceId');
+        node.addListener(_onFocusChanged);
+        return node;
+      });
 
   bool _isTvConfirmKey(LogicalKeyboardKey key) => {
     LogicalKeyboardKey.select,
@@ -283,7 +302,8 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
       _tvPendingReorderSourceId = null;
       _tvReorderHoldTimer?.cancel();
       if (wasShortPress &&
-          _advancedSwitchFocus(source.id).hasFocus) {
+          (_advancedSourceFocus(source.id).hasFocus ||
+              _advancedSwitchFocus(source.id).hasFocus)) {
         unawaited(_toggle(source, !widget.store.sourceEnabled(source.id)));
       }
       return KeyEventResult.handled;
@@ -294,6 +314,10 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   Widget _advancedSourceTile(SourceSite source, {required int index}) {
     final isTelevision = AppLayout.isTelevision(context);
     final selectedForReorder = _tvSelectedReorderSourceId == source.id;
+    final rowFocus = isTelevision ? _advancedSourceFocus(source.id) : null;
+    final switchFocus = isTelevision ? _advancedSwitchFocus(source.id) : null;
+    final hasFocus = isTelevision &&
+        (rowFocus!.hasFocus || switchFocus!.hasFocus);
     final colors = Theme.of(context).colorScheme;
     final enabled = widget.store.sourceEnabled(source.id);
     return ReorderableDelayedDragStartListener(
@@ -301,13 +325,18 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
       index: index,
       child: Focus(
         key: ValueKey('source-row-focus-${source.id}'),
-        focusNode: isTelevision ? _advancedSourceFocus(source.id) : null,
+        focusNode: rowFocus,
         onKeyEvent: (node, event) => _advancedSourceKey(source, index, event),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
           decoration: BoxDecoration(
             border: selectedForReorder
-                ? Border.all(color: colors.primary, width: 2)
+                ? Border.all(color: colors.primary, width: 2.5)
+                : hasFocus
+                ? Border.all(color: colors.primary, width: 1.8)
+                : null,
+            color: hasFocus
+                ? colors.primary.withValues(alpha: 0.08)
                 : null,
             borderRadius: BorderRadius.circular(12),
           ),
@@ -316,14 +345,14 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
             title: Text(uiTraditional(source.name)),
             subtitle: Text(
               selectedForReorder
-                  ? '已選取：使用遙控器方向鍵移動，按確認完成'
+                  ? '已選取排序：使用遙控器方向鍵移動，按確認完成'
+                  : hasFocus
+                  ? '目前焦點：${uiTraditional(source.name)}｜按確認切換，長按可排序'
                   : uiTraditional(source.description),
             ),
             trailing: Switch(
               key: ValueKey('source-switch-${source.id}'),
-              focusNode: isTelevision
-                  ? _advancedSwitchFocus(source.id)
-                  : null,
+              focusNode: switchFocus,
               value: enabled,
               onChanged: _busy || _ordering || _busySourceIds.contains(source.id)
                   ? null
@@ -353,16 +382,30 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
   Widget _sourceTile(
     SourceSite source, {
     FocusNode? focusNode,
-  }) => SwitchListTile(
-    key: ValueKey('source-switch-${source.id}'),
-    focusNode: focusNode,
-    contentPadding: EdgeInsets.zero,
-    title: Text(uiTraditional(source.name)),
-    subtitle: Text(source.id == 'duoduo' ? source.description : uiTraditional(source.description)),
-    value: widget.store.sourceEnabled(source.id),
-    onChanged: _busy || _busySourceIds.contains(source.id)
-        ? null
-        : (value) => _toggle(source, value),
+  }) => AnimatedContainer(
+    duration: const Duration(milliseconds: 140),
+    margin: const EdgeInsets.symmetric(vertical: 2),
+    padding: const EdgeInsets.symmetric(horizontal: 6),
+    decoration: BoxDecoration(
+      color: focusNode?.hasFocus == true
+          ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.08)
+          : null,
+      border: focusNode?.hasFocus == true
+          ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1.8)
+          : null,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: SwitchListTile(
+      key: ValueKey('source-switch-${source.id}'),
+      focusNode: focusNode,
+      contentPadding: EdgeInsets.zero,
+      title: Text(uiTraditional(source.name)),
+      subtitle: Text(source.id == 'duoduo' ? source.description : uiTraditional(source.description)),
+      value: widget.store.sourceEnabled(source.id),
+      onChanged: _busy || _busySourceIds.contains(source.id)
+          ? null
+          : (value) => _toggle(source, value),
+    ),
   );
 
   Widget _passwordGate() {
@@ -393,14 +436,17 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
+        child: FocusTraversalGroup(
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text('管理功能已上鎖'),
             const SizedBox(height: 6),
             const Text('請輸入管理員密碼以繼續。'),
             const SizedBox(height: 12),
-            TextField(
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(1),
+              child: TextField(
               key: const ValueKey('advanced-source-password'),
               controller: _password,
               focusNode: _passwordFocus,
@@ -415,15 +461,20 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            FilledButton.icon(
+            FocusTraversalOrder(
+              order: const NumericFocusOrder(2),
+              child: FilledButton.icon(
               key: const ValueKey('unlock-advanced-sources'),
+              focusNode: _unlockButtonFocus,
               onPressed: _busy ? null : _unlock,
               icon: const Icon(Icons.lock_open_rounded),
               label: Text(_busy ? '正在驗證…' : '解鎖'),
             ),
+            ),
             const SizedBox(height: 8),
 
           ],
+        ),
         ),
       ),
     );
