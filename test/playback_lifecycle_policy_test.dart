@@ -44,4 +44,62 @@ void main() {
     );
   });
 
+  test('Android auto-PiP background transition retains active playback', () {
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+      ),
+      isTrue,
+    );
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: false,
+        enabled: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: true,
+        enabled: false,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: true,
+        systemSupported: false,
+        playing: true,
+        enabled: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: true,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+        television: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackLifecycleShouldRetainAndroidPictureInPicture(
+        android: false,
+        systemSupported: true,
+        playing: true,
+        enabled: true,
+      ),
+      isFalse,
+    );
+  });
+
 }
