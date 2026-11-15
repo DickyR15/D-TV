@@ -354,6 +354,7 @@ void main() {
     final restored = testStore(preferences);
     addTearDown(restored.dispose);
     expect(restored.advancedSourceOrder, order);
+    await restored.switchProfile('default', pin: 'source-pass-123');
     expect(
       restored.permittedSources
           .where((source) => SourceSite.isRestricted(source.id))
