@@ -53,6 +53,8 @@ type nativeStreamServer struct {
 	address    string
 	sessions   map[string]*nativeStreamSession
 	server     *http.Server
+	lan        *http.Server
+	lanPort    int
 }
 
 const (
@@ -519,6 +521,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
 				http.Error(writer, err.Error(), http.StatusBadGateway)
 				return
 			}
+			body = stream.lanPlaylist(request, body)
 			writer.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 			if request.Method == http.MethodGet {
 				_, _ = io.WriteString(writer, body)

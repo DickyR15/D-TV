@@ -16,6 +16,8 @@ import 'player_fullscreen_layout_policy.dart';
 import 'app_theme.dart';
 import 'back_safe_dialog.dart';
 import 'core_bridge.dart';
+import 'cast_screen.dart';
+import 'google_cast.dart';
 import 'desktop_mini_window_policy.dart';
 import 'diary_service.dart';
 import 'playback_diagnostics.dart';
@@ -31,13 +33,13 @@ import 'portrait_blur_policy.dart';
 import 'luna_exo_player.dart';
 import 'player_controls.dart';
 import 'player_interactions.dart';
+import 'player_gesture_policy.dart';
 import 'player_menu.dart';
 import 'television_controls.dart';
 import 'widgets.dart';
 import 'ui_localization.dart';
 import 'sources_screen.dart';
 import 'lan_controller.dart';
-import 'lan_screen.dart';
 import 'video_enhancement.dart';
 import 'video_enhancement_preferences.dart';
 import 'video_output_size.dart';
@@ -153,6 +155,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final PlaybackVolumeMemory _volumeMemory;
   Future<void> _initialVolumeReady = Future<void>.value();
   Timer? _pictureInPictureExitTimer;
+  Timer? _androidPipSurfaceRefreshTimer;
+  bool _androidPipSurfaceRestorePending = false;
   Future<void> _operations = Future<void>.value();
   late int _index;
   late final int _profileEpoch;
@@ -244,6 +248,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   );
   bool _desktopMiniActive = false;
   bool _desktopMiniHovered = false;
+  bool _cinemaMode = false;
   double? _desktopMiniSeekValue;
   Rect? _desktopMiniRestoreBounds;
   bool _desktopMiniWasMaximized = false;
@@ -330,6 +335,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         inheritedLayout?.formFactor == FormFactor.television ||
         (inheritedLayout?.formFactor == null &&
             inheritedLayout?.television == true);
+    final isAndroidEmulator =
+        Platform.isAndroid && inheritedLayout?.detectedEmulator == true;
+    final useEmulatorDirectSurface = isAndroidEmulator &&
+        _androidPlayerEngine != 'exo' &&
+        widget.playerFactory == null &&
+        widget.videoBuilder == null;
     _preloadEnabled = preferences.preloads(
       television: isTelevisionLayout,
     );
@@ -337,14 +348,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     // The blur is composed from the same Flutter Texture Registry output;
     // it must never force the mediacodec-copy path that caused TV A/V drift.
     _portraitBlurBackground = preferences.portraitBlurBackground;
-    _useMpvEmbedForThisPlayer = shouldUseMpvEmbedForPlayback(
-      android: Platform.isAndroid,
-      television: isTelevisionLayout,
-      mpvEmbedConfigured: _androidPlayerEngine == 'mpv_embed',
-      softwareDecoderSelected:
-          preferences.televisionDecoder == TelevisionDecoder.software,
-      customPlayer: widget.playerFactory != null || widget.videoBuilder != null,
-    );
+    _useMpvEmbedForThisPlayer = useEmulatorDirectSurface ||
+        shouldUseMpvEmbedForPlayback(
+          android: Platform.isAndroid,
+          television: isTelevisionLayout,
+          mpvEmbedConfigured: _androidPlayerEngine == 'mpv_embed',
+          softwareDecoderSelected:
+              preferences.televisionDecoder == TelevisionDecoder.software,
+          customPlayer:
+              widget.playerFactory != null || widget.videoBuilder != null,
+        );
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
     widget.store.addListener(_accessChanged);
@@ -380,7 +393,8 @@ class _PlayerScreenState extends State<PlayerScreen>
           : useMpvEmbed
           ? 'media_kit/MPV (mediacodec_embed)'
           : 'media_kit/MPV'} '
-      'android-surface-after-video-params=${Platform.isAndroid ? false : 'default'}',
+      'android-surface-after-video-params=${Platform.isAndroid ? false : 'default'} '
+      'emulatorDirectSurface=$useEmulatorDirectSurface',
     );
     _video = widget.videoBuilder == null && !exoPlayer
         ? VideoController(
@@ -774,7 +788,12 @@ class _PlayerScreenState extends State<PlayerScreen>
           requested: false,
           delayHiddenPause: !active,
         );
-        if (changed) _scheduleAndroidPictureInPictureSurfaceRefresh();
+        if (changed && Platform.isAndroid && !active) {
+          // PiP exit can be reported before the Activity has resumed. Keep the
+          // native video Surface attached until the app is visibly foregrounded.
+          _androidPipSurfaceRestorePending = true;
+          _scheduleAndroidPictureInPictureSurfaceRefresh();
+        }
       } else if (call.method == 'pictureInPictureRestored') {
         final arguments = call.arguments;
         final positionMs = arguments is Map
@@ -864,19 +883,37 @@ class _PlayerScreenState extends State<PlayerScreen>
     unawaited(_refreshPictureInPictureStatus());
   }
 
+  bool get _canRefreshAndroidPipSurface =>
+      playbackShouldRefreshAndroidPipSurface(
+        android: Platform.isAndroid,
+        pendingRestore: _androidPipSurfaceRestorePending,
+        activityResumed: _lifecycleState == AppLifecycleState.resumed,
+        pictureInPictureActive: _pictureInPictureActive,
+        pictureInPictureRequested: _pictureInPictureRequested,
+      );
+
   Future<void> _refreshAndroidPictureInPictureSurface() async {
-    if (!Platform.isAndroid || !mounted || _closed) return;
+    if (!mounted || _closed || !_canRefreshAndroidPipSurface) return;
+    _androidPipSurfaceRestorePending = false;
+    DiaryService.add(
+      '[PiP] reattaching Android video Surface after Activity resumed',
+    );
     setState(() => _pictureInPictureSurfaceRevision++);
     await WidgetsBinding.instance.endOfFrame;
     await Future<void>.delayed(const Duration(milliseconds: 120));
   }
 
   void _scheduleAndroidPictureInPictureSurfaceRefresh() {
-    if (!Platform.isAndroid) return;
-    Future<void>.delayed(const Duration(milliseconds: 180), () async {
-      if (!mounted || _closed) return;
-      await _refreshAndroidPictureInPictureSurface();
-    });
+    if (!Platform.isAndroid || !_androidPipSurfaceRestorePending) return;
+    _androidPipSurfaceRefreshTimer?.cancel();
+    _androidPipSurfaceRefreshTimer = Timer(
+      const Duration(milliseconds: 320),
+      () async {
+        _androidPipSurfaceRefreshTimer = null;
+        if (!mounted || _closed || !_canRefreshAndroidPipSurface) return;
+        await _refreshAndroidPictureInPictureSurface();
+      },
+    );
   }
 
   Future<void> _restorePictureInPictureHandoff() async {
@@ -1880,7 +1917,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _interactions.cancel();
     _syncPictureInPicture();
-    await _refreshAndroidPictureInPictureSurface();
+    // Do not remount the video output while Android is moving it into PiP.
+    // The Surface is refreshed once after the Activity returns to foreground.
     final rawRatio = _aspectRatio.isFinite && _aspectRatio > 0
         ? _aspectRatio
         : 16 / 9;
@@ -2022,15 +2060,15 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _pushToDevice() async {
-    final link = LanController.current;
-    if (link == null ||
-        _panelOpen ||
+    if (_panelOpen ||
         _closed ||
         _loading ||
         _error != null ||
         widget.mediaId != null) {
       return;
     }
+    // iOS投屏入口已依需求移除；裝置互聯僅負責收藏與觀看進度同步。
+    if (Platform.isIOS) return;
     final generation = _generation;
     final index = _index;
     bool current() =>
@@ -2042,22 +2080,110 @@ class _PlayerScreenState extends State<PlayerScreen>
     _interactions.cancel();
     setState(() => _panelOpen = true);
     try {
-      await showLanPush(
+      Future<Map<String, dynamic>> discoverCastDevices() async {
+        var multicastLockAcquired = false;
+        try {
+          if (Platform.isAndroid) {
+            await AppDevice.channel.invokeMethod<void>(
+              'acquireCastMulticastLock',
+            );
+            multicastLockAcquired = true;
+          }
+          List<dynamic> dlnaItems = const [];
+          List<Map<String, dynamic>> googleCastItems = const [];
+          try {
+            final result = await widget.repository.cast('discover');
+            dlnaItems = (result['items'] as List? ?? const []).toList();
+          } catch (error) {
+            DiaryService.add(
+              '[Cast] dlna_discovery_failed error=${playbackDiagnosticError(error)}',
+            );
+          }
+          if (Platform.isAndroid || Platform.isWindows) {
+            try {
+              googleCastItems =
+                  await GoogleCastController.instance.discover();
+            } catch (error) {
+              DiaryService.add(
+                '[Cast] google_cast_discovery_failed error=${playbackDiagnosticError(error)}',
+              );
+            }
+          }
+          final items = <dynamic>[...dlnaItems, ...googleCastItems];
+          items.sort((a, b) {
+            final nameA = a is Map ? (a['name'] ?? '').toString() : '';
+            final nameB = b is Map ? (b['name'] ?? '').toString() : '';
+            return nameA.toLowerCase().compareTo(nameB.toLowerCase());
+          });
+          return {'items': items};
+        } finally {
+          if (multicastLockAcquired) {
+            try {
+              await AppDevice.channel.invokeMethod<void>(
+                'releaseCastMulticastLock',
+              );
+            } catch (error) {
+              DiaryService.add(
+                '[Cast] multicast_lock_release_failed error=${playbackDiagnosticError(error)}',
+              );
+            }
+          }
+        }
+      }
+
+      final device = await showCastDevicePicker(
         context,
-        link,
-        snapshot: () => LanPlaybackIntent(
-          drama: widget.detail.drama,
-          episodeID: widget.detail.episodes[index].id,
-          episode: widget.detail.episodes[index].number,
-          position: _currentPosition,
-        ),
-        stillCurrent: current,
-        onAccepted: () async {
-          if (!current()) throw StateError('本機播放內容已變更');
-          await _stopForLan();
-          if (!current()) throw StateError('本機播放內容已變更');
-        },
+        discovery: discoverCastDevices(),
       );
+      if (device == null || !current()) return;
+      final startMs = (_currentPosition * 1000).round();
+      if (device.isGoogleCast) {
+        final plan = await widget.repository.prepareHandoff(
+          widget.detail.drama,
+          widget.detail.episodes[index],
+          quality: _requestedQuality,
+        );
+        if (!current()) return;
+        if (plan == null || plan.url.isEmpty) {
+          throw StateError('目前片源無法取得可投放的播放網址');
+        }
+        if (plan.local || plan.decryptionKey.isNotEmpty) {
+          throw StateError('此影片需要本機播放或解密，目前無法使用 Google Cast');
+        }
+        await GoogleCastController.instance.play(
+          deviceJson: device.payload,
+          plan: plan,
+          title:
+              '${uiTraditional(widget.detail.drama.title)} · 第 ${widget.detail.episodes[index].number} 集',
+          startMs: startMs,
+        );
+      } else {
+        await widget.repository.cast(
+          'play',
+          device: device.id,
+          drama: widget.detail.drama,
+          episode: widget.detail.episodes[index],
+          quality: _requestedQuality,
+          startMs: startMs,
+        );
+      }
+      if (!current()) return;
+      _playIntent = false;
+      await _player.pause().timeout(
+        _playbackStopTimeout,
+        onTimeout: () => throw TimeoutException('暫停本機播放器逾時'),
+      );
+      await _saveProgress(flush: true);
+      if (!current()) return;
+      if (device.isGoogleCast) {
+        await showGoogleCastPlaybackControls(context, device: device);
+      } else {
+        await showCastPlaybackControls(
+          context,
+          repository: widget.repository,
+          device: device,
+        );
+      }
     } catch (error) {
       if (mounted && !_closed) {
         ScaffoldMessenger.of(
@@ -2281,10 +2407,34 @@ class _PlayerScreenState extends State<PlayerScreen>
       '[PlaybackLifecycle] from=${previous.name} to=${state.name} '
       'generation=$_generation foreground=$_foreground intended=$_playIntent '
       'playing=${playerState.playing} buffering=${playerState.buffering} '
+      'pipActive=$_pictureInPictureActive pipRequested=$_pictureInPictureRequested '
       'positionMs=${playerState.position.inMilliseconds} '
       'route=${_plan?.routeIndex ?? -1}/${_plan?.routeCount ?? 0} '
       'session=${_plan == null ? 'none' : playbackDiagnosticId(_plan!.session)}',
     );
+    // Android 12+ auto-enter PiP does not call onUserLeaveHint. The Activity
+    // can therefore report paused before onPictureInPictureModeChanged(true).
+    // Detect the same state that enabled native auto-enter and mark the PiP
+    // transition pending before ordinary background handling can pause MPV.
+    final androidAutoPipTransition = state == AppLifecycleState.paused &&
+        !_pictureInPictureActive &&
+        playbackLifecycleShouldRetainAndroidPictureInPicture(
+          android: Platform.isAndroid,
+          systemSupported: _pictureInPictureSupported,
+          playing: !_loading &&
+              _error == null &&
+              _playIntent &&
+              playerState.playing,
+          enabled: widget.store.playbackPreferences.autoPictureInPicture,
+          television: _television,
+        );
+    if (androidAutoPipTransition && !_pictureInPictureRequested) {
+      _pictureInPictureExitTimer?.cancel();
+      DiaryService.add(
+        '[PiP] Android auto-enter transition detected before native mode callback; retaining playback',
+      );
+      _setPictureInPictureStatus(requested: true);
+    }
     if (Platform.isIOS &&
         state != AppLifecycleState.resumed &&
         _iosAutoPictureInPicturePrepared &&
@@ -2298,6 +2448,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       _setPictureInPictureStatus(requested: false);
     }
     _applyLifecycleVisibility();
+    if (state == AppLifecycleState.resumed &&
+        Platform.isAndroid &&
+        _androidPipSurfaceRestorePending) {
+      _scheduleAndroidPictureInPictureSurfaceRefresh();
+    }
     if (state == AppLifecycleState.resumed &&
         _pictureInPictureHandoff &&
         _pendingPictureInPictureRestorePositionMs != null) {
@@ -3376,7 +3531,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           _fullscreen = previous;
           _automaticFullscreenSuppressed = previousSuppressed;
         });
-        _notice('無法切換全屏，請重試');
+        _notice('無法切換全螢幕，請重試');
       }
     } finally {
       _rotating = false;
@@ -3389,6 +3544,18 @@ class _PlayerScreenState extends State<PlayerScreen>
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(uiTraditional(message))));
+  }
+
+  String get _sleepTimerLabel => _sleepAtEpisodeEnd
+      ? '本集'
+      : _sleepMinutes > 0
+      ? '${_sleepMinutes}分'
+      : '關閉';
+
+  void _toggleCinemaMode() {
+    if (!Platform.isWindows && !Platform.isMacOS) return;
+    if (_closed || _desktopMiniActive) return;
+    setState(() => _cinemaMode = !_cinemaMode);
   }
 
   void _clearSleepTimer() {
@@ -3898,6 +4065,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _framePacingDiagnosticTimer?.cancel();
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
+    _androidPipSurfaceRefreshTimer?.cancel();
     if (_pictureInPictureHandlerInstalled) {
       unawaited(
         AppDevice.channel.invokeMethod<void>('updatePictureInPicture', null)
@@ -4058,11 +4226,17 @@ class _PlayerScreenState extends State<PlayerScreen>
           canRequestFocus: !_television,
           skipTraversal: _television,
           child: Scaffold(
-            backgroundColor: fullscreen || pictureInPicture || _desktopMiniActive
+            backgroundColor:
+                fullscreen || pictureInPicture || _desktopMiniActive || _cinemaMode
                 ? Colors.black
                 : theme.scaffoldBackgroundColor,
             appBar:
-                widget.desktopMiniPlayer || pictureInPicture || _desktopMiniActive || fullscreen || _mobile
+                widget.desktopMiniPlayer ||
+                    pictureInPicture ||
+                    _desktopMiniActive ||
+                    fullscreen ||
+                    _mobile ||
+                    _cinemaMode
                 ? null
                 : AppBar(
                     title: Text(
@@ -4072,7 +4246,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                     ),
                     actions: [
                       IconButton(
-                        tooltip: '旋轉與全屏',
+                        tooltip: '全螢幕',
                         onPressed: _rotate,
                         icon: const Icon(Icons.screen_rotation_alt_rounded),
                       ),
@@ -4094,7 +4268,11 @@ class _PlayerScreenState extends State<PlayerScreen>
                             (_formFactor == FormFactor.pad ||
                                 _formFactor == FormFactor.window) &&
                             constraints.maxWidth >= 840;
-                        if (widget.desktopMiniPlayer || fullscreen || _desktopMiniActive) {
+                        if (widget.desktopMiniPlayer ||
+                            fullscreen ||
+                            _desktopMiniActive ||
+                            (_cinemaMode &&
+                                (Platform.isWindows || Platform.isMacOS))) {
                           // PiP is a dedicated video surface, not a miniature
                           // copy of the full desktop player with its side panel.
                           return _videoPane(context);
@@ -4153,13 +4331,39 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  Widget _zoomVideoSurface(Widget child) => AnimatedBuilder(
+    animation: _interactions,
+    child: child,
+    builder: (context, child) => ClipRect(
+      child: Transform.scale(
+        scale: _interactions.zoomScale,
+        alignment: Alignment.center,
+        child: child,
+      ),
+    ),
+  );
+
   Widget _videoOutput({required BoxFit fit, required Widget controls}) {
+    final retainVideoOutputInBackground =
+        Platform.isAndroid && _pictureInPictureVisible ||
+        Platform.isIOS &&
+            (_pictureInPictureVisible || _iosAutoPictureInPicturePrepared);
     if (_player is LunaExoPlayer) {
-      return LunaExoVideoView(
-        key: ValueKey('pip-exo-surface-$_pictureInPictureSurfaceRevision'),
-        player: _player as LunaExoPlayer,
-        fit: fit,
-        controls: (_) => controls,
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: _zoomVideoSurface(
+              LunaExoVideoView(
+                key: ValueKey('pip-exo-surface-$_pictureInPictureSurfaceRevision'),
+                player: _player as LunaExoPlayer,
+                fit: fit,
+                controls: (_) => const SizedBox.shrink(),
+              ),
+            ),
+          ),
+          Positioned.fill(child: controls),
+        ],
       );
     }
     final textureRendererAvailable =
@@ -4174,25 +4378,30 @@ class _PlayerScreenState extends State<PlayerScreen>
       aspectRatio: _aspectRatio,
     );
     if (!portraitBlurActive) {
-      // Do not apply an extra scale to iOS landscape playback. BoxFit.contain
-      // keeps the entire frame visible, including subtitles near the bottom.
-      return Video(
-        key: ValueKey('pip-video-surface-$_pictureInPictureSurfaceRevision'),
-        controller: _video!,
-        fit: fit,
-        fill: Colors.black,
-        // media_kit_video pauses by default when the app backgrounds. During
-        // iOS PiP, MPV must keep rendering frames for AVSampleBufferDisplayLayer.
-        pauseUponEnteringBackgroundMode:
-            !(Platform.isIOS &&
-                (_pictureInPictureVisible || _iosAutoPictureInPicturePrepared)),
-        controls: (_) => controls,
+      // Keep the gesture controls outside the zoom transform. Only the video
+      // frame and subtitles scale; the controls stay anchored to the viewport.
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: _zoomVideoSurface(
+              Video(
+                key: ValueKey('pip-video-surface-$_pictureInPictureSurfaceRevision'),
+                controller: _video!,
+                fit: fit,
+                fill: Colors.black,
+                pauseUponEnteringBackgroundMode: !retainVideoOutputInBackground,
+                controls: null,
+              ),
+            ),
+          ),
+          Positioned.fill(child: controls),
+        ],
       );
     }
 
     // Both Video widgets subscribe to the same VideoController texture ID.
-    // MPV decodes once; Flutter composites that one live texture twice:
-    // cover + blur behind, contain + controls in front.
+    // MPV decodes once; Flutter composites that one live texture twice.
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -4221,14 +4430,18 @@ class _PlayerScreenState extends State<PlayerScreen>
           child: ColoredBox(color: Colors.black.withValues(alpha: .24)),
         ),
         Positioned.fill(
-          child: Video(
-            key: ValueKey('pip-video-main-$_pictureInPictureSurfaceRevision'),
-            controller: _video!,
-            fit: fit,
-            fill: Colors.transparent,
-            controls: (_) => controls,
+          child: _zoomVideoSurface(
+            Video(
+              key: ValueKey('pip-video-main-$_pictureInPictureSurfaceRevision'),
+              controller: _video!,
+              fit: fit,
+              fill: Colors.transparent,
+              pauseUponEnteringBackgroundMode: !retainVideoOutputInBackground,
+              controls: null,
+            ),
           ),
         ),
+        Positioned.fill(child: controls),
       ],
     );
   }
@@ -4307,7 +4520,11 @@ class _PlayerScreenState extends State<PlayerScreen>
                 _index + 1 < widget.detail.episodes.length,
             title: title,
             onTogglePlayback: _togglePlayback,
-            swipeEnabled: _mobile,
+            swipeEnabled: supportsPlayerTouchGestures(
+              android: Platform.isAndroid,
+              ios: Platform.isIOS,
+              television: _television,
+            ),
             onFullscreen: _rotate,
             onBack: _back,
             onFocusSurface: _playerFocus.requestFocus,
@@ -4319,7 +4536,16 @@ class _PlayerScreenState extends State<PlayerScreen>
             onSpeed: () => _openPanel(PlayerMenuSection.speed),
             onQuality: () => _openPanel(PlayerMenuSection.quality),
             onSettings: () => _openPanel(PlayerMenuSection.settings),
-            onPush: widget.mediaId == null && !widget.desktopMiniPlayer
+            onAspectRatio: () => _openPanel(PlayerMenuSection.aspectRatio),
+            onSleepTimer: () => _openPanel(PlayerMenuSection.sleepTimer),
+            onCinemaMode:
+                Platform.isWindows || Platform.isMacOS ? _toggleCinemaMode : null,
+            aspectRatioLabel: playbackAspectRatioLabel(_playbackAspectRatio),
+            sleepTimerLabel: _sleepTimerLabel,
+            cinemaMode: _cinemaMode,
+            onPush: !Platform.isIOS &&
+                    widget.mediaId == null &&
+                    !widget.desktopMiniPlayer
                 ? _pushToDevice
                 : null,
             onPictureInPicture: _canUsePictureInPicture
@@ -4375,7 +4601,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             fit: StackFit.expand,
             children: [
               if (widget.videoBuilder != null)
-                widget.videoBuilder!(layeredControls)
+                _zoomVideoSurface(widget.videoBuilder!(layeredControls))
               else
                 _applyAspectRatio(
                   _videoOutput(

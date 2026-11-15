@@ -187,6 +187,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   final navigator = GlobalKey<NavigatorState>();
   LocalStore? store;
   Object? error;
+  bool repositoryReady = false;
   SystemAccentColors systemAccentColors = (light: null, dark: null);
   late AppDevice device = widget.device;
 
@@ -283,76 +284,112 @@ class _AppBootstrapState extends State<AppBootstrap>
   }
 
   Future<void> _initialize() async {
-    setState(() {
-      error = null;
-    });
+    if (mounted) {
+      setState(() {
+        error = null;
+        repositoryReady = false;
+      });
+    }
     try {
       final preferences = await SharedPreferences.getInstance();
       await _restoreDesktopWindowState(preferences);
-      await _refreshDevice();
-      final accents = await AppDevice.systemAccentColors();
-      unawaited(_logStartupRendering());
-      await repository.initialize();
-      final localStore = await LocalStore.open(preferences);
-      if (mounted) {
+
+      // Start device/theme discovery alongside local profile loading. Neither
+      // operation needs to block the first locked-profile frame.
+      final deviceReady = _refreshDevice();
+      final accentsReady = AppDevice.systemAccentColors();
+
+      // Load local profiles before initializing the playback core. A locked
+      // Android TV can show its login screen immediately instead of waiting
+      // for native player initialization and proxy/download setup.
+      final LocalStore localStore;
+      final existingStore = store;
+      if (existingStore == null) {
+        final openedStore = await LocalStore.open(preferences);
+        if (!mounted) {
+          openedStore.dispose();
+          return;
+        }
+        localStore = openedStore;
         setState(() {
-          systemAccentColors = accents;
-          store = localStore;
-          repository.access = store;
-          MediaLibrary.attach(repository, store!);
-          LanController.current?.dispose();
-          final link = LanController(
-            repository,
-            store!,
-            kind: (device.television || device.emulator)
-                ? 'tv'
-                : Platform.isWindows || Platform.isMacOS
-                ? 'computer'
-                : 'phone',
-          );
-          LanController.current = link;
-          link.openPlayback = (request) async {
-            final epoch = request.profileEpoch;
-            if (request.cancelled ||
-                !mounted ||
-                store!.locked ||
-                !link.receiving ||
-                store!.profileEpoch != epoch ||
-                !store!.allowsSource(request.detail.drama.source)) {
-              throw StateError('目前使用者無法接收播放內容');
-            }
-            await link.playbackHost?.stop();
-            if (request.cancelled ||
-                !mounted ||
-                store!.locked ||
-                store!.profileEpoch != epoch ||
-                !link.receiving) {
-              throw StateError('播放接收已取消');
-            }
-            final navigation = navigator.currentState;
-            if (navigation == null) throw StateError('接收裝置介面尚未就緒');
-            unawaited(
-              navigation.pushAndRemoveUntil<void>(
-                MaterialPageRoute<void>(
-                  builder: (_) => PlayerScreen(
-                    detail: request.detail,
-                    initialIndex: request.index,
-                    initialPosition: request.position,
-                    repository: repository,
-                    store: store!,
-                    handoff: request,
-                  ),
-                ),
-                (route) => route.isFirst,
-              ),
-            );
-          };
+          store = openedStore;
+          repository.access = openedStore;
+        });
+      } else {
+        localStore = existingStore;
+        setState(() {
+          repository.access = existingStore;
         });
       }
+
+      await deviceReady;
+      final accents = await accentsReady;
+      if (!mounted) return;
+      setState(() => systemAccentColors = accents);
+      unawaited(_logStartupRendering());
+
+      // Home and playback remain gated until initialize() completes, while
+      // ProfilesScreen remains usable during this background setup.
+      await repository.initialize();
+      if (!mounted) return;
+
+      setState(() {
+        repository.access = localStore;
+        MediaLibrary.attach(repository, localStore);
+        LanController.current?.dispose();
+        final link = LanController(
+          repository,
+          localStore,
+          kind: (device.television || device.emulator)
+              ? 'tv'
+              : Platform.isWindows || Platform.isMacOS
+              ? 'computer'
+              : 'phone',
+        );
+        LanController.current = link;
+        link.openPlayback = (request) async {
+          final epoch = request.profileEpoch;
+          if (request.cancelled ||
+              !mounted ||
+              localStore.locked ||
+              !link.receiving ||
+              localStore.profileEpoch != epoch ||
+              !localStore.allowsSource(request.detail.drama.source)) {
+            throw StateError('目前使用者無法接收播放內容');
+          }
+          await link.playbackHost?.stop();
+          if (request.cancelled ||
+              !mounted ||
+              localStore.locked ||
+              localStore.profileEpoch != epoch ||
+              !link.receiving) {
+            throw StateError('播放接收已取消');
+          }
+          final navigation = navigator.currentState;
+          if (navigation == null) throw StateError('接收裝置介面尚未就緒');
+          unawaited(
+            navigation.pushAndRemoveUntil<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => PlayerScreen(
+                  detail: request.detail,
+                  initialIndex: request.index,
+                  initialPosition: request.position,
+                  repository: repository,
+                  store: localStore,
+                  handoff: request,
+                ),
+              ),
+              (route) => route.isFirst,
+            ),
+          );
+        };
+        repositoryReady = true;
+      });
     } catch (failure) {
       if (mounted) {
         setState(() {
           error = failure;
+          repositoryReady = false;
         });
       }
     }
@@ -364,6 +401,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     store: store,
     bootstrapError: error?.toString(),
     onRetry: _initialize,
+    repositoryReady: repositoryReady,
     television: device.television,
     emulator: device.emulator,
     version: device.version,
@@ -408,6 +446,7 @@ class DuanjuApp extends StatelessWidget {
     this.store,
     this.bootstrapError,
     this.onRetry,
+    this.repositoryReady = false,
     this.television = false,
     this.emulator = false,
     this.version = appVersion,
@@ -418,6 +457,7 @@ class DuanjuApp extends StatelessWidget {
   final LocalStore? store;
   final String? bootstrapError;
   final VoidCallback? onRetry;
+  final bool repositoryReady;
   final bool television;
   final bool emulator;
   final String version;
@@ -491,6 +531,7 @@ class DuanjuApp extends StatelessWidget {
             child: AppLayout(
               television: tv,
               detectedTelevision: television,
+              detectedEmulator: emulator,
               formFactor: formFactor,
               version: version,
               child: Theme(
@@ -550,17 +591,52 @@ class DuanjuApp extends StatelessWidget {
                     key: ValueKey('locked-${store!.profileEpoch}'),
                     child: ProfilesScreen(store: store!, locked: true),
                   )
-                : DeviceRegistrationGate(
-                    repository: repository,
-                    store: store!,
-                    child: HomeScreen(
-                      key: ValueKey(
-                        'profile-${store!.profile.id}-${store!.profileEpoch}',
-                      ),
-                      repository: repository,
-                      store: store!,
-                    ),
-                  )
+                : repositoryReady
+                    ? DeviceRegistrationGate(
+                        repository: repository,
+                        store: store!,
+                        child: HomeScreen(
+                          key: ValueKey(
+                            'profile-${store!.profile.id}-${store!.profileEpoch}',
+                          ),
+                          repository: repository,
+                          store: store!,
+                        ),
+                      )
+                    : KeyedSubtree(
+                        key: ValueKey(
+                          bootstrapError == null
+                              ? 'bootstrap-loading'
+                              : 'bootstrap-error',
+                        ),
+                        child: Scaffold(
+                          backgroundColor: const Color(0xFF0B0D12),
+                          body: Center(
+                            child: bootstrapError == null
+                                ? const CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  )
+                                : Padding(
+                                    padding: const EdgeInsets.all(32),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          bootstrapError!,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(fontSize: 16),
+                                        ),
+                                        const SizedBox(height: 20),
+                                        FilledButton(
+                                          onPressed: onRetry,
+                                          child: const Text('重新開啟'),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      )
           : KeyedSubtree(
               key: ValueKey<String>(
                 bootstrapError == null ? 'bootstrap-loading' : 'bootstrap-error',

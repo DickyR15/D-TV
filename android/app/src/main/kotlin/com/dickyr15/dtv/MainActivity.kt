@@ -26,6 +26,7 @@ import android.content.res.Configuration
 import android.graphics.Rect
 import android.graphics.drawable.Icon
 import android.net.ConnectivityManager
+import android.net.wifi.WifiManager
 import android.net.Uri
 import android.util.Rational
 import android.view.InputDevice
@@ -42,6 +43,9 @@ import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterShellArgs
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.Executors
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 private const val PICTURE_IN_PICTURE_ACTION = "com.dickyr15.dtv.PICTURE_IN_PICTURE_ACTION"
 
@@ -58,6 +62,8 @@ open class MainActivity : FlutterActivity() {
     private var headroomReadAt = 0L
     private var thermalHeadroom: Double? = null
     private var deviceChannel: MethodChannel? = null
+    private var castMulticastLock: WifiManager.MulticastLock? = null
+    private val cryptoExecutor = Executors.newSingleThreadExecutor()
     private var pictureInPicture: PlayerPictureInPicture? = null
     private var pictureInPictureReceiver: BroadcastReceiver? = null
     private var televisionMode = false
@@ -581,6 +587,23 @@ open class MainActivity : FlutterActivity() {
         super.onSaveInstanceState(outState)
     }
 
+    private fun deriveProfilePinHash(pin: String, salt: String): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(pin.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        val block = salt.toByteArray(Charsets.UTF_8) + byteArrayOf(0, 0, 0, 1)
+        var value = mac.doFinal(block)
+        val derived = value.copyOf()
+        // Match the existing Dart PBKDF2-HMAC-SHA256 derivation exactly:
+        // 120,000 iterations, UTF-8 password/salt, one 32-byte output block.
+        repeat(119999) {
+            value = mac.doFinal(value)
+            for (index in derived.indices) {
+                derived[index] = (derived[index].toInt() xor value[index].toInt()).toByte()
+            }
+        }
+        return derived.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         deviceChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "duanju/device")
@@ -588,6 +611,47 @@ open class MainActivity : FlutterActivity() {
                 registerPictureInPictureReceiver()
                 channel.setMethodCallHandler { call, result ->
                     when (call.method) {
+                        "acquireCastMulticastLock" -> {
+                            runCatching {
+                                val wifi = getSystemService(Context.WIFI_SERVICE) as WifiManager
+                                val lock = castMulticastLock ?: wifi.createMulticastLock("dtv-dlna-discovery").apply {
+                                    setReferenceCounted(false)
+                                }
+                                if (!lock.isHeld) lock.acquire()
+                                castMulticastLock = lock
+                            }.onSuccess {
+                                result.success(true)
+                            }.onFailure { error ->
+                                result.error("multicast_lock_failed", "無法啟用 DLNA 裝置搜尋：${error.message}", null)
+                            }
+                        }
+                        "releaseCastMulticastLock" -> {
+                            runCatching {
+                                castMulticastLock?.takeIf { it.isHeld }?.release()
+                                castMulticastLock = null
+                            }.onSuccess {
+                                result.success(null)
+                            }.onFailure { error ->
+                                result.error("multicast_unlock_failed", "無法釋放 DLNA 搜尋資源：${error.message}", null)
+                            }
+                        }
+                        "deriveProfilePinHash" -> {
+                            val pin = call.argument<String>("pin")
+                            val salt = call.argument<String>("salt")
+                            if (pin == null || salt == null) {
+                                result.error("invalid_pin", "密碼驗證資料無效", null)
+                            } else {
+                                cryptoExecutor.execute {
+                                    val hash = runCatching { deriveProfilePinHash(pin, salt) }
+                                    runOnUiThread {
+                                        hash.onSuccess { result.success(it) }
+                                            .onFailure { error ->
+                                                result.error("pin_hash_failed", error.message, null)
+                                            }
+                                    }
+                                }
+                            }
+                        }
                         "deviceInfo" -> {
                             val packageInfo = packageManager.getPackageInfo(packageName, 0)
                             val versionName = packageInfo.versionName.orEmpty()
@@ -967,8 +1031,13 @@ open class MainActivity : FlutterActivity() {
         pictureInPictureReceiver?.let { receiver -> runCatching { unregisterReceiver(receiver) } }
         pictureInPictureReceiver = null
         pictureInPicture = null
+        runCatching {
+            castMulticastLock?.takeIf { it.isHeld }?.release()
+            castMulticastLock = null
+        }
         deviceChannel?.setMethodCallHandler(null)
         deviceChannel = null
+        cryptoExecutor.shutdownNow()
         super.cleanUpFlutterEngine(flutterEngine)
     }
 }

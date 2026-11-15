@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
-import 'lan_controller.dart';
 import 'player_interactions.dart';
 import 'playback_controls_visibility.dart';
 import 'widgets.dart';
@@ -36,6 +35,12 @@ class PlayerControls extends StatefulWidget {
     this.onPush,
     this.onPictureInPicture,
     this.onSettings,
+    this.onAspectRatio,
+    this.onSleepTimer,
+    this.onCinemaMode,
+    this.aspectRatioLabel = '自動',
+    this.sleepTimerLabel = '關閉',
+    this.cinemaMode = false,
     this.pictureInPictureTooltip = '畫中畫',
     this.enhancement,
     this.playbackGeneration = 0,
@@ -66,6 +71,12 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
   final Future<void> Function()? onSettings;
+  final Future<void> Function()? onAspectRatio;
+  final Future<void> Function()? onSleepTimer;
+  final VoidCallback? onCinemaMode;
+  final String aspectRatioLabel;
+  final String sleepTimerLabel;
+  final bool cinemaMode;
   final String pictureInPictureTooltip;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
@@ -448,7 +459,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         child: Row(
           children: [
             _overlayIconButton(
-              tooltip: widget.fullscreen ? '退出全屏' : '返回',
+              tooltip: widget.fullscreen ? '退出全螢幕' : '返回',
               onPressed: widget.fullscreen
                   ? widget.onFullscreen
                   : widget.onBack,
@@ -474,7 +485,7 @@ class _PlayerControlsState extends State<PlayerControls> {
               ),
             if (compact)
               _overlayIconButton(
-                tooltip: '旋轉與全屏',
+                tooltip: '全螢幕',
                 onPressed: widget.onFullscreen,
                 icon: Icons.screen_rotation_alt_rounded,
               ),
@@ -804,32 +815,14 @@ class _PlayerControlsState extends State<PlayerControls> {
   Widget _toolGroup(List<Widget> children) =>
       Row(mainAxisSize: MainAxisSize.min, children: children);
 
-  Widget _lanPushTool(Key key) {
-    final link = LanController.current;
-    if (link == null) return const SizedBox.shrink();
-    return AnimatedBuilder(
-      animation: link,
-      builder: (context, _) => _toolButton(
-        key: key,
-        tooltip: link.connection == null
-            ? '傳送播放'
-            : '傳送播放至 ${link.connection!.peer.name}',
-        onPressed: widget.enabled ? () => _panel(widget.onPush!) : null,
-        child: link.pushing
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Icon(
-                link.connection == null
-                    ? Icons.cast_rounded
-                    : Icons.cast_connected_rounded,
-                size: 22,
-              ),
-      ),
-    );
-  }
+  Widget _castTool(Key key) => _toolIcon(
+    key: key,
+    tooltip: '傳送播放（DLNA）',
+    icon: Icons.cast_rounded,
+    onPressed: widget.enabled && widget.onPush != null
+        ? () => _panel(widget.onPush!)
+        : null,
+  );
 
   Widget _clusteredToolRow(List<Widget> tools) => Row(
     children: [
@@ -870,7 +863,33 @@ class _PlayerControlsState extends State<PlayerControls> {
           width: 52,
         ),
       ],
-      if (showPush) _lanPushTool(const ValueKey('fullscreen-lan-push')),
+      if (showPush) _castTool(const ValueKey('fullscreen-lan-push')),
+      if (widget.onAspectRatio != null)
+        _toolIcon(
+          key: const ValueKey('player-aspect-ratio'),
+          tooltip: '畫面比例：${widget.aspectRatioLabel}',
+          icon: Icons.aspect_ratio_rounded,
+          onPressed: widget.enabled
+              ? () => _panel(widget.onAspectRatio!)
+              : null,
+        ),
+      if (widget.onSleepTimer != null)
+        _toolIcon(
+          key: const ValueKey('player-sleep-timer'),
+          tooltip: '睡眠計時：${widget.sleepTimerLabel}',
+          icon: Icons.bedtime_rounded,
+          onPressed: widget.enabled
+              ? () => _panel(widget.onSleepTimer!)
+              : null,
+        ),
+      if (widget.onCinemaMode != null)
+        _toolIcon(
+          key: const ValueKey('player-cinema-mode'),
+          tooltip: widget.cinemaMode ? '退出電影模式' : '電影模式',
+          icon: Icons.width_wide_rounded,
+          selected: widget.cinemaMode,
+          onPressed: widget.enabled ? widget.onCinemaMode : null,
+        ),
       if (showEpisodes)
         _toolIcon(
           key: const ValueKey('player-episodes'),
@@ -901,7 +920,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         ),
       _toolIcon(
         key: const ValueKey('player-fullscreen'),
-        tooltip: fullscreen ? '退出全屏' : '旋轉與全屏',
+        tooltip: fullscreen ? '退出全螢幕' : '全螢幕',
         icon: fullscreen
             ? Icons.fullscreen_exit_rounded
             : Icons.fullscreen_rounded,
@@ -931,7 +950,25 @@ class _PlayerControlsState extends State<PlayerControls> {
         width: 52,
       ),
       if (widget.onPush != null)
-        _lanPushTool(const ValueKey('fullscreen-lan-push')),
+        _castTool(const ValueKey('fullscreen-lan-push')),
+      if (widget.onAspectRatio != null)
+        _toolIcon(
+          key: const ValueKey('player-aspect-ratio'),
+          tooltip: '畫面比例：${widget.aspectRatioLabel}',
+          icon: Icons.aspect_ratio_rounded,
+          onPressed: widget.enabled
+              ? () => _panel(widget.onAspectRatio!)
+              : null,
+        ),
+      if (widget.onSleepTimer != null)
+        _toolIcon(
+          key: const ValueKey('player-sleep-timer'),
+          tooltip: '睡眠計時：${widget.sleepTimerLabel}',
+          icon: Icons.bedtime_rounded,
+          onPressed: widget.enabled
+              ? () => _panel(widget.onSleepTimer!)
+              : null,
+        ),
       if (fullscreen)
         _toolIcon(
           key: const ValueKey('player-episodes'),
@@ -1099,18 +1136,26 @@ class _PlayerControlsState extends State<PlayerControls> {
     builder: (context, _) {
       final hud = widget.interactions.hudState;
       final feedback = widget.interactions.feedback;
-      if (hud.type == SwipeAction.brightness) {
+      if (hud.type == SwipeAction.brightness ||
+          hud.type == SwipeAction.volume) {
+        final isBrightness = hud.type == SwipeAction.brightness;
         final value = hud.value.clamp(0.0, 1.0);
         final percent = (value * 100).round();
-        final icon = value < 0.33
-            ? Icons.brightness_low_rounded
-            : value < 0.66
-            ? Icons.brightness_medium_rounded
-            : Icons.brightness_high_rounded;
+        final icon = isBrightness
+            ? value < 0.33
+                ? Icons.brightness_low_rounded
+                : value < 0.66
+                    ? Icons.brightness_medium_rounded
+                    : Icons.brightness_high_rounded
+            : value <= 0
+                ? Icons.volume_off_rounded
+                : value < 0.5
+                    ? Icons.volume_down_rounded
+                    : Icons.volume_up_rounded;
         return IgnorePointer(
           child: Center(
             child: Container(
-              width: 120,
+              width: 132,
               padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: .75),
@@ -1133,7 +1178,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                   Icon(icon, color: Colors.white, size: 36),
                   const SizedBox(height: 14),
                   SizedBox(
-                    width: 70,
+                    width: 82,
                     height: 6,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(3),
@@ -1148,7 +1193,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    '亮度 $percent%',
+                    (isBrightness ? '亮度 ' : '音量 ') + percent.toString() + '%',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -1157,6 +1202,32 @@ class _PlayerControlsState extends State<PlayerControls> {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+        );
+      }
+      if (hud.type == SwipeAction.zoom) {
+        final percent = playerZoomPercentage(hud.value);
+        return IgnorePointer(
+          child: Center(
+            child: Container(
+              key: const ValueKey('player-zoom-percentage'),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: .78),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withValues(alpha: .15)),
+              ),
+              child: Text(
+                '${percent}%',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
               ),
             ),
           ),

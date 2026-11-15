@@ -2,14 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/desktop_mini_window_policy.dart';
 
 void main() {
-  test('desktop mini-player is disabled on Windows and secondary players', () {
+  test('desktop mini-player is available on Windows and macOS, not secondary players', () {
     expect(
       supportsDesktopMiniPlayer(
         isWindows: true,
         isMacOS: false,
         secondaryPlayer: false,
       ),
-      isFalse,
+      isTrue,
     );
     expect(
       supportsDesktopMiniPlayer(
@@ -17,7 +17,7 @@ void main() {
         isMacOS: true,
         secondaryPlayer: false,
       ),
-      isFalse,
+      isTrue,
     );
     expect(
       supportsDesktopMiniPlayer(

@@ -52,6 +52,7 @@ class LocalSnapshot {
     'forceLogin',
     'ignoredUpdateVersion',
     'checkForUpdatesOnStartup',
+    'advancedSourceOrder',
   };
   static const _retiredKeys = {
     'sourceGateEnabled',
@@ -188,6 +189,7 @@ class LocalSnapshot {
       'sourceSwitches',
       'ignoredUpdateVersion',
       'checkForUpdatesOnStartup',
+      'advancedSourceOrder',
     ]) {
       if (values.containsKey(key)) {
         globalSettings[key] = _toDiskValue(key, values[key]);
@@ -275,6 +277,7 @@ class LocalSnapshot {
       'sourceSwitches',
       'ignoredUpdateVersion',
       'checkForUpdatesOnStartup',
+      'advancedSourceOrder',
     ]) {
       if (globalSettings.containsKey(key)) {
         final value = _fromDiskValue(key, globalSettings[key]);

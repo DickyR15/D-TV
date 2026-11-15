@@ -298,6 +298,7 @@ void main() {
       'forceLogin': backup['forceLogin'],
       'ignoredUpdateVersion': backup['ignoredUpdateVersion'],
       'checkForUpdatesOnStartup': backup['checkForUpdatesOnStartup'],
+      'advancedSourceOrder': backup['advancedSourceOrder'],
     };
     expect(() => store.validateBackup(jsonEncode(reordered)), returnsNormally);
 

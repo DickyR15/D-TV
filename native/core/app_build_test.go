@@ -21,7 +21,20 @@ func TestNativeBuildAuthorization(t *testing.T) {
 			}
 		}
 	}
+	for _, source := range []string{sourceHongguo, sourceHanxiaoquan, sourceDuoduo, sourceHuangdou} {
+		allowed := nativePrimarySource(source) || buildAllSources == "true" && isHuangguoProviderSource(source)
+		err := nativeAuthorizeInput(nativeInput{Action: "cast", Command: "play",
+			Drama: nativeDrama{ID: source + ":123", Source: source},
+			Chapter: Chapter{ID: "episode-1", Source: source}})
+		if (err == nil) != allowed {
+			t.Fatalf("DLNA cast authorization for %s: allowed=%v, error=%v", source, allowed, err)
+		}
+	}
+	if err := nativeAuthorizeInput(nativeInput{Action: "cast", Command: "discover"}); err != nil {
+		t.Fatalf("device discovery should not require a source: %v", err)
+	}
 	for _, input := range []nativeInput{
+		{Action: "cast", Command: "play", Drama: nativeDrama{ID: "huangdou:123", Source: sourceHongguo}, Chapter: Chapter{ID: "episode-1", Source: sourceHongguo}},
 		{Action: "resolve", Drama: nativeDrama{ID: "huangdou:123", Source: sourceHongguo}},
 		{Action: "resolve", Drama: nativeDrama{ID: "hongguo:123", Source: sourceHongguo}, Chapter: Chapter{Source: sourceHuangdou}},
 		{Action: "resolve", Drama: nativeDrama{ID: "hongguo:123", Source: sourceHongguo}, Chapter: Chapter{ID: "huangdou:123:1"}},

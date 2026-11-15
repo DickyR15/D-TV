@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -190,26 +191,33 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _switch(LocalProfile profile) async {
-    String pin = '';
-    if (profile.protected) {
-      final value = await showDialog<String>(
-        context: context,
-        builder: (_) => _PasswordDialog(name: uiTraditional(profile.name)),
-      );
-      if (value == null || !mounted) return;
-      pin = value;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
+    if (_busy) return;
     try {
-      await widget.store.switchProfile(profile.id, pin: pin);
+      if (profile.protected) {
+        // The modal itself blocks duplicate submits. Do not show an indeterminate
+        // progress bar behind it, which can also prevent TV focus transitions
+        // from settling while the password dialog is open.
+        final switched = await showDialog<bool>(
+          context: context,
+          builder: (_) => _PasswordDialog(
+            name: uiTraditional(profile.name),
+            onSubmit: (pin) =>
+                widget.store.switchProfile(profile.id, pin: pin),
+          ),
+        );
+        if (!mounted || switched != true) return;
+      } else {
+        setState(() {
+          _busy = true;
+          _error = null;
+        });
+        await widget.store.switchProfile(profile.id);
+      }
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && _busy) setState(() => _busy = false);
     }
   }
 
@@ -444,40 +452,213 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 }
 
 class _PasswordDialog extends StatefulWidget {
-  const _PasswordDialog({required this.name});
+  const _PasswordDialog({required this.name, this.onSubmit});
   final String name;
+  final Future<void> Function(String pin)? onSubmit;
   @override
   State<_PasswordDialog> createState() => _PasswordDialogState();
 }
 
 class _PasswordDialogState extends State<_PasswordDialog> {
   final _pin = TextEditingController();
+  final FocusNode _pinFocus = FocusNode(debugLabel: 'profile-password-input');
+  final FocusNode _cancelFocus = FocusNode(debugLabel: 'profile-password-cancel');
+  final FocusNode _loginFocus = FocusNode(debugLabel: 'profile-password-submit');
+  bool _submitting = false;
+  String? _submitError;
+  bool _initialKeyboardScheduled = false;
+
+  bool get _television => AppLayout.isTelevision(context);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_television || _initialKeyboardScheduled) return;
+    _initialKeyboardScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestPasswordKeyboard());
+  }
+
+  void _requestPasswordKeyboard() {
+    if (!_television || _submitting || !mounted) return;
+    if (!_pinFocus.hasPrimaryFocus) _pinFocus.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _submitting || !_pinFocus.hasPrimaryFocus) return;
+      unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
+    });
+  }
+
+  void _completePasswordEntry() {
+    if (!_television) {
+      unawaited(_submit());
+      return;
+    }
+    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
+    _loginFocus.requestFocus();
+  }
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    final submit = widget.onSubmit;
+    if (submit == null) {
+      Navigator.pop(context, _pin.text);
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _submitError = null;
+    });
+    try {
+      await submit(_pin.text);
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error
+          .toString()
+          .replaceFirst(RegExp(r'^Bad state:\s*'), '')
+          .trim();
+      setState(() {
+        _submitting = false;
+        _submitError = message.isEmpty
+            ? '登入失敗，請重新輸入密碼'
+            : uiTraditional(message);
+        _pin.clear();
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _pinFocus.requestFocus();
+          _requestPasswordKeyboard();
+        }
+      });
+    } finally {
+      if (mounted && _submitting) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  KeyEventResult _pinKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _completePasswordEntry();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _actionKey(
+    KeyEvent event, {
+    required FocusNode left,
+    required FocusNode right,
+  }) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _requestPasswordKeyboard();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      left.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      right.requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   void dispose() {
     _pin.dispose();
+    _pinFocus.dispose();
+    _cancelFocus.dispose();
+    _loginFocus.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text('登入 ${widget.name}'),
-    content: TextField(
-      controller: _pin,
-      autofocus: true,
-      obscureText: true,
-      decoration: const InputDecoration(labelText: '密碼'),
-      onSubmitted: (value) => Navigator.pop(context, value),
+  Widget build(BuildContext context) => FocusTraversalGroup(
+    policy: OrderedTraversalPolicy(),
+    child: AlertDialog(
+      title: Text('登入 ${widget.name}'),
+      content: FocusTraversalOrder(
+        order: const NumericFocusOrder(1),
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _pinKey,
+          child: TextField(
+            key: const ValueKey('profile-password-input'),
+            controller: _pin,
+            focusNode: _pinFocus,
+            autofocus: _television,
+            enabled: !_submitting,
+            onTap: _requestPasswordKeyboard,
+            obscureText: true,
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              labelText: '密碼',
+              errorText: _submitError,
+            ),
+            onChanged: (_) {
+              if (_submitError != null) {
+                setState(() => _submitError = null);
+              }
+            },
+            onSubmitted: (_) {
+              if (_television) {
+                _completePasswordEntry();
+              } else {
+                unawaited(_submit());
+              }
+            },
+          ),
+        ),
+      ),
+      actions: [
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(2),
+          child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onKeyEvent: (node, event) => _actionKey(
+              event,
+              left: _cancelFocus,
+              right: _loginFocus,
+            ),
+            child: TextButton(
+              key: const ValueKey('profile-password-cancel'),
+              focusNode: _cancelFocus,
+              onPressed: _submitting ? null : () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+          ),
+        ),
+        FocusTraversalOrder(
+          order: const NumericFocusOrder(3),
+          child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onKeyEvent: (node, event) => _actionKey(
+              event,
+              left: _cancelFocus,
+              right: _loginFocus,
+            ),
+            child: FilledButton(
+              key: const ValueKey('profile-password-submit'),
+              focusNode: _loginFocus,
+              autofocus: false,
+              onPressed: _submitting ? null : _submit,
+              child: const Text('登入'),
+            ),
+          ),
+        ),
+      ],
     ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('取消'),
-      ),
-      FilledButton(
-        onPressed: () => Navigator.pop(context, _pin.text),
-        child: const Text('登入'),
-      ),
-    ],
   );
 }
 

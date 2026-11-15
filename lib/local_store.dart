@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -221,12 +222,27 @@ class LocalStore extends ChangeNotifier {
       _configurationError = null;
       _locked = !_assumeAuthenticated && forceLogin && profile.protected;
       _loadSourceSwitches();
-      _loadLibrary();
-      _loadSeriesCandidates();
-      _queue(() => _moveSeriesCandidates().catchError((Object _) {}));
+      // A locked startup only needs the profile directory and source switches.
+      // Defer potentially large library parsing and legacy series-cache
+      // migration until after successful authentication.
+      if (!_locked) {
+        _loadLibrary();
+        _loadSeriesCandidates();
+        _scheduleSeriesCandidateMigration();
+      }
     } catch (_) {
       _block('本機使用者設定損毀，已鎖定存取。原始紀錄已保留，請重新讀取或從備份還原。');
     }
+  }
+
+  void _scheduleSeriesCandidateMigration() {
+    if (_locked || _configurationError != null || _disposed) return;
+    unawaited(
+      Future<void>.microtask(() async {
+        if (_locked || _configurationError != null || _disposed) return;
+        await _queue(() => _moveSeriesCandidates().catchError((Object _) {}));
+      }),
+    );
   }
 
   static List<LocalProfile> _readProfiles(dynamic records) {
@@ -479,35 +495,102 @@ class LocalStore extends ChangeNotifier {
       SourceSite.isAvailable(source) &&
       profile.allows(source) &&
       sourceEnabled(source);
-  List<SourceSite> get sources =>
-      SourceSite.values.where((site) => allowsSource(site.id)).toList();
-  List<SourceSite> get permittedSources => [
+  List<SourceSite> get sources => _orderSources(
+    SourceSite.values.where((site) => allowsSource(site.id)),
+  );
+  List<SourceSite> get permittedSources => _orderSources([
     for (final site in SourceSite.values)
       if (!locked && profile.allows(site.id)) site,
-  ];
+  ]);
+
+  List<String> _normalizedAdvancedSourceOrder(Object? raw) {
+    Object? decoded = raw;
+    if (raw is String) {
+      try {
+        decoded = jsonDecode(raw);
+      } catch (_) {
+        decoded = null;
+      }
+    }
+    final allowed = SourceSite.restrictedValues.map((site) => site.id).toSet();
+    final saved = <String>[];
+    if (decoded is List) {
+      for (final value in decoded) {
+        if (value is String && allowed.contains(value) && !saved.contains(value)) {
+          saved.add(value);
+        }
+      }
+    }
+    return [
+      ...saved,
+      for (final site in SourceSite.restrictedValues)
+        if (!saved.contains(site.id)) site.id,
+    ];
+  }
+
+  /// Global advanced-source order shared by every local profile on this device.
+  /// Unknown or newly added sources are safely appended in their registry order.
+  List<String> get advancedSourceOrder =>
+      _normalizedAdvancedSourceOrder(_string('advancedSourceOrder'));
+
+  List<String> get _availableAdvancedSourceIds => SourceSite.restrictedValues
+      .where((site) => SourceSite.isAvailable(site.id))
+      .map((site) => site.id)
+      .toList();
+
+  List<SourceSite> _orderSources(Iterable<SourceSite> input) {
+    final order = advancedSourceOrder;
+    final advancedRank = {
+      for (var index = 0; index < order.length; index++) order[index]: index,
+    };
+    final registryRank = {
+      for (var index = 0; index < SourceSite.values.length; index++)
+        SourceSite.values[index].id: index,
+    };
+    final result = input.toList();
+    result.sort((a, b) {
+      final aAdvanced = SourceSite.isRestricted(a.id);
+      final bAdvanced = SourceSite.isRestricted(b.id);
+      if (aAdvanced != bAdvanced) return aAdvanced ? 1 : -1;
+      if (aAdvanced) {
+        return (advancedRank[a.id] ?? 999).compareTo(
+          advancedRank[b.id] ?? 999,
+        );
+      }
+      return (registryRank[a.id] ?? 999).compareTo(
+        registryRank[b.id] ?? 999,
+      );
+    });
+    return result;
+  }
 
   bool sourceEnabled(String source) =>
       SourceSite.isAvailable(source) &&
       (_sourceSwitches[source] ?? !SourceSite.isRestricted(source));
 
   /// Validates the existing administrator password for advanced source settings.
-  Future<void> unlockAdvancedSources(String pin) {
+  Future<void> unlockAdvancedSources(String pin) async {
+    // Password derivation is CPU-bound. Do not put it inside the serialized
+    // storage-write queue: a pending library migration or profile write must
+    // not make the TV password screen appear frozen.
+    _requireAdmin();
     final requestEpoch = _sourceAccessEpoch;
     final profileEpoch = _epoch;
-    return _queue(() async {
-      _requireAdmin();
-      final admin = _profiles.firstWhere((candidate) => candidate.admin);
-      if (!admin.protected) throw StateError('請先為管理員設定密碼');
-      await _checkPin(admin, pin);
-      if (requestEpoch != _sourceAccessEpoch ||
-          profileEpoch != _epoch ||
-          locked ||
-          !profile.admin) {
-        throw StateError('管理員身分已變更，請重新驗證');
-      }
-      _advancedSourcesUnlocked = true;
-      _notify();
-    });
+    final admin = _profiles.firstWhere((candidate) => candidate.admin);
+    if (!admin.protected) throw StateError('請先為管理員設定密碼');
+    await _checkPin(admin, pin);
+
+    final currentAdmin = _profiles.firstWhere((candidate) => candidate.admin);
+    if (requestEpoch != _sourceAccessEpoch ||
+        profileEpoch != _epoch ||
+        locked ||
+        !profile.admin ||
+        currentAdmin.salt != admin.salt ||
+        currentAdmin.pinHash != admin.pinHash) {
+      throw StateError('管理員身分已變更，請重新驗證');
+    }
+    _advancedSourcesUnlocked = true;
+    _notify();
   }
 
   /// Revokes advanced source access when the management screen is closed.
@@ -555,6 +638,39 @@ class LocalStore extends ChangeNotifier {
       final switches = {..._sourceSwitches, source: enabled};
       await _commit({'sourceSwitches': jsonEncode(switches)});
       _sourceSwitches = switches;
+      _notify();
+    });
+  }
+
+  /// Persists the complete order of currently available advanced sources.
+  /// The setting is global (not tied to an individual local profile).
+  Future<void> setAdvancedSourceOrder(List<String> sourceIds) {
+    final requested = List<String>.unmodifiable(sourceIds);
+    final epoch = _epoch;
+    final sourceAccessEpoch = _sourceAccessEpoch;
+    return _queue(() async {
+      _requireAdmin();
+      if (epoch != _epoch) throw StateError('目前使用者已變更，請重試');
+      if (!_advancedSourcesUnlocked ||
+          sourceAccessEpoch != _sourceAccessEpoch) {
+        throw StateError('請先輸入管理員密碼解鎖進階片源');
+      }
+      final available = _availableAdvancedSourceIds;
+      final requestedSet = requested.toSet();
+      if (requested.length != available.length ||
+          requestedSet.length != available.length ||
+          !requestedSet.containsAll(available)) {
+        throw StateError('進階片源排序資料無效');
+      }
+      final availableSet = available.toSet();
+      final merged = [
+        ...requested,
+        ...advancedSourceOrder.where((id) => !availableSet.contains(id)),
+      ];
+      await _commit(
+        {'advancedSourceOrder': jsonEncode(merged)},
+        trackSync: false,
+      );
       _notify();
     });
   }
@@ -1730,20 +1846,46 @@ class LocalStore extends ChangeNotifier {
     _failures = 0;
   }
 
-  Future<void> switchProfile(String id, {String pin = ''}) => _queue(() async {
-    if (_configurationError != null) throw StateError('本機使用者設定損毀，請先還原');
+  Future<void> switchProfile(String id, {String pin = ''}) async {
+    if (_configurationError != null) {
+      throw StateError('本機使用者設定損毀，請先還原');
+    }
+    final profileEpoch = _epoch;
+    final sourceAccessEpoch = _sourceAccessEpoch;
     final target = _profiles.firstWhere((profile) => profile.id == id);
+
+    // Verify the password before joining the write queue. This keeps the
+    // TV login responsive even while older local-data migrations are writing.
     await _checkPin(target, pin);
-    await _commit({'activeProfile': id});
-    _current = id;
-    _locked = false;
-    _sourceAccessEpoch++;
-    _advancedSourcesUnlocked = false;
-    _loadLibrary();
-    _loadSeriesCandidates();
-    _epoch++;
-    _notify();
-  });
+
+    await _queue(() async {
+      if (_configurationError != null) {
+        throw StateError('本機使用者設定損毀，請先還原');
+      }
+      if (profileEpoch != _epoch ||
+          sourceAccessEpoch != _sourceAccessEpoch) {
+        throw StateError('使用者設定已變更，請重新登入');
+      }
+      final currentTarget = _profiles.firstWhere(
+        (profile) => profile.id == id,
+        orElse: () => throw StateError('使用者不存在，請重新登入'),
+      );
+      if (currentTarget.salt != target.salt ||
+          currentTarget.pinHash != target.pinHash) {
+        throw StateError('使用者密碼已變更，請重新登入');
+      }
+      await _commit({'activeProfile': id});
+      _current = id;
+      _locked = false;
+      _sourceAccessEpoch++;
+      _advancedSourcesUnlocked = false;
+      _loadLibrary();
+      _loadSeriesCandidates();
+      _epoch++;
+      _notify();
+      _scheduleSeriesCandidateMigration();
+    });
+  }
   void lock() {
     final wasAdvancedUnlocked = _advancedSourcesUnlocked;
     _sourceAccessEpoch++;
@@ -1874,6 +2016,7 @@ class LocalStore extends ChangeNotifier {
       'forceLogin': forceLogin,
       'ignoredUpdateVersion': ignoredUpdateVersion,
       'checkForUpdatesOnStartup': checkForUpdatesOnStartup,
+      'advancedSourceOrder': advancedSourceOrder,
       'libraries': {
         for (final profile in _profiles)
           profile.id: {
@@ -1998,6 +2141,16 @@ class LocalStore extends ChangeNotifier {
         data['checkForUpdatesOnStartup'] is! bool) {
       throw const FormatException('備份啟動更新檢查設定無效');
     }
+    if (data.containsKey('advancedSourceOrder')) {
+      final rawOrder = data['advancedSourceOrder'];
+      final allowed = SourceSite.restrictedValues.map((site) => site.id).toSet();
+      if (rawOrder is! List ||
+          rawOrder.length > allowed.length ||
+          rawOrder.any((id) => id is! String || !allowed.contains(id)) ||
+          rawOrder.toSet().length != rawOrder.length) {
+        throw const FormatException('備份進階片源排序設定無效');
+      }
+    }
     final libraries = data['libraries'] as Map;
     for (final profile in profiles) {
       final library = libraries[profile.id] as Map;
@@ -2089,6 +2242,9 @@ class LocalStore extends ChangeNotifier {
       'ignoredUpdateVersion': data['ignoredUpdateVersion'] as String? ?? '',
       'checkForUpdatesOnStartup':
           data['checkForUpdatesOnStartup'] as bool? ?? true,
+      'advancedSourceOrder': jsonEncode(
+        _normalizedAdvancedSourceOrder(data['advancedSourceOrder']),
+      ),
     };
     final libraries = data['libraries'] as Map;
     for (final profile in profiles) {

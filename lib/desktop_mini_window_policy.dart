@@ -6,14 +6,13 @@ double clampDesktopMiniAspectRatio(double aspectRatio) {
   return aspectRatio.clamp(1 / 2.39, 2.39).toDouble();
 }
 
-/// Desktop mini-player is intentionally limited to macOS. Windows keeps its
-/// normal resizable main window instead of shrinking it into the screen corner.
+/// Windows and macOS both have native mini-window implementations.
 bool supportsDesktopMiniPlayer({
   required bool isWindows,
   required bool isMacOS,
   required bool secondaryPlayer,
 }) =>
-    !secondaryPlayer && isMacOS && !isWindows;
+    !secondaryPlayer && (isWindows || isMacOS);
 
 /// Returns the mini-window size using its longest edge as [extent].
 Size desktopMiniWindowSize(double aspectRatio, double extent) {

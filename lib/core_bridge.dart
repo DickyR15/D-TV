@@ -86,6 +86,14 @@ abstract class AppRepository {
     String command,
     Map<String, dynamic> payload,
   ) async => throw AppFailure('目前環境不支援裝置互聯');
+  Future<Map<String, dynamic>> cast(
+    String command, {
+    String device = '',
+    Drama? drama,
+    Episode? episode,
+    int quality = 0,
+    int startMs = 0,
+  }) async => throw AppFailure('目前環境不支援 DLNA 投屏');
   Future<PlaybackPlan?> prepareHandoff(
     Drama drama,
     Episode episode, {
@@ -242,6 +250,25 @@ class NativeRepository extends AppRepository {
     String command,
     Map<String, dynamic> payload,
   ) => _call({'action': 'lan', 'command': command, 'lan': payload});
+
+  @override
+  Future<Map<String, dynamic>> cast(
+    String command, {
+    String device = '',
+    Drama? drama,
+    Episode? episode,
+    int quality = 0,
+    int startMs = 0,
+  }) => _call({
+    'action': 'cast',
+    'command': command,
+    if (device.isNotEmpty) 'device': device,
+    if (drama != null) 'drama': drama.toJson(),
+    if (episode != null) 'chapter': episode.raw,
+    if (episode != null) 'index': episode.number,
+    'quality': quality,
+    'startMs': startMs,
+  });
 
   @override
   Future<PlaybackPlan?> prepareHandoff(

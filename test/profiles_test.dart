@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:hgtv/core_bridge.dart';
@@ -7,11 +8,19 @@ import 'package:hgtv/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'fixtures.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const drama = Drama(id: 'hongguo:1', source: 'hongguo', title: '合成短劇');
   const denied = Drama(id: 'huangdou:2', source: 'huangdou', title: '受限合成短劇');
 
+  test('password hash keeps the existing PBKDF2-HMAC-SHA256 output', () async {
+    expect(
+      await hashProfilePin('DTV-test-pass', '00112233445566778899aabbccddeeff'),
+      '4c36e4abb7e9af61fc93a7f7b98622db084c6544dfe1201dd1daaa44cc30b962',
+    );
+  });
   test(
     'profiles require an admin password, isolate records and lock on restart',
     () async {
@@ -211,4 +220,61 @@ void main() {
       store.dispose();
     },
   );
+  test('advanced source unlock verifies outside a pending profile write queue', () async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final blockedVerification = Completer<void>();
+    var blockNextAdminVerification = false;
+    final store = LocalStore(
+      preferences,
+      pinHasher: (pin, salt) async {
+        if (pin == 'admin-pass' && blockNextAdminVerification) {
+          blockNextAdminVerification = false;
+          await blockedVerification.future;
+        }
+        return testPinHasher(pin, salt);
+      },
+    );
+    addTearDown(store.dispose);
+
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'admin-pass',
+    );
+
+    blockNextAdminVerification = true;
+    final pendingProfileWrite = store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      currentPin: 'admin-pass',
+      pin: 'new-admin-pass',
+    );
+    // Let the queued profile update enter its deliberately blocked PIN check.
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    await store.unlockAdvancedSources('admin-pass').timeout(
+      const Duration(seconds: 1),
+    );
+    expect(store.advancedSourcesUnlocked, isTrue);
+
+    blockedVerification.complete();
+    await pendingProfileWrite;
+    // Changing the admin PIN revokes an unlock that raced the queued update.
+    expect(store.advancedSourcesUnlocked, isFalse);
+
+    await expectLater(
+      store.unlockAdvancedSources('admin-pass'),
+      throwsStateError,
+    );
+    await store.unlockAdvancedSources('new-admin-pass');
+    expect(store.advancedSourcesUnlocked, isTrue);
+    store.lockAdvancedSources();
+    expect(store.advancedSourcesUnlocked, isFalse);
+  });
+
 }
