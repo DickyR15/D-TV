@@ -35,6 +35,18 @@ final class DTVSampleBufferPiPRenderer: NSObject,
   private var startTimeout: DispatchWorkItem?
   private var pendingStart: ((Error?) -> Void)?
   private var pendingSkipCompletion: (@Sendable () -> Void)?
+  private var appendedFrameCount = 0
+  private var enqueuedFrameCount = 0
+
+  private func diagnose(_ message: String) {
+    DispatchQueue.main.async { [weak self] in
+      self?.eventHandler("pictureInPictureDiagnostic", message)
+    }
+  }
+
+  func reportDiagnostic(_ message: String) {
+    diagnose(message)
+  }
 
   init(eventHandler: @escaping EventHandler) {
     self.eventHandler = eventHandler
@@ -55,11 +67,17 @@ final class DTVSampleBufferPiPRenderer: NSObject,
         return
       }
 
+      self.diagnose(
+        "start request width=\(width) height=\(height) playing=\(playing) " +
+        "position=\(positionSeconds) controllerExists=\(self.controller != nil)"
+      )
       self.durationSeconds = durationSeconds.isFinite ? max(0, durationSeconds) : 0
       self.stateLock.lock()
       self.paused = !playing
       self.enabled = true
       self.lastMediaTime = nil
+      self.appendedFrameCount = 0
+      self.enqueuedFrameCount = 0
       self.stateLock.unlock()
 
       do {
@@ -71,9 +89,14 @@ final class DTVSampleBufferPiPRenderer: NSObject,
       }
 
       guard self.ensureDisplayLayer(width: width, height: height, positionSeconds: positionSeconds) else {
+        self.diagnose("display layer creation failed; no foreground UIWindowScene")
         completion(self.error("找不到目前的 iOS 視窗，無法建立子母畫面"))
         return
       }
+      self.diagnose(
+        "display layer ready status=\(String(describing: self.displayLayer?.status)) " +
+        "error=\(self.displayLayer?.error?.localizedDescription ?? "none")"
+      )
 
       if self.controller == nil {
         guard let layer = self.displayLayer else {
@@ -93,6 +116,10 @@ final class DTVSampleBufferPiPRenderer: NSObject,
           \.isPictureInPicturePossible,
           options: [.initial, .new]
         ) { [weak self] observed, _ in
+          self?.diagnose(
+            "isPictureInPicturePossible=\(observed.isPictureInPicturePossible) " +
+            "layerStatus=\(String(describing: self?.displayLayer?.status))"
+          )
           guard observed.isPictureInPicturePossible else { return }
           DispatchQueue.main.async {
             self?.startWhenPossible()
@@ -214,7 +241,26 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     guard let sampleBuffer = frameQueue.sync(execute: {
       makeSampleBuffer(from: source, positionSeconds: positionSeconds)
     }) else {
+      stateLock.lock()
+      let firstFailure = appendedFrameCount == 0
+      stateLock.unlock()
+      if firstFailure {
+        diagnose(
+          "makeSampleBuffer failed source=\(CVPixelBufferGetWidth(source))x\(CVPixelBufferGetHeight(source)) " +
+          "format=\(CVPixelBufferGetPixelFormatType(source))"
+        )
+      }
       return
+    }
+    stateLock.lock()
+    appendedFrameCount += 1
+    let reportFirstFrame = appendedFrameCount == 1
+    stateLock.unlock()
+    if reportFirstFrame {
+      diagnose(
+        "first MPV frame copied size=\(CVPixelBufferGetWidth(source))x\(CVPixelBufferGetHeight(source)) " +
+        "format=\(CVPixelBufferGetPixelFormatType(source)) pts=\(positionSeconds)"
+      )
     }
 
     let needsTimelineReset = previousTime != nil &&
@@ -238,6 +284,26 @@ final class DTVSampleBufferPiPRenderer: NSObject,
 
       if layer.isReadyForMoreMediaData {
         layer.enqueue(sampleBuffer)
+        self.stateLock.lock()
+        self.enqueuedFrameCount += 1
+        let count = self.enqueuedFrameCount
+        self.stateLock.unlock()
+        if count == 1 {
+          self.diagnose(
+            "first sample enqueued layerStatus=\(String(describing: layer.status)) " +
+            "layerError=\(layer.error?.localizedDescription ?? "none")"
+          )
+        }
+      } else {
+        self.stateLock.lock()
+        let count = self.enqueuedFrameCount
+        self.stateLock.unlock()
+        if count == 0 {
+          self.diagnose(
+            "sample not enqueued; layer not ready status=\(String(describing: layer.status)) " +
+            "error=\(layer.error?.localizedDescription ?? "none")"
+          )
+        }
       }
     }
   }
@@ -353,11 +419,21 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     startTimeout?.cancel()
     let timeout = DispatchWorkItem { [weak self] in
       guard let self, let completion = self.pendingStart else { return }
-      self.pendingStart = nil
-      self.startTimeout = nil
+      let possible = self.controller?.isPictureInPicturePossible ?? false
+      let active = self.controller?.isPictureInPictureActive ?? false
+      let layerStatus = self.displayLayer.map { String(describing: $0.status) } ?? "nil"
+      let layerError = self.displayLayer?.error?.localizedDescription ?? "none"
       self.stateLock.lock()
+      let appended = self.appendedFrameCount
+      let enqueued = self.enqueuedFrameCount
       self.enabled = false
       self.stateLock.unlock()
+      self.diagnose(
+        "start timeout possible=\(possible) active=\(active) layerStatus=\(layerStatus) " +
+        "layerError=\(layerError) appendedFrames=\(appended) enqueuedFrames=\(enqueued)"
+      )
+      self.pendingStart = nil
+      self.startTimeout = nil
       completion(self.error("iOS 子母畫面啟動逾時，已保留原播放器"))
     }
     startTimeout = timeout
@@ -369,6 +445,7 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     guard pendingStart != nil else { return }
     // Do not report success here. AVKit may still reject the request.
     // The MethodChannel completes only from didStart / failedToStart.
+    diagnose("calling startPictureInPicture active=\(controller.isPictureInPictureActive)")
     controller.startPictureInPicture()
     scheduleStartTimeout()
   }
@@ -405,6 +482,7 @@ final class DTVSampleBufferPiPRenderer: NSObject,
 
   func stop() {
     DispatchQueue.main.async {
+      self.diagnose("stop requested active=\(self.controller?.isPictureInPictureActive ?? false)")
       self.stateLock.lock()
       self.enabled = false
       self.stateLock.unlock()
@@ -509,9 +587,16 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     false
   }
 
+  func pictureInPictureControllerWillStartPictureInPicture(
+    _ pictureInPictureController: AVPictureInPictureController
+  ) {
+    diagnose("AVKit delegate willStart")
+  }
+
   func pictureInPictureControllerDidStartPictureInPicture(
     _ pictureInPictureController: AVPictureInPictureController
   ) {
+    diagnose("AVKit delegate didStart")
     let completion = pendingStart
     pendingStart = nil
     startTimeout?.cancel()
@@ -533,6 +618,7 @@ final class DTVSampleBufferPiPRenderer: NSObject,
     _ pictureInPictureController: AVPictureInPictureController,
     failedToStartPictureInPictureWithError error: Error
   ) {
+    diagnose("AVKit delegate failedToStart error=\(error.localizedDescription)")
     let completion = pendingStart
     pendingStart = nil
     startTimeout?.cancel()

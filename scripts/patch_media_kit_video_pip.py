@@ -217,18 +217,32 @@ def patch_texture_sw(package: Path, template: Path) -> None:
       completion: completion
     )
 
-    // If MPV is already paused, its render callback may not fire again.
-    // Seed PiP once from the last completed texture frame; subsequent frames
-    // arrive through TextureSW.render() as MPV continues playback.
-    if !playing {
-      DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250)) { [weak self, weak renderer] in
-        guard let self, let renderer,
-              let current = self.textureContexts.current else { return }
-        renderer.appendFrame(
-          from: current.pixelBuffer,
-          positionSeconds: positionSeconds
-        )
+    // Seed SampleBuffer PiP for both playing and paused sessions. Waiting for
+    // the next MPV render callback can leave AVKit's display layer empty on
+    // some iOS paths, so enqueue the latest completed texture frame first.
+    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(180)) { [weak self, weak renderer] in
+      guard let self, let renderer else { return }
+      guard let current = self.textureContexts.current else {
+        renderer.reportDiagnostic("initial frame seed skipped: no current TextureSW frame")
+        return
       }
+      var seedPosition = positionSeconds
+      let timeStatus = mpv_get_property(
+        self.handle,
+        "time-pos",
+        MPV_FORMAT_DOUBLE,
+        &seedPosition
+      )
+      if timeStatus < 0 || !seedPosition.isFinite {
+        seedPosition = positionSeconds
+      }
+      renderer.reportDiagnostic(
+        "seeding initial frame playing=\(playing) position=\(seedPosition)"
+      )
+      renderer.appendFrame(
+        from: current.pixelBuffer,
+        positionSeconds: seedPosition
+      )
     }
   }
 

@@ -741,6 +741,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (_lifecycleState == AppLifecycleState.resumed) {
           unawaited(_restorePictureInPictureHandoff());
         }
+      } else if (call.method == 'pictureInPictureDiagnostic') {
+        final message = call.arguments?.toString();
+        if (message != null && message.isNotEmpty) {
+          DiaryService.add('[PiP][Native] $message');
+        }
       } else if (call.method == 'mpvPictureInPictureError') {
         final message = call.arguments?.toString();
         _setPictureInPictureStatus(active: false, requested: false);
