@@ -41,6 +41,9 @@ Duration playerHoldSeekTarget({
 
 enum SwipeAction { none, brightness, volume, episode, zoom }
 
+int playerZoomPercentage(double scale) =>
+    (scale.clamp(1.0, 3.0) * 100).round();
+
 class GestureHudState {
   const GestureHudState({this.type = SwipeAction.none, this.value = 0.0});
   final SwipeAction type;
@@ -511,6 +514,9 @@ class PlayerInteractions extends ChangeNotifier {
       if (_pointers.isEmpty) {
         _cancelUntilRelease = false;
         _pointerPositions.clear();
+        if (_hudState.type == SwipeAction.zoom) {
+          _scheduleDismissHud(delay: const Duration(milliseconds: 650));
+        }
       }
       return;
     }
@@ -562,9 +568,11 @@ class PlayerInteractions extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _scheduleDismissHud() {
+  void _scheduleDismissHud({
+    Duration delay = const Duration(milliseconds: 1000),
+  }) {
     _hudTimer?.cancel();
-    _hudTimer = Timer(const Duration(milliseconds: 1000), () {
+    _hudTimer = Timer(delay, () {
       if (_disposed) return;
       _hudState = const GestureHudState();
       notifyListeners();

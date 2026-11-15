@@ -865,24 +865,22 @@ class _PlayerControlsState extends State<PlayerControls> {
       ],
       if (showPush) _castTool(const ValueKey('fullscreen-lan-push')),
       if (widget.onAspectRatio != null)
-        _toolText(
+        _toolIcon(
           key: const ValueKey('player-aspect-ratio'),
-          tooltip: '畫面比例',
-          label: widget.aspectRatioLabel,
+          tooltip: '畫面比例：${widget.aspectRatioLabel}',
+          icon: Icons.aspect_ratio_rounded,
           onPressed: widget.enabled
               ? () => _panel(widget.onAspectRatio!)
               : null,
-          width: 58,
         ),
       if (widget.onSleepTimer != null)
-        _toolText(
+        _toolIcon(
           key: const ValueKey('player-sleep-timer'),
-          tooltip: '睡眠計時',
-          label: widget.sleepTimerLabel,
+          tooltip: '睡眠計時：${widget.sleepTimerLabel}',
+          icon: Icons.bedtime_rounded,
           onPressed: widget.enabled
               ? () => _panel(widget.onSleepTimer!)
               : null,
-          width: 52,
         ),
       if (widget.onCinemaMode != null)
         _toolIcon(
@@ -1210,32 +1208,26 @@ class _PlayerControlsState extends State<PlayerControls> {
         );
       }
       if (hud.type == SwipeAction.zoom) {
-        final scale = hud.value.clamp(1.0, 3.0);
+        final percent = playerZoomPercentage(hud.value);
         return IgnorePointer(
           child: Center(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              key: const ValueKey('player-zoom-percentage'),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: .78),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: Colors.white.withValues(alpha: .15)),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.zoom_in_rounded, color: Colors.white, size: 26),
-                  const SizedBox(width: 10),
-                  Text(
-                    scale <= 1.005
-                        ? '原始大小'
-                        : '畫面縮放 ' + scale.toStringAsFixed(1) + '×',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+              child: Text(
+                '${percent}%',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
               ),
             ),
           ),

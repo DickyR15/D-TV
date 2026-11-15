@@ -50,6 +50,8 @@ class _DetailScreenState extends State<DetailScreen> {
   String _selectedPlayLine = '';
   final _episodeAnchor = GlobalKey();
   final _detailScroll = ScrollController();
+  final _overviewScroll = ScrollController();
+  final _overviewFocus = FocusNode(debugLabel: 'tv-detail-synopsis');
   final _startPlayFocus = FocusNode(debugLabel: 'detail-start-play');
   final Map<String, FocusNode> _seasonFocusNodes = {};
   bool _initialActionHandled = false;
@@ -106,6 +108,8 @@ class _DetailScreenState extends State<DetailScreen> {
   @override
   void dispose() {
     _detailScroll.dispose();
+    _overviewScroll.dispose();
+    _overviewFocus.dispose();
     _startPlayFocus.dispose();
     for (final node in _seasonFocusNodes.values) {
       node.dispose();
@@ -500,9 +504,26 @@ class _DetailScreenState extends State<DetailScreen> {
                             250.0,
                             360.0,
                           ),
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(20),
-                            child: _overview(drama),
+                          child: Focus(
+                            key: const ValueKey('tv-detail-synopsis-focus'),
+                            focusNode: _overviewFocus,
+                            canRequestFocus: true,
+                            onKeyEvent: _handleOverviewKey,
+                            child: Semantics(
+                              label: '劇情簡介，可使用上下方向鍵或翻頁鍵閱讀完整內容',
+                              child: Scrollbar(
+                                controller: _overviewScroll,
+                                thumbVisibility: true,
+                                child: SingleChildScrollView(
+                                  key: const ValueKey('tv-detail-synopsis-scroll'),
+                                  controller: _overviewScroll,
+                                  primary: false,
+                                  physics: const ClampingScrollPhysics(),
+                                  padding: const EdgeInsets.fromLTRB(20, 20, 24, 28),
+                                  child: _overview(drama),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                         const VerticalDivider(width: 1),
@@ -842,6 +863,44 @@ class _DetailScreenState extends State<DetailScreen> {
       MediaQuery.textScalerOf(context).scale(20) * digits * .65 + 40,
     );
     return ((width - 40) / minimum).floor().clamp(1, 12);
+  }
+
+  KeyEventResult _handleOverviewKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent || !_overviewScroll.hasClients) {
+      return KeyEventResult.ignored;
+    }
+    final position = _overviewScroll.position;
+    if (!position.hasContentDimensions ||
+        position.maxScrollExtent <= position.minScrollExtent) {
+      return KeyEventResult.ignored;
+    }
+    final step = math.max(160.0, position.viewportDimension * .72);
+    final num? rawTarget = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowDown =>
+        position.pixels + step,
+      LogicalKeyboardKey.arrowUp =>
+        position.pixels - step,
+      LogicalKeyboardKey.pageDown =>
+        position.pixels + position.viewportDimension * .9,
+      LogicalKeyboardKey.pageUp =>
+        position.pixels - position.viewportDimension * .9,
+      _ => null,
+    };
+    if (rawTarget == null) return KeyEventResult.ignored;
+    final target = rawTarget
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    if ((target - position.pixels).abs() < 1) {
+      return KeyEventResult.ignored;
+    }
+    unawaited(
+      _overviewScroll.animateTo(
+        target,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+      ),
+    );
+    return KeyEventResult.handled;
   }
 
   Widget _overview(Drama drama) {

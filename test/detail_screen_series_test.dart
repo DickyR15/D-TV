@@ -117,6 +117,53 @@ void main() {
     },
   );
 
+  testWidgets('TV synopsis can be scrolled with the remote directional keys', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    final longSynopsis = List.filled(100, '這是一段測試劇情簡介。').join();
+    final drama = Drama(
+      id: 'hongguo:synopsis-test',
+      source: 'hongguo',
+      title: '簡介捲動測試',
+      description: longSynopsis,
+      seriesGroupId: 'synopsis-series',
+    );
+    final repository = _SeriesFixtureRepository(const []);
+    await tester.view.setPhysicalSize(const Size(1920, 1080));
+    await tester.view.setDevicePixelRatio(1);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      AppLayout(
+        television: true,
+        formFactor: FormFactor.television,
+        child: MaterialApp(
+          home: DetailScreen(
+            drama: drama,
+            repository: repository,
+            store: store,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final scrollFinder = find.byKey(const ValueKey('tv-detail-synopsis-scroll'));
+    expect(scrollFinder, findsOneWidget);
+    final scroll = tester.widget<SingleChildScrollView>(scrollFinder);
+    expect(scroll.controller!.position.maxScrollExtent, greaterThan(0));
+    final focus = tester.widget<Focus>(
+      find.byKey(const ValueKey('tv-detail-synopsis-focus')),
+    );
+    focus.focusNode!.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(scroll.controller!.offset, greaterThan(0));
+    expect(tester.takeException(), isNull);
+  });
+
   test('native season lookup is currently limited to Redfruit and Duoduo', () {
     expect(supportsNativeSeriesSeasons('hongguo'), isTrue);
     expect(supportsNativeSeriesSeasons('duoduo'), isTrue);
