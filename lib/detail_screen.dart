@@ -51,10 +51,26 @@ class _DetailScreenState extends State<DetailScreen> {
   final _episodeAnchor = GlobalKey();
   final _detailScroll = ScrollController();
   final _startPlayFocus = FocusNode(debugLabel: 'detail-start-play');
+  final Map<String, FocusNode> _seasonFocusNodes = {};
   bool _initialActionHandled = false;
   late final int _profileEpoch;
   bool _supportsSeriesSeasons(String source) =>
       supportsNativeSeriesSeasons(source);
+
+  void _syncSeasonFocusNodes(Iterable<DramaSeason> seasons) {
+    final ids = seasons.map((season) => season.drama.id).toSet();
+    for (final id in _seasonFocusNodes.keys.toList()) {
+      if (!ids.contains(id)) {
+        _seasonFocusNodes.remove(id)?.dispose();
+      }
+    }
+    for (final season in seasons) {
+      _seasonFocusNodes.putIfAbsent(
+        season.drama.id,
+        () => FocusNode(debugLabel: 'detail-season-${season.drama.id}'),
+      );
+    }
+  }
 
   Widget? get _sourceDiagnostics => widget.repository.supportsSourceManagement
       ? SourceDiagnosticsButton(
@@ -91,6 +107,10 @@ class _DetailScreenState extends State<DetailScreen> {
   void dispose() {
     _detailScroll.dispose();
     _startPlayFocus.dispose();
+    for (final node in _seasonFocusNodes.values) {
+      node.dispose();
+    }
+    _seasonFocusNodes.clear();
     _detailPreloader.dispose();
     widget.store.removeListener(_onStoreChanged);
     _generation++;
@@ -107,6 +127,7 @@ class _DetailScreenState extends State<DetailScreen> {
     final generation = ++_generation;
     final requestedDrama = _activeDrama;
     _detailPreloader.clear();
+    _syncSeasonFocusNodes(const []);
     setState(() {
       _loading = true;
       _error = null;
@@ -266,6 +287,7 @@ class _DetailScreenState extends State<DetailScreen> {
           _activeDrama.id != drama.id) {
         return;
       }
+      _syncSeasonFocusNodes(seasons);
       setState(() {
         _seriesSeasons = seasons;
         _seriesSeasonsLoading = false;
@@ -1050,6 +1072,17 @@ class _DetailScreenState extends State<DetailScreen> {
       label,
       ...details,
     ].join(' · ');
+    if (AppLayout.isTelevision(context)) {
+      return RemoteButton(
+        key: ValueKey('official-season-${season.drama.id}'),
+        focusNode: _seasonFocusNodes[season.drama.id],
+        autofocus: current,
+        label: text,
+        icon: current ? Icons.check_circle_outline_rounded : Icons.movie_outlined,
+        selected: current,
+        onPressed: current ? () {} : () => _openSeriesDrama(season.drama),
+      );
+    }
     return Tooltip(
       message: [
         uiTraditional(season.drama.title),
