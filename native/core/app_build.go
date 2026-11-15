@@ -70,6 +70,11 @@ func nativeAuthorizeInput(input nativeInput) error {
 		if (input.Action == "resolve" || input.Action == "preload" || input.Action == "prepareHandoff") && !nativeChapterAvailable(input.Drama, input.Chapter) {
 			return errNativeBuildSource
 		}
+	case "cast":
+		if input.Command == "play" &&
+			(!nativeDramaAvailable(input.Drama) || !nativeChapterAvailable(input.Drama, input.Chapter)) {
+			return errNativeBuildSource
+		}
 	}
 	return nil
 }
