@@ -47,16 +47,25 @@ void main() {
 
   group('three-lane vertical swipe controls', () {
     test('left adjusts brightness, centre changes episode, right adjusts volume', () {
+      // 35% left brightness / 30% centre episode / 35% right volume.
       expect(
-        playerSwipeZoneForPosition(x: 60, width: 400),
+        playerSwipeZoneForPosition(x: 139, width: 400),
         PlayerSwipeZone.brightness,
       );
       expect(
-        playerSwipeZoneForPosition(x: 200, width: 400),
+        playerSwipeZoneForPosition(x: 140, width: 400),
         PlayerSwipeZone.episode,
       );
       expect(
-        playerSwipeZoneForPosition(x: 340, width: 400),
+        playerSwipeZoneForPosition(x: 259, width: 400),
+        PlayerSwipeZone.episode,
+      );
+      expect(
+        playerSwipeZoneForPosition(x: 260, width: 400),
+        PlayerSwipeZone.volume,
+      );
+      expect(
+        playerSwipeZoneForPosition(x: 399, width: 400),
         PlayerSwipeZone.volume,
       );
     });
