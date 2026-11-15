@@ -1099,18 +1099,26 @@ class _PlayerControlsState extends State<PlayerControls> {
     builder: (context, _) {
       final hud = widget.interactions.hudState;
       final feedback = widget.interactions.feedback;
-      if (hud.type == SwipeAction.brightness) {
+      if (hud.type == SwipeAction.brightness ||
+          hud.type == SwipeAction.volume) {
+        final isBrightness = hud.type == SwipeAction.brightness;
         final value = hud.value.clamp(0.0, 1.0);
         final percent = (value * 100).round();
-        final icon = value < 0.33
-            ? Icons.brightness_low_rounded
-            : value < 0.66
-            ? Icons.brightness_medium_rounded
-            : Icons.brightness_high_rounded;
+        final icon = isBrightness
+            ? value < 0.33
+                ? Icons.brightness_low_rounded
+                : value < 0.66
+                    ? Icons.brightness_medium_rounded
+                    : Icons.brightness_high_rounded
+            : value <= 0
+                ? Icons.volume_off_rounded
+                : value < 0.5
+                    ? Icons.volume_down_rounded
+                    : Icons.volume_up_rounded;
         return IgnorePointer(
           child: Center(
             child: Container(
-              width: 120,
+              width: 132,
               padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: .75),
@@ -1133,7 +1141,7 @@ class _PlayerControlsState extends State<PlayerControls> {
                   Icon(icon, color: Colors.white, size: 36),
                   const SizedBox(height: 14),
                   SizedBox(
-                    width: 70,
+                    width: 82,
                     height: 6,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(3),
@@ -1148,12 +1156,44 @@ class _PlayerControlsState extends State<PlayerControls> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    '亮度 $percent%',
+                    (isBrightness ? '亮度 ' : '音量 ') + percent.toString() + '%',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+      if (hud.type == SwipeAction.zoom) {
+        final scale = hud.value.clamp(1.0, 3.0);
+        return IgnorePointer(
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: .78),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withValues(alpha: .15)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.zoom_in_rounded, color: Colors.white, size: 26),
+                  const SizedBox(width: 10),
+                  Text(
+                    scale <= 1.005
+                        ? '原始大小'
+                        : '畫面縮放 ' + scale.toStringAsFixed(1) + '×',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
