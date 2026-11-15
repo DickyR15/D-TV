@@ -188,7 +188,8 @@ class _GoogleCastPlaybackDialogState extends State<_GoogleCastPlaybackDialog> {
           ? duration.inMilliseconds.toDouble()
           : 1.0;
       final sliderValue = (_dragValue ?? position.inMilliseconds.toDouble())
-          .clamp(0.0, maximum);
+          .clamp(0.0, maximum)
+          .toDouble();
       final playing = _controller.isPlaying.value;
       return AlertDialog(
         title: const Text('傳送播放'),

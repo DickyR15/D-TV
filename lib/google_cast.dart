@@ -90,10 +90,13 @@ class GoogleCastController {
     _positionSubscription = session.positionStream.listen(_updatePosition);
     _durationSubscription = session.durationStream.listen(_updateDuration);
 
-    final contentType = plan.headers.entries
-        .where((entry) => entry.key.toLowerCase() == 'content-type')
-        .map((entry) => entry.value)
-        .firstOrNull ?? '';
+    var contentType = '';
+    for (final entry in plan.headers.entries) {
+      if (entry.key.toLowerCase() == 'content-type') {
+        contentType = entry.value;
+        break;
+      }
+    }
     final mediaType = switch (googleCastMediaKindForUrl(
       plan.url,
       contentType: contentType,
@@ -111,10 +114,14 @@ class GoogleCastController {
           type: mediaType,
           httpHeaders: plan.headers,
           title: title,
-          startPosition: Duration(milliseconds: startMs.clamp(0, 1 << 52)),
+          startPosition: Duration(
+            milliseconds: startMs.clamp(0, 1 << 52).toInt(),
+          ),
         ),
       );
-      position.value = Duration(milliseconds: startMs.clamp(0, 1 << 52));
+      position.value = Duration(
+        milliseconds: startMs.clamp(0, 1 << 52).toInt(),
+      );
       isPlaying.value = true;
     } catch (_) {
       await _disconnectCurrent();
@@ -126,7 +133,9 @@ class GoogleCastController {
     if (value is Duration) {
       position.value = value.isNegative ? Duration.zero : value;
     } else if (value is num) {
-      position.value = Duration(milliseconds: value.round().clamp(0, 1 << 52));
+      position.value = Duration(
+        milliseconds: value.round().clamp(0, 1 << 52).toInt(),
+      );
     }
   }
 
@@ -134,7 +143,9 @@ class GoogleCastController {
     if (value is Duration) {
       duration.value = value.isNegative ? Duration.zero : value;
     } else if (value is num) {
-      duration.value = Duration(milliseconds: value.round().clamp(0, 1 << 52));
+      duration.value = Duration(
+        milliseconds: value.round().clamp(0, 1 << 52).toInt(),
+      );
     }
   }
 
