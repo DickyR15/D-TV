@@ -389,4 +389,93 @@ void main() {
     },
   );
 
+
+  testWidgets(
+    'TV profile password dialog defaults to Login and supports D-pad actions',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'admin-password',
+      );
+      await store.saveProfile(
+        id: 'visitor',
+        name: '訪客',
+        sources: const ['hongguo'],
+        download: false,
+        pin: 'visitor-password',
+      );
+      store.lock();
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: MaterialApp(
+            home: ProfilesScreen(store: store, locked: true),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('profile-open-visitor')));
+      await tester.pumpAndSettle();
+
+      final loginFinder = find.byKey(
+        const ValueKey('profile-password-submit'),
+      );
+      final cancelFinder = find.byKey(
+        const ValueKey('profile-password-cancel'),
+      );
+      final pinFinder = find.byKey(
+        const ValueKey('profile-password-input'),
+      );
+      expect(loginFinder, findsOneWidget);
+      expect(cancelFinder, findsOneWidget);
+      expect(pinFinder, findsOneWidget);
+      expect(
+        tester.widget<FilledButton>(loginFinder).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(
+        tester.widget<TextButton>(cancelFinder).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(
+        tester.widget<FilledButton>(loginFinder).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(pinFinder).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.enterText(pinFinder, 'visitor-password');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        tester.widget<FilledButton>(loginFinder).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(store.profile.id, 'visitor');
+      expect(find.byKey(pinFinder), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
 }
