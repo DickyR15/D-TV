@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:hgtv/app_build.dart';
 import 'package:hgtv/app_layout.dart';
+import 'package:hgtv/models.dart';
 import 'package:hgtv/source_management_screen.dart';
 
 import 'fixtures.dart';
@@ -321,6 +322,94 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.sourceEnabled('hongguo'), isFalse);
     expect(tester.widget<SwitchListTile>(other).onChanged, isNotNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('advanced source order persists and controls permitted source ordering', () async {
+    if (!allSourcesEnabled) return;
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final store = testStore(preferences);
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+    await store.unlockAdvancedSources('source-pass-123');
+
+    final order = store.advancedSourceOrder.reversed.toList();
+    await store.setAdvancedSourceOrder(order);
+    expect(store.advancedSourceOrder, order);
+    expect(
+      store.permittedSources
+          .where((source) => SourceSite.isRestricted(source.id))
+          .map((source) => source.id)
+          .toList(),
+      order,
+    );
+
+    final restored = testStore(preferences);
+    addTearDown(restored.dispose);
+    expect(restored.advancedSourceOrder, order);
+    expect(
+      restored.permittedSources
+          .where((source) => SourceSite.isRestricted(source.id))
+          .map((source) => source.id)
+          .toList(),
+      order,
+    );
+  });
+
+  testWidgets('TV advanced source ordering uses remote-friendly move buttons', (
+    tester,
+  ) async {
+    if (!allSourcesEnabled) return;
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      AppLayout(
+        television: true,
+        formFactor: FormFactor.television,
+        child: MaterialApp(home: SourceManagementScreen(store: store)),
+      ),
+    );
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const ValueKey('advanced-source-password')),
+      'source-pass-123',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+
+    final initial = store.advancedSourceOrder;
+    final firstSource = initial.first;
+    final moveDown = find.byKey(
+      ValueKey('source-move-down-$firstSource'),
+    );
+    await tester.ensureVisible(moveDown);
+    await tester.pumpAndSettle();
+    expect(moveDown, findsOneWidget);
+    await tester.tap(moveDown);
+    await tester.pumpAndSettle();
+
+    expect(
+      store.advancedSourceOrder.take(2).toList(),
+      [initial[1], initial[0]],
+    );
     expect(tester.takeException(), isNull);
   });
 
