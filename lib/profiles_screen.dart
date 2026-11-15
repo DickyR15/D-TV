@@ -465,8 +465,35 @@ class _PasswordDialogState extends State<_PasswordDialog> {
   final FocusNode _loginFocus = FocusNode(debugLabel: 'profile-password-submit');
   bool _submitting = false;
   String? _submitError;
+  bool _initialKeyboardScheduled = false;
 
   bool get _television => AppLayout.isTelevision(context);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_television || _initialKeyboardScheduled) return;
+    _initialKeyboardScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestPasswordKeyboard());
+  }
+
+  void _requestPasswordKeyboard() {
+    if (!_television || _submitting || !mounted) return;
+    if (!_pinFocus.hasPrimaryFocus) _pinFocus.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _submitting || !_pinFocus.hasPrimaryFocus) return;
+      unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
+    });
+  }
+
+  void _completePasswordEntry() {
+    if (!_television) {
+      unawaited(_submit());
+      return;
+    }
+    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
+    _loginFocus.requestFocus();
+  }
 
   Future<void> _submit() async {
     if (_submitting) return;
@@ -497,7 +524,10 @@ class _PasswordDialogState extends State<_PasswordDialog> {
         _pin.clear();
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _pinFocus.requestFocus();
+        if (mounted) {
+          _pinFocus.requestFocus();
+          _requestPasswordKeyboard();
+        }
       });
     } finally {
       if (mounted && _submitting) {
@@ -511,7 +541,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _loginFocus.requestFocus();
+      _completePasswordEntry();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -526,7 +556,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
       return KeyEventResult.ignored;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _pinFocus.requestFocus();
+      _requestPasswordKeyboard();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
@@ -564,8 +594,9 @@ class _PasswordDialogState extends State<_PasswordDialog> {
             key: const ValueKey('profile-password-input'),
             controller: _pin,
             focusNode: _pinFocus,
-            autofocus: !_television,
+            autofocus: _television,
             enabled: !_submitting,
+            onTap: _requestPasswordKeyboard,
             obscureText: true,
             textInputAction: TextInputAction.done,
             decoration: InputDecoration(
@@ -577,7 +608,13 @@ class _PasswordDialogState extends State<_PasswordDialog> {
                 setState(() => _submitError = null);
               }
             },
-            onSubmitted: (_) => _submit(),
+            onSubmitted: (_) {
+              if (_television) {
+                _completePasswordEntry();
+              } else {
+                unawaited(_submit());
+              }
+            },
           ),
         ),
       ),
@@ -613,7 +650,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
             child: FilledButton(
               key: const ValueKey('profile-password-submit'),
               focusNode: _loginFocus,
-              autofocus: _television,
+              autofocus: false,
               onPressed: _submitting ? null : _submit,
               child: const Text('登入'),
             ),
