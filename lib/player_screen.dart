@@ -31,6 +31,7 @@ import 'portrait_blur_policy.dart';
 import 'luna_exo_player.dart';
 import 'player_controls.dart';
 import 'player_interactions.dart';
+import 'player_gesture_policy.dart';
 import 'player_menu.dart';
 import 'television_controls.dart';
 import 'widgets.dart';
@@ -4218,17 +4219,39 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
+  Widget _zoomVideoSurface(Widget child) => AnimatedBuilder(
+    animation: _interactions,
+    child: child,
+    builder: (context, child) => ClipRect(
+      child: Transform.scale(
+        scale: _interactions.zoomScale,
+        alignment: Alignment.center,
+        child: child,
+      ),
+    ),
+  );
+
   Widget _videoOutput({required BoxFit fit, required Widget controls}) {
     final retainVideoOutputInBackground =
         Platform.isAndroid && _pictureInPictureVisible ||
         Platform.isIOS &&
             (_pictureInPictureVisible || _iosAutoPictureInPicturePrepared);
     if (_player is LunaExoPlayer) {
-      return LunaExoVideoView(
-        key: ValueKey('pip-exo-surface-$_pictureInPictureSurfaceRevision'),
-        player: _player as LunaExoPlayer,
-        fit: fit,
-        controls: (_) => controls,
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: _zoomVideoSurface(
+              LunaExoVideoView(
+                key: ValueKey('pip-exo-surface-$_pictureInPictureSurfaceRevision'),
+                player: _player as LunaExoPlayer,
+                fit: fit,
+                controls: (_) => const SizedBox.shrink(),
+              ),
+            ),
+          ),
+          Positioned.fill(child: controls),
+        ],
       );
     }
     final textureRendererAvailable =
@@ -4243,26 +4266,30 @@ class _PlayerScreenState extends State<PlayerScreen>
       aspectRatio: _aspectRatio,
     );
     if (!portraitBlurActive) {
-      // Do not apply an extra scale to iOS landscape playback. BoxFit.contain
-      // keeps the entire frame visible, including subtitles near the bottom.
-      return Video(
-        key: ValueKey('pip-video-surface-$_pictureInPictureSurfaceRevision'),
-        controller: _video!,
-        fit: fit,
-        fill: Colors.black,
-        // media_kit_video pauses by default when the app backgrounds. During
-        // iOS PiP, MPV must keep rendering frames for AVSampleBufferDisplayLayer.
-        // Keep MPV's texture and decoder attached while Android's auto
-        // PiP transition briefly backgrounds the Activity. Manual PiP marks
-        // the same state before requesting the native transition.
-        pauseUponEnteringBackgroundMode: !retainVideoOutputInBackground,
-        controls: (_) => controls,
+      // Keep the gesture controls outside the zoom transform. Only the video
+      // frame and subtitles scale; the controls stay anchored to the viewport.
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: _zoomVideoSurface(
+              Video(
+                key: ValueKey('pip-video-surface-$_pictureInPictureSurfaceRevision'),
+                controller: _video!,
+                fit: fit,
+                fill: Colors.black,
+                pauseUponEnteringBackgroundMode: !retainVideoOutputInBackground,
+                controls: null,
+              ),
+            ),
+          ),
+          Positioned.fill(child: controls),
+        ],
       );
     }
 
     // Both Video widgets subscribe to the same VideoController texture ID.
-    // MPV decodes once; Flutter composites that one live texture twice:
-    // cover + blur behind, contain + controls in front.
+    // MPV decodes once; Flutter composites that one live texture twice.
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -4291,15 +4318,18 @@ class _PlayerScreenState extends State<PlayerScreen>
           child: ColoredBox(color: Colors.black.withValues(alpha: .24)),
         ),
         Positioned.fill(
-          child: Video(
-            key: ValueKey('pip-video-main-$_pictureInPictureSurfaceRevision'),
-            controller: _video!,
-            fit: fit,
-            fill: Colors.transparent,
-            pauseUponEnteringBackgroundMode: !retainVideoOutputInBackground,
-            controls: (_) => controls,
+          child: _zoomVideoSurface(
+            Video(
+              key: ValueKey('pip-video-main-$_pictureInPictureSurfaceRevision'),
+              controller: _video!,
+              fit: fit,
+              fill: Colors.transparent,
+              pauseUponEnteringBackgroundMode: !retainVideoOutputInBackground,
+              controls: null,
+            ),
           ),
         ),
+        Positioned.fill(child: controls),
       ],
     );
   }
@@ -4378,7 +4408,11 @@ class _PlayerScreenState extends State<PlayerScreen>
                 _index + 1 < widget.detail.episodes.length,
             title: title,
             onTogglePlayback: _togglePlayback,
-            swipeEnabled: _mobile,
+            swipeEnabled: supportsPlayerTouchGestures(
+              android: Platform.isAndroid,
+              ios: Platform.isIOS,
+              television: _television,
+            ),
             onFullscreen: _rotate,
             onBack: _back,
             onFocusSurface: _playerFocus.requestFocus,
@@ -4446,7 +4480,7 @@ class _PlayerScreenState extends State<PlayerScreen>
             fit: StackFit.expand,
             children: [
               if (widget.videoBuilder != null)
-                widget.videoBuilder!(layeredControls)
+                _zoomVideoSurface(widget.videoBuilder!(layeredControls))
               else
                 _applyAspectRatio(
                   _videoOutput(
