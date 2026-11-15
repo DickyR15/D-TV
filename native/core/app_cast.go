@@ -310,13 +310,13 @@ func (engine *nativeEngine) castPlay(ctx context.Context, input nativeInput) (an
 		return nil, errors.New("劇集資訊無效")
 	}
 	task := Task{DramaID: input.Drama.ID, DramaTitle: input.Drama.Title, Chapter: input.Chapter, Index: input.Index}
-	resolved, err := engine.downloader.resolveproviderMedia(ctx, task)
+	resolved, err := engine.downloader.resolveProviderMedia(ctx, task)
 	if err != nil {
 		return nil, err
 	}
 	var media *providerMedia
 	for _, option := range nativePlaybackChoices(resolved, input.Quality).media {
-		if IsProviderHTTPMediaURL(option.URL) {
+		if isProviderHTTPMediaURL(option.URL) {
 			media = &option
 			break
 		}
