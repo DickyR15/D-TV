@@ -364,7 +364,7 @@ void main() {
     );
   });
 
-  testWidgets('TV advanced source ordering uses remote-friendly move buttons', (
+  testWidgets('TV advanced sources use hold-to-select, D-pad reorder and short-press toggle', (
     tester,
   ) async {
     if (!allSourcesEnabled) return;
@@ -398,19 +398,50 @@ void main() {
 
     final initial = store.advancedSourceOrder;
     final firstSource = initial.first;
-    final moveDown = find.byKey(
-      ValueKey('source-move-down-$firstSource'),
-    );
-    await tester.ensureVisible(moveDown);
+    final firstTile = find.byKey(ValueKey('source-switch-$firstSource'));
+    await tester.ensureVisible(firstTile);
     await tester.pumpAndSettle();
-    expect(moveDown, findsOneWidget);
-    await tester.tap(moveDown);
-    await tester.pumpAndSettle();
+    final firstFocus = tester.widget<SwitchListTile>(firstTile).focusNode!;
+    firstFocus.requestFocus();
+    await tester.pump();
 
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(find.text('已選取：使用遙控器方向鍵移動，按確認完成'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
     expect(
       store.advancedSourceOrder.take(2).toList(),
       [initial[1], initial[0]],
     );
+    expect(
+      find.byKey(ValueKey('source-move-down-$firstSource')),
+      findsNothing,
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('已選取：使用遙控器方向鍵移動，按確認完成'), findsNothing);
+
+    final shortPressSource = store.advancedSourceOrder.first;
+    expect(store.sourceEnabled(shortPressSource), isFalse);
+    final shortPressTile = find.byKey(
+      ValueKey('source-switch-$shortPressSource'),
+    );
+    await tester.ensureVisible(shortPressTile);
+    final shortPressFocus =
+        tester.widget<SwitchListTile>(shortPressTile).focusNode!;
+    shortPressFocus.requestFocus();
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(store.sourceEnabled(shortPressSource), isTrue);
     expect(tester.takeException(), isNull);
   });
 
