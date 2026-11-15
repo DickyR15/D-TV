@@ -401,7 +401,9 @@ void main() {
     final firstTile = find.byKey(ValueKey('source-switch-$firstSource'));
     await tester.ensureVisible(firstTile);
     await tester.pumpAndSettle();
-    final firstFocus = tester.widget<SwitchListTile>(firstTile).focusNode!;
+    final firstFocus = tester
+        .widget<Focus>(find.byKey(ValueKey('source-row-focus-$firstSource')))
+        .focusNode!;
     firstFocus.requestFocus();
     await tester.pump();
 
@@ -433,8 +435,7 @@ void main() {
       ValueKey('source-switch-$shortPressSource'),
     );
     await tester.ensureVisible(shortPressTile);
-    final shortPressFocus =
-        tester.widget<SwitchListTile>(shortPressTile).focusNode!;
+    final shortPressFocus = tester.widget<Switch>(shortPressTile).focusNode!;
     shortPressFocus.requestFocus();
     await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
@@ -486,7 +487,7 @@ void main() {
     final row = find.byKey(ValueKey('source-switch-$firstId'));
     final reorderable = find.byKey(ValueKey('reorderable-source-$firstId'));
     final title = find.descendant(
-      of: row,
+      of: reorderable,
       matching: find.text(SourceSite.byId(firstId).name),
     );
     await tester.ensureVisible(row);
@@ -499,7 +500,7 @@ void main() {
     final focus = listener.child as Focus;
     expect(focus.child, isA<AnimatedContainer>());
     final container = focus.child as AnimatedContainer;
-    expect(container.child, isA<SwitchListTile>());
+    expect(container.child, isA<ListTile>());
     expect(find.byIcon(Icons.drag_indicator_rounded), findsNothing);
 
     // A short press on the title area does not toggle or reorder the source.
