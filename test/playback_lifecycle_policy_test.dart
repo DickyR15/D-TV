@@ -101,5 +101,58 @@ void main() {
       isFalse,
     );
   });
+  test('Android PiP Surface refresh waits for the foreground restore state', () {
+    expect(
+      playbackShouldRefreshAndroidPipSurface(
+        android: true,
+        pendingRestore: true,
+        activityResumed: true,
+        pictureInPictureActive: false,
+        pictureInPictureRequested: false,
+      ),
+      isTrue,
+    );
+    expect(
+      playbackShouldRefreshAndroidPipSurface(
+        android: true,
+        pendingRestore: true,
+        activityResumed: false,
+        pictureInPictureActive: false,
+        pictureInPictureRequested: false,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackShouldRefreshAndroidPipSurface(
+        android: true,
+        pendingRestore: true,
+        activityResumed: true,
+        pictureInPictureActive: true,
+        pictureInPictureRequested: false,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackShouldRefreshAndroidPipSurface(
+        android: true,
+        pendingRestore: true,
+        activityResumed: true,
+        pictureInPictureActive: false,
+        pictureInPictureRequested: true,
+      ),
+      isFalse,
+    );
+    expect(
+      playbackShouldRefreshAndroidPipSurface(
+        android: false,
+        pendingRestore: true,
+        activityResumed: true,
+        pictureInPictureActive: false,
+        pictureInPictureRequested: false,
+      ),
+      isFalse,
+    );
+  });
+
 
 }

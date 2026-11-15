@@ -153,6 +153,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final PlaybackVolumeMemory _volumeMemory;
   Future<void> _initialVolumeReady = Future<void>.value();
   Timer? _pictureInPictureExitTimer;
+  Timer? _androidPipSurfaceRefreshTimer;
+  bool _androidPipSurfaceRestorePending = false;
   Future<void> _operations = Future<void>.value();
   late int _index;
   late final int _profileEpoch;
@@ -330,6 +332,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         inheritedLayout?.formFactor == FormFactor.television ||
         (inheritedLayout?.formFactor == null &&
             inheritedLayout?.television == true);
+    final isAndroidEmulator =
+        Platform.isAndroid && inheritedLayout?.detectedEmulator == true;
+    final useEmulatorDirectSurface = isAndroidEmulator &&
+        _androidPlayerEngine != 'exo' &&
+        widget.playerFactory == null &&
+        widget.videoBuilder == null;
     _preloadEnabled = preferences.preloads(
       television: isTelevisionLayout,
     );
@@ -337,14 +345,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     // The blur is composed from the same Flutter Texture Registry output;
     // it must never force the mediacodec-copy path that caused TV A/V drift.
     _portraitBlurBackground = preferences.portraitBlurBackground;
-    _useMpvEmbedForThisPlayer = shouldUseMpvEmbedForPlayback(
-      android: Platform.isAndroid,
-      television: isTelevisionLayout,
-      mpvEmbedConfigured: _androidPlayerEngine == 'mpv_embed',
-      softwareDecoderSelected:
-          preferences.televisionDecoder == TelevisionDecoder.software,
-      customPlayer: widget.playerFactory != null || widget.videoBuilder != null,
-    );
+    _useMpvEmbedForThisPlayer = useEmulatorDirectSurface ||
+        shouldUseMpvEmbedForPlayback(
+          android: Platform.isAndroid,
+          television: isTelevisionLayout,
+          mpvEmbedConfigured: _androidPlayerEngine == 'mpv_embed',
+          softwareDecoderSelected:
+              preferences.televisionDecoder == TelevisionDecoder.software,
+          customPlayer:
+              widget.playerFactory != null || widget.videoBuilder != null,
+        );
     _loader = PlaybackLoader(widget.repository);
     _preloader = PlaybackPreloader(widget.repository);
     widget.store.addListener(_accessChanged);
@@ -380,7 +390,8 @@ class _PlayerScreenState extends State<PlayerScreen>
           : useMpvEmbed
           ? 'media_kit/MPV (mediacodec_embed)'
           : 'media_kit/MPV'} '
-      'android-surface-after-video-params=${Platform.isAndroid ? false : 'default'}',
+      'android-surface-after-video-params=${Platform.isAndroid ? false : 'default'} '
+      'emulatorDirectSurface=$useEmulatorDirectSurface',
     );
     _video = widget.videoBuilder == null && !exoPlayer
         ? VideoController(
@@ -774,7 +785,12 @@ class _PlayerScreenState extends State<PlayerScreen>
           requested: false,
           delayHiddenPause: !active,
         );
-        if (changed) _scheduleAndroidPictureInPictureSurfaceRefresh();
+        if (changed && Platform.isAndroid && !active) {
+          // PiP exit can be reported before the Activity has resumed. Keep the
+          // native video Surface attached until the app is visibly foregrounded.
+          _androidPipSurfaceRestorePending = true;
+          _scheduleAndroidPictureInPictureSurfaceRefresh();
+        }
       } else if (call.method == 'pictureInPictureRestored') {
         final arguments = call.arguments;
         final positionMs = arguments is Map
@@ -864,19 +880,37 @@ class _PlayerScreenState extends State<PlayerScreen>
     unawaited(_refreshPictureInPictureStatus());
   }
 
+  bool get _canRefreshAndroidPipSurface =>
+      playbackShouldRefreshAndroidPipSurface(
+        android: Platform.isAndroid,
+        pendingRestore: _androidPipSurfaceRestorePending,
+        activityResumed: _lifecycleState == AppLifecycleState.resumed,
+        pictureInPictureActive: _pictureInPictureActive,
+        pictureInPictureRequested: _pictureInPictureRequested,
+      );
+
   Future<void> _refreshAndroidPictureInPictureSurface() async {
-    if (!Platform.isAndroid || !mounted || _closed) return;
+    if (!mounted || _closed || !_canRefreshAndroidPipSurface) return;
+    _androidPipSurfaceRestorePending = false;
+    DiaryService.add(
+      '[PiP] reattaching Android video Surface after Activity resumed',
+    );
     setState(() => _pictureInPictureSurfaceRevision++);
     await WidgetsBinding.instance.endOfFrame;
     await Future<void>.delayed(const Duration(milliseconds: 120));
   }
 
   void _scheduleAndroidPictureInPictureSurfaceRefresh() {
-    if (!Platform.isAndroid) return;
-    Future<void>.delayed(const Duration(milliseconds: 180), () async {
-      if (!mounted || _closed) return;
-      await _refreshAndroidPictureInPictureSurface();
-    });
+    if (!Platform.isAndroid || !_androidPipSurfaceRestorePending) return;
+    _androidPipSurfaceRefreshTimer?.cancel();
+    _androidPipSurfaceRefreshTimer = Timer(
+      const Duration(milliseconds: 320),
+      () async {
+        _androidPipSurfaceRefreshTimer = null;
+        if (!mounted || _closed || !_canRefreshAndroidPipSurface) return;
+        await _refreshAndroidPictureInPictureSurface();
+      },
+    );
   }
 
   Future<void> _restorePictureInPictureHandoff() async {
@@ -1880,7 +1914,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     _interactions.cancel();
     _syncPictureInPicture();
-    await _refreshAndroidPictureInPictureSurface();
+    // Do not remount the video output while Android is moving it into PiP.
+    // The Surface is refreshed once after the Activity returns to foreground.
     final rawRatio = _aspectRatio.isFinite && _aspectRatio > 0
         ? _aspectRatio
         : 16 / 9;
@@ -2322,6 +2357,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       _setPictureInPictureStatus(requested: false);
     }
     _applyLifecycleVisibility();
+    if (state == AppLifecycleState.resumed &&
+        Platform.isAndroid &&
+        _androidPipSurfaceRestorePending) {
+      _scheduleAndroidPictureInPictureSurfaceRefresh();
+    }
     if (state == AppLifecycleState.resumed &&
         _pictureInPictureHandoff &&
         _pendingPictureInPictureRestorePositionMs != null) {
@@ -3922,6 +3962,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _framePacingDiagnosticTimer?.cancel();
     _errorTimer?.cancel();
     _pictureInPictureExitTimer?.cancel();
+    _androidPipSurfaceRefreshTimer?.cancel();
     if (_pictureInPictureHandlerInstalled) {
       unawaited(
         AppDevice.channel.invokeMethod<void>('updatePictureInPicture', null)

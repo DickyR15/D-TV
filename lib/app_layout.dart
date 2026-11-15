@@ -270,6 +270,7 @@ class AppLayout extends InheritedWidget {
     super.key,
     required this.television,
     this.detectedTelevision,
+    this.detectedEmulator = false,
     this.formFactor,
     this.version = appVersion,
     required super.child,
@@ -280,6 +281,8 @@ class AppLayout extends InheritedWidget {
   final bool television;
   /// Physical device classification, independent of the user-selected layout.
   final bool? detectedTelevision;
+  /// Physical Android emulator identity, independent of the selected UI mode.
+  final bool detectedEmulator;
   final FormFactor? formFactor;
   final String version;
 
@@ -357,6 +360,10 @@ class AppLayout extends InheritedWidget {
     final layout = context.dependOnInheritedWidgetOfExactType<AppLayout>();
     return layout?.detectedTelevision ?? layout?.television ?? false;
   }
+
+  static bool isAndroidEmulator(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppLayout>()?.detectedEmulator ??
+      false;
   static bool isPhone(BuildContext context) =>
       formFactorOf(context) == FormFactor.phone;
   static bool isPad(BuildContext context) =>
@@ -431,6 +438,7 @@ class AppLayout extends InheritedWidget {
   bool updateShouldNotify(AppLayout oldWidget) =>
       television != oldWidget.television ||
       detectedTelevision != oldWidget.detectedTelevision ||
+      detectedEmulator != oldWidget.detectedEmulator ||
       formFactor != oldWidget.formFactor ||
       version != oldWidget.version;
 }

@@ -531,6 +531,7 @@ class DuanjuApp extends StatelessWidget {
             child: AppLayout(
               television: tv,
               detectedTelevision: television,
+              detectedEmulator: emulator,
               formFactor: formFactor,
               version: version,
               child: Theme(

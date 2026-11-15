@@ -190,21 +190,25 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _switch(LocalProfile profile) async {
-    String pin = '';
-    if (profile.protected) {
-      final value = await showDialog<String>(
-        context: context,
-        builder: (_) => _PasswordDialog(name: uiTraditional(profile.name)),
-      );
-      if (value == null || !mounted) return;
-      pin = value;
-    }
+    if (_busy) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await widget.store.switchProfile(profile.id, pin: pin);
+      if (profile.protected) {
+        final switched = await showDialog<bool>(
+          context: context,
+          builder: (_) => _PasswordDialog(
+            name: uiTraditional(profile.name),
+            onSubmit: (pin) =>
+                widget.store.switchProfile(profile.id, pin: pin),
+          ),
+        );
+        if (!mounted || switched != true) return;
+      } else {
+        await widget.store.switchProfile(profile.id);
+      }
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
@@ -444,8 +448,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 }
 
 class _PasswordDialog extends StatefulWidget {
-  const _PasswordDialog({required this.name});
+  const _PasswordDialog({required this.name, this.onSubmit});
   final String name;
+  final Future<void> Function(String pin)? onSubmit;
   @override
   State<_PasswordDialog> createState() => _PasswordDialogState();
 }
@@ -455,11 +460,47 @@ class _PasswordDialogState extends State<_PasswordDialog> {
   final FocusNode _pinFocus = FocusNode(debugLabel: 'profile-password-input');
   final FocusNode _cancelFocus = FocusNode(debugLabel: 'profile-password-cancel');
   final FocusNode _loginFocus = FocusNode(debugLabel: 'profile-password-submit');
+  bool _submitting = false;
+  String? _submitError;
 
   bool get _television => AppLayout.isTelevision(context);
 
-  void _submit() {
-    Navigator.pop(context, _pin.text);
+  Future<void> _submit() async {
+    if (_submitting) return;
+    final submit = widget.onSubmit;
+    if (submit == null) {
+      Navigator.pop(context, _pin.text);
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _submitError = null;
+    });
+    try {
+      await submit(_pin.text);
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error
+          .toString()
+          .replaceFirst(RegExp(r'^Bad state:\s*'), '')
+          .trim();
+      setState(() {
+        _submitting = false;
+        _submitError = message.isEmpty
+            ? '登入失敗，請重新輸入密碼'
+            : uiTraditional(message);
+        _pin.clear();
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _pinFocus.requestFocus();
+      });
+    } finally {
+      if (mounted && _submitting) {
+        setState(() => _submitting = false);
+      }
+    }
   }
 
   KeyEventResult _pinKey(FocusNode node, KeyEvent event) {
@@ -521,9 +562,18 @@ class _PasswordDialogState extends State<_PasswordDialog> {
             controller: _pin,
             focusNode: _pinFocus,
             autofocus: !_television,
+            enabled: !_submitting,
             obscureText: true,
             textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(labelText: '密碼'),
+            decoration: InputDecoration(
+              labelText: '密碼',
+              errorText: _submitError,
+            ),
+            onChanged: (_) {
+              if (_submitError != null) {
+                setState(() => _submitError = null);
+              }
+            },
             onSubmitted: (_) => _submit(),
           ),
         ),
@@ -542,7 +592,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
             child: TextButton(
               key: const ValueKey('profile-password-cancel'),
               focusNode: _cancelFocus,
-              onPressed: () => Navigator.pop(context),
+              onPressed: _submitting ? null : () => Navigator.pop(context),
               child: const Text('取消'),
             ),
           ),
@@ -561,7 +611,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
               key: const ValueKey('profile-password-submit'),
               focusNode: _loginFocus,
               autofocus: _television,
-              onPressed: _submit,
+              onPressed: _submitting ? null : _submit,
               child: const Text('登入'),
             ),
           ),

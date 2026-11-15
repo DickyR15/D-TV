@@ -474,6 +474,19 @@ void main() {
         tester.widget<TextField>(pinFinder).focusNode!.hasPrimaryFocus,
         isTrue,
       );
+      await tester.enterText(pinFinder, 'wrong-password');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+
+      expect(pinFinder, findsOneWidget);
+      expect(find.textContaining('錯誤'), findsOneWidget);
+      expect(
+        tester.widget<TextField>(pinFinder).focusNode!.hasPrimaryFocus,
+        isTrue,
+      );
+
       await tester.enterText(pinFinder, 'visitor-password');
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pump();
