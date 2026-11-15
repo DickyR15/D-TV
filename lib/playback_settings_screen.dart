@@ -19,10 +19,12 @@ class PlaybackSettingsScreen extends StatefulWidget {
     super.key,
     required this.store,
     this.portraitBlurSupported,
+    this.pictureInPictureSupported,
   });
 
   final LocalStore store;
   final bool? portraitBlurSupported;
+  final bool? pictureInPictureSupported;
 
   @override
   State<PlaybackSettingsScreen> createState() => _PlaybackSettingsScreenState();
@@ -47,6 +49,8 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   late bool _preloadEnabled;
   late bool _autoAdvance;
   late bool _autoPictureInPicture;
+  late bool _pictureInPictureEnabled =
+      widget.store.playbackPreferences.pictureInPictureEnabled;
   late bool _desktopAlwaysOnTop =
       widget.store.playbackPreferences.desktopAlwaysOnTop;
   late bool _showTelevisionNetworkSpeed =
@@ -98,7 +102,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
   }
 
   Future<void> _loadPictureInPictureSupport() async {
-    if (!Platform.isAndroid) return;
+    if (widget.pictureInPictureSupported != null) {
+      _pictureInPictureSupported = widget.pictureInPictureSupported!;
+      return;
+    }
+    if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
       final status = await AppDevice.channel.invokeMapMethod<String, dynamic>(
         'pictureInPictureStatus',
@@ -133,6 +141,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           preload: _preloadEnabled,
           autoAdvance: _autoAdvance,
           autoPictureInPicture: _autoPictureInPicture,
+          pictureInPictureEnabled: _pictureInPictureEnabled,
           desktopAlwaysOnTop: _desktopAlwaysOnTop,
           showTelevisionNetworkSpeed: _showTelevisionNetworkSpeed,
           showTelevisionClock: _showTelevisionClock,
@@ -194,6 +203,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateAutoPictureInPicture(bool value) {
     setState(() => _autoPictureInPicture = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updatePictureInPictureEnabled(bool value) {
+    setState(() => _pictureInPictureEnabled = value);
     unawaited(_persistPreferences());
   }
 
@@ -404,6 +418,16 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
               value: _autoAdvance,
               onChanged: _updateAutoAdvance,
             ),
+            if (_pictureInPictureSupported &&
+                !AppLayout.isTelevisionDevice(context))
+              SwitchListTile(
+                key: const ValueKey('playback-picture-in-picture-enabled'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('啟用子母畫面'),
+                subtitle: const Text('允許播放畫面使用系統子母畫面；關閉後隱藏子母畫面入口。'),
+                value: _pictureInPictureEnabled,
+                onChanged: _updatePictureInPictureEnabled,
+              ),
             if (supportsPictureInPicture(
               android: Platform.isAndroid,
               systemSupported: _pictureInPictureSupported,
@@ -439,7 +463,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入、自動連播、電視網速與時鐘顯示，以及電腦播放視窗置頂都會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
+              '倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入、自動連播、子母畫面、電視網速與時鐘顯示，以及電腦播放視窗置頂都會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
             ),
           ],
         ),

@@ -22,6 +22,24 @@ void main() {
     expect(clockRestored.showTelevisionClock, isFalse);
   });
 
+  test('PiP is enabled by default and can be independently disabled', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.pictureInPictureEnabled, isTrue);
+
+    final disabled = defaults.copyWith(pictureInPictureEnabled: false);
+    expect(disabled.pictureInPictureEnabled, isFalse);
+    expect(
+      PlaybackPreferences.fromJson(disabled.toJson()).pictureInPictureEnabled,
+      isFalse,
+    );
+    expect(
+      PlaybackPreferences.fromJson(const {'autoPictureInPicture': true})
+          .pictureInPictureEnabled,
+      isTrue,
+      reason: 'legacy auto-entry preference must not disable PiP itself',
+    );
+  });
+
   test('desktop always-on-top defaults off and persists', () {
     final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
     expect(defaults.desktopAlwaysOnTop, isFalse);

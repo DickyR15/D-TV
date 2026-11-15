@@ -99,6 +99,7 @@ class PlaybackPreferences {
     this.portraitBlurBackground = false,
     this.televisionDecoder = TelevisionDecoder.automatic,
     this.autoPictureInPicture = false,
+    this.pictureInPictureEnabled = true,
     this.aspectRatio = PlaybackAspectRatio.automatic,
     this.desktopAlwaysOnTop = false,
     this.showTelevisionNetworkSpeed = true,
@@ -113,6 +114,7 @@ class PlaybackPreferences {
   final bool portraitBlurBackground;
   final TelevisionDecoder televisionDecoder;
   final bool autoPictureInPicture;
+  final bool pictureInPictureEnabled;
   final PlaybackAspectRatio aspectRatio;
   final bool desktopAlwaysOnTop;
   final bool showTelevisionNetworkSpeed;
@@ -131,6 +133,7 @@ class PlaybackPreferences {
     bool? portraitBlurBackground,
     TelevisionDecoder? televisionDecoder,
     bool? autoPictureInPicture,
+    bool? pictureInPictureEnabled,
     PlaybackAspectRatio? aspectRatio,
     bool? desktopAlwaysOnTop,
     bool? showTelevisionNetworkSpeed,
@@ -144,6 +147,8 @@ class PlaybackPreferences {
     portraitBlurBackground: portraitBlurBackground ?? this.portraitBlurBackground,
     televisionDecoder: televisionDecoder ?? this.televisionDecoder,
     autoPictureInPicture: autoPictureInPicture ?? this.autoPictureInPicture,
+    pictureInPictureEnabled:
+        pictureInPictureEnabled ?? this.pictureInPictureEnabled,
     aspectRatio: aspectRatio ?? this.aspectRatio,
     desktopAlwaysOnTop: desktopAlwaysOnTop ?? this.desktopAlwaysOnTop,
     showTelevisionNetworkSpeed:
@@ -160,6 +165,7 @@ class PlaybackPreferences {
     'portraitBlurBackground': portraitBlurBackground,
     'televisionDecoderMode': televisionDecoder.name,
     'autoPictureInPicture': autoPictureInPicture,
+    'pictureInPictureEnabled': pictureInPictureEnabled,
     'aspectRatioMode': aspectRatio.name,
     'desktopAlwaysOnTop': desktopAlwaysOnTop,
     'showTelevisionNetworkSpeed': showTelevisionNetworkSpeed,
@@ -192,6 +198,8 @@ class PlaybackPreferences {
       portraitBlurBackground: value['portraitBlurBackground'] as bool? ?? false,
       televisionDecoder: decoder,
       autoPictureInPicture: value['autoPictureInPicture'] as bool? ?? false,
+      pictureInPictureEnabled:
+          value['pictureInPictureEnabled'] as bool? ?? true,
       aspectRatio: aspectRatio,
       desktopAlwaysOnTop: value['desktopAlwaysOnTop'] as bool? ?? false,
       showTelevisionNetworkSpeed:

@@ -239,12 +239,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   Rect? _desktopMiniRestoreBounds;
   bool _desktopMiniWasMaximized = false;
   bool _desktopMiniWasFullscreen = false;
-  bool get _canUsePictureInPicture => supportsPictureInPicture(
-    android: defaultTargetPlatform == TargetPlatform.android,
-    ios: defaultTargetPlatform == TargetPlatform.iOS,
-    systemSupported: _pictureInPictureSupported,
-    television: _television,
-  );
+  bool get _canUsePictureInPicture =>
+      widget.store.playbackPreferences.pictureInPictureEnabled &&
+      supportsPictureInPicture(
+        android: defaultTargetPlatform == TargetPlatform.android,
+        ios: defaultTargetPlatform == TargetPlatform.iOS,
+        systemSupported: _pictureInPictureSupported,
+        television: _television,
+      );
   bool get _mobile => _formFactor == FormFactor.phone;
   VideoEnhancementController? get _enhancementForUi =>
       _enhancement.supported ? _enhancement : null;
@@ -3958,6 +3960,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         controller: _video!,
         fit: fit,
         fill: Colors.black,
+        // media_kit_video pauses by default when the app backgrounds. During
+        // iOS PiP, MPV must keep rendering frames for AVSampleBufferDisplayLayer.
+        pauseUponEnteringBackgroundMode:
+            !(Platform.isIOS && _pictureInPictureVisible),
         controls: (_) => controls,
       );
     }
