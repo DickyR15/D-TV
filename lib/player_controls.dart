@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
-import 'lan_controller.dart';
 import 'player_interactions.dart';
 import 'playback_controls_visibility.dart';
 import 'widgets.dart';
@@ -816,32 +815,14 @@ class _PlayerControlsState extends State<PlayerControls> {
   Widget _toolGroup(List<Widget> children) =>
       Row(mainAxisSize: MainAxisSize.min, children: children);
 
-  Widget _lanPushTool(Key key) {
-    final link = LanController.current;
-    if (link == null) return const SizedBox.shrink();
-    return AnimatedBuilder(
-      animation: link,
-      builder: (context, _) => _toolButton(
-        key: key,
-        tooltip: link.connection == null
-            ? '傳送播放'
-            : '傳送播放至 ${link.connection!.peer.name}',
-        onPressed: widget.enabled ? () => _panel(widget.onPush!) : null,
-        child: link.pushing
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Icon(
-                link.connection == null
-                    ? Icons.cast_rounded
-                    : Icons.cast_connected_rounded,
-                size: 22,
-              ),
-      ),
-    );
-  }
+  Widget _castTool(Key key) => _toolIcon(
+    key: key,
+    tooltip: '傳送播放（DLNA）',
+    icon: Icons.cast_rounded,
+    onPressed: widget.enabled && widget.onPush != null
+        ? () => _panel(widget.onPush!)
+        : null,
+  );
 
   Widget _clusteredToolRow(List<Widget> tools) => Row(
     children: [
@@ -882,7 +863,7 @@ class _PlayerControlsState extends State<PlayerControls> {
           width: 52,
         ),
       ],
-      if (showPush) _lanPushTool(const ValueKey('fullscreen-lan-push')),
+      if (showPush) _castTool(const ValueKey('fullscreen-lan-push')),
       if (widget.onAspectRatio != null)
         _toolText(
           key: const ValueKey('player-aspect-ratio'),
@@ -971,7 +952,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         width: 52,
       ),
       if (widget.onPush != null)
-        _lanPushTool(const ValueKey('fullscreen-lan-push')),
+        _castTool(const ValueKey('fullscreen-lan-push')),
       if (widget.onAspectRatio != null)
         _toolIcon(
           key: const ValueKey('player-aspect-ratio'),
