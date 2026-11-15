@@ -401,6 +401,7 @@ class _AppBootstrapState extends State<AppBootstrap>
     store: store,
     bootstrapError: error?.toString(),
     onRetry: _initialize,
+    repositoryReady: repositoryReady,
     television: device.television,
     emulator: device.emulator,
     version: device.version,
@@ -445,6 +446,7 @@ class DuanjuApp extends StatelessWidget {
     this.store,
     this.bootstrapError,
     this.onRetry,
+    this.repositoryReady = false,
     this.television = false,
     this.emulator = false,
     this.version = appVersion,
@@ -455,6 +457,7 @@ class DuanjuApp extends StatelessWidget {
   final LocalStore? store;
   final String? bootstrapError;
   final VoidCallback? onRetry;
+  final bool repositoryReady;
   final bool television;
   final bool emulator;
   final String version;
