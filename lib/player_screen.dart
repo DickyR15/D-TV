@@ -3482,7 +3482,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           _fullscreen = previous;
           _automaticFullscreenSuppressed = previousSuppressed;
         });
-        _notice('無法切換全屏，請重試');
+        _notice('無法切換全螢幕，請重試');
       }
     } finally {
       _rotating = false;
