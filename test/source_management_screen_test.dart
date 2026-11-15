@@ -189,11 +189,65 @@ void main() {
         find.byKey(const ValueKey('source-row-focus-huangdou')),
       );
       expect(firstAdvanced.focusNode!.hasPrimaryFocus, isTrue);
+      final firstRow = tester.widget<AnimatedContainer>(
+        find.descendant(
+          of: find.byKey(const ValueKey('reorderable-source-huangdou')),
+          matching: find.byType(AnimatedContainer),
+        ),
+      );
+      expect(firstRow.decoration, isA<BoxDecoration>());
+      expect((firstRow.decoration as BoxDecoration).border, isNotNull);
+      expect(
+        find.textContaining('目前焦點：黃豆'),
+        findsOneWidget,
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();
     },
   );
+
+  testWidgets('TV password gate exposes a visible D-pad unlock action', (tester) async {
+    if (!allSourcesEnabled) return;
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      AppLayout(
+        television: true,
+        formFactor: FormFactor.television,
+        child: MaterialApp(home: SourceManagementScreen(store: store)),
+      ),
+    );
+    await tester.pump();
+
+    final password = tester.widget<TextField>(
+      find.byKey(const ValueKey('advanced-source-password')),
+    );
+    expect(password.focusNode!.hasPrimaryFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    final unlock = tester.widget<FilledButton>(
+      find.byKey(const ValueKey('unlock-advanced-sources')),
+    );
+    expect(unlock.focusNode!.hasPrimaryFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(password.focusNode!.hasPrimaryFocus, isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
 
   testWidgets('advanced source toggles are hidden until admin password is verified', (
     tester,
