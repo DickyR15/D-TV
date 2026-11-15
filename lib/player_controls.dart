@@ -36,6 +36,12 @@ class PlayerControls extends StatefulWidget {
     this.onPush,
     this.onPictureInPicture,
     this.onSettings,
+    this.onAspectRatio,
+    this.onSleepTimer,
+    this.onCinemaMode,
+    this.aspectRatioLabel = '自動',
+    this.sleepTimerLabel = '關閉',
+    this.cinemaMode = false,
     this.pictureInPictureTooltip = '畫中畫',
     this.enhancement,
     this.playbackGeneration = 0,
@@ -66,6 +72,12 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
   final Future<void> Function()? onSettings;
+  final Future<void> Function()? onAspectRatio;
+  final Future<void> Function()? onSleepTimer;
+  final VoidCallback? onCinemaMode;
+  final String aspectRatioLabel;
+  final String sleepTimerLabel;
+  final bool cinemaMode;
   final String pictureInPictureTooltip;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
@@ -448,7 +460,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         child: Row(
           children: [
             _overlayIconButton(
-              tooltip: widget.fullscreen ? '退出全屏' : '返回',
+              tooltip: widget.fullscreen ? '退出全螢幕' : '返回',
               onPressed: widget.fullscreen
                   ? widget.onFullscreen
                   : widget.onBack,
@@ -474,7 +486,7 @@ class _PlayerControlsState extends State<PlayerControls> {
               ),
             if (compact)
               _overlayIconButton(
-                tooltip: '旋轉與全屏',
+                tooltip: '全螢幕',
                 onPressed: widget.onFullscreen,
                 icon: Icons.screen_rotation_alt_rounded,
               ),
@@ -871,6 +883,34 @@ class _PlayerControlsState extends State<PlayerControls> {
         ),
       ],
       if (showPush) _lanPushTool(const ValueKey('fullscreen-lan-push')),
+      if (widget.onAspectRatio != null)
+        _toolText(
+          key: const ValueKey('player-aspect-ratio'),
+          tooltip: '畫面比例',
+          label: widget.aspectRatioLabel,
+          onPressed: widget.enabled
+              ? () => _panel(widget.onAspectRatio!)
+              : null,
+          width: 58,
+        ),
+      if (widget.onSleepTimer != null)
+        _toolText(
+          key: const ValueKey('player-sleep-timer'),
+          tooltip: '睡眠計時',
+          label: widget.sleepTimerLabel,
+          onPressed: widget.enabled
+              ? () => _panel(widget.onSleepTimer!)
+              : null,
+          width: 52,
+        ),
+      if (widget.onCinemaMode != null)
+        _toolIcon(
+          key: const ValueKey('player-cinema-mode'),
+          tooltip: widget.cinemaMode ? '退出電影模式' : '電影模式',
+          icon: Icons.width_wide_rounded,
+          selected: widget.cinemaMode,
+          onPressed: widget.enabled ? widget.onCinemaMode : null,
+        ),
       if (showEpisodes)
         _toolIcon(
           key: const ValueKey('player-episodes'),
@@ -901,7 +941,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         ),
       _toolIcon(
         key: const ValueKey('player-fullscreen'),
-        tooltip: fullscreen ? '退出全屏' : '旋轉與全屏',
+        tooltip: fullscreen ? '退出全螢幕' : '全螢幕',
         icon: fullscreen
             ? Icons.fullscreen_exit_rounded
             : Icons.fullscreen_rounded,
@@ -932,6 +972,24 @@ class _PlayerControlsState extends State<PlayerControls> {
       ),
       if (widget.onPush != null)
         _lanPushTool(const ValueKey('fullscreen-lan-push')),
+      if (widget.onAspectRatio != null)
+        _toolIcon(
+          key: const ValueKey('player-aspect-ratio'),
+          tooltip: '畫面比例：${widget.aspectRatioLabel}',
+          icon: Icons.aspect_ratio_rounded,
+          onPressed: widget.enabled
+              ? () => _panel(widget.onAspectRatio!)
+              : null,
+        ),
+      if (widget.onSleepTimer != null)
+        _toolIcon(
+          key: const ValueKey('player-sleep-timer'),
+          tooltip: '睡眠計時：${widget.sleepTimerLabel}',
+          icon: Icons.bedtime_rounded,
+          onPressed: widget.enabled
+              ? () => _panel(widget.onSleepTimer!)
+              : null,
+        ),
       if (fullscreen)
         _toolIcon(
           key: const ValueKey('player-episodes'),
