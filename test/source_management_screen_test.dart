@@ -492,10 +492,7 @@ void main() {
     await tester.ensureVisible(secondTile);
     await tester.pumpAndSettle();
     expect(
-      find.ancestor(
-        of: firstTile,
-        matching: find.byType(ReorderableDelayedDragStartListener),
-      ),
+      find.byKey(ValueKey('reorderable-source-$firstId')),
       findsOneWidget,
     );
 
