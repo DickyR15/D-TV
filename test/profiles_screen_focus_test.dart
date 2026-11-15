@@ -473,7 +473,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(store.profile.id, 'visitor');
-      expect(find.byKey(pinFinder), findsNothing);
+      expect(pinFinder, findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
