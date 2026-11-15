@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'app_layout.dart';
+import 'player_gesture_policy.dart';
 import 'widgets.dart';
 
 const double _playerHoldBoostSpeed = 2.0;
@@ -38,7 +39,7 @@ Duration playerHoldSeekTarget({
   return Duration(milliseconds: milliseconds);
 }
 
-enum SwipeAction { none, brightness, episode }
+enum SwipeAction { none, brightness, volume, episode, zoom }
 
 class GestureHudState {
   const GestureHudState({this.type = SwipeAction.none, this.value = 0.0});
@@ -88,9 +89,14 @@ class PlayerInteractions extends ChangeNotifier {
   Timer? _hintTimer;
   Future<void> _rates = Future<void>.value();
   final Set<int> _pointers = {};
+  final Map<int, Offset> _pointerPositions = {};
   int? _pointer;
   Offset? _origin;
   Offset? _lastPosition;
+  bool _pinching = false;
+  double _pinchStartDistance = 0.0;
+  double _pinchStartScale = 1.0;
+  double _zoomScale = 1.0;
   Duration _started = Duration.zero;
   double _swipeThreshold = 70;
   bool _swipeEnabled = false;
@@ -107,12 +113,15 @@ class PlayerInteractions extends ChangeNotifier {
   GestureHudState _hudState = const GestureHudState();
   double _brightness = 0.5;
   double _initialBrightness = 0.5;
+  double _initialVolume = 100.0;
   double _viewHeight = 0.0;
   bool _brightnessReady = false, _brightnessLoading = false;
+  bool _volumeReady = false;
   Timer? _hudTimer;
 
   GestureHudState get hudState => _hudState;
   double get brightness => _brightness;
+  double get zoomScale => _zoomScale;
   bool get isBrightnessActive => _hudState.type == SwipeAction.brightness;
 
   void setBrightnessDirect(double value) {
@@ -290,9 +299,12 @@ class PlayerInteractions extends ChangeNotifier {
       _cancelUntilRelease = true;
       _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 600));
     }
+    _pinching = false;
+    _pointerPositions.clear();
     _pointer = null;
     _origin = null;
     _lastPosition = null;
+    _volumeReady = false;
     endSeekHold(silent: true, discardPending: true);
     _endHold(silent: true);
     hint('');
@@ -306,6 +318,16 @@ class PlayerInteractions extends ChangeNotifier {
     double bottomEdgeExclusion = 0.0,
   }) {
     _pointers.add(event.pointer);
+    _pointerPositions[event.pointer] = event.localPosition;
+
+    if (_pointers.length == 2 &&
+        !_cancelUntilRelease &&
+        swipeEnabled &&
+        available() &&
+        event.kind == PointerDeviceKind.touch) {
+      _beginPinch();
+      return;
+    }
     if (_pointers.length != 1 || _cancelUntilRelease) {
       cancel();
       return;
@@ -314,8 +336,7 @@ class PlayerInteractions extends ChangeNotifier {
     _pointer = event.pointer;
     _origin = _lastPosition = event.localPosition;
     _started = event.timeStamp;
-    // Keep the iOS Home-indicator / Android system-gesture edge clear. A
-    // vertical swipe that starts here must not be interpreted as changing episode.
+    // Keep the iOS Home-indicator / Android system-gesture edge clear.
     final swipeableHeight = math.max(0.0, height - bottomEdgeExclusion);
     _swipeEnabled = swipeEnabled &&
         event.kind == PointerDeviceKind.touch &&
@@ -325,19 +346,30 @@ class PlayerInteractions extends ChangeNotifier {
     _moved = _held = false;
     _brightnessReady = false;
     _brightnessLoading = false;
+    _volumeReady = false;
     _swipeAction = SwipeAction.none;
 
     if (_swipeEnabled && width > 0) {
-      // 左側 35% 保留垂直滑動調整亮度；其他區域垂直滑動切集。
-      // 單純按下不能顯示亮度提示或讀寫裝置亮度，避免誤把點擊當成手勢。
-      _swipeAction = event.localPosition.dx < width * 0.35
+      // Match the upstream player: left half adjusts brightness, right half volume.
+      _swipeAction = event.localPosition.dx < width / 2
           ? SwipeAction.brightness
-          : SwipeAction.episode;
+          : SwipeAction.volume;
+      if (_swipeAction == SwipeAction.volume) {
+        _initialVolume = player.state.volume.clamp(0.0, 100.0);
+        _volumeReady = true;
+      }
     }
   }
 
   void pointerMove(PointerMoveEvent event) {
-    if (_pointer != event.pointer || _origin == null) return;
+    _pointerPositions[event.pointer] = event.localPosition;
+    if (_pinching) {
+      _updatePinchZoom();
+      return;
+    }
+    if (_cancelUntilRelease || _pointer != event.pointer || _origin == null) {
+      return;
+    }
     _lastPosition = event.localPosition;
     if (_seekHoldDirection != 0) return;
     final diff = event.localPosition - _origin!;
@@ -349,10 +381,13 @@ class PlayerInteractions extends ChangeNotifier {
 
     final isVertical = diff.dy.abs() >= _swipeThreshold &&
         diff.dy.abs() > diff.dx.abs() * 1.5;
+    if (_swipeAction == SwipeAction.volume) {
+      if (_volumeReady && isVertical) _applyVolumeFromLatestPosition();
+      return;
+    }
     if (_swipeAction != SwipeAction.brightness) return;
     if (!_brightnessReady) {
-      // Activate brightness controls only after a deliberate vertical swipe,
-      // never on pointer down or a normal tap.
+      // Read the system brightness only after a deliberate vertical swipe.
       if (!isVertical || _brightnessLoading) return;
       _brightnessLoading = true;
       final pointer = event.pointer;
@@ -381,17 +416,95 @@ class PlayerInteractions extends ChangeNotifier {
   void _applyBrightnessFromLatestPosition() {
     final origin = _origin, latest = _lastPosition;
     if (origin == null || latest == null || _viewHeight <= 0) return;
-    final deltaRatio = (origin.dy - latest.dy) / (_viewHeight * 0.6);
-    _brightness = (_initialBrightness + deltaRatio).clamp(0.01, 1.0);
+    _brightness = playerVerticalSwipeValue(
+      initialValue: _initialBrightness,
+      originY: origin.dy,
+      currentY: latest.dy,
+      height: _viewHeight,
+      maximumValue: 1.0,
+    ).clamp(0.01, 1.0);
     AppDevice.setBrightness(_brightness);
     _showHud(SwipeAction.brightness, _brightness);
   }
 
+  void _applyVolumeFromLatestPosition() {
+    final origin = _origin, latest = _lastPosition;
+    if (origin == null || latest == null || _viewHeight <= 0) return;
+    final volume = playerVerticalSwipeValue(
+      initialValue: _initialVolume,
+      originY: origin.dy,
+      currentY: latest.dy,
+      height: _viewHeight,
+      maximumValue: 100.0,
+    );
+    if ((volume - player.state.volume).abs() < 0.5) return;
+    unawaited(player.setVolume(volume));
+    _showHud(SwipeAction.volume, volume / 100.0);
+  }
+
+  void _beginPinch() {
+    final positions = _pointerPositions.values.toList(growable: false);
+    if (positions.length < 2) return;
+    final distance = (positions[0] - positions[1]).distance;
+    if (!distance.isFinite || distance <= 0) return;
+
+    _pinching = true;
+    _pinchStartDistance = distance;
+    _pinchStartScale = _zoomScale;
+    _pointer = null;
+    _origin = null;
+    _lastPosition = null;
+    _moved = true;
+    _held = true;
+    _brightnessReady = false;
+    _brightnessLoading = false;
+    _volumeReady = false;
+    _swipeAction = SwipeAction.none;
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _endHold(silent: true);
+    endSeekHold(silent: true, discardPending: true);
+    _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 700));
+  }
+
+  void _updatePinchZoom() {
+    if (!_pinching || _pointerPositions.length < 2) return;
+    final positions = _pointerPositions.values.toList(growable: false);
+    final distance = (positions[0] - positions[1]).distance;
+    final next = playerPinchZoomScale(
+      initialScale: _pinchStartScale,
+      initialDistance: _pinchStartDistance,
+      currentDistance: distance,
+    );
+    if ((next - _zoomScale).abs() < 0.005) return;
+    _zoomScale = next;
+    _showHud(SwipeAction.zoom, _zoomScale);
+  }
+
+  void resetZoom() {
+    if (_disposed || (_zoomScale - 1.0).abs() < 0.005) return;
+    _zoomScale = 1.0;
+    _showHud(SwipeAction.zoom, _zoomScale);
+    _scheduleDismissHud();
+  }
+
   void pointerUp(PointerUpEvent event) {
     _pointers.remove(event.pointer);
+    _pointerPositions.remove(event.pointer);
+
+    if (_pinching) {
+      _pinching = false;
+      _cancelUntilRelease = _pointers.isNotEmpty;
+      _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 700));
+      if (_pointers.isEmpty) _scheduleDismissHud();
+      return;
+    }
     if (_cancelUntilRelease) {
       _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 600));
-      if (_pointers.isEmpty) _cancelUntilRelease = false;
+      if (_pointers.isEmpty) {
+        _cancelUntilRelease = false;
+        _pointerPositions.clear();
+      }
       return;
     }
     if (_pointer != event.pointer || _origin == null) return;
@@ -407,7 +520,8 @@ class PlayerInteractions extends ChangeNotifier {
         isVertical &&
         event.timeStamp - _started < const Duration(milliseconds: 1500)) {
       if (available()) hint(onEpisode(delta.dy < 0 ? 1 : -1));
-    } else if (_swipeAction == SwipeAction.brightness && _brightnessReady) {
+    } else if ((_swipeAction == SwipeAction.brightness && _brightnessReady) ||
+        (_swipeAction == SwipeAction.volume && _volumeReady && isVertical)) {
       _scheduleDismissHud();
     }
 
@@ -418,16 +532,19 @@ class PlayerInteractions extends ChangeNotifier {
     _origin = null;
     _brightnessReady = false;
     _brightnessLoading = false;
+    _volumeReady = false;
     _endHold();
     endSeekHold();
   }
 
   void pointerCancel(PointerCancelEvent event) {
     _pointers.remove(event.pointer);
+    _pointerPositions.remove(event.pointer);
     cancel();
     _brightnessReady = false;
     _brightnessLoading = false;
-    _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 600));
+    _volumeReady = false;
+    _ignoreTapUntil = DateTime.now().add(const Duration(milliseconds: 700));
     if (_pointers.isEmpty) _cancelUntilRelease = false;
   }
 
@@ -539,6 +656,8 @@ class PlayerInteractions extends ChangeNotifier {
     _boosting = false;
     _playing.cancel();
     _pointers.clear();
+    _pointerPositions.clear();
+    _pinching = false;
     super.dispose();
   }
 }
