@@ -566,6 +566,77 @@ func adultFindM3U8(body string, pageURLs ...string) string {
 	return ""
 }
 
+// adultSupJavFSTHLS follows the FST player's declared source order.
+// Its primary source can be a relative or extensionless HLS URL, so requiring
+// an absolute .m3u8 URL would silently skip the source selected by the player.
+func adultSupJavFSTHLS(body, embedURL string) string {
+	scriptPattern := regexp.MustCompile("(?is)<script\\b[^>]*>(.*?)</script\\s*>")
+	linksAssignment := regexp.MustCompile("(?is)(?:var|let|const)\\s+links\\s*=\\s*")
+	sourcesPattern := regexp.MustCompile("(?is)(?:sources|['\\\"]sources['\\\"])\\s*:\\s*\\[\\s*\\{([^{}]*)\\}")
+	filePattern := regexp.MustCompile("(?is)(?:file|['\\\"]file['\\\"])\\s*:\\s*(links\\.hls[234](?:\\s*\\|\\|\\s*links\\.hls[234])*)")
+	typePattern := regexp.MustCompile("(?is)(?:type|['\\\"]type['\\\"])\\s*:\\s*['\\\"]hls['\\\"]")
+	keyPattern := regexp.MustCompile("links\\.(hls[234])")
+
+	for _, match := range scriptPattern.FindAllStringSubmatch(body, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		script := match[1]
+		if strings.Contains(script, "eval(function") {
+			script = adultUnpackPacker(script)
+		}
+		if script == "" {
+			continue
+		}
+		assignment := linksAssignment.FindStringIndex(script)
+		if assignment == nil {
+			continue
+		}
+		objectStart := strings.Index(script[assignment[1]:], "{")
+		if objectStart < 0 {
+			continue
+		}
+		remaining := script[assignment[1]+objectStart:]
+		decoder := json.NewDecoder(strings.NewReader(remaining))
+		var links map[string]any
+		if decoder.Decode(&links) != nil || len(links) == 0 {
+			continue
+		}
+		offset := int(decoder.InputOffset())
+		if offset < 0 || offset > len(remaining) {
+			continue
+		}
+		sources := sourcesPattern.FindStringSubmatch(remaining[offset:])
+		if len(sources) < 2 {
+			continue
+		}
+		fields := sources[1]
+		fileMatch := filePattern.FindStringSubmatch(fields)
+		if len(fileMatch) < 2 {
+			continue
+		}
+		explicitHLS := typePattern.MatchString(fields)
+		for _, key := range keyPattern.FindAllStringSubmatch(fileMatch[1], -1) {
+			if len(key) < 2 {
+				continue
+			}
+			raw, ok := links[key[1]].(string)
+			if !ok || strings.TrimSpace(raw) == "" {
+				continue
+			}
+			resolved := adultResolvePlaybackURL(embedURL, raw)
+			if resolved == "" {
+				continue
+			}
+			path := strings.ToLower(strings.SplitN(resolved, "?", 2)[0])
+			if explicitHLS || strings.HasSuffix(path, ".m3u8") {
+				return resolved
+			}
+		}
+	}
+	return ""
+}
+
 func adultReverse(value string) string {
 	runes := []rune(value)
 	for left, right := 0, len(runes)-1; left < right; left, right = left+1, right-1 {
@@ -689,7 +760,14 @@ func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (provider
 			if fetchErr != nil {
 				continue
 			}
-			if found := adultFindM3U8(embed); found != "" {
+			found := ""
+			if name == "FST" {
+				found = adultSupJavFSTHLS(embed, embedURL)
+			}
+			if found == "" {
+				found = adultFindM3U8(embed, embedURL)
+			}
+			if found != "" {
 				mediaURL = found
 				referer = embedURL
 			}
