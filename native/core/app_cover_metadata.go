@@ -103,6 +103,8 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nat
 		fresh, _, err = d.fetchDSDDetail(ctx, id)
 	case sourceHanxiaoquan:
 		fresh, _, err = d.fetchHanxiaoquanDetail(ctx, id)
+	case sourceGuipian:
+		fresh, _, err = d.fetchGuipianDetail(ctx, id)
 	case sourceHeitao:
 		// Use the same exact-title stale-ID recovery as the detail/player path.
 		// A retired Heitao catalogue ID should not block poster repair when
@@ -292,6 +294,9 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 		return nativeCoverAddressesFromDrama(fresh), err
 	case sourceHanxiaoquan:
 		fresh, _, err := d.fetchHanxiaoquanDetail(ctx, id)
+		return nativeCoverAddressesFromDrama(fresh), err
+	case sourceGuipian:
+		fresh, _, err := d.fetchGuipianDetail(ctx, id)
 		return nativeCoverAddressesFromDrama(fresh), err
 	case sourceCloudFront:
 		if !rankingSourceID.MatchString(id) {
