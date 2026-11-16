@@ -113,14 +113,14 @@ jwplayer("vplayer").setup({sources:[{type:"hls",file:links.hls4 || links.hls3 ||
 	}
 }
 
-func TestAdultSupJavFSTRejectsExtensionlessNonHLS(t *testing.T) {
+func TestAdultSupJavFSTSkipsExtensionlessNonHLSAndUsesValidM3U8Fallback(t *testing.T) {
 	body := `<script>
 var links={"hls4":"https://cdn.example/manifest","hls3":"https://cdn.example/low/master.m3u8"};
 jwplayer("vplayer").setup({sources:[{file:links.hls4 || links.hls3,type:"mp4"}]});
 </script>`
 	got := adultSupJavFSTHLS(body, "https://fc2stream.example/e/video")
-	if got != "" {
-		t.Fatalf("FST non-HLS extensionless source = %q, want empty", got)
+	if got != "https://cdn.example/low/master.m3u8" {
+		t.Fatalf("FST fallback HLS = %q, want the valid .m3u8 alternative", got)
 	}
 }
 
