@@ -657,7 +657,7 @@ finally {
   }
 
   static List<int>? _versionParts(String value) {
-    final match = RegExp(r'(\\d+)\\.(\\d+)(?:\\.(\\d+))?').firstMatch(value);
+    final match = RegExp(r'(\d+)\.(\d+)(?:\.(\d+))?').firstMatch(value);
     if (match == null) return null;
     return [
       int.parse(match.group(1)!),
