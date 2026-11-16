@@ -22,6 +22,7 @@ func TestBrowserTransportRoutesProtectedProviders(t *testing.T) {
 		{name: "MissAV numbered domain", method: http.MethodGet, address: "https://missav123.com/", wantSource: sourceMissAV},
 		{name: "SupJav primary domain", method: http.MethodGet, address: "https://supjav.com/zh/", wantSource: sourceSupJav},
 		{name: "SupJav www alias", method: http.MethodHead, address: "https://www.supjav.com/zh/", wantSource: sourceSupJav},
+		{name: "SupJav playback embed", method: http.MethodGet, address: "https://lk1.supremejav.com/supjav.php?c=token", wantSource: sourceSupJav},
 		{name: "Huangguo AI API", method: http.MethodPost, address: "https://huangguoai.com/api/playback/request", wantSource: sourceHuangguoAI},
 		{name: "unknown host", method: http.MethodGet, address: "https://example.invalid/", wantSource: ""},
 		{name: "unrelated SupJav path method", method: http.MethodPost, address: "https://supjav.com/zh/", wantSource: ""},
