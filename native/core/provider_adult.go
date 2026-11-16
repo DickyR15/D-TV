@@ -215,13 +215,30 @@ func adultSafeURL(base, raw, source string) string {
 	return resolved.String()
 }
 
+func adultSafeImageURL(base, raw string) string {
+	raw = html.UnescapeString(strings.TrimSpace(strings.ReplaceAll(raw, "\\/", "/")))
+	baseURL, err := url.Parse(base)
+	if err != nil || raw == "" {
+		return ""
+	}
+	reference, err := url.Parse(raw)
+	if err != nil || reference.User != nil {
+		return ""
+	}
+	resolved := baseURL.ResolveReference(reference)
+	if resolved.User != nil || !isProviderHTTPMediaURL(resolved.String()) {
+		return ""
+	}
+	return resolved.String()
+}
+
 func adultImageCandidates(fragment, base, source string) []string {
 	seen := map[string]bool{}
 	var result []string
 	for _, tag := range adultImagePattern.FindAllString(fragment, -1) {
 		for _, attr := range []string{"data-original", "data-src", "data-lazy-src", "data-lazyload", "src"} {
 			if raw := adultAttribute(tag, attr); raw != "" {
-				address := adultSafeURL(base, raw, source)
+				address := adultSafeImageURL(base, raw)
 				if address != "" && !seen[address] {
 					seen[address] = true
 					result = append(result, address)
@@ -467,7 +484,7 @@ func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID stri
 	}
 	covers := adultImageCandidates(body, base, source)
 	if raw := adultMetaValue(body, "og:image"); raw != "" {
-		if cover := adultSafeURL(base, raw, source); cover != "" {
+		if cover := adultSafeImageURL(base, raw); cover != "" {
 			covers = append([]string{cover}, covers...)
 		}
 	}
