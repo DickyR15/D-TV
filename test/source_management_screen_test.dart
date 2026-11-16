@@ -621,7 +621,7 @@ void main() {
     expect(rowContainer.child, isA<ListTile>());
     final listTile = rowContainer.child as ListTile;
     expect(listTile.title, isA<Text>());
-    expect(listTile.subtitle, isA<Text>());
+    expect(listTile.subtitle, isA<Wrap>());
     expect(listTile.trailing, isA<Switch>());
     expect(find.byIcon(Icons.drag_indicator_rounded), findsNothing);
 
