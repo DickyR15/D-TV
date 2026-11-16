@@ -36,6 +36,8 @@ class FollowState {
     if (newSeasons > 0) '新季 $newSeasons 部',
   ].join(' · ');
   String get label => manuallyWatched ? '已看 · 手動標記' : status.label;
+  String get posterLabel =>
+      status == FollowStatus.planned ? '想看' : '再看';
 
   FollowState copyWith({
     FollowStatus? status,
