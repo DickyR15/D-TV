@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'app_build.dart';
 
 class SourceSite {
-  const SourceSite(this.id, this.name, this.description);
+  const SourceSite(this.id, this.name, this.description, {this.adult = false});
   final String id;
   final String name;
   final String description;
+  /// True only when the provider itself is explicitly adult-oriented.
+  final bool adult;
   bool get onlineSearch => id == 'hongguo' || pagedSearch;
   bool get pagedSearch =>
       id == 'hongguo' ||
@@ -15,7 +17,8 @@ class SourceSite {
       id == 'dsd' ||
       id == 'duoduo' ||
       id == 'hanxiaoquan' ||
-      id == 'heitao';
+      id == 'heitao' ||
+      id == 'guipian';
   bool get searchSuggestions => id == 'hongguo';
   // These providers must remain independent in
   // source switching and ranking filters.
@@ -48,9 +51,26 @@ class SourceSite {
     '韓小圈',
     '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
+  static const guipian = SourceSite(
+    'guipian',
+    '鬼片',
+    '電影 · 電視劇 · 動漫',
+  );
+  static const missav = SourceSite(
+    'missav',
+    'MISS AV',
+    '分類 · 搜尋 · 播放',
+    adult: true,
+  );
+  static const supjav = SourceSite(
+    'supjav',
+    'SupJav',
+    '分類 · 搜尋 · 播放',
+    adult: true,
+  );
 
-  /// 預設開啟的三個一般片源：紅果、韓小圈、多多追劇。
-  static const primaryValues = [hongguo, hanxiaoquan, duoduo];
+  /// 預設開啟的一般片源：紅果、韓小圈、鬼片、多多追劇。
+  static const primaryValues = [hongguo, hanxiaoquan, guipian, duoduo];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
