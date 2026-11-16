@@ -355,7 +355,32 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            title: Text(uiTraditional(source.name)),
+            title: Wrap(
+              spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(uiTraditional(source.name)),
+                if (source.adult)
+                  Container(
+                    key: ValueKey('restricted-badge-${source.id}'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '限制級',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             subtitle: Text(
               selectedForReorder
                   ? '已選取排序：使用遙控器方向鍵移動，按確認完成'
