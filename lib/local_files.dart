@@ -203,11 +203,52 @@ class LocalFiles {
     }
   }
 
+  /// Confirms that the parent directory supports the write and rename
+  /// operations required by the atomic directory swap. This runs before any
+  /// staging or existing data is removed, so permission failures are harmless.
+  Future<void> _verifyReplaceAccess() async {
+    final parent = Directory(path.dirname(root.path));
+    final suffix = '${pid}-${DateTime.now().microsecondsSinceEpoch}';
+    final probe = File(path.join(parent.path, '.dtv-restore-$suffix.tmp'));
+    final renamed = File('${probe.path}.renamed');
+    try {
+      await parent.create(recursive: true);
+      await probe.writeAsBytes(const [0x44, 0x54, 0x56], flush: true);
+      await probe.rename(renamed.path);
+      await renamed.rename(probe.path);
+      final bytes = await probe.readAsBytes();
+      if (bytes.length != 3 ||
+          bytes[0] != 0x44 ||
+          bytes[1] != 0x54 ||
+          bytes[2] != 0x56) {
+        throw FileSystemException('本機資料夾寫入權限預檢資料不一致', parent.path);
+      }
+      await probe.delete();
+    } on FileSystemException catch (error) {
+      throw FileSystemException(
+        '本機資料夾缺少備份還原所需的寫入或重新命名權限；原始資料未變更。'
+        '請檢查 macOS「檔案與資料夾」權限及磁碟空間後再試。',
+        parent.path,
+        error.osError,
+      );
+    } finally {
+      for (final candidate in [probe, renamed]) {
+        try {
+          if (await candidate.exists()) await candidate.delete();
+        } on FileSystemException {
+          // Preserve the original failure; a harmless probe may be cleaned up
+          // on the next launch if the OS temporarily blocks deletion.
+        }
+      }
+    }
+  }
+
   /// Replaces the complete data set transactionally, for validated backup restore.
   Future<void> replaceAll(Map<String, Object?> contents) async {
     if (!contents.containsKey(marker)) {
       throw StateError('本機使用者索引缺失，拒絕替換資料');
     }
+    await _verifyReplaceAccess();
     if (await _staging.exists()) {
       await _staging.delete(recursive: true);
     }
@@ -267,7 +308,14 @@ class LocalFiles {
 }
 
 class LocalFilesRecoveryRequired implements Exception {
-  const LocalFilesRecoveryRequired();
+  const LocalFilesRecoveryRequired([
+    this.message = '本機資料回復未完成；原始資料檔案已保留，請勿手動刪除備份資料夾。',
+  ]);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 
