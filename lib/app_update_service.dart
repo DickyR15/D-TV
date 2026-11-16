@@ -599,66 +599,19 @@ finally {
           continue;
         }
         final sizeValue = rawAsset['size'];
-        final rawDigest = rawAsset['digest'];
-        final digestMatch = rawDigest is String
-            ? RegExp(r'^sha256:([a-fA-F0-9]{64})
-      }
-    }
-
-    final published = DateTime.tryParse(release['published_at'] as String? ?? '');
-    return AppUpdateInfo(
-      version: tag.trim(),
-      title: title is String && title.trim().isNotEmpty ? title.trim() : tag.trim(),
-      releaseUrl: url.toString(),
-      notes: release['body'] is String ? release['body'] as String : '',
-      publishedAt: published,
-      assets: List.unmodifiable(assets),
-    );
-  }
-
-  static bool shouldNotify(
-    AppUpdateInfo? update, {
-    String? ignoredVersion,
-  }) {
-    if (update == null) return false;
-    final ignored = ignoredVersion?.trim() ?? '';
-    return ignored.isEmpty || update.version.trim() != ignored;
-  }
-
-  static bool isNewerVersion(String installed, String available) {
-    final current = _versionParts(installed);
-    final latest = _versionParts(available);
-    if (current == null || latest == null) return false;
-    for (var i = 0; i < 3; i++) {
-      if (latest[i] != current[i]) return latest[i] > current[i];
-    }
-    return false;
-  }
-
-  static List<int>? _versionParts(String value) {
-    final match = RegExp(r'(\d+)\.(\d+)(?:\.(\d+))?').firstMatch(value);
-    if (match == null) return null;
-    return [
-      int.parse(match.group(1)!),
-      int.parse(match.group(2)!),
-      int.parse(match.group(3) ?? '0'),
-    ];
-  }
-}
-).firstMatch(rawDigest.trim())
-            : null;
         assets.add(
           AppUpdateAsset(
             name: name.trim(),
             downloadUrl: assetUri.toString(),
             size: sizeValue is int && sizeValue > 0 ? sizeValue : 0,
-            sha256: digestMatch?.group(1)?.toLowerCase(),
+            sha256: _parseSha256(rawAsset['digest']),
           ),
         );
       }
     }
 
-    final published = DateTime.tryParse(release['published_at'] as String? ?? '');
+    final published =
+        DateTime.tryParse(release['published_at'] as String? ?? '');
     return AppUpdateInfo(
       version: tag.trim(),
       title: title is String && title.trim().isNotEmpty ? title.trim() : tag.trim(),
@@ -667,6 +620,21 @@ finally {
       publishedAt: published,
       assets: List.unmodifiable(assets),
     );
+  }
+
+  static String? _parseSha256(Object? value) {
+    if (value is! String) return null;
+    final text = value.trim();
+    if (!text.toLowerCase().startsWith('sha256:')) return null;
+    final digest = text.substring(7);
+    if (digest.length != 64) return null;
+    final isHex = digest.codeUnits.every(
+      (unit) =>
+          (unit >= 48 && unit <= 57) ||
+          (unit >= 65 && unit <= 70) ||
+          (unit >= 97 && unit <= 102),
+    );
+    return isHex ? digest.toLowerCase() : null;
   }
 
   static bool shouldNotify(
@@ -689,7 +657,7 @@ finally {
   }
 
   static List<int>? _versionParts(String value) {
-    final match = RegExp(r'(\d+)\.(\d+)(?:\.(\d+))?').firstMatch(value);
+    final match = RegExp(r'(\\d+)\\.(\\d+)(?:\\.(\\d+))?').firstMatch(value);
     if (match == null) return null;
     return [
       int.parse(match.group(1)!),
