@@ -17,10 +17,10 @@ void main() {
     final store = testStore(await SharedPreferences.getInstance());
     expect(appSlug, 'dtv');
     // 一般版與全片源版都預設開啟紅果、韓小圈及多多追劇。
-    expect(store.sources.length, 3);
+    expect(store.sources.length, 4);
     expect(
       store.sources.map((source) => source.id),
-      ['hongguo', 'hanxiaoquan', 'duoduo'],
+      ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo'],
     );
     expect(
       SourceSite.values.any((source) => source.id == 'dsd'),
@@ -41,7 +41,7 @@ void main() {
       );
       await store.unlockAdvancedSources('source-pass-123');
       await store.setSourceEnabled('dsd', true);
-      expect(store.sources.length, 4);
+      expect(store.sources.length, 5);
       expect(store.allowsSource('dsd'), isTrue);
     } else {
       await expectLater(store.setSourceEnabled('dsd', true), throwsStateError);
