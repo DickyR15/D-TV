@@ -233,8 +233,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<String> _readBackupFile(PlatformFile file) async {
     try {
       final size = await file.length();
-      if (size == null || size <= 0 || size > 8 * 1024 * 1024) {
-        throw const FormatException('備份檔案為空、過大或無法讀取');
+      if (size == null) {
+        throw FileSystemException('無法取得所選備份檔案大小', file.path);
+      }
+      if (size <= 0 || size > 8 * 1024 * 1024) {
+        throw const FormatException('備份檔案為空或超過 8 MiB 上限');
       }
       // PlatformFile.readAsBytes() uses the platform picker bridge so macOS
       // security-scoped file access is honoured; do not reopen its path with
