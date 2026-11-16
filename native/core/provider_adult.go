@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	htmlnet "golang.org/x/net/html"
 )
 
 const (
@@ -106,7 +108,7 @@ func adultDetailURL(source, sourceID string) string {
 		if !strings.ContainsAny(sourceID, "0123456789") {
 			return ""
 		}
-		return base + "/en/" + url.PathEscape(sourceID)
+		return base + "/" + url.PathEscape(sourceID)
 	case sourceSupJav:
 		if _, err := strconv.Atoi(sourceID); err != nil {
 			return ""
@@ -126,17 +128,17 @@ func adultCategoryURL(source, category string) (string, error) {
 		if source == sourceSupJav {
 			return base + "/zh/", nil
 		}
-		return base + "/en/", nil
+		return base + "/", nil
 	}
 	if source == sourceMissAV {
 		paths := map[string]string{
-			"today-hot": "/dm298/en/today-hot",
-			"weekly-hot": "/dm170/en/weekly-hot",
-			"monthly-hot": "/dm270/en/monthly-hot",
-			"chinese-subtitle": "/dm278/en/chinese-subtitle",
-			"new": "/dm539/en/new",
-			"release": "/dm634/en/release",
-			"uncensored-leak": "/dm817/en/uncensored-leak",
+			"today-hot": "/dm298/today-hot",
+			"weekly-hot": "/dm170/weekly-hot",
+			"monthly-hot": "/dm270/monthly-hot",
+			"chinese-subtitle": "/dm278/chinese-subtitle",
+			"new": "/dm539/new",
+			"release": "/dm634/release",
+			"uncensored-leak": "/dm817/uncensored-leak",
 		}
 		if path, ok := paths[category]; ok {
 			return base + path, nil
@@ -262,15 +264,88 @@ func adultMetaValue(body, wanted string) string {
 	return ""
 }
 
+func adultHTMLClass(node *htmlnet.Node, wanted string) bool {
+	if node == nil || node.Type != htmlnet.ElementNode {
+		return false
+	}
+	for _, className := range strings.Fields(providerHTMLAttr(node, "class")) {
+		if className == wanted {
+			return true
+		}
+	}
+	return false
+}
+
+func adultHTMLWalk(node *htmlnet.Node, visit func(*htmlnet.Node)) {
+	if node == nil {
+		return
+	}
+	visit(node)
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		adultHTMLWalk(child, visit)
+	}
+}
+
+func adultHTMLFirst(node *htmlnet.Node, match func(*htmlnet.Node) bool) *htmlnet.Node {
+	var found *htmlnet.Node
+	adultHTMLWalk(node, func(candidate *htmlnet.Node) {
+		if found == nil && match(candidate) {
+			found = candidate
+		}
+	})
+	return found
+}
+
+func adultHTMLCardNodes(document *htmlnet.Node, source string) []*htmlnet.Node {
+	var cards []*htmlnet.Node
+	adultHTMLWalk(document, func(node *htmlnet.Node) {
+		if node.Type != htmlnet.ElementNode {
+			return
+		}
+		if source == sourceSupJav && adultHTMLClass(node, "post") ||
+			source == sourceMissAV && (adultHTMLClass(node, "thumbnail") ||
+				adultHTMLClass(node, "video-item") || adultHTMLClass(node, "group")) {
+			cards = append(cards, node)
+		}
+	})
+	return cards
+}
+
+func adultNodeImages(card *htmlnet.Node, base, source string) []string {
+	seen := map[string]bool{}
+	var covers []string
+	adultHTMLWalk(card, func(node *htmlnet.Node) {
+		if node.Type != htmlnet.ElementNode || node.Data != "img" {
+			return
+		}
+		for _, attr := range []string{"data-original", "data-src", "data-lazy-src", "data-lazyload", "src"} {
+			if raw := providerHTMLAttr(node, attr); raw != "" {
+				address := adultSafeURL(base, raw, source)
+				if address != "" && !seen[address] {
+					seen[address] = true
+					covers = append(covers, address)
+				}
+			}
+		}
+	})
+	return covers
+}
+
 func adultParseCards(body, base, source string) []Drama {
+	document, err := htmlnet.Parse(strings.NewReader(body))
+	if err != nil {
+		return nil
+	}
 	var items []Drama
 	seen := map[string]bool{}
-	for _, match := range adultAnchorPattern.FindAllStringSubmatch(body, -1) {
-		if len(match) < 3 {
+	for _, card := range adultHTMLCardNodes(document, source) {
+		anchor := adultHTMLFirst(card, func(node *htmlnet.Node) bool {
+			return node.Type == htmlnet.ElementNode && node.Data == "a" && providerHTMLAttr(node, "href") != ""
+		})
+		if anchor == nil {
 			continue
 		}
-		anchor := "<a " + match[1] + ">"
-		address := adultSafeURL(base, adultAttribute(anchor, "href"), source)
+		address := adultSafeURL(base, providerHTMLAttr(anchor, "href"), source)
 		if address == "" {
 			continue
 		}
@@ -294,17 +369,21 @@ func adultParseCards(body, base, source string) []Drama {
 				continue
 			}
 		}
-		title := adultAttribute(anchor, "title")
+		title := providerHTMLAttr(anchor, "title")
 		if title == "" {
-			title = adultAttribute(anchor, "aria-label")
+			title = providerHTMLAttr(anchor, "aria-label")
 		}
 		if title == "" {
-			title = adultClean(match[2])
+			title = providerHTMLText(anchor)
 		}
+		if title == "" {
+			title = providerHTMLText(card)
+		}
+		title = adultClean(title)
 		if title == "" {
 			continue
 		}
-		covers := adultImageCandidates(match[2], base, source)
+		covers := adultNodeImages(card, base, source)
 		cover := ""
 		if len(covers) > 0 {
 			cover = covers[0]
@@ -336,7 +415,7 @@ func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page 
 			return nil, false, errors.New("搜尋關鍵字過長")
 		}
 		if source == sourceMissAV {
-			address = base + "/en/search/" + url.PathEscape(strings.TrimSpace(query))
+			address = base + "/search/" + url.PathEscape(strings.TrimSpace(query))
 		} else {
 			address = base + "/zh/?s=" + url.QueryEscape(strings.TrimSpace(query))
 		}
