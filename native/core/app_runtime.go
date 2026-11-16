@@ -48,7 +48,6 @@ type Downloader struct {
 	rankings              rankingCache
 	cfg                   Config
 	client                *http.Client
-	hongguoRegisterClient *http.Client
 	streamClient          *http.Client
 	streamHostMu          sync.Mutex
 	streamHostFailures    map[string]nativeStreamHostFailureState
@@ -427,8 +426,6 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 		}
 		return nil
 	}
-	registerDoH := &hostDoHTransport{base: transport, resolver: newDNSResolver(transport), router: router, host: "log.snssdk.com"}
-	d.hongguoRegisterClient = &http.Client{Transport: registerDoH, Timeout: 25 * time.Second, CheckRedirect: checkRedirect}
 	d.client = &http.Client{
 		Transport: newHuangguoBrowserTransport(providerTransport, d),
 		Timeout: 45 * time.Second,

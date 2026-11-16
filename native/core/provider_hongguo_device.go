@@ -87,18 +87,63 @@ func (downloader *Downloader) ensureHongguoDeviceFor(ctx context.Context, helper
 	return nil
 }
 
+type hongguoRegistrationHeader struct {
+	DisplayName        string `json:"display_name"`
+	Aid                int    `json:"aid"`
+	AppVersion         string `json:"app_version"`
+	VersionCode        int    `json:"version_code"`
+	ManifestVersionCode int   `json:"manifest_version_code"`
+	UpdateVersionCode  int    `json:"update_version_code"`
+	Channel            string `json:"channel"`
+	Package            string `json:"package"`
+	AppLanguage        string `json:"app_language"`
+	OS                 string `json:"os"`
+	OSVersion          string `json:"os_version"`
+	OSAPI              int    `json:"os_api"`
+	DeviceModel        string `json:"device_model"`
+	DeviceBrand        string `json:"device_brand"`
+	DeviceManufacturer string `json:"device_manufacturer"`
+	CPUABI             string `json:"cpu_abi"`
+	DensityDPI         int    `json:"density_dpi"`
+	DisplayDensity     string `json:"display_density"`
+	Resolution         string `json:"resolution"`
+	Language           string `json:"language"`
+	Timezone           int    `json:"timezone"`
+	Access             string `json:"access"`
+	OpenUDID           string `json:"openudid"`
+	ClientUDID         string `json:"clientudid"`
+	CDID               string `json:"cdid"`
+	Region             string `json:"region"`
+	TimezoneName       string `json:"tz_name"`
+	TimezoneOffset     int    `json:"tz_offset"`
+	SimRegion          string `json:"sim_region"`
+	DevicePlatform     string `json:"device_platform"`
+	NotRequestSender   int    `json:"not_request_sender"`
+	IsSystemApp        int    `json:"is_system_app"`
+	SDKFlavor          string `json:"sdk_flavor"`
+	ROM                string `json:"rom"`
+	ROMVersion         string `json:"rom_version"`
+}
+
+type hongguoRegistrationPayload struct {
+	MagicTag string `json:"magic_tag"`
+	Header   hongguoRegistrationHeader `json:"header"`
+	GenTime  int64  `json:"_gen_time"`
+}
+
 func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string, string, error) {
-	header := map[string]any{
-		"display_name": "红果免费短剧", "aid": 8662, "app_version": "7.3.5.32", "version_code": 73532,
-		"manifest_version_code": 73532, "update_version_code": 73532, "channel": "update_64", "package": "com.phoenix.read",
-		"app_language": "zh", "os": "Android", "os_version": "16", "os_api": 36, "device_model": "25053RT47C",
-		"device_brand": "Redmi", "device_manufacturer": "Xiaomi", "cpu_abi": "arm64-v8a", "density_dpi": 520,
-		"display_density": "xxhdpi", "resolution": "2772x1280", "language": "zh", "timezone": 8, "access": "wifi",
-		"openudid": randomHex(8), "clientudid": uuidLike(), "cdid": uuidLike(),
-		"region": "CN", "tz_name": "Asia/Shanghai", "tz_offset": 28800, "sim_region": "cn", "device_platform": "android",
-		"not_request_sender": 0, "is_system_app": 0, "sdk_flavor": "china", "rom": "OS2.0", "rom_version": "BP2A.250605.031.A3",
+	header := hongguoRegistrationHeader{
+		DisplayName: "红果免费短剧", Aid: 8662, AppVersion: "7.3.5.32", VersionCode: 73532,
+		ManifestVersionCode: 73532, UpdateVersionCode: 73532, Channel: "update_64", Package: "com.phoenix.read",
+		AppLanguage: "zh", OS: "Android", OSVersion: "16", OSAPI: 36, DeviceModel: "25053RT47C",
+		DeviceBrand: "Redmi", DeviceManufacturer: "Xiaomi", CPUABI: "arm64-v8a", DensityDPI: 520,
+		DisplayDensity: "xxhdpi", Resolution: "2772x1280", Language: "zh", Timezone: 8, Access: "wifi",
+		OpenUDID: randomHex(8), ClientUDID: uuidLike(), CDID: uuidLike(),
+		Region: "CN", TimezoneName: "Asia/Shanghai", TimezoneOffset: 28800, SimRegion: "cn",
+		DevicePlatform: "android", NotRequestSender: 0, IsSystemApp: 0, SDKFlavor: "china",
+		ROM: "OS2.0", ROMVersion: "BP2A.250605.031.A3",
 	}
-	body, err := json.Marshal(map[string]any{"magic_tag": "ss_app_log", "header": header, "_gen_time": time.Now().UnixMilli()})
+	body, err := json.Marshal(hongguoRegistrationPayload{MagicTag: "ss_app_log", Header: header, GenTime: time.Now().UnixMilli()})
 	if err != nil {
 		return "", "", err
 	}
@@ -113,10 +158,13 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 	request.Header.Set("User-Agent", hongguoAppUserAgent)
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json; charset=utf-8")
-	response, err := downloader.doPreparedCatalogRequestWithClient(request, 20*time.Second, func(prepared *http.Request) {
+	// GuoApp app-v2.0.0-112 executes module host.fetch through the shared
+	// Host HTTP client. Keep registration on that same route rather than
+	// introducing a separate DNS transport just for log.snssdk.com.
+	response, err := downloader.doPreparedCatalogRequest(request, 20*time.Second, func(prepared *http.Request) {
 		query.Set("_rticket", strconv.FormatInt(time.Now().UnixMilli(), 10))
 		prepared.URL.RawQuery = query.Encode()
-	}, downloader.hongguoRegisterClient)
+	})
 	if err != nil {
 		return "", "", err
 	}

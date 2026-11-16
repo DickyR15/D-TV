@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +15,99 @@ func TestHongguoAppBaseURLMatchesUpstreamFallbackHost(t *testing.T) {
 	const want = "https://api5-normal-sinfonlineb.fqnovel.com"
 	if hongguoAppBaseURL != want {
 		t.Fatalf("Hongguo App API host = %q, want upstream fallback host %q", hongguoAppBaseURL, want)
+	}
+}
+
+func TestHongguoDeviceRegistrationMatchesGuoAppModuleV102(t *testing.T) {
+	var calls int
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		calls++
+		if request.Method != http.MethodPost || request.URL.Host != "log.snssdk.com" || request.URL.Path != "/service/2/device_register/" {
+			t.Fatalf("unexpected registration request: %s %s", request.Method, request.URL.String())
+		}
+		if got := request.Header.Get("User-Agent"); got != hongguoAppUserAgent {
+			t.Fatalf("registration user-agent = %q", got)
+		}
+		if got := request.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
+			t.Fatalf("registration content-type = %q", got)
+		}
+		query := request.URL.Query()
+		expected := map[string]string{
+			"aid": "8662", "app_name": "novelread", "version_code": "73532", "version_name": "7.3.5.32",
+			"manifest_version_code": "73532", "update_version_code": "73532", "channel": "update_64",
+			"device_platform": "android", "os": "android", "ssmix": "a", "device_type": "25053RT47C",
+			"device_brand": "Redmi", "language": "zh", "os_api": "36", "os_version": "16",
+			"resolution": "1280*2772", "dpi": "520", "ac": "wifi",
+		}
+		for name, want := range expected {
+			if got := query.Get(name); got != want {
+				t.Errorf("registration query %s = %q, want %q", name, got, want)
+			}
+		}
+		if query.Get("device_id") != "" || query.Get("iid") != "" {
+			t.Error("registration query must not contain a prior device id or install id")
+		}
+		if len(query.Get("req_id")) != 36 || len(query.Get("_rticket")) < 13 {
+			t.Errorf("registration request identifiers are invalid: req_id=%q _rticket=%q", query.Get("req_id"), query.Get("_rticket"))
+		}
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload struct {
+			MagicTag string         "json:\"magic_tag\""
+			Header   map[string]any "json:\"header\""
+			GenTime  int64          "json:\"_gen_time\""
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("registration body is not JSON: %v", err)
+		}
+		if payload.MagicTag != "ss_app_log" || payload.GenTime <= 0 {
+			t.Fatalf("registration envelope mismatch: %#v", payload)
+		}
+		for name, want := range map[string]string{
+			"display_name": "红果免费短剧", "app_version": "7.3.5.32", "channel": "update_64",
+			"package": "com.phoenix.read", "os": "Android", "os_version": "16",
+			"device_model": "25053RT47C", "device_brand": "Redmi", "device_manufacturer": "Xiaomi",
+			"cpu_abi": "arm64-v8a", "resolution": "2772x1280", "tz_name": "Asia/Shanghai",
+			"sim_region": "cn", "device_platform": "android", "sdk_flavor": "china",
+			"rom": "OS2.0", "rom_version": "BP2A.250605.031.A3",
+		} {
+			if got, _ := payload.Header[name].(string); got != want {
+				t.Errorf("registration header %s = %q, want %q", name, got, want)
+			}
+		}
+		ordered := []string{
+			"\"magic_tag\":", "\"header\":", "\"display_name\":", "\"aid\":", "\"app_version\":",
+			"\"version_code\":", "\"manifest_version_code\":", "\"update_version_code\":", "\"channel\":",
+			"\"package\":", "\"app_language\":", "\"os\":", "\"os_version\":", "\"os_api\":",
+			"\"device_model\":", "\"device_brand\":", "\"device_manufacturer\":", "\"cpu_abi\":",
+			"\"density_dpi\":", "\"display_density\":", "\"resolution\":", "\"language\":", "\"timezone\":",
+			"\"access\":", "\"openudid\":", "\"clientudid\":", "\"cdid\":", "\"region\":",
+			"\"tz_name\":", "\"tz_offset\":", "\"sim_region\":", "\"device_platform\":",
+			"\"not_request_sender\":", "\"is_system_app\":", "\"sdk_flavor\":", "\"rom\":",
+			"\"rom_version\":", "\"_gen_time\":",
+		}
+		position := -1
+		for _, key := range ordered {
+			next := strings.Index(string(body), key)
+			if next <= position {
+				t.Fatalf("registration body field order differs from upstream JSON.stringify order at %s", key)
+			}
+			position = next
+		}
+		return sourceFixtureResponse(request, http.StatusOK, "{\"device_id_str\":\"1001\",\"install_id_str\":\"10019\"}"), nil
+	})
+	d.hongguoClient().state.Registered = false
+	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("registration request count = %d, want 1", calls)
+	}
+	state := d.hongguoCatalogSnapshot()
+	if !state.Registered || state.DeviceID != "1001" || state.InstallID != "10019" {
+		t.Fatalf("registered state = %#v", state)
 	}
 }
 
