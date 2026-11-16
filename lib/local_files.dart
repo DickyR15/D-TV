@@ -258,6 +258,15 @@ class LocalFiles {
     }
     await _write(_staging, marker, contents[marker]);
     if (await _retired.exists()) {
+      // Never delete a previous recovery directory unless the active store
+      // is complete. A previous interrupted swap may have left the only copy
+      // of the user's original data in .old.
+      if (!await _complete(root)) {
+        throw LocalFilesRecoveryRequired(
+          '偵測到尚未完成的本機資料回復；原始資料仍保留於 ${_retired.path}，'
+          '請勿刪除該資料夾，先重新啟動 D TV 或匯出恢復資料。',
+        );
+      }
       await _retired.delete(recursive: true);
     }
     var movedOld = false;
@@ -267,9 +276,20 @@ class LocalFiles {
         movedOld = true;
       }
       await _staging.rename(root.path);
-    } catch (_) {
-      if (movedOld && !await root.exists() && await _retired.exists()) {
-        await _retired.rename(root.path);
+      if (!await _complete(root)) {
+        throw FileSystemException('新備份資料未通過索引完整性檢查', root.path);
+      }
+    } catch (error) {
+      if (movedOld && await _retired.exists()) {
+        try {
+          if (await root.exists()) await root.delete(recursive: true);
+          await _retired.rename(root.path);
+        } catch (restoreError) {
+          throw LocalFilesRecoveryRequired(
+            '備份還原未完成，無法自動放回原始資料。舊資料仍保留於 ${_retired.path}；'
+            '請勿刪除該資料夾。原始錯誤：$error；回復錯誤：$restoreError',
+          );
+        }
       }
       rethrow;
     }
