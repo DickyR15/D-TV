@@ -17,19 +17,7 @@ func nativePrimarySource(source string) bool {
 
 func nativeSourceAvailable(source string) bool {
 	source = canonicalProviderSource(source)
-	// Guipian is a retired provider. Keep its identity readable so saved
-	// favorites can still recover posters, but never re-enable its catalogue,
-	// playback, or download routes in either edition.
-	if source == sourceGuipian {
-		return false
-	}
 	return nativePrimarySource(source) || buildAllSources == "true" && isHuangguoProviderSource(source)
-}
-
-func nativeLegacyCoverAvailable(drama nativeDrama) bool {
-	source, _, valid := splitProviderDramaID(drama.ID)
-	return valid && source == sourceGuipian &&
-		(drama.Source == "" || canonicalProviderSource(drama.Source) == source)
 }
 
 func nativeDramaAvailable(drama nativeDrama) bool {
@@ -76,9 +64,7 @@ func nativeAuthorizeInput(input nativeInput) error {
 			return errNativeBuildSource
 		}
 	case "cover", "prepareCover":
-		// A retired Guipian item may still use the poster-repair pipeline.
-		// This exception does not authorize its catalog, details or playback.
-		if !nativeDramaAvailable(input.Drama) && !nativeLegacyCoverAvailable(input.Drama) {
+		if !nativeDramaAvailable(input.Drama) {
 			return errNativeBuildSource
 		}
 	case "detail", "metadata", "followCheck", "resolve", "preload", "prepareHandoff", "enqueueDownloads", "localPlayback":
