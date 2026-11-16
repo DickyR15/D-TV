@@ -1107,7 +1107,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                           border: Border.all(color: const Color(0x66FFFFFF)),
                         ),
                         child: Text(
-                          '${following.status.label}${following.hasUpdates ? ' · ${following.updateLabel}' : ''}',
+                          '${following.posterLabel}${following.hasUpdates ? ' · ${following.updateLabel}' : ''}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
