@@ -112,23 +112,36 @@ class GoogleCastController {
   bool get isConnected => _session != null;
 
   Future<List<Map<String, dynamic>>> discover() async {
-    if (Platform.isWindows) {
-      try {
-        // Prefer the Windows DNS-SD API (DnsServiceBrowse / Resolve). This
-        // avoids relying only on a Dart UDP multicast socket, which can behave
-        // differently from Chromium's native receiver discovery on Windows.
-        final nativeDevices = await _discoverWindowsDnsSd();
-        if (nativeDevices.isNotEmpty) return nativeDevices;
-        debugPrint(
-          '[GoogleCast] Windows DNS-SD found no receivers; falling back to dart_cast mDNS',
-        );
-      } catch (error) {
-        debugPrint(
-          '[GoogleCast] Windows DNS-SD discovery failed; falling back to dart_cast mDNS: $error',
-        );
-      }
+    if (!Platform.isWindows) return _discoverWithDartCast();
+
+    // Run the Windows DNS-SD API and the original mDNS provider together.
+    // Different receivers / interfaces can be visible to only one discovery
+    // path; merging prevents a partial native result from hiding those devices.
+    final results = await Future.wait([
+      _discoverWindowsDnsSd().catchError((Object error) {
+        debugPrint('[GoogleCast] Windows DNS-SD discovery failed: $error');
+        return <Map<String, dynamic>>[];
+      }),
+      _discoverWithDartCast().catchError((Object error) {
+        debugPrint('[GoogleCast] dart_cast mDNS discovery failed: $error');
+        return <Map<String, dynamic>>[];
+      }),
+    ]);
+
+    final devices = <String, Map<String, dynamic>>{};
+    for (final payload in results.expand((items) => items)) {
+      final address = payload['address']?.toString() ?? '';
+      final port = payload['port']?.toString() ?? '';
+      final key = address.isNotEmpty && port.isNotEmpty
+          ? '$address:$port'
+          : payload['id']?.toString() ?? '';
+      if (key.isNotEmpty) devices.putIfAbsent(key, () => payload);
     }
-    return _discoverWithDartCast();
+    final merged = devices.values.toList(growable: false)
+      ..sort((a, b) => (a['name'] as String)
+          .toLowerCase()
+          .compareTo((b['name'] as String).toLowerCase()));
+    return merged;
   }
 
   Future<List<Map<String, dynamic>>> _discoverWindowsDnsSd() async {
