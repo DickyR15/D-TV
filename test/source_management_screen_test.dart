@@ -15,6 +15,13 @@ import 'fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('adult metadata is independent from advanced source membership', () {
+    expect(SourceSite.missav.adult, isTrue);
+    expect(SourceSite.supjav.adult, isTrue);
+    expect(SourceSite.guipian.adult, isFalse);
+    expect(SourceSite.byId('huangdou').adult, isFalse);
+  });
+
   test('source management removes the Dart Bad state prefix', () {
     expect(
       sourceManagementErrorMessage(StateError('密碼不正確')),
@@ -63,7 +70,7 @@ void main() {
     expect(find.textContaining('Bad state:'), findsNothing);
   });
 
-  testWidgets('three primary sources and guidance are visible in every edition', (
+  testWidgets('four primary sources and guidance are visible in every edition', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -82,16 +89,19 @@ void main() {
     );
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
+    expect(find.text('鬼片'), findsOneWidget);
     expect(find.text('多多追劇'), findsOneWidget);
+    expect(find.text('電影 · 電視劇 · 動漫'), findsOneWidget);
     expect(find.text('電影 · 電視劇 · 動漫 · 綜藝'), findsOneWidget);
     expect(
       find.textContaining(
-        '預設開啟 3 個一般片源：紅果、韓小圈、多多追劇。',
+        '預設開啟 4 個一般片源：紅果、韓小圈、鬼片、多多追劇。',
       ),
       findsOneWidget,
     );
     expect(store.sourceEnabled('hongguo'), isTrue);
     expect(store.sourceEnabled('hanxiaoquan'), isTrue);
+    expect(store.sourceEnabled('guipian'), isTrue);
     expect(store.sourceEnabled('duoduo'), isTrue);
   });
 
