@@ -504,15 +504,20 @@ func adultResolvePlaybackURL(baseAddress, raw string) string {
 	if raw == "" {
 		return ""
 	}
-	base, err := url.Parse(baseAddress)
-	if err != nil || base == nil {
-		return ""
-	}
 	reference, err := url.Parse(raw)
 	if err != nil || reference.User != nil {
 		return ""
 	}
-	resolved := base.ResolveReference(reference)
+	var resolved *url.URL
+	if strings.TrimSpace(baseAddress) == "" {
+		resolved = reference
+	} else {
+		base, parseErr := url.Parse(baseAddress)
+		if parseErr != nil || base == nil {
+			return ""
+		}
+		resolved = base.ResolveReference(reference)
+	}
 	if resolved.Scheme != "https" || resolved.User != nil || resolved.Hostname() == "" {
 		return ""
 	}
