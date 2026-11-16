@@ -106,7 +106,10 @@ func adultDetailURL(source, sourceID string) string {
 		if !strings.ContainsAny(sourceID, "0123456789") {
 			return ""
 		}
-		return base + "/" + url.PathEscape(sourceID)
+		// Current MissAV detail links include a language segment (/en/<code>).
+		// The previous root-level /<code> route no longer consistently
+		// serves the player page.
+		return base + "/en/" + url.PathEscape(sourceID)
 	case sourceSupJav:
 		if _, err := strconv.Atoi(sourceID); err != nil {
 			return ""
@@ -496,17 +499,68 @@ func adultUnpackPacker(script string) string {
 	})
 }
 
-func adultFindM3U8(body string) string {
+func adultResolvePlaybackURL(baseAddress, raw string) string {
+	raw = html.UnescapeString(strings.TrimSpace(strings.ReplaceAll(raw, "\\/", "/")))
+	if raw == "" {
+		return ""
+	}
+	base, err := url.Parse(baseAddress)
+	if err != nil || base == nil {
+		return ""
+	}
+	reference, err := url.Parse(raw)
+	if err != nil || reference.User != nil {
+		return ""
+	}
+	resolved := base.ResolveReference(reference)
+	if resolved.Scheme != "https" || resolved.User != nil || resolved.Hostname() == "" {
+		return ""
+	}
+	return resolved.String()
+}
+
+func adultM3U8FromText(body, pageURL string) string {
 	body = strings.ReplaceAll(body, "\\/", "/")
-	if match := adultM3U8Pattern.FindString(body); match != "" && isProviderHTTPMediaURL(match) {
+	for _, match := range adultM3U8Pattern.FindAllString(body, -1) {
+		candidate := strings.TrimRight(match, ".,;:)]}")
+		resolved := adultResolvePlaybackURL(pageURL, candidate)
+		if resolved != "" {
+			return resolved
+		}
+	}
+	return ""
+}
+
+func adultFindM3U8(body string, pageURLs ...string) string {
+	pageURL := ""
+	if len(pageURLs) > 0 {
+		pageURL = pageURLs[0]
+	}
+	body = strings.ReplaceAll(body, "\\/", "/")
+	if match := adultM3U8FromText(body, pageURL); match != "" {
 		return match
 	}
 	scriptPattern := regexp.MustCompile("(?is)<script\\b[^>]*>(.*?)</script>")
 	for _, script := range scriptPattern.FindAllStringSubmatch(body, -1) {
-		if len(script) > 1 && strings.Contains(script[1], "eval(function") {
-			if match := adultM3U8Pattern.FindString(adultUnpackPacker(script[1])); match != "" && isProviderHTTPMediaURL(match) {
-				return match
+		if len(script) < 2 {
+			continue
+		}
+		content := script[1]
+		if strings.Contains(content, "eval(function") {
+			content = adultUnpackPacker(content)
+		}
+		if content == "" {
+			continue
+		}
+		sourcePattern := regexp.MustCompile("(?is)\\bsource\\s*[:=]\\s*['\\\"]?((?:https?:)?//[^'\\\"\\s;]+|/[^'\\\"\\s;]+)")
+		if source := sourcePattern.FindStringSubmatch(content); len(source) > 1 {
+			candidate := adultResolvePlaybackURL(pageURL, source[1])
+			if candidate != "" && strings.Contains(strings.ToLower(candidate), ".m3u8") {
+				return candidate
 			}
+		}
+		if match := adultM3U8FromText(content, pageURL); match != "" {
+			return match
 		}
 	}
 	return ""
