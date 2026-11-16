@@ -1,8 +1,26 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hgtv/diary_service.dart';
 import 'package:hgtv/models.dart';
 import 'package:hgtv/playback_preloader.dart';
 
 import 'fixtures.dart';
+
+class FailingPreloadRepository extends FixtureRepository {
+  int preloadCalls = 0;
+
+  @override
+  Future<PlaybackPlan?> preload(
+    Drama drama,
+    Episode episode, {
+    int quality = 0,
+    bool online = false,
+  }) async {
+    preloadCalls++;
+    throw TimeoutException('next episode resolver timed out');
+  }
+}
 
 class DetailPreloadRepository extends FixtureRepository {
   DetailPreloadRepository(this.plan);
@@ -38,6 +56,26 @@ class DetailPreloadRepository extends FixtureRepository {
   Future<void> release(String session) async {
     released.add(session);
   }
+
+  testWidgets('failed next-episode preload records elapsed time and error type', (
+    tester,
+  ) async {
+    DiaryService.clear();
+    final repository = FailingPreloadRepository();
+    final preloader = PlaybackPreloader(repository);
+    addTearDown(preloader.dispose);
+
+    preloader.prepare(FixtureRepository.free, episode(2));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+
+    expect(repository.preloadCalls, 1);
+    expect(preloader.error, isNotEmpty);
+    expect(DiaryService.fullText, contains('[NextEpisodePreload] start'));
+    expect(DiaryService.fullText, contains('[NextEpisodePreload] failed'));
+    expect(DiaryService.fullText, contains('errorType=TimeoutException'));
+  });
+
 }
 
 void main() {
@@ -49,6 +87,7 @@ void main() {
   testWidgets('detail preload prepares and transfers only the selected episode', (
     tester,
   ) async {
+    DiaryService.clear();
     final repository = DetailPreloadRepository(
       const PlaybackPlan(
         url: 'https://example.test/prepared.m3u8',
@@ -77,7 +116,13 @@ void main() {
       quality: 1080,
     );
     expect(transferred?.session, 'detail-prepared');
+    expect(preloader.lastTakeResolveMs, greaterThanOrEqualTo(0));
     expect(repository.released, isEmpty);
+    expect(DiaryService.fullText, contains('[NextEpisodePreload] scheduled'));
+    expect(DiaryService.fullText, contains('[NextEpisodePreload] start'));
+    expect(DiaryService.fullText, contains('[NextEpisodePreload] complete'));
+    expect(DiaryService.fullText, contains('[NextEpisodePreload] take hit=true'));
+    expect(DiaryService.fullText, contains('preloadResolveMs='));
   });
 
   testWidgets('a different episode never receives the prepared session', (
