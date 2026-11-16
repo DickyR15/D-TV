@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'core_bridge.dart';
+import 'diary_service.dart';
 import 'models.dart';
 
 class PlaybackPreloader extends ChangeNotifier {
@@ -15,6 +16,9 @@ class PlaybackPreloader extends ChangeNotifier {
   String? _identity;
   Timer? _delay;
   DateTime _expires = DateTime(2000), _retryAt = DateTime(2000);
+  int _readyResolveMs = 0;
+  int _lastTakeResolveMs = 0;
+  int get lastTakeResolveMs => _lastTakeResolveMs;
   int _generation = 0;
   bool _closed = false, loading = false;
   String error = '';
@@ -61,10 +65,17 @@ class PlaybackPreloader extends ChangeNotifier {
       return;
     }
     final ticket = _generation;
+    DiaryService.add(
+      '[NextEpisodePreload] scheduled source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality online=$online delayMs=600',
+    );
     _delay = Timer(const Duration(milliseconds: 600), () async {
       _delay = null;
       loading = true;
       notifyListeners();
+      final preloadClock = Stopwatch()..start();
+      DiaryService.add(
+        '[NextEpisodePreload] start source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality online=$online',
+      );
       try {
         final plan = await repository.preload(
           drama,
@@ -73,6 +84,9 @@ class PlaybackPreloader extends ChangeNotifier {
           online: online,
         );
         if (_closed || ticket != _generation) {
+          DiaryService.add(
+            '[NextEpisodePreload] cancelled source=${drama.source} dramaId=${drama.id} episode=${episode.number} elapsedMs=${preloadClock.elapsedMilliseconds}',
+          );
           if (plan != null) await repository.release(plan.session);
           return;
         }
@@ -91,12 +105,19 @@ class PlaybackPreloader extends ChangeNotifier {
           throw AppFailure('下一集播放憑證即將過期');
         }
         _ready = plan;
+        _readyResolveMs = preloadClock.elapsedMilliseconds;
         _expires = expires;
         error = '';
+        DiaryService.add(
+          '[NextEpisodePreload] complete source=${drama.source} dramaId=${drama.id} episode=${episode.number} elapsedMs=$_readyResolveMs bytes=${plan.prefetchedBytes} local=${plan.local} expiresInMs=${expires.difference(_now()).inMilliseconds}',
+        );
       } catch (failure) {
         if (_closed || ticket != _generation) return;
         error = failure.toString();
         _retryAt = _now().add(const Duration(seconds: 30));
+        DiaryService.add(
+          '[NextEpisodePreload] failed source=${drama.source} dramaId=${drama.id} episode=${episode.number} elapsedMs=${preloadClock.elapsedMilliseconds} errorType=${failure.runtimeType} retryAfterSeconds=30',
+        );
       } finally {
         if (!_closed && ticket == _generation) {
           loading = false;
@@ -113,11 +134,26 @@ class PlaybackPreloader extends ChangeNotifier {
     int quality = 0,
     bool online = false,
   }) {
-    final result =
-        _identity == _key(drama, episode, quality, online) &&
-            _now().isBefore(_expires)
-        ? _ready
-        : null;
+    final identityMatches =
+        _identity == _key(drama, episode, quality, online);
+    final notExpired = _now().isBefore(_expires);
+    final result = identityMatches && notExpired ? _ready : null;
+    final reason = result != null
+        ? 'ready'
+        : !identityMatches
+        ? 'identity_mismatch'
+        : !notExpired
+        ? 'expired'
+        : loading || _delay != null
+        ? 'still_loading'
+        : error.isNotEmpty
+        ? 'preload_failed'
+        : 'not_ready';
+    final resolvedMs = result == null ? 0 : _readyResolveMs;
+    _lastTakeResolveMs = resolvedMs;
+    DiaryService.add(
+      '[NextEpisodePreload] take hit=${result != null} source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality reason=$reason preloadResolveMs=$resolvedMs',
+    );
     if (result != null) _ready = null;
     clear();
     return result;
@@ -139,6 +175,7 @@ class PlaybackPreloader extends ChangeNotifier {
     pause();
     final old = _ready;
     _ready = null;
+    _readyResolveMs = 0;
     _identity = null;
     _retryAt = DateTime(2000);
     error = '';
