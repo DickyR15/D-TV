@@ -497,11 +497,15 @@ finally {
         '-WorkDirectory',
         workDirectory.path,
       ],
-      mode: ProcessStartMode.detached,
+      mode: ProcessStartMode.normal,
     );
+    // Drain both pipes so a PowerShell diagnostic cannot block the updater.
+    unawaited(updaterProcess.stdout.drain<void>());
+    unawaited(updaterProcess.stderr.drain<void>());
 
     // Do not close D TV until PowerShell confirms that the archive has been
-    // extracted and all required files have passed validation.
+    // extracted and all required files have passed validation. A normal child
+    // process continues running when the app exits after the ready marker.
     final updaterExitCode = updaterProcess.exitCode;
     final deadline = DateTime.now().add(const Duration(minutes: 2));
     while (DateTime.now().isBefore(deadline)) {
