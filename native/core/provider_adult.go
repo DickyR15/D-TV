@@ -1,0 +1,563 @@
+package core
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html"
+	"net/url"
+	"regexp"
+	"runtime"
+	"strconv"
+	"strings"
+)
+
+const (
+	sourceMissAV   = "missav"
+	sourceSupJav   = "supjav"
+	missAVBaseURL  = "https://missav.ws"
+	supJavBaseURL  = "https://supjav.com"
+	adultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
+var (
+	adultAnchorPattern = regexp.MustCompile("(?is)<a\\b([^>]*)>(.*?)</a>")
+	adultImagePattern  = regexp.MustCompile("(?is)<img\\b[^>]*>")
+	adultMetaPattern   = regexp.MustCompile("(?is)<meta\\b[^>]*>")
+	adultTagPattern    = regexp.MustCompile("(?is)<[^>]+>")
+	adultM3U8Pattern   = regexp.MustCompile("(?i)https?://[^\\\"'<>\\\\s]+\\.m3u8(?:\\?[^\\\"'<>\\\\s]*)?")
+	adultPackerPattern = regexp.MustCompile("(?s)eval\\(function\\(p,a,c,k,e,d\\)\\{.*?\\}\\('([^']*)',\\s*(\\d+),\\s*(\\d+),\\s*'([^']*)'\\.split\\('\\|'\\)")
+	adultWordPattern   = regexp.MustCompile("\\b([0-9a-zA-Z_]+)\\b")
+	adultSlugPattern   = regexp.MustCompile("(?i)^[a-z0-9][a-z0-9_-]{0,127}$")
+)
+
+func adultSourceName(source string) string {
+	switch canonicalProviderSource(source) {
+	case sourceMissAV:
+		return "MISS AV"
+	case sourceSupJav:
+		return "SupJav"
+	default:
+		return "進階片源"
+	}
+}
+
+func adultProviderBaseURL(source string) string {
+	switch canonicalProviderSource(source) {
+	case sourceMissAV:
+		return missAVBaseURL
+	case sourceSupJav:
+		return supJavBaseURL
+	default:
+		return ""
+	}
+}
+
+func adultProviderCategories(source string) []nativeCategory {
+	switch canonicalProviderSource(source) {
+	case sourceMissAV:
+		return []nativeCategory{
+			{ID: "today-hot", Name: "今日熱門"},
+			{ID: "weekly-hot", Name: "本週熱門"},
+			{ID: "monthly-hot", Name: "本月熱門"},
+			{ID: "chinese-subtitle", Name: "中文字幕"},
+			{ID: "new", Name: "最近更新"},
+			{ID: "release", Name: "新作上市"},
+			{ID: "uncensored-leak", Name: "無碼流出"},
+		}
+	case sourceSupJav:
+		return []nativeCategory{
+			{ID: "popular", Name: "熱門總榜"},
+			{ID: "weekly-hot", Name: "本週熱門"},
+			{ID: "monthly-hot", Name: "本月熱門"},
+			{ID: "uncensored-jav", Name: "無碼"},
+			{ID: "censored-jav", Name: "有碼"},
+			{ID: "amateur", Name: "素人"},
+			{ID: "chinese-subtitles", Name: "中文字幕"},
+			{ID: "english-subtitles", Name: "英文字幕"},
+			{ID: "reducing-mosaic", Name: "破壞版"},
+		}
+	default:
+		return nil
+	}
+}
+
+func validAdultProviderCategory(source, category string) bool {
+	if category == "" {
+		return true
+	}
+	for _, item := range adultProviderCategories(source) {
+		if item.ID == category {
+			return true
+		}
+	}
+	return false
+}
+
+func adultDetailURL(source, sourceID string) string {
+	base := adultProviderBaseURL(source)
+	sourceID = strings.TrimSpace(sourceID)
+	if base == "" || !adultSlugPattern.MatchString(sourceID) {
+		return ""
+	}
+	switch canonicalProviderSource(source) {
+	case sourceMissAV:
+		if !strings.ContainsAny(sourceID, "0123456789") {
+			return ""
+		}
+		return base + "/en/" + url.PathEscape(sourceID)
+	case sourceSupJav:
+		if _, err := strconv.Atoi(sourceID); err != nil {
+			return ""
+		}
+		return base + "/zh/" + url.PathEscape(sourceID) + ".html"
+	default:
+		return ""
+	}
+}
+
+func adultCategoryURL(source, category string) (string, error) {
+	base := adultProviderBaseURL(source)
+	if base == "" || !validAdultProviderCategory(source, category) {
+		return "", errors.New("片源分類無效")
+	}
+	if category == "" {
+		if source == sourceSupJav {
+			return base + "/zh/", nil
+		}
+		return base + "/en/", nil
+	}
+	if source == sourceMissAV {
+		paths := map[string]string{
+			"today-hot": "/dm298/en/today-hot",
+			"weekly-hot": "/dm170/en/weekly-hot",
+			"monthly-hot": "/dm270/en/monthly-hot",
+			"chinese-subtitle": "/dm278/en/chinese-subtitle",
+			"new": "/dm539/en/new",
+			"release": "/dm634/en/release",
+			"uncensored-leak": "/dm817/en/uncensored-leak",
+		}
+		if path, ok := paths[category]; ok {
+			return base + path, nil
+		}
+	}
+	if source == sourceSupJav {
+		paths := map[string]string{
+			"popular": "/popular",
+			"weekly-hot": "/popular?sort=week",
+			"monthly-hot": "/popular?sort=month",
+			"uncensored-jav": "/category/uncensored-jav",
+			"censored-jav": "/category/censored-jav",
+			"amateur": "/category/amateur",
+			"chinese-subtitles": "/category/chinese-subtitles",
+			"english-subtitles": "/category/english-subtitles",
+			"reducing-mosaic": "/category/reducing-mosaic",
+		}
+		if path, ok := paths[category]; ok {
+			if strings.HasPrefix(path, "/popular") {
+				return base + path, nil
+			}
+			return base + "/zh" + path, nil
+		}
+	}
+	return "", errors.New("片源分類目前沒有對應網址")
+}
+
+func adultAttribute(tag, wanted string) string {
+	pattern := regexp.MustCompile("(?is)\\b" + regexp.QuoteMeta(wanted) + "\\s*=\\s*['\\\"]([^'\\\"]*)['\\\"]")
+	match := pattern.FindStringSubmatch(tag)
+	if len(match) < 2 {
+		return ""
+	}
+	return html.UnescapeString(strings.TrimSpace(match[1]))
+}
+
+func adultClean(value string) string {
+	value = adultTagPattern.ReplaceAllString(value, " ")
+	value = html.UnescapeString(value)
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func adultSafeURL(base, raw, source string) string {
+	raw = html.UnescapeString(strings.TrimSpace(strings.ReplaceAll(raw, "\\\\/", "/")))
+	if raw == "" {
+		return ""
+	}
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+	reference, err := url.Parse(raw)
+	if err != nil || reference.User != nil {
+		return ""
+	}
+	resolved := baseURL.ResolveReference(reference)
+	if resolved.Scheme != "https" || resolved.User != nil || resolved.Hostname() == "" {
+		return ""
+	}
+	host := strings.ToLower(resolved.Hostname())
+	switch canonicalProviderSource(source) {
+	case sourceMissAV:
+		if host != "missav.ai" && host != "www.missav.ai" &&
+			host != "missav.ws" && host != "www.missav.ws" &&
+			host != "missav.live" && host != "www.missav.live" &&
+			host != "missav123.com" && host != "www.missav123.com" {
+			return ""
+		}
+	case sourceSupJav:
+		if host != "supjav.com" && host != "www.supjav.com" {
+			return ""
+		}
+	default:
+		return ""
+	}
+	return resolved.String()
+}
+
+func adultImageCandidates(fragment, base, source string) []string {
+	seen := map[string]bool{}
+	var result []string
+	for _, tag := range adultImagePattern.FindAllString(fragment, -1) {
+		for _, attr := range []string{"data-original", "data-src", "data-lazy-src", "data-lazyload", "src"} {
+			if raw := adultAttribute(tag, attr); raw != "" {
+				address := adultSafeURL(base, raw, source)
+				if address != "" && !seen[address] {
+					seen[address] = true
+					result = append(result, address)
+				}
+			}
+		}
+	}
+	return result
+}
+
+func adultMetaValue(body, wanted string) string {
+	for _, tag := range adultMetaPattern.FindAllString(body, -1) {
+		name := adultAttribute(tag, "property")
+		if name == "" {
+			name = adultAttribute(tag, "name")
+		}
+		if strings.EqualFold(name, wanted) {
+			return adultAttribute(tag, "content")
+		}
+	}
+	return ""
+}
+
+func adultParseCards(body, base, source string) []Drama {
+	var items []Drama
+	seen := map[string]bool{}
+	for _, match := range adultAnchorPattern.FindAllStringSubmatch(body, -1) {
+		if len(match) < 3 {
+			continue
+		}
+		anchor := "<a " + match[1] + ">"
+		address := adultSafeURL(base, adultAttribute(anchor, "href"), source)
+		if address == "" {
+			continue
+		}
+		parsed, err := url.Parse(address)
+		if err != nil {
+			continue
+		}
+		slug := strings.TrimSuffix(parsed.Path[strings.LastIndex(parsed.Path, "/")+1:], ".html")
+		if !adultSlugPattern.MatchString(slug) || seen[slug] {
+			continue
+		}
+		if source == sourceMissAV {
+			if !strings.ContainsAny(slug, "0123456789") || strings.HasPrefix(strings.ToLower(slug), "dm") {
+				continue
+			}
+		} else if source == sourceSupJav {
+			if !strings.HasSuffix(strings.ToLower(parsed.Path), ".html") {
+				continue
+			}
+			if _, err := strconv.Atoi(slug); err != nil {
+				continue
+			}
+		}
+		title := adultAttribute(anchor, "title")
+		if title == "" {
+			title = adultAttribute(anchor, "aria-label")
+		}
+		if title == "" {
+			title = adultClean(match[2])
+		}
+		if title == "" {
+			continue
+		}
+		covers := adultImageCandidates(match[2], base, source)
+		cover := ""
+		if len(covers) > 0 {
+			cover = covers[0]
+		}
+		seen[slug] = true
+		items = append(items, Drama{
+			ID: providerDramaID(source, slug), Source: source, SourceID: slug,
+			Title: truncate(title, 512), Name: truncate(title, 512),
+			Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), covers[1:]...),
+			ChannelName: adultSourceName(source), CategoryName: adultSourceName(source),
+			TotalEpisode: 1, EpisodeCount: 1,
+		})
+		if len(items) >= 100 {
+			break
+		}
+	}
+	return items
+}
+
+func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page int, category, query string) ([]Drama, bool, error) {
+	source = canonicalProviderSource(source)
+	if page < 1 || page > 100000 {
+		return nil, false, errors.New("目錄頁碼無效")
+	}
+	base := adultProviderBaseURL(source)
+	var address string
+	if strings.TrimSpace(query) != "" {
+		if len(query) > 256 {
+			return nil, false, errors.New("搜尋關鍵字過長")
+		}
+		if source == sourceMissAV {
+			address = base + "/en/search/" + url.PathEscape(strings.TrimSpace(query))
+		} else {
+			address = base + "/zh/?s=" + url.QueryEscape(strings.TrimSpace(query))
+		}
+	} else {
+		var err error
+		address, err = adultCategoryURL(source, category)
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	if page > 1 {
+		parsed, err := url.Parse(address)
+		if err != nil {
+			return nil, false, err
+		}
+		if source == sourceMissAV {
+			q := parsed.Query()
+			q.Set("page", strconv.Itoa(page))
+			parsed.RawQuery = q.Encode()
+		} else {
+			parsed.Path = strings.TrimRight(parsed.Path, "/") + "/page/" + strconv.Itoa(page)
+		}
+		address = parsed.String()
+	}
+	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
+	body, err := d.fetchProviderText(requestContext, address, base+"/")
+	if err != nil {
+		return nil, false, fmt.Errorf("%s 目錄讀取失敗：%w", adultSourceName(source), err)
+	}
+	items := adultParseCards(body, base, source)
+	return items, len(items) >= 20, nil
+}
+
+func adultEncodeBase(value, base int) string {
+	const digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+	if value == 0 {
+		return "0"
+	}
+	var result []byte
+	for value > 0 {
+		result = append(result, digits[value%base])
+		value /= base
+	}
+	for left, right := 0, len(result)-1; left < right; left, right = left+1, right-1 {
+		result[left], result[right] = result[right], result[left]
+	}
+	return string(result)
+}
+
+func adultUnpackPacker(script string) string {
+	match := adultPackerPattern.FindStringSubmatch(script)
+	if len(match) != 5 {
+		return ""
+	}
+	packed := strings.ReplaceAll(match[1], "\\\\'", "'")
+	packed = strings.ReplaceAll(packed, "\\\\/", "/")
+	base, err1 := strconv.Atoi(match[2])
+	count, err2 := strconv.Atoi(match[3])
+	if err1 != nil || err2 != nil || base < 2 || base > 36 || count < 0 || count > 200000 {
+		return ""
+	}
+	keys := strings.Split(match[4], "|")
+	lookup := make(map[string]string, count)
+	for index := 0; index < count; index++ {
+		key := adultEncodeBase(index, base)
+		if index < len(keys) && keys[index] != "" {
+			lookup[key] = keys[index]
+		} else {
+			lookup[key] = key
+		}
+	}
+	return adultWordPattern.ReplaceAllStringFunc(packed, func(word string) string {
+		sub := adultWordPattern.FindStringSubmatch(word)
+		if len(sub) == 2 {
+			if value, ok := lookup[sub[1]]; ok {
+				return value
+			}
+		}
+		return word
+	})
+}
+
+func adultFindM3U8(body string) string {
+	body = strings.ReplaceAll(body, "\\\\/", "/")
+	if match := adultM3U8Pattern.FindString(body); match != "" && isProviderHTTPMediaURL(match) {
+		return match
+	}
+	scriptPattern := regexp.MustCompile("(?is)<script\\b[^>]*>(.*?)</script>")
+	for _, script := range scriptPattern.FindAllStringSubmatch(body, -1) {
+		if len(script) > 1 && strings.Contains(script[1], "eval(function") {
+			if match := adultM3U8Pattern.FindString(adultUnpackPacker(script[1])); match != "" && isProviderHTTPMediaURL(match) {
+				return match
+			}
+		}
+	}
+	return ""
+}
+
+func adultReverse(value string) string {
+	runes := []rune(value)
+	for left, right := 0, len(runes)-1; left < right; left, right = left+1, right-1 {
+		runes[left], runes[right] = runes[right], runes[left]
+	}
+	return string(runes)
+}
+
+func adultSupJavDataLinks(body string) map[string]string {
+	result := map[string]string{}
+	pattern := regexp.MustCompile("(?is)<a\\b([^>]*data-link[^>]*)>(.*?)</a>")
+	for _, match := range pattern.FindAllStringSubmatch(body, -1) {
+		if len(match) < 3 {
+			continue
+		}
+		name := strings.ToUpper(adultClean(match[2]))
+		link := adultAttribute("<a "+match[1]+">", "data-link")
+		if name != "" && link != "" {
+			if _, exists := result[name]; !exists {
+				result[name] = link
+			}
+		}
+	}
+	return result
+}
+
+func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID string) (Drama, []Chapter, error) {
+	source = canonicalProviderSource(source)
+	pageURL := adultDetailURL(source, sourceID)
+	if pageURL == "" {
+		return Drama{}, nil, errors.New("作品識別碼無效")
+	}
+	base := adultProviderBaseURL(source)
+	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
+	body, err := d.fetchProviderText(requestContext, pageURL, base+"/")
+	if err != nil {
+		return Drama{}, nil, fmt.Errorf("%s 作品詳情讀取失敗：%w", adultSourceName(source), err)
+	}
+	title := adultClean(adultMetaValue(body, "og:title"))
+	if title == "" {
+		if match := regexp.MustCompile("(?is)<h1\\b[^>]*>(.*?)</h1>").FindStringSubmatch(body); len(match) > 1 {
+			title = adultClean(match[1])
+		}
+	}
+	if title == "" {
+		return Drama{}, nil, fmt.Errorf("%s 詳情頁缺少作品標題", adultSourceName(source))
+	}
+	covers := adultImageCandidates(body, base, source)
+	if raw := adultMetaValue(body, "og:image"); raw != "" {
+		if cover := adultSafeURL(base, raw, source); cover != "" {
+			covers = append([]string{cover}, covers...)
+		}
+	}
+	unique := make([]string, 0, len(covers))
+	seen := map[string]bool{}
+	for _, cover := range covers {
+		if cover != "" && !seen[cover] {
+			seen[cover] = true
+			unique = append(unique, cover)
+		}
+	}
+	cover := ""
+	if len(unique) > 0 {
+		cover = unique[0]
+	}
+	description := adultClean(adultMetaValue(body, "description"))
+	drama := Drama{
+		ID: providerDramaID(source, sourceID), Source: source, SourceID: sourceID,
+		Title: truncate(title, 512), Name: truncate(title, 512),
+		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
+		Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), unique[1:]...),
+		ChannelName: adultSourceName(source), CategoryName: adultSourceName(source),
+		TotalEpisode: 1, EpisodeCount: 1,
+	}
+	chapter := Chapter{
+		ID: providerChapterID(source, sourceID, pageURL),
+		Source: source, Title: "第1集",
+		PageURL: pageURL, Referer: base + "/",
+		VideoURL: "adult-page://" + pageURL,
+		CurrentEpisode: json.RawMessage("1"),
+	}
+	return drama, []Chapter{chapter}, nil
+}
+
+func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (providerMedia, error) {
+	source, sourceID, valid := splitProviderDramaID(task.DramaID)
+	if !valid || (source != sourceMissAV && source != sourceSupJav) {
+		return providerMedia{}, errors.New("進階片源作品資訊無效，請重新整理")
+	}
+	prefix := providerChapterID(source, sourceID, "")
+	if !strings.HasPrefix(task.Chapter.ID, prefix) {
+		return providerMedia{}, errors.New("進階片源分集資訊無效，請重新整理")
+	}
+	pageURL := task.Chapter.PageURL
+	if pageURL == "" {
+		pageURL = strings.TrimPrefix(task.Chapter.ID, prefix)
+	}
+	base := adultProviderBaseURL(source)
+	if adultSafeURL(base, pageURL, source) == "" {
+		return providerMedia{}, errors.New("進階片源播放頁網址無效")
+	}
+	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
+	body, err := d.fetchProviderText(requestContext, pageURL, base+"/")
+	if err != nil {
+		return providerMedia{}, fmt.Errorf("%s 播放頁讀取失敗：%w", adultSourceName(source), err)
+	}
+	mediaURL := ""
+	referer := pageURL
+	if source == sourceMissAV {
+		mediaURL = adultFindM3U8(body)
+	} else {
+		servers := adultSupJavDataLinks(body)
+		order := []string{"EVS", "FST", "VAS", "LUC", "VOE", "TV", "ST"}
+		for _, name := range order {
+			link, ok := servers[name]
+			if !ok || mediaURL != "" {
+				continue
+			}
+			embedURL := "https://lk1.supremejav.com/supjav.php?c=" + url.QueryEscape(adultReverse(link))
+			embed, fetchErr := d.fetchProviderText(requestContext, embedURL, supJavBaseURL+"/")
+			if fetchErr != nil {
+				continue
+			}
+			if found := adultFindM3U8(embed); found != "" {
+				mediaURL = found
+				referer = embedURL
+			}
+		}
+	}
+	if mediaURL == "" || !isProviderHTTPMediaURL(mediaURL) {
+		return providerMedia{}, fmt.Errorf("%s 目前沒有可用的 HLS 播放網址；站方可能要求驗證、封鎖請求或已變更播放器", adultSourceName(source))
+	}
+	credentials := &providerMediaCredentials{referer: referer, userAgent: adultUserAgent}
+	media := providerMedia{
+		URL: mediaURL, Referer: referer, credentials: credentials,
+		StandardHTTP: runtime.GOOS == "android",
+	}
+	parsed, _ := url.Parse(mediaURL)
+	if parsed != nil && strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
+		return d.prepareWebProviderMedia(ctx, media, adultSourceName(source))
+	}
+	return media, nil
+}
