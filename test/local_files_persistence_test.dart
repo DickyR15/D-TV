@@ -254,6 +254,34 @@ void main() {
     expect(await stagingBlocker.readAsString(), 'do-not-remove');
   });
 
+  test('incomplete active store never deletes the only retired recovery copy', () async {
+    final parent = await Directory.systemTemp.createTemp('dtv-retired-guard-');
+    addTearDown(() => parent.delete(recursive: true));
+    final root = Directory(path.join(parent.path, 'store'));
+    await root.create();
+    await File(path.join(root.path, 'incomplete.txt')).writeAsString('partial');
+
+    final retired = Directory('${root.path}.old');
+    await retired.create();
+    final retiredIndex = File(path.join(retired.path, LocalFiles.marker));
+    final retiredFavorites = File(path.join(retired.path, 'favorites.json'));
+    await retiredIndex.writeAsString('original-index');
+    await retiredFavorites.writeAsString('original-favorites');
+
+    final files = LocalFiles(root);
+    await expectLater(
+      files.replaceAll({
+        LocalFiles.marker: 'replacement-index',
+        'favorites.json': 'replacement-favorites',
+      }),
+      throwsA(isA<LocalFilesRecoveryRequired>()),
+    );
+
+    expect(await retiredIndex.readAsString(), 'original-index');
+    expect(await retiredFavorites.readAsString(), 'original-favorites');
+    expect(await File(path.join(root.path, 'incomplete.txt')).readAsString(), 'partial');
+  });
+
   test('temporarily unreadable history is preserved and read-only until reload', () async {
     final preferences = await freshPreferences();
     final legacy = LocalStore(preferences);
