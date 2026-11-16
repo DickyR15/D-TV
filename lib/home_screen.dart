@@ -1856,6 +1856,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       badge: following != null && following.hasUpdates
           ? following.updateLabel
           : null,
+      statusBadge: following?.status.label,
     );
   }
 
