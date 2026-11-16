@@ -503,7 +503,7 @@ void main() {
       await tester.enterText(pinFinder, 'visitor-password');
       // The Android TV keyboard's checkmark only finishes text entry and
       // transfers focus to the explicit 登入 button. It must not authenticate.
-      tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(pinFinder, findsOneWidget);
       expect(store.profile.name, '管理員');
