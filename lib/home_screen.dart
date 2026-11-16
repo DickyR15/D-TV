@@ -1602,9 +1602,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final service = const AppUpdateService();
     final asset = update.assetForPlatform(Platform.operatingSystem);
     if (Platform.isIOS) {
-      // iOS cannot install an IPA from inside the app. Open the release asset
-      // in Safari/the system browser so the user can save the IPA to Files.
-      await AppDevice.openExternalUrl(asset?.downloadUrl ?? update.releaseUrl);
+      // Match the upstream update flow: show the version notes and checksums
+      // on the release page; iOS IPA files must be signed and sideloaded.
+      await AppDevice.openExternalUrl(update.releaseUrl);
+      DiaryService.add('[Update] opened_release_page=iOS version=${update.version}');
       return;
     }
     if (asset == null) {
@@ -1650,7 +1651,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           );
         }
       } else if (Platform.isWindows) {
-        await service.launchWindowsUpdater(file);
+        await service.launchWindowsUpdater(file, releaseUrl: update.releaseUrl);
         exit(0);
       } else if (Platform.isMacOS) {
         await service.openMacDmg(file);
@@ -1672,7 +1673,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       DiaryService.add('[Update] download_failed=' + error.toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('下載或啟動更新失敗：${uiTraditional(error.toString())}')),
+          SnackBar(
+            content: Text(
+              '下載或啟動更新失敗：${uiTraditional(error.toString())}',
+            ),
+            action: SnackBarAction(
+              label: '開啟更新頁',
+              onPressed: () {
+                unawaited(
+                  AppDevice.openExternalUrl(update.releaseUrl).catchError(
+                    (Object openError) {
+                      DiaryService.add(
+                        '[Update] fallback_release_page_failed=' +
+                            openError.toString(),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
         );
       }
     }
