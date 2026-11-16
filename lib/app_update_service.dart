@@ -327,7 +327,17 @@ try {
   if (!(Test-Path -LiteralPath $stagedExecutable -PathType Leaf)) {
     throw '更新 ZIP 缺少 DTV.exe，已取消更新。'
   }
-  foreach ($requiredFile in @('duanju_core.dll', 'flutter_windows.dll')) {
+  foreach ($requiredFile in @(
+    'DTV.exe',
+    'duanju_core.dll',
+    'flutter_windows.dll',
+    'libffmpegkit.dll',
+    'libmpv-2.dll',
+    'msvcp140.dll',
+    'vcruntime140.dll',
+    'data/icudtl.dat',
+    'data/app.so'
+  )) {
     if (!(Test-Path -LiteralPath (Join-Path $stage $requiredFile) -PathType Leaf)) {
       throw "更新 ZIP 缺少必要檔案：$requiredFile"
     }
