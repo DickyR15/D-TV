@@ -2823,16 +2823,38 @@ class _PlayerScreenState extends State<PlayerScreen>
       widget.handoff?.fail('接收端已更換播放內容');
     }
     if (index != _index) _forceOnline = false;
-    final warmed =
-        handoffPlan ??
-        (recoveryAction == null && _preloadEnabled && !widget.localOnly
-            ? _preloader.take(
-                widget.detail.drama,
-                widget.detail.episodes[index],
-                quality: _requestedQuality,
-                online: _forceOnline,
-              )
-            : null);
+    final episodeToOpen = widget.detail.episodes[index];
+    PlaybackPlan? warmed;
+    var preloadBypassReason = '';
+    if (handoffPlan != null) {
+      preloadBypassReason = 'handoff';
+    } else if (recoveryAction != null) {
+      preloadBypassReason = 'recovery';
+    } else if (widget.localOnly) {
+      preloadBypassReason = 'local_only';
+    } else if (!_preloadEnabled) {
+      preloadBypassReason = 'disabled';
+    } else {
+      warmed = _preloader.take(
+        widget.detail.drama,
+        episodeToOpen,
+        quality: _requestedQuality,
+        online: _forceOnline,
+      );
+    }
+    if (warmed == null && preloadBypassReason.isNotEmpty) {
+      DiaryService.add(
+        '[NextEpisodePreload] take hit=false source=${widget.detail.drama.source} dramaId=${widget.detail.drama.id} episode=${episodeToOpen.number} reason=$preloadBypassReason',
+      );
+    }
+    final preloadResolveMs = warmed == null ? 0 : _preloader.lastTakeResolveMs;
+    final playbackSource = handoffPlan != null
+        ? 'handoff'
+        : recoveryAction != null
+        ? 'recovery'
+        : warmed != null
+        ? 'preloaded'
+        : 'api';
     _preloader.clear();
     final ticket = ++_generation;
     if (recoveryAction == null) _lastPlaybackError = null;
@@ -3169,8 +3191,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (_closed || ticket != _generation) {
           return;
         }
+        final effectiveResolverMs = warmed != null
+            ? preloadResolveMs
+            : resolveMs;
         DiaryService.add(
-          '[PlayTiming] generation=$ticket cleanupMs=$cleanupMs resolveMs=$resolveMs setupMs=$setupMs openMs=$openMs totalMs=${playClock.elapsedMilliseconds} backend=${_mpvEmbedBackend ? 'mpv_embed' : 'standard'}',
+          '[PlayTiming] generation=$ticket source=$playbackSource cleanupMs=$cleanupMs resolveMs=$resolveMs preloadResolveMs=$preloadResolveMs effectiveResolverMs=$effectiveResolverMs setupMs=$setupMs openMs=$openMs totalMs=${playClock.elapsedMilliseconds} backend=${_mpvEmbedBackend ? 'mpv_embed' : 'standard'}',
         );
         _openedIndex = index;
         _startSyncDiagnostics();
