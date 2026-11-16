@@ -484,14 +484,17 @@ class _PasswordDialogState extends State<_PasswordDialog> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_television || _initialKeyboardScheduled) return;
+    if (_initialKeyboardScheduled) return;
     _initialKeyboardScheduled = true;
+    // Desktop dialogs also need an initial keyboard focus; otherwise the
+    // first click is consumed merely to activate the password field.
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestPasswordKeyboard());
   }
 
   void _requestPasswordKeyboard() {
-    if (!_television || _submitting || !mounted) return;
+    if (_submitting || !mounted) return;
     if (!_pinFocus.hasPrimaryFocus) _pinFocus.requestFocus();
+    if (!_television) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _submitting || !_pinFocus.hasPrimaryFocus) return;
       unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
@@ -612,7 +615,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
             key: const ValueKey('profile-password-input'),
             controller: _pin,
             focusNode: _pinFocus,
-            autofocus: _television,
+            autofocus: true,
             enabled: !_submitting,
             onTap: _requestPasswordKeyboard,
             obscureText: true,
