@@ -31,5 +31,5 @@ jobs:
 
       - name: Publish version-specific update notes
         env:
-          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/sync_release_notes.py
