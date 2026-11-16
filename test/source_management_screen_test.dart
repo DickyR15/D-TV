@@ -431,7 +431,7 @@ void main() {
       scrollable: scrollable,
     );
     expect(find.byKey(const ValueKey('restricted-badge-supjav')), findsOneWidget);
-    expect(find.text('限制級'), findsOneWidget);
+    expect(find.text('限制級'), findsNWidgets(2));
     expect(SourceSite.byId('huangdou').adult, isFalse);
   });
 
