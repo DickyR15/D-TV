@@ -386,7 +386,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('adult advanced sources alone display the restricted badge', (tester) async {
+  testWidgets('all advanced sources display the restricted badge', (tester) async {
     if (!allSourcesEnabled) return;
     SharedPreferences.setMockInitialValues({});
     final store = testStore(await SharedPreferences.getInstance());
@@ -414,7 +414,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
 
+    // 黃豆 is a non-adult advanced source and must still carry the badge.
     final scrollable = find.byType(Scrollable).last;
+    final huangdou = find.text('黃豆');
+    await tester.scrollUntilVisible(
+      huangdou,
+      220,
+      scrollable: scrollable,
+    );
+    expect(find.byKey(const ValueKey('restricted-badge-huangdou')), findsOneWidget);
+    expect(SourceSite.byId('huangdou').adult, isFalse);
+
     final missav = find.text('MissAV');
     await tester.scrollUntilVisible(
       missav,
@@ -430,7 +440,6 @@ void main() {
       scrollable: scrollable,
     );
     expect(find.byKey(const ValueKey('restricted-badge-supjav')), findsOneWidget);
-    expect(SourceSite.byId('huangdou').adult, isFalse);
   });
 
   test('advanced source order persists and controls permitted source ordering', () async {
