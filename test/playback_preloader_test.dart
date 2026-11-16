@@ -57,25 +57,6 @@ class DetailPreloadRepository extends FixtureRepository {
     released.add(session);
   }
 
-  testWidgets('failed next-episode preload records elapsed time and error type', (
-    tester,
-  ) async {
-    DiaryService.clear();
-    final repository = FailingPreloadRepository();
-    final preloader = PlaybackPreloader(repository);
-    addTearDown(preloader.dispose);
-
-    preloader.prepare(FixtureRepository.free, episode(2));
-    await tester.pump(const Duration(milliseconds: 600));
-    await tester.pump();
-
-    expect(repository.preloadCalls, 1);
-    expect(preloader.error, isNotEmpty);
-    expect(DiaryService.fullText, contains('[NextEpisodePreload] start'));
-    expect(DiaryService.fullText, contains('[NextEpisodePreload] failed'));
-    expect(DiaryService.fullText, contains('errorType=TimeoutException'));
-  });
-
 }
 
 void main() {
@@ -169,4 +150,24 @@ void main() {
     expect(preloader.take(FixtureRepository.free, episode(1)), isNull);
     expect(repository.released, ['expired-detail-plan']);
   });
+
+  testWidgets('failed next-episode preload records elapsed time and error type', (
+    tester,
+  ) async {
+    DiaryService.clear();
+    final repository = FailingPreloadRepository();
+    final preloader = PlaybackPreloader(repository);
+    addTearDown(preloader.dispose);
+
+    preloader.prepare(FixtureRepository.free, episode(2));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+
+    expect(repository.preloadCalls, 1);
+    expect(preloader.error, isNotEmpty);
+    expect(DiaryService.fullText, contains('[NextEpisodePreload] start'));
+    expect(DiaryService.fullText, contains('[NextEpisodePreload] failed'));
+    expect(DiaryService.fullText, contains('errorType=TimeoutException'));
+  });
+
 }
