@@ -43,7 +43,7 @@ func TestAdultProviderDramaIDsAndDetailURLs(t *testing.T) {
 	if !ok || source != sourceMissAV || sourceID != "sone-543" {
 		t.Fatalf("split MISS AV ID = %q/%q/%v", source, sourceID, ok)
 	}
-	if got := adultDetailURL(sourceMissAV, "sone-543"); got != "https://missav.ws/sone-543" {
+	if got := adultDetailURL(sourceMissAV, "sone-543"); got != "https://missav.ws/en/sone-543" {
 		t.Fatalf("MISS AV detail URL = %q", got)
 	}
 	if got := adultDetailURL(sourceSupJav, "12345"); got != "https://supjav.com/zh/12345.html" {
@@ -75,6 +75,52 @@ func TestAdultCardParsingAndLazyCoverFallback(t *testing.T) {
 	if items[0].ID != providerDramaID(sourceSupJav, "12345") ||
 		items[0].Cover != "https://supjav.com/images/cover.jpg" {
 		t.Fatalf("unexpected SupJav card: %#v", items[0])
+	}
+}
+
+func TestAdultPlaybackURLsResolveRelativeToTheActualPlayerPage(t *testing.T) {
+	got := adultFindM3U8(
+		"<script>var player={source:'/media/master.m3u8?token=abc'};</script>",
+		"https://missav.ws/en/simw-014",
+	)
+	if got != "https://missav.ws/media/master.m3u8?token=abc" {
+		t.Fatalf("relative player URL = %q", got)
+	}
+	if got := adultFindM3U8("<script>source='https://cdn.example/master.m3u8'</script>"); got != "https://cdn.example/master.m3u8" {
+		t.Fatalf("absolute player URL without a page base = %q", got)
+	}
+}
+
+func TestAdultSupJavFSTUsesDeclaredHLSOrderAndResolvesRelativeURL(t *testing.T) {
+	body := `<script>
+var links={"hls4":"/stream/high/master.m3u8","hls3":"https://cdn.example/low/master.m3u8"};
+jwplayer("vplayer").setup({sources:[{file:links.hls4 || links.hls3,type:"hls"}]});
+</script>`
+	got := adultSupJavFSTHLS(body, "https://fc2stream.example/e/video")
+	if got != "https://fc2stream.example/stream/high/master.m3u8" {
+		t.Fatalf("FST primary HLS = %q", got)
+	}
+}
+
+func TestAdultSupJavFSTAcceptsExtensionlessDeclaredHLS(t *testing.T) {
+	body := `<script>
+var links={"hls4":"","hls3":"https://cdn.example/manifest.txt","hls2":"https://cdn.example/low/master.m3u8"};
+jwplayer("vplayer").setup({sources:[{type:"hls",file:links.hls4 || links.hls3 || links.hls2}]});
+</script>`
+	got := adultSupJavFSTHLS(body, "https://fc2stream.example/e/video")
+	if got != "https://cdn.example/manifest.txt" {
+		t.Fatalf("FST extensionless HLS = %q", got)
+	}
+}
+
+func TestAdultSupJavFSTRejectsExtensionlessNonHLS(t *testing.T) {
+	body := `<script>
+var links={"hls4":"https://cdn.example/manifest","hls3":"https://cdn.example/low/master.m3u8"};
+jwplayer("vplayer").setup({sources:[{file:links.hls4 || links.hls3,type:"mp4"}]});
+</script>`
+	got := adultSupJavFSTHLS(body, "https://fc2stream.example/e/video")
+	if got != "" {
+		t.Fatalf("FST non-HLS extensionless source = %q, want empty", got)
 	}
 }
 
