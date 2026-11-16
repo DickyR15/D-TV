@@ -11,18 +11,31 @@ import (
 )
 
 func TestNativeBuildAuthorization(t *testing.T) {
-	for _, source := range []string{sourceHongguo, sourceHanxiaoquan, "guipian", sourceDuoduo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, "unknown"} {
-		allowed := nativePrimarySource(source) || buildAllSources == "true" && isHuangguoProviderSource(source)
-		for _, action := range []string{"catalog", "cached", "sourceStatus", "sourceJob", "cancelSourceJob", "detail", "followCheck", "cover", "resolve", "enqueueDownloads", "localPlayback"} {
+	for _, source := range []string{sourceHongguo, sourceHanxiaoquan, sourceGuipian, sourceDuoduo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, "unknown"} {
+		allowed := nativeSourceAvailable(source)
+		for _, action := range []string{"catalog", "cached", "sourceStatus", "sourceJob", "cancelSourceJob", "detail", "followCheck", "cover", "prepareCover", "resolve", "enqueueDownloads", "localPlayback"} {
 			input := nativeInput{Action: action, Source: source, Drama: nativeDrama{ID: source + ":123", Source: source}}
 			err := nativeAuthorizeInput(input)
-			if (err == nil) != allowed {
-				t.Fatalf("%s %s: allowed=%v, error=%v", action, source, allowed, err)
+			actionAllowed := allowed
+			if source == sourceGuipian && (action == "cover" || action == "prepareCover") {
+				actionAllowed = true
+			}
+			if (err == nil) != actionAllowed {
+				t.Fatalf("%s %s: allowed=%v, error=%v", action, source, actionAllowed, err)
 			}
 		}
 	}
+	if !isHuangguoProviderSource(sourceGuipian) || nativeSourceAvailable(sourceGuipian) {
+		t.Fatal("retired Guipian must remain identifiable but unavailable as a source")
+	}
+	if nativeDramaAvailable(nativeDrama{ID: "guipian:123", Source: sourceGuipian}) {
+		t.Fatal("retired Guipian must not be available for playback or downloads")
+	}
+	if !nativeLegacyCoverAvailable(nativeDrama{ID: "guipian:123", Source: sourceGuipian}) {
+		t.Fatal("saved Guipian items must retain poster-recovery identity")
+	}
 	for _, source := range []string{sourceHongguo, sourceHanxiaoquan, sourceDuoduo, sourceHuangdou} {
-		allowed := nativePrimarySource(source) || buildAllSources == "true" && isHuangguoProviderSource(source)
+		allowed := nativeSourceAvailable(source)
 		err := nativeAuthorizeInput(nativeInput{Action: "cast", Command: "play",
 			Drama: nativeDrama{ID: source + ":123", Source: source},
 			Chapter: Chapter{ID: "episode-1", Source: source}})
