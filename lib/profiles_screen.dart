@@ -178,7 +178,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         if (accepted != true || !mounted) return;
         final pin = await showDialog<String>(
           context: context,
-          builder: (_) => const _PasswordDialog(name: '管理員（原設定或備份中的密碼）'),
+          builder: (_) => _PasswordDialog(
+            name: '管理員（原設定或備份中的密碼）',
+            television: AppLayout.isTelevision(context),
+          ),
         );
         if (pin == null || !mounted) return;
         await widget.store.recoverBackup(content, pin: pin);
@@ -201,6 +204,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           context: context,
           builder: (_) => _PasswordDialog(
             name: uiTraditional(profile.name),
+            television: AppLayout.isTelevision(context),
             onSubmit: (pin) =>
                 widget.store.switchProfile(profile.id, pin: pin),
           ),
@@ -452,8 +456,13 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 }
 
 class _PasswordDialog extends StatefulWidget {
-  const _PasswordDialog({required this.name, this.onSubmit});
+  const _PasswordDialog({
+    required this.name,
+    this.television = false,
+    this.onSubmit,
+  });
   final String name;
+  final bool television;
   final Future<void> Function(String pin)? onSubmit;
   @override
   State<_PasswordDialog> createState() => _PasswordDialogState();
@@ -468,7 +477,9 @@ class _PasswordDialogState extends State<_PasswordDialog> {
   String? _submitError;
   bool _initialKeyboardScheduled = false;
 
-  bool get _television => AppLayout.isTelevision(context);
+  // Capture the layout from ProfilesScreen before opening the root-navigator
+  // dialog. This keeps Android TV's two-step keyboard/登入 flow deterministic.
+  bool get _television => widget.television || AppLayout.isTelevision(context);
 
   @override
   void didChangeDependencies() {
@@ -493,7 +504,13 @@ class _PasswordDialogState extends State<_PasswordDialog> {
       return;
     }
     unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
-    _loginFocus.requestFocus();
+    // Let the IME's done/confirm event finish before moving focus. Otherwise
+    // Android TV can deliver that same activation to the newly focused 登入
+    // button and submit immediately, skipping the explicit second confirmation.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _submitting) return;
+      _loginFocus.requestFocus();
+    });
   }
 
   Future<void> _submit() async {
