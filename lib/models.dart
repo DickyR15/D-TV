@@ -12,6 +12,7 @@ class SourceSite {
   bool get onlineSearch => id == 'hongguo' || pagedSearch;
   bool get pagedSearch =>
       id == 'hongguo' ||
+      id == 'guipian' ||
       id == 'huangju' ||
       id == 'yeguo' ||
       id == 'dsd' ||
@@ -52,6 +53,11 @@ class SourceSite {
     '韓小圈',
     '韓劇 · 韓國電影 · 綜藝節目 · 動畫',
   );
+  static const guipian = SourceSite(
+    'guipian',
+    '鬼片',
+    '恐怖片 · 電影 · 電視劇 · 動畫',
+  );
   static const missav = SourceSite(
     'missav',
     'MissAV',
@@ -65,8 +71,8 @@ class SourceSite {
     adult: true,
   );
 
-  /// 預設開啟的一般片源：紅果、韓小圈、多多追劇。
-  static const primaryValues = [hongguo, hanxiaoquan, duoduo];
+  /// 預設開啟的一般片源：紅果、韓小圈、鬼片、多多追劇。
+  static const primaryValues = [hongguo, hanxiaoquan, guipian, duoduo];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
