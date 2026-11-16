@@ -31,24 +31,28 @@ void main() {
     await expectLater(store.setSourceEnabled('sorani', true), throwsStateError);
   });
 
-  test('Guipian and KANMovie are retired and stale switches are ignored', () async {
+  test('Guipian is restored as a searchable primary source; KANMovie stays retired', () async {
     final store = await create({
       'sourceSwitches': jsonEncode({'guipian': true, 'kanmovie': true}),
     });
-    expect(SourceSite.isKnown('guipian'), isFalse);
-    expect(SourceSite.isAvailable('guipian'), isFalse);
+    expect(SourceSite.isKnown('guipian'), isTrue);
+    expect(SourceSite.isAvailable('guipian'), isTrue);
+    expect(SourceSite.isRestricted('guipian'), isFalse);
+    expect(SourceSite.byId('guipian').name, '鬼片');
+    expect(SourceSite.byId('guipian').pagedSearch, isTrue);
+    expect(SourceSite.byId('guipian').onlineSearch, isTrue);
     expect(SourceSite.isKnown('kanmovie'), isFalse);
     expect(store.sourceEnabled('duoduo'), isTrue);
+    expect(store.sourceEnabled('guipian'), isTrue);
+    expect(store.allowsSource('guipian'), isTrue);
     expect(store.allowsSource('baofeng'), isFalse);
     expect(store.allowsSource('jisu'), isFalse);
     expect(store.allowsSource('360'), isFalse);
     expect(store.allowsSource('huya'), isFalse);
-    expect(store.sourceEnabled('guipian'), isFalse);
-    expect(store.allowsSource('guipian'), isFalse);
     expect(store.allowsSource('kanmovie'), isFalse);
   });
 
-  test('old aggregate profile permissions migrate to Duoduo', () async {
+  test('legacy profile migration retains Guipian and maps KANMovie to Duoduo', () async {
     final store = await create({
       'profiles': jsonEncode([
         LocalProfile(
@@ -67,9 +71,9 @@ void main() {
       'activeProfile': 'viewer',
     });
     expect(store.configurationError, isNull);
-    expect(store.profile.sources, ['duoduo']);
+    expect(store.profile.sources, containsAll(['duoduo', 'guipian']));
     expect(store.profile.allows('duoduo'), isTrue);
-    expect(store.profile.allows('guipian'), isFalse);
+    expect(store.profile.allows('guipian'), isTrue);
   });
 
   test('saved KANMovie records are not remapped to unrelated sources', () {
@@ -93,15 +97,16 @@ void main() {
     expect(heitao.onlineSearch, isTrue);
   });
 
-  test('three primary sources start enabled and restricted sources start switched off', () async {
+  test('four primary sources start enabled and restricted sources start switched off', () async {
     final store = await create();
     expect(
       store.sources.map((site) => site.id),
-      ['hongguo', 'hanxiaoquan', 'duoduo'],
+      ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);
     expect(store.sourceEnabled('hongguo'), isTrue);
     expect(store.sourceEnabled('hanxiaoquan'), isTrue);
+    expect(store.sourceEnabled('guipian'), isTrue);
     expect(store.sourceEnabled('duoduo'), isTrue);
     expect(store.sourceEnabled('huangdou'), isFalse);
     expect(store.allowsSource('huangdou'), isFalse);
