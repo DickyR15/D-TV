@@ -37,7 +37,7 @@ var (
 func adultSourceName(source string) string {
 	switch canonicalProviderSource(source) {
 	case sourceMissAV:
-		return "MISS AV"
+		return "MissAV"
 	case sourceSupJav:
 		return "SupJav"
 	default:
@@ -320,7 +320,7 @@ func adultNodeImages(card *htmlnet.Node, base, source string) []string {
 		}
 		for _, attr := range []string{"data-original", "data-src", "data-lazy-src", "data-lazyload", "src"} {
 			if raw := providerHTMLAttr(node, attr); raw != "" {
-				address := adultSafeURL(base, raw, source)
+				address := adultSafeImageURL(base, raw)
 				if address != "" && !seen[address] {
 					seen[address] = true
 					covers = append(covers, address)
