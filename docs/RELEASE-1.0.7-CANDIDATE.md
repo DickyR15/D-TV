@@ -47,3 +47,15 @@ iOS 不嘗試在 App 內安裝 IPA。按下更新後開啟對應版本的 GitHub
 - iOS：確認更新按鈕開啟版本頁，而不是直接下載 IPA。
 
 所有項目完成自動化與實機驗收前，不得將本候選版標示為正式版。
+
+
+## CI 工具鏈與 Runner 更新
+
+- JavaScript GitHub Actions 升級至 Node.js 24 相容版本：checkout v7.0.1、setup-python v7.1.0、setup-go v7.0.0、setup-java v6.3.0、upload-artifact v7.0.2、download-artifact v8.0.2、setup-android v4.0.4、github-script v9.0.0 及 action-gh-release v3.0.4。
+- setup-java 保留 Java problem matcher，Android 建置仍使用 Temurin JDK 17。
+- Windows MSYS2 改用 UCRT64 環境及 `mingw-w64-ucrt-x86_64-gcc`；原生核心仍由既有 GCC 呼叫方式編譯。
+- Android Gradle Wrapper 改用 Gradle 9.9.1 `bin` 發行套件，並使用固定 SHA-256：`d8a18a7a841dd5df825d35a685fad6f2d7f12ac0c280e57b67c27b4a520ba228`。保留 AGP 9.1.0、Kotlin Plugin 2.4.0 與 JDK 17，不額外變更 Android Plugin 版本。
+- Ubuntu jobs 固定使用 `ubuntu-26.04`，避開 `ubuntu-latest` 在 2026 年 10–11 月的 Runner 映像遷移窗口。
+- macOS Universal 工作維持 `macos-26`；Runner 排隊警告是 GitHub Hosted Runner 容量因素，不能由專案升級套件解決。
+- Android Emulator 安裝／啟動為非阻擋式 best-effort 檢查；APK 編譯、簽章、套件與 ABI 驗證仍不可略過。
+

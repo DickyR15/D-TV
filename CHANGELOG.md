@@ -19,6 +19,15 @@
 - macOS 維持 DMG 下載及開啟流程；下載或開啟失敗時可直接前往版本頁手動下載。
 - iOS 改為開啟該版本 GitHub Releases 頁面，讓使用者查看更新內容與 SHA-256 校驗碼，再自行下載未簽章 IPA 並透過側載工具安裝；不再直接跳到 IPA 檔案網址。
 
+### 自動化建置與工具鏈
+- GitHub Actions JavaScript 工作流程升級至 Node.js 24 相容版本，包含 checkout、Python、Go、Java、Android SDK、Artifact 上下載、Release 發布及重試流程，避免繼續使用已淘汰的 Node.js 20 執行環境。
+- Android CI 保留 JDK 17，升級 setup-java 至 v6，並保留 Java 問題比對器註記功能。
+- Windows 原生編譯環境由 MSYS2 MINGW64 改為 UCRT64，改用對應的 UCRT64 GCC 套件。
+- Android Gradle Wrapper 升級至 Gradle 9.9.1，改用較精簡的 bin 發行套件，並加入官方 SHA-256 固定值驗證；Android Gradle Plugin 9.1.0、Kotlin Plugin 2.4.0 與 JDK 17 維持不變。
+- Linux CI Runner 明確固定為 ubuntu-26.04，避免 ubuntu-latest 遷移期間不同工作可能落在不同映像版本。
+- macOS Runner 維持 macos-26 Universal 建置設定；佇列時間警告屬 GitHub Hosted Runner 容量，不是專案程式或工具鏈錯誤，無法靠升級套件消除。
+- Android 模擬器安裝／啟動維持 best-effort；必要的 APK 建置、簽章、套件識別與三種 ABI 驗證仍是必須通過的檢查。
+
 > 本候選版尚待 GitHub Actions 自動化測試，以及 Windows／macOS／iOS 實際更新情境驗收；CI 通過不等同所有裝置均已完成實機更新測試。
 
 ---
