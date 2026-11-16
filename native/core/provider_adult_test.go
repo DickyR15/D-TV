@@ -18,6 +18,12 @@ func TestAdultProviderRegistrationAndCategories(t *testing.T) {
 		if !isHuangguoProviderSource(test.want) {
 			t.Fatalf("provider %q is not registered", test.want)
 		}
+		if got := providerSourceForURL("https://" + test.input + "/"); got != test.want {
+			t.Fatalf("providerSourceForURL(%q) = %q, want %q", test.input, got, test.want)
+		}
+		if adultProviderBaseURL(test.want) == "" {
+			t.Fatalf("provider %q has no base URL", test.want)
+		}
 		if !validNativeCategory(test.want, "") {
 			t.Fatalf("provider %q rejected the all category", test.want)
 		}
