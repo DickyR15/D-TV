@@ -419,32 +419,24 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
 
-    // 黃豆 is a non-adult advanced source and must still carry the badge.
+    // Every advanced source receives the same label, regardless of its
+    // provider-level adult metadata. General sources (including Guipian) do not.
     final scrollable = find.byType(Scrollable).last;
-    final huangdou = find.text('黃豆');
-    await tester.scrollUntilVisible(
-      huangdou,
-      220,
-      scrollable: scrollable,
-    );
-    expect(find.byKey(const ValueKey('restricted-badge-huangdou')), findsOneWidget);
+    for (final source in SourceSite.restrictedValues) {
+      final title = find.text(source.name);
+      await tester.scrollUntilVisible(
+        title,
+        220,
+        scrollable: scrollable,
+      );
+      expect(
+        find.byKey(ValueKey('restricted-badge-${source.id}')),
+        findsOneWidget,
+        reason: '${source.name} should display 限制級',
+      );
+    }
     expect(SourceSite.byId('huangdou').adult, isFalse);
-
-    final missav = find.text('MissAV');
-    await tester.scrollUntilVisible(
-      missav,
-      220,
-      scrollable: scrollable,
-    );
-    expect(find.byKey(const ValueKey('restricted-badge-missav')), findsOneWidget);
-
-    final supjav = find.text('SupJav');
-    await tester.scrollUntilVisible(
-      supjav,
-      220,
-      scrollable: scrollable,
-    );
-    expect(find.byKey(const ValueKey('restricted-badge-supjav')), findsOneWidget);
+    expect(SourceSite.byId('guipian').adult, isFalse);
   });
 
   test('advanced source order persists and controls permitted source ordering', () async {
