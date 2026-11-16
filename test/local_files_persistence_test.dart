@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:hgtv/local_files.dart';
 import 'package:hgtv/local_snapshot.dart';
 import 'package:hgtv/local_store.dart';
 import 'package:hgtv/models.dart';
@@ -224,6 +225,35 @@ void main() {
       isTrue,
     );
   });
+  test('backup replacement failure leaves the original local data untouched', () async {
+    final parent = await Directory.systemTemp.createTemp('dtv-restore-guard-');
+    addTearDown(() => parent.delete(recursive: true));
+    final root = Directory(path.join(parent.path, 'store'));
+    await root.create();
+    final originalIndex = File(path.join(root.path, LocalFiles.marker));
+    final originalFavorites = File(path.join(root.path, 'favorites.json'));
+    await originalIndex.writeAsString('original-index');
+    await originalFavorites.writeAsString('original-favorites');
+
+    // A file at the staging directory path makes the staged replacement
+    // impossible. The old root must stay readable and byte-for-byte intact.
+    final stagingBlocker = File('${root.path}.new');
+    await stagingBlocker.writeAsString('do-not-remove');
+    final files = LocalFiles(root);
+
+    await expectLater(
+      files.replaceAll({
+        LocalFiles.marker: 'replacement-index',
+        'favorites.json': 'replacement-favorites',
+      }),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(await originalIndex.readAsString(), 'original-index');
+    expect(await originalFavorites.readAsString(), 'original-favorites');
+    expect(await stagingBlocker.readAsString(), 'do-not-remove');
+  });
+
   test('temporarily unreadable history is preserved and read-only until reload', () async {
     final preferences = await freshPreferences();
     final legacy = LocalStore(preferences);
