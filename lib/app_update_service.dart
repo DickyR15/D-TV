@@ -361,7 +361,7 @@ try {
 
   # Back up every destination file before changing any installed file.
   foreach ($sourceFile in $stagedFiles) {
-    $relative = $sourceFile.FullName.Substring($stage.Length).TrimStart([char[]]@('\\','/'))
+    $relative = $sourceFile.FullName.Substring($stage.Length).TrimStart([char[]](92, 47))
     $destination = Join-Path $TargetDirectory $relative
     if (Test-Path -LiteralPath $destination -PathType Leaf) {
       $backupFile = Join-Path $backupRoot $relative
@@ -375,7 +375,7 @@ try {
   }
 
   foreach ($sourceFile in $stagedFiles) {
-    $relative = $sourceFile.FullName.Substring($stage.Length).TrimStart([char[]]@('\\','/'))
+    $relative = $sourceFile.FullName.Substring($stage.Length).TrimStart([char[]](92, 47))
     $destination = Join-Path $TargetDirectory $relative
     $destinationDirectory = Split-Path -Parent $destination
     New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
