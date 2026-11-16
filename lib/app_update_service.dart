@@ -68,6 +68,18 @@ class _RetryableUpdateException implements Exception {
 class AppUpdateService {
   const AppUpdateService();
 
+  /// Only retries HttpExceptions that indicate a response body ended early.
+  /// Ordinary HTTP status failures remain terminal and are not retried.
+  static bool isRetryableResponseBodyError(Object error) {
+    if (error is! HttpException) return false;
+    final message = error.message.toLowerCase();
+    return message.contains('connection closed') ||
+        message.contains('premature') ||
+        message.contains('unexpected eof') ||
+        message.contains('unexpected end of') ||
+        message.contains('end of file');
+  }
+
   static const latestReleaseApi =
       'https://api.github.com/repos/DickyR15/D-TV/releases/latest';
 
@@ -151,6 +163,7 @@ class AppUpdateService {
         ..idleTimeout = const Duration(seconds: 45)
         ..userAgent = 'D-TV-Updater';
       IOSink? sink;
+      var readingResponseBody = false;
       try {
         final request = await client.getUrl(uri).timeout(
           const Duration(seconds: 30),
@@ -176,12 +189,14 @@ class AppUpdateService {
 
         sink = partial.openWrite();
         var receivedBytes = 0;
+        readingResponseBody = true;
         await for (final chunk in response.timeout(
           const Duration(seconds: 45),
         )) {
           sink.add(chunk);
           receivedBytes += chunk.length;
         }
+        readingResponseBody = false;
         await sink.flush();
         await sink.close();
         sink = null;
@@ -215,7 +230,8 @@ class AppUpdateService {
         final retryable = error is SocketException ||
             error is TimeoutException ||
             error is _RetryableUpdateException ||
-            error is FormatException;
+            error is FormatException ||
+            (readingResponseBody && isRetryableResponseBodyError(error));
         if (!retryable || attempt == 3) {
           throw StateError(
             '下載更新檔失敗（已嘗試 ${attempt}/3 次）：${error.toString()}',
