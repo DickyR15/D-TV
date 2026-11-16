@@ -1095,11 +1095,10 @@ class _RankingsScreenState extends State<RankingsScreen> {
                 ),
                 if (following != null)
                   Positioned(
-                    left: 8,
                     right: 8,
                     bottom: 8,
                     child: Align(
-                      alignment: Alignment.bottomLeft,
+                      alignment: Alignment.bottomRight,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
                         decoration: BoxDecoration(
