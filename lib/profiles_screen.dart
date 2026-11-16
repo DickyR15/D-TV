@@ -476,6 +476,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
   bool _submitting = false;
   String? _submitError;
   bool _initialKeyboardScheduled = false;
+  Animation<double>? _routeAnimation;
 
   // Capture the layout from ProfilesScreen before opening the root-navigator
   // dialog. This keeps Android TV's two-step keyboard/登入 flow deterministic.
@@ -486,14 +487,24 @@ class _PasswordDialogState extends State<_PasswordDialog> {
     super.didChangeDependencies();
     if (_initialKeyboardScheduled) return;
     _initialKeyboardScheduled = true;
-    // Desktop dialogs also need an initial keyboard focus; otherwise the
-    // first click is consumed merely to activate the password field.
+    // A desktop window can finish presenting the modal after its first frame.
+    // Request focus again when the route is fully visible so the first physical
+    // keypress goes into the password field rather than activating the dialog.
+    _routeAnimation = ModalRoute.of(context)?.animation;
+    _routeAnimation?.addStatusListener(_onRouteAnimationStatus);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestPasswordKeyboard());
+  }
+
+  void _onRouteAnimationStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestPasswordKeyboard());
   }
 
   void _requestPasswordKeyboard() {
     if (_submitting || !mounted) return;
-    if (!_pinFocus.hasPrimaryFocus) _pinFocus.requestFocus();
+    if (!_pinFocus.hasPrimaryFocus) {
+      FocusScope.of(context).requestFocus(_pinFocus);
+    }
     if (!_television) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _submitting || !_pinFocus.hasPrimaryFocus) return;
@@ -593,6 +604,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
 
   @override
   void dispose() {
+    _routeAnimation?.removeStatusListener(_onRouteAnimationStatus);
     _pin.dispose();
     _pinFocus.dispose();
     _cancelFocus.dispose();
