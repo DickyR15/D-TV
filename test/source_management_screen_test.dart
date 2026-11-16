@@ -389,6 +389,38 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('adult advanced sources alone display the restricted badge', (tester) async {
+    if (!allSourcesEnabled) return;
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: SourceManagementScreen(store: store)),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('advanced-source-password')),
+      'source-pass-123',
+    );
+    final unlockButton = find.byKey(const ValueKey('unlock-advanced-sources'));
+    await tester.ensureVisible(unlockButton);
+    await tester.pumpAndSettle();
+    await tester.tap(unlockButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('restricted-badge-missav')), findsOneWidget);
+    expect(find.byKey(const ValueKey('restricted-badge-supjav')), findsOneWidget);
+    expect(find.byKey(const ValueKey('restricted-badge-huangdou')), findsNothing);
+    expect(find.text('限制級'), findsNWidgets(2));
+  });
+
   test('advanced source order persists and controls permitted source ordering', () async {
     if (!allSourcesEnabled) return;
     SharedPreferences.setMockInitialValues({});
