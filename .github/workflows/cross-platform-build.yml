@@ -406,16 +406,12 @@ jobs:
           echo "DTV_IPHONE_DUO_SIMULATOR_ID=$device_id" >> "$GITHUB_ENV"
           echo "已選取 iPhone Duo 模擬器：$device_id"
       - name: Build device IPA and universal simulator core
+        id: build-ios-package
         run: python scripts/retry_command.py --attempts 3 -- python scripts/build_ios.py --simulator --all-sources
-      - uses: actions/upload-artifact@v7.0.2
-        with:
-          name: DTV-iOS-IPA
-          path: dist/ios/DTV-*.ipa
-          if-no-files-found: error
-          retention-days: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
       - name: Build iOS Simulator app
         # Flutter only supports Debug/Profile simulator builds; Release is
-        # reserved for physical iOS devices.
+        # reserved for physical iOS devices. Run this before uploading the IPA
+        # so an artifact-network failure cannot skip simulator validation.
         run: flutter build ios --simulator --debug --no-codesign --no-pub --dart-define=ALL_SOURCES=true
       - name: Install and launch on iPhone Duo simulator
         shell: bash
@@ -430,6 +426,25 @@ jobs:
           bundle_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist")
           xcrun simctl install "$device_id" "$app"
           xcrun simctl launch "$device_id" "$bundle_id"
+      - name: Upload iOS IPA artifact
+        id: upload-ios-ipa
+        if: always() && steps.build-ios-package.outcome == 'success'
+        uses: actions/upload-artifact@v7.0.2
+        continue-on-error: true
+        with:
+          name: DTV-iOS-IPA
+          path: dist/ios/DTV-*.ipa
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
+      - name: Retry iOS IPA artifact upload after a transient upload failure
+        if: steps.upload-ios-ipa.outcome == 'failure'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: DTV-iOS-IPA
+          path: dist/ios/DTV-*.ipa
+          if-no-files-found: error
+          overwrite: true
+          retention-days: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
   macos-universal:
     if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/build/pre-missav-supjav-and-advanced-reorder') || (github.event_name == 'push' && github.ref == 'refs/heads/feature/advanced-source-reorder-cross-platform') || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'macos'))
     name: macOS Universal DMG (arm64 + x86_64)
