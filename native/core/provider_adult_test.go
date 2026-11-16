@@ -37,7 +37,7 @@ func TestAdultProviderDramaIDsAndDetailURLs(t *testing.T) {
 	if !ok || source != sourceMissAV || sourceID != "sone-543" {
 		t.Fatalf("split MISS AV ID = %q/%q/%v", source, sourceID, ok)
 	}
-	if got := adultDetailURL(sourceMissAV, "sone-543"); got != "https://missav.ws/en/sone-543" {
+	if got := adultDetailURL(sourceMissAV, "sone-543"); got != "https://missav.ws/sone-543" {
 		t.Fatalf("MISS AV detail URL = %q", got)
 	}
 	if got := adultDetailURL(sourceSupJav, "12345"); got != "https://supjav.com/zh/12345.html" {
