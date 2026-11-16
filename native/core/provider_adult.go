@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -571,6 +572,78 @@ func adultFindM3U8(body string, pageURLs ...string) string {
 	return ""
 }
 
+func adultRot13(value string) string {
+	data := []byte(value)
+	for index, character := range data {
+		switch {
+		case character >= 'a' && character <= 'z':
+			data[index] = 'a' + (character-'a'+13)%26
+		case character >= 'A' && character <= 'Z':
+			data[index] = 'A' + (character-'A'+13)%26
+		}
+	}
+	return string(data)
+}
+
+// adultSupJavVOEHLS decodes VOE's static JSON player payload without running
+// remote JavaScript. The returned URL must still be a public HTTPS media URL.
+func adultSupJavVOEHLS(body, embedURL string) string {
+	scriptPattern := regexp.MustCompile("(?is)<script\\b([^>]*)>(.*?)</script\\s*>")
+	for _, match := range scriptPattern.FindAllStringSubmatch(body, -1) {
+		if len(match) < 3 || !strings.EqualFold(adultAttribute("<script "+match[1]+">", "type"), "application/json") {
+			continue
+		}
+		var payload []string
+		if err := json.Unmarshal([]byte(strings.TrimSpace(match[2])), &payload); err != nil || len(payload) == 0 {
+			continue
+		}
+		encoded := adultRot13(payload[0])
+		for _, noise := range []string{"@$", "^^", "~@", "%?", "*~", "!!", "#&", "_"} {
+			encoded = strings.ReplaceAll(encoded, noise, "")
+		}
+		shifted, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			shifted, err = base64.RawStdEncoding.DecodeString(strings.TrimRight(encoded, "="))
+		}
+		if err != nil {
+			continue
+		}
+		for index := range shifted {
+			if shifted[index] < 3 {
+				err = errors.New("invalid VOE shift")
+				break
+			}
+			shifted[index] -= 3
+		}
+		if err != nil {
+			continue
+		}
+		for left, right := 0, len(shifted)-1; left < right; left, right = left+1, right-1 {
+			shifted[left], shifted[right] = shifted[right], shifted[left]
+		}
+		decoded, decodeErr := base64.StdEncoding.DecodeString(string(shifted))
+		if decodeErr != nil {
+			decoded, decodeErr = base64.RawStdEncoding.DecodeString(strings.TrimRight(string(shifted), "="))
+		}
+		if decodeErr != nil {
+			continue
+		}
+		var config map[string]any
+		if json.Unmarshal(decoded, &config) != nil {
+			continue
+		}
+		raw, _ := config["source"].(string)
+		if raw == "" {
+			continue
+		}
+		resolved := adultResolvePlaybackURL(embedURL, raw)
+		if resolved != "" && strings.Contains(strings.ToLower(resolved), ".m3u8") {
+			return resolved
+		}
+	}
+	return ""
+}
+
 // adultSupJavFSTHLS follows the FST player's declared source order.
 // Its primary source can be a relative or extensionless HLS URL, so requiring
 // an absolute .m3u8 URL would silently skip the source selected by the player.
@@ -782,8 +855,11 @@ func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (provider
 				}
 			}
 			found := ""
-			if name == "FST" {
+			switch name {
+			case "FST":
 				found = adultSupJavFSTHLS(embed, embedURL)
+			case "VOE":
+				found = adultSupJavVOEHLS(embed, embedURL)
 			}
 			if found == "" {
 				found = adultFindM3U8(embed, embedURL)
