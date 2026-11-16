@@ -19,6 +19,18 @@
 
 免安裝版應解壓在目前 Windows 使用者可寫入的位置。若資料夾位於需要系統管理員權限的位置，更新程序應在關閉 D TV 之前明確提示，不可直接開始覆蓋。
 
+## Android TV 操作修正
+
+- 密碼欄位按下系統鍵盤「打勾／完成」時，只收起鍵盤並將焦點移到「登入」按鈕。必須再按一次「登入」才會驗證，避免鍵盤的確認鍵被重複當成登入指令。
+- 詳情頁「收藏／取消收藏」有獨立焦點；可從底部播放按鈕向左進入，也可從第一欄選集向左移至收藏，並以遙控器確認。
+
+## Windows Google Cast 裝置探索
+
+- Windows 優先使用 nsd 5.0.1 的系統 DNS-SD API 搜尋 _googlecast._tcp，並解析接收器名稱、TXT 中的 Cast ID、IPv4 位址與 8009 連接埠。
+- 若 Windows 原生 DNS-SD 無結果或發生錯誤，回退原本的 dart_cast mDNS 探索。
+- 自動化測試涵蓋 DNS-SD 服務轉換、缺少 IPv4 時忽略，以及缺少 Cast ID 時的備援識別碼。
+- 需用 Windows 實機確認 Edge 可發現的 onn. 4K Pro 也會出現在 D-TV 裝置清單，並實際完成 Google Cast 連線。
+
 ## macOS
 
 維持 Universal DMG 流程：App 下載 DMG 並交由系統開啟，使用者將新版 D TV 拖曳至「應用程式」取代舊版。若下載或開啟 DMG 失敗，App 應提供前往 GitHub Releases 版本頁的備援入口。
