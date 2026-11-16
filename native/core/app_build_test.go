@@ -17,22 +17,16 @@ func TestNativeBuildAuthorization(t *testing.T) {
 			input := nativeInput{Action: action, Source: source, Drama: nativeDrama{ID: source + ":123", Source: source}}
 			err := nativeAuthorizeInput(input)
 			actionAllowed := allowed
-			if source == sourceGuipian && (action == "cover" || action == "prepareCover") {
-				actionAllowed = true
-			}
 			if (err == nil) != actionAllowed {
 				t.Fatalf("%s %s: allowed=%v, error=%v", action, source, actionAllowed, err)
 			}
 		}
 	}
-	if !isHuangguoProviderSource(sourceGuipian) || nativeSourceAvailable(sourceGuipian) {
-		t.Fatal("retired Guipian must remain identifiable but unavailable as a source")
+	if !isHuangguoProviderSource(sourceGuipian) || !nativeSourceAvailable(sourceGuipian) {
+		t.Fatal("Guipian must be registered and available as a primary source")
 	}
-	if nativeDramaAvailable(nativeDrama{ID: "guipian:123", Source: sourceGuipian}) {
-		t.Fatal("retired Guipian must not be available for playback or downloads")
-	}
-	if !nativeLegacyCoverAvailable(nativeDrama{ID: "guipian:123", Source: sourceGuipian}) {
-		t.Fatal("saved Guipian items must retain poster-recovery identity")
+	if !nativeDramaAvailable(nativeDrama{ID: "guipian:123", Source: sourceGuipian}) {
+		t.Fatal("Guipian dramas must be available for details, playback and downloads")
 	}
 	for _, source := range []string{sourceHongguo, sourceHanxiaoquan, sourceDuoduo, sourceHuangdou} {
 		allowed := nativeSourceAvailable(source)
@@ -85,9 +79,9 @@ func TestNativeBuildPreservesForeignDownloadRecordsAndRestrictsScheduling(t *tes
 	reopened := newNativeDownloads(manager.engine)
 	t.Cleanup(reopened.close)
 	jobs, err := reopened.snapshot()
-	expected := 3
+	expected := 4
 	if buildAllSources == "true" {
-		expected = 8
+		expected = 9
 	}
 	if err != nil || len(jobs) != expected {
 		t.Fatalf("wrong visible downloads: %v, %v", jobs, err)
