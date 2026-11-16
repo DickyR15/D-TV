@@ -4,6 +4,14 @@
 
 本文件記錄 D TV 1.0.7 候選版的整合範圍、平台差異及驗收條件。1.0.6 仍是目前正式版本；本候選版尚未通過全部自動化與實機驗收。
 
+## 紅果播放修正
+
+- 紅果播放改以 v1.0.2 使用的專用 V5 播放端點為首選：`api5-normal-sinfonlinea.fqnovel.com/novel/player/multi_video_model/player/v1`。
+- 播放請求使用獨立的 Android 12／PGT-AN10 裝置參數、`X-Khronos`、`X-Helios`、`X-Medusa` 與 `X-SS-STUB`；目錄、搜尋、詳情仍使用既有 App API 與舊簽章。
+- 按照 `data → 1004 → video_id` 解析回應，必須取得要求中的集數，不可誤用其他集數；新版路徑失敗時保留快捷網頁、舊 App、多清晰度與官網備援。
+- 新增 32 組 F13 雜湊及 4 組 carrier 上游測試向量，以及 V5 端點／回應層級測試。
+- CI 通過後仍需在 Android TV、Windows、iOS／macOS 實際播放紅果影片，確認 API 即時回應、音畫與下一集切換正常。
+
 ## Windows x64
 
 維持免安裝 ZIP 更新方式，不改成安裝程式。更新流程應符合以下順序：
