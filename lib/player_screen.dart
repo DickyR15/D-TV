@@ -176,7 +176,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   int _mobileTab = 0;
   bool _autoAdvance = true;
   bool _advancingOfficialSeason = false;
-  bool _showTelevisionNetworkSpeed = true;
   bool _showTelevisionClock = true;
   Timer? _sleepTimer;
   int _sleepMinutes = 0;
@@ -275,7 +274,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     autoPictureInPicture: widget.store.playbackPreferences.autoPictureInPicture,
     aspectRatio: _playbackAspectRatio,
     desktopAlwaysOnTop: widget.store.playbackPreferences.desktopAlwaysOnTop,
-    showTelevisionNetworkSpeed: _showTelevisionNetworkSpeed,
     showTelevisionClock: _showTelevisionClock,
   );
   int get _actualVideoQuality =>
@@ -326,7 +324,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     _autoAdvance = preferences.autoAdvance;
     _televisionDecoder = preferences.televisionDecoder;
     _playbackAspectRatio = preferences.aspectRatio;
-    _showTelevisionNetworkSpeed = preferences.showTelevisionNetworkSpeed;
     _showTelevisionClock = preferences.showTelevisionClock;
     // Preserve the previously validated Android TV MPV Embed + MediaCodec path.
     // ExoPlayer remains opt-in through DTV_ANDROID_PLAYER=exo for A/B tests.
@@ -3627,7 +3624,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       _preloadEnabled = nextPreferences.preload ?? _preloadEnabled;
       _portraitBlurBackground = nextPreferences.portraitBlurBackground;
       _televisionDecoder = nextPreferences.televisionDecoder;
-      _showTelevisionNetworkSpeed = nextPreferences.showTelevisionNetworkSpeed;
       _showTelevisionClock = nextPreferences.showTelevisionClock;
     });
     if (qualityChanged) _preloader.clear();
@@ -4479,7 +4475,6 @@ class _PlayerScreenState extends State<PlayerScreen>
             player: _player,
             interactions: _interactions,
             playbackGeneration: _generation,
-            showNetworkSpeed: _showTelevisionNetworkSpeed,
             showClock: _showTelevisionClock,
             title: title,
             enabled: !_loading && _error == null,

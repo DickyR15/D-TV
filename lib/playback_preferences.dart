@@ -104,7 +104,6 @@ class PlaybackPreferences {
     this.pictureInPictureEnabled = true,
     this.aspectRatio = PlaybackAspectRatio.automatic,
     this.desktopAlwaysOnTop = false,
-    this.showTelevisionNetworkSpeed = true,
     this.showTelevisionClock = true,
   });
 
@@ -119,7 +118,6 @@ class PlaybackPreferences {
   final bool pictureInPictureEnabled;
   final PlaybackAspectRatio aspectRatio;
   final bool desktopAlwaysOnTop;
-  final bool showTelevisionNetworkSpeed;
   final bool showTelevisionClock;
 
   // Fresh installs enable next-episode preloading on phones and TVs.
@@ -138,7 +136,6 @@ class PlaybackPreferences {
     bool? pictureInPictureEnabled,
     PlaybackAspectRatio? aspectRatio,
     bool? desktopAlwaysOnTop,
-    bool? showTelevisionNetworkSpeed,
     bool? showTelevisionClock,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
@@ -153,8 +150,6 @@ class PlaybackPreferences {
         pictureInPictureEnabled ?? this.pictureInPictureEnabled,
     aspectRatio: aspectRatio ?? this.aspectRatio,
     desktopAlwaysOnTop: desktopAlwaysOnTop ?? this.desktopAlwaysOnTop,
-    showTelevisionNetworkSpeed:
-        showTelevisionNetworkSpeed ?? this.showTelevisionNetworkSpeed,
     showTelevisionClock: showTelevisionClock ?? this.showTelevisionClock,
   );
 
@@ -170,7 +165,6 @@ class PlaybackPreferences {
     'pictureInPictureEnabled': pictureInPictureEnabled,
     'aspectRatioMode': aspectRatio.name,
     'desktopAlwaysOnTop': desktopAlwaysOnTop,
-    'showTelevisionNetworkSpeed': showTelevisionNetworkSpeed,
     'showTelevisionClock': showTelevisionClock,
   };
 
@@ -204,8 +198,6 @@ class PlaybackPreferences {
           value['pictureInPictureEnabled'] as bool? ?? true,
       aspectRatio: aspectRatio,
       desktopAlwaysOnTop: value['desktopAlwaysOnTop'] as bool? ?? false,
-      showTelevisionNetworkSpeed:
-          value['showTelevisionNetworkSpeed'] as bool? ?? true,
       showTelevisionClock: value['showTelevisionClock'] as bool? ?? true,
     );
   }

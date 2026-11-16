@@ -53,8 +53,6 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       widget.store.playbackPreferences.pictureInPictureEnabled;
   late bool _desktopAlwaysOnTop =
       widget.store.playbackPreferences.desktopAlwaysOnTop;
-  late bool _showTelevisionNetworkSpeed =
-      widget.store.playbackPreferences.showTelevisionNetworkSpeed;
   late bool _showTelevisionClock =
       widget.store.playbackPreferences.showTelevisionClock;
   bool _pictureInPictureSupported = false;
@@ -143,7 +141,6 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           autoPictureInPicture: _autoPictureInPicture,
           pictureInPictureEnabled: _pictureInPictureEnabled,
           desktopAlwaysOnTop: _desktopAlwaysOnTop,
-          showTelevisionNetworkSpeed: _showTelevisionNetworkSpeed,
           showTelevisionClock: _showTelevisionClock,
         ),
       );
@@ -213,11 +210,6 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updateDesktopAlwaysOnTop(bool value) {
     setState(() => _desktopAlwaysOnTop = value);
-    unawaited(_persistPreferences());
-  }
-
-  void _updateTelevisionNetworkSpeed(bool value) {
-    setState(() => _showTelevisionNetworkSpeed = value);
     unawaited(_persistPreferences());
   }
 
@@ -322,14 +314,6 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ),
             const SizedBox(height: 20),
             if (AppLayout.isTelevision(context)) ...[
-              SwitchListTile(
-                key: const ValueKey('playback-tv-network-speed'),
-                contentPadding: EdgeInsets.zero,
-                title: const Text('顯示即時網速'),
-                subtitle: const Text('使用 MPV 回報的快取讀取速率；ExoPlayer 或未提供速率時不顯示數值。'),
-                value: _showTelevisionNetworkSpeed,
-                onChanged: _updateTelevisionNetworkSpeed,
-              ),
               SwitchListTile(
                 key: const ValueKey('playback-tv-clock'),
                 contentPadding: EdgeInsets.zero,
@@ -464,7 +448,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入、自動連播、子母畫面、電視網速與時鐘顯示，以及電腦播放視窗置頂都會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
+              '倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入、自動連播、子母畫面、時鐘顯示，以及電腦播放視窗置頂都會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
             ),
           ],
         ),
