@@ -12,7 +12,7 @@
 - 詳情頁「收藏／取消收藏」加入明確遙控器焦點與方向鍵路徑，可從底部播放按鈕向左，或從第一欄選集向左移至收藏。
 
 ### Windows 投放裝置探索
-- Windows 優先透過系統 DNS-SD API 探索 Google Cast 接收器，解析裝置名稱、IP、連接埠與 Cast 裝置 ID；若原生探索沒有結果，仍會回退原本的 dart_cast mDNS 搜尋。
+- Windows 同時透過系統 DNS-SD API 與原本的 dart_cast mDNS 搜尋 Google Cast 接收器，合併結果並依 IP／連接埠去重，避免單一路徑漏掉裝置。
 - 新增 Google Cast DNS-SD 資料轉換測試；仍需在 Windows 實機確認 onn. 4K Pro 能出現在投放清單並完成連線。
 
 ### macOS 與 iOS 更新流程
