@@ -1,6 +1,11 @@
 package core
 
-import "testing"
+import (
+	"encoding/base64"
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestAdultProviderRegistrationAndCategories(t *testing.T) {
 	tests := []struct {
@@ -88,6 +93,62 @@ func TestAdultPlaybackURLsResolveRelativeToTheActualPlayerPage(t *testing.T) {
 	}
 	if got := adultFindM3U8("<script>source='https://cdn.example/master.m3u8'</script>"); got != "https://cdn.example/master.m3u8" {
 		t.Fatalf("absolute player URL without a page base = %q", got)
+	}
+}
+
+func adultEncodeVOETestPayload(t *testing.T, mediaURL string) string {
+	t.Helper()
+	config, err := json.Marshal(map[string]string{"source": mediaURL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reversedBase64 := base64.StdEncoding.EncodeToString(config)
+	data := []byte(reversedBase64)
+	for left, right := 0, len(data)-1; left < right; left, right = left+1, right-1 {
+		data[left], data[right] = data[right], data[left]
+	}
+	for index := range data {
+		data[index] += 3
+	}
+	encoded := base64.StdEncoding.EncodeToString(data)
+	encoded = adultRot13(encoded)
+	var chunks []string
+	for len(encoded) > 4 {
+		chunks = append(chunks, encoded[:4])
+		encoded = encoded[4:]
+	}
+	if encoded != "" {
+		chunks = append(chunks, encoded)
+	}
+	return strings.Join(chunks, "@$")
+}
+
+func TestAdultSupJavVOEDecodesStaticJSONHLSPayload(t *testing.T) {
+	payload := adultEncodeVOETestPayload(t, "https://cdn.example/master.m3u8?token=abc")
+	raw, err := json.Marshal([]string{payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := "<script type=\"application/json\">" + string(raw) + "</script>"
+	got := adultSupJavVOEHLS(body, "https://voe.sx/e/video")
+	if got != "https://cdn.example/master.m3u8?token=abc" {
+		t.Fatalf("VOE decoded URL = %q", got)
+	}
+}
+
+func TestAdultSupJavVOERejectsInvalidOrNonHLSPayload(t *testing.T) {
+	invalid := `<script type="application/json">["not-a-valid-payload"]</script>`
+	if got := adultSupJavVOEHLS(invalid, "https://voe.sx/e/video"); got != "" {
+		t.Fatalf("invalid VOE payload = %q, want empty", got)
+	}
+	payload := adultEncodeVOETestPayload(t, "https://cdn.example/video.mp4")
+	raw, err := json.Marshal([]string{payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := "<script type=\"application/json\">" + string(raw) + "</script>"
+	if got := adultSupJavVOEHLS(body, "https://voe.sx/e/video"); got != "" {
+		t.Fatalf("non-HLS VOE payload = %q, want empty", got)
 	}
 }
 
