@@ -556,6 +556,12 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      - name: Extract this version's update notes from CHANGELOG
+        id: release-notes
+        env:
+          DTV_RELEASE_VERSION: ${{ steps.release-files.outputs.version }}
+        run: python scripts/extract_release_notes.py
+
       - name: Publish Release after successful four-platform builds
         uses: softprops/action-gh-release@v2
         with:
@@ -570,6 +576,10 @@ jobs:
             ## D TV ${{ steps.release-files.outputs.version }}
 
             四個平台的建置與必要檢查已全部通過；Windows 提供免安裝 ZIP。
+
+            ### 本次更新
+
+            ${{ steps.release-notes.outputs.notes }}
 
             ### 下載檔案
             - Android／Android TV：Universal APK（ARM64、ARMv7、x86_64）
