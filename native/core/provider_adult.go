@@ -743,15 +743,23 @@ func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (provider
 	if adultSafeURL(base, pageURL, source) == "" {
 		return providerMedia{}, errors.New("進階片源播放頁網址無效")
 	}
-	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
+	pageResponses := &playbackResponseURLs{}
+	requestContext := context.WithValue(ctx, playbackResponseURLsKey{}, pageResponses)
+	requestContext = context.WithValue(requestContext, providerTextUserAgentKey{}, adultUserAgent)
 	body, err := d.fetchProviderText(requestContext, pageURL, base+"/")
 	if err != nil {
 		return providerMedia{}, fmt.Errorf("%s 播放頁讀取失敗：%w", adultSourceName(source), err)
 	}
+	if actual, ok := pageResponses.values.Load(pageURL); ok {
+		if finalURL, valid := actual.(string); valid && finalURL != "" {
+			pageURL = finalURL
+		}
+	}
 	mediaURL := ""
 	referer := pageURL
+	var serverErrors []string
 	if source == sourceMissAV {
-		mediaURL = adultFindM3U8(body)
+		mediaURL = adultFindM3U8(body, pageURL)
 	} else {
 		servers := adultSupJavDataLinks(body)
 		order := []string{"EVS", "FST", "VAS", "LUC", "VOE", "TV", "ST"}
@@ -761,9 +769,17 @@ func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (provider
 				continue
 			}
 			embedURL := "https://lk1.supremejav.com/supjav.php?c=" + url.QueryEscape(adultReverse(link))
-			embed, fetchErr := d.fetchProviderText(requestContext, embedURL, supJavBaseURL+"/")
+			embedResponses := &playbackResponseURLs{}
+			embedContext := context.WithValue(requestContext, playbackResponseURLsKey{}, embedResponses)
+			embed, fetchErr := d.fetchProviderText(embedContext, embedURL, pageURL)
 			if fetchErr != nil {
+				serverErrors = append(serverErrors, name+": "+truncate(fetchErr.Error(), 120))
 				continue
+			}
+			if actual, ok := embedResponses.values.Load(embedURL); ok {
+				if finalURL, valid := actual.(string); valid && finalURL != "" {
+					embedURL = finalURL
+				}
 			}
 			found := ""
 			if name == "FST" {
@@ -775,10 +791,15 @@ func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (provider
 			if found != "" {
 				mediaURL = found
 				referer = embedURL
+			} else {
+				serverErrors = append(serverErrors, name+": 播放頁未找到可用 HLS 位址")
 			}
 		}
 	}
 	if mediaURL == "" || !isProviderHTTPMediaURL(mediaURL) {
+		if source == sourceSupJav && len(serverErrors) > 0 {
+			return providerMedia{}, fmt.Errorf("%s 沒有可用播放來源：%s", adultSourceName(source), strings.Join(serverErrors, "；"))
+		}
 		return providerMedia{}, fmt.Errorf("%s 目前沒有可用的 HLS 播放網址；站方可能要求驗證、封鎖請求或已變更播放器", adultSourceName(source))
 	}
 	credentials := &providerMediaCredentials{referer: referer, userAgent: adultUserAgent}
