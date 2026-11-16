@@ -139,7 +139,6 @@ class AppUpdateService {
     }
     final directory = Directory(path.join(baseDirectory.path, 'D TV Updates'));
     await directory.create(recursive: true);
-    final target = File('${target.path}.part');
     final partial = File(path.join(directory.path, '${safeName}.part'));
     final finalTarget = File(path.join(directory.path, safeName));
     if (await finalTarget.exists()) await finalTarget.delete();
