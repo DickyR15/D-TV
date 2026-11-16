@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -11,11 +12,13 @@ class AppUpdateAsset {
     required this.name,
     required this.downloadUrl,
     this.size = 0,
+    this.sha256,
   });
 
   final String name;
   final String downloadUrl;
   final int size;
+  final String? sha256;
 }
 
 class AppUpdateInfo {
@@ -52,6 +55,14 @@ class AppUpdateInfo {
 
   AppUpdateAsset? get currentPlatformAsset =>
       assetForPlatform(Platform.operatingSystem);
+}
+
+class _RetryableUpdateException implements Exception {
+  const _RetryableUpdateException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 class AppUpdateService {
@@ -128,47 +139,95 @@ class AppUpdateService {
     }
     final directory = Directory(path.join(baseDirectory.path, 'D TV Updates'));
     await directory.create(recursive: true);
-    final target = File(path.join(directory.path, safeName));
-    if (await target.exists()) await target.delete();
+    final target = File('${target.path}.part');
+    final partial = File(path.join(directory.path, '${safeName}.part'));
+    final finalTarget = File(path.join(directory.path, safeName));
+    if (await finalTarget.exists()) await finalTarget.delete();
+    if (await partial.exists()) await partial.delete();
 
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 15)
-      ..userAgent = 'D-TV-Updater';
-    try {
-      final request = await client.getUrl(uri).timeout(
-        const Duration(seconds: 20),
-      );
-      request.headers.set(
-        HttpHeaders.acceptHeader,
-        'application/octet-stream',
-      );
-      final response = await request.close().timeout(
-        const Duration(seconds: 30),
-      );
-      if (response.statusCode != HttpStatus.ok) {
-        await response.drain<void>();
-        throw HttpException(
-          '更新檔下載失敗，伺服器回應 ' + response.statusCode.toString(),
-          uri: uri,
-        );
-      }
+    Object? lastError;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 20)
+        ..idleTimeout = const Duration(seconds: 45)
+        ..userAgent = 'D-TV-Updater';
+      IOSink? sink;
       try {
-        await response
-            .pipe(target.openWrite())
-            .timeout(const Duration(minutes: 5));
-        final downloadedBytes = await target.length();
-        if (downloadedBytes <= 0 ||
+        final request = await client.getUrl(uri).timeout(
+          const Duration(seconds: 30),
+        );
+        request.headers.set(
+          HttpHeaders.acceptHeader,
+          'application/octet-stream',
+        );
+        final response = await request.close().timeout(
+          const Duration(seconds: 45),
+        );
+        if (response.statusCode != HttpStatus.ok) {
+          await response.drain<void>();
+          final message =
+              '更新檔下載失敗，伺服器回應 ${response.statusCode}';
+          if (response.statusCode == 408 ||
+              response.statusCode == 429 ||
+              response.statusCode >= 500) {
+            throw _RetryableUpdateException(message);
+          }
+          throw HttpException(message, uri: uri);
+        }
+
+        sink = partial.openWrite();
+        var receivedBytes = 0;
+        await for (final chunk in response.timeout(
+          const Duration(seconds: 45),
+        )) {
+          sink.add(chunk);
+          receivedBytes += chunk.length;
+        }
+        await sink.flush();
+        await sink.close();
+        sink = null;
+
+        final downloadedBytes = await partial.length();
+        if (receivedBytes <= 0 ||
+            downloadedBytes != receivedBytes ||
             (asset.size > 0 && downloadedBytes != asset.size)) {
           throw const FormatException('更新檔下載不完整，請重新檢查更新');
         }
-      } catch (_) {
-        if (await target.exists()) await target.delete();
-        rethrow;
+        final expectedDigest = asset.sha256;
+        if (expectedDigest != null) {
+          final actualDigest = await sha256.bind(partial.openRead()).first;
+          if (actualDigest.toString().toLowerCase() != expectedDigest) {
+            throw const FormatException(
+              '更新檔 SHA-256 校驗失敗，為保護程式完整性，已取消更新',
+            );
+          }
+        }
+        return await partial.rename(finalTarget.path);
+      } catch (error) {
+        lastError = error;
+        try {
+          await sink?.close();
+        } catch (_) {}
+        if (await partial.exists()) {
+          try {
+            await partial.delete();
+          } catch (_) {}
+        }
+        final retryable = error is SocketException ||
+            error is TimeoutException ||
+            error is _RetryableUpdateException ||
+            error is FormatException;
+        if (!retryable || attempt == 3) {
+          throw StateError(
+            '下載更新檔失敗（已嘗試 ${attempt}/3 次）：${error.toString()}',
+          );
+        }
+        await Future<void>.delayed(Duration(seconds: attempt));
+      } finally {
+        client.close(force: true);
       }
-      return target;
-    } finally {
-      client.close(force: true);
     }
+    throw StateError('下載更新檔失敗：${lastError ?? '未知錯誤'}');
   }
 
   Future<void> launchWindowsUpdater(File archive) async {
@@ -460,11 +519,60 @@ finally {
           continue;
         }
         final sizeValue = rawAsset['size'];
+        final rawDigest = rawAsset['digest'];
+        final digestMatch = rawDigest is String
+            ? RegExp(r'^sha256:([a-fA-F0-9]{64})
+      }
+    }
+
+    final published = DateTime.tryParse(release['published_at'] as String? ?? '');
+    return AppUpdateInfo(
+      version: tag.trim(),
+      title: title is String && title.trim().isNotEmpty ? title.trim() : tag.trim(),
+      releaseUrl: url.toString(),
+      notes: release['body'] is String ? release['body'] as String : '',
+      publishedAt: published,
+      assets: List.unmodifiable(assets),
+    );
+  }
+
+  static bool shouldNotify(
+    AppUpdateInfo? update, {
+    String? ignoredVersion,
+  }) {
+    if (update == null) return false;
+    final ignored = ignoredVersion?.trim() ?? '';
+    return ignored.isEmpty || update.version.trim() != ignored;
+  }
+
+  static bool isNewerVersion(String installed, String available) {
+    final current = _versionParts(installed);
+    final latest = _versionParts(available);
+    if (current == null || latest == null) return false;
+    for (var i = 0; i < 3; i++) {
+      if (latest[i] != current[i]) return latest[i] > current[i];
+    }
+    return false;
+  }
+
+  static List<int>? _versionParts(String value) {
+    final match = RegExp(r'(\d+)\.(\d+)(?:\.(\d+))?').firstMatch(value);
+    if (match == null) return null;
+    return [
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+      int.parse(match.group(3) ?? '0'),
+    ];
+  }
+}
+).firstMatch(rawDigest.trim())
+            : null;
         assets.add(
           AppUpdateAsset(
             name: name.trim(),
             downloadUrl: assetUri.toString(),
             size: sizeValue is int && sizeValue > 0 ? sizeValue : 0,
+            sha256: digestMatch?.group(1)?.toLowerCase(),
           ),
         );
       }
