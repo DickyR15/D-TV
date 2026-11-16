@@ -35,7 +35,6 @@ class TelevisionControls extends StatefulWidget {
     this.onPictureInPicture,
     this.enhancement,
     this.playbackGeneration = 0,
-    this.showNetworkSpeed = true,
     this.showClock = true,
   });
   final Player player;
@@ -53,7 +52,6 @@ class TelevisionControls extends StatefulWidget {
   final Future<void> Function()? onPictureInPicture;
   final VideoEnhancementController? enhancement;
   final int playbackGeneration;
-  final bool showNetworkSpeed;
   final bool showClock;
 
   @override
@@ -74,9 +72,6 @@ class TelevisionControlsState extends State<TelevisionControls> {
   Timer? _seekTimer;
   Timer? _infoTimer;
   DateTime _clockNow = DateTime.now();
-  String? _networkSpeedLabel;
-  bool _infoReadPending = false;
-  bool _infoReadFailureLogged = false;
   bool _visible = true;
   bool _panelOpen = false;
   bool _seekHint = false;
@@ -172,10 +167,9 @@ class TelevisionControlsState extends State<TelevisionControls> {
       _hideTimer?.cancel();
       if (_visible) _visible = false;
     }
-    if (widget.showNetworkSpeed != oldWidget.showNetworkSpeed ||
-        widget.showClock != oldWidget.showClock) {
+    if (widget.showClock != oldWidget.showClock) {
       _syncInfoTimer();
-      if (_visible) unawaited(_refreshPlaybackInfo());
+      if (_visible) _refreshPlaybackClock();
     }
   }
 
@@ -184,62 +178,22 @@ class TelevisionControlsState extends State<TelevisionControls> {
   }
 
   void _syncInfoTimer() {
-    final needsInfo = widget.showNetworkSpeed || widget.showClock;
-    if (!needsInfo) {
+    if (!widget.showClock) {
       _infoTimer?.cancel();
       _infoTimer = null;
-      _networkSpeedLabel = null;
       return;
     }
     if (_infoTimer != null) return;
-    unawaited(_refreshPlaybackInfo());
+    _refreshPlaybackClock();
     _infoTimer = Timer.periodic(
       const Duration(seconds: 1),
-      (_) => unawaited(_refreshPlaybackInfo()),
+      (_) => _refreshPlaybackClock(),
     );
   }
 
-  Future<void> _refreshPlaybackInfo() async {
-    if (!mounted || !widget.enabled || !_visible || _infoReadPending) return;
-    _infoReadPending = true;
-    String? speed;
-    try {
-      if (widget.showNetworkSpeed && widget.player.platform is NativePlayer) {
-        final platform = widget.player.platform as NativePlayer;
-        final network = await platform.getProperty(
-          'demuxer-via-network',
-          waitForInitialization: false,
-        );
-        final isNetwork = const {'yes', 'true', '1'}.contains(
-          network.trim().toLowerCase(),
-        );
-        if (isNetwork) {
-          final raw = await platform.getProperty(
-            'cache-speed',
-            waitForInitialization: false,
-          );
-          speed = televisionNetworkSpeedLabel(raw, networkInput: true);
-        }
-      }
-      _infoReadFailureLogged = false;
-    } catch (error) {
-      // MPV can temporarily report an unavailable property during open/seek.
-      // Keep the previous sample rather than showing a fabricated zero.
-      if (!_infoReadFailureLogged) {
-        DiaryService.add(
-          '[TVInfo] network_speed_read_failed error=${error.runtimeType}',
-        );
-        _infoReadFailureLogged = true;
-      }
-      speed = _networkSpeedLabel;
-    } finally {
-      _infoReadPending = false;
-    }
-    if (!mounted) return;
-    setState(() {
-      _clockNow = DateTime.now();
-      _networkSpeedLabel = speed;
-    });
+  void _refreshPlaybackClock() {
+    if (!mounted || !widget.enabled || !_visible) return;
+    setState(() => _clockNow = DateTime.now());
   }
 
   Widget _infoPill(String label) => DecoratedBox(
@@ -280,9 +234,7 @@ class TelevisionControlsState extends State<TelevisionControls> {
         !_visible || !_surface.hasFocus || _surface.hasPrimaryFocus;
     if (!_visible) setState(() => _visible = true);
     if (needsFocus) _focus(_play);
-    if (widget.showNetworkSpeed || widget.showClock) {
-      unawaited(_refreshPlaybackInfo());
-    }
+    if (widget.showClock) _refreshPlaybackClock();
     _scheduleHide();
   }
 
@@ -587,10 +539,6 @@ class TelevisionControlsState extends State<TelevisionControls> {
                           ),
                         ),
                       ),
-                      if (widget.showNetworkSpeed && _networkSpeedLabel != null) ...[
-                        const SizedBox(width: 10),
-                        _infoPill('網速 $_networkSpeedLabel'),
-                      ],
                       if (widget.showClock) ...[
                         const SizedBox(width: 10),
                         _infoPill(televisionClockLabel(_clockNow)),

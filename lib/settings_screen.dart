@@ -219,6 +219,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Object _filePickerAccessFailure(Object error, {required String action}) {
+    if (Platform.isMacOS &&
+        (error is FileSystemException || error is PlatformException)) {
+      return StateError(
+        'macOS 無法$action。請重新選取檔案，並在「系統設定 > 隱私權與安全性 > 檔案與資料夾」'
+        '確認已允許 D TV 存取；本機原始資料未被修改。',
+      );
+    }
+    return error;
+  }
+
+  Future<String> _readBackupFile(PlatformFile file) async {
+    try {
+      final size = await file.length();
+      if (size == null) {
+        throw FileSystemException('無法取得所選備份檔案大小', file.path);
+      }
+      if (size <= 0 || size > 8 * 1024 * 1024) {
+        throw const FormatException('備份檔案為空或超過 8 MiB 上限');
+      }
+      // PlatformFile.readAsBytes() uses the platform picker bridge so macOS
+      // security-scoped file access is honoured; do not reopen its path with
+      // dart:io after the native picker has returned.
+      final bytes = await file.readAsBytes();
+      if (bytes.length != size) {
+        throw const FormatException('備份檔案讀取不完整，原始資料未變更');
+      }
+      return utf8.decode(bytes);
+    } on FileSystemException catch (error) {
+      throw _filePickerAccessFailure(error, action: '讀取所選備份檔');
+    } on PlatformException catch (error) {
+      throw _filePickerAccessFailure(error, action: '讀取所選備份檔');
+    }
+  }
+
   Future<void> _backup(bool restore) async {
     setState(() {
       _busy = true;
@@ -265,25 +300,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
             );
           }
         } else {
-          final saved = await FilePicker.saveFile(
-            fileName:
-                '$appSlug-backup-${DateTime.now().toIso8601String().substring(0, 10)}.json',
-            bytes: Uint8List.fromList(utf8.encode(content)),
-            mimeType: 'application/json',
-          );
+          final Uri? saved;
+          try {
+            saved = await FilePicker.saveFile(
+              dialogTitle: '儲存 D TV 設定備份',
+              fileName:
+                  '$appSlug-backup-${DateTime.now().toIso8601String().substring(0, 10)}.json',
+              bytes: Uint8List.fromList(utf8.encode(content)),
+              mimeType: 'application/json',
+            );
+          } on FileSystemException catch (error) {
+            throw _filePickerAccessFailure(error, action: '儲存設定備份檔');
+          } on PlatformException catch (error) {
+            throw _filePickerAccessFailure(error, action: '儲存設定備份檔');
+          }
           if (saved != null && mounted) setState(() => _message = '備份已儲存');
         }
       } else {
-        final file = await FilePicker.pickFile(
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-        );
-        if (file == null || !mounted) return;
-        final size = await file.length();
-        if (size == null || size > 8 * 1024 * 1024) {
-          throw const FormatException('備份檔案過大或無法讀取');
+        final PlatformFile? file;
+        try {
+          file = await FilePicker.pickFile(
+            dialogTitle: '選取 D TV 設定備份',
+            type: FileType.custom,
+            allowedExtensions: ['json'],
+          );
+        } on FileSystemException catch (error) {
+          throw _filePickerAccessFailure(error, action: '開啟備份檔案選取器');
+        } on PlatformException catch (error) {
+          throw _filePickerAccessFailure(error, action: '開啟備份檔案選取器');
         }
-        final content = utf8.decode(await file.readAsBytes());
+        if (file == null || !mounted) return;
+        final content = await _readBackupFile(file);
         final data = widget.store.validateBackup(content);
         if (!mounted) return;
         final accepted = await showDialog<bool>(

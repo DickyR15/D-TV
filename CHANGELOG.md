@@ -1,3 +1,58 @@
+## 1.0.7（2026-11-17 正式版）
+
+### Windows 線上更新
+- 更新檔下載加入最多三次重試，使用暫存檔接收資料，檢查下載大小，並在 GitHub Release 提供 SHA-256 摘要時驗證檔案完整性。
+- 更新前先檢查免安裝程式資料夾是否可寫入，並驗證 ZIP 路徑及必要執行檔／DLL；準備與驗證未完成前不關閉目前版本。
+- 覆蓋前先完整備份所有將被取代的檔案；更新失敗時回復舊檔、清理由更新新增的檔案，並嘗試重新啟動舊版。
+- 延長更新準備與新版啟動檢查時間；更新失敗時保留記錄與備份位置，並開啟該版本 Releases 頁面供手動處理。
+- Windows 下載或更新程序啟動失敗時，App 內提供直接開啟版本頁的備援入口。
+
+### 紅果播放修正
+- 播放改用紅果 v1.0.2 的專用 V5 播放 API 與 Medusa／Helios 簽章；目錄、搜尋、詳情繼續使用既有 API。
+- 依照回應中的指定集數 ID 解析媒體；新版 V5 路徑不可用時保留既有快捷網頁、App、多清晰度與官網備援。
+- 新增 32 組 F13 與 4 組 carrier 上游測試向量；依使用者回報，Windows 版與 Android APK 的紅果播放均已可正常播放。
+
+### Android TV 操作修正
+- 密碼欄位按下系統鍵盤的打勾／完成只會收起鍵盤並將焦點移到「登入」，不會直接送出；必須再按一次「登入」才會驗證。
+- 詳情頁「收藏／取消收藏」加入明確遙控器焦點與方向鍵路徑，可從底部播放按鈕向左，或從第一欄選集向左移至收藏。
+
+### Windows 投放裝置探索
+- Windows 同時透過系統 DNS-SD API 與原本的 dart_cast mDNS 搜尋 Google Cast 接收器，合併結果並依 IP／連接埠去重，避免單一路徑漏掉裝置。
+- 新增 Google Cast DNS-SD 資料轉換測試；仍需在 Windows 實機確認 onn. 4K Pro 能出現在投放清單並完成連線。
+
+### macOS 與 iOS 更新流程
+- macOS 維持 DMG 下載及開啟流程；下載或開啟失敗時可直接前往版本頁手動下載。
+- iOS 改為開啟該版本 GitHub Releases 頁面，讓使用者查看更新內容與 SHA-256 校驗碼，再自行下載未簽章 IPA 並透過側載工具安裝；不再直接跳到 IPA 檔案網址。
+
+### 一般片源與進階片源
+- 恢復鬼片為一般片源，預設順序為紅果、韓小圈、鬼片、多多追劇；保留原生分類、搜尋、詳情、海報解析及播放路徑。
+- 片源管理的每一個進階片源一律顯示「限制級」標籤；一般片源（包含鬼片）不顯示。
+
+### MissAV 與 SupJav 播放修正
+- MissAV 詳情頁改用目前網站使用的語系路徑（例如 `/en/<作品代碼>`），並讓播放網址解析以實際播放頁／重新導向後的網址為基準，支援相對 HLS 位址及既有 packed JavaScript 播放資料。
+- MissAV、SupJav 與 SupJav 播放內嵌網域納入 Chrome 150 TLS 瀏覽器指紋傳輸；不只更換 User-Agent。
+- SupJav FST 播放來源依播放器宣告的 HLS 順序解析，支援相對網址，以及播放器明確標示為 HLS 的 `.txt`／無副檔名網址；未標示 HLS 的無副檔名來源不會被當成播放清單。
+- SupJav 各伺服器解析失敗保留個別原因，避免只回報籠統的「沒有 HLS」。
+- 新增 MissAV 詳情路徑、相對 HLS、SupJav FST 來源排序及無效來源備援測試。站方仍回傳 HTTP 403／要求互動式瀏覽器驗證時，需以實際網路與裝置再次驗證；CI 通過不代表站方封鎖已解除。
+
+### macOS 檔案與備份安全
+- Debug／Release entitlement 必須包含使用者選取檔案讀寫權限；缺少檔案或 Xcode 未引用權限設定時，macOS 建置會直接失敗，不再靜默略過。
+- 備份匯入透過 FilePicker 原生讀取 API 取得使用者選取的檔案，遇到權限錯誤時提供 macOS 隱私權設定指引。
+- 還原前預檢資料目錄寫入及重新命名權限；分階段寫入暫存資料，交換失敗時保留／回復舊資料，並新增中斷還原時保護唯一舊資料副本的測試。
+
+### 自動化建置與工具鏈
+- GitHub Actions JavaScript 工作流程升級至 Node.js 24 相容版本，包含 checkout、Python、Go、Java、Android SDK、Artifact 上下載、Release 發布及重試流程，避免繼續使用已淘汰的 Node.js 20 執行環境。
+- Android CI 保留 JDK 17，升級 setup-java 至 v6，並保留 Java 問題比對器註記功能。
+- Windows 原生編譯環境由 MSYS2 MINGW64 改為 UCRT64，改用對應的 UCRT64 GCC 套件。
+- Android Gradle Wrapper 升級至 Gradle 9.9.1，改用較精簡的 bin 發行套件，並加入官方 SHA-256 固定值驗證；Android Gradle Plugin 9.1.0、Kotlin Plugin 2.4.0 與 JDK 17 維持不變。
+- Linux CI Runner 明確固定為 ubuntu-26.04，避免 ubuntu-latest 遷移期間不同工作可能落在不同映像版本。
+- macOS Runner 維持 macos-26 Universal 建置設定；佇列時間警告屬 GitHub Hosted Runner 容量，不是專案程式或工具鏈錯誤，無法靠升級套件消除。
+- Android 模擬器安裝／啟動維持 best-effort；必要的 APK 建置、簽章、套件識別與三種 ABI 驗證仍是必須通過的檢查。
+
+> 實測回報：Windows 版及 Android APK 的紅果播放均已成功。仍待確認 Windows 線上更新回復、Windows Google Cast 至 onn. 4K Pro、macOS 檔案／備份與更新情境，以及 iOS IPA 側載流程；四平台建置與 CI 通過不代表上述未測項目已完成。
+
+---
+
 ## 1.0.6（2026-11-16 正式版）
 
 ### 播放與操作

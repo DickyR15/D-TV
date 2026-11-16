@@ -176,7 +176,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   int _mobileTab = 0;
   bool _autoAdvance = true;
   bool _advancingOfficialSeason = false;
-  bool _showTelevisionNetworkSpeed = true;
   bool _showTelevisionClock = true;
   Timer? _sleepTimer;
   int _sleepMinutes = 0;
@@ -275,7 +274,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     autoPictureInPicture: widget.store.playbackPreferences.autoPictureInPicture,
     aspectRatio: _playbackAspectRatio,
     desktopAlwaysOnTop: widget.store.playbackPreferences.desktopAlwaysOnTop,
-    showTelevisionNetworkSpeed: _showTelevisionNetworkSpeed,
     showTelevisionClock: _showTelevisionClock,
   );
   int get _actualVideoQuality =>
@@ -326,7 +324,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     _autoAdvance = preferences.autoAdvance;
     _televisionDecoder = preferences.televisionDecoder;
     _playbackAspectRatio = preferences.aspectRatio;
-    _showTelevisionNetworkSpeed = preferences.showTelevisionNetworkSpeed;
     _showTelevisionClock = preferences.showTelevisionClock;
     // Preserve the previously validated Android TV MPV Embed + MediaCodec path.
     // ExoPlayer remains opt-in through DTV_ANDROID_PLAYER=exo for A/B tests.
@@ -2826,16 +2823,38 @@ class _PlayerScreenState extends State<PlayerScreen>
       widget.handoff?.fail('接收端已更換播放內容');
     }
     if (index != _index) _forceOnline = false;
-    final warmed =
-        handoffPlan ??
-        (recoveryAction == null && _preloadEnabled && !widget.localOnly
-            ? _preloader.take(
-                widget.detail.drama,
-                widget.detail.episodes[index],
-                quality: _requestedQuality,
-                online: _forceOnline,
-              )
-            : null);
+    final episodeToOpen = widget.detail.episodes[index];
+    PlaybackPlan? warmed;
+    var preloadBypassReason = '';
+    if (handoffPlan != null) {
+      preloadBypassReason = 'handoff';
+    } else if (recoveryAction != null) {
+      preloadBypassReason = 'recovery';
+    } else if (widget.localOnly) {
+      preloadBypassReason = 'local_only';
+    } else if (!_preloadEnabled) {
+      preloadBypassReason = 'disabled';
+    } else {
+      warmed = _preloader.take(
+        widget.detail.drama,
+        episodeToOpen,
+        quality: _requestedQuality,
+        online: _forceOnline,
+      );
+    }
+    if (warmed == null && preloadBypassReason.isNotEmpty) {
+      DiaryService.add(
+        '[NextEpisodePreload] take hit=false source=${widget.detail.drama.source} dramaId=${widget.detail.drama.id} episode=${episodeToOpen.number} reason=$preloadBypassReason',
+      );
+    }
+    final preloadResolveMs = warmed == null ? 0 : _preloader.lastTakeResolveMs;
+    final playbackSource = handoffPlan != null
+        ? 'handoff'
+        : recoveryAction != null
+        ? 'recovery'
+        : warmed != null
+        ? 'preloaded'
+        : 'api';
     _preloader.clear();
     final ticket = ++_generation;
     if (recoveryAction == null) _lastPlaybackError = null;
@@ -3172,8 +3191,11 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (_closed || ticket != _generation) {
           return;
         }
+        final effectiveResolverMs = warmed != null
+            ? preloadResolveMs
+            : resolveMs;
         DiaryService.add(
-          '[PlayTiming] generation=$ticket cleanupMs=$cleanupMs resolveMs=$resolveMs setupMs=$setupMs openMs=$openMs totalMs=${playClock.elapsedMilliseconds} backend=${_mpvEmbedBackend ? 'mpv_embed' : 'standard'}',
+          '[PlayTiming] generation=$ticket source=$playbackSource cleanupMs=$cleanupMs resolveMs=$resolveMs preloadResolveMs=$preloadResolveMs effectiveResolverMs=$effectiveResolverMs setupMs=$setupMs openMs=$openMs totalMs=${playClock.elapsedMilliseconds} backend=${_mpvEmbedBackend ? 'mpv_embed' : 'standard'}',
         );
         _openedIndex = index;
         _startSyncDiagnostics();
@@ -3627,7 +3649,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       _preloadEnabled = nextPreferences.preload ?? _preloadEnabled;
       _portraitBlurBackground = nextPreferences.portraitBlurBackground;
       _televisionDecoder = nextPreferences.televisionDecoder;
-      _showTelevisionNetworkSpeed = nextPreferences.showTelevisionNetworkSpeed;
       _showTelevisionClock = nextPreferences.showTelevisionClock;
     });
     if (qualityChanged) _preloader.clear();
@@ -4479,7 +4500,6 @@ class _PlayerScreenState extends State<PlayerScreen>
             player: _player,
             interactions: _interactions,
             playbackGeneration: _generation,
-            showNetworkSpeed: _showTelevisionNetworkSpeed,
             showClock: _showTelevisionClock,
             title: title,
             enabled: !_loading && _error == null,

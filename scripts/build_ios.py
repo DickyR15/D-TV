@@ -63,7 +63,7 @@ def build_core(simulator=False, variant=BuildVariant()):
     if not go:
         raise SystemExit('請安裝 Go 1.24.1 或更新版本。')
     environment = os.environ.copy()
-    environment.setdefault('GOPROXY', 'https://goproxy.cn,direct')
+    environment.setdefault('GOPROXY', 'https://proxy.golang.org|https://goproxy.cn|direct')
     environment.setdefault('GOSUMDB', 'off')
     environment['CGO_ENABLED'] = '1'
     environment['GOTOOLCHAIN'] = os.environ.get('GOTOOLCHAIN', 'auto')

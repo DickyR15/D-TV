@@ -178,7 +178,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         if (accepted != true || !mounted) return;
         final pin = await showDialog<String>(
           context: context,
-          builder: (_) => const _PasswordDialog(name: '管理員（原設定或備份中的密碼）'),
+          builder: (_) => _PasswordDialog(
+            name: '管理員（原設定或備份中的密碼）',
+            television: AppLayout.isTelevision(context),
+          ),
         );
         if (pin == null || !mounted) return;
         await widget.store.recoverBackup(content, pin: pin);
@@ -201,6 +204,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
           context: context,
           builder: (_) => _PasswordDialog(
             name: uiTraditional(profile.name),
+            television: AppLayout.isTelevision(context),
             onSubmit: (pin) =>
                 widget.store.switchProfile(profile.id, pin: pin),
           ),
@@ -452,8 +456,13 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 }
 
 class _PasswordDialog extends StatefulWidget {
-  const _PasswordDialog({required this.name, this.onSubmit});
+  const _PasswordDialog({
+    required this.name,
+    this.television = false,
+    this.onSubmit,
+  });
   final String name;
+  final bool television;
   final Future<void> Function(String pin)? onSubmit;
   @override
   State<_PasswordDialog> createState() => _PasswordDialogState();
@@ -467,20 +476,36 @@ class _PasswordDialogState extends State<_PasswordDialog> {
   bool _submitting = false;
   String? _submitError;
   bool _initialKeyboardScheduled = false;
+  Animation<double>? _routeAnimation;
 
-  bool get _television => AppLayout.isTelevision(context);
+  // Capture the layout from ProfilesScreen before opening the root-navigator
+  // dialog. This keeps Android TV's two-step keyboard/登入 flow deterministic.
+  bool get _television => widget.television || AppLayout.isTelevision(context);
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_television || _initialKeyboardScheduled) return;
+    if (_initialKeyboardScheduled) return;
     _initialKeyboardScheduled = true;
+    // A desktop window can finish presenting the modal after its first frame.
+    // Request focus again when the route is fully visible so the first physical
+    // keypress goes into the password field rather than activating the dialog.
+    _routeAnimation = ModalRoute.of(context)?.animation;
+    _routeAnimation?.addStatusListener(_onRouteAnimationStatus);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestPasswordKeyboard());
+  }
+
+  void _onRouteAnimationStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
     WidgetsBinding.instance.addPostFrameCallback((_) => _requestPasswordKeyboard());
   }
 
   void _requestPasswordKeyboard() {
-    if (!_television || _submitting || !mounted) return;
-    if (!_pinFocus.hasPrimaryFocus) _pinFocus.requestFocus();
+    if (_submitting || !mounted) return;
+    if (!_pinFocus.hasPrimaryFocus) {
+      FocusScope.of(context).requestFocus(_pinFocus);
+    }
+    if (!_television) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _submitting || !_pinFocus.hasPrimaryFocus) return;
       unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
@@ -493,7 +518,13 @@ class _PasswordDialogState extends State<_PasswordDialog> {
       return;
     }
     unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
-    _loginFocus.requestFocus();
+    // Let the IME's done/confirm event finish before moving focus. Otherwise
+    // Android TV can deliver that same activation to the newly focused 登入
+    // button and submit immediately, skipping the explicit second confirmation.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _submitting) return;
+      _loginFocus.requestFocus();
+    });
   }
 
   Future<void> _submit() async {
@@ -573,6 +604,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
 
   @override
   void dispose() {
+    _routeAnimation?.removeStatusListener(_onRouteAnimationStatus);
     _pin.dispose();
     _pinFocus.dispose();
     _cancelFocus.dispose();
@@ -595,7 +627,7 @@ class _PasswordDialogState extends State<_PasswordDialog> {
             key: const ValueKey('profile-password-input'),
             controller: _pin,
             focusNode: _pinFocus,
-            autofocus: _television,
+            autofocus: true,
             enabled: !_submitting,
             onTap: _requestPasswordKeyboard,
             obscureText: true,

@@ -76,14 +76,14 @@ env:
 jobs:
   core-validation:
     name: Shared Go and Flutter validation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
@@ -113,13 +113,13 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Install Pillow for platform icons
         run: python -m pip install --disable-pip-version-check "Pillow>=10.4,<13"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
@@ -183,9 +183,9 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           release: false
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
-          install: mingw-w64-x86_64-gcc
+          install: mingw-w64-ucrt-x86_64-gcc
       - name: Read Windows package version
         id: windows-version
         shell: pwsh
@@ -219,7 +219,7 @@ jobs:
       # Upload the unpacked portable bundle as the artifact itself. GitHub
       # creates the downloadable ZIP, so uploading dist/*.zip here would
       # produce a ZIP containing another ZIP (two extraction steps).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: DTV-${{ steps.windows-version.outputs.app_version }}-Windows-Portable
           path: build/windows/x64/runner/Release/
@@ -229,7 +229,7 @@ jobs:
     if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/build/pre-missav-supjav-and-advanced-reorder') || (github.event_name == 'push' && github.ref == 'refs/heads/feature/advanced-source-reorder-cross-platform') || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android'))
     name: Android Universal APK (3 ABIs)
     needs: core-validation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 90
     steps:
       - name: Free unused runner disk space
@@ -239,22 +239,23 @@ jobs:
           sudo rm -rf /usr/local/lib/android/sdk/system-images
           sudo apt-get clean
           df -h
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Install Pillow for platform icons
         run: python -m pip install --disable-pip-version-check "Pillow>=10.4,<13"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6.3.0
         with:
           distribution: temurin
           java-version: "17"
+          problem-matcher: true
       - uses: gradle/actions/setup-gradle@v6
         with:
           # Cache Gradle dependencies and reusable task outputs between branch builds.
           cache-provider: basic
           cache-read-only: ${{ github.event_name == 'pull_request' }}
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
@@ -263,7 +264,7 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4.0.4
         with:
           packages: "platforms;android-36 build-tools;36.0.0 platform-tools ndk;28.2.13676358"
           accept-android-sdk-licenses: true
@@ -334,7 +335,7 @@ jobs:
             fi
             echo "  - $abi OK"
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: DTV-Android-APK
           path: dist/android/DTV-*.apk
@@ -365,13 +366,13 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 100
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Install Pillow for platform icons
         run: python -m pip install --disable-pip-version-check "Pillow>=10.4,<13"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
@@ -405,16 +406,12 @@ jobs:
           echo "DTV_IPHONE_DUO_SIMULATOR_ID=$device_id" >> "$GITHUB_ENV"
           echo "已選取 iPhone Duo 模擬器：$device_id"
       - name: Build device IPA and universal simulator core
+        id: build-ios-package
         run: python scripts/retry_command.py --attempts 3 -- python scripts/build_ios.py --simulator --all-sources
-      - uses: actions/upload-artifact@v4
-        with:
-          name: DTV-iOS-IPA
-          path: dist/ios/DTV-*.ipa
-          if-no-files-found: error
-          retention-days: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
       - name: Build iOS Simulator app
         # Flutter only supports Debug/Profile simulator builds; Release is
-        # reserved for physical iOS devices.
+        # reserved for physical iOS devices. Run this before uploading the IPA
+        # so an artifact-network failure cannot skip simulator validation.
         run: flutter build ios --simulator --debug --no-codesign --no-pub --dart-define=ALL_SOURCES=true
       - name: Install and launch on iPhone Duo simulator
         shell: bash
@@ -429,6 +426,25 @@ jobs:
           bundle_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist")
           xcrun simctl install "$device_id" "$app"
           xcrun simctl launch "$device_id" "$bundle_id"
+      - name: Upload iOS IPA artifact
+        id: upload-ios-ipa
+        if: always() && steps.build-ios-package.outcome == 'success'
+        uses: actions/upload-artifact@v7.0.2
+        continue-on-error: true
+        with:
+          name: DTV-iOS-IPA
+          path: dist/ios/DTV-*.ipa
+          if-no-files-found: error
+          retention-days: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
+      - name: Retry iOS IPA artifact upload after a transient upload failure
+        if: steps.upload-ios-ipa.outcome == 'failure'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: DTV-iOS-IPA
+          path: dist/ios/DTV-*.ipa
+          if-no-files-found: error
+          overwrite: true
+          retention-days: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
   macos-universal:
     if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/build/pre-missav-supjav-and-advanced-reorder') || (github.event_name == 'push' && github.ref == 'refs/heads/feature/advanced-source-reorder-cross-platform') || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3') || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'macos'))
     name: macOS Universal DMG (arm64 + x86_64)
@@ -436,13 +452,13 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 100
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
       - name: Install Pillow for platform icons
         run: python -m pip install --disable-pip-version-check "Pillow>=10.4,<13"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
@@ -458,7 +474,7 @@ jobs:
         run: gem install cocoapods --no-document
       - name: Build universal Go core, Flutter app and DMG
         run: python scripts/retry_command.py --attempts 3 -- python scripts/build_macos.py --all-sources
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: DTV-macOS-DMG
           path: dist/macos/DTV-*.dmg
@@ -476,14 +492,14 @@ jobs:
       - android-universal
       - ios-ipa
       - macos-universal
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - name: Check out repository for release version metadata
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Download platform build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8.0.2
         with:
           path: release-artifacts
 
@@ -563,7 +579,7 @@ jobs:
         run: python scripts/extract_release_notes.py
 
       - name: Publish Release after successful four-platform builds
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3.0.4
         with:
           tag_name: ${{ steps.release-files.outputs.tag }}
           target_commitish: ${{ github.sha }}

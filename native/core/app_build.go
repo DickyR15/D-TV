@@ -8,7 +8,7 @@ var errNativeBuildSource = errors.New("目前版本不包含此片源")
 
 func nativePrimarySource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHongguo, sourceHanxiaoquan, sourceDuoduo:
+	case sourceHongguo, sourceHanxiaoquan, sourceGuipian, sourceDuoduo:
 		return true
 	default:
 		return false
@@ -63,7 +63,11 @@ func nativeAuthorizeInput(input nativeInput) error {
 			(!nativeDramaAvailable(input.Drama) || sourceFromDramaID(input.Drama.ID) != canonicalProviderSource(input.Source)) {
 			return errNativeBuildSource
 		}
-	case "cover", "prepareCover", "detail", "metadata", "followCheck", "resolve", "preload", "prepareHandoff", "enqueueDownloads", "localPlayback":
+	case "cover", "prepareCover":
+		if !nativeDramaAvailable(input.Drama) {
+			return errNativeBuildSource
+		}
+	case "detail", "metadata", "followCheck", "resolve", "preload", "prepareHandoff", "enqueueDownloads", "localPlayback":
 		if !nativeDramaAvailable(input.Drama) {
 			return errNativeBuildSource
 		}

@@ -15,6 +15,15 @@ import 'fixtures.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('adult metadata is independent from advanced source membership', () {
+    expect(SourceSite.missav.adult, isTrue);
+    expect(SourceSite.supjav.adult, isTrue);
+    expect(SourceSite.isKnown('guipian'), isTrue);
+    expect(SourceSite.isAvailable('guipian'), isTrue);
+    expect(SourceSite.byId('guipian').adult, isFalse);
+    expect(SourceSite.byId('huangdou').adult, isFalse);
+  });
+
   test('source management removes the Dart Bad state prefix', () {
     expect(
       sourceManagementErrorMessage(StateError('密碼不正確')),
@@ -63,7 +72,7 @@ void main() {
     expect(find.textContaining('Bad state:'), findsNothing);
   });
 
-  testWidgets('three primary sources and guidance are visible in every edition', (
+  testWidgets('four primary sources and guidance are visible in every edition', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -82,16 +91,18 @@ void main() {
     );
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
+    expect(find.text('鬼片'), findsOneWidget);
     expect(find.text('多多追劇'), findsOneWidget);
     expect(find.text('電影 · 電視劇 · 動漫 · 綜藝'), findsOneWidget);
     expect(
       find.textContaining(
-        '預設開啟 3 個一般片源：紅果、韓小圈、多多追劇。',
+        '預設開啟 4 個一般片源：紅果、韓小圈、鬼片、多多追劇。',
       ),
       findsOneWidget,
     );
     expect(store.sourceEnabled('hongguo'), isTrue);
     expect(store.sourceEnabled('hanxiaoquan'), isTrue);
+    expect(store.sourceEnabled('guipian'), isTrue);
     expect(store.sourceEnabled('duoduo'), isTrue);
   });
 
@@ -270,6 +281,7 @@ void main() {
     );
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
+    expect(find.text('鬼片'), findsOneWidget);
     expect(find.text('多多追劇'), findsOneWidget);
     expect(find.text('暴風'), findsNothing);
     expect(find.text('極速'), findsNothing);
@@ -281,7 +293,7 @@ void main() {
     expect(find.text('進階片源'), findsNothing);
     expect(
       find.textContaining(
-        '預設開啟 3 個一般片源：紅果、韓小圈、多多追劇。',
+        '預設開啟 4 個一般片源：紅果、韓小圈、鬼片、多多追劇。',
       ),
       findsOneWidget,
     );
@@ -377,6 +389,54 @@ void main() {
     expect(store.sourceEnabled('hongguo'), isFalse);
     expect(tester.widget<SwitchListTile>(other).onChanged, isNotNull);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('all advanced sources display the restricted badge', (tester) async {
+    if (!allSourcesEnabled) return;
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    await store.saveProfile(
+      id: 'default',
+      name: '管理員',
+      sources: const [],
+      download: true,
+      pin: 'source-pass-123',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: SourceManagementScreen(store: store)),
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('advanced-source-password')),
+      'source-pass-123',
+    );
+    final unlockButton = find.byKey(const ValueKey('unlock-advanced-sources'));
+    await tester.ensureVisible(unlockButton);
+    await tester.pumpAndSettle();
+    await tester.tap(unlockButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+
+    // Every advanced source receives the same label, regardless of its
+    // provider-level adult metadata. General sources (including Guipian) do not.
+    final scrollable = find.byType(Scrollable).last;
+    for (final source in SourceSite.restrictedValues) {
+      final title = find.text(source.name);
+      await tester.scrollUntilVisible(
+        title,
+        220,
+        scrollable: scrollable,
+      );
+      expect(
+        find.byKey(ValueKey('restricted-badge-${source.id}')),
+        findsOneWidget,
+        reason: '${source.name} should display 限制級',
+      );
+    }
+    expect(SourceSite.byId('huangdou').adult, isFalse);
+    expect(SourceSite.byId('guipian').adult, isFalse);
   });
 
   test('advanced source order persists and controls permitted source ordering', () async {
@@ -558,7 +618,7 @@ void main() {
     expect(rowContainer.child, isA<ListTile>());
     final listTile = rowContainer.child as ListTile;
     expect(listTile.title, isA<Text>());
-    expect(listTile.subtitle, isA<Text>());
+    expect(listTile.subtitle, isA<Wrap>());
     expect(listTile.trailing, isA<Switch>());
     expect(find.byIcon(Icons.drag_indicator_rounded), findsNothing);
 

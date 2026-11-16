@@ -501,17 +501,76 @@ void main() {
       );
 
       await tester.enterText(pinFinder, 'visitor-password');
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pump();
+      // The Android TV keyboard's checkmark only finishes text entry and
+      // transfers focus to the explicit 登入 button. It must not authenticate.
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(pinFinder, findsOneWidget);
+      expect(store.profile.name, '管理員');
       expect(
         tester.widget<FilledButton>(loginFinder).focusNode!.hasPrimaryFocus,
         isTrue,
       );
+
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 
       expect(store.profile.name, '訪客');
       expect(pinFinder, findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+
+  testWidgets(
+    'Windows protected profile dialog starts with password field focused',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      await store.saveProfile(
+        id: 'default',
+        name: '管理員',
+        sources: const [],
+        download: true,
+        pin: 'admin-password',
+      );
+      await store.saveProfile(
+        id: 'visitor',
+        name: '訪客',
+        sources: const ['hongguo'],
+        download: false,
+        pin: 'visitor-password',
+      );
+      final visitor = store.profiles.firstWhere(
+        (profile) => profile.name == '訪客',
+      );
+      store.lock();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.windows),
+          home: ProfilesScreen(store: store, locked: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('profile-open-${visitor.id}')));
+      await tester.pumpAndSettle();
+
+      final pinFinder = find.byKey(
+        const ValueKey('profile-password-input'),
+      );
+      expect(pinFinder, findsOneWidget);
+      expect(
+        tester.widget<TextField>(pinFinder).focusNode!.hasPrimaryFocus,
+        isTrue,
+        reason: 'Windows should not require a preliminary mouse click to focus the password field',
+      );
+      await tester.enterText(pinFinder, 'visitor-password');
+      expect(
+        tester.widget<TextField>(pinFinder).controller!.text,
+        'visitor-password',
+      );
       expect(tester.takeException(), isNull);
     },
   );

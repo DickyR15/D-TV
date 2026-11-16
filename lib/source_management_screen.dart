@@ -333,6 +333,11 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
         (rowFocus!.hasFocus || switchFocus!.hasFocus);
     final colors = Theme.of(context).colorScheme;
     final enabled = widget.store.sourceEnabled(source.id);
+    final subtitle = selectedForReorder
+        ? '已選取排序：使用遙控器方向鍵移動，按確認完成'
+        : hasFocus
+        ? '目前焦點：${uiTraditional(source.name)}｜按確認切換，長按可排序'
+        : uiTraditional(source.description);
     return ReorderableDelayedDragStartListener(
       key: ValueKey('reorderable-source-${source.id}'),
       index: index,
@@ -356,12 +361,31 @@ class _SourceManagementScreenState extends State<SourceManagementScreen> {
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 8),
             title: Text(uiTraditional(source.name)),
-            subtitle: Text(
-              selectedForReorder
-                  ? '已選取排序：使用遙控器方向鍵移動，按確認完成'
-                  : hasFocus
-                  ? '目前焦點：${uiTraditional(source.name)}｜按確認切換，長按可排序'
-                  : uiTraditional(source.description),
+            subtitle: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Container(
+                  key: ValueKey('restricted-badge-${source.id}'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '限制級',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onErrorContainer,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(subtitle),
+              ],
             ),
             trailing: Switch(
               key: ValueKey('source-switch-${source.id}'),

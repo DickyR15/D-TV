@@ -458,6 +458,7 @@ class DramaTile extends StatelessWidget {
     this.onFocus,
     this.actions,
     this.badge,
+    this.statusBadge,
     this.selected,
     this.onMore,
     this.onLongPress,
@@ -471,6 +472,7 @@ class DramaTile extends StatelessWidget {
   final VoidCallback? onFocus;
   final Widget? actions;
   final String? badge;
+  final String? statusBadge;
   final bool? selected;
   final VoidCallback? onMore;
   final VoidCallback? onLongPress;
@@ -529,6 +531,32 @@ class DramaTile extends StatelessWidget {
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (statusBadge != null && statusBadge!.isNotEmpty)
+                Positioned(
+                  right: 6,
+                  bottom: 6,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xE61A1118),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(color: const Color(0x66FFFFFF)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      child: Text(
+                        statusBadge!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
                         ),
                       ),
                     ),

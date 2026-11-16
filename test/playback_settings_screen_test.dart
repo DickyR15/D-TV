@@ -239,27 +239,19 @@ void main() {
       ),
     );
 
-    final networkFinder = find.byKey(
-      const ValueKey('playback-tv-network-speed'),
+    expect(find.text('顯示即時網速'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('playback-tv-network-speed')),
+      findsNothing,
     );
-    await tester.scrollUntilVisible(networkFinder, 120);
-    await tester.pumpAndSettle();
-    final network = tester.widget<SwitchListTile>(networkFinder);
     final clockFinder = find.byKey(const ValueKey('playback-tv-clock'));
     await tester.scrollUntilVisible(clockFinder, 120);
     await tester.pumpAndSettle();
     final clock = tester.widget<SwitchListTile>(clockFinder);
-    expect(network.value, isTrue);
     expect(clock.value, isTrue);
-    await tester.ensureVisible(networkFinder);
-    await tester.tap(networkFinder);
-    await tester.pumpAndSettle();
-    expect(store.playbackPreferences.showTelevisionNetworkSpeed, isFalse);
-    expect(store.playbackPreferences.showTelevisionClock, isTrue);
     await tester.ensureVisible(clockFinder);
     await tester.tap(clockFinder);
     await tester.pumpAndSettle();
-    expect(store.playbackPreferences.showTelevisionNetworkSpeed, isFalse);
     expect(store.playbackPreferences.showTelevisionClock, isFalse);
   });
 

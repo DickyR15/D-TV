@@ -177,6 +177,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	client := downloader.hongguoClient()
 	helper, _ := ctx.Value(hongguoHelperDeviceKey{}).(bool)
 	signed := path != hongguoBookmallTabPath
+	playback := path == hongguoPlaybackPath
 	var registerErr error
 	if signed {
 		// 暫時性註冊失敗仍可沿用既有設備識別碼；首次啟動閘門會要求完成雙設備註冊。
@@ -186,10 +187,19 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	base := client.baseURL
 	deviceID, installID, registered := client.deviceLocked(helper)
 	client.mu.Unlock()
+	if playback {
+		base = hongguoPlaybackBaseURL
+	}
 	if helper && (!signed || !registered || !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0") {
 		return nil, errors.New("紅果輔助設備尚未完成註冊")
 	}
 	query := hongguoAppQuery(deviceID, installID)
+	if playback {
+		query = make(url.Values)
+		for key, value := range hongguoPlaybackQuery(deviceID, installID) {
+			query.Set(key, value)
+		}
+	}
 	for key, values := range extra {
 		query[key] = append([]string(nil), values...)
 	}
@@ -218,18 +228,44 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				return nil, ctx.Err()
 			}
 		}
-		request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(base, "/")+path, bytes.NewReader(body))
+		requestURL := strings.TrimRight(base, "/") + path
+		var v5Headers http.Header
+		if playback {
+			values := make(map[string]string, len(query))
+			for key, items := range query {
+				if len(items) > 0 {
+					values[key] = items[0]
+				}
+			}
+			var signErr error
+			requestURL, v5Headers, signErr = signHongguoPlaybackV5(requestURL, values, body, time.Now())
+			if signErr != nil {
+				return nil, signErr
+			}
+		}
+		request, err := http.NewRequestWithContext(ctx, method, requestURL, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
 		}
-		request.Header.Set("User-Agent", hongguoAppUserAgent)
-		request.Header.Set("Accept", "application/json")
-		request.Header.Set("X-XS-From-Web", "0")
-		request.Header.Set("Sdk-Version", "2")
-		if payload != nil {
-			request.Header.Set("Content-Type", "application/json; charset=utf-8")
+		if playback {
+			request.Header.Set("User-Agent", hongguoPlaybackUserAgent)
+			request.Header.Set("Accept", "application/json")
+			for key, values := range v5Headers {
+				request.Header[key] = append([]string(nil), values...)
+			}
+		} else {
+			request.Header.Set("User-Agent", hongguoAppUserAgent)
+			request.Header.Set("Accept", "application/json")
+			request.Header.Set("X-XS-From-Web", "0")
+			request.Header.Set("Sdk-Version", "2")
+			if payload != nil {
+				request.Header.Set("Content-Type", "application/json; charset=utf-8")
+			}
 		}
 		response, err := downloader.doPreparedCatalogRequest(request, 20*time.Second, func(prepared *http.Request) {
+			if playback {
+				return
+			}
 			now := time.Now()
 			query.Set("_rticket", strconv.FormatInt(now.UnixMilli(), 10))
 			prepared.URL.RawQuery = query.Encode()

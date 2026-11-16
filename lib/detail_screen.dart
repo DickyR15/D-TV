@@ -53,6 +53,7 @@ class _DetailScreenState extends State<DetailScreen> {
   final _overviewScroll = ScrollController();
   final _overviewFocus = FocusNode(debugLabel: 'tv-detail-synopsis');
   final _startPlayFocus = FocusNode(debugLabel: 'detail-start-play');
+  final _favoriteFocus = FocusNode(debugLabel: 'detail-favorite-toggle');
   final Map<String, FocusNode> _seasonFocusNodes = {};
   bool _initialActionHandled = false;
   late final int _profileEpoch;
@@ -111,6 +112,7 @@ class _DetailScreenState extends State<DetailScreen> {
     _overviewScroll.dispose();
     _overviewFocus.dispose();
     _startPlayFocus.dispose();
+    _favoriteFocus.dispose();
     for (final node in _seasonFocusNodes.values) {
       node.dispose();
     }
@@ -542,6 +544,9 @@ class _DetailScreenState extends State<DetailScreen> {
                                           episodes: episodes,
                                           currentNumber: resumeEpisodeNumber,
                                           onSelected: (index) => _play(index),
+                                          onExitLeft: television
+                                              ? () => _favoriteFocus.requestFocus()
+                                              : null,
                                         ),
                                       ),
                                     ],
@@ -651,7 +656,21 @@ class _DetailScreenState extends State<DetailScreen> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: FilledButton.icon(
+                        child: Focus(
+                          canRequestFocus: false,
+                          skipTraversal: true,
+                          onKeyEvent: (node, event) {
+                            if (television &&
+                                event is KeyDownEvent &&
+                                event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+                                allowed &&
+                                !_loading) {
+                              _favoriteFocus.requestFocus();
+                              return KeyEventResult.handled;
+                            }
+                            return KeyEventResult.ignored;
+                          },
+                          child: FilledButton.icon(
                           key: const ValueKey('start-play'),
                           focusNode: playAutofocus ? _startPlayFocus : null,
                           autofocus: playAutofocus,
@@ -671,6 +690,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                 ? '繼續播放 · 第 ${episodes[resumeIndex].number} 集'
                                 : '播放',
                             textAlign: TextAlign.center,
+                          ),
                           ),
                         ),
                       ),
@@ -866,7 +886,19 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   KeyEventResult _handleOverviewKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent || !_overviewScroll.hasClients) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus == _favoriteFocus) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+        _overviewFocus.requestFocus();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    // The overview scroll handler must not consume D-pad input while a child
+    // action has focus; otherwise the 收藏 button looks focused but cannot be
+    // activated or navigated from with a TV remote.
+    if (primaryFocus != _overviewFocus || !_overviewScroll.hasClients) {
       return KeyEventResult.ignored;
     }
     final position = _overviewScroll.position;
@@ -1191,6 +1223,7 @@ class _DetailScreenState extends State<DetailScreen> {
       children: [
         FilledButton.tonalIcon(
           key: const ValueKey('favorite-toggle'),
+          focusNode: AppLayout.isTelevision(context) ? _favoriteFocus : null,
           onPressed: () async {
             if (_profileEpoch != widget.store.profileEpoch) return;
             await saveUserChange(

@@ -1502,7 +1502,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         'android' => '將下載 APK，接著由 Android 系統安裝程式確認更新。',
         'windows' => '將下載免安裝 ZIP，關閉 D TV 後自動替換檔案並重新啟動。',
         'macos' => '將下載 DMG 並開啟安裝映像檔，請將新版 D TV 拖曳至「應用程式」替換。',
-        'ios' => '將開啟 Safari（或系統預設瀏覽器）直接下載 IPA；下載後請使用側載工具安裝。',
+        'ios' => '將開啟該版本 GitHub Releases 頁面；查看更新內容與 SHA-256 校驗碼後，再自行下載 IPA 側載安裝。',
         _ => '將依目前裝置提供可用的更新檔案。',
       };
       final contentText = [
@@ -1602,9 +1602,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final service = const AppUpdateService();
     final asset = update.assetForPlatform(Platform.operatingSystem);
     if (Platform.isIOS) {
-      // iOS cannot install an IPA from inside the app. Open the release asset
-      // in Safari/the system browser so the user can save the IPA to Files.
-      await AppDevice.openExternalUrl(asset?.downloadUrl ?? update.releaseUrl);
+      // Match the upstream update flow: show the version notes and checksums
+      // on the release page; iOS IPA files must be signed and sideloaded.
+      try {
+        await AppDevice.openExternalUrl(update.releaseUrl);
+        DiaryService.add(
+          '[Update] opened_release_page=iOS version=${update.version}',
+        );
+      } catch (error) {
+        await Clipboard.setData(ClipboardData(text: update.releaseUrl));
+        DiaryService.add(
+          '[Update] release_page_copied=iOS error=${error.toString()}',
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('無法開啟版本頁，已複製更新頁網址。')),
+          );
+        }
+      }
       return;
     }
     if (asset == null) {
@@ -1650,7 +1665,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           );
         }
       } else if (Platform.isWindows) {
-        await service.launchWindowsUpdater(file);
+        await service.launchWindowsUpdater(file, releaseUrl: update.releaseUrl);
         exit(0);
       } else if (Platform.isMacOS) {
         await service.openMacDmg(file);
@@ -1672,7 +1687,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       DiaryService.add('[Update] download_failed=' + error.toString());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('下載或啟動更新失敗：${uiTraditional(error.toString())}')),
+          SnackBar(
+            content: Text(
+              '下載或啟動更新失敗：${uiTraditional(error.toString())}',
+            ),
+            action: SnackBarAction(
+              label: '開啟更新頁',
+              onPressed: () {
+                unawaited(
+                  AppDevice.openExternalUrl(update.releaseUrl).catchError(
+                    (Object openError) {
+                      DiaryService.add(
+                        '[Update] fallback_release_page_failed=' +
+                            openError.toString(),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
         );
       }
     }
@@ -1822,6 +1856,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       badge: following != null && following.hasUpdates
           ? following.updateLabel
           : null,
+      statusBadge: following?.posterLabel,
     );
   }
 

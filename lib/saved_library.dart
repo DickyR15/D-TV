@@ -155,6 +155,7 @@ class _SavedLibraryState extends State<SavedLibrary> {
       // 收藏與最近觀看皆以長按開啟操作選單，不顯示三點操作鈕。
       actions: null,
       badge: badge,
+      statusBadge: widget.history ? null : state?.posterLabel,
       subtitle: watched == null
           ? uiTraditional(SourceSite.byId(drama.source).name)
           : '第 ${watched.episode} 集 · ${formatPosition(watched.position)}',

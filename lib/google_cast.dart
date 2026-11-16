@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:dart_cast/dart_cast.dart' as dc;
 import 'package:flutter/foundation.dart';
+import 'package:nsd/nsd.dart' as nsd;
 
 import 'models.dart';
 
@@ -27,6 +30,65 @@ GoogleCastMediaKind googleCastMediaKindForUrl(
   return GoogleCastMediaKind.mp4;
 }
 
+/// Converts a resolved Windows DNS-SD Google Cast service into the same
+/// payload used by dart_cast. Windows NSD uses the OS DNS-SD API, which follows
+/// the same discovery path used by Chromium-based browsers.
+Map<String, dynamic>? googleCastPayloadFromNsdService(nsd.Service service) {
+  final port = service.port;
+  if (port == null || port <= 0 || port > 65535) return null;
+
+  InternetAddress? address;
+  for (final candidate in service.addresses ?? const <InternetAddress>[]) {
+    if (candidate.type == InternetAddressType.IPv4 &&
+        !candidate.isLoopback &&
+        !candidate.isMulticast) {
+      address = candidate;
+      break;
+    }
+  }
+  address ??= service.host == null
+      ? null
+      : InternetAddress.tryParse(service.host!);
+  if (address == null ||
+      address.type != InternetAddressType.IPv4 ||
+      address.isLoopback ||
+      address.isMulticast) {
+    return null;
+  }
+
+  final metadata = <String, String>{};
+  for (final entry in service.txt?.entries ?? const []) {
+    final bytes = entry.value;
+    if (bytes == null) continue;
+    final value = utf8.decode(bytes, allowMalformed: true).trim();
+    if (value.isNotEmpty) metadata[entry.key] = value;
+  }
+
+  final advertisedName = metadata['fn']?.trim();
+  final serviceName = service.name?.trim();
+  final name = advertisedName != null && advertisedName.isNotEmpty
+      ? advertisedName
+      : serviceName != null && serviceName.isNotEmpty
+      ? serviceName
+      : address.address;
+  final advertisedId = metadata['id']?.trim();
+  final id = advertisedId != null && advertisedId.isNotEmpty
+      ? advertisedId
+      : '${address.address}:$port';
+  final device = dc.CastDevice(
+    id: id,
+    name: name,
+    protocol: dc.CastProtocol.chromecast,
+    address: address,
+    port: port,
+    metadata: metadata,
+  );
+  return <String, dynamic>{
+    ...device.toJson(),
+    'transport': 'google_cast',
+  };
+}
+
 /// Chromecast V2 sender. Only Google Cast is registered here; AirPlay is
 /// deliberately excluded because iOS projection was removed from D-TV.
 class GoogleCastController {
@@ -50,6 +112,69 @@ class GoogleCastController {
   bool get isConnected => _session != null;
 
   Future<List<Map<String, dynamic>>> discover() async {
+    if (!Platform.isWindows) return _discoverWithDartCast();
+
+    // Run the Windows DNS-SD API and the original mDNS provider together.
+    // Different receivers / interfaces can be visible to only one discovery
+    // path; merging prevents a partial native result from hiding those devices.
+    final results = await Future.wait([
+      _discoverWindowsDnsSd().catchError((Object error) {
+        debugPrint('[GoogleCast] Windows DNS-SD discovery failed: $error');
+        return <Map<String, dynamic>>[];
+      }),
+      _discoverWithDartCast().catchError((Object error) {
+        debugPrint('[GoogleCast] dart_cast mDNS discovery failed: $error');
+        return <Map<String, dynamic>>[];
+      }),
+    ]);
+
+    final devices = <String, Map<String, dynamic>>{};
+    for (final payload in results.expand((items) => items)) {
+      final address = payload['address']?.toString() ?? '';
+      final port = payload['port']?.toString() ?? '';
+      final key = address.isNotEmpty && port.isNotEmpty
+          ? '$address:$port'
+          : payload['id']?.toString() ?? '';
+      if (key.isNotEmpty) devices.putIfAbsent(key, () => payload);
+    }
+    final merged = devices.values.toList(growable: false)
+      ..sort((a, b) => (a['name'] as String)
+          .toLowerCase()
+          .compareTo((b['name'] as String).toLowerCase()));
+    return merged;
+  }
+
+  Future<List<Map<String, dynamic>>> _discoverWindowsDnsSd() async {
+    nsd.Discovery? discovery;
+    try {
+      discovery = await nsd.startDiscovery(
+        '_googlecast._tcp',
+        autoResolve: true,
+        ipLookupType: nsd.IpLookupType.v4,
+      );
+      // Windows NSD reports discoveries asynchronously. Keep the browse alive
+      // for the same window as the existing Chromecast search before reading
+      // the fully resolved host, port and TXT data.
+      await Future<void>.delayed(const Duration(seconds: 10));
+      final devices = <String, Map<String, dynamic>>{};
+      for (final service in discovery.services) {
+        final payload = googleCastPayloadFromNsdService(service);
+        if (payload == null) continue;
+        devices[payload['id'] as String] = payload;
+      }
+      final result = devices.values.toList(growable: false)
+        ..sort((a, b) => (a['name'] as String)
+            .toLowerCase()
+            .compareTo((b['name'] as String).toLowerCase()));
+      return result;
+    } finally {
+      if (discovery != null) {
+        await nsd.stopDiscovery(discovery);
+      }
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _discoverWithDartCast() async {
     var latestDevices = <dc.CastDevice>[];
     final discovery = _service
         .startDiscovery(timeout: const Duration(seconds: 10))

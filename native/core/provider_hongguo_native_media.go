@@ -49,6 +49,55 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 }
 
 
+
+// resolveHongguoV5Media uses the playback-specific V5 endpoint from
+// guoapp-modules/hongguo v1.0.2. Catalog/detail API requests deliberately
+// continue to use hongguoAppRequest's legacy signing mode.
+func (downloader *Downloader) resolveHongguoV5Media(ctx context.Context, videoID string) (providerMedia, error) {
+	if !hongguoNumericID.MatchString(videoID) {
+		return providerMedia{}, errors.New("紅果 V5 播放 ID 無效")
+	}
+	payload := map[string]any{
+		"biz_param": map[string]any{
+			"detail_page_version": 0,
+			"device_level": 3,
+			"disable_digg_stat": false,
+			"disable_video_relate_book": false,
+			"need_all_video_definition": true,
+			"need_mp4_align": false,
+			"use_os_player": false,
+			"use_server_dns": false,
+			"video_platform": 1024,
+		},
+		"mixed_video_id_map": map[string]any{"1004": []string{videoID}},
+		"dr_scene": "player",
+	}
+	requestCtx, cancel := context.WithTimeout(ctx, 18*time.Second)
+	defer cancel()
+	result, err := downloader.hongguoAppRequest(
+		requestCtx, http.MethodPost, hongguoPlaybackPath, nil, payload,
+	)
+	if err != nil {
+		return providerMedia{}, err
+	}
+
+	data := nestedMap(result, "data")
+	episode := nestedMap(nestedMap(data, "1004"), videoID)
+	if len(episode) == 0 {
+		// Accept the flat form for compatible API rollout variants, but never
+		// substitute a different episode ID from the response.
+		episode = nestedMap(data, videoID)
+	}
+	if len(episode) == 0 {
+		return providerMedia{}, errors.New("紅果 V5 播放 API 未返回指定集數")
+	}
+	model := hongguoVideoModelFromAppResult(map[string]any{"data": episode})
+	if len(model) == 0 {
+		return providerMedia{}, errors.New("紅果 V5 播放模型格式異常")
+	}
+	return selectHongguoAppMedia(model)
+}
+
 func hongguoMediaShortEdgeQuality(width, height, definition int) int {
 	// The visible resolution label is the shorter image edge. Prefer actual
 	// dimensions over definition metadata, which may describe the long edge

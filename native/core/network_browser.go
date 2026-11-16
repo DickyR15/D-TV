@@ -43,23 +43,47 @@ func newHuangguoBrowserTransport(base http.RoundTripper, downloader *Downloader)
 	return transport
 }
 
-func (transport *huangguoBrowserTransport) matches(request *http.Request) bool {
-	if request.Method == http.MethodPost && request.URL.Path == "/api/playback/request" &&
-		(request.URL.Scheme == "http" || request.URL.Scheme == "https") {
-		host := strings.ToLower(request.URL.Hostname())
+func (transport *huangguoBrowserTransport) source(request *http.Request) string {
+	if request == nil || request.URL == nil {
+		return ""
+	}
+	scheme := strings.ToLower(request.URL.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return ""
+	}
+	host := strings.ToLower(request.URL.Hostname())
+	if request.Method == http.MethodPost && request.URL.Path == "/api/playback/request" {
 		if host == "huangguoai.com" || host == "huangguoai.io" {
-			return true
+			return sourceHuangguoAI
 		}
 		for _, domain := range huangguoAIMirrorDomains {
 			if host == domain || strings.HasSuffix(host, "."+domain) {
-				return true
+				return sourceHuangguoAI
 			}
 		}
-		return false
+		return ""
 	}
-	return (request.Method == http.MethodGet || request.Method == http.MethodHead) &&
-		(request.URL.Scheme == "http" || request.URL.Scheme == "https") &&
-		(strings.EqualFold(request.URL.Host, transport.host) || strings.EqualFold(request.URL.Hostname(), "huangguo.video"))
+	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+		return ""
+	}
+	if strings.EqualFold(request.URL.Host, transport.host) || host == "huangguo.video" {
+		return sourceHuangguoVideo
+	}
+	switch host {
+	case "missav.ws", "www.missav.ws",
+		"missav.ai", "www.missav.ai",
+		"missav.live", "www.missav.live",
+		"missav123.com", "www.missav123.com":
+		return sourceMissAV
+	case "supjav.com", "www.supjav.com", "lk1.supremejav.com":
+		return sourceSupJav
+	default:
+		return ""
+	}
+}
+
+func (transport *huangguoBrowserTransport) matches(request *http.Request) bool {
+	return transport.source(request) != ""
 }
 
 func (transport *huangguoBrowserTransport) createClient(proxy string) (browserHTTPClient, error) {
@@ -164,7 +188,7 @@ func (transport *huangguoBrowserTransport) RoundTrip(request *http.Request) (*ht
 	}
 	client, err := transport.client(request)
 	if err != nil {
-		return nil, fmt.Errorf("黃果瀏覽器用戶端初始化失敗：%w", publicError(err))
+		return nil, fmt.Errorf("瀏覽器指紋用戶端初始化失敗：%w", publicError(err))
 	}
 	upstream, err := fhttp.NewRequestWithContext(request.Context(), request.Method, request.URL.String(), request.Body)
 	if err != nil {
@@ -199,7 +223,7 @@ func (transport *huangguoBrowserTransport) RoundTrip(request *http.Request) (*ht
 		if result.StatusCode >= 400 || strings.EqualFold(result.Header.Get("Cf-Mitigated"), "challenge") {
 			level = "warning"
 		}
-		transport.record(diagnosticEvent{Event: "network.browser_request", Level: level, Source: sourceHuangguoVideo,
+		transport.record(diagnosticEvent{Event: "network.browser_request", Level: level, Source: transport.source(request),
 			Host: request.URL.Hostname(), HTTPStatus: result.StatusCode, Client: huangguoBrowserProfile,
 			Protocol: result.Proto, CFRay: truncate(result.Header.Get("Cf-Ray"), 128),
 			ResponseType: truncate(result.Header.Get("Content-Type"), 128), Message: "黄果浏览器指纹请求完成"})

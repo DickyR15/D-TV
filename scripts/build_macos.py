@@ -63,17 +63,51 @@ def ensure_macos_project(flutter):
         with info.open("wb") as stream:
             plistlib.dump(values, stream)
 
-    for name in ["DebugProfile.entitlements", "Release.entitlements"]:
+    required_entitlements = [
+        "DebugProfile.entitlements",
+        "Release.entitlements",
+    ]
+    for name in required_entitlements:
         entitlements = project / "Runner" / name
         if not entitlements.is_file():
-            continue
-        with entitlements.open("rb") as stream:
-            values = plistlib.load(stream)
+            raise SystemExit(
+                "macOS 缺少 Runner/" + name
+                + "；拒絕建置，避免檔案選取器缺少使用者授權。"
+            )
+        try:
+            with entitlements.open("rb") as stream:
+                values = plistlib.load(stream)
+        except (OSError, plistlib.InvalidFileException) as error:
+            raise SystemExit(
+                "macOS Runner/" + name + " 無法讀取：" + str(error)
+            ) from error
         values["com.apple.security.network.client"] = True
         values["com.apple.security.network.server"] = True
         values["com.apple.security.files.user-selected.read-write"] = True
         with entitlements.open("wb") as stream:
             plistlib.dump(values, stream)
+
+        with entitlements.open("rb") as stream:
+            verified = plistlib.load(stream)
+        required_keys = [
+            "com.apple.security.network.client",
+            "com.apple.security.network.server",
+            "com.apple.security.files.user-selected.read-write",
+        ]
+        if any(verified.get(key) is not True for key in required_keys):
+            raise SystemExit(
+                "macOS Runner/" + name + " 缺少必要檔案或網路權限。"
+            )
+
+    for name in required_entitlements:
+        expected = "Runner/" + name
+        if not re.search(
+            r"CODE_SIGN_ENTITLEMENTS\s*=\s*" + re.escape(expected) + r"\s*;",
+            text,
+        ):
+            raise SystemExit(
+                "macOS Xcode 專案未將 CODE_SIGN_ENTITLEMENTS 指向 " + expected
+            )
 
 
 def ensure_macos_system_accent_channel(project):

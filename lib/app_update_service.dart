@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -11,11 +12,13 @@ class AppUpdateAsset {
     required this.name,
     required this.downloadUrl,
     this.size = 0,
+    this.sha256,
   });
 
   final String name;
   final String downloadUrl;
   final int size;
+  final String? sha256;
 }
 
 class AppUpdateInfo {
@@ -54,8 +57,28 @@ class AppUpdateInfo {
       assetForPlatform(Platform.operatingSystem);
 }
 
+class _RetryableUpdateException implements Exception {
+  const _RetryableUpdateException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class AppUpdateService {
   const AppUpdateService();
+
+  /// Only retries HttpExceptions that indicate a response body ended early.
+  /// Ordinary HTTP status failures remain terminal and are not retried.
+  static bool isRetryableResponseBodyError(Object error) {
+    if (error is! HttpException) return false;
+    final message = error.message.toLowerCase();
+    return message.contains('connection closed') ||
+        message.contains('premature') ||
+        message.contains('unexpected eof') ||
+        message.contains('unexpected end of') ||
+        message.contains('end of file');
+  }
 
   static const latestReleaseApi =
       'https://api.github.com/repos/DickyR15/D-TV/releases/latest';
@@ -128,50 +151,104 @@ class AppUpdateService {
     }
     final directory = Directory(path.join(baseDirectory.path, 'D TV Updates'));
     await directory.create(recursive: true);
-    final target = File(path.join(directory.path, safeName));
-    if (await target.exists()) await target.delete();
+    final partial = File(path.join(directory.path, '${safeName}.part'));
+    final finalTarget = File(path.join(directory.path, safeName));
+    if (await finalTarget.exists()) await finalTarget.delete();
+    if (await partial.exists()) await partial.delete();
 
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 15)
-      ..userAgent = 'D-TV-Updater';
-    try {
-      final request = await client.getUrl(uri).timeout(
-        const Duration(seconds: 20),
-      );
-      request.headers.set(
-        HttpHeaders.acceptHeader,
-        'application/octet-stream',
-      );
-      final response = await request.close().timeout(
-        const Duration(seconds: 30),
-      );
-      if (response.statusCode != HttpStatus.ok) {
-        await response.drain<void>();
-        throw HttpException(
-          '更新檔下載失敗，伺服器回應 ' + response.statusCode.toString(),
-          uri: uri,
-        );
-      }
+    Object? lastError;
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 20)
+        ..idleTimeout = const Duration(seconds: 45)
+        ..userAgent = 'D-TV-Updater';
+      IOSink? sink;
+      var readingResponseBody = false;
       try {
-        await response
-            .pipe(target.openWrite())
-            .timeout(const Duration(minutes: 5));
-        final downloadedBytes = await target.length();
-        if (downloadedBytes <= 0 ||
+        final request = await client.getUrl(uri).timeout(
+          const Duration(seconds: 30),
+        );
+        request.headers.set(
+          HttpHeaders.acceptHeader,
+          'application/octet-stream',
+        );
+        final response = await request.close().timeout(
+          const Duration(seconds: 45),
+        );
+        if (response.statusCode != HttpStatus.ok) {
+          await response.drain<void>();
+          final message =
+              '更新檔下載失敗，伺服器回應 ${response.statusCode}';
+          if (response.statusCode == 408 ||
+              response.statusCode == 429 ||
+              response.statusCode >= 500) {
+            throw _RetryableUpdateException(message);
+          }
+          throw HttpException(message, uri: uri);
+        }
+
+        sink = partial.openWrite();
+        var receivedBytes = 0;
+        readingResponseBody = true;
+        await for (final chunk in response.timeout(
+          const Duration(seconds: 45),
+        )) {
+          sink.add(chunk);
+          receivedBytes += chunk.length;
+        }
+        readingResponseBody = false;
+        await sink.flush();
+        await sink.close();
+        sink = null;
+
+        final downloadedBytes = await partial.length();
+        if (receivedBytes <= 0 ||
+            downloadedBytes != receivedBytes ||
             (asset.size > 0 && downloadedBytes != asset.size)) {
           throw const FormatException('更新檔下載不完整，請重新檢查更新');
         }
-      } catch (_) {
-        if (await target.exists()) await target.delete();
-        rethrow;
+        final expectedDigest = asset.sha256;
+        if (expectedDigest != null) {
+          final actualDigest = await sha256.bind(partial.openRead()).first;
+          if (actualDigest.toString().toLowerCase() != expectedDigest) {
+            throw const FormatException(
+              '更新檔 SHA-256 校驗失敗，為保護程式完整性，已取消更新',
+            );
+          }
+        }
+        return await partial.rename(finalTarget.path);
+      } catch (error) {
+        lastError = error;
+        try {
+          await sink?.close();
+        } catch (_) {}
+        if (await partial.exists()) {
+          try {
+            await partial.delete();
+          } catch (_) {}
+        }
+        final retryable = error is SocketException ||
+            error is TimeoutException ||
+            error is _RetryableUpdateException ||
+            error is FormatException ||
+            (readingResponseBody && isRetryableResponseBodyError(error));
+        if (!retryable || attempt == 3) {
+          throw StateError(
+            '下載更新檔失敗（已嘗試 ${attempt}/3 次）：${error.toString()}',
+          );
+        }
+        await Future<void>.delayed(Duration(seconds: attempt));
+      } finally {
+        client.close(force: true);
       }
-      return target;
-    } finally {
-      client.close(force: true);
     }
+    throw StateError('下載更新檔失敗：${lastError ?? '未知錯誤'}');
   }
 
-  Future<void> launchWindowsUpdater(File archive) async {
+  Future<void> launchWindowsUpdater(
+    File archive, {
+    required String releaseUrl,
+  }) async {
     if (!Platform.isWindows) {
       throw UnsupportedError('Windows 更新只支援 Windows');
     }
@@ -179,6 +256,14 @@ class AppUpdateService {
         !archive.path.toLowerCase().endsWith('.zip') ||
         await archive.length() <= 0) {
       throw const FormatException('Windows 更新 ZIP 檔案無效或為空');
+    }
+
+    final releaseUri = Uri.tryParse(releaseUrl);
+    if (releaseUri == null ||
+        releaseUri.scheme != 'https' ||
+        releaseUri.host != 'github.com' ||
+        !releaseUri.path.startsWith('/DickyR15/D-TV/releases/tag/')) {
+      throw const FormatException('Windows 更新頁網址無效');
     }
 
     final executable = File(Platform.resolvedExecutable);
@@ -198,6 +283,7 @@ class AppUpdateService {
 param(
   [int]$ProcessId,
   [string]$ArchivePath,
+  [string]$ReleaseUrl,
   [string]$TargetDirectory,
   [string]$ExecutableName,
   [string]$WorkDirectory
@@ -229,13 +315,45 @@ try {
     throw "找不到 D TV 安裝資料夾：$TargetDirectory"
   }
 
+  $writeProbe = Join-Path $TargetDirectory ('.dtv-update-write-' + [guid]::NewGuid().ToString('N') + '.tmp')
+  try {
+    [System.IO.File]::WriteAllText($writeProbe, 'write-test')
+    Remove-Item -LiteralPath $writeProbe -Force
+  } catch {
+    throw "D TV 安裝資料夾沒有寫入權限：$TargetDirectory。請將免安裝版解壓到目前使用者可寫入的位置，再重新更新。"
+  }
+
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
+  try {
+    foreach ($entry in $zip.Entries) {
+      $entryName = $entry.FullName.Replace('\', '/')
+      if ([System.IO.Path]::IsPathRooted($entryName) -or
+          (($entryName -split '/') -contains '..')) {
+        throw "更新 ZIP 含有不安全的檔案路徑：$entryName"
+      }
+    }
+  } finally {
+    $zip.Dispose()
+  }
+
   New-Item -ItemType Directory -Path $stage -Force | Out-Null
   Expand-Archive -LiteralPath $ArchivePath -DestinationPath $stage -Force
   $stagedExecutable = Join-Path $stage $ExecutableName
   if (!(Test-Path -LiteralPath $stagedExecutable -PathType Leaf)) {
     throw '更新 ZIP 缺少 DTV.exe，已取消更新。'
   }
-  foreach ($requiredFile in @('duanju_core.dll', 'flutter_windows.dll')) {
+  foreach ($requiredFile in @(
+    'DTV.exe',
+    'duanju_core.dll',
+    'flutter_windows.dll',
+    'libffmpegkit.dll',
+    'libmpv-2.dll',
+    'msvcp140.dll',
+    'vcruntime140.dll',
+    'data/icudtl.dat',
+    'data/app.so'
+  )) {
     if (!(Test-Path -LiteralPath (Join-Path $stage $requiredFile) -PathType Leaf)) {
       throw "更新 ZIP 缺少必要檔案：$requiredFile"
     }
@@ -257,12 +375,10 @@ try {
     Start-Sleep -Milliseconds 300
   }
 
+  # Back up every destination file before changing any installed file.
   foreach ($sourceFile in $stagedFiles) {
-    $relative = $sourceFile.FullName.Substring($stage.Length).TrimStart([char[]]@('\','/'))
+    $relative = $sourceFile.FullName.Substring($stage.Length).TrimStart([char[]](92, 47))
     $destination = Join-Path $TargetDirectory $relative
-    $destinationDirectory = Split-Path -Parent $destination
-    New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
-
     if (Test-Path -LiteralPath $destination -PathType Leaf) {
       $backupFile = Join-Path $backupRoot $relative
       $backupDirectory = Split-Path -Parent $backupFile
@@ -272,6 +388,13 @@ try {
     } else {
       $createdFiles.Add($relative) | Out-Null
     }
+  }
+
+  foreach ($sourceFile in $stagedFiles) {
+    $relative = $sourceFile.FullName.Substring($stage.Length).TrimStart([char[]](92, 47))
+    $destination = Join-Path $TargetDirectory $relative
+    $destinationDirectory = Split-Path -Parent $destination
+    New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
     Copy-Item -LiteralPath $sourceFile.FullName -Destination $destination -Force
   }
 
@@ -284,17 +407,21 @@ try {
   }
 
   $newProcess = Start-Process -FilePath $installedExecutable -WorkingDirectory $TargetDirectory -PassThru
-  Start-Sleep -Seconds 5
-  $newProcess.Refresh()
-  if ($newProcess.HasExited) {
-    throw "新版 D TV 啟動後立即結束，結束代碼：$($newProcess.ExitCode)"
-  }
+  $startupDeadline = (Get-Date).AddSeconds(20)
+  do {
+    Start-Sleep -Milliseconds 500
+    $newProcess.Refresh()
+    if ($newProcess.HasExited) {
+      throw "新版 D TV 啟動後立即結束，結束代碼：$($newProcess.ExitCode)"
+    }
+  } while ((Get-Date) -lt $startupDeadline)
 
   $success = $true
   Write-UpdateLog 'Update completed and the new D TV process is running.'
 }
 catch {
   $failure = $_.Exception.Message
+  $rollbackFailures = New-Object 'System.Collections.Generic.List[string]'
   try {
     Write-UpdateLog "UPDATE FAILED: $failure"
   } catch {}
@@ -316,6 +443,7 @@ catch {
         Copy-Item -LiteralPath $backupFile -Destination $destination -Force
       }
     } catch {
+      $rollbackFailures.Add($relative) | Out-Null
       try { Write-UpdateLog "ROLLBACK FAILED: $relative - $($_.Exception.Message)" } catch {}
     }
   }
@@ -326,6 +454,7 @@ catch {
         Remove-Item -LiteralPath $destination -Force
       }
     } catch {
+      $rollbackFailures.Add($relative) | Out-Null
       try { Write-UpdateLog "CLEANUP FAILED: $relative - $($_.Exception.Message)" } catch {}
     }
   }
@@ -345,9 +474,17 @@ catch {
   try {
     [System.IO.File]::WriteAllText($errorPath, $failure)
     if (!$parentStillRunning) {
+      $recoveryMessage = if ($rollbackFailures.Count -eq 0) {
+        '更新失敗，已還原舊版程式並重新啟動。'
+      } else {
+        '更新失敗，部分檔案還原未完成。原始備份已保留，請先勿刪除更新暫存資料夾。'
+      }
+      if ($ReleaseUrl -match '^https://github\.com/DickyR15/D-TV/releases/tag/') {
+        try { Start-Process -FilePath $ReleaseUrl | Out-Null } catch {}
+      }
       Add-Type -AssemblyName System.Windows.Forms
       [System.Windows.Forms.MessageBox]::Show(
-        "D TV 更新失敗，已嘗試還原原版本。" + [Environment]::NewLine + [Environment]::NewLine + $failure + [Environment]::NewLine + [Environment]::NewLine + "詳細紀錄：" + $logPath,
+        $recoveryMessage + [Environment]::NewLine + [Environment]::NewLine + $failure + [Environment]::NewLine + [Environment]::NewLine + "詳細紀錄：" + $logPath + [Environment]::NewLine + "備份位置：" + $backupRoot,
         'D TV 更新',
         [System.Windows.Forms.MessageBoxButtons]::OK,
         [System.Windows.Forms.MessageBoxIcon]::Warning
@@ -363,7 +500,7 @@ finally {
 }
 ''', flush: true);
 
-    await Process.start(
+    final updaterProcess = await Process.start(
       'powershell.exe',
       [
         '-NoProfile',
@@ -377,6 +514,8 @@ finally {
         pid.toString(),
         '-ArchivePath',
         archive.path,
+        '-ReleaseUrl',
+        releaseUri.toString(),
         '-TargetDirectory',
         installDirectory,
         '-ExecutableName',
@@ -384,27 +523,43 @@ finally {
         '-WorkDirectory',
         workDirectory.path,
       ],
-      mode: ProcessStartMode.detached,
+      mode: ProcessStartMode.normal,
     );
+    // Drain both pipes so a PowerShell diagnostic cannot block the updater.
+    unawaited(updaterProcess.stdout.drain<void>());
+    unawaited(updaterProcess.stderr.drain<void>());
 
-    // Keep D TV open until the detached updater has extracted and verified
-    // the archive. A preparation failure never closes the current app.
-    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    // Do not close D TV until PowerShell confirms that the archive has been
+    // extracted and all required files have passed validation. A normal child
+    // process continues running when the app exits after the ready marker.
+    final updaterExitCode = updaterProcess.exitCode;
+    final deadline = DateTime.now().add(const Duration(minutes: 2));
     while (DateTime.now().isBefore(deadline)) {
       if (await readyMarker.exists()) return;
       if (await errorMarker.exists()) {
         final message = (await errorMarker.readAsString()).trim();
         throw StateError(
           message.isEmpty
-              ? 'Windows 更新程序準備失敗。'
+              ? 'Windows 更新程序準備失敗；D TV 尚未關閉。'
               : 'Windows 更新程序準備失敗：$message',
         );
       }
-      await Future<void>.delayed(const Duration(milliseconds: 250));
+      final exitCode = await Future.any<int?>([
+        updaterExitCode.then<int?>((value) => value),
+        Future<void>.delayed(const Duration(milliseconds: 400))
+            .then<int?>((_) => null),
+      ]);
+      if (exitCode != null) {
+        throw StateError(
+          'Windows 更新程序提前結束（代碼 $exitCode），D TV 尚未關閉。'
+          '請檢查 $logHint。',
+        );
+      }
     }
+    updaterProcess.kill();
     throw TimeoutException(
-      'Windows 更新程序未能在 30 秒內完成檔案驗證；D TV 尚未關閉。'
-      '請檢查 $logHint。',
+      'Windows 更新程序準備逾時（2 分鐘）；D TV 尚未關閉，請檢查網路磁碟、防毒軟體及資料夾權限。'
+      '詳細紀錄：$logHint。',
     );
   }
 
@@ -465,12 +620,14 @@ finally {
             name: name.trim(),
             downloadUrl: assetUri.toString(),
             size: sizeValue is int && sizeValue > 0 ? sizeValue : 0,
+            sha256: _parseSha256(rawAsset['digest']),
           ),
         );
       }
     }
 
-    final published = DateTime.tryParse(release['published_at'] as String? ?? '');
+    final published =
+        DateTime.tryParse(release['published_at'] as String? ?? '');
     return AppUpdateInfo(
       version: tag.trim(),
       title: title is String && title.trim().isNotEmpty ? title.trim() : tag.trim(),
@@ -479,6 +636,21 @@ finally {
       publishedAt: published,
       assets: List.unmodifiable(assets),
     );
+  }
+
+  static String? _parseSha256(Object? value) {
+    if (value is! String) return null;
+    final text = value.trim();
+    if (!text.toLowerCase().startsWith('sha256:')) return null;
+    final digest = text.substring(7);
+    if (digest.length != 64) return null;
+    final isHex = digest.codeUnits.every(
+      (unit) =>
+          (unit >= 48 && unit <= 57) ||
+          (unit >= 65 && unit <= 70) ||
+          (unit >= 97 && unit <= 102),
+    );
+    return isHex ? digest.toLowerCase() : null;
   }
 
   static bool shouldNotify(

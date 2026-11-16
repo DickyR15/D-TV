@@ -2,24 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/playback_preferences.dart';
 
 void main() {
-  test('TV network speed and clock visibility preferences are independent', () {
+  test('TV clock visibility persists and legacy network speed setting is ignored', () {
     final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
-    expect(defaults.showTelevisionNetworkSpeed, isTrue);
     expect(defaults.showTelevisionClock, isTrue);
 
-    final speedOff = defaults.copyWith(showTelevisionNetworkSpeed: false);
-    expect(speedOff.showTelevisionNetworkSpeed, isFalse);
-    expect(speedOff.showTelevisionClock, isTrue);
-    final speedRestored = PlaybackPreferences.fromJson(speedOff.toJson());
-    expect(speedRestored.showTelevisionNetworkSpeed, isFalse);
-    expect(speedRestored.showTelevisionClock, isTrue);
-
     final clockOff = defaults.copyWith(showTelevisionClock: false);
-    expect(clockOff.showTelevisionNetworkSpeed, isTrue);
     expect(clockOff.showTelevisionClock, isFalse);
     final clockRestored = PlaybackPreferences.fromJson(clockOff.toJson());
-    expect(clockRestored.showTelevisionNetworkSpeed, isTrue);
     expect(clockRestored.showTelevisionClock, isFalse);
+
+    final legacy = PlaybackPreferences.fromJson(const {
+      'showTelevisionNetworkSpeed': true,
+      'showTelevisionClock': false,
+    });
+    expect(legacy.showTelevisionClock, isFalse);
+    expect(legacy.toJson().containsKey('showTelevisionNetworkSpeed'), isFalse);
   });
 
   test('PiP is enabled by default and can be independently disabled', () {

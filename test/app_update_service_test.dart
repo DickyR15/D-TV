@@ -1,7 +1,36 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/app_update_service.dart';
 
 void main() {
+  test('only premature response-body closures are retryable', () {
+    expect(
+      AppUpdateService.isRetryableResponseBodyError(
+        const HttpException('Connection closed while receiving data'),
+      ),
+      isTrue,
+    );
+    expect(
+      AppUpdateService.isRetryableResponseBodyError(
+        const HttpException('Unexpected end of file'),
+      ),
+      isTrue,
+    );
+    expect(
+      AppUpdateService.isRetryableResponseBodyError(
+        const HttpException('更新檔下載失敗，伺服器回應 404'),
+      ),
+      isFalse,
+    );
+    expect(
+      AppUpdateService.isRetryableResponseBodyError(
+        const FormatException('檔案格式錯誤'),
+      ),
+      isFalse,
+    );
+  });
+
   test('version comparison ignores build metadata and recognizes newer releases', () {
     expect(AppUpdateService.isNewerVersion('1.0.0+340', 'v1.0.1'), isTrue);
     expect(AppUpdateService.isNewerVersion('1.0.0', '1.1.0'), isTrue);
@@ -33,6 +62,7 @@ void main() {
             'browser_download_url':
                 'https://github.com/DickyR15/D-TV/releases/download/v1.0.1/DTV-1.0.1-Windows-Portable.zip',
             'size': 2048,
+            'digest': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           },
           {
             'name': 'DTV-1.0.1-macOS.dmg',
@@ -59,6 +89,7 @@ void main() {
     expect(info.publishedAt, DateTime.utc(2026, 10, 30));
     expect(info.assetForPlatform('android')?.name, 'DTV-1.0.1-Android.apk');
     expect(info.assetForPlatform('windows')?.name, 'DTV-1.0.1-Windows-Portable.zip');
+    expect(info.assetForPlatform('windows')?.sha256, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
     expect(info.assetForPlatform('macos')?.name, 'DTV-1.0.1-macOS.dmg');
     expect(info.assetForPlatform('ios')?.name, 'DTV-1.0.1-iOS.ipa');
   });

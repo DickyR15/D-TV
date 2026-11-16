@@ -32,6 +32,7 @@ type Config struct {
 	YeguoURL         string
 	YeguoAPIURL      string
 	DSDURL           string
+	GuipianURL       string
 	HanxiaoquanURL   string
 	HeitaoURL        string
 	Token            string
@@ -47,7 +48,6 @@ type Downloader struct {
 	rankings              rankingCache
 	cfg                   Config
 	client                *http.Client
-	hongguoRegisterClient *http.Client
 	streamClient          *http.Client
 	streamHostMu          sync.Mutex
 	streamHostFailures    map[string]nativeStreamHostFailureState
@@ -426,8 +426,6 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 		}
 		return nil
 	}
-	registerDoH := &hostDoHTransport{base: transport, resolver: newDNSResolver(transport), router: router, host: "log.snssdk.com"}
-	d.hongguoRegisterClient = &http.Client{Transport: registerDoH, Timeout: 25 * time.Second, CheckRedirect: checkRedirect}
 	d.client = &http.Client{
 		Transport: newHuangguoBrowserTransport(providerTransport, d),
 		Timeout: 45 * time.Second,
@@ -776,6 +774,28 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
+	if query != "" && source == sourceGuipian {
+		items, more, err := d.fetchGuipianCatalogPage(ctx, page, "", query)
+		if err != nil {
+			return result, err
+		}
+		for _, drama := range items {
+			result.Items = append(result.Items, nativeNormalize(drama))
+		}
+		result.HasMore = more
+		return result, nil
+	}
+	if query != "" && (source == sourceMissAV || source == sourceSupJav) {
+		items, more, err := d.fetchAdultCatalog(ctx, source, page, "", query)
+		if err != nil {
+			return result, err
+		}
+		for _, drama := range items {
+			result.Items = append(result.Items, nativeNormalize(drama))
+		}
+		result.HasMore = more
+		return result, nil
+	}
 	if query != "" && (source == sourceYeguo || source == sourceDSD) {
 		var items []Drama
 		var more bool
@@ -881,6 +901,10 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		items, result.HasMore, err = d.fetchHanxiaoquanCatalogPage(ctx, page, category, "")
 	case sourceHeitao:
 		items, result.HasMore, err = d.fetchHeitaoCatalogPage(ctx, page, category, "")
+	case sourceGuipian:
+		items, result.HasMore, err = d.fetchGuipianCatalogPage(ctx, page, category, "")
+	case sourceMissAV, sourceSupJav:
+		items, result.HasMore, err = d.fetchAdultCatalog(ctx, source, page, category, "")
 	case sourceHuangguoVideo:
 		address := fmt.Sprintf("%s/videos?page=%d", d.providerBaseURL(source), page)
 		if category != "" {
@@ -898,7 +922,7 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 	if err != nil && len(items) == 0 {
 		return result, err
 	}
-	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && source != sourceDuoduo && source != sourceHanxiaoquan && source != sourceHeitao {
+	if len(items) == 0 && page == 1 && source != sourceHuangju && source != sourceYeguo && source != sourceDSD && source != sourceDuoduo && source != sourceHanxiaoquan && source != sourceHeitao && source != sourceGuipian {
 		return result, errors.New("片源尚未提供劇集，請稍後重新整理")
 	}
 	if err != nil {
@@ -974,6 +998,10 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		raw, chapters, err = engine.downloader.fetchHeitaoDetailWithFallback(
 			ctx, sourceID, lookupSourceID, drama.Title,
 		)
+	case sourceGuipian:
+		raw, chapters, err = engine.downloader.fetchGuipianDetail(ctx, sourceID)
+	case sourceMissAV, sourceSupJav:
+		raw, chapters, err = engine.downloader.fetchAdultDetail(ctx, source, sourceID)
 	default:
 		title, chapters, err = engine.downloader.GetHuangguoChapters(ctx, source, sourceID)
 	}

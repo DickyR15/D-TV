@@ -41,6 +41,12 @@ func (d *Downloader) providerBaseURL(source string) string {
 		configured, fallback = d.cfg.YeguoURL, yeguoBaseURL
 	case sourceDSD:
 		configured, fallback = d.cfg.DSDURL, dsdBaseURL
+	case sourceGuipian:
+		configured, fallback = d.cfg.GuipianURL, guipianSiteBaseURL
+	case sourceMissAV:
+		fallback = missAVBaseURL
+	case sourceSupJav:
+		fallback = supJavBaseURL
 	case sourceDuoduo:
 		d.providerMu.Lock()
 		configured = strings.TrimRight(d.providerHosts[sourceDuoduo], "/")
@@ -84,6 +90,15 @@ func providerSourceForURL(raw string) string {
 		return sourceHanxiaoquan
 	case host == "heitaodj.com" || host == "www.heitaodj.com":
 		return sourceHeitao
+	case host == "guipianwu.com" || host == "www.guipianwu.com":
+		return sourceGuipian
+	case host == "missav.ai" || host == "www.missav.ai" ||
+		host == "missav.ws" || host == "www.missav.ws" ||
+		host == "missav.live" || host == "www.missav.live" ||
+		host == "missav123.com" || host == "www.missav123.com":
+		return sourceMissAV
+	case host == "supjav.com" || host == "www.supjav.com":
+		return sourceSupJav
 	default:
 		return ""
 	}
@@ -150,6 +165,12 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 	}
 	if chapter.Source == sourceHeitao {
 		return d.resolveHeitaoMedia(ctx, task)
+	}
+	if chapter.Source == sourceGuipian {
+		return d.resolveGuipianMedia(ctx, task)
+	}
+	if chapter.Source == sourceMissAV || chapter.Source == sourceSupJav {
+		return d.resolveAdultMedia(ctx, task)
 	}
 	if strings.HasPrefix(chapter.VideoURL, "hongguo-cenc://") {
 		return d.resolveHongguoMedia(ctx, task)

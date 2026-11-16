@@ -199,9 +199,17 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if !hongguoNumericID.MatchString(videoID) || !hongguoNumericID.MatchString(seriesID) {
 		return providerMedia{}, fmt.Errorf("紅果章節 ID 無效，請重新取得章節")
 	}
-	// Use the supported first-party routes only. The retired third-party
-	// playback API was slow and unreliable; do not make users wait for it
-	// after the App and official web routes have already failed.
+
+	// Current Hongguo v1.0.2 playback uses the dedicated V5 endpoint and
+	// Medusa/Helios signatures. Keep older first-party paths as fallbacks
+	// for episodes or devices that the newer endpoint does not serve.
+	media, v5Err := d.resolveHongguoV5Media(ctx, videoID)
+	if v5Err == nil {
+		return media, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return providerMedia{}, err
+	}
 	media, quickWebErr := d.resolveHongguoQuickAppMedia(ctx, seriesID, videoID)
 	if quickWebErr == nil {
 		return media, nil
@@ -238,7 +246,8 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		return providerMedia{}, err
 	}
 	return providerMedia{}, fmt.Errorf(
-		"紅果取流失敗：快捷網頁：%v；App：%v；多清晰度：%v；官網網頁：%w",
+		"紅果取流失敗：新版 V5 App：%v；快捷網頁：%v；舊版 App：%v；多清晰度：%v；官網網頁：%w",
+		publicError(v5Err),
 		publicError(quickWebErr),
 		publicError(nativeErr),
 		publicError(multiModelErr),
