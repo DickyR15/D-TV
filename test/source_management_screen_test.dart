@@ -18,7 +18,7 @@ void main() {
   test('adult metadata is independent from advanced source membership', () {
     expect(SourceSite.missav.adult, isTrue);
     expect(SourceSite.supjav.adult, isTrue);
-    expect(SourceSite.guipian.adult, isFalse);
+    expect(SourceSite.isKnown('guipian'), isFalse);
     expect(SourceSite.byId('huangdou').adult, isFalse);
   });
 
@@ -70,7 +70,7 @@ void main() {
     expect(find.textContaining('Bad state:'), findsNothing);
   });
 
-  testWidgets('four primary sources and guidance are visible in every edition', (
+  testWidgets('three primary sources and guidance are visible in every edition', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -89,19 +89,16 @@ void main() {
     );
     expect(find.text('紅果'), findsOneWidget);
     expect(find.text('韓小圈'), findsOneWidget);
-    expect(find.text('鬼片'), findsOneWidget);
     expect(find.text('多多追劇'), findsOneWidget);
-    expect(find.text('電影 · 電視劇 · 動漫'), findsOneWidget);
     expect(find.text('電影 · 電視劇 · 動漫 · 綜藝'), findsOneWidget);
     expect(
       find.textContaining(
-        '預設開啟 4 個一般片源：紅果、韓小圈、鬼片、多多追劇。',
+        '預設開啟 3 個一般片源：紅果、韓小圈、多多追劇。',
       ),
       findsOneWidget,
     );
     expect(store.sourceEnabled('hongguo'), isTrue);
     expect(store.sourceEnabled('hanxiaoquan'), isTrue);
-    expect(store.sourceEnabled('guipian'), isTrue);
     expect(store.sourceEnabled('duoduo'), isTrue);
   });
 
@@ -413,12 +410,29 @@ void main() {
     await tester.ensureVisible(unlockButton);
     await tester.pumpAndSettle();
     await tester.tap(unlockButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.pumpAndSettle();
 
+    final scrollable = find.byType(Scrollable).last;
+    final missav = find.text('MissAV');
+    await tester.scrollUntilVisible(
+      missav,
+      220,
+      scrollable: scrollable,
+    );
     expect(find.byKey(const ValueKey('restricted-badge-missav')), findsOneWidget);
+    expect(find.text('限制級'), findsOneWidget);
+
+    final supjav = find.text('SupJav');
+    await tester.scrollUntilVisible(
+      supjav,
+      220,
+      scrollable: scrollable,
+    );
     expect(find.byKey(const ValueKey('restricted-badge-supjav')), findsOneWidget);
-    expect(find.byKey(const ValueKey('restricted-badge-huangdou')), findsNothing);
-    expect(find.text('限制級'), findsNWidgets(2));
+    expect(find.text('限制級'), findsOneWidget);
+    expect(SourceSite.byId('huangdou').adult, isFalse);
   });
 
   test('advanced source order persists and controls permitted source ordering', () async {
