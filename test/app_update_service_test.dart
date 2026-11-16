@@ -33,6 +33,7 @@ void main() {
             'browser_download_url':
                 'https://github.com/DickyR15/D-TV/releases/download/v1.0.1/DTV-1.0.1-Windows-Portable.zip',
             'size': 2048,
+            'digest': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           },
           {
             'name': 'DTV-1.0.1-macOS.dmg',
@@ -59,6 +60,7 @@ void main() {
     expect(info.publishedAt, DateTime.utc(2026, 10, 30));
     expect(info.assetForPlatform('android')?.name, 'DTV-1.0.1-Android.apk');
     expect(info.assetForPlatform('windows')?.name, 'DTV-1.0.1-Windows-Portable.zip');
+    expect(info.assetForPlatform('windows')?.sha256, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
     expect(info.assetForPlatform('macos')?.name, 'DTV-1.0.1-macOS.dmg');
     expect(info.assetForPlatform('ios')?.name, 'DTV-1.0.1-iOS.ipa');
   });
