@@ -26,7 +26,7 @@ var (
 	adultImagePattern  = regexp.MustCompile("(?is)<img\\b[^>]*>")
 	adultMetaPattern   = regexp.MustCompile("(?is)<meta\\b[^>]*>")
 	adultTagPattern    = regexp.MustCompile("(?is)<[^>]+>")
-	adultM3U8Pattern   = regexp.MustCompile("(?i)https?://[^\\\"'<>\\\\s]+\\.m3u8(?:\\?[^\\\"'<>\\\\s]*)?")
+	adultM3U8Pattern   = regexp.MustCompile("(?i)https?://[^\"'<>\\s]+\\.m3u8(?:\\?[^\"'<>\\s]*)?")
 	adultPackerPattern = regexp.MustCompile("(?s)eval\\(function\\(p,a,c,k,e,d\\)\\{.*?\\}\\('([^']*)',\\s*(\\d+),\\s*(\\d+),\\s*'([^']*)'\\.split\\('\\|'\\)")
 	adultWordPattern   = regexp.MustCompile("\\b([0-9a-zA-Z_]+)\\b")
 	adultSlugPattern   = regexp.MustCompile("(?i)^[a-z0-9][a-z0-9_-]{0,127}$")
@@ -180,7 +180,7 @@ func adultClean(value string) string {
 }
 
 func adultSafeURL(base, raw, source string) string {
-	raw = html.UnescapeString(strings.TrimSpace(strings.ReplaceAll(raw, "\\\\/", "/")))
+	raw = html.UnescapeString(strings.TrimSpace(strings.ReplaceAll(raw, "\\/", "/")))
 	if raw == "" {
 		return ""
 	}
@@ -374,8 +374,8 @@ func adultUnpackPacker(script string) string {
 	if len(match) != 5 {
 		return ""
 	}
-	packed := strings.ReplaceAll(match[1], "\\\\'", "'")
-	packed = strings.ReplaceAll(packed, "\\\\/", "/")
+	packed := strings.ReplaceAll(match[1], "\\'", "'")
+	packed = strings.ReplaceAll(packed, "\\/", "/")
 	base, err1 := strconv.Atoi(match[2])
 	count, err2 := strconv.Atoi(match[3])
 	if err1 != nil || err2 != nil || base < 2 || base > 36 || count < 0 || count > 200000 {
@@ -403,7 +403,7 @@ func adultUnpackPacker(script string) string {
 }
 
 func adultFindM3U8(body string) string {
-	body = strings.ReplaceAll(body, "\\\\/", "/")
+	body = strings.ReplaceAll(body, "\\/", "/")
 	if match := adultM3U8Pattern.FindString(body); match != "" && isProviderHTTPMediaURL(match) {
 		return match
 	}
