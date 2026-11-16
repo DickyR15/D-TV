@@ -26,8 +26,8 @@
 
 ## Windows Google Cast 裝置探索
 
-- Windows 優先使用 nsd 5.0.1 的系統 DNS-SD API 搜尋 _googlecast._tcp，並解析接收器名稱、TXT 中的 Cast ID、IPv4 位址與 8009 連接埠。
-- 若 Windows 原生 DNS-SD 無結果或發生錯誤，回退原本的 dart_cast mDNS 探索。
+- Windows 同時使用 nsd 5.0.1 的系統 DNS-SD API 與原本的 dart_cast mDNS 搜尋 _googlecast._tcp，並合併兩路結果、依 IP／連接埠去重。
+- DNS-SD 解析接收器名稱、TXT 中的 Cast ID、IPv4 位址與 8009 連接埠；其中一路失敗不會丟棄另一路找到的裝置。
 - 自動化測試涵蓋 DNS-SD 服務轉換、缺少 IPv4 時忽略，以及缺少 Cast ID 時的備援識別碼。
 - 需用 Windows 實機確認 Edge 可發現的 onn. 4K Pro 也會出現在 D-TV 裝置清單，並實際完成 Google Cast 連線。
 
