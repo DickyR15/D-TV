@@ -501,12 +501,17 @@ void main() {
       );
 
       await tester.enterText(pinFinder, 'visitor-password');
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pump();
+      // The Android TV keyboard's checkmark only finishes text entry and
+      // transfers focus to the explicit 登入 button. It must not authenticate.
+      tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(pinFinder, findsOneWidget);
+      expect(store.profile.name, '管理員');
       expect(
         tester.widget<FilledButton>(loginFinder).focusNode!.hasPrimaryFocus,
         isTrue,
       );
+
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
 
