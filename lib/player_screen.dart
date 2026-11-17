@@ -28,6 +28,7 @@ import 'playback_preloader.dart';
 import 'playback_recovery.dart';
 import 'playback_controls_visibility.dart';
 import 'playback_preferences.dart';
+import 'playback_startup_visibility.dart';
 import 'playback_lifecycle_policy.dart';
 import 'portrait_blur_policy.dart';
 import 'luna_exo_player.dart';
@@ -566,6 +567,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           widget.onProgress?.call(_index, _resumePosition);
         }
         _syncPreload();
+        _finishStartupOverlayWhenVideoIsVisible('position');
         _acknowledgeHandoff();
       }),
     );
@@ -580,6 +582,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       _subscriptions.add(
         stream.listen((_) {
           _syncPreload();
+          _finishStartupOverlayWhenVideoIsVisible('player_state');
           _acknowledgeHandoff();
         }),
       );
@@ -627,6 +630,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           _scheduleSystemUi();
           _syncPictureInPicture();
         }
+        _finishStartupOverlayWhenVideoIsVisible('video_params');
         unawaited(_logVideoOutput(parameters));
       }),
     );
@@ -2729,6 +2733,35 @@ class _PlayerScreenState extends State<PlayerScreen>
     unawaited(Navigator.of(context).pushReplacement<void, void>(route));
   }
 
+  void _finishStartupOverlayWhenVideoIsVisible(String signal) {
+    if (_closed || !mounted || !_loading || _error != null || _plan == null) {
+      return;
+    }
+    final state = _player.state;
+    if (!playbackStartupVideoIsVisible(
+      playing: state.playing,
+      buffering: state.buffering,
+      playIntent: _playIntent,
+      foreground: _foreground,
+      width: state.width,
+      height: state.height,
+    )) {
+      return;
+    }
+
+    _loadingOverlayTimer?.cancel();
+    setState(() {
+      _loading = false;
+      _showLoadingOverlay = false;
+    });
+    DiaryService.add(
+      '[Play] startup_overlay_dismissed generation=$_generation '
+      'episode=$_index signal=$signal positionMs=${state.position.inMilliseconds}',
+    );
+    _acknowledgeHandoff();
+    _menuRevision.value++;
+  }
+
   void _togglePlayback() {
     if (_closed || _loading || _error != null) return;
     _handoffOwned = false;
@@ -2901,6 +2934,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     });
     // Don't flash a spinner for streams that start quickly.
     _loadingOverlayTimer = Timer(const Duration(milliseconds: 350), () {
+      // The native open Future can lag behind MPV's first decoded video frame
+      // on a cold app install. Re-check player state before showing a stale
+      // startup spinner over a picture that is already playing.
+      _finishStartupOverlayWhenVideoIsVisible('overlay_timer');
       if (mounted &&
           !_closed &&
           ticket == _generation &&

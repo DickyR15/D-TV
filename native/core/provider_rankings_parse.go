@@ -137,6 +137,9 @@ func parseHongguoRanking(body string, board rankingBoard, page int) (rankingPage
 	if len(result.Items) == 0 && result.HasMore {
 		return rankingPage{}, failure
 	}
+	// Structured loader rows may contain all IDs and titles but omit poster
+	// URLs. Merge the matching lazy-loaded HTML card covers for this path too.
+	enrichHongguoRankingCoversFromBody(body, result.Items)
 	return result, nil
 }
 

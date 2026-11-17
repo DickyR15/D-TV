@@ -169,6 +169,10 @@ func parseHongguoRankingDocument(body string, board rankingBoard, page int, load
 	// rows; otherwise fall back to the page's actual article cards.
 	fullPageRequired := result.HasMore || page == 5
 	if foundJSONLD && (!fullPageRequired || len(items) == 20) {
+		// JSON-LD supplies stable IDs, ranks and titles, but often omits artwork.
+		// Merge the matching visible HTML card's lazy-loaded poster fields so a
+		// fresh install does not render every ranking tile with an empty cover.
+		enrichHongguoRankingCovers(document, items)
 		result.Items = items
 	} else {
 		for _, list := range providerHTMLNodes(document, func(node *html.Node) bool {
@@ -206,6 +210,78 @@ func parseHongguoRankingDocument(body string, board rankingBoard, page int, load
 		return rankingPage{}, errHongguoRankingIncomplete
 	}
 	return result, nil
+}
+
+func hongguoRankingArticleCover(article *html.Node) string {
+	images := providerHTMLNodes(article, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && (node.Data == "img" || node.Data == "source")
+	})
+	for _, image := range images {
+		// Lazy-load fields must be preferred over a placeholder src/data URI.
+		for _, attribute := range []string{
+			"data-original", "data-src", "data-lazy-src", "data-lazyload",
+			"data-url", "data-image",
+		} {
+			if cover := hongguoCoverAddress(providerHTMLAttr(image, attribute)); cover != "" {
+				return cover
+			}
+		}
+		for _, attribute := range []string{"data-srcset", "srcset"} {
+			if raw := strings.TrimSpace(providerHTMLAttr(image, attribute)); raw != "" {
+				candidate := strings.TrimSpace(strings.SplitN(raw, ",", 2)[0])
+				if fields := strings.Fields(candidate); len(fields) > 0 {
+					if cover := hongguoCoverAddress(fields[0]); cover != "" {
+						return cover
+					}
+				}
+			}
+		}
+		if cover := hongguoCoverAddress(providerHTMLAttr(image, "src")); cover != "" {
+			return cover
+		}
+	}
+	return ""
+}
+
+func enrichHongguoRankingCoversFromBody(body string, items []rankingItem) {
+	if len(items) == 0 || strings.TrimSpace(body) == "" {
+		return
+	}
+	document, err := html.Parse(strings.NewReader(body))
+	if err != nil {
+		return
+	}
+	enrichHongguoRankingCovers(document, items)
+}
+
+func enrichHongguoRankingCovers(document *html.Node, items []rankingItem) {
+	if document == nil || len(items) == 0 {
+		return
+	}
+	covers := make(map[string]string)
+	articles := providerHTMLNodes(document, func(node *html.Node) bool {
+		return node.Type == html.ElementNode &&
+			node.Data == "article" &&
+			strings.HasPrefix(providerHTMLAttr(node, "aria-labelledby"), "rank-title-")
+	})
+	for _, article := range articles {
+		id := strings.TrimPrefix(providerHTMLAttr(article, "aria-labelledby"), "rank-title-")
+		if !hongguoNumericID.MatchString(id) {
+			continue
+		}
+		if cover := hongguoRankingArticleCover(article); cover != "" {
+			covers[id] = cover
+		}
+	}
+	for index := range items {
+		if coverPathFromAny(items[index].Drama.Cover) != "" {
+			continue
+		}
+		if cover := covers[items[index].Drama.SourceID]; cover != "" {
+			items[index].Drama.Cover = cover
+			items[index].Drama.CoverURL = cover
+		}
+	}
 }
 
 func parseHongguoRankingJSONLD(body string, board rankingBoard, page int) ([]rankingItem, bool) {
@@ -268,12 +344,8 @@ func parseHongguoRankingArticle(article *html.Node) (rankingItem, bool) {
 		if err == nil && value > 0 && (rank == 0 || rank == value) {
 			rank = value
 		}
-		for _, image := range providerHTMLNodes(link, func(node *html.Node) bool { return node.Data == "img" }) {
-			cover := hongguoCoverAddress(providerHTMLAttr(image, "src"))
-			if cover != "" {
-				drama.Cover, drama.CoverURL = cover, cover
-				break
-			}
+		if cover := hongguoRankingArticleCover(article); cover != "" {
+			drama.Cover, drama.CoverURL = cover, cover
 		}
 	}
 	for _, node := range providerHTMLNodes(article, func(node *html.Node) bool { return node.Type == html.TextNode }) {

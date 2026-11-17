@@ -123,3 +123,50 @@ bool playbackProgressRefreshAllowed({
   required bool buffering,
   bool transientSeekHint = false,
 }) => controlsVisible || buffering || transientSeekHint;
+
+
+/// A stale MPV buffering flag must not cover video that is still advancing.
+/// Show the spinner only after the position has genuinely stopped moving.
+class PlaybackBufferingIndicatorPolicy {
+  static const stallDelay = Duration(milliseconds: 900);
+
+  Duration? _position;
+  DateTime? _lastProgressAt;
+  bool _buffering = false;
+  bool _playing = false;
+
+  void update({
+    required bool buffering,
+    required bool playing,
+    required Duration position,
+    required DateTime now,
+  }) {
+    final positionAdvanced = _position == null || position != _position;
+    final startedWaiting = buffering && playing && (!_buffering || !_playing);
+
+    if (positionAdvanced || startedWaiting) {
+      _lastProgressAt = now;
+    }
+
+    _position = position;
+    _buffering = buffering;
+    _playing = playing;
+
+    if (!buffering || !playing) {
+      _lastProgressAt = null;
+    }
+  }
+
+  bool visibleAt(DateTime now) {
+    final remaining = remainingAt(now);
+    return remaining == Duration.zero;
+  }
+
+  Duration? remainingAt(DateTime now) {
+    if (!_buffering || !_playing || _lastProgressAt == null) {
+      return null;
+    }
+    final remaining = stallDelay - now.difference(_lastProgressAt!);
+    return remaining > Duration.zero ? remaining : Duration.zero;
+  }
+}
