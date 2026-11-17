@@ -65,6 +65,27 @@ func TestAdultProviderRegistrationAndCategories(t *testing.T) {
 	}
 }
 
+func TestAdultMissAVDynamicGenreParser(t *testing.T) {
+	body := `<nav>
+		<a href="/cn/genres/chinese-subtitle">中文字幕類</a>
+		<a href="/dm298/cn/genres/uncensored-leak">無碼流出</a>
+		<a href="/cn/genres/chinese-subtitle">中文字幕</a>
+		<a href="/cn/videos/not-a-genre">不應收錄</a>
+		<a href="https://evil.example/cn/genres/fake">外站分類</a>
+	</nav>`
+	got := adultParseMissAVCategories(body, missAVBaseURL)
+	if len(got) != 2 {
+		t.Fatalf("MissAV genres = %#v, want two trusted categories", got)
+	}
+	byID := map[string]string{}
+	for _, category := range got {
+		byID[category.ID] = category.Name
+	}
+	if byID["chinese-subtitle"] != "中文字幕" || byID["uncensored-leak"] != "無碼流出" {
+		t.Fatalf("MissAV dynamic genres = %#v", byID)
+	}
+}
+
 func TestAdultProviderDramaIDsAndDetailURLs(t *testing.T) {
 	missav := providerDramaID(sourceMissAV, "sone-543")
 	source, sourceID, ok := splitProviderDramaID(missav)
