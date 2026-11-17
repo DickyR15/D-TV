@@ -30,7 +30,6 @@ dependencies:
   dart_cast: ^0.7.4
   package_info_plus: ^10.2.1
   qr_flutter: ^4.1.0
-  flutter_inappwebview: ^6.1.5
 
 dev_dependencies:
   flutter_test:
