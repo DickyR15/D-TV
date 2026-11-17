@@ -484,13 +484,13 @@ func adultParseCards(body, base, source string) []Drama {
 	seen := map[string]bool{}
 	for _, card := range adultHTMLCardNodes(document, source) {
 		var anchor *htmlnet.Node
-		var slug, address string
+		var slug string
 		for _, candidate := range providerHTMLNodes(card, func(node *htmlnet.Node) bool {
 			return node.Type == htmlnet.ElementNode && node.Data == "a"
 		}) {
-			candidateSlug, candidateAddress := adultSourceIDFromHref(providerHTMLAttr(candidate, "href"), base, source)
+			candidateSlug, _ := adultSourceIDFromHref(providerHTMLAttr(candidate, "href"), base, source)
 			if candidateSlug != "" {
-				anchor, slug, address = candidate, candidateSlug, candidateAddress
+				anchor, slug = candidate, candidateSlug
 				break
 			}
 		}
