@@ -602,7 +602,8 @@ func (d *Downloader) fetchAdultCategories(ctx context.Context, source string) ([
 	}
 	base := adultProviderBaseURL(source)
 	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
-	body, err := d.fetchProviderText(requestContext, base+"/cn/genres", base+"/")
+	referer := base + "/cn/"
+	body, err := d.fetchProviderText(requestContext, base+"/cn/genres", referer)
 	if err != nil {
 		return nil, fmt.Errorf("MissAV 分類讀取失敗：%w", err)
 	}
@@ -651,7 +652,11 @@ func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page 
 		address = parsed.String()
 	}
 	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
-	body, err := d.fetchProviderText(requestContext, address, base+"/")
+	referer := base + "/"
+	if source == sourceMissAV {
+		referer = base + "/cn/"
+	}
+	body, err := d.fetchProviderText(requestContext, address, referer)
 	if err != nil {
 		return nil, false, fmt.Errorf("%s 目錄讀取失敗：%w", adultSourceName(source), err)
 	}
