@@ -492,9 +492,10 @@ class LocalStore extends ChangeNotifier {
   bool get canDownload => !locked && (profile.admin || profile.download);
   bool allowsSource(String source) =>
       !locked &&
-      SourceSite.isAvailable(source) &&
+      (SourceSite.isAvailable(source) ||
+          SourceSite.isLegacyRecordOnly(source)) &&
       profile.allows(source) &&
-      sourceEnabled(source);
+      (SourceSite.isLegacyRecordOnly(source) || sourceEnabled(source));
   List<SourceSite> get sources => _orderSources(
     SourceSite.values.where((site) => allowsSource(site.id)),
   );
