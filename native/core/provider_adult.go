@@ -123,7 +123,7 @@ func adultSafeURL(base, raw, source string) string {
 			host != "missav123.com" && host != "www.missav123.com" {
 			return ""
 		}
-remove URL host	default:
+default:
 		return ""
 	}
 	return resolved.String()
@@ -208,7 +208,7 @@ func adultSourceIDFromHref(raw, base, source string) (string, string) {
 	if err != nil {
 		return "", ""
 	}
-remove source-id branch	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 	for index := 0; index < len(segments)-1; index++ {
 		if strings.EqualFold(segments[index], "cn") {
 			slug := segments[index+1]
