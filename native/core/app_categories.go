@@ -91,7 +91,27 @@ func (engine *nativeEngine) nativeCategories(ctx context.Context, source string,
 		return append(all, nativeAICategories...), nil
 	case sourceHuangdou:
 		return all, nil
-	case sourceMissAV, sourceSupJav:
+	case sourceMissAV:
+		engine.mu.Lock()
+		cached := append([]nativeCategory{}, engine.categoryOptions[source]...)
+		engine.mu.Unlock()
+		if len(cached) > 1 && !force {
+			return cached, nil
+		}
+		categories, err := engine.downloader.fetchAdultCategories(ctx, source)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, categories...)
+		engine.mu.Lock()
+		if engine.categoryOptions == nil {
+			engine.categoryOptions = map[string][]nativeCategory{}
+		}
+		engine.categoryOptions[source] = all
+		engine.writeCatalogDiskLocked()
+		engine.mu.Unlock()
+		return all, nil
+	case sourceSupJav:
 		return append(all, adultProviderCategories(source)...), nil
 	}
 	engine.mu.Lock()
