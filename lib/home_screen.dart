@@ -18,6 +18,7 @@ import 'rankings_screen.dart';
 import 'playback_launch_screen.dart';
 import 'detail_screen.dart';
 import 'supjav_browser_action.dart';
+import 'supjav_access_mode.dart';
 import 'local_store.dart';
 import 'lan_screen.dart';
 import 'models.dart';
@@ -3174,11 +3175,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     )
                   : _items.isEmpty && _error != null
                   ? StatusPanel(
-                      title: '暫時無法載入',
-                      message: uiTraditional(_error!),
-                      onRetry: () => _load(force: true),
+                      title: !_allSources &&
+                              _source.id == 'supjav' &&
+                              SupJavAccessMode.isWebViewOnly
+                          ? 'SupJav 已切換至網站瀏覽模式'
+                          : '暫時無法載入',
+                      message: !_allSources &&
+                              _source.id == 'supjav' &&
+                              SupJavAccessMode.isWebViewOnly
+                          ? '原生片源請求已暫停。請使用 D-TV 內建瀏覽器中的 SupJav 網站目錄、搜尋及網站播放器。'
+                          : uiTraditional(_error!),
+                      onRetry: !_allSources &&
+                              _source.id == 'supjav' &&
+                              SupJavAccessMode.isWebViewOnly
+                          ? null
+                          : () => _load(force: true),
                       secondaryAction: !_allSources && _source.id == 'supjav'
-                          ? const SupJavBrowserAction()
+                          ? SupJavBrowserAction(
+                              onModeChanged: () {
+                                if (mounted) setState(() {});
+                              },
+                            )
                           : null,
                       icon: Icons.wifi_off_rounded,
                     )

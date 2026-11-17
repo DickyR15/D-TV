@@ -20,6 +20,7 @@ import 'download_collections.dart';
 import 'resource_settings.dart';
 import 'diary_service.dart';
 import 'ui_localization.dart';
+import 'supjav_access_mode.dart';
 
 typedef _NativeRequest = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _DartRequest = Pointer<Utf8> Function(Pointer<Utf8>);
@@ -588,6 +589,21 @@ class NativeRepository extends AppRepository {
   Future<Map<String, dynamic>> _call(Map<String, dynamic> input) async {
     try {
       final action = input['action'] as String;
+      final requestDrama = input['drama'];
+      final requestSource = input['source'] is String
+          ? input['source'] as String
+          : requestDrama is Map
+          ? requestDrama['source'] as String?
+          : null;
+      if (SupJavAccessMode.shouldBlockNativeRequest(
+        action: action,
+        source: requestSource,
+      )) {
+        throw AppFailure(
+          'SupJav 已切換為網站瀏覽模式。請使用 D-TV 內建瀏覽器中的網站目錄、搜尋與播放器。',
+          code: 'SUPJAV_WEBVIEW_ONLY',
+        );
+      }
       final unrestricted =
           {
             'initialize',

@@ -192,7 +192,7 @@ class _SupJavBrowserScreenState extends State<SupJavBrowserScreen> {
     useWideViewPort: true,
     loadWithOverviewMode: true,
     useShouldOverrideUrlLoading: true,
-    supportMultipleWindows: false,
+    supportMultipleWindows: true,
     javaScriptCanOpenWindowsAutomatically: false,
     safeBrowsingEnabled: true,
     isInspectable: false,
@@ -350,6 +350,16 @@ class _SupJavBrowserScreenState extends State<SupJavBrowserScreen> {
                     onProgressChanged: (controller, progress) {
                       if (!mounted) return;
                       setState(() => _progress = progress / 100);
+                    },
+                    onCreateWindow: (controller, action) async {
+                      // Keep target="_blank" / window.open navigation in the
+                      // same WebView controller and persistent site session.
+                      final target = action.request.url;
+                      if (target == null) return false;
+                      final scheme = target.scheme.toLowerCase();
+                      if (scheme != 'http' && scheme != 'https') return false;
+                      await controller.loadUrl(urlRequest: action.request);
+                      return false;
                     },
                     onReceivedHttpError: (controller, request, response) {
                       _recordHttpError(request, response);

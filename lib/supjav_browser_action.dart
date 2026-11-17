@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
 import 'supjav_browser_screen.dart';
+import 'supjav_access_mode.dart';
 
 class SupJavBrowserAction extends StatelessWidget {
   const SupJavBrowserAction({
     super.key,
     this.browserBuilder,
+    this.onModeChanged,
   });
 
   /// Test seam. Production always opens the embedded native browser.
   final WidgetBuilder? browserBuilder;
+  final VoidCallback? onModeChanged;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -27,6 +30,8 @@ class SupJavBrowserAction extends StatelessWidget {
         key: const ValueKey('supjav-open-browser'),
         autofocus: AppLayout.isTelevision(context),
         onPressed: () {
+          SupJavAccessMode.enterWebViewOnly();
+          onModeChanged?.call();
           Navigator.of(context).push<void>(
             MaterialPageRoute<void>(
               builder: browserBuilder ?? (_) => const SupJavBrowserScreen(),
