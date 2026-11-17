@@ -214,8 +214,6 @@ void main() {
       expect(playbackProgressRefreshAllowed(controlsVisible: false, buffering: false, transientSeekHint: true), isTrue);
     });
   });
-}
-
 
   group('playback buffering indicator policy', () {
     final start = DateTime(2026, 11, 17, 10);
@@ -283,3 +281,4 @@ void main() {
       expect(policy.visibleAt(start.add(const Duration(seconds: 6))), isFalse);
     });
   });
+}
