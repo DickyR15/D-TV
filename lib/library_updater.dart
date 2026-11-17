@@ -102,7 +102,14 @@ class LibraryUpdater extends ChangeNotifier {
     final selected = sources
         .map((source) => source.id)
         .toSet()
-        .where((source) => store.allowsSource(source) && !busy(source))
+        // Retired sources may remain readable for saved history, but must not
+        // be started by catalog updates or source-management workflows.
+        .where(
+          (source) =>
+              SourceSite.isAvailable(source) &&
+              store.allowsSource(source) &&
+              !busy(source),
+        )
         .toList();
     for (final source in selected) {
       _stopRequested.remove(source);
