@@ -18,8 +18,6 @@ import 'ui_localization.dart';
 import 'sources_screen.dart';
 import 'episode_browser.dart';
 import 'playback_preloader.dart';
-import 'supjav_browser_action.dart';
-import 'supjav_access_mode.dart';
 
 
 class DetailScreen extends StatefulWidget {
@@ -85,31 +83,7 @@ class _DetailScreenState extends State<DetailScreen> {
         )
       : null;
 
-  Widget? get _secondaryStatusActions {
-    final diagnostics = _sourceDiagnostics;
-    final showSupJavBrowser =
-        _activeDrama.source == 'supjav' &&
-        (_error != null || SupJavAccessMode.isWebViewOnly);
-    final actions = <Widget>[
-      if (showSupJavBrowser)
-        SupJavBrowserAction(
-          onModeChanged: () {
-            if (mounted) setState(() {});
-          },
-        ),
-      if (diagnostics != null) diagnostics,
-    ];
-    if (actions.isEmpty) return null;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var index = 0; index < actions.length; index++) ...[
-          if (index > 0) const SizedBox(height: 8),
-          actions[index],
-        ],
-      ],
-    );
-  }
+  Widget? get _secondaryStatusActions => _sourceDiagnostics;
 
   @override
   void initState() {
@@ -826,20 +800,10 @@ class _DetailScreenState extends State<DetailScreen> {
         ),
       );
     }
-    final supJavWebViewOnly =
-        _activeDrama.source == 'supjav' && SupJavAccessMode.isWebViewOnly;
     return StatusPanel(
-      title: supJavWebViewOnly
-          ? 'SupJav 已切換至網站瀏覽模式'
-          : _error != null
-          ? '劇集資訊暫時不可用'
-          : '暫時沒有可播放的集數',
-      message: supJavWebViewOnly
-          ? '原生片源請求已暫停。請使用 D-TV 內建瀏覽器中的 SupJav 網站目錄、搜尋及網站播放器。'
-          : _error == null
-          ? '可以更新劇集資訊後重試。'
-          : uiTraditional(_error!),
-      onRetry: supJavWebViewOnly ? null : _load,
+      title: _error != null ? '劇集資訊暫時不可用' : '暫時沒有可播放的集數',
+      message: _error == null ? '可以更新劇集資訊後重試。' : uiTraditional(_error!),
+      onRetry: _load,
       secondaryAction: _secondaryStatusActions,
     );
   }
