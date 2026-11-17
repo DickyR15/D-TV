@@ -94,7 +94,7 @@ jobs:
           channel: stable
           cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
-        run: python scripts/retry_command.py --attempts 3 -- flutter pub get
+        run: python scripts/retry_command.py --resolve-flutter --attempts 3 -- flutter pub get
       - name: Test Flutter suite
         run: flutter test --dart-define=ALL_SOURCES=true
       - name: Test standard edition primary sources
@@ -130,7 +130,7 @@ jobs:
           channel: stable
           cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
-        run: python scripts/retry_command.py --attempts 3 -- flutter pub get
+        run: python scripts/retry_command.py --resolve-flutter --attempts 3 -- flutter pub get
 
       - name: Download and verify FFmpegKit Windows x64 bundle
         shell: pwsh
@@ -269,7 +269,7 @@ jobs:
           channel: stable
           cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
-        run: python scripts/retry_command.py --attempts 3 -- flutter pub get
+        run: python scripts/retry_command.py --resolve-flutter --attempts 3 -- flutter pub get
 
       - uses: android-actions/setup-android@v4.0.4
         with:
@@ -392,7 +392,7 @@ jobs:
           channel: stable
           cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
-        run: python scripts/retry_command.py --attempts 3 -- flutter pub get
+        run: python scripts/retry_command.py --resolve-flutter --attempts 3 -- flutter pub get
 
       - name: Install CocoaPods
         run: gem install cocoapods --no-document
@@ -481,7 +481,7 @@ jobs:
           channel: stable
           cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
-        run: python scripts/retry_command.py --attempts 3 -- flutter pub get
+        run: python scripts/retry_command.py --resolve-flutter --attempts 3 -- flutter pub get
 
       - name: Install CocoaPods
         run: gem install cocoapods --no-document
