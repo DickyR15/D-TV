@@ -60,16 +60,3 @@ D TV 中由 DickyR15 創作的原創修改及新增內容，其著作權由相�
 繁體中文（台灣用語）轉換使用 OpenCC 字典，來源與授權見 [OPENCC-NOTICE.md](OPENCC-NOTICE.md)。其他第三方套件、媒體解碼元件及素材仍依各自授權條款使用。
 
 重新散布 D TV 或其修改版本時，請遵守 GPL-3.0，包括保留必要聲明、附上授權全文，並依授權要求提供對應原始碼。D TV 名稱、標誌及品牌識別不因 GPL-3.0 而自動授權他人冒充官方版本或暗示官方背書。
-
-## 文件
-
-- [文件索引](docs/README.md)
-- [D TV 1.0.6 發布說明](docs/RELEASE-1.0.6.md)
-- [1.0.6 之後的開發路線圖](docs/ROADMAP-NEXT.md)
-- [PlaybackSession 架構評估（1.0.3 歷史文件）](docs/PLAYBACK-SESSION-ANALYSIS-1.0.3.md)
-- [1.0.3 歷史開發規劃](docs/ROADMAP-1.0.3.md)
-- [片源管理說明](docs/SOURCE-MANAGEMENT.md)
-- [著作權與授權說明](COPYRIGHT.md)
-- [上游來源與修改聲明](UPSTREAM-NOTICE.md)
-- [OpenCC 字典來源與授權](OPENCC-NOTICE.md)
-- [台灣繁體中文在地化規範](docs/LOCALIZATION-TW.md)
