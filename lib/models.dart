@@ -19,8 +19,7 @@ class SourceSite {
       id == 'duoduo' ||
       id == 'hanxiaoquan' ||
       id == 'heitao' ||
-      id == 'missav' ||
-      id == 'supjav';
+      id == 'missav';
   bool get searchSuggestions => id == 'hongguo';
   // These providers must remain independent in
   // source switching and ranking filters.
@@ -64,12 +63,6 @@ class SourceSite {
     '分類 · 搜尋 · 播放',
     adult: true,
   );
-  static const supjav = SourceSite(
-    'supjav',
-    'SupJav',
-    '分類 · 搜尋 · 播放',
-    adult: true,
-  );
 
   /// 預設開啟的一般片源：紅果、韓小圈、鬼片、多多追劇。
   static const primaryValues = [hongguo, hanxiaoquan, guipian, duoduo];
@@ -83,13 +76,13 @@ class SourceSite {
     SourceSite('huangguo-video', '黃果影片', '影片與劇集'),
     SourceSite('huangguoai', '黃果 AI', 'AI 短劇'),
     missav,
-    supjav,
     SourceSite('heitao', '黑桃', '分類短劇 · 線上搜尋'),
   ];
   /// Retired providers remain recognizable for saved library records only.
   /// They are not available for new catalog browsing or source management.
   static const legacyValues = [
     SourceSite('cloudfront', '黃果舊版', '已停止提供新目錄；保留舊紀錄相容性'),
+    SourceSite('supjav', 'SupJav', '已停止提供；僅保留舊收藏與觀看紀錄', adult: true),
   ];
   static const currentValues = [...primaryValues, ...restrictedValues];
   static const knownValues = [...currentValues, ...legacyValues];

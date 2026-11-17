@@ -2,7 +2,6 @@ package core
 
 import (
 	"net/http"
-	"strings"
 	"testing"
 )
 
@@ -21,12 +20,8 @@ func TestBrowserTransportRoutesProtectedProviders(t *testing.T) {
 		{name: "MissAV alternate domain", method: http.MethodGet, address: "https://missav.ai/", wantSource: sourceMissAV},
 		{name: "MissAV live domain", method: http.MethodGet, address: "https://missav.live/", wantSource: sourceMissAV},
 		{name: "MissAV numbered domain", method: http.MethodGet, address: "https://missav123.com/", wantSource: sourceMissAV},
-		{name: "SupJav primary domain", method: http.MethodGet, address: "https://supjav.com/zh/", wantSource: sourceSupJav},
-		{name: "SupJav www alias", method: http.MethodHead, address: "https://www.supjav.com/zh/", wantSource: sourceSupJav},
-		{name: "SupJav playback embed", method: http.MethodGet, address: "https://lk1.supremejav.com/supjav.php?c=token", wantSource: sourceSupJav},
 		{name: "Huangguo AI API", method: http.MethodPost, address: "https://huangguoai.com/api/playback/request", wantSource: sourceHuangguoAI},
 		{name: "unknown host", method: http.MethodGet, address: "https://example.invalid/", wantSource: ""},
-		{name: "unrelated SupJav path method", method: http.MethodPost, address: "https://supjav.com/zh/", wantSource: ""},
 		{name: "unrelated scheme", method: http.MethodGet, address: "file:///tmp/index.html", wantSource: ""},
 	}
 	for _, test := range tests {
@@ -45,19 +40,3 @@ func TestBrowserTransportRoutesProtectedProviders(t *testing.T) {
 	}
 }
 
-func TestBrowserTransportRoutesSupJavVASPostWithoutForwardingInternalMarker(t *testing.T) {
-	transport := &huangguoBrowserTransport{}
-	request, err := http.NewRequest(http.MethodPost, "https://vas.example.test/api/stream", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.Header.Set(supJavVASRequestHeader, "1")
-	if got := transport.source(request); got != sourceSupJav {
-		t.Fatalf("VAS request source = %q, want %q", got, sourceSupJav)
-	}
-	for key := range huangguoBrowserHeaders(request) {
-		if key == strings.ToLower(supJavVASRequestHeader) {
-			t.Fatal("internal VAS routing marker leaked into upstream headers")
-		}
-	}
-}

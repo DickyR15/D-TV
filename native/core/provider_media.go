@@ -45,8 +45,6 @@ func (d *Downloader) providerBaseURL(source string) string {
 		configured, fallback = d.cfg.GuipianURL, guipianSiteBaseURL
 	case sourceMissAV:
 		fallback = missAVBaseURL
-	case sourceSupJav:
-		fallback = supJavBaseURL
 	case sourceDuoduo:
 		d.providerMu.Lock()
 		configured = strings.TrimRight(d.providerHosts[sourceDuoduo], "/")
@@ -97,8 +95,6 @@ func providerSourceForURL(raw string) string {
 		host == "missav.live" || host == "www.missav.live" ||
 		host == "missav123.com" || host == "www.missav123.com":
 		return sourceMissAV
-	case host == "supjav.com" || host == "www.supjav.com":
-		return sourceSupJav
 	default:
 		return ""
 	}
@@ -169,7 +165,7 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 	if chapter.Source == sourceGuipian {
 		return d.resolveGuipianMedia(ctx, task)
 	}
-	if chapter.Source == sourceMissAV || chapter.Source == sourceSupJav {
+	if chapter.Source == sourceMissAV {
 		return d.resolveAdultMedia(ctx, task)
 	}
 	if strings.HasPrefix(chapter.VideoURL, "hongguo-cenc://") {

@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,7 +17,6 @@ import (
 
 const (
 	missAVBaseURL  = "https://missav.live"
-	supJavBaseURL  = "https://supjav.com"
 	adultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
@@ -36,133 +34,52 @@ var (
 	adultSlugPattern   = regexp.MustCompile("(?i)^[a-z0-9][a-z0-9._-]{0,127}$")
 )
 
-func adultSourceName(source string) string {
-	switch canonicalProviderSource(source) {
-	case sourceMissAV:
-		return "MissAV"
-	case sourceSupJav:
-		return "SupJav"
-	default:
-		return "進階片源"
-	}
-}
+func adultSourceName(_ string) string { return "MissAV" }
 
 func adultProviderBaseURL(source string) string {
-	switch canonicalProviderSource(source) {
-	case sourceMissAV:
-		return missAVBaseURL
-	case sourceSupJav:
-		return supJavBaseURL
-	default:
-		return ""
-	}
+	if canonicalProviderSource(source) == sourceMissAV { return missAVBaseURL }
+	return ""
 }
 
 func adultProviderCategories(source string) []nativeCategory {
-	switch canonicalProviderSource(source) {
-	case sourceMissAV:
-		return []nativeCategory{
-			{ID: "today-hot", Name: "今日熱門"},
-			{ID: "weekly-hot", Name: "本週熱門"},
-			{ID: "monthly-hot", Name: "本月熱門"},
-			{ID: "chinese-subtitle", Name: "中文字幕"},
-			{ID: "new", Name: "最近更新"},
-			{ID: "release", Name: "新作上市"},
-			{ID: "uncensored-leak", Name: "無碼流出"},
-		}
-	case sourceSupJav:
-		return []nativeCategory{
-			{ID: "popular", Name: "熱門總榜"},
-			{ID: "weekly-hot", Name: "本週熱門"},
-			{ID: "monthly-hot", Name: "本月熱門"},
-			{ID: "uncensored-jav", Name: "無碼"},
-			{ID: "censored-jav", Name: "有碼"},
-			{ID: "amateur", Name: "素人"},
-			{ID: "chinese-subtitles", Name: "中文字幕"},
-			{ID: "english-subtitles", Name: "英文字幕"},
-			{ID: "reducing-mosaic", Name: "破壞版"},
-		}
-	default:
-		return nil
+	if canonicalProviderSource(source) != sourceMissAV { return nil }
+	return []nativeCategory{
+		{ID: "today-hot", Name: "今日熱門"},
+		{ID: "weekly-hot", Name: "本週熱門"},
+		{ID: "monthly-hot", Name: "本月熱門"},
+		{ID: "chinese-subtitle", Name: "中文字幕"},
+		{ID: "new", Name: "最近更新"},
+		{ID: "release", Name: "新作上市"},
+		{ID: "uncensored-leak", Name: "無碼流出"},
 	}
 }
 
 func validAdultProviderCategory(source, category string) bool {
-	if category == "" {
-		return true
-	}
-	if canonicalProviderSource(source) == sourceMissAV {
-		return adultSlugPattern.MatchString(category)
-	}
-	for _, item := range adultProviderCategories(source) {
-		if item.ID == category {
-			return true
-		}
-	}
-	return false
+	return canonicalProviderSource(source) == sourceMissAV &&
+		(category == "" || adultSlugPattern.MatchString(category))
 }
 
 func adultDetailURL(source, sourceID string) string {
 	base := adultProviderBaseURL(source)
 	sourceID = strings.TrimSpace(sourceID)
-	if base == "" || !adultSlugPattern.MatchString(sourceID) {
+	if base == "" || canonicalProviderSource(source) != sourceMissAV ||
+		!adultSlugPattern.MatchString(sourceID) {
 		return ""
 	}
-	switch canonicalProviderSource(source) {
-	case sourceMissAV:
-		for _, category := range adultProviderCategories(sourceMissAV) {
-			if sourceID == category.ID {
-				return ""
-			}
-		}
-		return base + "/cn/" + url.PathEscape(sourceID)
-	case sourceSupJav:
-		if _, err := strconv.Atoi(sourceID); err != nil {
-			return ""
-		}
-		return base + "/zh/" + url.PathEscape(sourceID) + ".html"
-	default:
-		return ""
+	for _, category := range adultProviderCategories(sourceMissAV) {
+		if sourceID == category.ID { return "" }
 	}
+	return base + "/cn/" + url.PathEscape(sourceID)
 }
 
 func adultCategoryURL(source, category string) (string, error) {
 	base := adultProviderBaseURL(source)
-	if base == "" || !validAdultProviderCategory(source, category) {
+	if base == "" || canonicalProviderSource(source) != sourceMissAV ||
+		!validAdultProviderCategory(source, category) {
 		return "", errors.New("片源分類無效")
 	}
-	if category == "" {
-		if source == sourceSupJav {
-			return base + "/zh/", nil
-		}
-		if source == sourceMissAV {
-			return base + "/cn/new", nil
-		}
-		return base + "/", nil
-	}
-	if source == sourceMissAV {
-		return base + "/cn/genres/" + url.PathEscape(category), nil
-	}
-	if source == sourceSupJav {
-		paths := map[string]string{
-			"popular": "/popular",
-			"weekly-hot": "/popular?sort=week",
-			"monthly-hot": "/popular?sort=month",
-			"uncensored-jav": "/category/uncensored-jav",
-			"censored-jav": "/category/censored-jav",
-			"amateur": "/category/amateur",
-			"chinese-subtitles": "/category/chinese-subtitles",
-			"english-subtitles": "/category/english-subtitles",
-			"reducing-mosaic": "/category/reducing-mosaic",
-		}
-		if path, ok := paths[category]; ok {
-			if strings.HasPrefix(path, "/popular") {
-				return base + path, nil
-			}
-			return base + "/zh" + path, nil
-		}
-	}
-	return "", errors.New("片源分類目前沒有對應網址")
+	if category == "" { return base + "/cn/new", nil }
+	return base + "/cn/genres/" + url.PathEscape(category), nil
 }
 
 func adultAttribute(tag, wanted string) string {
@@ -206,11 +123,7 @@ func adultSafeURL(base, raw, source string) string {
 			host != "missav123.com" && host != "www.missav123.com" {
 			return ""
 		}
-	case sourceSupJav:
-		if host != "supjav.com" && host != "www.supjav.com" {
-			return ""
-		}
-	default:
+remove URL host	default:
 		return ""
 	}
 	return resolved.String()
@@ -286,27 +199,6 @@ func adultHTMLFirst(node *htmlnet.Node, match func(*htmlnet.Node) bool) *htmlnet
 	return found
 }
 
-func adultSupJavSourceIDFromHref(raw string) string {
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return ""
-	}
-	if parsed.IsAbs() && !strings.EqualFold(parsed.Hostname(), "supjav.com") &&
-		!strings.EqualFold(parsed.Hostname(), "www.supjav.com") {
-		return ""
-	}
-	path := strings.TrimRight(parsed.Path, "/")
-	if path == "" {
-		return ""
-	}
-	slug := path[strings.LastIndex(path, "/")+1:]
-	slug = strings.TrimSuffix(strings.ToLower(slug), ".html")
-	if _, err := strconv.Atoi(slug); err != nil {
-		return ""
-	}
-	return slug
-}
-
 func adultSourceIDFromHref(raw, base, source string) (string, string) {
 	address := adultSafeURL(base, raw, source)
 	if address == "" {
@@ -316,14 +208,7 @@ func adultSourceIDFromHref(raw, base, source string) (string, string) {
 	if err != nil {
 		return "", ""
 	}
-	if source == sourceSupJav {
-		slug := adultSupJavSourceIDFromHref(address)
-		if slug == "" {
-			return "", ""
-		}
-		return slug, address
-	}
-	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+remove source-id branch	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 	for index := 0; index < len(segments)-1; index++ {
 		if strings.EqualFold(segments[index], "cn") {
 			slug := segments[index+1]
@@ -335,71 +220,17 @@ func adultSourceIDFromHref(raw, base, source string) (string, string) {
 	return "", ""
 }
 
-func adultHTMLNodeHasImage(node *htmlnet.Node) bool {
-	found := false
-	adultHTMLWalk(node, func(candidate *htmlnet.Node) {
-		if found || candidate.Type != htmlnet.ElementNode {
-			return
-		}
-		if candidate.Data == "img" {
-			found = true
-			return
-		}
-		if candidate.Data == "source" &&
-			(providerHTMLAttr(candidate, "src") != "" || providerHTMLAttr(candidate, "srcset") != "") {
-			found = true
-			return
-		}
-		style := strings.ToLower(providerHTMLAttr(candidate, "style"))
-		if strings.Contains(style, "url(") ||
-			providerHTMLAttr(candidate, "data-background-image") != "" ||
-			providerHTMLAttr(candidate, "data-bg") != "" {
-			found = true
-		}
-	})
-	return found
-}
-
 func adultHTMLCardNodes(document *htmlnet.Node, source string) []*htmlnet.Node {
 	var cards []*htmlnet.Node
 	seen := map[*htmlnet.Node]bool{}
-	appendCard := func(node *htmlnet.Node) {
-		if node != nil && !seen[node] {
+	adultHTMLWalk(document, func(node *htmlnet.Node) {
+		if source == sourceMissAV && node.Type == htmlnet.ElementNode &&
+			node.Data == "div" && adultHTMLClass(node, "thumbnail") && adultHTMLClass(node, "group") &&
+			!seen[node] {
 			seen[node] = true
 			cards = append(cards, node)
 		}
-	}
-	adultHTMLWalk(document, func(node *htmlnet.Node) {
-		if node.Type != htmlnet.ElementNode {
-			return
-		}
-		if source == sourceMissAV {
-			if node.Data == "div" && adultHTMLClass(node, "thumbnail") && adultHTMLClass(node, "group") {
-				appendCard(node)
-			}
-		} else if source == sourceSupJav && adultHTMLClass(node, "post") {
-			appendCard(node)
-		}
 	})
-	if source == sourceSupJav {
-		// Theme-independent fallback: locate numeric SupJav detail links and
-		// walk to the nearest ancestor that actually contains an image.
-		adultHTMLWalk(document, func(node *htmlnet.Node) {
-			if node.Type != htmlnet.ElementNode || node.Data != "a" ||
-				adultSupJavSourceIDFromHref(providerHTMLAttr(node, "href")) == "" {
-				return
-			}
-			root := node
-			for parent, depth := node, 0; parent != nil && depth < 6; parent, depth = parent.Parent, depth+1 {
-				if adultHTMLNodeHasImage(parent) {
-					root = parent
-					break
-				}
-				root = parent
-			}
-			appendCard(root)
-		})
-	}
 	return cards
 }
 
@@ -598,7 +429,7 @@ func adultParseMissAVCategories(body, base string) []nativeCategory {
 func (d *Downloader) fetchAdultCategories(ctx context.Context, source string) ([]nativeCategory, error) {
 	source = canonicalProviderSource(source)
 	if source != sourceMissAV {
-		return adultProviderCategories(source), nil
+		return nil, errors.New("不支援的進階片源")
 	}
 	base := adultProviderBaseURL(source)
 	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
@@ -616,6 +447,7 @@ func (d *Downloader) fetchAdultCategories(ctx context.Context, source string) ([
 
 func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page int, category, query string) ([]Drama, bool, error) {
 	source = canonicalProviderSource(source)
+	if source != sourceMissAV { return nil, false, errors.New("不支援的進階片源") }
 	if page < 1 || page > 100000 {
 		return nil, false, errors.New("目錄頁碼無效")
 	}
@@ -625,11 +457,7 @@ func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page 
 		if len(query) > 256 {
 			return nil, false, errors.New("搜尋關鍵字過長")
 		}
-		if source == sourceMissAV {
-			address = base + "/cn/search/" + url.PathEscape(strings.TrimSpace(query))
-		} else {
-			address = base + "/zh/?s=" + url.QueryEscape(strings.TrimSpace(query))
-		}
+		address = base + "/cn/search/" + url.PathEscape(strings.TrimSpace(query))
 	} else {
 		var err error
 		address, err = adultCategoryURL(source, category)
@@ -642,26 +470,16 @@ func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page 
 		if err != nil {
 			return nil, false, err
 		}
-		if source == sourceMissAV {
-			q := parsed.Query()
-			q.Set("page", strconv.Itoa(page))
-			parsed.RawQuery = q.Encode()
-		} else {
-			parsed.Path = strings.TrimRight(parsed.Path, "/") + "/page/" + strconv.Itoa(page)
-		}
+		q := parsed.Query()
+		q.Set("page", strconv.Itoa(page))
+		parsed.RawQuery = q.Encode()
 		address = parsed.String()
 	}
 	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
-	referer := base + "/"
-	if source == sourceMissAV {
-		referer = base + "/cn/"
-	}
+	referer := base + "/cn/"
 	body, err := d.fetchProviderText(requestContext, address, referer)
 	if err != nil {
 		return nil, false, fmt.Errorf("%s 目錄讀取失敗：%w", adultSourceName(source), err)
-	}
-	if source == sourceSupJav && adultSupJavIsCloudflareChallenge(body) {
-		return nil, false, adultSupJavCloudflareError()
 	}
 	items := adultParseCards(body, base, source)
 	return items, len(items) >= 20, nil
@@ -826,163 +644,6 @@ func adultFindM3U8(body string, pageURLs ...string) string {
 	return ""
 }
 
-func adultRot13(value string) string {
-	data := []byte(value)
-	for index, character := range data {
-		switch {
-		case character >= 'a' && character <= 'z':
-			data[index] = 'a' + (character-'a'+13)%26
-		case character >= 'A' && character <= 'Z':
-			data[index] = 'A' + (character-'A'+13)%26
-		}
-	}
-	return string(data)
-}
-
-// adultSupJavVOEHLS decodes VOE's static JSON player payload without running
-// remote JavaScript. The returned URL must still be a public HTTPS media URL.
-func adultSupJavVOEHLS(body, embedURL string) string {
-	scriptPattern := regexp.MustCompile("(?is)<script\\b([^>]*)>(.*?)</script\\s*>")
-	for _, match := range scriptPattern.FindAllStringSubmatch(body, -1) {
-		if len(match) < 3 || !strings.EqualFold(adultAttribute("<script "+match[1]+">", "type"), "application/json") {
-			continue
-		}
-		var payload []string
-		if err := json.Unmarshal([]byte(strings.TrimSpace(match[2])), &payload); err != nil || len(payload) == 0 {
-			continue
-		}
-		encoded := adultRot13(payload[0])
-		for _, noise := range []string{"@$", "^^", "~@", "%?", "*~", "!!", "#&", "_"} {
-			encoded = strings.ReplaceAll(encoded, noise, "")
-		}
-		shifted, err := base64.StdEncoding.DecodeString(encoded)
-		if err != nil {
-			shifted, err = base64.RawStdEncoding.DecodeString(strings.TrimRight(encoded, "="))
-		}
-		if err != nil {
-			continue
-		}
-		for index := range shifted {
-			if shifted[index] < 3 {
-				err = errors.New("invalid VOE shift")
-				break
-			}
-			shifted[index] -= 3
-		}
-		if err != nil {
-			continue
-		}
-		for left, right := 0, len(shifted)-1; left < right; left, right = left+1, right-1 {
-			shifted[left], shifted[right] = shifted[right], shifted[left]
-		}
-		decoded, decodeErr := base64.StdEncoding.DecodeString(string(shifted))
-		if decodeErr != nil {
-			decoded, decodeErr = base64.RawStdEncoding.DecodeString(strings.TrimRight(string(shifted), "="))
-		}
-		if decodeErr != nil {
-			continue
-		}
-		var config map[string]any
-		if json.Unmarshal(decoded, &config) != nil {
-			continue
-		}
-		raw, _ := config["source"].(string)
-		if raw == "" {
-			continue
-		}
-		resolved := adultResolvePlaybackURL(embedURL, raw)
-		if resolved != "" && strings.Contains(strings.ToLower(resolved), ".m3u8") {
-			return resolved
-		}
-	}
-	return ""
-}
-
-// adultSupJavFSTHLS follows the FST player's declared source order.
-// Its primary source can be a relative or extensionless HLS URL, so requiring
-// an absolute .m3u8 URL would silently skip the source selected by the player.
-func adultSupJavFSTHLS(body, embedURL string) string {
-	scriptPattern := regexp.MustCompile("(?is)<script\\b[^>]*>(.*?)</script\\s*>")
-	linksAssignment := regexp.MustCompile("(?is)(?:var|let|const)\\s+links\\s*=\\s*")
-	sourcesPattern := regexp.MustCompile("(?is)(?:sources|['\\\"]sources['\\\"])\\s*:\\s*\\[\\s*\\{([^{}]*)\\}")
-	filePattern := regexp.MustCompile("(?is)(?:file|['\\\"]file['\\\"])\\s*:\\s*(links\\.hls[234](?:\\s*\\|\\|\\s*links\\.hls[234])*)")
-	typePattern := regexp.MustCompile("(?is)(?:type|['\\\"]type['\\\"])\\s*:\\s*['\\\"]hls['\\\"]")
-	keyPattern := regexp.MustCompile("links\\.(hls[234])")
-
-	for _, match := range scriptPattern.FindAllStringSubmatch(body, -1) {
-		if len(match) < 2 {
-			continue
-		}
-		script := match[1]
-		if strings.Contains(script, "eval(function") {
-			script = adultUnpackPacker(script)
-		}
-		if script == "" {
-			continue
-		}
-		assignment := linksAssignment.FindStringIndex(script)
-		if assignment == nil {
-			continue
-		}
-		objectStart := strings.Index(script[assignment[1]:], "{")
-		if objectStart < 0 {
-			continue
-		}
-		remaining := script[assignment[1]+objectStart:]
-		decoder := json.NewDecoder(strings.NewReader(remaining))
-		var links map[string]any
-		if decoder.Decode(&links) != nil || len(links) == 0 {
-			continue
-		}
-		offset := int(decoder.InputOffset())
-		if offset < 0 || offset > len(remaining) {
-			continue
-		}
-		sources := sourcesPattern.FindStringSubmatch(remaining[offset:])
-		if len(sources) < 2 {
-			continue
-		}
-		fields := sources[1]
-		fileMatch := filePattern.FindStringSubmatch(fields)
-		if len(fileMatch) < 2 {
-			continue
-		}
-		explicitHLS := typePattern.MatchString(fields)
-		for _, key := range keyPattern.FindAllStringSubmatch(fileMatch[1], -1) {
-			if len(key) < 2 {
-				continue
-			}
-			raw, ok := links[key[1]].(string)
-			if !ok || strings.TrimSpace(raw) == "" {
-				continue
-			}
-			resolved := adultResolvePlaybackURL(embedURL, raw)
-			if resolved == "" {
-				continue
-			}
-			path := strings.ToLower(strings.SplitN(resolved, "?", 2)[0])
-			if explicitHLS || strings.HasSuffix(path, ".m3u8") {
-				return resolved
-			}
-		}
-	}
-	// Match FetchJAV's fallback for direct or packed FST HLS URLs. The
-	// playlist is still fetched and validated by fetchMediaPlaylist before use.
-	return adultFindM3U8(body, embedURL)
-}
-
-func adultReverse(value string) string {
-	runes := []rune(value)
-	for left, right := 0, len(runes)-1; left < right; left, right = left+1, right-1 {
-		runes[left], runes[right] = runes[right], runes[left]
-	}
-	return string(runes)
-}
-
-func adultSupJavDataLinks(body string) map[string]string {
-	return adultSupJavServerLinks(body)
-}
-
 func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID string) (Drama, []Chapter, error) {
 	source = canonicalProviderSource(source)
 	pageURL := adultDetailURL(source, sourceID)
@@ -998,9 +659,6 @@ func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID stri
 	body, err := d.fetchProviderText(requestContext, pageURL, referer)
 	if err != nil {
 		return Drama{}, nil, fmt.Errorf("%s 作品詳情讀取失敗：%w", adultSourceName(source), err)
-	}
-	if source == sourceSupJav && adultSupJavIsCloudflareChallenge(body) {
-		return Drama{}, nil, adultSupJavCloudflareError()
 	}
 	title := adultClean(adultMetaValue(body, "og:title"))
 	if title == "" {
@@ -1063,7 +721,7 @@ func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID stri
 
 func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (providerMedia, error) {
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
-	if !valid || (source != sourceMissAV && source != sourceSupJav) {
+	if !valid || source != sourceMissAV {
 		return providerMedia{}, errors.New("進階片源作品資訊無效，請重新整理")
 	}
 	prefix := providerChapterID(source, sourceID, "")
@@ -1089,25 +747,10 @@ func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (provider
 	if err != nil {
 		return providerMedia{}, fmt.Errorf("%s 播放頁讀取失敗：%w", adultSourceName(source), err)
 	}
-	if source == sourceSupJav && adultSupJavIsCloudflareChallenge(body) {
-		return providerMedia{}, adultSupJavCloudflareError()
-	}
 	if actual, ok := pageResponses.values.Load(pageURL); ok {
 		if finalURL, valid := actual.(string); valid && finalURL != "" {
 			pageURL = finalURL
 		}
-	}
-	if source == sourceSupJav {
-		routes, routeErrors := d.resolveAdultSupJavRoutes(ctx, pageURL, body)
-		if len(routes) == 0 {
-			if len(routeErrors) > 0 {
-				return providerMedia{}, fmt.Errorf("%s 沒有可用播放來源：%s", adultSourceName(source), strings.Join(routeErrors, "；"))
-			}
-			return providerMedia{}, errors.New("SupJav 目前沒有可用的播放來源；站方可能要求互動式驗證或封鎖原生請求")
-		}
-		primary := routes[0]
-		primary.Variants = append([]providerMedia(nil), routes[1:]...)
-		return primary, nil
 	}
 
 	mediaURL := adultFindMissAVMedia(body, pageURL)

@@ -15,7 +15,6 @@ import (
 )
 
 const huangguoBrowserProfile = "Chrome 150"
-const supJavVASRequestHeader = "X-DTV-SupJav-VAS"
 
 type browserHTTPClient interface {
 	Do(*fhttp.Request) (*fhttp.Response, error)
@@ -64,10 +63,6 @@ func (transport *huangguoBrowserTransport) source(request *http.Request) string 
 		}
 		return ""
 	}
-	if request.Method == http.MethodPost && request.URL.Path == "/api/stream" &&
-		request.Header.Get(supJavVASRequestHeader) == "1" {
-		return sourceSupJav
-	}
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		return ""
 	}
@@ -80,8 +75,6 @@ func (transport *huangguoBrowserTransport) source(request *http.Request) string 
 		"missav.live", "www.missav.live",
 		"missav123.com", "www.missav123.com":
 		return sourceMissAV
-	case "supjav.com", "www.supjav.com", "supremejav.com", "www.supremejav.com", "lk1.supremejav.com", "lk2.supremejav.com":
-		return sourceSupJav
 	default:
 		return ""
 	}
@@ -166,8 +159,7 @@ func huangguoBrowserHeaders(request *http.Request) fhttp.Header {
 	}
 	for key, values := range request.Header {
 		lower := strings.ToLower(key)
-		if _, fixed := headers[lower]; fixed || lower == "host" || lower == "connection" ||
-			lower == strings.ToLower(supJavVASRequestHeader) {
+		if _, fixed := headers[lower]; fixed || lower == "host" || lower == "connection" {
 			continue
 		}
 		headers[lower] = append([]string(nil), values...)

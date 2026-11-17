@@ -93,3 +93,25 @@ func TestLegacyResource404KeepsHealthyEndpoint(t *testing.T) {
 		t.Fatal("catalog did not remain usable", err)
 	}
 }
+
+
+func TestHongguoCategoriesUseCurrentBuiltInList(t *testing.T) {
+	engine := &nativeEngine{
+		categoryOptions: map[string][]nativeCategory{
+			sourceHongguo: {{ID: "obsolete", Name: "舊版分類"}},
+		},
+	}
+	categories, err := engine.nativeCategories(context.Background(), sourceHongguo, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(categories) != len(hongguoAppGenres)+1 || categories[0].Name != "全部" {
+		t.Fatalf("Red Fruit categories = %#v", categories)
+	}
+	for index, genre := range hongguoAppGenres {
+		got := categories[index+1]
+		if got.ID != genre.key || got.Name != genre.name {
+			t.Fatalf("Red Fruit category %d = %#v, want %s/%s", index, got, genre.key, genre.name)
+		}
+	}
+}

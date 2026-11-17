@@ -17,7 +17,9 @@ void main() {
 
   test('adult metadata is independent from advanced source membership', () {
     expect(SourceSite.missav.adult, isTrue);
-    expect(SourceSite.supjav.adult, isTrue);
+    expect(SourceSite.isAvailable('supjav'), isFalse);
+    expect(SourceSite.isLegacyRecordOnly('supjav'), isTrue);
+    expect(SourceSite.byId('supjav').adult, isTrue);
     expect(SourceSite.isKnown('guipian'), isTrue);
     expect(SourceSite.isAvailable('guipian'), isTrue);
     expect(SourceSite.byId('guipian').adult, isFalse);
