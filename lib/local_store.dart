@@ -2144,7 +2144,10 @@ class LocalStore extends ChangeNotifier {
     }
     if (data.containsKey('advancedSourceOrder')) {
       final rawOrder = data['advancedSourceOrder'];
-      final allowed = SourceSite.restrictedValues.map((site) => site.id).toSet();
+      final allowed = {
+        ...SourceSite.restrictedValues.map((site) => site.id),
+        ...SourceSite.legacyValues.map((site) => site.id),
+      };
       if (rawOrder is! List ||
           rawOrder.length > allowed.length ||
           rawOrder.any((id) => id is! String || !allowed.contains(id)) ||
