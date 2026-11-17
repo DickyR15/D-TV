@@ -1,40 +1,16 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'app_layout.dart';
-
-typedef SupJavExternalLauncher = Future<bool> Function(Uri url);
+import 'supjav_browser_screen.dart';
 
 class SupJavBrowserAction extends StatelessWidget {
-  const SupJavBrowserAction({super.key, this.launcher});
+  const SupJavBrowserAction({
+    super.key,
+    this.browserBuilder,
+  });
 
-  final SupJavExternalLauncher? launcher;
-
-  static final Uri websiteUri = Uri.parse('https://supjav.com/zh/');
-
-  static Future<bool> _launchExternal(Uri url) => launchUrl(
-    url,
-    mode: LaunchMode.externalApplication,
-  );
-
-  Future<void> _open(BuildContext context) async {
-    var opened = false;
-    try {
-      opened = await (launcher ?? _launchExternal)(websiteUri);
-    } catch (_) {
-      opened = false;
-    }
-    if (!context.mounted || opened) return;
-    ScaffoldMessenger.maybeOf(context)
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('無法開啟 SupJav。請確認裝置已安裝可開啟網頁的瀏覽器。'),
-        ),
-      );
-  }
+  /// Test seam. Production always opens the embedded native browser.
+  final WidgetBuilder? browserBuilder;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -42,7 +18,7 @@ class SupJavBrowserAction extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Text(
-        '若 SupJav 要求安全驗證，請在外部瀏覽器由你本人完成。外部瀏覽器的驗證狀態不會同步到 D-TV；返回後重新整理仍可能無法解除 403。',
+        '在 D-TV 內建瀏覽器開啟 SupJav。若網站要求安全驗證，請依頁面指示親自完成；瀏覽器工作階段不會自動解除 D-TV 原生片源連線的 403。',
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.bodySmall,
       ),
@@ -50,9 +26,15 @@ class SupJavBrowserAction extends StatelessWidget {
       OutlinedButton.icon(
         key: const ValueKey('supjav-open-browser'),
         autofocus: AppLayout.isTelevision(context),
-        onPressed: () => unawaited(_open(context)),
+        onPressed: () {
+          Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(
+              builder: browserBuilder ?? (_) => const SupJavBrowserScreen(),
+            ),
+          );
+        },
         icon: const Icon(Icons.open_in_browser_rounded),
-        label: const Text('開啟 SupJav 官方網站'),
+        label: const Text('在 D-TV 內開啟 SupJav'),
       ),
     ],
   );

@@ -15,8 +15,11 @@
 - 原作者 `Xanerix/guoapp app-v2.0.1-113` 可作為來源解析參考。D-TV 現有 `network_browser.go` 的 Chrome TLS 指紋傳輸是依黃果影片主機設定，並不是 SupJav 的互動式瀏覽器工作階段，不能視為已能執行 SupJav 的 JavaScript／Cloudflare 驗證。
 - SupJav 已新增不依賴單一 `.post` class 的卡片尋找備援，並解析延遲圖片屬性、`srcset`、`data-background-image`、`data-bg` 與 CSS `background-image`。
 - 已新增固定 HTML fixture，涵蓋 MissAV 卡片、分類、Surrit URL，以及 SupJav 不含 `.post` 容器時的海報備援解析。
-- SupJav 目錄及作品詳情遇到錯誤時，新增「開啟 SupJav 官方網站」外部瀏覽器入口，供使用者自行檢視並手動完成網站要求的驗證；按鈕不會自動解題，也不會擷取或轉送瀏覽器 Cookie／Session。
-- **SupJav 403 仍未解除**：外部瀏覽器的驗證狀態不會同步到 D-TV 的 Go HTTP 用戶端，因此此入口是透明的人工瀏覽備援，不代表原生目錄／詳情／播放請求已恢復。需另以站方允許的存取方式及實際平台驗收確認。
+- SupJav 目錄及作品詳情錯誤入口改為開啟 D-TV 內建站內瀏覽器，使用 `flutter_inappwebview` 原生 WebView；Android／Android TV、iOS、macOS、Windows 共用同一個 Flutter 介面。
+- WebView 啟用 JavaScript、DOM Storage、資料庫、第三方 Cookie 與媒體內嵌播放；不自訂／偽裝 User-Agent、不擷取或轉送 Cookie／Session、不自動點擊或破解驗證。使用者可在目前頁面依網站指示親自完成驗證。
+- Windows 使用獨立且可寫入的 D-TV 應用程式支援資料夾保存 WebView2 使用者資料；若找不到 Microsoft Edge WebView2 Runtime，會顯示明確安裝提示。
+- 依 Cloudflare 文件辨識主頁回應的 `cf-mitigated: challenge`，並將 Cloudflare Challenge 與一般 HTTP 403 分開提示；不將其他網域或子資源錯誤誤判為 SupJav 主頁驗證。
+- **限制：SupJav 403 尚未在實際裝置驗證解除**。WebView 的驗證狀態僅保留在該 WebView；不會注入 D-TV Go HTTP 用戶端，因此原生目錄／詳情／播放器仍可能收到 403。此功能先提供站內瀏覽與網站原生播放備援，並非聲稱原生解析已恢復。
 - GitHub Actions #1676 使用較早提交 `af8e0abd`，Go 測試因未使用的區域變數失敗；該變數已在後續提交移除。#1676 不是目前最新候選分支內容的驗證結果，後續程式及新增測試仍須以最新提交重新執行 CI。
 - 以上屬於程式修正與離線測試準備，尚未代表 MissAV／SupJav 在即時站點正常播放，也尚未代表 SupJav 實際海報已於所有裝置顯示。四平台建置及裝置驗收仍未完成。
 
