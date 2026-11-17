@@ -79,7 +79,23 @@ class _PlayerMenuState extends State<PlayerMenu> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
+    final viewPadding = MediaQuery.viewPaddingOf(context);
     final landscape = size.width > size.height;
+    final maxMenuHeight = math.max(
+      180.0,
+      math.min(size.height - viewPadding.vertical - 24, size.height * .84),
+    );
+    final episodeColumns = size.width >= 720 ? 10 : size.width >= 480 ? 8 : 6;
+    final episodeRows = (widget.episodes.length / episodeColumns).ceil();
+    final contentHeight = switch (widget.section) {
+      PlayerMenuSection.episodes =>
+        124.0 + episodeRows * 54.0 + (widget.episodes.length > 30 ? 42.0 : 0.0),
+      PlayerMenuSection.speed => 204.0,
+      PlayerMenuSection.quality => 224.0,
+      PlayerMenuSection.aspectRatio => 196.0,
+      PlayerMenuSection.sleepTimer => 196.0,
+      PlayerMenuSection.settings => maxMenuHeight,
+    };
     final colors = Theme.of(context).colorScheme;
     final title = switch (widget.section) {
       PlayerMenuSection.episodes => '選集 · 共 ${widget.episodes.length} 集',
@@ -95,8 +111,8 @@ class _PlayerMenuState extends State<PlayerMenu> {
       insetPadding: const EdgeInsets.all(12),
       backgroundColor: colors.surface,
       child: SizedBox(
-        width: landscape ? math.min(440, size.width * .6) : 600,
-        height: landscape ? size.height : size.height * .72,
+        width: landscape ? math.min(440, size.width * .6) : math.min(600, size.width - 24),
+        height: math.min(maxMenuHeight, contentHeight),
         child: Column(
           children: [
             Padding(
