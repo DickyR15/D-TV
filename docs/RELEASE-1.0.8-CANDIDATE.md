@@ -9,6 +9,15 @@
 
 本文件是 1.0.8 的範圍與驗收規格，不代表下列功能已經完成。每項功能須以程式修改、回歸測試及實際平台驗收結果更新狀態。
 
+## 目前實作進度（2026-11-17）
+
+- MissAV 已依官方 `guoapp-modules/missav v1.0.1` 對齊 `missav.live`、`/cn/` 詳情及搜尋路徑、動態 `/cn/genres` 分類、`thumbnail group` 列表卡片、`data-src` 海報欄位、詳情 `og:image`／`twitter:image`／影片 `data-poster` 與 Surrit HLS 網址優先解析。
+- 原作者 `Xanerix/guoapp app-v2.0.1-113` 已確認在網路指紋部分有相關修正；D-TV 現有 Chrome TLS 指紋傳輸已辨識 MissAV 與 SupJav 主機，本輪保留既有傳輸架構並調整站源路徑及 Referer。
+- SupJav 已新增不依賴單一 `.post` class 的卡片尋找備援，並解析延遲圖片屬性、`srcset`、`data-background-image`、`data-bg` 與 CSS `background-image`。
+- 已新增固定 HTML fixture，涵蓋 MissAV 卡片、分類、Surrit URL，以及 SupJav 不含 `.post` 容器時的海報備援解析。
+- GitHub Actions #1676 使用較早提交 `af8e0abd`，Go 測試因未使用的區域變數失敗；該變數已在後續提交移除。#1676 不是目前最新候選分支內容的驗證結果，後續程式及新增測試仍須以最新提交重新執行 CI。
+- 以上屬於程式修正與離線測試準備，尚未代表 MissAV／SupJav 在即時站點正常播放，也尚未代表 SupJav 實際海報已於所有裝置顯示。四平台建置及裝置驗收仍未完成。
+
 ## 1. MissAV／SupJav 原生片源完整度
 
 ### 目錄、分類與搜尋
