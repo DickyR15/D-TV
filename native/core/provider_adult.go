@@ -538,6 +538,61 @@ func adultParseCards(body, base, source string) []Drama {
 	return items
 }
 
+func (d *Downloader) fetchAdultCategories(ctx context.Context, source string) ([]nativeCategory, error) {
+	source = canonicalProviderSource(source)
+	if source != sourceMissAV {
+		return adultProviderCategories(source), nil
+	}
+	base := adultProviderBaseURL(source)
+	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
+	body, err := d.fetchProviderText(requestContext, base+"/cn/genres", base+"/")
+	if err != nil {
+		return nil, fmt.Errorf("MissAV 分類讀取失敗：%w", err)
+	}
+	document, err := htmlnet.Parse(strings.NewReader(body))
+	if err != nil {
+		return nil, errors.New("MissAV 分類頁解析失敗")
+	}
+	categories := make([]nativeCategory, 0, 32)
+	positions := map[string]int{}
+	for _, anchor := range providerHTMLNodes(document, func(node *htmlnet.Node) bool {
+		return node.Type == htmlnet.ElementNode && node.Data == "a"
+	}) {
+		address := adultSafeURL(base, providerHTMLAttr(anchor, "href"), source)
+		parsed, parseErr := url.Parse(address)
+		if parseErr != nil || address == "" {
+			continue
+		}
+		match := adultMissAVGenrePath.FindStringSubmatch(parsed.Path)
+		if len(match) < 2 {
+			continue
+		}
+		slug, unescapeErr := url.PathUnescape(match[1])
+		if unescapeErr != nil || !adultSlugPattern.MatchString(slug) {
+			continue
+		}
+		name := strings.TrimSpace(providerHTMLText(anchor))
+		if name == "" || len([]rune(name)) > 48 {
+			continue
+		}
+		if index, exists := positions[slug]; exists {
+			if len([]rune(name)) < len([]rune(categories[index].Name)) {
+				categories[index].Name = name
+			}
+			continue
+		}
+		positions[slug] = len(categories)
+		categories = append(categories, nativeCategory{ID: slug, Name: name})
+		if len(categories) >= 200 {
+			break
+		}
+	}
+	if len(categories) == 0 {
+		return nil, errors.New("MissAV 尚未提供可辨識的分類")
+	}
+	return categories, nil
+}
+
 func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page int, category, query string) ([]Drama, bool, error) {
 	source = canonicalProviderSource(source)
 	if page < 1 || page > 100000 {
@@ -585,7 +640,6 @@ func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page 
 }
 
 func adultEncodeBase(value, base int) string {
-	const digits = "0123456789abcdefghijklmnopqrstuvwxyz"
 	if value == 0 {
 		return "0"
 	}
@@ -890,7 +944,11 @@ func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID stri
 	}
 	base := adultProviderBaseURL(source)
 	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
-	body, err := d.fetchProviderText(requestContext, pageURL, base+"/")
+	referer := base + "/"
+	if source == sourceMissAV {
+		referer = base + "/cn/"
+	}
+	body, err := d.fetchProviderText(requestContext, pageURL, referer)
 	if err != nil {
 		return Drama{}, nil, fmt.Errorf("%s 作品詳情讀取失敗：%w", adultSourceName(source), err)
 	}
