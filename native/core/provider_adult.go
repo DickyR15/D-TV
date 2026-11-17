@@ -660,6 +660,9 @@ func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page 
 	if err != nil {
 		return nil, false, fmt.Errorf("%s 目錄讀取失敗：%w", adultSourceName(source), err)
 	}
+	if source == sourceSupJav && adultSupJavIsCloudflareChallenge(body) {
+		return nil, false, adultSupJavCloudflareError()
+	}
 	items := adultParseCards(body, base, source)
 	return items, len(items) >= 20, nil
 }
@@ -963,7 +966,9 @@ func adultSupJavFSTHLS(body, embedURL string) string {
 			}
 		}
 	}
-	return ""
+	// Match FetchJAV's fallback for direct or packed FST HLS URLs. The
+	// playlist is still fetched and validated by fetchMediaPlaylist before use.
+	return adultFindM3U8(body, embedURL)
 }
 
 func adultReverse(value string) string {
@@ -993,6 +998,9 @@ func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID stri
 	body, err := d.fetchProviderText(requestContext, pageURL, referer)
 	if err != nil {
 		return Drama{}, nil, fmt.Errorf("%s 作品詳情讀取失敗：%w", adultSourceName(source), err)
+	}
+	if source == sourceSupJav && adultSupJavIsCloudflareChallenge(body) {
+		return Drama{}, nil, adultSupJavCloudflareError()
 	}
 	title := adultClean(adultMetaValue(body, "og:title"))
 	if title == "" {
@@ -1080,6 +1088,9 @@ func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (provider
 	body, err := d.fetchProviderText(requestContext, pageURL, pageReferer)
 	if err != nil {
 		return providerMedia{}, fmt.Errorf("%s 播放頁讀取失敗：%w", adultSourceName(source), err)
+	}
+	if source == sourceSupJav && adultSupJavIsCloudflareChallenge(body) {
+		return providerMedia{}, adultSupJavCloudflareError()
 	}
 	if actual, ok := pageResponses.values.Load(pageURL); ok {
 		if finalURL, valid := actual.(string); valid && finalURL != "" {
