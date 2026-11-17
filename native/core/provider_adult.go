@@ -28,7 +28,7 @@ var (
 	adultMetaPattern   = regexp.MustCompile("(?is)<meta\\b[^>]*>")
 	adultTagPattern    = regexp.MustCompile("(?is)<[^>]+>")
 	adultM3U8Pattern   = regexp.MustCompile("(?i)https?://[^\"'<>\\s]+\\.m3u8(?:\\?[^\"'<>\\s]*)?")
-	adultMissAVMediaPattern = regexp.MustCompile("(?i)https?://surrit\\.com/[0-9a-f-]{36}/playlist\\.m3u8")
+	adultMissAVMediaPattern = regexp.MustCompile("(?i)https?://surrit\\.com/[0-9a-f-]{36}/playlist\\.m3u8(?:\\?[^\\\"'<>\\s]*)?")
 	adultPackerPattern = regexp.MustCompile("(?s)eval\\(function\\(p,a,c,k,e,d\\)\\{.*?\\}\\('((?:[^'\\\\]|\\\\.)*)',\\s*(\\d+),\\s*(\\d+),\\s*'((?:[^'\\\\]|\\\\.)*)'\\.split\\('\\|'\\)")
 	adultWordPattern   = regexp.MustCompile("\\b([0-9a-zA-Z_]+)\\b")
 	adultCSSImagePattern = regexp.MustCompile("(?i)url\\(([^)]+)\\)")
@@ -761,12 +761,14 @@ func adultFindMissAVMedia(body, pageURL string) string {
 			content = adultUnpackPacker(content)
 		}
 		if found := adultMissAVMediaPattern.FindString(content); found != "" {
+			found = strings.TrimRight(found, ".,;:)]}")
 			if resolved := adultResolvePlaybackURL(pageURL, found); resolved != "" {
 				return resolved
 			}
 		}
 	}
 	if found := adultMissAVMediaPattern.FindString(body); found != "" {
+		found = strings.TrimRight(found, ".,;:)]}")
 		if resolved := adultResolvePlaybackURL(pageURL, found); resolved != "" {
 			return resolved
 		}
