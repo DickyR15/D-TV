@@ -16,6 +16,9 @@
 - SupJav 已新增不依賴單一 `.post` class 的卡片尋找備援，並解析延遲圖片屬性、`srcset`、`data-background-image`、`data-bg` 與 CSS `background-image`。
 - 已新增固定 HTML fixture，涵蓋 MissAV 卡片、分類、Surrit URL，以及 SupJav 不含 `.post` 容器時的海報備援解析。
 - SupJav 採用 D-TV 原生 Go Provider 解析播放來源，保留 TV、FST、EVS、VAS、LUC、VOE、ST 多線路解析與備援切換；解析後交給 D-TV 現有播放器。
+- 參考 FetchJAV 的 FST 擷取備援策略，當 SupJav FST 播放頁未符合既有 `links.hls` 結構時，額外嘗試直接／解包後 M3U8 擷取；擷取結果仍須經原生 `fetchMediaPlaylist` 驗證為有效 `#EXTM3U` 才會採用。
+- 新增 Cloudflare 驗證頁特徵辨識，涵蓋 SupJav 目錄、詳情、播放頁及播放閘道。驗證頁會回報明確錯誤，不再呈現成空目錄或單純缺少播放網址；這是錯誤辨識，不是 Cloudflare 繞過。
+- 新增 FST 備援擷取與 Cloudflare 驗證頁判斷的離線 Go 測試；CI 與即時 SupJav 站點驗收尚待確認。
 - SupJav 不提供內嵌瀏覽器／WebView 模式，也不會因為原生解析失敗而切換到網站播放器。若站方回傳 HTTP 403 或要求互動式驗證，應顯示清楚錯誤與診斷原因，不能宣稱已繞過限制。
 - 目前 SupJav 多線路解析屬於程式實作；仍需以最新 CI 與即時站點、實際裝置驗收確認哪些來源可正常播放。
 - 啟動更新提示已改為顯示完整 Release Notes，不再截斷 1,500 字；內容視窗依螢幕高度限制並顯示捲軸。Android TV 遙控器可用上下鍵／Page Up／Page Down／Home／End 捲動，手機觸控及桌面滑鼠支援一般捲動；新增長篇內容與遙控器捲動 widget 測試，仍待 CI 驗證。
