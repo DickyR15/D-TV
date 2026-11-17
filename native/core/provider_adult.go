@@ -975,21 +975,7 @@ func adultReverse(value string) string {
 }
 
 func adultSupJavDataLinks(body string) map[string]string {
-	result := map[string]string{}
-	pattern := regexp.MustCompile("(?is)<a\\b([^>]*data-link[^>]*)>(.*?)</a>")
-	for _, match := range pattern.FindAllStringSubmatch(body, -1) {
-		if len(match) < 3 {
-			continue
-		}
-		name := strings.ToUpper(adultClean(match[2]))
-		link := adultAttribute("<a "+match[1]+">", "data-link")
-		if name != "" && link != "" {
-			if _, exists := result[name]; !exists {
-				result[name] = link
-			}
-		}
-	}
-	return result
+	return adultSupJavServerLinks(body)
 }
 
 func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID string) (Drama, []Chapter, error) {
@@ -1100,59 +1086,26 @@ func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (provider
 			pageURL = finalURL
 		}
 	}
-	mediaURL := ""
-	referer := pageURL
-	var serverErrors []string
-	if source == sourceMissAV {
-		mediaURL = adultFindMissAVMedia(body, pageURL)
-	} else {
-		servers := adultSupJavDataLinks(body)
-		order := []string{"EVS", "FST", "VAS", "LUC", "VOE", "TV", "ST"}
-		for _, name := range order {
-			link, ok := servers[name]
-			if !ok || mediaURL != "" {
-				continue
+	if source == sourceSupJav {
+		routes, routeErrors := d.resolveAdultSupJavRoutes(ctx, pageURL, body)
+		if len(routes) == 0 {
+			if len(routeErrors) > 0 {
+				return providerMedia{}, fmt.Errorf("%s 沒有可用播放來源：%s", adultSourceName(source), strings.Join(routeErrors, "；"))
 			}
-			embedURL := "https://lk1.supremejav.com/supjav.php?c=" + url.QueryEscape(adultReverse(link))
-			embedResponses := &playbackResponseURLs{}
-			embedContext := context.WithValue(requestContext, playbackResponseURLsKey{}, embedResponses)
-			embed, fetchErr := d.fetchProviderText(embedContext, embedURL, pageURL)
-			if fetchErr != nil {
-				serverErrors = append(serverErrors, name+": "+truncate(fetchErr.Error(), 120))
-				continue
-			}
-			if actual, ok := embedResponses.values.Load(embedURL); ok {
-				if finalURL, valid := actual.(string); valid && finalURL != "" {
-					embedURL = finalURL
-				}
-			}
-			found := ""
-			switch name {
-			case "FST":
-				found = adultSupJavFSTHLS(embed, embedURL)
-			case "VOE":
-				found = adultSupJavVOEHLS(embed, embedURL)
-			}
-			if found == "" {
-				found = adultFindM3U8(embed, embedURL)
-			}
-			if found != "" {
-				mediaURL = found
-				referer = embedURL
-			} else {
-				serverErrors = append(serverErrors, name+": 播放頁未找到可用 HLS 位址")
-			}
+			return providerMedia{}, errors.New("SupJav 目前沒有可用的播放來源；站方可能要求互動式驗證或封鎖原生請求")
 		}
+		primary := routes[0]
+		primary.Variants = append([]providerMedia(nil), routes[1:]...)
+		return primary, nil
 	}
+
+	mediaURL := adultFindMissAVMedia(body, pageURL)
 	if mediaURL == "" || !isProviderHTTPMediaURL(mediaURL) {
-		if source == sourceSupJav && len(serverErrors) > 0 {
-			return providerMedia{}, fmt.Errorf("%s 沒有可用播放來源：%s", adultSourceName(source), strings.Join(serverErrors, "；"))
-		}
 		return providerMedia{}, fmt.Errorf("%s 目前沒有可用的 HLS 播放網址；站方可能要求驗證、封鎖請求或已變更播放器", adultSourceName(source))
 	}
-	credentials := &providerMediaCredentials{referer: referer, userAgent: adultUserAgent}
+	credentials := &providerMediaCredentials{referer: pageURL, userAgent: adultUserAgent}
 	media := providerMedia{
-		URL: mediaURL, Referer: referer, credentials: credentials,
+		URL: mediaURL, Referer: pageURL, credentials: credentials,
 		StandardHTTP: runtime.GOOS == "android",
 	}
 	parsed, _ := url.Parse(mediaURL)

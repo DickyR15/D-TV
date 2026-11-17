@@ -75,7 +75,7 @@ func (transport *huangguoBrowserTransport) source(request *http.Request) string 
 		"missav.live", "www.missav.live",
 		"missav123.com", "www.missav123.com":
 		return sourceMissAV
-	case "supjav.com", "www.supjav.com", "lk1.supremejav.com":
+	case "supjav.com", "www.supjav.com", "supremejav.com", "www.supremejav.com", "lk1.supremejav.com", "lk2.supremejav.com":
 		return sourceSupJav
 	default:
 		return ""
