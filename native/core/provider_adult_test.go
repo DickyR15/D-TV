@@ -35,7 +35,6 @@ func TestAdultProviderRegistrationAndCategories(t *testing.T) {
 		want  string
 	}{
 		{"missav.ws", sourceMissAV},
-		{"missav.live", sourceMissAV},
 		{"www.missav.ai", sourceMissAV},
 		{"supjav.com", sourceSupJav},
 	}
@@ -58,6 +57,9 @@ func TestAdultProviderRegistrationAndCategories(t *testing.T) {
 		if !validAdultProviderCategory(test.want, adultProviderCategories(test.want)[0].ID) {
 			t.Fatalf("provider %q rejected its first category", test.want)
 		}
+	}
+	if got := providerSourceForURL("https://missav.live/"); got != sourceMissAV {
+		t.Fatalf("providerSourceForURL for current MissAV domain = %q, want %q", got, sourceMissAV)
 	}
 	if validAdultProviderCategory(sourceMissAV, "../bad") ||
 		validAdultProviderCategory(sourceSupJav, "https://attacker.example") {
