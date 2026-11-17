@@ -110,6 +110,11 @@ func adultDetailURL(source, sourceID string) string {
 	}
 	switch canonicalProviderSource(source) {
 	case sourceMissAV:
+		for _, category := range adultProviderCategories(sourceMissAV) {
+			if sourceID == category.ID {
+				return ""
+			}
+		}
 		return base + "/cn/" + url.PathEscape(sourceID)
 	case sourceSupJav:
 		if _, err := strconv.Atoi(sourceID); err != nil {
