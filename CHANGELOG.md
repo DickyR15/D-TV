@@ -14,6 +14,12 @@
 
 > 本節目前記錄的是候選範圍與已提交但尚待驗證的程式調整，不代表功能已完成。正式發布前須依實際測試與實機驗收結果改寫；站方 HTTP 403 或互動式驗證限制必須如實列為已知限制。
 
+### #1678 Flutter 測試失敗修正（程式已提交，待重跑）
+- #1678 完整 Flutter 測試為 460 項通過、1 項失敗；唯一失敗為退役來源 `cloudfront` 被錯誤排入目錄更新工作。
+- `LibraryUpdater.update()` 現在只接受 `SourceSite.isAvailable()` 的來源；已退役來源仍保留舊收藏／觀看紀錄讀取相容性，但不再啟動新目錄更新。
+- 回歸測試明確驗證：`cloudfront` 是 legacy record-only、不是 available source、舊紀錄仍可讀，但不會出現在更新工作清單。
+- 新修正尚待 GitHub Actions 重新驗證；#1678 的四平台工作因共用 Flutter 驗證失敗而全部略過。
+
 ### SupJav 站內瀏覽器備援（程式已提交，待 CI／實機驗收）
 - SupJav 目錄／詳情錯誤入口改為開啟 D-TV 內建 WebView，取代外部瀏覽器跳轉。
 - 使用平台原生 WebView 與持續保存的瀏覽器資料；Windows 使用專用 WebView2 使用者資料夾。使用者可在同一個 D-TV 頁面自行完成網站要求的互動式驗證。
