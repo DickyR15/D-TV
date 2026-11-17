@@ -124,6 +124,11 @@ jobs:
         with:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
         run: python scripts/retry_command.py --attempts 3 -- flutter pub get
 
@@ -258,6 +263,11 @@ jobs:
         with:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
         run: python scripts/retry_command.py --attempts 3 -- flutter pub get
 
@@ -376,6 +386,11 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
         run: python scripts/retry_command.py --attempts 3 -- flutter pub get
 
@@ -460,6 +475,11 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
       - name: Resolve Flutter dependencies (retry transient network errors)
         run: python scripts/retry_command.py --attempts 3 -- flutter pub get
 
