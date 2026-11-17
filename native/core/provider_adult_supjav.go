@@ -24,6 +24,35 @@ var (
 	adultSupJavSafeFileCode = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 )
 
+
+var adultSupJavCloudflareMarkers = []string{
+	"just a moment",
+	"checking your browser",
+	"cf-mitigated",
+	"cf-chl-",
+	"challenge-platform",
+	"cf-turnstile",
+	"attention required! | cloudflare",
+	"verify you are human",
+	"enable javascript and cookies to continue",
+}
+
+// adultSupJavIsCloudflareChallenge identifies an interstitial challenge page.
+// It deliberately does not execute scripts or attempt to solve the challenge.
+func adultSupJavIsCloudflareChallenge(body string) bool {
+	lower := strings.ToLower(body)
+	for _, marker := range adultSupJavCloudflareMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func adultSupJavCloudflareError() error {
+	return errors.New("SupJav 要求 Cloudflare 驗證；D-TV 不提供瀏覽器驗證，請稍後再試")
+}
+
 func adultSupJavNormalizeServerName(raw string) string {
 	name := strings.ToUpper(strings.Join(strings.Fields(strings.TrimSpace(raw)), ""))
 	switch name {
@@ -98,6 +127,10 @@ func (d *Downloader) fetchAdultSupJavEmbed(ctx context.Context, token, referer s
 		body, err := d.fetchProviderText(requestContext, address, referer)
 		cancel()
 		if err == nil && strings.TrimSpace(body) != "" {
+			if adultSupJavIsCloudflareChallenge(body) {
+				lastErr = adultSupJavCloudflareError()
+				continue
+			}
 			finalURL := address
 			if actual, ok := responses.values.Load(address); ok {
 				if resolved, valid := actual.(string); valid && resolved != "" {
@@ -361,6 +394,9 @@ func (d *Downloader) fetchAdultSupJavEmbedURL(ctx context.Context, address, refe
 	body, err := d.fetchProviderText(requestContext, address, referer)
 	if err != nil {
 		return "", "", err
+	}
+	if adultSupJavIsCloudflareChallenge(body) {
+		return "", "", adultSupJavCloudflareError()
 	}
 	finalURL := address
 	if actual, ok := responses.values.Load(address); ok {
