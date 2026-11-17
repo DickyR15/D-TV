@@ -1538,35 +1538,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
             actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                _UpdatePromptAction.disableStartupChecks,
+              TextButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _UpdatePromptAction.disableStartupChecks,
+                ),
+                child: const Text('不再提醒'),
               ),
-              child: const Text('不再提醒'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                _UpdatePromptAction.ignoreVersion,
+              TextButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _UpdatePromptAction.ignoreVersion,
+                ),
+                child: const Text('忽略此版本'),
               ),
-              child: const Text('忽略此版本'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                _UpdatePromptAction.remindLater,
+              TextButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _UpdatePromptAction.remindLater,
+                ),
+                child: const Text('忽略'),
               ),
-              child: const Text('忽略'),
-            ),
-            FilledButton(
-              autofocus: !isTelevision,
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                _UpdatePromptAction.download,
+              FilledButton(
+                autofocus: !isTelevision,
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _UpdatePromptAction.download,
+                ),
+                child: const Text('更新'),
               ),
-              child: const Text('更新'),
-            ),
             ],
           );
         },
