@@ -87,11 +87,19 @@ class SourceSite {
     SourceSite('heitao', '黑桃', '分類短劇 · 線上搜尋'),
     SourceSite('cloudfront', '黃果舊版', '舊版 API 片庫'),
   ];
-  static const knownValues = [...primaryValues, ...restrictedValues];
-  static const allValues = [...primaryValues, ...restrictedValues];
-  static const values = allSourcesEnabled ? knownValues : primaryValues;
+  /// Retired providers remain recognizable for saved library records only.
+  /// They are not available for new catalog browsing or source management.
+  static const legacyValues = [
+    SourceSite('cloudfront', '黃果舊版', '已停止提供新目錄；保留舊紀錄相容性'),
+  ];
+  static const currentValues = [...primaryValues, ...restrictedValues];
+  static const knownValues = [...currentValues, ...legacyValues];
+  static const allValues = knownValues;
+  static const values = allSourcesEnabled ? currentValues : primaryValues;
   static bool isAvailable(String id) => values.any((site) => site.id == id);
   static bool isKnown(String id) => allValues.any((site) => site.id == id);
+  static bool isLegacyRecordOnly(String id) =>
+      legacyValues.any((site) => site.id == id);
   static bool isRestricted(String id) =>
       restrictedValues.any((site) => site.id == id);
   static SourceSite byId(String id) =>
