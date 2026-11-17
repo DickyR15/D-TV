@@ -243,6 +243,17 @@ func hongguoRankingArticleCover(article *html.Node) string {
 	return ""
 }
 
+func enrichHongguoRankingCoversFromBody(body string, items []rankingItem) {
+	if len(items) == 0 || strings.TrimSpace(body) == "" {
+		return
+	}
+	document, err := html.Parse(strings.NewReader(body))
+	if err != nil {
+		return
+	}
+	enrichHongguoRankingCovers(document, items)
+}
+
 func enrichHongguoRankingCovers(document *html.Node, items []rankingItem) {
 	if document == nil || len(items) == 0 {
 		return
