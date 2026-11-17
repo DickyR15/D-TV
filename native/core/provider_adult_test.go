@@ -7,6 +7,26 @@ import (
 	"testing"
 )
 
+func adultNodeImagesFromHTMLForTest(body, base string) string {
+	document, err := htmlnet.Parse(strings.NewReader(body))
+	if err != nil {
+		return ""
+	}
+	covers := adultNodeImages(document, base, sourceSupJav)
+	if len(covers) == 0 {
+		return ""
+	}
+	return covers[0]
+}
+
+func adultCategoryURLMust(source, category string) string {
+	address, err := adultCategoryURL(source, category)
+	if err != nil {
+		return ""
+	}
+	return address
+}
+
 func TestAdultProviderRegistrationAndCategories(t *testing.T) {
 	tests := []struct {
 		input string
@@ -48,8 +68,11 @@ func TestAdultProviderDramaIDsAndDetailURLs(t *testing.T) {
 	if !ok || source != sourceMissAV || sourceID != "sone-543" {
 		t.Fatalf("split MISS AV ID = %q/%q/%v", source, sourceID, ok)
 	}
-	if got := adultDetailURL(sourceMissAV, "sone-543"); got != "https://missav.ws/en/sone-543" {
+	if got := adultDetailURL(sourceMissAV, "sone-543"); got != "https://missav.live/cn/sone-543" {
 		t.Fatalf("MISS AV detail URL = %q", got)
+	}
+	if got := adultCategoryURLMust(sourceMissAV, "vr"); got != "https://missav.live/cn/genres/vr" {
+		t.Fatalf("MISS AV genre URL = %q", got)
 	}
 	if got := adultDetailURL(sourceSupJav, "12345"); got != "https://supjav.com/zh/12345.html" {
 		t.Fatalf("SupJav detail URL = %q", got)
@@ -61,14 +84,14 @@ func TestAdultProviderDramaIDsAndDetailURLs(t *testing.T) {
 }
 
 func TestAdultCardParsingAndLazyCoverFallback(t *testing.T) {
-	missav := "<div class=\"thumbnail\"><a href=\"/en/sone-543\" title=\"SAMPLE-543\"></a><img data-src=\"/covers/sample.webp\"></div>"
+	missav := "<div class=\"thumbnail group\"><a href=\"/cn/sone-543\"><img data-src=\"/covers/sample.webp\" alt=\"SAMPLE-543\"></a><div class=\"my-2\">SAMPLE-543</div></div>"
 	items := adultParseCards(missav, missAVBaseURL, sourceMissAV)
 	if len(items) != 1 {
 		t.Fatalf("MISS AV cards = %d, want 1", len(items))
 	}
 	if items[0].ID != providerDramaID(sourceMissAV, "sone-543") ||
 		items[0].Title != "SAMPLE-543" ||
-		items[0].Cover != "https://missav.ws/covers/sample.webp" {
+		items[0].Cover != "https://missav.live/covers/sample.webp" {
 		t.Fatalf("unexpected MISS AV card: %#v", items[0])
 	}
 
@@ -81,14 +104,40 @@ func TestAdultCardParsingAndLazyCoverFallback(t *testing.T) {
 		items[0].Cover != "https://supjav.com/images/cover.jpg" {
 		t.Fatalf("unexpected SupJav card: %#v", items[0])
 	}
+
+	// SupJav themes do not always expose the ".post" wrapper or a plain
+	// image src. Discover a card through its detail link, then parse lazy
+	// srcset and CSS background poster candidates.
+	supjavFallback := `<div class="listing-card">
+		<a href="/zh/67890.html"><span>備援海報作品</span></a>
+		<div class="poster">
+			<img src="data:image/gif;base64,R0lGODlhAQABA" data-srcset="/covers/67890-small.jpg 320w, /covers/67890-large.jpg 800w">
+			<div class="fallback" data-background-image="/covers/67890-bg.webp"></div>
+		</div>
+	</div>`
+	items = adultParseCards(supjavFallback, supJavBaseURL, sourceSupJav)
+	if len(items) != 1 {
+		t.Fatalf("SupJav fallback cards = %d, want 1", len(items))
+	}
+	if items[0].ID != providerDramaID(sourceSupJav, "67890") ||
+		items[0].Cover != "https://supjav.com/covers/67890-small.jpg" {
+		t.Fatalf("SupJav lazy srcset poster was not parsed: %#v", items[0])
+	}
+	wantFallback := "https://supjav.com/covers/67890-large.jpg"
+	if len(items[0].CoverCandidates) == 0 || items[0].CoverCandidates[0] != wantFallback {
+		t.Fatalf("SupJav poster candidates = %#v, want %q first fallback", items[0].CoverCandidates, wantFallback)
+	}
+	if got := adultNodeImagesFromHTMLForTest(`<div style="background-image:url('/covers/bg.webp')"></div>`, supJavBaseURL); got != "https://supjav.com/covers/bg.webp" {
+		t.Fatalf("SupJav CSS background poster = %q", got)
+	}
 }
 
 func TestAdultPlaybackURLsResolveRelativeToTheActualPlayerPage(t *testing.T) {
 	got := adultFindM3U8(
 		"<script>var player={source:'/media/master.m3u8?token=abc'};</script>",
-		"https://missav.ws/en/simw-014",
+		"https://missav.live/cn/simw-014",
 	)
-	if got != "https://missav.ws/media/master.m3u8?token=abc" {
+	if got != "https://missav.live/media/master.m3u8?token=abc" {
 		t.Fatalf("relative player URL = %q", got)
 	}
 	if got := adultFindM3U8("<script>source='https://cdn.example/master.m3u8'</script>"); got != "https://cdn.example/master.m3u8" {
