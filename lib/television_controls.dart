@@ -15,6 +15,7 @@ import 'diary_service.dart';
 import 'television_playback_info.dart';
 import 'contained_slider.dart';
 import 'playback_controls_visibility.dart';
+import 'playback_buffering_indicator.dart';
 import 'player_interactions.dart';
 
 class TelevisionControls extends StatefulWidget {
@@ -455,8 +456,10 @@ class TelevisionControlsState extends State<TelevisionControls> {
                   child: const SizedBox.expand(),
                 ),
               ),
-              if (state.buffering && widget.enabled)
-                const Center(child: CircularProgressIndicator()),
+              PlaybackBufferingIndicator(
+                player: widget.player,
+                enabled: widget.enabled,
+              ),
               if (widget.interactions.feedback.isNotEmpty)
                 IgnorePointer(
                   child: Center(
