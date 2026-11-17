@@ -85,7 +85,6 @@ class SourceSite {
     missav,
     supjav,
     SourceSite('heitao', '黑桃', '分類短劇 · 線上搜尋'),
-    SourceSite('cloudfront', '黃果舊版', '舊版 API 片庫'),
   ];
   /// Retired providers remain recognizable for saved library records only.
   /// They are not available for new catalog browsing or source management.
