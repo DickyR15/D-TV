@@ -110,3 +110,18 @@ func TestAdultSupJavRoutesKeepMultipleProviderFallbacks(t *testing.T) {
 		t.Fatalf("native playback choices lost SupJav fallbacks: %#v", choice.media)
 	}
 }
+
+func TestAdultSupJavGatewayHostsAreNotRehostedAsSiteCatalogURLs(t *testing.T) {
+	for _, address := range []string{
+		"https://lk1.supremejav.com/supjav.php?c=abc",
+		"https://lk2.supremejav.com/supjav.php?c=abc",
+		"https://supremejav.com/supjav.php?l=abc",
+	} {
+		if got := providerSourceForURL(address); got != "" {
+			t.Fatalf("gateway URL %q was incorrectly classified as site catalog host %q", address, got)
+		}
+	}
+	if got := providerSourceForURL("https://supjav.com/zh/12345.html"); got != sourceSupJav {
+		t.Fatalf("SupJav site URL = %q, want %q", got, sourceSupJav)
+	}
+}

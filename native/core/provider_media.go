@@ -97,7 +97,7 @@ func providerSourceForURL(raw string) string {
 		host == "missav.live" || host == "www.missav.live" ||
 		host == "missav123.com" || host == "www.missav123.com":
 		return sourceMissAV
-	case host == "supjav.com" || host == "www.supjav.com" || host == "supremejav.com" || host == "www.supremejav.com" || host == "lk1.supremejav.com" || host == "lk2.supremejav.com":
+	case host == "supjav.com" || host == "www.supjav.com":
 		return sourceSupJav
 	default:
 		return ""
