@@ -109,13 +109,18 @@ void main() {
   });
 
   test(
-    'update scope respects compiled sources and keeps other starts after a failure',
+    'update scope excludes retired record-only sources and keeps other starts after a failure',
     () async {
       final store = await create();
       final repository = LibraryFeatureRepository()
         ..startFailures.add('hongguo');
       final updater = LibraryUpdater(repository, store);
       addTearDown(updater.dispose);
+      // Retired CloudFront remains permitted for saved library compatibility,
+      // but it is no longer an available source and must never start updates.
+      expect(SourceSite.isLegacyRecordOnly('cloudfront'), isTrue);
+      expect(SourceSite.isAvailable('cloudfront'), isFalse);
+      expect(store.allowsSource('cloudfront'), isTrue);
       await updater.update(SourceSite.knownValues);
       expect(
         repository.starts,
