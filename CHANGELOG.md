@@ -763,3 +763,11 @@
 - 修復站源管理頁黃果分組內顯示錯誤資訊時頁面構建失敗的問題。
 - 站源全部關閉時，發現頁隱藏切換站源按鈕，排序與篩選、多選下載、搜尋按鈕置灰。
 
+
+### SupJav WebView-only 降級路由（程式已提交，待 CI／實機驗收）
+- 使用者從 SupJav 錯誤入口開啟 D-TV 內建瀏覽器時，啟用 session-level WebView-only 模式。
+- Flutter 在呼叫 Go FFI DuanjuRequest 前攔截 SupJav 的目錄、分類、詳情、海報、播放解析及更新排程；其他片源不受影響，避免已知 403 時持續重試原生請求。
+- 網站的 target blank／使用者觸發的 window.open 導航會在同一個 WebView 控制器中載入，維持站內瀏覽工作階段。
+- 不讀取、不複製、不轉送 WebView Cookie 或 Challenge token 給 Go。這是 WebView-only 降級，不是原生 403 的解除。
+- 新增路由單元測試；尚待最新 CI 與實機驗收。
+
