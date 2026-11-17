@@ -232,29 +232,41 @@ void main() {
     expect(store.sourceEnabled('hongguo'), isTrue);
     expect(store.sourceEnabled('huangdou'), isFalse);
   });
-  test('Huangguo providers remain independent source groups', () {
+  test('active Huangguo providers remain independent source groups', () {
     const sources = [
       SourceSite('huangguo-video', '黃果影片', '影片與劇集'),
       SourceSite('huangguoai', '黃果 AI', 'AI 短劇'),
-      SourceSite('cloudfront', '黃果舊版', '舊版 API 片庫'),
     ];
 
     final groups = SourceGroup.fromSources(sources);
     expect(groups.map((group) => group.id).toList(), [
       'huangguo-video',
       'huangguoai',
-      'cloudfront',
     ]);
     expect(groups.map((group) => group.name).toList(), [
       '黃果影片',
       '黃果 AI',
-      '黃果舊版',
     ]);
     expect(sources.map((source) => source.hasRankings).toList(), [
       false,
       true,
-      false,
     ]);
+  });
+
+  test('retired Huangguo legacy source is hidden but remains recognizable', () {
+    expect(SourceSite.isKnown('cloudfront'), isTrue);
+    expect(SourceSite.isAvailable('cloudfront'), isFalse);
+    expect(SourceSite.isRestricted('cloudfront'), isFalse);
+    expect(SourceSite.isLegacyRecordOnly('cloudfront'), isTrue);
+    expect(SourceSite.byId('cloudfront').name, '黃果舊版');
+    expect(
+      SourceSite.restrictedValues.any((source) => source.id == 'cloudfront'),
+      isFalse,
+    );
+    expect(
+      SourceSite.values.any((source) => source.id == 'cloudfront'),
+      isFalse,
+    );
   });
 
   test('new-user save is rejected without admin password and preserves existing profiles', () async {
