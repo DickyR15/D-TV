@@ -35,6 +35,7 @@ func TestAdultProviderRegistrationAndCategories(t *testing.T) {
 		want  string
 	}{
 		{"missav.ws", sourceMissAV},
+		{"missav.live", sourceMissAV},
 		{"www.missav.ai", sourceMissAV},
 		{"supjav.com", sourceSupJav},
 	}
@@ -144,6 +145,15 @@ func TestAdultPlaybackURLsResolveRelativeToTheActualPlayerPage(t *testing.T) {
 	}
 	if got := adultFindM3U8("<script>source='https://cdn.example/master.m3u8'</script>"); got != "https://cdn.example/master.m3u8" {
 		t.Fatalf("absolute player URL without a page base = %q", got)
+	}
+}
+
+func TestAdultMissAVPrefersCurrentSurritPlaylist(t *testing.T) {
+	body := `<script>const playlist = "https://surrit.com/01234567-89ab-cdef-0123-456789abcdef/playlist.m3u8?token=fixture";</script>`
+	got := adultFindMissAVMedia(body, "https://missav.live/cn/sample-123")
+	want := "https://surrit.com/01234567-89ab-cdef-0123-456789abcdef/playlist.m3u8?token=fixture"
+	if got != want {
+		t.Fatalf("MissAV Surrit media URL = %q, want %q", got, want)
 	}
 }
 
