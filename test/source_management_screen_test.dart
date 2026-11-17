@@ -314,6 +314,7 @@ void main() {
 
     expect(store.advancedSourcesUnlocked, isTrue);
     expect(find.text('進階片源'), findsOneWidget);
+    expect(find.text('黃果舊版'), findsNothing);
     // This test covers the password gate and the first advanced switch.
     // The complete source registry and all source permissions are covered by
     // source_switches_test.dart; do not assert lazy ListView children here.
