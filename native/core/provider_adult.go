@@ -553,27 +553,17 @@ func adultParseCards(body, base, source string) []Drama {
 	return items
 }
 
-func (d *Downloader) fetchAdultCategories(ctx context.Context, source string) ([]nativeCategory, error) {
-	source = canonicalProviderSource(source)
-	if source != sourceMissAV {
-		return adultProviderCategories(source), nil
-	}
-	base := adultProviderBaseURL(source)
-	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
-	body, err := d.fetchProviderText(requestContext, base+"/cn/genres", base+"/")
-	if err != nil {
-		return nil, fmt.Errorf("MissAV 分類讀取失敗：%w", err)
-	}
+func adultParseMissAVCategories(body, base string) []nativeCategory {
 	document, err := htmlnet.Parse(strings.NewReader(body))
 	if err != nil {
-		return nil, errors.New("MissAV 分類頁解析失敗")
+		return nil
 	}
 	categories := make([]nativeCategory, 0, 32)
 	positions := map[string]int{}
 	for _, anchor := range providerHTMLNodes(document, func(node *htmlnet.Node) bool {
 		return node.Type == htmlnet.ElementNode && node.Data == "a"
 	}) {
-		address := adultSafeURL(base, providerHTMLAttr(anchor, "href"), source)
+		address := adultSafeURL(base, providerHTMLAttr(anchor, "href"), sourceMissAV)
 		parsed, parseErr := url.Parse(address)
 		if parseErr != nil || address == "" {
 			continue
@@ -602,6 +592,21 @@ func (d *Downloader) fetchAdultCategories(ctx context.Context, source string) ([
 			break
 		}
 	}
+	return categories
+}
+
+func (d *Downloader) fetchAdultCategories(ctx context.Context, source string) ([]nativeCategory, error) {
+	source = canonicalProviderSource(source)
+	if source != sourceMissAV {
+		return adultProviderCategories(source), nil
+	}
+	base := adultProviderBaseURL(source)
+	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
+	body, err := d.fetchProviderText(requestContext, base+"/cn/genres", base+"/")
+	if err != nil {
+		return nil, fmt.Errorf("MissAV 分類讀取失敗：%w", err)
+	}
+	categories := adultParseMissAVCategories(body, base)
 	if len(categories) == 0 {
 		return nil, errors.New("MissAV 尚未提供可辨識的分類")
 	}
