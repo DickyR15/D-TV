@@ -25,9 +25,7 @@
 - 使用者管理、設定備份與還原
 - 不提供影片下載功能
 
-## 下載正式版
-
-最新正式版為 **D TV 1.0.6（2026-11-16）**，支援 Android／Android TV、Windows x64、macOS 與 iOS。請前往 [D TV 1.0.6 正式版 Releases](https://github.com/DickyR15/D-TV/releases/tag/v1.0.6)，依照裝置下載對應檔案：
+依照裝置下載對應檔案：
 
 - **Android／Android TV**：`DTV-1.0.6-Android.apk`（單一 Universal APK，包含 ARM64、ARMv7 與 x86_64）
 - **Windows x64**：`DTV-1.0.6-Windows-Portable.zip`（解壓縮後執行，無須安裝）
