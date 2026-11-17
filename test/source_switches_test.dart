@@ -269,6 +269,18 @@ void main() {
     );
   });
 
+  test('retired Huangguo source is removed from restored advanced ordering', () async {
+    final storedOrder = [
+      ...SourceSite.restrictedValues.map((site) => site.id),
+      'cloudfront',
+    ];
+    final store = await create({
+      'advancedSourceOrder': jsonEncode(storedOrder),
+    });
+    expect(store.advancedSourceOrder, isNot(contains('cloudfront')));
+    expect(store.advancedSourceOrder.length, SourceSite.restrictedValues.length);
+  });
+
   test('new-user save is rejected without admin password and preserves existing profiles', () async {
     final store = await create();
     final before = store.profiles
