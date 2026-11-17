@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'player_interactions.dart';
 import 'playback_controls_visibility.dart';
+import 'playback_buffering_indicator.dart';
 import 'widgets.dart';
 import 'contained_slider.dart';
 import 'video_enhancement.dart';
@@ -392,10 +393,10 @@ class _PlayerControlsState extends State<PlayerControls> {
                     : null,
               ),
             ),
-            if (state.buffering && widget.enabled)
-              const IgnorePointer(
-                child: Center(child: CircularProgressIndicator()),
-              ),
+            PlaybackBufferingIndicator(
+              player: widget.player,
+              enabled: widget.enabled,
+            ),
             IgnorePointer(
               ignoring: !visible,
               child: ExcludeFocus(
