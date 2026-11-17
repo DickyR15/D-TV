@@ -158,6 +158,16 @@ func TestAdultCardParsingAndLazyCoverFallback(t *testing.T) {
 	}
 }
 
+func TestAdultPackerBase62AlphabetBound(t *testing.T) {
+	if got := adultEncodeBase(61, 62); got != "Z" {
+		t.Fatalf("base-62 digit 61 = %q, want Z", got)
+	}
+	packedWithUnsupportedRadix := "eval(function(p,a,c,k,e,d){return p;}('0',64,1,'x'.split('|'))"
+	if got := adultUnpackPacker(packedWithUnsupportedRadix); got != "" {
+		t.Fatalf("base-64 Packer payload should be rejected, got %q", got)
+	}
+}
+
 func TestAdultPlaybackURLsResolveRelativeToTheActualPlayerPage(t *testing.T) {
 	got := adultFindM3U8(
 		"<script>var player={source:'/media/master.m3u8?token=abc'};</script>",

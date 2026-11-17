@@ -697,7 +697,7 @@ func adultUnpackPacker(script string) string {
 	packed = strings.ReplaceAll(packed, "\\\\", "\\")
 	base, err1 := strconv.Atoi(match[2])
 	count, err2 := strconv.Atoi(match[3])
-	if err1 != nil || err2 != nil || base < 2 || base > 64 || count < 0 || count > 200000 {
+	if err1 != nil || err2 != nil || base < 2 || base > 62 || count < 0 || count > 200000 {
 		return ""
 	}
 	keys := strings.Split(match[4], "|")
