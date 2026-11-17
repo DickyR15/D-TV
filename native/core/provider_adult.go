@@ -28,6 +28,7 @@ var (
 	adultMetaPattern   = regexp.MustCompile("(?is)<meta\\b[^>]*>")
 	adultTagPattern    = regexp.MustCompile("(?is)<[^>]+>")
 	adultM3U8Pattern   = regexp.MustCompile("(?i)https?://[^\"'<>\\s]+\\.m3u8(?:\\?[^\"'<>\\s]*)?")
+	adultMissAVMediaPattern = regexp.MustCompile("(?i)https?://surrit\\.com/[0-9a-f-]{36}/playlist\\.m3u8")
 	adultPackerPattern = regexp.MustCompile("(?s)eval\\(function\\(p,a,c,k,e,d\\)\\{.*?\\}\\('([^']*)',\\s*(\\d+),\\s*(\\d+),\\s*'([^']*)'\\.split\\('\\|'\\)")
 	adultWordPattern   = regexp.MustCompile("\\b([0-9a-zA-Z_]+)\\b")
 	adultCSSImagePattern = regexp.MustCompile("(?i)url\\(([^)]+)\\)")
@@ -720,6 +721,34 @@ func adultResolvePlaybackURL(baseAddress, raw string) string {
 	return resolved.String()
 }
 
+// adultFindMissAVMedia mirrors the upstream MissAV module's media selector:
+// unpack Packer scripts and prefer the site's current Surrit playlist URL.
+// Keep the generic HLS parser as a fallback for older player responses.
+func adultFindMissAVMedia(body, pageURL string) string {
+	body = strings.ReplaceAll(body, "\\/", "/")
+	scriptPattern := regexp.MustCompile("(?is)<script\\b[^>]*>(.*?)</script\\s*>")
+	for _, match := range scriptPattern.FindAllStringSubmatch(body, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		content := match[1]
+		if strings.Contains(content, "eval(function") {
+			content = adultUnpackPacker(content)
+		}
+		if found := adultMissAVMediaPattern.FindString(content); found != "" {
+			if resolved := adultResolvePlaybackURL(pageURL, found); resolved != "" {
+				return resolved
+			}
+		}
+	}
+	if found := adultMissAVMediaPattern.FindString(body); found != "" {
+		if resolved := adultResolvePlaybackURL(pageURL, found); resolved != "" {
+			return resolved
+		}
+	}
+	return adultFindM3U8(body, pageURL)
+}
+
 func adultM3U8FromText(body, pageURL string) string {
 	body = strings.ReplaceAll(body, "\\/", "/")
 	for _, match := range adultM3U8Pattern.FindAllString(body, -1) {
@@ -997,10 +1026,14 @@ func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID stri
 		ChannelName: adultSourceName(source), CategoryName: adultSourceName(source),
 		TotalEpisode: 1, EpisodeCount: 1,
 	}
+	chapterReferer := base + "/"
+	if source == sourceMissAV {
+		chapterReferer = base + "/cn/"
+	}
 	chapter := Chapter{
 		ID: providerChapterID(source, sourceID, pageURL),
 		Source: source, Title: "第1集",
-		PageURL: pageURL, Referer: base + "/",
+		PageURL: pageURL, Referer: chapterReferer,
 		VideoURL: "adult-page://" + pageURL,
 		CurrentEpisode: json.RawMessage("1"),
 	}
@@ -1027,7 +1060,11 @@ func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (provider
 	pageResponses := &playbackResponseURLs{}
 	requestContext := context.WithValue(ctx, playbackResponseURLsKey{}, pageResponses)
 	requestContext = context.WithValue(requestContext, providerTextUserAgentKey{}, adultUserAgent)
-	body, err := d.fetchProviderText(requestContext, pageURL, base+"/")
+	pageReferer := base + "/"
+	if source == sourceMissAV {
+		pageReferer = base + "/cn/"
+	}
+	body, err := d.fetchProviderText(requestContext, pageURL, pageReferer)
 	if err != nil {
 		return providerMedia{}, fmt.Errorf("%s 播放頁讀取失敗：%w", adultSourceName(source), err)
 	}
@@ -1040,7 +1077,7 @@ func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (provider
 	referer := pageURL
 	var serverErrors []string
 	if source == sourceMissAV {
-		mediaURL = adultFindM3U8(body, pageURL)
+		mediaURL = adultFindMissAVMedia(body, pageURL)
 	} else {
 		servers := adultSupJavDataLinks(body)
 		order := []string{"EVS", "FST", "VAS", "LUC", "VOE", "TV", "ST"}
