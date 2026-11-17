@@ -72,7 +72,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final scrollable = tester.state<ScrollableState>(
-      find.byKey(const ValueKey('update-release-notes-scroll')),
+      find.descendant(
+        of: find.byKey(const ValueKey('update-release-notes-scroll')),
+        matching: find.byType(Scrollable),
+      ),
     );
     expect(scrollable.position.maxScrollExtent, 0);
     expect(find.text('目前已是最新版本。'), findsOneWidget);
