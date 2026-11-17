@@ -2,6 +2,7 @@ package core
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -41,5 +42,22 @@ func TestBrowserTransportRoutesProtectedProviders(t *testing.T) {
 				t.Fatalf("matches(%s %s) = %v, want %v", test.method, test.address, got, test.wantSource != "")
 			}
 		})
+	}
+}
+
+func TestBrowserTransportRoutesSupJavVASPostWithoutForwardingInternalMarker(t *testing.T) {
+	transport := &huangguoBrowserTransport{}
+	request, err := http.NewRequest(http.MethodPost, "https://vas.example.test/api/stream", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set(supJavVASRequestHeader, "1")
+	if got := transport.source(request); got != sourceSupJav {
+		t.Fatalf("VAS request source = %q, want %q", got, sourceSupJav)
+	}
+	for key := range huangguoBrowserHeaders(request) {
+		if key == strings.ToLower(supJavVASRequestHeader) {
+			t.Fatal("internal VAS routing marker leaked into upstream headers")
+		}
 	}
 }

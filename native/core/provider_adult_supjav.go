@@ -234,6 +234,7 @@ func (d *Downloader) fetchAdultSupJavVAS(ctx context.Context, embedURL, body str
 	request.Header.Set("Origin", origin)
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set(supJavVASRequestHeader, "1")
 	response, err := d.doCatalogRequestWithTimeout(request, 12*time.Second)
 	if err != nil {
 		return "", err
