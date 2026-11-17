@@ -18,6 +18,7 @@
 - SupJav 採用 D-TV 原生 Go Provider 解析播放來源，保留 TV、FST、EVS、VAS、LUC、VOE、ST 多線路解析與備援切換；解析後交給 D-TV 現有播放器。
 - SupJav 不提供內嵌瀏覽器／WebView 模式，也不會因為原生解析失敗而切換到網站播放器。若站方回傳 HTTP 403 或要求互動式驗證，應顯示清楚錯誤與診斷原因，不能宣稱已繞過限制。
 - 目前 SupJav 多線路解析屬於程式實作；仍需以最新 CI 與即時站點、實際裝置驗收確認哪些來源可正常播放。
+- 啟動更新提示已改為顯示完整 Release Notes，不再截斷 1,500 字；內容視窗依螢幕高度限制並顯示捲軸。Android TV 遙控器可用上下鍵／Page Up／Page Down／Home／End 捲動，手機觸控及桌面滑鼠支援一般捲動；新增長篇內容與遙控器捲動 widget 測試，仍待 CI 驗證。
 - GitHub Actions #1676 使用較早提交 `af8e0abd`，Go 測試因未使用的區域變數失敗；該變數已在後續提交移除。#1676 不是目前最新候選分支內容的驗證結果，後續程式及新增測試仍須以最新提交重新執行 CI。
 - GitHub Actions #1678（提交 `66346ce4`）的 Flutter 完整測試為 460 項通過、1 項失敗；失敗原因是 `LibraryUpdater.update()` 將只供舊收藏／觀看紀錄相容的 `cloudfront` 退役來源也排入目錄更新。已在 `lib/library_updater.dart` 加入 `SourceSite.isAvailable()` 篩選，並在 `test/library_workflow_test.dart` 加入「舊紀錄仍可讀取、但不啟動更新」回歸斷言。此修正尚待新一輪 CI 證實。
 - 以上屬於程式修正與離線測試準備，尚未代表 MissAV／SupJav 在即時站點正常播放，也尚未代表 SupJav 實際海報已於所有裝置顯示。四平台建置及裝置驗收仍未完成。
