@@ -17,9 +17,11 @@
 - 已新增固定 HTML fixture，涵蓋 MissAV 卡片、分類、Surrit URL，以及 SupJav 不含 `.post` 容器時的海報備援解析。
 - SupJav 目錄及作品詳情錯誤入口改為開啟 D-TV 內建站內瀏覽器，使用 `flutter_inappwebview` 原生 WebView；Android／Android TV、iOS、macOS、Windows 共用同一個 Flutter 介面。
 - WebView 啟用 JavaScript、DOM Storage、資料庫、第三方 Cookie 與媒體內嵌播放；不自訂／偽裝 User-Agent、不擷取或轉送 Cookie／Session、不自動點擊或破解驗證。使用者可在目前頁面依網站指示親自完成驗證。
+- 使用者從 SupJav 錯誤入口開啟站內瀏覽器時，啟用 session-level `WebView-only` 路由；Flutter 在呼叫 Go FFI `DuanjuRequest` 前擋下該來源的目錄、分類、詳情、海報、播放解析及更新排程請求，避免原生層重複取得 403。其他片源不受影響；App 重新啟動後可重新嘗試原生模式。
+- 網站的 target blank 或使用者觸發的 window.open 導航會回到同一個 WebView 控制器載入，避免切換成另一份瀏覽器工作階段。
 - Windows 使用獨立且可寫入的 D-TV 應用程式支援資料夾保存 WebView2 使用者資料；若找不到 Microsoft Edge WebView2 Runtime，會顯示明確安裝提示。
 - 依 Cloudflare 文件辨識主頁回應的 `cf-mitigated: challenge`，並將 Cloudflare Challenge 與一般 HTTP 403 分開提示；不將其他網域或子資源錯誤誤判為 SupJav 主頁驗證。
-- **限制：SupJav 403 尚未在實際裝置驗證解除**。WebView 的驗證狀態僅保留在該 WebView；不會注入 D-TV Go HTTP 用戶端，因此原生目錄／詳情／播放器仍可能收到 403。此功能先提供站內瀏覽與網站原生播放備援，並非聲稱原生解析已恢復。
+- **限制：SupJav 原生片源 403 尚未證明已解除**。WebView 的驗證狀態僅保留在該 WebView；不會讀取、複製或注入 D-TV Go HTTP 用戶端。啟用 WebView-only 後，D-TV 原生目錄／詳情／播放器不再送出 SupJav 請求，應改用站內網站目錄、搜尋與網站原生播放器。這是明確的降級路由，不是原生 403 已恢復。
 - GitHub Actions #1676 使用較早提交 `af8e0abd`，Go 測試因未使用的區域變數失敗；該變數已在後續提交移除。#1676 不是目前最新候選分支內容的驗證結果，後續程式及新增測試仍須以最新提交重新執行 CI。
 - GitHub Actions #1678（提交 `66346ce4`）的 Flutter 完整測試為 460 項通過、1 項失敗；失敗原因是 `LibraryUpdater.update()` 將只供舊收藏／觀看紀錄相容的 `cloudfront` 退役來源也排入目錄更新。已在 `lib/library_updater.dart` 加入 `SourceSite.isAvailable()` 篩選，並在 `test/library_workflow_test.dart` 加入「舊紀錄仍可讀取、但不啟動更新」回歸斷言。此修正尚待新一輪 CI 證實。
 - 以上屬於程式修正與離線測試準備，尚未代表 MissAV／SupJav 在即時站點正常播放，也尚未代表 SupJav 實際海報已於所有裝置顯示。四平台建置及裝置驗收仍未完成。
