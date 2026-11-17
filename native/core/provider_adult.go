@@ -29,7 +29,7 @@ var (
 	adultTagPattern    = regexp.MustCompile("(?is)<[^>]+>")
 	adultM3U8Pattern   = regexp.MustCompile("(?i)https?://[^\"'<>\\s]+\\.m3u8(?:\\?[^\"'<>\\s]*)?")
 	adultMissAVMediaPattern = regexp.MustCompile("(?i)https?://surrit\\.com/[0-9a-f-]{36}/playlist\\.m3u8")
-	adultPackerPattern = regexp.MustCompile("(?s)eval\\(function\\(p,a,c,k,e,d\\)\\{.*?\\}\\('([^']*)',\\s*(\\d+),\\s*(\\d+),\\s*'([^']*)'\\.split\\('\\|'\\)")
+	adultPackerPattern = regexp.MustCompile("(?s)eval\\(function\\(p,a,c,k,e,d\\)\\{.*?\\}\\('((?:[^'\\\\]|\\\\.)*)',\\s*(\\d+),\\s*(\\d+),\\s*'((?:[^'\\\\]|\\\\.)*)'\\.split\\('\\|'\\)")
 	adultWordPattern   = regexp.MustCompile("\\b([0-9a-zA-Z_]+)\\b")
 	adultCSSImagePattern = regexp.MustCompile("(?i)url\\(([^)]+)\\)")
 	adultMissAVGenrePath = regexp.MustCompile("(?i)/(?:dm[0-9]+/)?cn/genres/([^/?#]+)/?$")
@@ -341,8 +341,17 @@ func adultHTMLNodeHasImage(node *htmlnet.Node) bool {
 		if found || candidate.Type != htmlnet.ElementNode {
 			return
 		}
-		if candidate.Data == "img" || candidate.Data == "source" ||
-			providerHTMLAttr(candidate, "style") != "" ||
+		if candidate.Data == "img" {
+			found = true
+			return
+		}
+		if candidate.Data == "source" &&
+			(providerHTMLAttr(candidate, "src") != "" || providerHTMLAttr(candidate, "srcset") != "") {
+			found = true
+			return
+		}
+		style := strings.ToLower(providerHTMLAttr(candidate, "style"))
+		if strings.Contains(style, "url(") ||
 			providerHTMLAttr(candidate, "data-background-image") != "" ||
 			providerHTMLAttr(candidate, "data-bg") != "" {
 			found = true
@@ -675,6 +684,7 @@ func adultUnpackPacker(script string) string {
 	}
 	packed := strings.ReplaceAll(match[1], "\\'", "'")
 	packed = strings.ReplaceAll(packed, "\\/", "/")
+	packed = strings.ReplaceAll(packed, "\\\\", "\\")
 	base, err1 := strconv.Atoi(match[2])
 	count, err2 := strconv.Atoi(match[3])
 	if err1 != nil || err2 != nil || base < 2 || base > 64 || count < 0 || count > 200000 {
