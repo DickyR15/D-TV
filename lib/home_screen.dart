@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import 'app_layout.dart';
 import 'app_update_service.dart';
+import 'update_notes_scroll_view.dart';
 import 'app_bottom_navigation.dart';
 import 'core_bridge.dart';
 import 'catalog_filters.dart';
@@ -1511,7 +1512,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         '',
         update.notes.trim().isEmpty
             ? '有新版本可供下載。'
-            : update.notes.trim().characters.take(1500).toString(),
+            : update.notes.trim(),
         '',
         asset == null
             ? '目前尚未找到此平台的安裝檔，將開啟版本頁面供手動下載。'
@@ -1520,13 +1521,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       final action = await showDialog<_UpdatePromptAction>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text('發現 D TV 新版本 ' + update.version),
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: SingleChildScrollView(child: Text(contentText)),
-          ),
-          actions: [
+        builder: (dialogContext) {
+          final screenHeight = MediaQuery.sizeOf(dialogContext).height;
+          final isTelevision = AppLayout.isTelevision(dialogContext);
+          return AlertDialog(
+            title: Text('發現 D TV 新版本 ' + update.version),
+            content: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 520,
+                maxHeight: screenHeight * 0.56,
+              ),
+              child: UpdateNotesScrollView(
+                text: contentText,
+                maxHeight: screenHeight * 0.54,
+                autofocus: isTelevision,
+              ),
+            ),
+            actions: [
             TextButton(
               onPressed: () => Navigator.pop(
                 dialogContext,
@@ -1549,15 +1560,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: const Text('忽略'),
             ),
             FilledButton(
-              autofocus: true,
+              autofocus: !isTelevision,
               onPressed: () => Navigator.pop(
                 dialogContext,
                 _UpdatePromptAction.download,
               ),
               child: const Text('更新'),
             ),
-          ],
-        ),
+            ],
+          );
+        },
       );
 
       if (!mounted) return;
