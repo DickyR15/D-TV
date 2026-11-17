@@ -18,6 +18,7 @@ import 'ui_localization.dart';
 import 'sources_screen.dart';
 import 'episode_browser.dart';
 import 'playback_preloader.dart';
+import 'supjav_browser_action.dart';
 
 
 class DetailScreen extends StatefulWidget {
@@ -82,6 +83,25 @@ class _DetailScreenState extends State<DetailScreen> {
           drama: _activeDrama,
         )
       : null;
+
+  Widget? get _secondaryStatusActions {
+    final diagnostics = _sourceDiagnostics;
+    final showSupJavBrowser = _error != null && _activeDrama.source == 'supjav';
+    final actions = <Widget>[
+      if (showSupJavBrowser) const SupJavBrowserAction(),
+      if (diagnostics != null) diagnostics,
+    ];
+    if (actions.isEmpty) return null;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var index = 0; index < actions.length; index++) ...[
+          if (index > 0) const SizedBox(height: 8),
+          actions[index],
+        ],
+      ],
+    );
+  }
 
   @override
   void initState() {
@@ -802,7 +822,7 @@ class _DetailScreenState extends State<DetailScreen> {
       title: _error != null ? '劇集資訊暫時不可用' : '暫時沒有可播放的集數',
       message: _error == null ? '可以更新劇集資訊後重試。' : uiTraditional(_error!),
       onRetry: _load,
-      secondaryAction: _sourceDiagnostics,
+      secondaryAction: _secondaryStatusActions,
     );
   }
 

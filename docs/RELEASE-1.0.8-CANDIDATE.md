@@ -12,9 +12,11 @@
 ## 目前實作進度（2026-11-17）
 
 - MissAV 已依官方 `guoapp-modules/missav v1.0.1` 對齊 `missav.live`、`/cn/` 詳情及搜尋路徑、動態 `/cn/genres` 分類、`thumbnail group` 列表卡片、`data-src` 海報欄位、詳情 `og:image`／`twitter:image`／影片 `data-poster` 與 Surrit HLS 網址優先解析。
-- 原作者 `Xanerix/guoapp app-v2.0.1-113` 已確認在網路指紋部分有相關修正；D-TV 現有 Chrome TLS 指紋傳輸已辨識 MissAV 與 SupJav 主機，本輪保留既有傳輸架構並調整站源路徑及 Referer。
+- 原作者 `Xanerix/guoapp app-v2.0.1-113` 可作為來源解析參考。D-TV 現有 `network_browser.go` 的 Chrome TLS 指紋傳輸是依黃果影片主機設定，並不是 SupJav 的互動式瀏覽器工作階段，不能視為已能執行 SupJav 的 JavaScript／Cloudflare 驗證。
 - SupJav 已新增不依賴單一 `.post` class 的卡片尋找備援，並解析延遲圖片屬性、`srcset`、`data-background-image`、`data-bg` 與 CSS `background-image`。
 - 已新增固定 HTML fixture，涵蓋 MissAV 卡片、分類、Surrit URL，以及 SupJav 不含 `.post` 容器時的海報備援解析。
+- SupJav 目錄及作品詳情遇到錯誤時，新增「開啟 SupJav 官方網站」外部瀏覽器入口，供使用者自行檢視並手動完成網站要求的驗證；按鈕不會自動解題，也不會擷取或轉送瀏覽器 Cookie／Session。
+- **SupJav 403 仍未解除**：外部瀏覽器的驗證狀態不會同步到 D-TV 的 Go HTTP 用戶端，因此此入口是透明的人工瀏覽備援，不代表原生目錄／詳情／播放請求已恢復。需另以站方允許的存取方式及實際平台驗收確認。
 - GitHub Actions #1676 使用較早提交 `af8e0abd`，Go 測試因未使用的區域變數失敗；該變數已在後續提交移除。#1676 不是目前最新候選分支內容的驗證結果，後續程式及新增測試仍須以最新提交重新執行 CI。
 - 以上屬於程式修正與離線測試準備，尚未代表 MissAV／SupJav 在即時站點正常播放，也尚未代表 SupJav 實際海報已於所有裝置顯示。四平台建置及裝置驗收仍未完成。
 

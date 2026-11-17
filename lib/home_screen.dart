@@ -17,6 +17,7 @@ import 'recommendations_screen.dart';
 import 'rankings_screen.dart';
 import 'playback_launch_screen.dart';
 import 'detail_screen.dart';
+import 'supjav_browser_action.dart';
 import 'local_store.dart';
 import 'lan_screen.dart';
 import 'models.dart';
@@ -3176,7 +3177,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       title: '暫時無法載入',
                       message: uiTraditional(_error!),
                       onRetry: () => _load(force: true),
-                      secondaryAction: null,
+                      secondaryAction: !_allSources && _source.id == 'supjav'
+                          ? const SupJavBrowserAction()
+                          : null,
                       icon: Icons.wifi_off_rounded,
                     )
                   : items.isEmpty
