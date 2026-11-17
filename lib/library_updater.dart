@@ -6,7 +6,6 @@ import 'core_bridge.dart';
 import 'local_store.dart';
 import 'models.dart';
 import 'source_status.dart';
-import 'supjav_access_mode.dart';
 
 class LibraryUpdater extends ChangeNotifier {
   LibraryUpdater(this.repository, this.store, {this.onCatalogChanged})
@@ -108,7 +107,6 @@ class LibraryUpdater extends ChangeNotifier {
         .where(
           (source) =>
               SourceSite.isAvailable(source) &&
-              !(source == 'supjav' && SupJavAccessMode.isWebViewOnly) &&
               store.allowsSource(source) &&
               !busy(source),
         )
