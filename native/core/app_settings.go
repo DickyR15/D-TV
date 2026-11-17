@@ -1,6 +1,9 @@
 package core
 
-import (
+import ( 
+	"context"
+	"fmt"
+	"io"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,6 +15,37 @@ import (
 	"sync"
 	"time"
 )
+
+
+const nativeResourceConnectionTestURL = "https://connectivitycheck.gstatic.com/generate_204"
+
+func nativeTestResourceConnection(ctx context.Context, client *http.Client, target string) (map[string]any, error) {
+	if client == nil {
+		return nil, errors.New("網路用戶端尚未初始化")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, errors.New("無法建立連線測試要求")
+	}
+	started := time.Now()
+	response, err := client.Do(request)
+	elapsed := time.Since(started).Milliseconds()
+	if err != nil {
+		return nil, fmt.Errorf("連線測試失敗：%w", err)
+	}
+	defer response.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1024))
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("連線測試收到 HTTP %d", response.StatusCode)
+	}
+	return map[string]any{"statusCode": response.StatusCode, "elapsedMs": elapsed}, nil
+}
+
+func (engine *nativeEngine) testResourceConnection(ctx context.Context) (map[string]any, error) {
+	testContext, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	return nativeTestResourceConnection(testContext, engine.downloader.client, nativeResourceConnectionTestURL)
+}
 
 type nativeResourceSettings struct {
 	ProxyMode           string `json:"proxyMode"`

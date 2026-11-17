@@ -104,6 +104,8 @@ abstract class AppRepository {
   Future<ResourceSettings> saveResourceSettings(
     ResourceSettings settings,
   ) async => throw AppFailure('目前環境不支援資源設定');
+  Future<Map<String, dynamic>> testResourceConnection() async =>
+      throw AppFailure('目前環境不支援連線測試');
   final catalogUpdates = CatalogUpdates();
   Future<void> cancelPreload() async {}
   Future<PlaybackPlan?> preload(
@@ -315,6 +317,12 @@ class NativeRepository extends AppRepository {
         'settings': settings.toJson(),
       }),
     );
+  }
+
+  @override
+  Future<Map<String, dynamic>> testResourceConnection() async {
+    _adminPermission();
+    return _call({'action': 'testResourceConnection'});
   }
 
   Future<Map<String, dynamic>> _read(

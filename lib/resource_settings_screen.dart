@@ -33,6 +33,9 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   bool _savePending = false;
   Timer? _saveDebounce;
   bool _showProxy = false;
+  bool _testingConnection = false;
+  bool? _connectionTestSucceeded;
+  String? _connectionTestMessage;
   int _interval = 250;
 
   String? _error;
@@ -126,6 +129,45 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
     }
   }
 
+  Future<void> _testConnection() async {
+    if (!_allowed || _busy || _testingConnection || _settings == null) return;
+    _saveDebounce?.cancel();
+    _saveDebounce = null;
+    await _save();
+    if (!mounted || !_allowed) return;
+    if (_error != null) {
+      setState(() {
+        _connectionTestSucceeded = false;
+        _connectionTestMessage = '設定儲存失敗，未執行連線測試。';
+      });
+      return;
+    }
+    setState(() {
+      _testingConnection = true;
+      _connectionTestSucceeded = null;
+      _connectionTestMessage = null;
+    });
+    try {
+      final result = await widget.repository.testResourceConnection();
+      if (!mounted || !_allowed) return;
+      final status = result['statusCode'] ?? result['status'];
+      final elapsed = result['elapsedMs'];
+      setState(() {
+        _connectionTestSucceeded = true;
+        _connectionTestMessage =
+            '連線成功 · HTTP $status · ${elapsed ?? '-'} ms';
+      });
+    } catch (error) {
+      if (!mounted || !_allowed) return;
+      setState(() {
+        _connectionTestSucceeded = false;
+        _connectionTestMessage = '連線失敗：${uiTraditional(error.toString())}';
+      });
+    } finally {
+      if (mounted) setState(() => _testingConnection = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('網路與資源')),
@@ -198,6 +240,36 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                                   : Icons.visibility_outlined,
                             ),
                           ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 18),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('resource-test-connection'),
+                      onPressed: _busy || _testingConnection
+                          ? null
+                          : _testConnection,
+                      icon: _testingConnection
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.network_check_rounded),
+                      label: Text(_testingConnection ? '測試中…' : '測試連線'),
+                    ),
+                  ),
+                  if (_connectionTestMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(
+                        _connectionTestMessage!,
+                        style: TextStyle(
+                          color: _connectionTestSucceeded == true
+                              ? Colors.green
+                              : Theme.of(context).colorScheme.error,
                         ),
                       ),
                     ),

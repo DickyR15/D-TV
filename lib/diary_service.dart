@@ -79,6 +79,52 @@ class DiaryService {
     _nativeText = lines
         .skip(lines.length > 500 ? lines.length - 500 : 0)
         .join('\n');
+    revision.value++;
+  }
+
+  /// Diagnostic filters are independent from personal watch history.
+  static bool matchesFilter(String entry, String filter) {
+    if (filter == 'all') return true;
+    final value = entry.toLowerCase();
+    final isError = RegExp(
+      r'error|fatal|warn|exception|失敗|錯誤|403|404',
+    ).hasMatch(value);
+    if (filter == 'errors') return isError;
+    if (filter == 'network') {
+      return RegExp(
+        r'http|dns|tls|ssl|proxy|connect|timeout|network|cdn|403|404',
+      ).hasMatch(value);
+    }
+    if (filter == 'playback') {
+      return RegExp(
+        r'playback|player|stream|mpv|video|audio|hls|播放',
+      ).hasMatch(value);
+    }
+    return true;
+  }
+
+  static Future<void> _confirmClear(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('清空播放除錯紀錄？'),
+        content: const Text(
+          '只會清除診斷紀錄，不會刪除最近觀看、收藏、播放進度或其他本機資料。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('確認清空'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) clear();
   }
 
   /// 複製全部紀錄到剪貼簿
@@ -190,6 +236,8 @@ class DiaryService {
     if (!context.mounted) return;
     final logFocus = FocusNode(debugLabel: 'playback-debug-log-list');
     final clearFocus = FocusNode(debugLabel: 'playback-log-clear');
+    final refreshFocus = FocusNode(debugLabel: 'playback-log-refresh');
+    final logFilter = ValueNotifier<String>('all');
     final exportFocus = FocusNode(debugLabel: 'playback-log-export');
     final copyFocus = FocusNode(debugLabel: 'playback-log-copy');
     final closeFocus = FocusNode(debugLabel: 'playback-log-close');
@@ -207,7 +255,9 @@ class DiaryService {
           identical(current, target) || target.hasPrimaryFocus;
 
       if (key == LogicalKeyboardKey.arrowLeft) {
-        if (isCurrent(clearFocus)) {
+        if (isCurrent(refreshFocus)) {
+          clearFocus.requestFocus();
+        } else if (isCurrent(clearFocus)) {
           logFocus.requestFocus();
         } else if (isCurrent(exportFocus)) {
           closeFocus.requestFocus();
@@ -222,6 +272,8 @@ class DiaryService {
       }
       if (key == LogicalKeyboardKey.arrowRight) {
         if (isCurrent(clearFocus)) {
+          refreshFocus.requestFocus();
+        } else if (isCurrent(refreshFocus)) {
           logFocus.requestFocus();
         } else if (isCurrent(exportFocus)) {
           copyFocus.requestFocus();
@@ -233,7 +285,9 @@ class DiaryService {
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowUp) {
-        if (isCurrent(exportFocus) ||
+        if (isCurrent(refreshFocus)) {
+          clearFocus.requestFocus();
+        } else if (isCurrent(exportFocus) ||
             isCurrent(copyFocus) ||
             isCurrent(closeFocus)) {
           logFocus.requestFocus();
@@ -245,7 +299,7 @@ class DiaryService {
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowDown) {
-        if (isCurrent(clearFocus)) {
+        if (isCurrent(clearFocus) || isCurrent(refreshFocus)) {
           logFocus.requestFocus();
         } else if (isCurrent(logFocus)) {
           exportFocus.requestFocus();
@@ -295,13 +349,19 @@ class DiaryService {
                 ),
               ),
               IconButton(
+                focusNode: refreshFocus,
+                tooltip: '重新整理紀錄',
+                onPressed: refreshNativeLogs,
+                icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+              ),
+              IconButton(
                 focusNode: clearFocus,
                 icon: const Icon(
                   Icons.delete_outline_rounded,
                   color: Colors.white70,
                 ),
                 tooltip: '清空紀錄',
-                onPressed: () => clear(),
+                onPressed: () => _confirmClear(dialogContext),
               ),
             ],
           ),
@@ -309,36 +369,66 @@ class DiaryService {
             width: double.maxFinite,
             height: MediaQuery.of(dialogContext).size.height * 0.65,
             child: AnimatedBuilder(
-              animation: revision,
+              animation: Listenable.merge([revision, logFilter]),
               builder: (context, _) {
-                final list = entries;
-                if (list.isEmpty) {
-                  return Focus(
-                    focusNode: logFocus,
-                    onKeyEvent: (node, event) => routeDialogRemote(node, event),
-                    child: const Center(
-                      child: Text(
-                        '暫無紀錄',
-                        style: TextStyle(color: Colors.white38),
+                final list = entries
+                    .where((entry) => matchesFilter(entry, logFilter.value))
+                    .toList();
+                return Column(
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final option in const [
+                            (id: 'all', label: '全部'),
+                            (id: 'playback', label: '播放'),
+                            (id: 'network', label: '網路'),
+                            (id: 'errors', label: '錯誤'),
+                          ])
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: ChoiceChip(
+                                label: Text(option.label),
+                                selected: logFilter.value == option.id,
+                                onSelected: (_) => logFilter.value = option.id,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                  );
-                }
-                return Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: list.isEmpty
+                          ? Focus(
+                              focusNode: logFocus,
+                              onKeyEvent: (node, event) =>
+                                  routeDialogRemote(node, event),
+                              child: Center(
+                                child: Text(
+                                  entries.isEmpty ? '暫無紀錄' : '此分類目前沒有紀錄',
+                                  style: const TextStyle(color: Colors.white38),
+                                ),
+                              ),
+                            )
+                          : Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                ),
+                              ),
+                              child: _PlaybackLogList(
+                                entries: list,
+                                focusNode: logFocus,
+                                clearFocus: clearFocus,
+                                exportFocus: exportFocus,
+                              ),
+                            ),
                     ),
-                  ),
-                  child: _PlaybackLogList(
-                    entries: list,
-                    focusNode: logFocus,
-                    clearFocus: clearFocus,
-                    exportFocus: exportFocus,
-                  ),
+                  ],
                 );
               },
             ),
@@ -369,9 +459,11 @@ class DiaryService {
       },
       );
     } finally {
+      logFilter.dispose();
       for (final node in [
         logFocus,
         clearFocus,
+        refreshFocus,
         exportFocus,
         copyFocus,
         closeFocus,

@@ -551,6 +551,8 @@ func nativeDispatch(input nativeInput) (any, error) {
 		return engine.resourceSettings(), nil
 	case "saveResourceSettings":
 		return engine.saveResourceSettings(input.Settings)
+	case "testResourceConnection":
+		return engine.testResourceConnection(ctx)
 	case "controlDownloadBatch":
 		return engine.downloads.controlBatchExpected(ctx, input.JobIDs, input.Command, input.ExpectedVersions)
 	case "preload":
