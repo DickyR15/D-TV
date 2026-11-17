@@ -215,3 +215,71 @@ void main() {
     });
   });
 }
+
+
+  group('playback buffering indicator policy', () {
+    final start = DateTime(2026, 11, 17, 10);
+
+    test('does not show while position keeps advancing despite buffering flag', () {
+      final policy = PlaybackBufferingIndicatorPolicy();
+      policy.update(
+        buffering: true,
+        playing: true,
+        position: Duration.zero,
+        now: start,
+      );
+      expect(policy.visibleAt(start.add(const Duration(seconds: 2))), isTrue);
+
+      policy.update(
+        buffering: true,
+        playing: true,
+        position: const Duration(seconds: 1),
+        now: start.add(const Duration(seconds: 2)),
+      );
+      expect(policy.visibleAt(start.add(const Duration(seconds: 2))), isFalse);
+      expect(policy.visibleAt(start.add(const Duration(seconds: 2, milliseconds: 500))), isFalse);
+    });
+
+    test('shows only after buffering playback position stalls', () {
+      final policy = PlaybackBufferingIndicatorPolicy();
+      policy.update(
+        buffering: true,
+        playing: true,
+        position: const Duration(seconds: 5),
+        now: start,
+      );
+      expect(policy.visibleAt(start.add(const Duration(milliseconds: 899))), isFalse);
+      expect(policy.visibleAt(start.add(const Duration(milliseconds: 900))), isTrue);
+    });
+
+    test('clears the indicator when buffering stops or playback is paused', () {
+      final policy = PlaybackBufferingIndicatorPolicy();
+      policy.update(
+        buffering: true,
+        playing: true,
+        position: const Duration(seconds: 5),
+        now: start,
+      );
+      policy.update(
+        buffering: false,
+        playing: true,
+        position: const Duration(seconds: 5),
+        now: start.add(const Duration(seconds: 2)),
+      );
+      expect(policy.visibleAt(start.add(const Duration(seconds: 2))), isFalse);
+
+      policy.update(
+        buffering: true,
+        playing: true,
+        position: const Duration(seconds: 5),
+        now: start.add(const Duration(seconds: 3)),
+      );
+      policy.update(
+        buffering: true,
+        playing: false,
+        position: const Duration(seconds: 5),
+        now: start.add(const Duration(seconds: 4)),
+      );
+      expect(policy.visibleAt(start.add(const Duration(seconds: 6))), isFalse);
+    });
+  });
