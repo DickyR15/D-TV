@@ -35,11 +35,31 @@ def main():
     )
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--delay", type=int, default=8)
+    parser.add_argument(
+        "--resolve-flutter",
+        action="store_true",
+        help="Resolve Flutter from FLUTTER_ROOT explicitly (including flutter.bat on Windows).",
+    )
     parser.add_argument("command", nargs=argparse.REMAINDER)
     options = parser.parse_args()
     command = options.command[1:] if options.command[:1] == ["--"] else options.command
     if not command:
         parser.error("請在 -- 後指定要執行的命令。")
+    if options.resolve_flutter:
+        import os
+
+        flutter_root = os.environ.get("FLUTTER_ROOT", "")
+        if not flutter_root:
+            parser.error("--resolve-flutter 需要 FLUTTER_ROOT 環境變數。")
+        flutter_executable = os.path.join(
+            flutter_root,
+            "bin",
+            "flutter.bat" if os.name == "nt" else "flutter",
+        )
+        if not os.path.isfile(flutter_executable):
+            parser.error(f"找不到 Flutter 執行檔：{flutter_executable}")
+        if command[0] in {"flutter", "flutter.bat"}:
+            command[0] = flutter_executable
     if options.attempts < 1 or options.delay < 0:
         parser.error("--attempts 必須大於 0，--delay 不可小於 0。")
 
