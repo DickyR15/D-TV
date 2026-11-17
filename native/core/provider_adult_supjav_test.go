@@ -125,3 +125,36 @@ func TestAdultSupJavGatewayHostsAreNotRehostedAsSiteCatalogURLs(t *testing.T) {
 		t.Fatalf("SupJav site URL = %q, want %q", got, sourceSupJav)
 	}
 }
+
+func TestAdultSupJavFSTFallsBackToDirectPackedM3U8Extraction(t *testing.T) {
+	body := `<script>var playerConfig = {source: "https://cdn.example.test/fst/master.m3u8?token=abc"};</script>`
+	got := adultSupJavFSTHLS(body, "https://lk1.supremejav.com/embed/1")
+	want := "https://cdn.example.test/fst/master.m3u8?token=abc"
+	if got != want {
+		t.Fatalf("FST fallback URL = %q, want %q", got, want)
+	}
+}
+
+func TestAdultSupJavDetectsCloudflareChallengeWithoutTryingToSolveIt(t *testing.T) {
+	for _, body := range []string{
+		`<title>Just a moment...</title><div id="challenge-platform"></div>`,
+		`<html><body>cf-mitigated: challenge</body></html>`,
+		`<div class="cf-turnstile"></div>`,
+		`Checking your browser before accessing supjav.com`,
+		`Attention Required! | Cloudflare`,
+	} {
+		if !adultSupJavIsCloudflareChallenge(body) {
+			t.Fatalf("challenge page was not detected: %q", body)
+		}
+	}
+	for _, body := range []string{
+		`<title>SupJav - Video</title><h1>Example</h1>`,
+		`<script>var title = "Just a movie";</script>`,
+		`#EXTM3U\n#EXTINF:6.0,\nsegment.ts`,
+	} {
+		if adultSupJavIsCloudflareChallenge(body) {
+			t.Fatalf("normal content was incorrectly classified as a challenge: %q", body)
+		}
+	}
+}
+
