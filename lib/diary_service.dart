@@ -37,9 +37,23 @@ class DiaryService {
   ]);
 
   /// 清空紀錄
-  static void clear() {
+  static Future<void> clear() async {
     _entries.clear();
     _nativeText = '';
+    final path = nativeLogPath;
+    if (path != null) {
+      for (final name in ['$path.1', path]) {
+        try {
+          final file = File(name);
+          if (await file.exists()) {
+            await file.writeAsString('', encoding: utf8, flush: true);
+          }
+        } on FileSystemException {
+          // Keep the in-memory view cleared even if the platform has already
+          // rotated or locked a diagnostic file.
+        }
+      }
+    }
     revision.value++;
   }
 
@@ -124,7 +138,7 @@ class DiaryService {
         ],
       ),
     );
-    if (confirmed == true) clear();
+    if (confirmed == true) await clear();
   }
 
   /// 複製全部紀錄到剪貼簿
@@ -272,9 +286,9 @@ class DiaryService {
       }
       if (key == LogicalKeyboardKey.arrowRight) {
         if (isCurrent(clearFocus)) {
-          refreshFocus.requestFocus();
-        } else if (isCurrent(refreshFocus)) {
           logFocus.requestFocus();
+        } else if (isCurrent(refreshFocus)) {
+          clearFocus.requestFocus();
         } else if (isCurrent(exportFocus)) {
           copyFocus.requestFocus();
         } else if (isCurrent(copyFocus)) {
@@ -285,8 +299,10 @@ class DiaryService {
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowUp) {
-        if (isCurrent(refreshFocus)) {
-          clearFocus.requestFocus();
+        if (isCurrent(clearFocus)) {
+          refreshFocus.requestFocus();
+        } else if (isCurrent(refreshFocus)) {
+          logFocus.requestFocus();
         } else if (isCurrent(exportFocus) ||
             isCurrent(copyFocus) ||
             isCurrent(closeFocus)) {
@@ -299,7 +315,9 @@ class DiaryService {
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowDown) {
-        if (isCurrent(clearFocus) || isCurrent(refreshFocus)) {
+        if (isCurrent(refreshFocus)) {
+          clearFocus.requestFocus();
+        } else if (isCurrent(clearFocus)) {
           logFocus.requestFocus();
         } else if (isCurrent(logFocus)) {
           exportFocus.requestFocus();

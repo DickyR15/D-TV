@@ -70,7 +70,7 @@ void main() {
   testWidgets(
     'playback log D-pad reaches export, copy, close and the clear action',
     (tester) async {
-      DiaryService.clear();
+      await DiaryService.clear();
       DiaryService.add('remote focus test row');
       await tester.pumpWidget(
         MaterialApp(
@@ -116,6 +116,16 @@ void main() {
         'playback-debug-log-list',
       );
       await press(LogicalKeyboardKey.arrowLeft);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-log-clear',
+      );
+      await press(LogicalKeyboardKey.arrowUp);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        'playback-log-refresh',
+      );
+      await press(LogicalKeyboardKey.arrowDown);
       expect(
         FocusManager.instance.primaryFocus?.debugLabel,
         'playback-log-clear',
