@@ -183,6 +183,12 @@ func nativeCoverRefererForDrama(downloader *Downloader, drama nativeDrama, addre
 	if source == "" {
 		source = sourceFromDramaID(drama.ID)
 	}
+	if source == sourceMissAV {
+		return strings.TrimRight(downloader.providerBaseURL(source), "/") + "/cn/"
+	}
+	if source == sourceSupJav {
+		return strings.TrimRight(downloader.providerBaseURL(source), "/") + "/zh/"
+	}
 	if source == sourceDuoduo {
 		// Bilibili's CDN requires its own site Referer to avoid returning its
 		// "image hotlink disabled" placeholder. Other original catalogue
