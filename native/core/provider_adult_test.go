@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	htmlnet "golang.org/x/net/html"
 )
 
 func adultNodeImagesFromHTMLForTest(body, base string) string {
