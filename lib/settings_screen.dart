@@ -20,6 +20,7 @@ import 'resource_settings_screen.dart';
 import 'lan_screen.dart';
 import 'diary_service.dart';
 import 'playback_settings_screen.dart';
+import 'sources_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -478,6 +479,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   context,
                   MaterialPageRoute<void>(
                     builder: (_) => PlaybackSettingsScreen(store: widget.store),
+                  ),
+                ),
+              ),
+              ListTile(
+                key: const ValueKey('source-diagnostics-setting'),
+                leading: const Icon(Icons.network_check_rounded),
+                title: const Text('片源診斷'),
+                subtitle: const Text('查看片源目錄狀態、自動檢查紀錄與連線診斷'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => SourcesScreen(
+                      repository: widget.repository,
+                      store: widget.store,
+                    ),
                   ),
                 ),
               ),
