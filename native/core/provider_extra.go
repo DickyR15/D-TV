@@ -31,7 +31,7 @@ const (
 var extraAdultCategories = map[string][]nativeCategory{
 	sourceSupJav: {{ID:"0",Name:"最新"},{ID:"uncensored",Name:"無碼"},{ID:"uncensored-leaked",Name:"無碼破解"},{ID:"censored",Name:"有碼"},{ID:"chinese",Name:"中文字幕"},{ID:"amateur",Name:"素人"}},
 	sourcePPP: {{ID:"new",Name:"最新上架"},{ID:"c-china",Name:"中國"},{ID:"c-japan",Name:"日本"},{ID:"c-taiwan",Name:"台灣"},{ID:"c-korea",Name:"韓國"},{ID:"c-hongkong",Name:"香港"},{ID:"c-se-asia",Name:"東南亞"},{ID:"c-amateur",Name:"素人自拍"},{ID:"c-cosplay",Name:"角色扮演"},{ID:"c-streamer",Name:"直播主"},{ID:"c-first-person-pov",Name:"第一人稱"},{ID:"c-china-av",Name:"中國成人影片"},{ID:"c-japan-producer",Name:"日本片商"}},
-	sourceMadou: {{ID:"0",Name:"全部"},{ID:"麻豆传媒",Name:"麻豆社"},{ID:"麻豆番外篇",Name:"麻豆番外篇"},{ID:"麻豆花絮",Name:"麻豆花絮"},{ID:"hongkongdoll",Name:"HongKongDoll"},{ID:"psychoporntw",Name:"PsychopornTW"},{ID:"91制片厂",Name:"91製片廠"},{ID:"果冻传媒",Name:"果凍傳媒"},{ID:"蜜桃影像",Name:"蜜桃影像"},{ID:"天美传媒",Name:"天美傳媒"},{ID:"皇家华人",Name:"皇家華人"},{ID:"兔子先生",Name:"兔子先生"},{ID:"星空无限传媒",Name:"星空無限傳媒"},{ID:"爱豆",Name:"愛豆"},{ID:"麻豆导演系列",Name:"麻豆導演系列"},{ID:"大象传媒",Name:"大象傳媒"},{ID:"猫爪影像",Name:"貓爪影像"},{ID:"精东影业",Name:"精東影業"},{ID:"杏吧",Name:"杏吧"},{ID:"乐播传媒",Name:"樂播傳媒"},{ID:"草莓",Name:"草莓"},{ID:"抖阴",Name:"抖陰"},{ID:"sa国际传媒",Name:"SA國際傳媒"},{ID:"起点传媒-性视界传媒",Name:"起點傳媒／性視界傳媒"},{ID:"大鸟十八",Name:"大鳥十八"},{ID:"小鹏奇啪行",Name:"小鵬奇啪行"},{ID:"女优淫娃培训营",Name:"女優培訓營"},{ID:"淫欲游戏王",Name:"淫慾遊戲王"},{ID:"女神羞羞研究所",Name:"女神羞羞研究所"},{ID:"突袭女优家",Name:"突襲女優家"},{ID:"情趣K歌房",Name:"情趣 K 歌房"},{ID:"kiss糖果屋",Name:"KISS 糖果屋"}},
+	sourceMadou: {{ID:"0",Name:"全部"},{ID:"麻豆传媒",Name:"madou"},{ID:"麻豆番外篇",Name:"麻豆番外篇"},{ID:"麻豆花絮",Name:"麻豆花絮"},{ID:"hongkongdoll",Name:"HongKongDoll"},{ID:"psychoporntw",Name:"PsychopornTW"},{ID:"91制片厂",Name:"91製片廠"},{ID:"果冻传媒",Name:"果凍傳媒"},{ID:"蜜桃影像",Name:"蜜桃影像"},{ID:"天美传媒",Name:"天美傳媒"},{ID:"皇家华人",Name:"皇家華人"},{ID:"兔子先生",Name:"兔子先生"},{ID:"星空无限传媒",Name:"星空無限傳媒"},{ID:"爱豆",Name:"愛豆"},{ID:"麻豆导演系列",Name:"麻豆導演系列"},{ID:"大象传媒",Name:"大象傳媒"},{ID:"猫爪影像",Name:"貓爪影像"},{ID:"精东影业",Name:"精東影業"},{ID:"杏吧",Name:"杏吧"},{ID:"乐播传媒",Name:"樂播傳媒"},{ID:"草莓",Name:"草莓"},{ID:"抖阴",Name:"抖陰"},{ID:"sa国际传媒",Name:"SA國際傳媒"},{ID:"起点传媒-性视界传媒",Name:"起點傳媒／性視界傳媒"},{ID:"大鸟十八",Name:"大鳥十八"},{ID:"小鹏奇啪行",Name:"小鵬奇啪行"},{ID:"女优淫娃培训营",Name:"女優培訓營"},{ID:"淫欲游戏王",Name:"淫慾遊戲王"},{ID:"女神羞羞研究所",Name:"女神羞羞研究所"},{ID:"突袭女优家",Name:"突襲女優家"},{ID:"情趣K歌房",Name:"情趣 K 歌房"},{ID:"kiss糖果屋",Name:"KISS 糖果屋"}},
 	source91Porna: {{ID:"play",Name:"正在播放"},{ID:"now_hot",Name:"目前最熱門"},{ID:"new_update",Name:"最近更新"},{ID:"original",Name:"91 原創"},{ID:"now_month_hot",Name:"本月最熱門"},{ID:"ten_minutes",Name:"10 分鐘以上"},{ID:"twenty_minutes",Name:"20 分鐘以上"},{ID:"now_month_collect",Name:"本月收藏"},{ID:"hd",Name:"高畫質"},{ID:"month_hot",Name:"上月最熱門"},{ID:"now_month_comment",Name:"本月討論"},{ID:"max_collect",Name:"收藏最多"}},
 }
 
@@ -48,7 +48,7 @@ func extraAdultSourceName(source string) string {
 	switch canonicalProviderSource(source) {
 	case sourceSupJav: return "SupJav"
 	case sourcePPP: return "ppp"
-	case sourceMadou: return "麻豆社"
+	case sourceMadou: return "madou"
 	case source91Porna: return "91porna"
 	default: return "進階片源"
 	}
