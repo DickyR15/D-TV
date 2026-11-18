@@ -96,7 +96,47 @@ Future<Map<String, dynamic>?> googleCastPayloadFromNsdService(
   }
 
   if (address == null && service.host != null) {
-    final host = service.host!.trim().replaceFirst(RegExp(r'\\.
+    var host = service.host!.trim();
+    if (host.endsWith('.')) host = host.substring(0, host.length - 1);
+    address = InternetAddress.tryParse(host);
+    if (address == null && host.isNotEmpty) {
+      try {
+        final resolved = await InternetAddress.lookup(
+          host,
+          type: InternetAddressType.IPv4,
+        ).timeout(const Duration(seconds: 2));
+        for (final candidate in resolved) {
+          if (candidate.type == InternetAddressType.IPv4 &&
+              !candidate.isLoopback &&
+              !candidate.isMulticast) {
+            address = candidate;
+            break;
+          }
+        }
+      } catch (error) {
+        debugPrint('[GoogleCast] host resolve failed host=$host error=$error');
+      }
+    }
+  }
+  if (address == null) return null;
+
+  final metadata = <String, String>{};
+  for (final entry in service.txt?.entries ?? const []) {
+    final bytes = entry.value;
+    if (bytes == null) continue;
+    final value = utf8.decode(bytes, allowMalformed: true).trim();
+    if (value.isNotEmpty) metadata[entry.key] = value;
+  }
+
+  return googleCastPayloadFromAddress(
+    address: address,
+    port: port,
+    advertisedName: metadata['fn'],
+    serviceName: service.name,
+    advertisedId: metadata['id'],
+    metadata: metadata,
+  );
+}
 /// Chromecast V2 sender. Only Google Cast is registered here; AirPlay is
 /// deliberately excluded because iOS projection was removed from D-TV.
 class GoogleCastController {
