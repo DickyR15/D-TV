@@ -435,7 +435,7 @@ func TestMadouHealthCheckWarnsOnCatalog404ButVerifiesPlaybackFromCachedDrama(t *
 	const detailPath = "/sample-123.html"
 	const sharePath = "/share/fixture"
 	const mediaPath = "/videos/fixture.m3u8"
-	d := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
+	engine := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
 		switch {
 		case request.URL.Host == "madou.club" && request.URL.Path == "/":
 			return sourceFixtureResponse(request, http.StatusNotFound, "not found"), nil
