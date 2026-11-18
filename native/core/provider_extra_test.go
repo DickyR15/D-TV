@@ -61,3 +61,25 @@ func TestExtraAdultCategoryAndSearchPaths(t *testing.T) {
 	got, paged, err := extraAdultSearchPath(sourcePPP, 2, "taiwan")
 	if err != nil || !paged || got != "/search/?q=taiwan&page=2" { t.Fatalf("PPP search path = %q, paged=%v, err=%v", got, paged, err) }
 }
+
+func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
+	if !extraAdultValidCategory(source91Porna, "play") {
+		t.Fatal("91Porn current playing category is not registered")
+	}
+	got, err := extraAdultCategoryPath(source91Porna, 1, "")
+	if err != nil || got != "/comic/index/video?category=play&page=1" {
+		t.Fatalf("91Porn default category path = %q, err=%v", got, err)
+	}
+	if got := extraAdultDetailURL(source91Porna, "key_123"); got != "https://91porna.com/comic/index/detail?video_key=key_123" {
+		t.Fatalf("91Porn detail URL = %q", got)
+	}
+	html := `<div class="video-item"><a href="/comic/index/detail?video_key=key_123"><img data-src="/poster.jpg" alt="91 current detail route"></a><span>12:34</span></div>`
+	segments := extraAdultSegments(html, source91Porna)
+	if len(segments) != 1 {
+		t.Fatalf("91Porn current card segments = %d, want 1", len(segments))
+	}
+	item, ok := extraAdultParseCard(source91Porna, segments[0], ninetyOneBaseURL)
+	if !ok || item.SourceID != "key_123" || item.Cover != "https://91porna.com/poster.jpg" {
+		t.Fatalf("91Porn current card parse = %#v, ok=%v", item, ok)
+	}
+}
