@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	ikanbotBaseURL = "https://v.ikanbot.com"
+	ikanbotBaseURL = "https://admin-api.aikanbot.com"
 	ikanbotUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 	ikanbotPageSize = 36
 	ikanbotMaxLines = 40
@@ -98,7 +98,7 @@ func ikanbotCardIDFromHref(raw string)string{
 	if err!=nil{return ""}
 	if u.IsAbs(){
 		host:=strings.ToLower(u.Hostname())
-		if host!="ikanbot.com"&&host!="www.ikanbot.com"&&host!="v.ikanbot.com"&&host!="v.aikanbot.com"{return ""}
+		if host!="ikanbot.com"&&host!="www.ikanbot.com"&&host!="v.ikanbot.com"&&host!="v.aikanbot.com"&&host!="admin-api.aikanbot.com"{return ""}
 	}
 	m:=regexp.MustCompile("^/play/([0-9]{1,12})(?:/|$)").FindStringSubmatch(u.Path)
 	if len(m)<2||!ikanbotNumericID(m[1]){return ""}
@@ -347,7 +347,7 @@ func ikanbotPlaybackAPIURL(pageURL, videoID, mtype, signedToken string) (string,
 	}
 	host := strings.ToLower(page.Hostname())
 	switch host {
-	case "ikanbot.com", "www.ikanbot.com", "v.ikanbot.com", "v.aikanbot.com":
+	case "ikanbot.com", "www.ikanbot.com", "v.ikanbot.com", "v.aikanbot.com", "admin-api.aikanbot.com":
 	default:
 		return "", errors.New("愛看機器人播放頁網域不受信任")
 	}
