@@ -75,11 +75,19 @@ class CatalogBrowser {
 
   Future<CatalogPage> cached(String source, {String category = ''}) {
     final key = '$source|$category';
-    return _cachedReads[key] ??= repository
-        .cached(source, category: category)
-        .whenComplete(() {
-          _cachedReads.remove(key);
-        });
+    final existing = _cachedReads[key];
+    if (existing != null) return existing;
+
+    late final Future<CatalogPage> request;
+    request = repository.cached(source, category: category).whenComplete(() {
+      // A cache clear may remove this entry and a fresh read may reuse the same
+      // key before this older request completes. Only retire our own Future.
+      if (identical(_cachedReads[key], request)) {
+        _cachedReads.remove(key);
+      }
+    });
+    _cachedReads[key] = request;
+    return request;
   }
 
   Future<void> cancel() {

@@ -811,7 +811,7 @@ class NativeRepository extends AppRepository {
   @override
   Future<CatalogPage> cached(String source, {String category = ''}) async =>
       CatalogPage.fromJson(
-        await _call({
+        await _read('cached-$source-$category', {
           'action': 'cached',
           'source': source,
           'category': category,
@@ -823,7 +823,7 @@ class NativeRepository extends AppRepository {
     String source, {
     String category = '',
   }) async => CatalogPage.fromJson(
-    await _call({
+    await _read('cachedPreview-$source-$category', {
       'action': 'cachedPreview',
       'source': source,
       'category': category,
