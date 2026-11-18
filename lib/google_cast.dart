@@ -36,6 +36,7 @@ Map<String, dynamic>? googleCastPayloadFromAddress({
   required InternetAddress address,
   required int port,
   String? advertisedName,
+  String? modelName,
   String? serviceName,
   String? advertisedId,
   Map<String, String> metadata = const {},
@@ -50,6 +51,8 @@ Map<String, dynamic>? googleCastPayloadFromAddress({
 
   final name = advertisedName?.trim().isNotEmpty == true
       ? advertisedName!.trim()
+      : modelName?.trim().isNotEmpty == true
+      ? modelName!.trim()
       : serviceName?.trim().isNotEmpty == true
       ? serviceName!.trim()
       : address.address;
@@ -154,6 +157,7 @@ Future<Map<String, dynamic>?> googleCastPayloadFromNsdService(
     address: address,
     port: port,
     advertisedName: metadata['fn'],
+    modelName: metadata['md'],
     serviceName: service.name,
     advertisedId: metadata['id'],
     metadata: metadata,
