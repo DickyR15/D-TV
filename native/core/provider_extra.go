@@ -45,7 +45,7 @@ func extraAdultBaseURL(source string) string {
 func extraAdultSourceName(source string) string {
 	switch canonicalProviderSource(source) {
 	case sourceSupJav: return "SupJav"
-	case sourcePPP: return "PPP"
+	case sourcePPP: return "ppp"
 	case sourceMadou: return "麻豆傳媒"
 	case source91Porna: return "91porna"
 	default: return "進階片源"
