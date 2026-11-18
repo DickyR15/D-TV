@@ -3718,54 +3718,136 @@ class _PlayerScreenState extends State<PlayerScreen>
     child: child,
   );
 
+  Widget _buildPlayerMenu(
+    BuildContext menuContext,
+    PlayerMenuSection section, {
+    bool compactPopover = false,
+  }) {
+    final menuTheme = _showFullscreen ? AppTheme.dark : Theme.of(context);
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _menuRevision,
+        widget.store,
+        _preloader,
+      ]),
+      builder: (_, _) => Theme(
+        data: menuTheme,
+        child: PlayerMenu(
+          section: section,
+          compactPopover: compactPopover,
+          episodes: widget.detail.episodes,
+          currentIndex: _index,
+          preferences: _preferences,
+          qualities: _plan?.qualities ?? [],
+          actualQuality: _actualVideoQuality > 0
+              ? _actualVideoQuality
+              : (_plan?.quality ?? 0),
+          local: _plan?.local == true,
+          favorite: widget.store.isFavorite(widget.detail.drama.id),
+          mobile: _mobile,
+          onEpisode: (index) => Navigator.pop(menuContext, index),
+          onPreferences: (preferences) async {
+            await _setPreferences(preferences);
+            if (compactPopover && menuContext.mounted) {
+              Navigator.pop(menuContext);
+            }
+          },
+          sleepMinutes: _sleepMinutes,
+          sleepAtEpisodeEnd: _sleepAtEpisodeEnd,
+          onSleepTimer: (minutes, episodeEnd) async {
+            await _setSleepTimer(minutes, episodeEnd);
+            if (compactPopover && menuContext.mounted) {
+              Navigator.pop(menuContext);
+            }
+          },
+          preloadStatus: _preloader.status,
+          enhancement: _enhancementForUi,
+          onCompareEnhancement: () {
+            unawaited(_enhancement.toggleCompare());
+            Navigator.pop(menuContext);
+          },
+          onFavorite: () => widget.store.toggleFavorite(widget.detail.drama),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openPanel(PlayerMenuSection section) async {
     if (_panelOpen || _closed) return;
     _interactions.cancel();
     setState(() => _panelOpen = true);
-    final menuTheme = _showFullscreen ? AppTheme.dark : Theme.of(context);
     try {
       final index = await showDialog<int>(
         context: context,
         builder: (menuContext) => _guardPlayerDialog(
-          AnimatedBuilder(
-          animation: Listenable.merge([
-            _menuRevision,
-            widget.store,
-            _preloader,
-          ]),
-          builder: (_, _) => Theme(
-            data: menuTheme,
-            child: PlayerMenu(
-              section: section,
-              episodes: widget.detail.episodes,
-              currentIndex: _index,
-              preferences: _preferences,
-              qualities: _plan?.qualities ?? [],
-              actualQuality: _actualVideoQuality > 0 ? _actualVideoQuality : (_plan?.quality ?? 0),
-              local: _plan?.local == true,
-              favorite: widget.store.isFavorite(widget.detail.drama.id),
-              mobile: _mobile,
-              onEpisode: (index) => Navigator.pop(menuContext, index),
-              onPreferences: _setPreferences,
-              sleepMinutes: _sleepMinutes,
-              sleepAtEpisodeEnd: _sleepAtEpisodeEnd,
-              onSleepTimer: _setSleepTimer,
-              preloadStatus: _preloader.status,
-              enhancement: _enhancementForUi,
-              onCompareEnhancement: () {
-                unawaited(_enhancement.toggleCompare());
-                Navigator.pop(menuContext);
-              },
-              onFavorite: () =>
-                  widget.store.toggleFavorite(widget.detail.drama),
-            ),
-          ),
-        ),
+          _buildPlayerMenu(menuContext, section),
         ),
       );
       if (mounted && !_closed && index != null && index != _index) {
         await _play(index);
       }
+    } finally {
+      if (mounted && !_closed) {
+        setState(() => _panelOpen = false);
+        _playerFocus.requestFocus();
+      }
+    }
+  }
+
+  Future<void> _openPopoverPanel(
+    PlayerMenuSection section,
+    Rect anchor,
+  ) async {
+    if (_panelOpen || _closed || !mounted) return;
+    _interactions.cancel();
+    setState(() => _panelOpen = true);
+    try {
+      await showGeneralDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: '關閉播放選單',
+        barrierColor: Colors.transparent,
+        transitionDuration: const Duration(milliseconds: 130),
+        pageBuilder: (menuContext, _, _) {
+          final viewport = MediaQuery.sizeOf(menuContext);
+          final requestedHeight = PlayerMenu.compactPopoverHeight(
+            section,
+            _plan?.qualities ?? [],
+          );
+          final rect = playerMenuPopoverRect(
+            anchor: anchor,
+            viewport: viewport,
+            menuSize: Size(154, requestedHeight),
+          );
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fromRect(
+                rect: rect,
+                child: _buildPlayerMenu(
+                  menuContext,
+                  section,
+                  compactPopover: true,
+                ),
+              ),
+            ],
+          );
+        },
+        transitionBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: .96, end: 1).animate(curved),
+              alignment: Alignment.bottomCenter,
+              child: child,
+            ),
+          );
+        },
+      );
     } finally {
       if (mounted && !_closed) {
         setState(() => _panelOpen = false);
@@ -4590,11 +4672,11 @@ class _PlayerScreenState extends State<PlayerScreen>
             speed: _speed,
             qualityLabel: _qualityLabel,
             onEpisodes: () => _openPanel(PlayerMenuSection.episodes),
-            onSpeed: () => _openPanel(PlayerMenuSection.speed),
-            onQuality: () => _openPanel(PlayerMenuSection.quality),
+            onSpeed: (anchor) => _openPopoverPanel(PlayerMenuSection.speed, anchor),
+            onQuality: (anchor) => _openPopoverPanel(PlayerMenuSection.quality, anchor),
             onSettings: () => _openPanel(PlayerMenuSection.settings),
-            onAspectRatio: () => _openPanel(PlayerMenuSection.aspectRatio),
-            onSleepTimer: () => _openPanel(PlayerMenuSection.sleepTimer),
+            onAspectRatio: (anchor) => _openPopoverPanel(PlayerMenuSection.aspectRatio, anchor),
+            onSleepTimer: (anchor) => _openPopoverPanel(PlayerMenuSection.sleepTimer, anchor),
             onCinemaMode:
                 Platform.isWindows || Platform.isMacOS ? _toggleCinemaMode : null,
             aspectRatioLabel: playbackAspectRatioLabel(_playbackAspectRatio),
