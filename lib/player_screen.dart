@@ -4640,11 +4640,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                 : null,
             onEpisodes: () => _televisionEpisodes(context),
             onSettings: () => _televisionSettings(context),
-            onPictureInPicture: _canUsePictureInPicture
-                ? _enterPictureInPicture
-                : _desktopMiniPlayerSupported
-                ? _openDesktopMiniPlayer
-                : null,
             onBack: _back,
           )
         : PlayerControls(
