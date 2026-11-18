@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"io"
-	"net/http"
 	"net/url"
 	"regexp"
 	"runtime"
