@@ -131,7 +131,7 @@ func TestIkanbotBuildChaptersMergesEpisodesAcrossLines(t *testing.T) {
 }
 
 func TestIkanbotUsesCurrentOfficialHostAndCategoryRoutes(t *testing.T) {
-	if ikanbotBaseURL != "https://v.ikanbot.com" {
+	if ikanbotBaseURL != "https://admin-api.aikanbot.com" {
 		t.Fatalf("IkanBot base URL = %q", ikanbotBaseURL)
 	}
 	got, err := ikanbotCategoryPath(1, "movie-热门")
@@ -201,7 +201,7 @@ func TestIkanbotImageSupportsLazyImageAttributes(t *testing.T) {
 }
 
 func TestIkanbotPlaybackAPIUsesResolvedPageHost(t *testing.T) {
-	for _, host := range []string{"v.ikanbot.com", "v.aikanbot.com", "www.ikanbot.com"} {
+	for _, host := range []string{"admin-api.aikanbot.com", "v.ikanbot.com", "v.aikanbot.com", "www.ikanbot.com"} {
 		got, err := ikanbotPlaybackAPIURL(
 			"https://"+host+"/play/1023900",
 			"1023900",
@@ -284,5 +284,77 @@ func TestIkanbotHLSURLRecognizesSignedPlaylistURLs(t *testing.T) {
 		if ikanbotIsHLSURL(address) {
 			t.Fatalf("IkanBot incorrectly classified non-HLS URL: %s", address)
 		}
+	}
+}
+
+
+func TestIkanbotAdminAPIHostIsRecognized(t *testing.T) {
+	const address = "https://admin-api.aikanbot.com/play/1023899"
+	if got := providerSourceForURL(address); got != sourceIkanBot {
+		t.Fatalf("current iKanBot host mapped to %q", got)
+	}
+	if got := canonicalProviderSource("admin-api.aikanbot.com"); got != sourceIkanBot {
+		t.Fatalf("canonical current iKanBot host = %q", got)
+	}
+}
+
+func TestGetHuangguoChaptersDispatchesIkanbot(t *testing.T) {
+	token := strings.Repeat("a", 80)
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/play/1023899":
+			body := fmt.Sprintf("<html><h1 id=\"video_title\">愛看測試作品</h1><input id=\"current_id\" value=\"1023899\"><input id=\"e_token\" value=\"%s\"><input id=\"mtype\" value=\"2\"></html>", token)
+			return sourceFixtureResponse(request, http.StatusOK, body), nil
+		case "/api/getResN":
+			body := "{\"state\":1,\"data\":{\"list\":[{\"resData\":\"[{\\\"flag\\\":\\\"1080P\\\",\\\"url\\\":\\\"第1集$https://cdn.example.test/1.m3u8?token=abc\\\"}]\"}]}}"
+			return sourceFixtureResponse(request, http.StatusOK, body), nil
+		default:
+			return nil, fmt.Errorf("unexpected iKanBot request: %s", request.URL)
+		}
+	})
+	title, chapters, err := d.GetHuangguoChapters(context.Background(), sourceIkanBot, "1023899")
+	if err != nil {
+		t.Fatalf("GetHuangguoChapters(iKanBot) failed: %v", err)
+	}
+	if title != "愛看測試作品" || len(chapters) != 1 ||
+		chapters[0].Source != sourceIkanBot ||
+		chapters[0].VideoURL != "https://cdn.example.test/1.m3u8?token=abc" {
+		t.Fatalf("iKanBot health-check detail = %q, %#v", title, chapters)
+	}
+}
+
+func TestIkanbotResolveMediaLoadsSignedHLSPlaylist(t *testing.T) {
+	const (
+		playlistURL = "https://cdn.example.test/index.m3u8?token=abc%2F123"
+		refererURL  = "https://admin-api.aikanbot.com/play/1023899"
+	)
+	playlist := "#EXTM3U\n#EXTINF:6.0,\nsegment-1.ts?token=abc\n#EXT-X-ENDLIST\n"
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() != playlistURL {
+			return nil, fmt.Errorf("unexpected media request: %s", request.URL)
+		}
+		if request.Header.Get("Referer") != refererURL ||
+			request.Header.Get("User-Agent") != ikanbotUserAgent {
+			return nil, fmt.Errorf("iKanBot media headers were not preserved: %#v", request.Header)
+		}
+		return sourceFixtureResponse(request, http.StatusOK, playlist), nil
+	})
+	chapter := Chapter{
+		ID: providerChapterID(sourceIkanBot, "1023899", "1"),
+		Source: sourceIkanBot,
+		PageURL: refererURL,
+		Referer: refererURL,
+		VideoURL: playlistURL,
+	}
+	media, err := d.resolveIkanbotMedia(context.Background(), Task{
+		DramaID: providerDramaID(sourceIkanBot, "1023899"),
+		Chapter: chapter,
+		Index: 1,
+	})
+	if err != nil {
+		t.Fatalf("resolveIkanbotMedia failed: %v", err)
+	}
+	if media.URL != playlistURL || media.Playlist != playlist {
+		t.Fatalf("signed iKanBot HLS playlist was not prepared: %#v", media)
 	}
 }
