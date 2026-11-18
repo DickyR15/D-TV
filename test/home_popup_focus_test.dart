@@ -76,6 +76,8 @@ void main() {
       // asserting the catalog-only refresh action.
       final categoryNavigation = find.byKey(const ValueKey('side-nav-8'));
       expect(categoryNavigation, findsOneWidget);
+      await tester.ensureVisible(categoryNavigation);
+      await tester.pump();
       await tester.tap(categoryNavigation);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
