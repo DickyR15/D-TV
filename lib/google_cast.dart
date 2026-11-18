@@ -82,71 +82,76 @@ Map<String, dynamic>? googleCastPayloadFromAddress({
 Future<Map<String, dynamic>?> googleCastPayloadFromNsdService(
   nsd.Service service,
 ) async {
-  final port = service.port;
-  if (port == null || port <= 0 || port > 65535) return null;
-
+  var currentService = service;
+  var port = currentService.port;
   InternetAddress? address;
-  for (final candidate in service.addresses ?? const <InternetAddress>[]) {
-    if (candidate.type == InternetAddressType.IPv4 &&
-        !candidate.isLoopback &&
-        !candidate.isMulticast) {
+
+  bool acceptable(InternetAddress candidate) =>
+      candidate.type == InternetAddressType.IPv4 &&
+      !candidate.isLoopback &&
+      !candidate.isMulticast;
+
+  for (final candidate
+      in currentService.addresses ?? const <InternetAddress>[]) {
+    if (acceptable(candidate)) {
       address = candidate;
       break;
     }
   }
 
-  // Auto-resolve can still leave the address list empty on Windows when
-  // the PTR/SRV service record arrives before its A record. Ask the platform
-  // resolver for a fresh DNS-SD result before falling back to a host lookup.
-  if (address == null) {
+  // Auto-resolve can still leave the port or address list incomplete on
+  // Windows when the PTR/SRV record arrives before its A record. Ask the
+  // platform resolver for a fresh DNS-SD result before rejecting the device.
+  if (port == null || port <= 0 || port > 65535 || address == null) {
     try {
-      final resolvedService = await nsd
-          .resolve(service)
+      currentService = await nsd
+          .resolve(currentService)
           .timeout(const Duration(seconds: 3));
+      port = currentService.port ?? port;
       for (final candidate
-          in resolvedService.addresses ?? const <InternetAddress>[]) {
-        if (candidate.type == InternetAddressType.IPv4 &&
-            !candidate.isLoopback &&
-            !candidate.isMulticast) {
+          in currentService.addresses ?? const <InternetAddress>[]) {
+        if (acceptable(candidate)) {
           address = candidate;
           break;
         }
-      }
-      if (address == null && resolvedService.host != null) {
-        service = resolvedService;
       }
     } catch (error) {
       debugPrint('[GoogleCast] DNS-SD resolve failed error=$error');
     }
   }
 
-  if (address == null && service.host != null) {
-    var host = service.host!.trim();
-    if (host.endsWith('.')) host = host.substring(0, host.length - 1);
-    address = InternetAddress.tryParse(host);
-    if (address == null && host.isNotEmpty) {
+  if (port == null || port <= 0 || port > 65535) return null;
+
+  final host = currentService.host ?? service.host;
+  if (address == null && host != null) {
+    var normalizedHost = host.trim();
+    if (normalizedHost.endsWith('.')) {
+      normalizedHost = normalizedHost.substring(0, normalizedHost.length - 1);
+    }
+    address = InternetAddress.tryParse(normalizedHost);
+    if (address == null && normalizedHost.isNotEmpty) {
       try {
         final resolved = await InternetAddress.lookup(
-          host,
+          normalizedHost,
           type: InternetAddressType.IPv4,
         ).timeout(const Duration(seconds: 2));
         for (final candidate in resolved) {
-          if (candidate.type == InternetAddressType.IPv4 &&
-              !candidate.isLoopback &&
-              !candidate.isMulticast) {
+          if (acceptable(candidate)) {
             address = candidate;
             break;
           }
         }
       } catch (error) {
-        debugPrint('[GoogleCast] host resolve failed host=$host error=$error');
+        debugPrint(
+          '[GoogleCast] host resolve failed host=$normalizedHost error=$error',
+        );
       }
     }
   }
   if (address == null) return null;
 
   final metadata = <String, String>{};
-  for (final entry in service.txt?.entries ?? const []) {
+  for (final entry in currentService.txt?.entries ?? const []) {
     final bytes = entry.value;
     if (bytes == null) continue;
     final value = utf8.decode(bytes, allowMalformed: true).trim();
@@ -158,7 +163,7 @@ Future<Map<String, dynamic>?> googleCastPayloadFromNsdService(
     port: port,
     advertisedName: metadata['fn'],
     modelName: metadata['md'],
-    serviceName: service.name,
+    serviceName: currentService.name,
     advertisedId: metadata['id'],
     metadata: metadata,
   );
