@@ -25,9 +25,14 @@ func TestAdultProviderRegistrationAndCategories(t *testing.T) {
 	if got := providerSourceForURL("https://missav.live/"); got != sourceMissAV {
 		t.Fatalf("current MissAV domain = %q", got)
 	}
-	if isHuangguoProviderSource(canonicalProviderSource("supjav")) ||
-		providerSourceForURL("https://supjav.com/") != "" {
-		t.Fatal("retired SupJav must not be registered as an active provider")
+	if got := canonicalProviderSource("supjav"); got != sourceSupJav {
+		t.Fatalf("canonicalProviderSource(%q) = %q, want active SupJav", "supjav", got)
+	}
+	if got := providerSourceForURL("https://supjav.blog/"); got != sourceSupJav {
+		t.Fatalf("providerSourceForURL(%q) = %q, want SupJav", "https://supjav.blog/", got)
+	}
+	if got := providerSourceForURL("https://supjav.com/"); got != "" {
+		t.Fatalf("legacy SupJav entry domain should remain disabled, got %q", got)
 	}
 	if !validNativeCategory(sourceMissAV, "") || !validAdultProviderCategory(sourceMissAV, "") ||
 		validAdultProviderCategory(sourceMissAV, "../bad") {
