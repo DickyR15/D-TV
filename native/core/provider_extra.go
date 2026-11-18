@@ -393,22 +393,25 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 			if fetchErr != nil {
 				return providerMedia{}, fmt.Errorf("91Porna 播放嵌入頁讀取失敗：%w", fetchErr)
 			}
-			img, encodedURL := extraAdult91PornaPlayParams(embed)
-			if img == "" || encodedURL == "" {
-				return providerMedia{}, errors.New("91Porna 嵌入頁缺少 embed_play.js 參數")
+			media = extraAdult91PornaMediaURL(embed, embedFinal)
+			if media == "" {
+				img, encodedURL := extraAdult91PornaPlayParams(embed)
+				if img == "" || encodedURL == "" {
+					return providerMedia{}, errors.New("91Porna 嵌入頁缺少 embed_play.js 參數")
+				}
+				imgValue, decodeErr := url.QueryUnescape(img)
+				if decodeErr != nil {
+					imgValue = img
+				}
+				jsURL := ninetyOneBaseURL + "/index/embed_play.js?img=" +
+					url.QueryEscape(imgValue) + "&u=" + url.QueryEscape(encodedURL) +
+					"&t=" + strconv.FormatInt(time.Now().Unix()/1800, 10)
+				jsBody, _, jsErr := extraAdultFetch(ctx, d, source, jsURL, embedFinal)
+				if jsErr != nil {
+					return providerMedia{}, fmt.Errorf("91Porna 播放腳本讀取失敗：%w", jsErr)
+				}
+				media = extraAdult91PornaMediaURL(jsBody, embedFinal)
 			}
-			imgValue, decodeErr := url.QueryUnescape(img)
-			if decodeErr != nil {
-				imgValue = img
-			}
-			jsURL := ninetyOneBaseURL + "/index/embed_play.js?img=" +
-				url.QueryEscape(imgValue) + "&u=" + url.QueryEscape(encodedURL) +
-				"&t=" + strconv.FormatInt(time.Now().Unix()/1800, 10)
-			jsBody, _, jsErr := extraAdultFetch(ctx, d, source, jsURL, embedFinal)
-			if jsErr != nil {
-				return providerMedia{}, fmt.Errorf("91Porna 播放腳本讀取失敗：%w", jsErr)
-			}
-			media = extraAdult91PornaMediaURL(jsBody, embedFinal)
 			referer = embedFinal
 		}
 		if !isProviderHTTPMediaURL(media) {
