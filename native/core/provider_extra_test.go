@@ -26,7 +26,7 @@ func TestExtraAdultImportedModuleCards(t *testing.T) {
 			wantID: "sample-123.html", wantTitle: "麻豆測試作品",
 		},
 		{
-			name: "91Porn", source: source91Porna, base: ninetyOneBaseURL,
+			name: "91Porna", source: source91Porna, base: ninetyOneBaseURL,
 			html: `<div class="video-item"><a href="/comic/index/avdetail?video_key=key_123"><img data-src="https://91porna.com/poster.jpg" alt="91 測試作品"></a><span>12:34</span></div>`,
 			wantID: "key_123", wantTitle: "91 測試作品",
 		},
@@ -66,15 +66,15 @@ func TestExtraAdultCategoryAndSearchPaths(t *testing.T) {
 func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 	if !extraAdultValidCategory(source91Porna, "play") ||
 		!extraAdultValidCategory(source91Porna, "month_hot") {
-		t.Fatal("91Porn current playing or previous-month category is not registered")
+		t.Fatal("91Porna current playing or previous-month category is not registered")
 	}
 	got, err := extraAdultCategoryPath(source91Porna, 1, "")
 	if err != nil || got != "/comic/index/video?category=play" {
-		t.Fatalf("91Porn default category path = %q, err=%v", got, err)
+		t.Fatalf("91Porna default category path = %q, err=%v", got, err)
 	}
 	got, err = extraAdultCategoryPath(source91Porna, 2, "")
 	if err != nil || got != "/comic/index/video?category=play&page=2" {
-		t.Fatalf("91Porn second-page category path = %q, err=%v", got, err)
+		t.Fatalf("91Porna second-page category path = %q, err=%v", got, err)
 	}
 	if got := extraAdultDetailURL(source91Porna, "key_123"); got != "https://91porna.com/comic/index/detail?video_key=key_123" {
 		t.Fatalf("91Porn detail URL = %q", got)
@@ -82,11 +82,11 @@ func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 	html := `<div class="video-item"><a href="/comic/index/detail?video_key=key_123"><img data-src="/poster.jpg" alt="91 current detail route"></a><span>12:34</span></div>`
 	segments := extraAdultSegments(html, source91Porna)
 	if len(segments) != 1 {
-		t.Fatalf("91Porn current card segments = %d, want 1", len(segments))
+		t.Fatalf("91Porna current card segments = %d, want 1", len(segments))
 	}
 	item, ok := extraAdultParseCard(source91Porna, segments[0], ninetyOneBaseURL)
 	if !ok || item.SourceID != "key_123" || item.Cover != "https://91porna.com/poster.jpg" {
-		t.Fatalf("91Porn current card parse = %#v, ok=%v", item, ok)
+		t.Fatalf("91Porna current card parse = %#v, ok=%v", item, ok)
 	}
 }
 
@@ -164,5 +164,54 @@ func TestExtraAdult91PornaDetectsMobileQROnlyDetailPages(t *testing.T) {
 	}
 	if extraAdultMobileScanRequired(`<p>使用手機瀏覽器瀏覽分類</p>`) {
 		t.Fatal("ordinary mobile-browser text was incorrectly classified as QR-only")
+	}
+}
+
+func TestExtraAdultPPPExtractsVarStreamAndKeepsSignedQuery(t *testing.T) {
+	body := `<script>var stream = 'https://cdn.ppp.porn/stream/opaque/index.m3u8?token=abc%2F123&expires=456';</script>`
+	got := extraAdultPPPStreamURL(body, pppBaseURL+"/v/example/")
+	want := "https://cdn.ppp.porn/stream/opaque/index.m3u8?token=abc%2F123&expires=456"
+	if got != want {
+		t.Fatalf("PPP stream URL = %q, want %q", got, want)
+	}
+}
+
+func TestExtraAdultMadouAcceptsUnquotedIframeSource(t *testing.T) {
+	body := `<iframe id="video" src=https://dash.madou.club/share/68ff2021d2f708714780a8c1></iframe>`
+	got := extraAdultFrame(madouBaseURL+"/sample.html", body)
+	want := "https://dash.madou.club/share/68ff2021d2f708714780a8c1"
+	if got != want {
+		t.Fatalf("Madou unquoted iframe URL = %q, want %q", got, want)
+	}
+}
+
+func TestExtraAdult91PornaExtractsCurrentEmbedPlaybackParameters(t *testing.T) {
+	body := `<script>
+		var player = "embed_play.js?img=poster%2Fabc123";
+		var src = encodeURIComponent("https://91porna.com/comic/index/embed?id=169397");
+	</script>`
+	img, encodedURL := extraAdult91PornaPlayParams(body)
+	if img != "poster%2Fabc123" {
+		t.Fatalf("91Porna embed image parameter = %q", img)
+	}
+	if encodedURL != "https://91porna.com/comic/index/embed?id=169397" {
+		t.Fatalf("91Porna encoded URL parameter = %q", encodedURL)
+	}
+}
+
+func TestExtraAdult91PornaExtractsHLSAndMP4FromEmbedPlayerScript(t *testing.T) {
+	hls := `document.write('<video src="https://media.example.test/playlist.m3u8?auth=one%2Ftwo"></video>');`
+	if got := extraAdult91PornaMediaURL(hls, ninetyOneBaseURL+"/comic/index/embed?id=169397"); got != "https://media.example.test/playlist.m3u8?auth=one%2Ftwo" {
+		t.Fatalf("91Porna HLS URL = %q", got)
+	}
+	mp4 := `document.write('<video src="https://media.example.test/movie.mp4?token=abc"></video>');`
+	if got := extraAdult91PornaMediaURL(mp4, ninetyOneBaseURL+"/comic/index/embed?id=169397"); got != "https://media.example.test/movie.mp4?token=abc" {
+		t.Fatalf("91Porna MP4 URL = %q", got)
+	}
+}
+
+func TestExtraAdult91PornaUsesOfficialDisplayName(t *testing.T) {
+	if got := extraAdultSourceName(source91Porna); got != "91Porna" {
+		t.Fatalf("91Porna display name = %q", got)
 	}
 }
