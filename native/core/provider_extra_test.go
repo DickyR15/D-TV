@@ -171,6 +171,17 @@ func TestExtraAdult91PornaDetectsMobileQROnlyDetailPages(t *testing.T) {
 	}
 }
 
+func TestAdultPackerUnpacksDAndRDecoderForms(t *testing.T) {
+	for _, decoder := range []string{"d", "r"} {
+		t.Run(decoder, func(t *testing.T) {
+			script := "eval(function(p,a,c,k,e," + decoder + "){return p;}('https://media.example.test/playlist.m3u8',36,0,''.split('|'),0,{}))"
+			if got := adultUnpackPacker(script); got != "https://media.example.test/playlist.m3u8" {
+				t.Fatalf("Packer %s decoder output = %q", decoder, got)
+			}
+		})
+	}
+}
+
 func TestExtraAdultPPPExtractsVarStreamAndKeepsSignedQuery(t *testing.T) {
 	body := `<script>var stream = 'https://cdn.ppp.porn/stream/opaque/index.m3u8?token=abc%2F123&expires=456';</script>`
 	got := extraAdultPPPStreamURL(body, pppBaseURL+"/v/example/")
