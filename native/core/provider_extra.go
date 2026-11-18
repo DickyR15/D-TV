@@ -26,7 +26,7 @@ const (
 var extraAdultCategories = map[string][]nativeCategory{
 	sourceSupJav: {{ID:"0",Name:"最新"},{ID:"uncensored",Name:"無碼"},{ID:"uncensored-leaked",Name:"無碼破解"},{ID:"censored",Name:"有碼"},{ID:"chinese",Name:"中文字幕"},{ID:"amateur",Name:"素人"}},
 	sourcePPP: {{ID:"new",Name:"最新上架"},{ID:"c-china",Name:"中國"},{ID:"c-japan",Name:"日本"},{ID:"c-taiwan",Name:"台灣"},{ID:"c-korea",Name:"韓國"},{ID:"c-hongkong",Name:"香港"},{ID:"c-se-asia",Name:"東南亞"},{ID:"c-amateur",Name:"素人自拍"},{ID:"c-cosplay",Name:"角色扮演"},{ID:"c-streamer",Name:"直播主"},{ID:"c-first-person-pov",Name:"第一人稱"},{ID:"c-china-av",Name:"中國成人影片"},{ID:"c-japan-producer",Name:"日本片商"}},
-	sourceMadou: {{ID:"0",Name:"全部"},{ID:"2",Name:"麻豆傳媒"},{ID:"51",Name:"麻豆番外篇"},{ID:"168",Name:"麻豆花絮"},{ID:"436",Name:"HongKongDoll"},{ID:"342",Name:"PsychopornTW"},{ID:"354",Name:"91製片廠"},{ID:"85",Name:"果凍傳媒"},{ID:"86",Name:"蜜桃影像"},{ID:"254",Name:"天美傳媒"},{ID:"87",Name:"皇家華人"},{ID:"99",Name:"兔子先生"},{ID:"283",Name:"星空無限傳媒"},{ID:"359",Name:"愛豆"},{ID:"155",Name:"麻豆導演系列"}},
+	sourceMadou: {{ID:"0",Name:"全部"},{ID:"麻豆传媒",Name:"麻豆傳媒"},{ID:"麻豆番外篇",Name:"麻豆番外篇"},{ID:"麻豆花絮",Name:"麻豆花絮"},{ID:"HongKongDoll",Name:"HongKongDoll"},{ID:"PsychopornTW",Name:"PsychopornTW"},{ID:"91制片厂",Name:"91製片廠"},{ID:"果冻传媒",Name:"果凍傳媒"},{ID:"蜜桃影像",Name:"蜜桃影像"},{ID:"天美传媒",Name:"天美傳媒"},{ID:"皇家华人",Name:"皇家華人"},{ID:"兔子先生",Name:"兔子先生"},{ID:"星空无限传媒",Name:"星空無限傳媒"},{ID:"爱豆",Name:"愛豆"},{ID:"麻豆导演系列",Name:"麻豆導演系列"},{ID:"大象传媒",Name:"大象傳媒"},{ID:"猫爪影像",Name:"貓爪影像"},{ID:"精东影业",Name:"精東影業"},{ID:"杏吧",Name:"杏吧"},{ID:"乐播传媒",Name:"樂播傳媒"},{ID:"草莓",Name:"草莓"},{ID:"抖阴",Name:"抖陰"},{ID:"SA国际传媒",Name:"SA國際傳媒"},{ID:"起点传媒-性视界传媒",Name:"起點傳媒／性視界傳媒"},{ID:"大鸟十八",Name:"大鳥十八"},{ID:"小鹏奇啪行",Name:"小鵬奇啪行"},{ID:"女优淫娃培训营",Name:"女優培訓營"},{ID:"淫欲游戏王",Name:"淫慾遊戲王"},{ID:"女神羞羞研究所",Name:"女神羞羞研究所"},{ID:"突袭女优家",Name:"突襲女優家"},{ID:"情趣K歌房",Name:"情趣 K 歌房"},{ID:"KISS糖果屋",Name:"KISS 糖果屋"}},
 	source91Porna: {{ID:"play",Name:"正在播放"},{ID:"now_hot",Name:"目前最熱門"},{ID:"new_update",Name:"最近更新"},{ID:"original",Name:"91 原創"},{ID:"now_month_hot",Name:"本月最熱門"},{ID:"ten_minutes",Name:"10 分鐘以上"},{ID:"twenty_minutes",Name:"20 分鐘以上"},{ID:"now_month_collect",Name:"本月收藏"},{ID:"hd",Name:"高畫質"},{ID:"month_hot",Name:"上月最熱門"},{ID:"now_month_comment",Name:"本月討論"},{ID:"max_collect",Name:"收藏最多"}},
 }
 
@@ -72,7 +72,13 @@ func extraAdultCategoryPath(source string, page int, category string) (string,er
 		if category=="" || category=="new" { if page==1{return "/new/",nil};return fmt.Sprintf("/new/%d/",page),nil }
 		slug:=strings.TrimPrefix(category,"c-");if page==1{return "/categories/"+url.PathEscape(slug)+"/",nil};return fmt.Sprintf("/categories/%s/%d/",url.PathEscape(slug),page),nil
 	case sourceMadou:
-		if category=="" {category="0"};return fmt.Sprintf("/page/%d/?cat=%s",page,url.QueryEscape(category)),nil
+		if category=="" || category=="0" {
+			if page==1 { return "/", nil }
+			return fmt.Sprintf("/page/%d/", page), nil
+		}
+		path := "/category/" + url.PathEscape(category)
+		if page > 1 { path += fmt.Sprintf("/page/%d", page) }
+		return path, nil
 	case source91Porna:
 		if category==""||category=="new"{category="play"}
 		return "/comic/index/video?category="+url.QueryEscape(category)+"&page="+strconv.Itoa(page),nil
@@ -90,20 +96,31 @@ func extraAdultSearchPath(source string,page int,query string)(string,bool,error
 }
 func extraAdultNormalizeID(source,raw string)string{
 	source=canonicalProviderSource(source);raw=strings.TrimSpace(html.UnescapeString(raw))
-	if u,e:=url.Parse(raw);e==nil&&u.IsAbs(){raw=u.EscapedPath();if source==source91Porna&&u.RawQuery!=""{raw+="?"+u.RawQuery}}
+	if parsed,err:=url.Parse(raw);err==nil{
+		if source==sourceMadou{
+			if parsed.IsAbs(){
+				host:=strings.ToLower(parsed.Hostname())
+				if parsed.Scheme!="https" || parsed.User!=nil || (host!="madou.club" && !strings.HasSuffix(host,".madou.club")){return ""}
+			}
+			raw=parsed.Path
+		}else if parsed.IsAbs(){
+			raw=parsed.EscapedPath()
+			if source==source91Porna&&parsed.RawQuery!=""{raw+="?"+parsed.RawQuery}
+		}
+	}
 	raw=strings.TrimLeft(raw,"/")
 	switch source{
 	case sourceSupJav:if strings.HasPrefix(raw,"video.php?slug="){return raw};return strings.TrimRight(raw,"/")
 	case sourcePPP:return strings.Trim(strings.TrimPrefix(raw,"v/"),"/")
 	case sourceMadou:return strings.TrimRight(raw,"/")
-	case source91Porna:if u,e:=url.Parse(raw);e==nil&&strings.Contains(raw,"video_key="){return u.Query().Get("video_key")};return raw
+	case source91Porna:if parsed,err:=url.Parse(raw);err==nil&&strings.Contains(raw,"video_key="){return parsed.Query().Get("video_key")};return raw
 	};return ""
 }
 func extraAdultValidID(source,id string)bool{
 	switch canonicalProviderSource(source){
 	case sourceSupJav:return regexp.MustCompile("^(video/[A-Za-z0-9._-]{1,180}|video\\.php\\?slug=[A-Za-z0-9._-]{1,180})$").MatchString(id)
 	case sourcePPP:return regexp.MustCompile("^[a-z0-9]{1,100}$").MatchString(id)
-	case sourceMadou:return regexp.MustCompile("^[A-Za-z0-9][A-Za-z0-9._-]{0,180}(\\.html)?$").MatchString(id)
+	case sourceMadou:return regexp.MustCompile("^[\\p{L}\\p{N}][\\p{L}\\p{N}._-]{0,180}(\\.html)?$").MatchString(id)
 	case source91Porna:return regexp.MustCompile("^[A-Za-z0-9_-]{1,128}$").MatchString(id)
 	};return false
 }
