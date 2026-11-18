@@ -37,6 +37,10 @@ type sourceResponseTrace struct {
 
 type sourceTraceKey struct{}
 
+type sourceHealthWarning struct { message string }
+
+func (warning sourceHealthWarning) Error() string { return warning.message }
+
 func observeSourceResponse(ctx context.Context, response *http.Response) {
 	trace, _ := ctx.Value(sourceTraceKey{}).(*sourceResponseTrace)
 	if trace == nil || response == nil {
@@ -61,10 +65,13 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Health = &copy })
 	}
 	var failure error
+	var warning bool
 	defer func() {
 		report.CheckedAt = time.Now()
 		if failure != nil {
 			report.State = "failed"
+		} else if warning {
+			report.State = "warning"
 		} else if playback {
 			report.State = "ok"
 		} else {
@@ -89,13 +96,22 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		step := trace.last
 		trace.mu.Unlock()
 		step.Name, step.State, step.Message, step.ElapsedMS = name, "ok", message, time.Since(start).Milliseconds()
+		isWarning := false
 		if err != nil {
-			failure = err
-			step.State = "failed"
-			if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
-				step.Message = "單次網路請求逾時"
-			} else {
+			var healthWarning sourceHealthWarning
+			if errors.As(err, &healthWarning) {
+				warning = true
+				isWarning = true
+				step.State = "warning"
 				step.Message = publicError(err).Error()
+			} else {
+				failure = err
+				step.State = "failed"
+				if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+					step.Message = "單次網路請求逾時"
+				} else {
+					step.Message = publicError(err).Error()
+				}
 			}
 			var backoff *requestBackoff
 			if errors.As(err, &backoff) {
@@ -104,19 +120,40 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		}
 		report.Steps = append(report.Steps, step)
 		publish()
-		return err == nil
+		return err == nil || isWarning
 	}
 	var page nativeCatalogResult
 	if !run("入口与目录", func() (string, error) {
 		var err error
 		page, err = engine.nativeCatalog(ctx, nativeInput{Source: source, Page: 1, Force: true})
-		if err == nil && page.Warning != "" {
-			err = errors.New(page.Warning)
+		catalogErr := err
+		if catalogErr == nil && page.Warning != "" {
+			catalogErr = errors.New(page.Warning)
 		}
-		if err == nil && len(page.Items) == 0 {
-			err = errors.New("入口可达，但没有解析到有效剧集")
+		if catalogErr == nil && len(page.Items) == 0 {
+			catalogErr = errors.New("入口可達，但沒有解析到有效劇集")
 		}
-		return fmt.Sprintf("已解析 %d 部剧", len(page.Items)), err
+		if catalogErr != nil && source == sourceMadou {
+			items := append([]nativeDrama(nil), page.Items...)
+			if len(items) == 0 && selected.ID != "" {
+				items = append(items, selected)
+			}
+			if len(items) == 0 {
+				engine.mu.Lock()
+				items = append(items, engine.catalogs[source]...)
+				engine.mu.Unlock()
+			}
+			if len(items) > 0 {
+				page.Items = items
+				message := "madou 即時目錄檢查未通過"
+				if detail := publicError(catalogErr).Error(); detail != "" {
+					message += "：" + detail
+				}
+				message += "；已改用目前載入的作品資料繼續驗證實際播放"
+				return fmt.Sprintf("即時目錄有警告，使用已載入資料 %d 部", len(items)), sourceHealthWarning{message: message}
+			}
+		}
+		return fmt.Sprintf("已解析 %d 部劇", len(page.Items)), catalogErr
 	}) || !playback {
 		return failure
 	}

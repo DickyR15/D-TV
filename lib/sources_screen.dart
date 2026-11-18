@@ -470,10 +470,14 @@ class _SourcesScreenState extends State<SourcesScreen> {
                                     Icon(
                                       step.state == 'ok'
                                           ? Icons.check_circle_outline
+                                          : step.state == 'warning'
+                                          ? Icons.warning_amber_rounded
                                           : Icons.error_outline,
                                       size: 20,
                                       color: step.state == 'ok'
                                           ? colors.primary
+                                          : step.state == 'warning'
+                                          ? colors.tertiary
                                           : colors.error,
                                     ),
                                     const SizedBox(width: 8),

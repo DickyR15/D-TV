@@ -26,6 +26,7 @@ const (
 	madouBaseURL = "https://madou.club"
 	madouDashBaseURL = "https://dash.madou.club"
 	ninetyOneBaseURL = "https://91porna.com"
+	ninetyOneMobileUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
 )
 
 var extraAdultCategories = map[string][]nativeCategory{
@@ -156,7 +157,12 @@ func extraAdultDetailURL(source,id string)string{
 	};return ""
 }
 func extraAdultFetch(ctx context.Context,d *Downloader,source,address,referer string)(string,string,error){
-	ctx=context.WithValue(ctx,providerTextUserAgentKey{},adultUserAgent);rs:=&playbackResponseURLs{};ctx=context.WithValue(ctx,playbackResponseURLsKey{},rs)
+	return extraAdultFetchWithUserAgent(ctx,d,source,address,referer,adultUserAgent)
+}
+
+func extraAdultFetchWithUserAgent(ctx context.Context,d *Downloader,source,address,referer,agent string)(string,string,error){
+	if strings.TrimSpace(agent)=="" { agent=adultUserAgent }
+	ctx=context.WithValue(ctx,providerTextUserAgentKey{},agent);rs:=&playbackResponseURLs{};ctx=context.WithValue(ctx,playbackResponseURLsKey{},rs)
 	body,e:=d.fetchProviderText(ctx,address,firstNonEmpty(referer,extraAdultBaseURL(source)+"/"));if e!=nil{return "",address,e}
 	if actual,ok:=rs.values.Load(address);ok{if v,valid:=actual.(string);valid&&v!=""{address=v}}
 	return body,address,nil
@@ -548,7 +554,9 @@ func extraAdultHLS(body,page string)string{
 }
 func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(providerMedia,error){
 	source,id,ok:=splitProviderDramaID(task.DramaID);prefix:=providerChapterID(source,id,"");if !ok||!extraAdultValidID(source,id)||!strings.HasPrefix(task.Chapter.ID,prefix){return providerMedia{},errors.New("進階片源分集資訊無效，請重新整理")}
-	base:=extraAdultBaseURL(source);page:=firstNonEmpty(task.Chapter.PageURL,strings.TrimPrefix(task.Chapter.ID,prefix));if page==""{page=extraAdultDetailURL(source,id)};body,final,e:=extraAdultFetch(ctx,d,source,page,base+"/");if e!=nil{return providerMedia{},fmt.Errorf("%s 播放頁讀取失敗：%w",extraAdultSourceName(source),e)}
+	userAgent:=adultUserAgent
+	if source==source91Porna { userAgent=ninetyOneMobileUserAgent }
+	base:=extraAdultBaseURL(source);page:=firstNonEmpty(task.Chapter.PageURL,strings.TrimPrefix(task.Chapter.ID,prefix));if page==""{page=extraAdultDetailURL(source,id)};body,final,e:=extraAdultFetchWithUserAgent(ctx,d,source,page,base+"/",userAgent);if e!=nil{return providerMedia{},fmt.Errorf("%s 播放頁讀取失敗：%w",extraAdultSourceName(source),e)}
 	switch source{
 	case sourcePPP:
 		media := extraAdultPPPStreamURL(body, final)
@@ -564,16 +572,21 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 	case source91Porna:
 		media := extraAdult91PornaMediaURL(body, final)
 		referer := final
+		scanOnly := extraAdultMobileScanRequired(body)
 		if media == "" {
 			embedURL := ninetyOneBaseURL + "/comic/index/embed?id=" + url.QueryEscape(id)
-			embed, embedFinal, fetchErr := extraAdultFetch(ctx, d, source, embedURL, final)
+			embed, embedFinal, fetchErr := extraAdultFetchWithUserAgent(ctx, d, source, embedURL, final, ninetyOneMobileUserAgent)
 			if fetchErr != nil {
 				return providerMedia{}, fmt.Errorf("91Porna 播放嵌入頁讀取失敗：%w", fetchErr)
 			}
+			scanOnly = scanOnly || extraAdultMobileScanRequired(embed)
 			media = extraAdult91PornaMediaURL(embed, embedFinal)
 			if media == "" {
 				img, encodedURL := extraAdult91PornaPlayParams(embed)
 				if img == "" || encodedURL == "" {
+					if scanOnly {
+						return providerMedia{}, errors.New("91Porna 目前仍只回傳手機掃碼入口，未提供可直接播放的嵌入資料")
+					}
 					return providerMedia{}, errors.New("91Porna 嵌入頁缺少 embed_play.js 參數")
 				}
 				if strings.ContainsAny(img, "&\\r\\n") {
@@ -584,18 +597,22 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 				jsQuery.Set("u", encodedURL)
 				jsQuery.Set("t", strconv.FormatInt(time.Now().Unix()/1800, 10))
 				jsURL := ninetyOneBaseURL + "/index/embed_play.js?" + jsQuery.Encode()
-				jsBody, _, jsErr := extraAdultFetch(ctx, d, source, jsURL, embedFinal)
+				jsBody, _, jsErr := extraAdultFetchWithUserAgent(ctx, d, source, jsURL, embedFinal, ninetyOneMobileUserAgent)
 				if jsErr != nil {
 					return providerMedia{}, fmt.Errorf("91Porna 播放腳本讀取失敗：%w", jsErr)
 				}
 				media = extraAdult91PornaMediaURL(jsBody, embedFinal)
+				scanOnly = scanOnly || extraAdultMobileScanRequired(jsBody)
 			}
 			referer = embedFinal
 		}
 		if !isProviderHTTPMediaURL(media) {
+			if scanOnly {
+				return providerMedia{}, errors.New("91Porna 目前仍要求以手機瀏覽器開啟掃碼頁面；這次回應沒有提供 D-TV 可直接使用的 HLS／MP4 網址")
+			}
 			return providerMedia{}, errors.New("91Porna 播放腳本沒有回傳有效的 HLS／MP4 網址")
 		}
-		cred := &providerMediaCredentials{referer: referer, userAgent: adultUserAgent}
+		cred := &providerMediaCredentials{referer: referer, userAgent: ninetyOneMobileUserAgent}
 		return d.prepareWebProviderMedia(ctx, providerMedia{URL: media, Referer: referer, credentials: cred, StandardHTTP: runtime.GOOS == "android"}, "91Porna")
 	}
 	return providerMedia{},errors.New("不支援的進階片源")

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -370,5 +371,114 @@ func TestWaitForPlaybackIdlePausesCatalogDuringPlayback(t *testing.T) {
 	engine.mu.Unlock()
 	if err := engine.waitForPlaybackIdle(context.Background(), sourceHongguo, "繼續載入歷史目錄"); err != nil {
 		t.Fatalf("catalog work should resume after playback releases its session: %v", err)
+	}
+}
+
+func TestResolveExtraAdultMediaUsesMobileBrowserFor91Porna(t *testing.T) {
+	const (
+		id = "key_123"
+		detailURL = "https://91porna.com/comic/index/detail?video_key=key_123"
+		embedURL = "https://91porna.com/comic/index/embed?id=key_123"
+		mediaURL = "https://media.example.test/master.m3u8?token=abc"
+	)
+	encodedEmbed := url.QueryEscape(embedURL)
+	seenMobile := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.Hostname() == "91porna.com" {
+			if got := request.Header.Get("User-Agent"); got != ninetyOneMobileUserAgent {
+				return nil, fmt.Errorf("91Porna request did not use mobile browser UA: %q", got)
+			}
+			seenMobile++
+		}
+		switch {
+		case request.URL.Host == "91porna.com" && request.URL.Path == "/comic/index/detail":
+			return sourceFixtureResponse(request, http.StatusOK, "<main>使用手機瀏覽器掃碼觀看</main>"), nil
+		case request.URL.Host == "91porna.com" && request.URL.Path == "/comic/index/embed":
+			body := "<script src='/index/embed_play.js?img=poster%2Fkey_123&amp;u=" + encodedEmbed + "'></script>"
+			return sourceFixtureResponse(request, http.StatusOK, body), nil
+		case request.URL.Host == "91porna.com" && request.URL.Path == "/index/embed_play.js":
+			if request.URL.Query().Get("img") != "poster/key_123" ||
+				request.URL.Query().Get("u") != embedURL {
+				return nil, fmt.Errorf("91Porna player script parameters were not preserved: %s", request.URL.RawQuery)
+			}
+			body := "document.write('<video src=" + mediaURL + "></video>');"
+			return sourceFixtureResponse(request, http.StatusOK, body), nil
+		case request.URL.Host == "media.example.test" && request.URL.Path == "/master.m3u8":
+			return sourceFixtureResponse(request, http.StatusOK, "#EXTM3U\n#EXTINF:6,\nsegment.ts?token=abc\n#EXT-X-ENDLIST\n"), nil
+		default:
+			return nil, fmt.Errorf("unexpected 91Porna playback request: %s", request.URL)
+		}
+	})
+	chapter := Chapter{
+		ID: providerChapterID(source91Porna, id, detailURL),
+		Source: source91Porna,
+		PageURL: detailURL,
+		Referer: detailURL,
+		VideoURL: "adult-page://" + detailURL,
+	}
+	media, err := d.resolveExtraAdultMedia(context.Background(), Task{
+		DramaID: providerDramaID(source91Porna, id),
+		Chapter: chapter,
+		Index: 1,
+	})
+	if err != nil {
+		t.Fatalf("resolveExtraAdultMedia(91Porna) failed: %v", err)
+	}
+	if seenMobile != 3 {
+		t.Fatalf("91Porna mobile detail/embed/script requests = %d, want 3", seenMobile)
+	}
+	if media.URL != mediaURL || !strings.HasPrefix(media.Playlist, "#EXTM3U") {
+		t.Fatalf("mobile 91Porna player media was not prepared: %#v", media)
+	}
+}
+func TestMadouHealthCheckWarnsOnCatalog404ButVerifiesPlaybackFromCachedDrama(t *testing.T) {
+	const detailPath = "/sample-123.html"
+	const sharePath = "/share/fixture"
+	const mediaPath = "/videos/fixture.m3u8"
+	d := sourceFixtureEngine(t, func(request *http.Request) (*http.Response, error) {
+		switch {
+		case request.URL.Host == "madou.club" && request.URL.Path == "/":
+			return sourceFixtureResponse(request, http.StatusNotFound, "not found"), nil
+		case request.URL.Host == "madou.club" && request.URL.Path == detailPath:
+			body := "<html><head><meta property='og:title' content='madou 健康檢查測試作品'></head><body><iframe id='video' src='https://dash.madou.club" + sharePath + "'></iframe></body></html>"
+			return sourceFixtureResponse(request, http.StatusOK, body), nil
+		case request.URL.Host == "dash.madou.club" && request.URL.Path == sharePath:
+			return sourceFixtureResponse(request, http.StatusOK, "var token='abc'; var m3u8='"+mediaPath+"?token=abc';"), nil
+		case request.URL.Host == "dash.madou.club" && request.URL.Path == mediaPath:
+			return sourceFixtureResponse(request, http.StatusOK, "#EXTM3U\n#EXTINF:6,\nsegment.ts?token=abc\n#EXT-X-ENDLIST\n"), nil
+		case request.URL.Host == "dash.madou.club" && request.URL.Path == "/videos/segment.ts":
+			response := sourceFixtureResponse(request, http.StatusPartialContent, strings.Repeat("s", 1024))
+			response.Header.Set("Content-Type", "video/mp2t")
+			return response, nil
+		default:
+			return nil, fmt.Errorf("unexpected madou health-check request: %s", request.URL)
+		}
+	})
+	selected := nativeDrama{
+		ID: providerDramaID(sourceMadou, "sample-123.html"),
+		Source: sourceMadou,
+		SourceID: "sample-123.html",
+		Title: "madou 健康檢查測試作品",
+	}
+	engine.mu.Lock()
+	engine.catalogs[sourceMadou] = []nativeDrama{selected}
+	engine.mu.Unlock()
+	if err := engine.checkSource(context.Background(), sourceMadou, selected, true); err != nil {
+		t.Fatalf("madou health check should verify playback despite root catalog 404: %v", err)
+	}
+	health := engine.sourceStatus(sourceMadou).Health
+	if health == nil {
+		t.Fatal("madou health report was not saved")
+	}
+	if health.State != "warning" {
+		t.Fatalf("madou health state = %q, want warning", health.State)
+	}
+	if len(health.Steps) != 5 || health.Steps[0].State != "warning" {
+		t.Fatalf("madou health steps should report a catalog warning and continue: %#v", health.Steps)
+	}
+	for i := 1; i < len(health.Steps); i++ {
+		if health.Steps[i].State != "ok" {
+			t.Fatalf("madou playback check step %q = %q, want ok: %s", health.Steps[i].Name, health.Steps[i].State, health.Steps[i].Message)
+		}
 	}
 }

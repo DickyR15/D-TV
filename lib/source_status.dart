@@ -35,6 +35,7 @@ class SourceHealth {
   String get label => switch (state) {
     'ok' => '連線檢測通過',
     'catalogOnly' => '目錄正常 · 播放未檢測',
+    'warning' => '目錄有警告 · 播放路徑已驗證',
     'checking' => '檢測中',
     'failed' => '檢測未通過',
     _ => '尚未檢測',
