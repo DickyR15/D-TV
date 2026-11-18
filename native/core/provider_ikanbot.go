@@ -397,8 +397,11 @@ func (d *Downloader) fetchIkanbotLines(ctx context.Context, sourceID, currentID,
 	if json.Unmarshal(body, &payload) != nil {
 		return nil, errors.New("愛看機器人線路回應格式無效")
 	}
-	if state, ok := payload["state"].(float64); ok && state != 1 {
-		return nil, fmt.Errorf("愛看機器人線路取得失敗：%v", payload["message"])
+	if stateValue, exists := payload["state"]; exists {
+		state := strings.TrimSpace(fmt.Sprint(stateValue))
+		if state != "" && state != "1" && state != "1.0" {
+			return nil, fmt.Errorf("愛看機器人線路取得失敗：%v", payload["message"])
+		}
 	}
 	lines := ikanbotParseLines(payload)
 	if len(lines) == 0 {
