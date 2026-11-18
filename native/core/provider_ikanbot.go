@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	ikanbotBaseURL = "https://www1.ikanbot.com"
+	ikanbotBaseURL = "https://www.ikanbot.com"
 	ikanbotUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 	ikanbotPageSize = 36
 	ikanbotMaxLines = 40
@@ -71,33 +71,85 @@ func ikanbotCategoryPath(page int,category string)(string,error){
 }
 func ikanbotImage(node *htmlnet.Node,pageURL string)string{
 	if node==nil{return ""}
-	raw:=providerHTMLAttr(node,"data-src");if raw==""{raw=providerHTMLAttr(node,"src")}
-	if raw==""||strings.HasPrefix(strings.ToLower(raw),"data:"){return ""}
-	return resolveProviderURL(pageURL,raw)
+	for _,attribute:=range []string{"data-original","data-src","data-lazy-src","data-lazyload","data-image","src"}{
+		raw:=strings.TrimSpace(providerHTMLAttr(node,attribute))
+		if raw==""||strings.HasPrefix(strings.ToLower(raw),"data:"){continue}
+		resolved:=resolveProviderURL(pageURL,raw)
+		if isProviderHTTPMediaURL(resolved){return resolved}
+	}
+	srcset:=strings.TrimSpace(providerHTMLAttr(node,"srcset"))
+	if srcset!=""{
+		for _,candidate:=range strings.Split(srcset,","){
+			fields:=strings.Fields(strings.TrimSpace(candidate))
+			if len(fields)==0{continue}
+			resolved:=resolveProviderURL(pageURL,fields[0])
+			if isProviderHTTPMediaURL(resolved){return resolved}
+		}
+	}
+	return ""
 }
 func ikanbotFindCard(root *htmlnet.Node)[]*htmlnet.Node{
 	return providerHTMLNodes(root,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&providerHTMLClass(n,"item")})
 }
+func ikanbotCardIDFromHref(raw string)string{
+	u,err:=url.Parse(strings.TrimSpace(raw))
+	if err!=nil{return ""}
+	if u.IsAbs(){
+		host:=strings.ToLower(u.Hostname())
+		if host!="ikanbot.com"&&host!="www.ikanbot.com"{return ""}
+	}
+	m:=regexp.MustCompile("^/play/([0-9]{1,12})(?:/|$)").FindStringSubmatch(u.Path)
+	if len(m)<2||!ikanbotNumericID(m[1]){return ""}
+	return m[1]
+}
+
+func ikanbotFirstImage(root *htmlnet.Node)*htmlnet.Node{
+	if root==nil{return nil}
+	for _,node:=range providerHTMLNodes(root,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="img"}){
+		if ikanbotImage(node,"https://www.ikanbot.com/")!=""{return node}
+	}
+	return nil
+}
+
 func ikanbotParseCards(root *htmlnet.Node,pageURL,category string)[]Drama{
 	out:=[]Drama{};seen:=map[string]bool{}
-	for _,card:=range ikanbotFindCard(root){
-		href:=providerHTMLAttr(card,"href")
-		m:=regexp.MustCompile("^/play/([0-9]{1,12})").FindStringSubmatch(href)
-		if len(m)<2||!ikanbotNumericID(m[1])||seen[m[1]]{continue}
+	anchors:=providerHTMLNodes(root,func(n *htmlnet.Node)bool{
+		return n.Type==htmlnet.ElementNode&&n.Data=="a"&&ikanbotCardIDFromHref(providerHTMLAttr(n,"href"))!=""
+	})
+	for _,anchor:=range anchors{
+		id:=ikanbotCardIDFromHref(providerHTMLAttr(anchor,"href"))
+		if id==""||seen[id]{continue}
 		var image *htmlnet.Node
-		for _,node:=range providerHTMLNodes(card,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="img"}){image=node;break}
-		title:=""
-		if image!=nil{title=providerHTMLPlainText(providerHTMLAttr(image,"alt"))}
-		if title==""{for _,node:=range providerHTMLNodes(card,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="p"}){title=providerHTMLText(node);break}}
+		// Current iKanBot templates put the poster inside the title link. Keep
+		// checking nearby card ancestors for older layouts where it is a sibling.
+		for current,depth:=anchor,0;current!=nil&&depth<4&&image==nil;current,depth=current.Parent,depth+1{
+			image=ikanbotFirstImage(current)
+		}
+		title:=providerHTMLPlainText(providerHTMLAttr(anchor,"title"))
+		if title==""&&image!=nil{title=providerHTMLPlainText(providerHTMLAttr(image,"alt"))}
+		if title==""{title=providerHTMLPlainText(providerHTMLText(anchor))}
+		if title==""{
+			for current,depth:=anchor.Parent,0;current!=nil&&depth<3;current,depth=current.Parent,depth+1{
+				for _,node:=range providerHTMLNodes(current,func(n *htmlnet.Node)bool{
+					return n.Type==htmlnet.ElementNode&&(n.Data=="h3"||n.Data=="h4"||n.Data=="p")
+				}){
+					title=providerHTMLPlainText(providerHTMLText(node))
+					if title!=""{break}
+				}
+				if title!=""{break}
+			}
+		}
 		if title==""{continue}
-		seen[m[1]]=true
-		out=append(out,Drama{ID:providerDramaID(sourceIkanBot,m[1]),Source:sourceIkanBot,SourceID:m[1],Title:truncate(title,512),Name:truncate(title,512),Cover:ikanbotImage(image,pageURL),CoverURL:ikanbotImage(image,pageURL),ChannelName:"愛看機器人",CategoryName:ikanbotCategoryKind(category)})
+		cover:=ikanbotImage(image,pageURL)
+		seen[id]=true
+		out=append(out,Drama{ID:providerDramaID(sourceIkanBot,id),Source:sourceIkanBot,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,ChannelName:"愛看機器人",CategoryName:ikanbotCategoryKind(category)})
 		if len(out)>=500{break}
 	}
 	return out
 }
 func ikanbotCategoryKind(category string)string{if strings.HasPrefix(category,"movie-"){return "電影"};return "影集"}
 func ikanbotParseSearch(root *htmlnet.Node,pageURL string)[]Drama{
+	if items:=ikanbotParseCards(root,pageURL,"");len(items)>0{return items}
 	out:=[]Drama{};seen:=map[string]bool{}
 	blocks:=providerHTMLNodes(root,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&providerHTMLClass(n,"media")})
 	for _,block:=range blocks{
