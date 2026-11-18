@@ -101,7 +101,9 @@ func TestExtraAdultMadouUsesCurrentCategorySlugs(t *testing.T) {
 	}
 
 	tests := []struct {
-		page, category, want string
+		page     int
+		category string
+		want     string
 	}{
 		{page: 1, category: "0", want: "/"},
 		{page: 2, category: "0", want: "/page/2/"},
