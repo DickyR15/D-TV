@@ -105,6 +105,7 @@ class PlaybackPreferences {
     this.aspectRatio = PlaybackAspectRatio.automatic,
     this.desktopAlwaysOnTop = false,
     this.showTelevisionClock = true,
+    this.autoFullscreen = true,
   });
 
   final double speed;
@@ -119,6 +120,7 @@ class PlaybackPreferences {
   final PlaybackAspectRatio aspectRatio;
   final bool desktopAlwaysOnTop;
   final bool showTelevisionClock;
+  final bool autoFullscreen;
 
   // Fresh installs enable next-episode preloading on phones and TVs.
   // A saved explicit choice (including false) always takes precedence.
@@ -137,6 +139,7 @@ class PlaybackPreferences {
     PlaybackAspectRatio? aspectRatio,
     bool? desktopAlwaysOnTop,
     bool? showTelevisionClock,
+    bool? autoFullscreen,
   }) => PlaybackPreferences(
     speed: speed ?? this.speed,
     quality: quality ?? this.quality,
@@ -151,6 +154,7 @@ class PlaybackPreferences {
     aspectRatio: aspectRatio ?? this.aspectRatio,
     desktopAlwaysOnTop: desktopAlwaysOnTop ?? this.desktopAlwaysOnTop,
     showTelevisionClock: showTelevisionClock ?? this.showTelevisionClock,
+    autoFullscreen: autoFullscreen ?? this.autoFullscreen,
   );
 
   Map<String, dynamic> toJson() => {
@@ -166,6 +170,7 @@ class PlaybackPreferences {
     'aspectRatioMode': aspectRatio.name,
     'desktopAlwaysOnTop': desktopAlwaysOnTop,
     'showTelevisionClock': showTelevisionClock,
+    'autoFullscreen': autoFullscreen,
   };
 
   factory PlaybackPreferences.fromJson(Map<String, dynamic> value) {
@@ -199,6 +204,7 @@ class PlaybackPreferences {
       aspectRatio: aspectRatio,
       desktopAlwaysOnTop: value['desktopAlwaysOnTop'] as bool? ?? false,
       showTelevisionClock: value['showTelevisionClock'] as bool? ?? true,
+      autoFullscreen: value['autoFullscreen'] as bool? ?? true,
     );
   }
 }
