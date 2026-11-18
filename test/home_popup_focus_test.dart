@@ -6,6 +6,7 @@ import 'package:hgtv/app_layout.dart';
 import 'package:hgtv/home_screen.dart';
 import 'package:hgtv/remote_widgets.dart';
 import 'package:hgtv/local_store.dart';
+import 'package:hgtv/models.dart';
 
 import 'fixtures.dart';
 
