@@ -83,3 +83,61 @@ func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 		t.Fatalf("91Porn current card parse = %#v, ok=%v", item, ok)
 	}
 }
+
+func TestExtraAdultMadouUsesCurrentCategorySlugs(t *testing.T) {
+	if !extraAdultValidCategory(sourceMadou, "大象传媒") ||
+		!extraAdultValidCategory(sourceMadou, "猫爪影像") ||
+		!extraAdultValidCategory(sourceMadou, "KISS糖果屋") {
+		t.Fatal("current Madou categories are missing")
+	}
+
+	tests := []struct {
+		page, category, want string
+	}{
+		{page: 1, category: "0", want: "/"},
+		{page: 2, category: "0", want: "/page/2/"},
+		{page: 1, category: "大象传媒", want: "/category/%E5%A4%A7%E8%B1%A1%E4%BC%A0%E5%AA%92"},
+		{page: 2, category: "大象传媒", want: "/category/%E5%A4%A7%E8%B1%A1%E4%BC%A0%E5%AA%92/page/2"},
+	}
+	for _, test := range tests {
+		got, err := extraAdultCategoryPath(sourceMadou, test.page, test.category)
+		if err != nil || got != test.want {
+			t.Fatalf("Madou category path (%d, %q) = %q, err=%v; want %q",
+				test.page, test.category, got, err, test.want)
+		}
+	}
+}
+
+func TestExtraAdultMadouAcceptsUnicodeDetailSlugsSafely(t *testing.T) {
+	const slug = "大象传媒-中文作品"
+	raw := "/%E5%A4%A7%E8%B1%A1%E4%BC%A0%E5%AA%92-%E4%B8%AD%E6%96%87%E4%BD%9C%E5%93%81.html"
+	id := extraAdultNormalizeID(sourceMadou, raw)
+	if id != slug+".html" || !extraAdultValidID(sourceMadou, id) {
+		t.Fatalf("Madou normalized detail ID = %q", id)
+	}
+	if got := extraAdultDetailURL(sourceMadou, id); got != madouBaseURL+"/"+url.PathEscape(id) {
+		t.Fatalf("Madou Unicode detail URL = %q", got)
+	}
+	if got := extraAdultNormalizeID(sourceMadou, "https://evil.example/"+raw); got != "" {
+		t.Fatalf("Madou accepted an external detail host: %q", got)
+	}
+}
+
+func TestExtraAdultMadouParsesUnicodeDetailCard(t *testing.T) {
+	html := `<article class="excerpt">
+		<a class="thumbnail" href="/%E5%A4%A7%E8%B1%A1%E4%BC%A0%E5%AA%92-%E4%B8%AD%E6%96%87%E4%BD%9C%E5%93%81.html">
+			<img data-src="/wp-content/uploads/poster.webp" alt="大象传媒中文作品">
+		</a>
+		<h2>大象传媒中文作品</h2>
+	</article>`
+	segments := extraAdultSegments(html, sourceMadou)
+	if len(segments) != 1 {
+		t.Fatalf("Madou article segments = %d, want 1", len(segments))
+	}
+	item, ok := extraAdultParseCard(sourceMadou, segments[0], madouBaseURL)
+	if !ok || item.SourceID != "大象传媒-中文作品.html" ||
+		item.Title != "大象传媒中文作品" ||
+		item.Cover != madouBaseURL+"/wp-content/uploads/poster.webp" {
+		t.Fatalf("Madou Unicode card = %#v, ok=%v", item, ok)
+	}
+}
