@@ -19,6 +19,19 @@ void main() {
     expect(legacy.toJson().containsKey('showTelevisionNetworkSpeed'), isFalse);
   });
 
+  test('automatic fullscreen defaults on and can be disabled persistently', () {
+    final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
+    expect(defaults.autoFullscreen, isTrue);
+
+    final disabled = defaults.copyWith(autoFullscreen: false);
+    expect(disabled.autoFullscreen, isFalse);
+    expect(
+      PlaybackPreferences.fromJson(disabled.toJson()).autoFullscreen,
+      isFalse,
+    );
+    expect(disabled.toJson()['autoFullscreen'], isFalse);
+  });
+
   test('PiP is enabled by default and can be independently disabled', () {
     final defaults = PlaybackPreferences.fromJson(const <String, dynamic>{});
     expect(defaults.pictureInPictureEnabled, isTrue);
