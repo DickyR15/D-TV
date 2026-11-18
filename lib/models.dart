@@ -80,7 +80,7 @@ class SourceSite {
     SourceSite('heitao', '黑桃', '分類短劇 · 線上搜尋'),
     SourceSite('supjav', 'SupJav', '分類 · 搜尋 · 播放', adult: true),
     SourceSite('ppp', 'ppp', '分類 · 搜尋 · 播放', adult: true),
-    SourceSite('madou', '麻豆傳媒', '分類 · 搜尋 · 多線播放', adult: true),
+    SourceSite('madou', '麻豆社', '分類 · 搜尋 · 多線播放', adult: true),
     SourceSite('91porna', '91porna', '分類 · 搜尋 · 多線播放', adult: true),
   ];
   /// Retired providers remain recognizable for saved library records only.
