@@ -9,7 +9,7 @@ import (
 )
 
 func TestIkanbotUsesCurrentOfficialHostAndCategoryRoutes(t *testing.T) {
-	if ikanbotBaseURL != "https://www.ikanbot.com" {
+	if ikanbotBaseURL != "https://v.ikanbot.com" {
 		t.Fatalf("IkanBot base URL = %q", ikanbotBaseURL)
 	}
 	got, err := ikanbotCategoryPath(1, "movie-熱門")
@@ -31,7 +31,7 @@ func TestIkanbotParsesCurrentCardLinksWithoutLegacyItemClass(t *testing.T) {
 			</a>
 		</div>
 		<div class="module-item">
-			<a href="https://www.ikanbot.com/play/1023900">
+			<a href="https://v.ikanbot.com/play/1023900">
 				<img data-src="/covers/second.webp" alt="第二部作品">
 				<p>第二部作品</p>
 			</a>
@@ -46,7 +46,7 @@ func TestIkanbotParsesCurrentCardLinksWithoutLegacyItemClass(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items := ikanbotParseCards(doc, "https://www.ikanbot.com/hot/index-movie-熱門.html", "movie-熱門")
+	items := ikanbotParseCards(doc, "https://v.ikanbot.com/hot/index-movie-熱門.html", "movie-熱門")
 	if len(items) != 2 {
 		t.Fatalf("IkanBot parsed %d cards, want 2: %#v", len(items), items)
 	}
@@ -55,7 +55,7 @@ func TestIkanbotParsesCurrentCardLinksWithoutLegacyItemClass(t *testing.T) {
 		t.Fatalf("first IkanBot card = %#v", items[0])
 	}
 	if items[1].SourceID != "1023900" || items[1].Title != "第二部作品" ||
-		items[1].Cover != "https://www.ikanbot.com/covers/second.webp" {
+		items[1].Cover != "https://v.ikanbot.com/covers/second.webp" {
 		t.Fatalf("second IkanBot card = %#v", items[1])
 	}
 }
@@ -79,7 +79,7 @@ func TestIkanbotImageSupportsLazyImageAttributes(t *testing.T) {
 }
 
 func TestIkanbotPlaybackAPIUsesResolvedPageHost(t *testing.T) {
-	for _, host := range []string{"www.ikanbot.com", "v.aikanbot.com", "www1.aikanbot.com"} {
+	for _, host := range []string{"v.ikanbot.com", "v.aikanbot.com", "www.ikanbot.com"} {
 		got, err := ikanbotPlaybackAPIURL(
 			"https://"+host+"/play/853970",
 			"853970",
@@ -105,7 +105,7 @@ func TestIkanbotPlaybackAPIUsesResolvedPageHost(t *testing.T) {
 
 func TestIkanbotPlaybackAPIRejectsUntrustedPageHosts(t *testing.T) {
 	for _, page := range []string{
-		"http://www.ikanbot.com/play/853970",
+		"http://v.ikanbot.com/play/853970",
 		"https://evil.example/play/853970",
 		"https://img1.ikanbot.com/play/853970",
 	} {
