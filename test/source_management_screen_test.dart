@@ -17,8 +17,8 @@ void main() {
 
   test('adult metadata is independent from advanced source membership', () {
     expect(SourceSite.missav.adult, isTrue);
-    expect(SourceSite.isAvailable('supjav'), isFalse);
-    expect(SourceSite.isLegacyRecordOnly('supjav'), isTrue);
+    expect(SourceSite.isAvailable('supjav'), allSourcesEnabled);
+    expect(SourceSite.isLegacyRecordOnly('supjav'), isFalse);
     expect(SourceSite.byId('supjav').adult, isTrue);
     expect(SourceSite.isKnown('guipian'), isTrue);
     expect(SourceSite.isAvailable('guipian'), isTrue);
@@ -95,10 +95,13 @@ void main() {
     expect(find.text('韓小圈'), findsOneWidget);
     expect(find.text('鬼片'), findsOneWidget);
     expect(find.text('多多追劇'), findsOneWidget);
+    expect(find.text('愛看機器人'), findsOneWidget);
+    expect(find.text('電影 · 電影 · 動漫 · 綜藝'), findsNothing);
+    expect(find.text('電影 · 影集 · 動畫 · 綜藝'), findsOneWidget);
     expect(find.text('電影 · 電視劇 · 動漫 · 綜藝'), findsOneWidget);
     expect(
       find.textContaining(
-        '預設開啟 4 個一般片源：紅果、韓小圈、鬼片、多多追劇。',
+        '預設開啟 5 個一般片源：紅果、韓小圈、鬼片、多多追劇、愛看機器人。',
       ),
       findsOneWidget,
     );
@@ -295,7 +298,7 @@ void main() {
     expect(find.text('進階片源'), findsNothing);
     expect(
       find.textContaining(
-        '預設開啟 4 個一般片源：紅果、韓小圈、鬼片、多多追劇。',
+        '預設開啟 5 個一般片源：紅果、韓小圈、鬼片、多多追劇、愛看機器人。',
       ),
       findsOneWidget,
     );
@@ -424,7 +427,7 @@ void main() {
 
     // Every advanced source receives the same label, regardless of its
     // provider-level adult metadata. General sources (including Guipian) do not.
-    final scrollable = find.byType(Scrollable).last;
+    final scrollable = find.byType(Scrollable).first;
     for (final source in SourceSite.restrictedValues) {
       final title = find.text(source.name);
       await tester.scrollUntilVisible(

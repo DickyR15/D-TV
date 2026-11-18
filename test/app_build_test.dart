@@ -16,11 +16,11 @@ void main() {
     SharedPreferences.setMockInitialValues({'source': 'huangdou'});
     final store = testStore(await SharedPreferences.getInstance());
     expect(appSlug, 'dtv');
-    // 一般版與全片源版都預設開啟紅果、韓小圈及多多追劇。
-    expect(store.sources.length, 4);
+    // 一般版與全片源版都預設開啟紅果、韓小圈、鬼片、多多追劇及愛看機器人。
+    expect(store.sources.length, 6);
     expect(
       store.sources.map((source) => source.id),
-      ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo'],
+      ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo', 'ikanbot'],
     );
     expect(
       SourceSite.values.any((source) => source.id == 'dsd'),

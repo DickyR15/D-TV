@@ -65,7 +65,7 @@ class SourceSite {
     adult: true,
   );
 
-  /// 預設開啟的一般片源：紅果、韓小圈、鬼片、多多追劇。
+  /// 預設開啟的一般片源：紅果、韓小圈、鬼片、多多追劇、愛看機器人。
   static const primaryValues = [hongguo, hanxiaoquan, guipian, duoduo, ikanbot];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。

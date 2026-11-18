@@ -891,6 +891,11 @@ class _ProfileEditorState extends State<ProfileEditor> {
             const SizedBox(height: 20),
             if (widget.profile?.admin != true) ...[
               Text('允許使用的片源', style: Theme.of(context).textTheme.titleMedium),
+              if (!widget.store.administratorPasswordConfigured)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Text('設定管理員密碼後，才能將進階片源授予其他使用者。'),
+                ),
               for (final source in (widget.store.administratorPasswordConfigured
                   ? SourceSite.values
                   : SourceSite.primaryValues))
@@ -909,11 +914,6 @@ class _ProfileEditorState extends State<ProfileEditor> {
                       }
                     });
                   },
-                ),
-              if (!widget.store.administratorPasswordConfigured)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text('設定管理員密碼後，才能將進階片源授予其他使用者。'),
                 ),
             ] else
               const Text('管理員可存取所有片源及功能。建立其他使用者前，請先設定管理員密碼。'),
