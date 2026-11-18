@@ -47,7 +47,7 @@ func extraAdultSourceName(source string) string {
 	case sourceSupJav: return "SupJav"
 	case sourcePPP: return "PPP"
 	case sourceMadou: return "麻豆傳媒"
-	case source91Porna: return "91Porna"
+	case source91Porna: return "91porna"
 	default: return "進階片源"
 	}
 }
