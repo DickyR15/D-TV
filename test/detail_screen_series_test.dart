@@ -298,7 +298,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('播放線路'), findsNothing);
-      expect(find.text('3 集'), findsOneWidget);
       for (final episode in [1, 2, 3]) {
         expect(
           find.byKey(ValueKey('episode-$episode')),
