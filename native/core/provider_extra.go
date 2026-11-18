@@ -369,28 +369,27 @@ func extraAdultPPPStreamURL(body, page string) string {
 
 // 91Porna playback: detail -> embed?id=... -> embed_play.js -> HLS/MP4.
 func extraAdult91PornaPlayParams(body string) (string, string) {
+	normalize := func(value string) string {
+		return strings.NewReplacer(
+			"\\/", "/",
+			"\\u002F", "/",
+			"\\u0026", "&",
+			"\\\"", "\"",
+			"\\'", "'",
+			"&amp;", "&",
+		).Replace(value)
+	}
 	unpacked := adultUnpackPacker(body)
 	if unpacked == "" {
 		unpacked = body
 	}
-	unpacked = strings.NewReplacer(
-		"\\/", "/",
-		"\\u002F", "/",
-		"\\\\\"", "\"",
-		"\\'", "'",
-		"&amp;", "&",
-	).Replace(unpacked)
-	normalizedBody := strings.NewReplacer(
-		"\\/", "/",
-		"\\u002F", "/",
-		"\\\\\"", "\"",
-		"&amp;", "&",
-	).Replace(body)
+	unpacked = normalize(unpacked)
+	normalizedBody := normalize(body)
 
 	var img, encodedURL string
-	// Current pages may place both values in the embed_play.js script URL,
-	// rather than declaring img/u as JavaScript variables.
-	scriptURLPattern := regexp.MustCompile(`(?is)embed_play\\.js\\?([^"'<>\\s]+)`)
+	// Current pages may put both values in the embed_play.js script URL,
+	// not in JavaScript img/u variable declarations.
+	scriptURLPattern := regexp.MustCompile("(?is)embed_play\\.js\\?([^\"'<>[:space:]]+)")
 	for _, source := range []string{unpacked, normalizedBody} {
 		for _, match := range scriptURLPattern.FindAllStringSubmatch(source, 32) {
 			query := strings.TrimRight(match[1], "});,]")
@@ -412,8 +411,8 @@ func extraAdult91PornaPlayParams(body string) (string, string) {
 
 	if img == "" {
 		imgPatterns := []*regexp.Regexp{
-			regexp.MustCompile(`(?is)embed_play\\.js\\?[^\\x22'&\\s]*?img=([^\\x22'&\\s]+)`),
-			regexp.MustCompile(`(?is)\\bimg\\s*=\\s*['\\x22]([^'\\x22]+)['\\x22]`),
+			regexp.MustCompile("(?is)embed_play\\.js\\?[^\"'&[:space:]]*?img=([^\"'&[:space:]]+)"),
+			regexp.MustCompile("(?is)\\bimg\\s*=\\s*['\"]([^'\"]+)['\"]"),
 		}
 		for _, source := range []string{unpacked, normalizedBody} {
 			for _, pattern := range imgPatterns {
@@ -422,13 +421,15 @@ func extraAdult91PornaPlayParams(body string) (string, string) {
 					break
 				}
 			}
-			if img != "" { break }
+			if img != "" {
+				break
+			}
 		}
 	}
 	if encodedURL == "" {
 		uPatterns := []*regexp.Regexp{
-			regexp.MustCompile(`(?is)encodeURIComponent\\s*\\(\\s*['\\x22]([^'\\x22]+)['\\x22]\\s*\\)`),
-			regexp.MustCompile(`(?is)\\b(?:var|let|const)\\s+u\\s*=\\s*['\\x22]([^'\\x22]+)['\\x22]`),
+			regexp.MustCompile("(?is)encodeURIComponent\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)"),
+			regexp.MustCompile("(?is)\\b(?:var|let|const)\\s+u\\s*=\\s*['\"]([^'\"]+)['\"]"),
 		}
 		for _, source := range []string{unpacked, normalizedBody} {
 			for _, pattern := range uPatterns {
@@ -437,9 +438,12 @@ func extraAdult91PornaPlayParams(body string) (string, string) {
 					break
 				}
 			}
-			if encodedURL != "" { break }
+			if encodedURL != "" {
+				break
+			}
 		}
 	}
+
 	// Some player templates encode the entire target URL twice.
 	if encodedURL != "" &&
 		!strings.HasPrefix(strings.ToLower(encodedURL), "https://") &&
