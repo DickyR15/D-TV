@@ -266,9 +266,9 @@ func TestExtraAdult91PornaExtractsCurrentEmbedPlaybackParameters(t *testing.T) {
 
 func TestExtraAdult91PornaExtractsEscapedEmbedPlayArguments(t *testing.T) {
 	body := `<script>
-		var player = "embed_play.js?img=poster%2Ffolder%3D1";
-		var src = encodeURIComponent(\\"https:\\/\\/91porna.com\\/comic\\/index\\/embed?id=169397\\");
-	</script>`
+  var player = "embed_play.js?img=poster%2Ffolder%3D1";
+  var src = encodeURIComponent(\"https:\/\/91porna.com\/comic\/index\/embed?id=169397\");
+</script>`
 	img, encodedURL := extraAdult91PornaPlayParams(body)
 	if img != "poster%2Ffolder%3D1" {
 		t.Fatalf("91Porna img query value changed: %q", img)
@@ -277,7 +277,6 @@ func TestExtraAdult91PornaExtractsEscapedEmbedPlayArguments(t *testing.T) {
 		t.Fatalf("91Porna escaped embed URL = %q", encodedURL)
 	}
 }
-
 func TestExtraAdult91PornaExtractsDirectUVariable(t *testing.T) {
 	body := `<script>var img='cover%2F123'; var u='https://91porna.com/comic/index/embed?id=169397';</script>`
 	img, encodedURL := extraAdult91PornaPlayParams(body)
