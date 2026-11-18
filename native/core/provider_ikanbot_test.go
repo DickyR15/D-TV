@@ -82,7 +82,7 @@ func TestIkanbotPlaybackAPIUsesResolvedPageHost(t *testing.T) {
 	for _, host := range []string{"v.ikanbot.com", "v.aikanbot.com", "www.ikanbot.com"} {
 		got, err := ikanbotPlaybackAPIURL(
 			"https://"+host+"/play/1023900",
-			"853970",
+			"1023900",
 			"2",
 			"722ae90e3a9be1a774fa099083c3cd15",
 		)
