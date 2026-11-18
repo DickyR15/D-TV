@@ -72,6 +72,14 @@ void main() {
 
       expect(find.text('熱門榜單・收藏追劇・隨選即播'), findsOneWidget);
 
+      // The app starts on the Hot board; switch to the TV Category tab before
+      // asserting the catalog-only refresh action.
+      final categoryNavigation = find.byKey(const ValueKey('side-nav-8'));
+      expect(categoryNavigation, findsOneWidget);
+      await tester.tap(categoryNavigation);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
       final refreshButton = find.byKey(const ValueKey('home-refresh'));
       expect(refreshButton, findsOneWidget);
       expect(
