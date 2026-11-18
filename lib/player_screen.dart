@@ -276,6 +276,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     aspectRatio: _playbackAspectRatio,
     desktopAlwaysOnTop: widget.store.playbackPreferences.desktopAlwaysOnTop,
     showTelevisionClock: _showTelevisionClock,
+    autoFullscreen: widget.store.playbackPreferences.autoFullscreen,
   );
   int get _actualVideoQuality =>
       videoQualityShortEdge(videoDisplaySize(_player.state.videoParams)) ?? 0;
@@ -307,6 +308,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       save: widget.store.setPlayerVolume,
     );
     final preferences = widget.store.playbackPreferences;
+    _fullscreen = preferences.autoFullscreen;
+    _automaticFullscreenSuppressed = !preferences.autoFullscreen;
     if (Platform.isWindows || Platform.isMacOS) {
       unawaited(
         windowManager.setAlwaysOnTop(
@@ -2241,7 +2244,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (_formFactor != formFactor) {
       // Opening a player is an explicit fullscreen action on every platform.
       // Keep that state when device metrics settle or the layout family changes.
-      _automaticFullscreenSuppressed = false;
+      if (widget.store.playbackPreferences.autoFullscreen) {
+        _automaticFullscreenSuppressed = false;
+      }
       _interactions.cancel();
     }
     _formFactor = formFactor;
@@ -2291,7 +2296,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       _portraitBlurBackground = true;
       unawaited(widget.store.migratePortraitBlurLandscapeDefault());
     }
-    if (_lastOrientation != null && _lastOrientation != orientation) {
+    if (_lastOrientation != null &&
+        _lastOrientation != orientation &&
+        widget.store.playbackPreferences.autoFullscreen) {
       _automaticFullscreenSuppressed = false;
       _interactions.cancel();
     }
