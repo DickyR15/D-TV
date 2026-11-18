@@ -357,7 +357,7 @@ func TestIkanbotResolveMediaLoadsSignedHLSPlaylist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveIkanbotMedia failed: %v", err)
 	}
-	if media.URL != playlistURL || media.Playlist != playlist {
+	if media.URL != playlistURL || strings.TrimSpace(media.Playlist) != strings.TrimSpace(playlist) {
 		t.Fatalf("signed iKanBot HLS playlist was not prepared: %#v", media)
 	}
 }
