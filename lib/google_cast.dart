@@ -30,9 +30,6 @@ GoogleCastMediaKind googleCastMediaKindForUrl(
   return GoogleCastMediaKind.mp4;
 }
 
-/// Converts a resolved Windows DNS-SD Google Cast service into the same
-/// payload used by dart_cast. Windows NSD uses the OS DNS-SD API, which follows
-/// the same discovery path used by Chromium-based browsers.
 /// Converts a resolved Google Cast endpoint into the payload consumed by
 /// dart_cast. Invalid, loopback, multicast and non-IPv4 endpoints are rejected.
 Map<String, dynamic>? googleCastPayloadFromAddress({
@@ -137,6 +134,7 @@ Future<Map<String, dynamic>?> googleCastPayloadFromNsdService(
     metadata: metadata,
   );
 }
+
 /// Chromecast V2 sender. Only Google Cast is registered here; AirPlay is
 /// deliberately excluded because iOS projection was removed from D-TV.
 class GoogleCastController {
