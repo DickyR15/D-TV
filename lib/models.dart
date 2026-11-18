@@ -81,7 +81,7 @@ class SourceSite {
     SourceSite('supjav', 'SupJav', '分類 · 搜尋 · 播放', adult: true),
     SourceSite('ppp', 'PPP', '分類 · 搜尋 · 播放', adult: true),
     SourceSite('madou', '麻豆傳媒', '分類 · 搜尋 · 多線播放', adult: true),
-    SourceSite('91porna', '91Porna', '分類 · 搜尋 · 多線播放', adult: true),
+    SourceSite('91porna', '91porna', '分類 · 搜尋 · 多線播放', adult: true),
   ];
   /// Retired providers remain recognizable for saved library records only.
   /// They are not available for new catalog browsing or source management.
