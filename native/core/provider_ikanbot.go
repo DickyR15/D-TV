@@ -287,6 +287,70 @@ func (d *Downloader) fetchIkanbotLines(ctx context.Context, sourceID, currentID,
 	}
 	return lines, nil
 }
+func ikanbotBuildChapters(sourceID, pageURL string, lines []ikanbotLine) []Chapter {
+	type selectedEpisode struct {
+		episode  ikanbotEpisode
+		lineFlag string
+		variants []string
+		seenURLs map[string]bool
+	}
+	selected := make(map[int]*selectedEpisode)
+	for _, line := range lines {
+		for index, episode := range line.Episodes {
+			order := episode.Order
+			if order <= 0 {
+				order = ikanbotEpisodeOrder(episode.Name, index+1)
+			}
+			if order <= 0 || !isProviderHTTPMediaURL(episode.URL) {
+				continue
+			}
+			entry := selected[order]
+			if entry == nil {
+				entry = &selectedEpisode{
+					episode: episode,
+					lineFlag: line.Flag,
+					seenURLs: map[string]bool{episode.URL: true},
+				}
+				selected[order] = entry
+				continue
+			}
+			if entry.seenURLs[episode.URL] {
+				continue
+			}
+			entry.seenURLs[episode.URL] = true
+			entry.variants = append(
+				entry.variants,
+				fmt.Sprintf("%d:%s", ikanbotQuality(line.Flag), episode.URL),
+			)
+		}
+	}
+	orders := make([]int, 0, len(selected))
+	for order := range selected {
+		orders = append(orders, order)
+	}
+	sort.Ints(orders)
+	chapters := make([]Chapter, 0, len(orders))
+	for _, order := range orders {
+		entry := selected[order]
+		name := strings.TrimSpace(entry.episode.Name)
+		if name == "" {
+			name = fmt.Sprintf("第 %d 集", order)
+		}
+		chapters = append(chapters, Chapter{
+			ID: providerChapterID(sourceIkanBot, sourceID, strconv.Itoa(order)),
+			Source: sourceIkanBot,
+			Title: truncate(name, 128),
+			VideoURL: entry.episode.URL,
+			PlaybackVariants: entry.variants,
+			PlayLine: entry.lineFlag,
+			PageURL: pageURL,
+			Referer: pageURL,
+			CurrentEpisode: json.RawMessage(strconv.Itoa(order)),
+		})
+	}
+	return chapters
+}
+
 func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Drama,[]Chapter,error){
 	if !ikanbotNumericID(sourceID){return Drama{},nil,errors.New("愛看機器人作品識別碼無效")}
 	pageURL:=ikanbotBaseURL+"/play/"+sourceID
@@ -298,15 +362,7 @@ func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Dra
 	lines,err:=d.fetchIkanbotLines(ctx,sourceID,currentID,token,mtype,final);if err!=nil{return Drama{},nil,err}
 	meta:=[]string{};for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="h3"&&providerHTMLClass(n,"meta")}){v:=providerHTMLText(n);if v!=""{meta=append(meta,v)}}
 	tags:=[]string{};year:="";for _,v:=range meta{if year==""&&regexp.MustCompile("^(19|20)[0-9]{2}$").MatchString(v){year=v};if strings.Contains(v,"/"){tags=append(tags,truncate(v,64))}}
-	primary:=lines[0];orders:=map[int]bool{};chapters:=[]Chapter{}
-	for index,ep:=range primary.Episodes{
-		order:=ep.Order;if order<=0{order=index+1};if orders[order]{continue};orders[order]=true
-		name:=strings.TrimSpace(ep.Name);if name==""{name=fmt.Sprintf("第 %d 集",order)}
-		var alternatives []string;seen:=map[string]bool{ep.URL:true}
-		for _,line:=range lines{for _,other:=range line.Episodes{if other.Order==order&&!seen[other.URL]{seen[other.URL]=true;alternatives=append(alternatives,fmt.Sprintf("%d:%s",ikanbotQuality(line.Flag),other.URL))}}}
-		chapters=append(chapters,Chapter{ID:providerChapterID(sourceIkanBot,sourceID,strconv.Itoa(order)),Source:sourceIkanBot,Title:truncate(name,128),VideoURL:ep.URL,PlaybackVariants:alternatives,PlayLine:primary.Flag,PageURL:final,Referer:final,CurrentEpisode:json.RawMessage(strconv.Itoa(order))})
-	}
-	sort.SliceStable(chapters,func(i,j int)bool{return chapters[i].EpisodeString(i+1)<chapters[j].EpisodeString(j+1)})
+	chapters := ikanbotBuildChapters(sourceID, final, lines)
 	if len(chapters)==0{return Drama{},nil,errors.New("愛看機器人目前沒有可播放分集")}
 	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,OnlineDate:year,Tags:tags,TotalEpisode:len(chapters),EpisodeCount:len(chapters),ChannelName:"愛看機器人",CategoryName:"影集"}
 	return drama,chapters,nil
