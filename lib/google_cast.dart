@@ -92,6 +92,31 @@ Future<Map<String, dynamic>?> googleCastPayloadFromNsdService(
     }
   }
 
+  // Auto-resolve can still leave the address list empty on Windows when
+  // the PTR/SRV service record arrives before its A record. Ask the platform
+  // resolver for a fresh DNS-SD result before falling back to a host lookup.
+  if (address == null) {
+    try {
+      final resolvedService = await nsd
+          .resolve(service)
+          .timeout(const Duration(seconds: 3));
+      for (final candidate
+          in resolvedService.addresses ?? const <InternetAddress>[]) {
+        if (candidate.type == InternetAddressType.IPv4 &&
+            !candidate.isLoopback &&
+            !candidate.isMulticast) {
+          address = candidate;
+          break;
+        }
+      }
+      if (address == null && resolvedService.host != null) {
+        service = resolvedService;
+      }
+    } catch (error) {
+      debugPrint('[GoogleCast] DNS-SD resolve failed error=$error');
+    }
+  }
+
   if (address == null && service.host != null) {
     var host = service.host!.trim();
     if (host.endsWith('.')) host = host.substring(0, host.length - 1);
