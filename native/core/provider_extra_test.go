@@ -64,8 +64,9 @@ func TestExtraAdultCategoryAndSearchPaths(t *testing.T) {
 }
 
 func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
-	if !extraAdultValidCategory(source91Porna, "play") {
-		t.Fatal("91Porn current playing category is not registered")
+	if !extraAdultValidCategory(source91Porna, "play") ||
+		!extraAdultValidCategory(source91Porna, "month_hot") {
+		t.Fatal("91Porn current playing or previous-month category is not registered")
 	}
 	got, err := extraAdultCategoryPath(source91Porna, 1, "")
 	if err != nil || got != "/comic/index/video?category=play&page=1" {
