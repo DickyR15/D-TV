@@ -31,7 +31,7 @@ const (
 var extraAdultCategories = map[string][]nativeCategory{
 	sourceSupJav: {{ID:"0",Name:"最新"},{ID:"uncensored",Name:"無碼"},{ID:"uncensored-leaked",Name:"無碼破解"},{ID:"censored",Name:"有碼"},{ID:"chinese",Name:"中文字幕"},{ID:"amateur",Name:"素人"}},
 	sourcePPP: {{ID:"new",Name:"最新上架"},{ID:"c-china",Name:"中國"},{ID:"c-japan",Name:"日本"},{ID:"c-taiwan",Name:"台灣"},{ID:"c-korea",Name:"韓國"},{ID:"c-hongkong",Name:"香港"},{ID:"c-se-asia",Name:"東南亞"},{ID:"c-amateur",Name:"素人自拍"},{ID:"c-cosplay",Name:"角色扮演"},{ID:"c-streamer",Name:"直播主"},{ID:"c-first-person-pov",Name:"第一人稱"},{ID:"c-china-av",Name:"中國成人影片"},{ID:"c-japan-producer",Name:"日本片商"}},
-	sourceMadou: {{ID:"0",Name:"全部"},{ID:"麻豆传媒",Name:"madou"},{ID:"麻豆番外篇",Name:"麻豆番外篇"},{ID:"麻豆花絮",Name:"麻豆花絮"},{ID:"hongkongdoll",Name:"HongKongDoll"},{ID:"psychoporntw",Name:"PsychopornTW"},{ID:"91制片厂",Name:"91製片廠"},{ID:"果冻传媒",Name:"果凍傳媒"},{ID:"蜜桃影像",Name:"蜜桃影像"},{ID:"天美传媒",Name:"天美傳媒"},{ID:"皇家华人",Name:"皇家華人"},{ID:"兔子先生",Name:"兔子先生"},{ID:"星空无限传媒",Name:"星空無限傳媒"},{ID:"爱豆",Name:"愛豆"},{ID:"麻豆导演系列",Name:"麻豆導演系列"},{ID:"大象传媒",Name:"大象傳媒"},{ID:"猫爪影像",Name:"貓爪影像"},{ID:"精东影业",Name:"精東影業"},{ID:"杏吧",Name:"杏吧"},{ID:"乐播传媒",Name:"樂播傳媒"},{ID:"草莓",Name:"草莓"},{ID:"抖阴",Name:"抖陰"},{ID:"sa国际传媒",Name:"SA國際傳媒"},{ID:"起点传媒-性视界传媒",Name:"起點傳媒／性視界傳媒"},{ID:"大鸟十八",Name:"大鳥十八"},{ID:"小鹏奇啪行",Name:"小鵬奇啪行"},{ID:"女优淫娃培训营",Name:"女優培訓營"},{ID:"淫欲游戏王",Name:"淫慾遊戲王"},{ID:"女神羞羞研究所",Name:"女神羞羞研究所"},{ID:"突袭女优家",Name:"突襲女優家"},{ID:"情趣K歌房",Name:"情趣 K 歌房"},{ID:"kiss糖果屋",Name:"KISS 糖果屋"}},
+	sourceMadou: {{ID:"麻豆传媒",Name:"madou"},{ID:"麻豆番外篇",Name:"麻豆番外篇"},{ID:"麻豆花絮",Name:"麻豆花絮"},{ID:"hongkongdoll",Name:"HongKongDoll"},{ID:"psychoporntw",Name:"PsychopornTW"},{ID:"91制片厂",Name:"91製片廠"},{ID:"果冻传媒",Name:"果凍傳媒"},{ID:"蜜桃影像",Name:"蜜桃影像"},{ID:"天美传媒",Name:"天美傳媒"},{ID:"皇家华人",Name:"皇家華人"},{ID:"兔子先生",Name:"兔子先生"},{ID:"星空无限传媒",Name:"星空無限傳媒"},{ID:"爱豆",Name:"愛豆"},{ID:"麻豆导演系列",Name:"麻豆導演系列"},{ID:"大象传媒",Name:"大象傳媒"},{ID:"猫爪影像",Name:"貓爪影像"},{ID:"精东影业",Name:"精東影業"},{ID:"杏吧",Name:"杏吧"},{ID:"乐播传媒",Name:"樂播傳媒"},{ID:"草莓",Name:"草莓"},{ID:"抖阴",Name:"抖陰"},{ID:"sa国际传媒",Name:"SA國際傳媒"},{ID:"起点传媒-性视界传媒",Name:"起點傳媒／性視界傳媒"},{ID:"大鸟十八",Name:"大鳥十八"},{ID:"小鹏奇啪行",Name:"小鵬奇啪行"},{ID:"女优淫娃培训营",Name:"女優培訓營"},{ID:"淫欲游戏王",Name:"淫慾遊戲王"},{ID:"女神羞羞研究所",Name:"女神羞羞研究所"},{ID:"突袭女优家",Name:"突襲女優家"},{ID:"情趣K歌房",Name:"情趣 K 歌房"},{ID:"kiss糖果屋",Name:"KISS 糖果屋"}},
 	source91Porna: {{ID:"play",Name:"正在播放"},{ID:"now_hot",Name:"目前最熱門"},{ID:"new_update",Name:"最近更新"},{ID:"original",Name:"91 原創"},{ID:"now_month_hot",Name:"本月最熱門"},{ID:"ten_minutes",Name:"10 分鐘以上"},{ID:"twenty_minutes",Name:"20 分鐘以上"},{ID:"now_month_collect",Name:"本月收藏"},{ID:"hd",Name:"高畫質"},{ID:"month_hot",Name:"上月最熱門"},{ID:"now_month_comment",Name:"本月討論"},{ID:"max_collect",Name:"收藏最多"}},
 }
 
@@ -54,8 +54,12 @@ func extraAdultSourceName(source string) string {
 	}
 }
 func extraAdultValidCategory(source, category string) bool {
+	source = canonicalProviderSource(source)
 	if category == "" { return true }
-	for _, item := range extraAdultCategories[canonicalProviderSource(source)] { if item.ID == category { return true } }
+	// Keep accepting the legacy "0" selection from saved Madou preferences,
+	// but expose only the shared "全部" option in the category picker.
+	if source == sourceMadou && category == "0" { return true }
+	for _, item := range extraAdultCategories[source] { if item.ID == category { return true } }
 	return false
 }
 func extraAdultCategoriesFor(source string) []nativeCategory {
@@ -365,52 +369,90 @@ func extraAdultPPPStreamURL(body, page string) string {
 
 // 91Porna playback: detail -> embed?id=... -> embed_play.js -> HLS/MP4.
 func extraAdult91PornaPlayParams(body string) (string, string) {
+	normalize := func(value string) string {
+		return strings.NewReplacer(
+			"\\/", "/",
+			"\\u002F", "/",
+			"\\u0026", "&",
+			"\\\"", "\"",
+			"\\'", "'",
+			"&amp;", "&",
+		).Replace(value)
+	}
 	unpacked := adultUnpackPacker(body)
 	if unpacked == "" {
 		unpacked = body
 	}
-	unpacked = strings.NewReplacer(
-		"\\/", "/",
-		"\\u002F", "/",
-		"\\\"", "\"",
-		"\\'", "'",
-		"&amp;", "&",
-	).Replace(unpacked)
-	normalizedBody := strings.NewReplacer(
-		"\\/", "/",
-		"\\u002F", "/",
-		"\\\"", "\"",
-		"&amp;", "&",
-	).Replace(body)
+	unpacked = normalize(unpacked)
+	normalizedBody := normalize(body)
 
-	var img string
-	imgPatterns := []*regexp.Regexp{
-		regexp.MustCompile("(?is)embed_play\\.js\\?[^\\x22'&\\s]*?img=([^\\x22'&\\s]+)"),
-		regexp.MustCompile("(?is)\\bimg\\s*=\\s*['\\x22]([^'\\x22]+)['\\x22]"),
-	}
+	var img, encodedURL string
+	// Current pages may put both values in the embed_play.js script URL,
+	// not in JavaScript img/u variable declarations.
+	scriptURLPattern := regexp.MustCompile("(?is)embed_play\\.js\\?([^\"'<>[:space:]]+)")
 	for _, source := range []string{unpacked, normalizedBody} {
-		for _, pattern := range imgPatterns {
-			if match := pattern.FindStringSubmatch(source); len(match) > 1 {
-				img = strings.TrimSpace(match[1])
+		for _, match := range scriptURLPattern.FindAllStringSubmatch(source, 32) {
+			query := strings.TrimRight(match[1], "});,]")
+			values, err := url.ParseQuery(query)
+			if err != nil {
+				continue
+			}
+			if img == "" {
+				img = strings.TrimSpace(values.Get("img"))
+			}
+			if encodedURL == "" {
+				encodedURL = strings.TrimSpace(values.Get("u"))
+			}
+		}
+		if img != "" && encodedURL != "" {
+			break
+		}
+	}
+
+	if img == "" {
+		imgPatterns := []*regexp.Regexp{
+			regexp.MustCompile("(?is)embed_play\\.js\\?[^\"'&[:space:]]*?img=([^\"'&[:space:]]+)"),
+			regexp.MustCompile("(?is)\\bimg\\s*=\\s*['\"]([^'\"]+)['\"]"),
+		}
+		for _, source := range []string{unpacked, normalizedBody} {
+			for _, pattern := range imgPatterns {
+				if match := pattern.FindStringSubmatch(source); len(match) > 1 {
+					img = strings.TrimSpace(match[1])
+					break
+				}
+			}
+			if img != "" {
 				break
 			}
 		}
-		if img != "" { break }
 	}
-
-	var encodedURL string
-	uPatterns := []*regexp.Regexp{
-		regexp.MustCompile("(?is)encodeURIComponent\\s*\\(\\s*['\\x22]([^'\\x22]+)['\\x22]\\s*\\)"),
-		regexp.MustCompile("(?is)\\b(?:var|let|const)\\s+u\\s*=\\s*['\\x22]([^'\\x22]+)['\\x22]"),
-	}
-	for _, source := range []string{unpacked, normalizedBody} {
-		for _, pattern := range uPatterns {
-			if match := pattern.FindStringSubmatch(source); len(match) > 1 {
-				encodedURL = strings.TrimSpace(match[1])
+	if encodedURL == "" {
+		uPatterns := []*regexp.Regexp{
+			regexp.MustCompile("(?is)encodeURIComponent\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)"),
+			regexp.MustCompile("(?is)\\b(?:var|let|const)\\s+u\\s*=\\s*['\"]([^'\"]+)['\"]"),
+		}
+		for _, source := range []string{unpacked, normalizedBody} {
+			for _, pattern := range uPatterns {
+				if match := pattern.FindStringSubmatch(source); len(match) > 1 {
+					encodedURL = strings.TrimSpace(match[1])
+					break
+				}
+			}
+			if encodedURL != "" {
 				break
 			}
 		}
-		if encodedURL != "" { break }
+	}
+
+	// Some player templates encode the entire target URL twice.
+	if encodedURL != "" &&
+		!strings.HasPrefix(strings.ToLower(encodedURL), "https://") &&
+		!strings.HasPrefix(strings.ToLower(encodedURL), "http://") {
+		if decoded, err := url.QueryUnescape(encodedURL); err == nil &&
+			(strings.HasPrefix(strings.ToLower(decoded), "https://") ||
+				strings.HasPrefix(strings.ToLower(decoded), "http://")) {
+			encodedURL = decoded
+		}
 	}
 	return img, encodedURL
 }
@@ -537,9 +579,11 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 				if strings.ContainsAny(img, "&\\r\\n") {
 					return providerMedia{}, errors.New("91Porna 播放腳本 img 參數無效")
 				}
-				jsURL := ninetyOneBaseURL + "/index/embed_play.js?img=" +
-					img + "&u=" + url.QueryEscape(encodedURL) +
-					"&t=" + strconv.FormatInt(time.Now().Unix()/1800, 10)
+				jsQuery := url.Values{}
+				jsQuery.Set("img", img)
+				jsQuery.Set("u", encodedURL)
+				jsQuery.Set("t", strconv.FormatInt(time.Now().Unix()/1800, 10))
+				jsURL := ninetyOneBaseURL + "/index/embed_play.js?" + jsQuery.Encode()
 				jsBody, _, jsErr := extraAdultFetch(ctx, d, source, jsURL, embedFinal)
 				if jsErr != nil {
 					return providerMedia{}, fmt.Errorf("91Porna 播放腳本讀取失敗：%w", jsErr)
