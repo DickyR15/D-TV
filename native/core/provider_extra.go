@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	htmlnet "golang.org/x/net/html"
 )
 
 const (
@@ -93,10 +95,21 @@ func extraAdultCategoryPath(source string, page int, category string) (string,er
 func extraAdultSearchPath(source string,page int,query string)(string,bool,error){
 	query=strings.TrimSpace(query);if query==""||len([]rune(query))>256||page<1||page>100000{return "",false,errors.New("搜尋條件無效")};q:=url.QueryEscape(query)
 	switch canonicalProviderSource(source){
-	case sourceSupJav:return "/search?keyword="+q,false,nil
-	case sourcePPP:p:="/search/?q="+q;if page>1{p+="&page="+strconv.Itoa(page)};return p,true,nil
-	case sourceMadou:if page==1{return "/?s="+q,false,nil};return fmt.Sprintf("/page/%d/?s=%s",page,q),false,nil
-	case source91Porna:return "/comic/index/search?keyword="+q,false,nil
+	case sourceSupJav:
+		p := "/search?keyword=" + q
+		if page > 1 { p += "&page=" + strconv.Itoa(page) }
+		return p, true, nil
+	case sourcePPP:
+		p := "/search/?q=" + q
+		if page > 1 { p += "&page=" + strconv.Itoa(page) }
+		return p, true, nil
+	case sourceMadou:
+		if page == 1 { return "/?s=" + q, true, nil }
+		return fmt.Sprintf("/page/%d/?s=%s", page, q), true, nil
+	case source91Porna:
+		p := "/comic/index/search?keyword=" + q
+		if page > 1 { p += "&page=" + strconv.Itoa(page) }
+		return p, true, nil
 	};return "",false,errors.New("不支援的進階片源搜尋")
 }
 func extraAdultNormalizeID(source,raw string)string{
@@ -155,6 +168,72 @@ func extraAdultSegments(body,source string)[]string{
 	starts:=re.FindAllStringIndex(body,-1);out:=make([]string,0,len(starts))
 	for i,x:=range starts{end:=len(body);if i+1<len(starts){end=starts[i+1][0]}else if end>x[0]+6000{end=x[0]+6000};out=append(out,body[x[0]:end])};return out
 }
+func extraAdultHasNextPage(body, baseURL string, currentPage int, source string) bool {
+	base, err := url.Parse(baseURL)
+	if err != nil || base.Hostname() == "" || currentPage < 1 {
+		return false
+	}
+	doc, err := htmlnet.Parse(strings.NewReader(body))
+	if err != nil {
+		return false
+	}
+	pagePathPatterns := map[string]*regexp.Regexp{
+		sourcePPP: regexp.MustCompile("(?i)/(?:new|categories/[^/]+)/([0-9]+)/?$"),
+		sourceMadou: regexp.MustCompile("(?i)/(?:page|category/[^/]+/page)/([0-9]+)/?$"),
+	}
+	for _, anchor := range providerHTMLNodes(doc, func(n *htmlnet.Node) bool {
+		return n.Type == htmlnet.ElementNode && n.Data == "a"
+	}) {
+		raw := strings.TrimSpace(providerHTMLAttr(anchor, "href"))
+		if raw == "" || strings.HasPrefix(strings.ToLower(raw), "javascript:") {
+			continue
+		}
+		reference, parseErr := url.Parse(html.UnescapeString(raw))
+		if parseErr != nil || reference.User != nil {
+			continue
+		}
+		target := base.ResolveReference(reference)
+		if target.Scheme != "https" || !strings.EqualFold(target.Hostname(), base.Hostname()) || target.User != nil {
+			continue
+		}
+
+		nextPage := 0
+		if value, convErr := strconv.Atoi(target.Query().Get("page")); convErr == nil {
+			nextPage = value
+		}
+		if pattern := pagePathPatterns[source]; pattern != nil {
+			if match := pattern.FindStringSubmatch(target.EscapedPath()); len(match) > 1 {
+				if value, convErr := strconv.Atoi(match[1]); convErr == nil && value > nextPage {
+					nextPage = value
+				}
+			}
+		}
+		if nextPage > 0 {
+			if nextPage > currentPage {
+				return true
+			}
+			continue
+		}
+
+		rel := strings.ToLower(providerHTMLAttr(anchor, "rel"))
+		class := strings.ToLower(providerHTMLAttr(anchor, "class"))
+		title := strings.ToLower(providerHTMLAttr(anchor, "title"))
+		label := strings.ToLower(strings.TrimSpace(providerHTMLPlainText(providerHTMLText(anchor))))
+		if strings.Contains(rel, "next") ||
+			strings.Contains(class, "next") ||
+			strings.Contains(title, "next") ||
+			strings.Contains(label, "next") ||
+			strings.Contains(label, "下一页") ||
+			strings.Contains(label, "下一頁") ||
+			strings.Contains(label, "下页") ||
+			strings.Contains(label, "下頁") ||
+			label == "»" || label == "›" || label == "→" {
+			return true
+		}
+	}
+	return false
+}
+
 func extraAdultParseCard(source,chunk,base string)(Drama,bool){
 	var id,title,cover,remark string
 	switch source{
@@ -191,12 +270,40 @@ func extraAdultParseCard(source,chunk,base string)(Drama,bool){
 	if !extraAdultValidID(source,id){return Drama{},false};title=adultClean(title);if title==""{title=id};cover=adultSafeImageURL(base,cover)
 	return Drama{ID:providerDramaID(source,id),Source:source,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,ChannelName:extraAdultSourceName(source),CategoryName:extraAdultSourceName(source),Remark:truncate(remark,64),TotalEpisode:1,EpisodeCount:1},true
 }
-func (d *Downloader) fetchExtraAdultCatalog(ctx context.Context,source string,page int,category,query string)([]Drama,bool,error){
-	source=canonicalProviderSource(source);if page<1||page>100000||!extraAdultValidCategory(source,category){return nil,false,errors.New("進階片源目錄條件無效")};base:=extraAdultBaseURL(source);var address string;var paged bool;var e error
-	if strings.TrimSpace(query)!=""{p,h,err:=extraAdultSearchPath(source,page,query);if err!=nil{return nil,false,err};address=base+p;paged=h}else{p,err:=extraAdultCategoryPath(source,page,category);if err!=nil{return nil,false,err};address=base+p}
-	body,_,e:=extraAdultFetch(ctx,d,source,address,base+"/");if e!=nil{return nil,false,fmt.Errorf("%s 目錄讀取失敗：%w",extraAdultSourceName(source),e)}
-	items:=[]Drama{};seen:=map[string]bool{};for _,block:=range extraAdultSegments(body,source){item,ok:=extraAdultParseCard(source,block,base);if !ok||seen[item.ID]{continue};seen[item.ID]=true;items=append(items,item);if len(items)>=100{break}}
-	limit:=20;if source==sourcePPP||source==sourceMadou{limit=12};if source==source91Porna{limit=10};return items,paged&&len(items)>=limit,nil
+func (d *Downloader) fetchExtraAdultCatalog(ctx context.Context, source string, page int, category, query string) ([]Drama, bool, error) {
+	source = canonicalProviderSource(source)
+	if page < 1 || page > 100000 || !extraAdultValidCategory(source, category) {
+		return nil, false, errors.New("進階片源目錄條件無效")
+	}
+	base := extraAdultBaseURL(source)
+	var address string
+	if strings.TrimSpace(query) != "" {
+		path, _, err := extraAdultSearchPath(source, page, query)
+		if err != nil { return nil, false, err }
+		address = base + path
+	} else {
+		path, err := extraAdultCategoryPath(source, page, category)
+		if err != nil { return nil, false, err }
+		address = base + path
+	}
+	body, _, err := extraAdultFetch(ctx, d, source, address, base+"/")
+	if err != nil {
+		return nil, false, fmt.Errorf("%s 目錄讀取失敗：%w", extraAdultSourceName(source), err)
+	}
+	items := make([]Drama, 0, 40)
+	seen := map[string]bool{}
+	for _, block := range extraAdultSegments(body, source) {
+		item, ok := extraAdultParseCard(source, block, base)
+		if !ok || seen[item.ID] { continue }
+		seen[item.ID] = true
+		items = append(items, item)
+		if len(items) >= 100 { break }
+	}
+	limit := 20
+	if source == sourcePPP || source == sourceMadou { limit = 12 }
+	if source == source91Porna { limit = 10 }
+	more := extraAdultHasNextPage(body, base, page, source) || len(items) >= limit
+	return items, more, nil
 }
 // extraAdultMobileScanRequired detects the current 91Porna desktop detail
 // template, which exposes a phone-browser QR handoff instead of a web player.
