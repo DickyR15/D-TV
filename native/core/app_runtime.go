@@ -789,7 +789,14 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		result.HasMore = more
 		return result, nil
 	}
-	if query != "" && source == sourceMissAV {
+	if query != "" && source == sourceIkanBot {
+		items, more, err := d.fetchIkanbotCatalogPage(ctx, page, "", query)
+		if err != nil { return result, err }
+		for _, drama := range items { result.Items = append(result.Items, nativeNormalize(drama)) }
+		result.HasMore = more
+		return result, nil
+	}
+	if query != "" && (source == sourceMissAV || source == sourceSupJav || source == sourcePPP || source == sourceMadou || source == source91Porna) {
 		items, more, err := d.fetchAdultCatalog(ctx, source, page, "", query)
 		if err != nil {
 			return result, err
@@ -907,8 +914,10 @@ func (engine *nativeEngine) nativeCatalog(ctx context.Context, input nativeInput
 		items, result.HasMore, err = d.fetchHeitaoCatalogPage(ctx, page, category, "")
 	case sourceGuipian:
 		items, result.HasMore, err = d.fetchGuipianCatalogPage(ctx, page, category, "")
-	case sourceMissAV:
+	case sourceMissAV, sourceSupJav, sourcePPP, sourceMadou, source91Porna:
 		items, result.HasMore, err = d.fetchAdultCatalog(ctx, source, page, category, "")
+	case sourceIkanBot:
+		items, result.HasMore, err = d.fetchIkanbotCatalogPage(ctx, page, category, "")
 	case sourceHuangguoVideo:
 		address := fmt.Sprintf("%s/videos?page=%d", d.providerBaseURL(source), page)
 		if category != "" {
@@ -1004,8 +1013,10 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 		)
 	case sourceGuipian:
 		raw, chapters, err = engine.downloader.fetchGuipianDetail(ctx, sourceID)
-	case sourceMissAV:
+	case sourceMissAV, sourceSupJav, sourcePPP, sourceMadou, source91Porna:
 		raw, chapters, err = engine.downloader.fetchAdultDetail(ctx, source, sourceID)
+	case sourceIkanBot:
+		raw, chapters, err = engine.downloader.fetchIkanbotDetail(ctx, sourceID)
 	default:
 		title, chapters, err = engine.downloader.GetHuangguoChapters(ctx, source, sourceID)
 	}

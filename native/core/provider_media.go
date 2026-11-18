@@ -45,6 +45,10 @@ func (d *Downloader) providerBaseURL(source string) string {
 		configured, fallback = d.cfg.GuipianURL, guipianSiteBaseURL
 	case sourceMissAV:
 		fallback = missAVBaseURL
+	case sourceIkanBot:
+		fallback = ikanbotBaseURL
+	case sourceSupJav, sourcePPP, sourceMadou, source91Porna:
+		fallback = extraAdultBaseURL(source)
 	case sourceDuoduo:
 		d.providerMu.Lock()
 		configured = strings.TrimRight(d.providerHosts[sourceDuoduo], "/")
@@ -90,6 +94,16 @@ func providerSourceForURL(raw string) string {
 		return sourceHeitao
 	case host == "guipianwu.com" || host == "www.guipianwu.com":
 		return sourceGuipian
+	case host == "www1.ikanbot.com" || host == "www.ikanbot.com" || host == "ikanbot.com" || strings.HasSuffix(host, ".ikanbot.com"):
+		return sourceIkanBot
+	case host == "supjav.blog" || strings.HasSuffix(host, ".supjav.blog"):
+		return sourceSupJav
+	case host == "ppp.porn" || strings.HasSuffix(host, ".ppp.porn") || host == "cdnlab.live" || strings.HasSuffix(host, ".cdnlab.live"):
+		return sourcePPP
+	case host == "madou.club" || strings.HasSuffix(host, ".madou.club"):
+		return sourceMadou
+	case host == "91porna.com" || strings.HasSuffix(host, ".91porna.com"):
+		return source91Porna
 	case host == "missav.ai" || host == "www.missav.ai" ||
 		host == "missav.ws" || host == "www.missav.ws" ||
 		host == "missav.live" || host == "www.missav.live" ||
@@ -111,7 +125,9 @@ func isHuangguoAIMirrorHost(host string) bool {
 
 func (d *Downloader) providerURLCandidates(raw string) []string {
 	source := providerSourceForURL(raw)
-	if source == "" || source == sourceHuangju || source == sourceYeguo {
+	if source == "" || source == sourceHuangju || source == sourceYeguo ||
+		source == sourceIkanBot || source == sourceSupJav || source == sourcePPP ||
+		source == sourceMadou || source == source91Porna {
 		return []string{raw}
 	}
 	parsed, _ := url.Parse(raw)
@@ -166,6 +182,10 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 		return d.resolveGuipianMedia(ctx, task)
 	}
 	if chapter.Source == sourceMissAV {
+		return d.resolveAdultMedia(ctx, task)
+	}
+	if chapter.Source == sourceIkanBot { return d.resolveIkanbotMedia(ctx, task) }
+	if chapter.Source == sourceSupJav || chapter.Source == sourcePPP || chapter.Source == sourceMadou || chapter.Source == source91Porna {
 		return d.resolveAdultMedia(ctx, task)
 	}
 	if strings.HasPrefix(chapter.VideoURL, "hongguo-cenc://") {

@@ -34,15 +34,18 @@ var (
 	adultSlugPattern   = regexp.MustCompile("(?i)^[a-z0-9][a-z0-9._-]{0,127}$")
 )
 
-func adultSourceName(_ string) string { return "MissAV" }
+func adultSourceName(source string) string {
+	if canonicalProviderSource(source) == sourceMissAV { return "MissAV" }
+	return extraAdultSourceName(source)
+}
 
 func adultProviderBaseURL(source string) string {
 	if canonicalProviderSource(source) == sourceMissAV { return missAVBaseURL }
-	return ""
+	return extraAdultBaseURL(source)
 }
 
 func adultProviderCategories(source string) []nativeCategory {
-	if canonicalProviderSource(source) != sourceMissAV { return nil }
+	if canonicalProviderSource(source) != sourceMissAV { return extraAdultCategoriesFor(source) }
 	return []nativeCategory{
 		{ID: "today-hot", Name: "今日熱門"},
 		{ID: "weekly-hot", Name: "本週熱門"},
@@ -55,8 +58,9 @@ func adultProviderCategories(source string) []nativeCategory {
 }
 
 func validAdultProviderCategory(source, category string) bool {
-	return canonicalProviderSource(source) == sourceMissAV &&
-		(category == "" || adultSlugPattern.MatchString(category))
+	source = canonicalProviderSource(source)
+	if source != sourceMissAV { return extraAdultValidCategory(source, category) }
+	return category == "" || adultSlugPattern.MatchString(category)
 }
 
 func adultDetailURL(source, sourceID string) string {
@@ -117,13 +121,16 @@ func adultSafeURL(base, raw, source string) string {
 	host := strings.ToLower(resolved.Hostname())
 	switch canonicalProviderSource(source) {
 	case sourceMissAV:
-		if host != "missav.ai" && host != "www.missav.ai" &&
-			host != "missav.ws" && host != "www.missav.ws" &&
-			host != "missav.live" && host != "www.missav.live" &&
-			host != "missav123.com" && host != "www.missav123.com" {
-			return ""
-		}
-default:
+		if host != "missav.ai" && host != "www.missav.ai" && host != "missav.ws" && host != "www.missav.ws" && host != "missav.live" && host != "www.missav.live" && host != "missav123.com" && host != "www.missav123.com" { return "" }
+	case sourceSupJav:
+		if host != "supjav.blog" && !strings.HasSuffix(host, ".supjav.blog") { return "" }
+	case sourcePPP:
+		if host != "ppp.porn" && !strings.HasSuffix(host, ".ppp.porn") && host != "cdnlab.live" && !strings.HasSuffix(host, ".cdnlab.live") { return "" }
+	case sourceMadou:
+		if host != "madou.club" && !strings.HasSuffix(host, ".madou.club") { return "" }
+	case source91Porna:
+		if host != "91porna.com" && !strings.HasSuffix(host, ".91porna.com") { return "" }
+	default:
 		return ""
 	}
 	return resolved.String()
@@ -428,9 +435,7 @@ func adultParseMissAVCategories(body, base string) []nativeCategory {
 
 func (d *Downloader) fetchAdultCategories(ctx context.Context, source string) ([]nativeCategory, error) {
 	source = canonicalProviderSource(source)
-	if source != sourceMissAV {
-		return nil, errors.New("不支援的進階片源")
-	}
+	if source != sourceMissAV { return parseExtraAdultCategories(source), nil }
 	base := adultProviderBaseURL(source)
 	requestContext := context.WithValue(ctx, providerTextUserAgentKey{}, adultUserAgent)
 	referer := base + "/cn/"
@@ -447,7 +452,7 @@ func (d *Downloader) fetchAdultCategories(ctx context.Context, source string) ([
 
 func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page int, category, query string) ([]Drama, bool, error) {
 	source = canonicalProviderSource(source)
-	if source != sourceMissAV { return nil, false, errors.New("不支援的進階片源") }
+	if source != sourceMissAV { return d.fetchExtraAdultCatalog(ctx, source, page, category, query) }
 	if page < 1 || page > 100000 {
 		return nil, false, errors.New("目錄頁碼無效")
 	}
@@ -646,6 +651,7 @@ func adultFindM3U8(body string, pageURLs ...string) string {
 
 func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID string) (Drama, []Chapter, error) {
 	source = canonicalProviderSource(source)
+	if source != sourceMissAV { return d.fetchExtraAdultDetail(ctx, source, sourceID) }
 	pageURL := adultDetailURL(source, sourceID)
 	if pageURL == "" {
 		return Drama{}, nil, errors.New("作品識別碼無效")
@@ -721,6 +727,7 @@ func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID stri
 
 func (d *Downloader) resolveAdultMedia(ctx context.Context, task Task) (providerMedia, error) {
 	source, sourceID, valid := splitProviderDramaID(task.DramaID)
+	if valid && source != sourceMissAV { return d.resolveExtraAdultMedia(ctx, task) }
 	if !valid || source != sourceMissAV {
 		return providerMedia{}, errors.New("進階片源作品資訊無效，請重新整理")
 	}

@@ -43,6 +43,7 @@ void main() {
     expect(SourceSite.byId('guipian').onlineSearch, isTrue);
     expect(SourceSite.isKnown('kanmovie'), isFalse);
     expect(store.sourceEnabled('duoduo'), isTrue);
+    expect(store.sourceEnabled('ikanbot'), isTrue);
     expect(store.sourceEnabled('guipian'), isTrue);
     expect(store.allowsSource('guipian'), isTrue);
     expect(store.allowsSource('baofeng'), isFalse);
@@ -97,11 +98,11 @@ void main() {
     expect(heitao.onlineSearch, isTrue);
   });
 
-  test('four primary sources start enabled and restricted sources start switched off', () async {
+  test('five primary sources start enabled and restricted sources start switched off', () async {
     final store = await create();
     expect(
       store.sources.map((site) => site.id),
-      ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo'],
+      ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo', 'ikanbot'],
     );
     expect(store.permittedSources.length, SourceSite.values.length);
     expect(store.sourceEnabled('hongguo'), isTrue);

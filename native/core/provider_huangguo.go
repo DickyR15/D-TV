@@ -34,6 +34,11 @@ const (
 	sourceHeitao          = "heitao"
 	sourceGuipian         = "guipian"
 	sourceMissAV          = "missav"
+	sourceIkanBot         = "ikanbot"
+	sourceSupJav          = "supjav"
+	sourcePPP             = "ppp"
+	sourceMadou            = "madou"
+	source91Porna          = "91porna"
 
 	providerMaxBodyBytes = 20 * 1024 * 1024
 	providerTimeout      = 12 * time.Second
@@ -98,7 +103,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceHeitao, sourceGuipian, sourceMissAV:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceHeitao, sourceGuipian, sourceMissAV, sourceIkanBot, sourceSupJav, sourcePPP, sourceMadou, source91Porna:
 		return true
 	default:
 		return false
@@ -133,6 +138,16 @@ func canonicalProviderSource(source string) string {
 		return sourceHeitao
 	case "guipian", "guipianwu.com", "www.guipianwu.com":
 		return sourceGuipian
+	case "ikanbot", "ikanbot.com", "www.ikanbot.com", "www1.ikanbot.com":
+		return sourceIkanBot
+	case "supjav", "supjav.blog", "www.supjav.blog":
+		return sourceSupJav
+	case "ppp", "ppp.porn", "www.ppp.porn", "cdnlab.live":
+		return sourcePPP
+	case "madou", "madou.club", "www.madou.club", "dash.madou.club":
+		return sourceMadou
+	case "91porna", "91porna.com", "www.91porna.com":
+		return source91Porna
 	case "missav", "missav.ai", "www.missav.ai", "missav.ws", "www.missav.ws", "missav.live", "www.missav.live", "missav123.com", "www.missav123.com":
 		return sourceMissAV
 	default:

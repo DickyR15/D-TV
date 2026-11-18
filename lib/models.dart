@@ -19,7 +19,7 @@ class SourceSite {
       id == 'duoduo' ||
       id == 'hanxiaoquan' ||
       id == 'heitao' ||
-      id == 'missav';
+      id == 'missav' || id == 'supjav' || id == 'ppp' || id == 'madou' || id == '91porna' || id == 'ikanbot';
   bool get searchSuggestions => id == 'hongguo';
   // These providers must remain independent in
   // source switching and ranking filters.
@@ -57,6 +57,7 @@ class SourceSite {
     '鬼片',
     '恐怖片 · 電影 · 電視劇 · 動畫',
   );
+  static const ikanbot = SourceSite('ikanbot', '愛看機器人', '電影 · 影集 · 動畫 · 綜藝');
   static const missav = SourceSite(
     'missav',
     'MissAV',
@@ -65,7 +66,7 @@ class SourceSite {
   );
 
   /// 預設開啟的一般片源：紅果、韓小圈、鬼片、多多追劇。
-  static const primaryValues = [hongguo, hanxiaoquan, guipian, duoduo];
+  static const primaryValues = [hongguo, hanxiaoquan, guipian, duoduo, ikanbot];
 
   /// 進階片源：預設關閉，需通過管理員密碼驗證後才能管理。
   static const restrictedValues = [
@@ -77,12 +78,15 @@ class SourceSite {
     SourceSite('huangguoai', '黃果 AI', 'AI 短劇'),
     missav,
     SourceSite('heitao', '黑桃', '分類短劇 · 線上搜尋'),
+    SourceSite('supjav', 'SupJav', '分類 · 搜尋 · 播放', adult: true),
+    SourceSite('ppp', 'PPP', '分類 · 搜尋 · 播放', adult: true),
+    SourceSite('madou', '麻豆傳媒', '分類 · 搜尋 · 多線播放', adult: true),
+    SourceSite('91porna', '91Porn', '分類 · 搜尋 · 多線播放', adult: true),
   ];
   /// Retired providers remain recognizable for saved library records only.
   /// They are not available for new catalog browsing or source management.
   static const legacyValues = [
     SourceSite('cloudfront', '黃果舊版', '已停止提供新目錄；保留舊紀錄相容性'),
-    SourceSite('supjav', 'SupJav', '已停止提供；僅保留舊收藏與觀看紀錄', adult: true),
   ];
   static const currentValues = [...primaryValues, ...restrictedValues];
   static const knownValues = [...currentValues, ...legacyValues];
