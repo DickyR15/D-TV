@@ -151,3 +151,16 @@ func TestExtraAdultMadouParsesUnicodeDetailCard(t *testing.T) {
 		t.Fatalf("Madou Unicode card = %#v, ok=%v", item, ok)
 	}
 }
+
+func TestExtraAdult91PornaDetectsMobileQROnlyDetailPages(t *testing.T) {
+	body := `<section>
+		<div>手機看</div>
+		<p>使用 手機瀏覽器 掃碼觀看</p>
+	</section>`
+	if !extraAdultMobileScanRequired(body) {
+		t.Fatal("91Porna mobile QR-only page was not detected")
+	}
+	if extraAdultMobileScanRequired(`<p>使用手機瀏覽器瀏覽分類</p>`) {
+		t.Fatal("ordinary mobile-browser text was incorrectly classified as QR-only")
+	}
+}
