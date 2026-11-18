@@ -42,8 +42,8 @@ void main() {
       GoogleCastMediaKind.mp4,
     );
   });
-  test('Windows DNS-SD Chromecast service is converted to Cast payload', () {
-    final payload = googleCastPayloadFromNsdService(
+  test('Windows DNS-SD Chromecast service is converted to Cast payload', () async {
+    final payload = await googleCastPayloadFromNsdService(
       nsd.Service(
         name: 'onn-4k-pro',
         type: '_googlecast._tcp',
@@ -71,8 +71,8 @@ void main() {
     );
   });
 
-  test('Windows DNS-SD ignores services without a resolved IPv4 address', () {
-    final payload = googleCastPayloadFromNsdService(
+  test('Windows DNS-SD ignores services without a resolved IPv4 address', () async {
+    final payload = await googleCastPayloadFromNsdService(
       const nsd.Service(
         name: 'unresolved-receiver',
         type: '_googlecast._tcp',
@@ -84,8 +84,8 @@ void main() {
     expect(payload, isNull);
   });
 
-  test('Windows DNS-SD falls back to resolved address when TXT id is absent', () {
-    final payload = googleCastPayloadFromNsdService(
+  test('Windows DNS-SD falls back to resolved address when TXT id is absent', () async {
+    final payload = await googleCastPayloadFromNsdService(
       nsd.Service(
         name: 'Chromecast',
         type: '_googlecast._tcp',
