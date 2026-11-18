@@ -81,7 +81,9 @@ func extraAdultCategoryPath(source string, page int, category string) (string,er
 		return path, nil
 	case source91Porna:
 		if category==""||category=="new"{category="play"}
-		return "/comic/index/video?category="+url.QueryEscape(category)+"&page="+strconv.Itoa(page),nil
+		path := "/comic/index/video?category=" + url.QueryEscape(category)
+		if page > 1 { path += "&page=" + strconv.Itoa(page) }
+		return path, nil
 	}
 	return "",errors.New("不支援的進階片源")
 }
