@@ -25,8 +25,8 @@ const (
 )
 
 var ikanbotCategories = []nativeCategory{
-	{ID:"movie-熱門",Name:"熱門電影"},
-	{ID:"tv-熱門",Name:"熱門影集"},
+	{ID:"movie-热门",Name:"熱門電影"},
+	{ID:"tv-热门",Name:"熱門影集"},
 	{ID:"tv-国产剧",Name:"中國劇"},
 	{ID:"tv-日剧",Name:"日劇"},
 	{ID:"tv-韩剧",Name:"韓劇"},
@@ -221,7 +221,7 @@ func ikanbotParseLines(payload map[string]any)[]ikanbotLine{
 	sort.SliceStable(lines,func(i,j int)bool{return len(lines[i].Episodes)>len(lines[j].Episodes)})
 	return lines
 }
-func ikanbotPlaybackAPIURL(pageURL, currentID, mtype, signedToken string) (string, error) {
+func ikanbotPlaybackAPIURL(pageURL, videoID, mtype, signedToken string) (string, error) {
 	page, err := url.Parse(strings.TrimSpace(pageURL))
 	if err != nil || page.Scheme != "https" || page.User != nil {
 		return "", errors.New("愛看機器人播放頁網址無效")
@@ -232,14 +232,14 @@ func ikanbotPlaybackAPIURL(pageURL, currentID, mtype, signedToken string) (strin
 	default:
 		return "", errors.New("愛看機器人播放頁網域不受信任")
 	}
-	if !ikanbotNumericID(currentID) || strings.TrimSpace(signedToken) == "" {
+	if !ikanbotNumericID(videoID) || strings.TrimSpace(signedToken) == "" {
 		return "", errors.New("愛看機器人播放參數無效")
 	}
 	if mtype == "" {
 		mtype = "1"
 	}
 	query := url.Values{}
-	query.Set("videoId", currentID)
+	query.Set("videoId", videoID)
 	query.Set("mtype", mtype)
 	query.Set("token", signedToken)
 	return page.Scheme + "://" + page.Host + "/api/getResN?" + query.Encode(), nil
@@ -250,7 +250,7 @@ func (d *Downloader) fetchIkanbotLines(ctx context.Context, sourceID, currentID,
 	if signed == "" {
 		return nil, errors.New("愛看機器人播放令牌無效，請重新整理詳情")
 	}
-	address, err := ikanbotPlaybackAPIURL(pageURL, currentID, mtype, signed)
+	address, err := ikanbotPlaybackAPIURL(pageURL, sourceID, mtype, signed)
 	if err != nil {
 		return nil, err
 	}
