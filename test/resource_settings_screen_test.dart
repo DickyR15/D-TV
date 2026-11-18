@@ -12,9 +12,15 @@ import 'fixtures.dart';
 class _ResourceSettingsRepository extends FixtureRepository {
   ResourceSettings current = const ResourceSettings();
   final writes = <ResourceSettings>[];
+  int cacheClears = 0;
 
   @override
   Future<ResourceSettings> resourceSettings() async => current;
+
+  @override
+  Future<void> clearSourceCache() async {
+    cacheClears++;
+  }
 
   @override
   Future<ResourceSettings> saveResourceSettings(ResourceSettings settings) async {
@@ -26,6 +32,64 @@ class _ResourceSettingsRepository extends FixtureRepository {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+
+  testWidgets('source cache clearing is confirmed and keeps user data', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    final repository = _ResourceSettingsRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                key: const ValueKey('open-resource-settings-test'),
+                onPressed: () => Navigator.of(context).push<bool>(
+                  MaterialPageRoute<bool>(
+                    builder: (_) => ResourceSettingsScreen(
+                      repository: repository,
+                      store: store,
+                    ),
+                  ),
+                ),
+                child: const Text('開啟網路設定'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('open-resource-settings-test')));
+    await tester.pumpAndSettle();
+    final clearButton = find.byKey(const ValueKey('resource-clear-source-cache'));
+    await tester.ensureVisible(clearButton);
+    await tester.pumpAndSettle();
+    await tester.tap(clearButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('清除片源快取？'), findsOneWidget);
+    expect(
+      find.textContaining('收藏、追劇清單、最近觀看、播放進度、使用者帳號及其他設定都會保留。'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(repository.cacheClears, 0);
+
+    await tester.ensureVisible(clearButton);
+    await tester.pumpAndSettle();
+    await tester.tap(clearButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('resource-confirm-clear-cache')));
+    await tester.pumpAndSettle();
+
+    expect(repository.cacheClears, 1);
+    expect(find.text('開啟網路設定'), findsOneWidget);
+  });
 
   testWidgets('resource settings autosave without a Save button', (tester) async {
     SharedPreferences.setMockInitialValues({});

@@ -137,7 +137,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $assetUrl = "https://github.com/sk3llo/ffmpeg_kit_flutter/releases/download/8.1.2-min-gpl/ffmpeg-kit-windows-x86_64-min-gpl-8.1.2.zip"
-          $expectedSha256 = "c3a69388f32ff86e4622baada470d2acc55d577a51b6ec15b68560c1f1b6e37b"
+          $expectedSha256 = "e2af1f8bece5e6dcb1956128b31ffb9313b9b57aa314b52f52909557f8689b12"
           $archive = Join-Path $env:RUNNER_TEMP "ffmpeg-kit-windows-x86_64-min-gpl-8.1.2.zip"
           $bundleDir = Join-Path $env:RUNNER_TEMP "ffmpeg-kit-windows-x86_64-min-gpl-8.1.2"
 

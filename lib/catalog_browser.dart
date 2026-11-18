@@ -90,6 +90,23 @@ class CatalogBrowser {
     return _cancelCatalogSerially();
   }
 
+  /// Drops process-local catalogue state after the native disk caches are cleared.
+  /// User-owned favorites, watch history and playback progress live elsewhere.
+  void clearMemoryCache() {
+    _generation++;
+    for (final session in _sessions.values) {
+      session.generation++;
+    }
+    _menus.clear();
+    _library.clear();
+    _sessions.clear();
+    _cachedReads.clear();
+    _rememberedBaseCaches.clear();
+    _choicesCache.clear();
+    _localCategoryNames.clear();
+    RankingSearchCache.clear();
+  }
+
   void _invalidateChoices() => _choicesCache.clear();
 
   void _refreshLocalCategoryNames(String source) {

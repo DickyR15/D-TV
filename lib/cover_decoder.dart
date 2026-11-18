@@ -18,6 +18,12 @@ class CoverDecoder {
   var _pruning = false;
   DateTime? _prunedAt;
 
+  Future<void> prepareForCacheClear() async {
+    if (_pending.isNotEmpty || _queue.isNotEmpty || _running > 0 || _pruning) {
+      throw AppFailure('海報仍在載入或轉換，請稍後再清除快取');
+    }
+  }
+
   Future<String> convert(
     String original,
     Future<Map<String, dynamic>> Function() prepare, {

@@ -68,6 +68,9 @@ class RankingSearchCache {
     return 2;
   }
 
+  /// Clears the in-memory ranking search index after ranking/catalogue cache removal.
+  static void clear() => _entries.clear();
+
   /// Clears process-local entries for deterministic unit tests.
-  static void clearForTesting() => _entries.clear();
+  static void clearForTesting() => clear();
 }

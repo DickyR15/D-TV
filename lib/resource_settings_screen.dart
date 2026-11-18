@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'app_layout.dart';
+import 'catalog_browser.dart';
 import 'core_bridge.dart';
 import 'local_store.dart';
 import 'resource_settings.dart';
@@ -34,6 +35,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   Timer? _saveDebounce;
   bool _showProxy = false;
   bool _testingConnection = false;
+  bool _clearingCache = false;
   bool? _connectionTestSucceeded;
   String? _connectionTestMessage;
   int _interval = 250;
@@ -130,7 +132,7 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
   }
 
   Future<void> _testConnection() async {
-    if (!_allowed || _busy || _testingConnection || _settings == null) return;
+    if (!_allowed || _busy || _testingConnection || _clearingCache || _settings == null) return;
     _saveDebounce?.cancel();
     _saveDebounce = null;
     await _save();
@@ -168,6 +170,57 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
     }
   }
 
+  Future<void> _clearSourceCache() async {
+    if (!_allowed || _busy || _testingConnection || _clearingCache || _settings == null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('清除片源快取？'),
+        content: const Text(
+          '這會清除片源目錄、分類、排行榜及海報圖片快取，下次進入時會重新載入。'
+          '收藏、追劇清單、最近觀看、播放進度、使用者帳號及其他設定都會保留。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const ValueKey('resource-confirm-clear-cache'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('清除快取'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted || !_allowed) return;
+
+    _saveDebounce?.cancel();
+    _saveDebounce = null;
+    await _save();
+    if (!mounted || !_allowed || _error != null) return;
+
+    setState(() {
+      _clearingCache = true;
+      _error = null;
+    });
+    try {
+      await widget.repository.clearSourceCache();
+      CatalogBrowser.shared(widget.repository).clearMemoryCache();
+      if (mounted && _allowed) {
+        Navigator.of(context).pop(true);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = '清除快取失敗：${uiTraditional(error.toString())}');
+      }
+    } finally {
+      if (mounted) setState(() => _clearingCache = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('網路與資源')),
@@ -183,7 +236,8 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  if (_busy) const LinearProgressIndicator(),
+                  if (_busy || _testingConnection || _clearingCache)
+                    const LinearProgressIndicator(),
                   if (_settings!.warning.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16),
@@ -273,6 +327,34 @@ class _ResourceSettingsScreenState extends State<ResourceSettingsScreen> {
                         ),
                       ),
                     ),
+                  const Divider(height: 32),
+                  Text(
+                    '片源快取管理',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '清除本機暫存的片源目錄、分類、排行榜與海報圖片。'
+                    '不會刪除收藏、最近觀看、追劇清單、播放進度、使用者或設定。',
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('resource-clear-source-cache'),
+                      onPressed: _busy || _testingConnection || _clearingCache
+                          ? null
+                          : _clearSourceCache,
+                      icon: _clearingCache
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.delete_sweep_outlined),
+                      label: Text(_clearingCache ? '清除中…' : '清除片源快取'),
+                    ),
+                  ),
                   const SizedBox(height: 28),
                   Text('目錄請求間隔 · $_interval 毫秒'),
                   Slider(

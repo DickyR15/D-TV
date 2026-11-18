@@ -530,15 +530,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: const Text('網路與資源'),
                   subtitle: const Text('代理、目錄請求間隔與片源目錄'),
                   trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => ResourceSettingsScreen(
-                        repository: widget.repository,
-                        store: widget.store,
+                  onTap: () async {
+                    final cleared = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute<bool>(
+                        builder: (_) => ResourceSettingsScreen(
+                          repository: widget.repository,
+                          store: widget.store,
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                    if (cleared == true && mounted && !widget.embedded) {
+                      Navigator.of(context).pop(true);
+                    }
+                  },
                 ),
                 ListTile(
                   leading: const Icon(Icons.backup_outlined),

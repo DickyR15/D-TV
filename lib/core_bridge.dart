@@ -19,6 +19,7 @@ import 'catalog_updates.dart';
 import 'download_collections.dart';
 import 'resource_settings.dart';
 import 'diary_service.dart';
+import 'ranking_search_cache.dart';
 import 'ui_localization.dart';
 
 typedef _NativeRequest = Pointer<Utf8> Function(Pointer<Utf8>);
@@ -106,6 +107,8 @@ abstract class AppRepository {
   ) async => throw AppFailure('目前環境不支援資源設定');
   Future<Map<String, dynamic>> testResourceConnection() async =>
       throw AppFailure('目前環境不支援連線測試');
+  Future<void> clearSourceCache() async =>
+      throw AppFailure('目前環境不支援清除片源快取');
   final catalogUpdates = CatalogUpdates();
   Future<void> cancelPreload() async {}
   Future<PlaybackPlan?> preload(
@@ -323,6 +326,16 @@ class NativeRepository extends AppRepository {
   Future<Map<String, dynamic>> testResourceConnection() async {
     _adminPermission();
     return _call({'action': 'testResourceConnection'});
+  }
+
+  @override
+  Future<void> clearSourceCache() async {
+    _adminPermission();
+    await _coverDecoder.prepareForCacheClear();
+    await _call({'action': 'clearSourceCache'});
+    _coverPaths.clear();
+    _detailCache.clear();
+    RankingSearchCache.clear();
   }
 
   Future<Map<String, dynamic>> _read(
@@ -614,6 +627,7 @@ class NativeRepository extends AppRepository {
               }.contains(input['command']);
       final epoch = access?.profileEpoch;
       if (!unrestricted && access?.locked == true) throw AppFailure('請先解鎖目前使用者');
+      if (action == 'clearSourceCache') _adminPermission();
       if (action == 'rankings') {
         _authorize(RankingBoard.sourceForID(input['board'] as String));
       }

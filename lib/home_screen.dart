@@ -2211,15 +2211,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   onSelected: (value) {
                     _homePopupSelected();
                     if (value == 'settings') {
-                      Navigator.push<void>(
+                      Navigator.push<bool>(
                         context,
-                        MaterialPageRoute<void>(
+                        MaterialPageRoute<bool>(
                           builder: (_) => SettingsScreen(
                             repository: widget.repository,
                             store: widget.store,
                           ),
                         ),
-                      ).whenComplete(
+                      ).then<void>((cacheCleared) {
+                        if (cacheCleared == true &&
+                            mounted &&
+                            _isCatalogTab &&
+                            !_showRecommendations) {
+                          unawaited(_load(force: true));
+                          unawaited(_loadCategories(force: true));
+                        }
+                      }).whenComplete(
                         () => _resetBackConfirmation(ignoreTrailingBack: true),
                       );
                     } else if (value == 'users') {
