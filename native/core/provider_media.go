@@ -94,7 +94,7 @@ func providerSourceForURL(raw string) string {
 		return sourceHeitao
 	case host == "guipianwu.com" || host == "www.guipianwu.com":
 		return sourceGuipian
-	case host == "www1.ikanbot.com" || host == "www.ikanbot.com" || host == "ikanbot.com" || strings.HasSuffix(host, ".ikanbot.com"):
+	case host == "www1.ikanbot.com" || host == "www.ikanbot.com" || host == "ikanbot.com" || strings.HasSuffix(host, ".ikanbot.com") || host == "admin-api.aikanbot.com":
 		return sourceIkanBot
 	case host == "supjav.blog" || strings.HasSuffix(host, ".supjav.blog"):
 		return sourceSupJav
