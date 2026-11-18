@@ -144,6 +144,23 @@ func TestIkanbotParseLinesAcceptsObjectResDataAndPreservesAllEpisodes(t *testing
 	}
 }
 
+func TestIkanbotEpisodeOrderPrefersEpisodeNumberOverYear(t *testing.T) {
+	tests := []struct {
+		name string
+		want int
+	}{
+		{name: "2024 年 第 03 集", want: 3},
+		{name: "第 12 話", want: 12},
+		{name: "Episode 7", want: 7},
+		{name: "EP08", want: 8},
+	}
+	for _, test := range tests {
+		if got := ikanbotEpisodeOrder(test.name, 99); got != test.want {
+			t.Fatalf("episode order for %q = %d, want %d", test.name, got, test.want)
+		}
+	}
+}
+
 func TestIkanbotBuildChaptersMergesEpisodesAcrossLines(t *testing.T) {
 	lines := []ikanbotLine{
 		{
