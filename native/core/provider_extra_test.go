@@ -1,6 +1,10 @@
 package core
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/base64"
+	"encoding/hex"
 	"net/url"
 	"strings"
 	"testing"
@@ -77,7 +81,7 @@ func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 		t.Fatalf("91Porna second-page category path = %q, err=%v", got, err)
 	}
 	if got := extraAdultDetailURL(source91Porna, "key_123"); got != "https://91porna.com/comic/index/detail?video_key=key_123" {
-		t.Fatalf("91Porn detail URL = %q", got)
+		t.Fatalf("91Porna detail URL = %q", got)
 	}
 	html := `<div class="video-item"><a href="/comic/index/detail?video_key=key_123"><img data-src="/poster.jpg" alt="91 current detail route"></a><span>12:34</span></div>`
 	segments := extraAdultSegments(html, source91Porna)
@@ -207,6 +211,34 @@ func TestExtraAdult91PornaExtractsHLSAndMP4FromEmbedPlayerScript(t *testing.T) {
 	mp4 := `document.write('<video src="https://media.example.test/movie.mp4?token=abc"></video>');`
 	if got := extraAdult91PornaMediaURL(mp4, ninetyOneBaseURL+"/comic/index/embed?id=169397"); got != "https://media.example.test/movie.mp4?token=abc" {
 		t.Fatalf("91Porna MP4 URL = %q", got)
+	}
+}
+
+func TestExtraAdult91PornaDecryptsEncodedMediaURL(t *testing.T) {
+	const media = "https://media.example.test/playlist.m3u8?auth=encrypted"
+	plain := []byte(media)
+	padding := aes.BlockSize - len(plain)%aes.BlockSize
+	for i := 0; i < padding; i++ {
+		plain = append(plain, byte(padding))
+	}
+	block, err := aes.NewCipher([]byte("f5d965df75336270"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ciphertext := make([]byte, len(plain))
+	cipher.NewCBCEncrypter(block, []byte("97b60394abc2fbe1")).CryptBlocks(ciphertext, plain)
+
+	for name, encoded := range map[string]string{
+		"base64": base64.StdEncoding.EncodeToString(ciphertext),
+		"hex":    hex.EncodeToString(ciphertext),
+	} {
+		t.Run(name, func(t *testing.T) {
+			body := "<script>var payload = '" + encoded + "';</script>"
+			got := extraAdult91PornaMediaURL(body, ninetyOneBaseURL+"/comic/index/embed?id=169397")
+			if got != media {
+				t.Fatalf("decrypted 91Porna media URL = %q, want %q", got, media)
+			}
+		})
 	}
 }
 
