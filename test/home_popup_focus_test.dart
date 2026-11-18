@@ -12,6 +12,15 @@ import 'fixtures.dart';
 class _SourceManagementRepository extends FixtureRepository {
   @override
   bool get supportsSourceManagement => true;
+
+  @override
+  Future<CatalogPage> catalog(
+    String source, {
+    int page = 1,
+    String query = '',
+    String category = '',
+    bool force = false,
+  }) async => CatalogPage([]);
 }
 
 void main() {
