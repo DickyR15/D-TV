@@ -56,6 +56,12 @@ func extraAdultValidCategory(source, category string) bool {
 func extraAdultCategoriesFor(source string) []nativeCategory {
 	return append([]nativeCategory(nil), extraAdultCategories[canonicalProviderSource(source)]...)
 }
+
+// parseExtraAdultCategories is the shared category registry used by catalog
+// and playback setup for the supported independent adult providers.
+func parseExtraAdultCategories(source string) []nativeCategory {
+	return extraAdultCategoriesFor(source)
+}
 func extraAdultCategoryPath(source string, page int, category string) (string,error) {
 	source=canonicalProviderSource(source)
 	if page<1 || page>100000 || !extraAdultValidCategory(source,category) { return "",errors.New("進階片源分類或頁碼無效") }
