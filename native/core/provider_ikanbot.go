@@ -196,8 +196,24 @@ func ikanbotSignToken(currentID,token string)string{
 func ikanbotQuality(flag string)int{
 	m:=regexp.MustCompile("(2160|1440|1080|720|480)").FindStringSubmatch(strings.ToLower(flag));if len(m)>1{n,_:=strconv.Atoi(m[1]);return n};return 0
 }
-func ikanbotEpisodeOrder(name string,fallback int)int{
-	m:=regexp.MustCompile("([0-9]{1,4})").FindStringSubmatch(name);if len(m)>1{if n,e:=strconv.Atoi(m[1]);e==nil&&n>0&&n<100000{return n}};return fallback
+func ikanbotEpisodeOrder(name string, fallback int) int {
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile("(?i)第\\s*0*([0-9]{1,4})\\s*[集話话期]"),
+		regexp.MustCompile("(?i)\\b(?:ep?|episode)\\s*0*([0-9]{1,4})\\b"),
+	}
+	for _, pattern := range patterns {
+		if match := pattern.FindStringSubmatch(name); len(match) > 1 {
+			if order, err := strconv.Atoi(match[1]); err == nil && order > 0 && order < 100000 {
+				return order
+			}
+		}
+	}
+	if match := regexp.MustCompile("([0-9]{1,4})").FindStringSubmatch(name); len(match) > 1 {
+		if order, err := strconv.Atoi(match[1]); err == nil && order > 0 && order < 100000 {
+			return order
+		}
+	}
+	return fallback
 }
 type ikanbotResEntry struct {
 	Flag string `json:"flag"`
