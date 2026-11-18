@@ -138,7 +138,7 @@ func canonicalProviderSource(source string) string {
 		return sourceHeitao
 	case "guipian", "guipianwu.com", "www.guipianwu.com":
 		return sourceGuipian
-	case "ikanbot", "ikanbot.com", "www.ikanbot.com", "www1.ikanbot.com":
+	case "ikanbot", "ikanbot.com", "www.ikanbot.com", "www1.ikanbot.com", "admin-api.aikanbot.com":
 		return sourceIkanBot
 	case "supjav", "supjav.blog", "www.supjav.blog":
 		return sourceSupJav
@@ -267,6 +267,12 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 		return drama.DisplayTitle(), chapters, err
 	case sourceHeitao:
 		drama, chapters, err := d.fetchHeitaoDetail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
+	case sourceMissAV, sourceSupJav, sourcePPP, sourceMadou, source91Porna:
+		drama, chapters, err := d.fetchAdultDetail(ctx, canonicalProviderSource(source), sourceID)
+		return drama.DisplayTitle(), chapters, err
+	case sourceIkanBot:
+		drama, chapters, err := d.fetchIkanbotDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
 	case sourceCloudFront:
 		return d.fetchLegacyChapters(ctx, sourceID)
