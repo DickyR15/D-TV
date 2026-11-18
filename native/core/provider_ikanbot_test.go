@@ -8,6 +8,43 @@ import (
 	htmlnet "golang.org/x/net/html"
 )
 
+func TestIkanbotBuildChaptersMergesEpisodesAcrossLines(t *testing.T) {
+	lines := []ikanbotLine{
+		{
+			Flag: "1080P",
+			Episodes: []ikanbotEpisode{
+				{Name: "第1集", URL: "https://media.example.test/1080/1.m3u8", Order: 1},
+				{Name: "第2集", URL: "https://media.example.test/1080/2.m3u8", Order: 2},
+			},
+		},
+		{
+			Flag: "720P",
+			Episodes: []ikanbotEpisode{
+				{Name: "第1集", URL: "https://media.example.test/720/1.m3u8", Order: 1},
+				{Name: "第2集", URL: "https://media.example.test/720/2.m3u8", Order: 2},
+				{Name: "第3集", URL: "https://media.example.test/720/3.m3u8", Order: 3},
+			},
+		},
+	}
+	chapters := ikanbotBuildChapters("1023900", "https://v.ikanbot.com/play/1023900", lines)
+	if len(chapters) != 3 {
+		t.Fatalf("merged IkanBot chapters = %d, want 3", len(chapters))
+	}
+	if chapters[0].EpisodeString(0) != "1" ||
+		chapters[1].EpisodeString(0) != "2" ||
+		chapters[2].EpisodeString(0) != "3" {
+		t.Fatalf("episode order was not preserved: %#v", chapters)
+	}
+	if chapters[2].VideoURL != "https://media.example.test/720/3.m3u8" ||
+		chapters[2].PlayLine != "720P" {
+		t.Fatalf("episode found only on secondary line was not playable: %#v", chapters[2])
+	}
+	if len(chapters[0].PlaybackVariants) != 1 ||
+		!strings.Contains(chapters[0].PlaybackVariants[0], "https://media.example.test/720/1.m3u8") {
+		t.Fatalf("alternate line for episode 1 was lost: %#v", chapters[0].PlaybackVariants)
+	}
+}
+
 func TestIkanbotUsesCurrentOfficialHostAndCategoryRoutes(t *testing.T) {
 	if ikanbotBaseURL != "https://v.ikanbot.com" {
 		t.Fatalf("IkanBot base URL = %q", ikanbotBaseURL)
