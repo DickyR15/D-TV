@@ -209,7 +209,7 @@ func (d *Downloader) fetchExtraAdultDetail(ctx context.Context,source,id string)
 	source=canonicalProviderSource(source);if !extraAdultValidID(source,id){return Drama{},nil,errors.New("作品識別碼無效")};base:=extraAdultBaseURL(source);body,final,e:=extraAdultFetch(ctx,d,source,extraAdultDetailURL(source,id),base+"/");if e!=nil{return Drama{},nil,fmt.Errorf("%s 作品詳情讀取失敗：%w",extraAdultSourceName(source),e)}
 	title:=extraAdultTitle(body,id);desc:=adultClean(adultMetaValue(body,"description"))
 	if source==source91Porna && extraAdultMobileScanRequired(body) {
-		const note = "此作品目前僅提供手機瀏覽器掃碼觀看，桌面網頁沒有 D-TV 可直接播放的影片網址。"
+		const note = "網站頁面顯示手機掃碼入口；D-TV 會另外解析作品嵌入播放器，若頁面沒有提供可用串流才會無法播放。"
 		if desc!="" { desc += "\n\n" }
 		desc += note
 	}
