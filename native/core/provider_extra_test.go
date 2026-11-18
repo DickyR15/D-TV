@@ -67,6 +67,56 @@ func TestExtraAdultCategoryAndSearchPaths(t *testing.T) {
 	if err != nil || !paged || got != "/search/?q=taiwan&page=2" { t.Fatalf("PPP search path = %q, paged=%v, err=%v", got, paged, err) }
 }
 
+func TestExtraAdultAdvancedCatalogPaginationDetectsProviderNextPages(t *testing.T) {
+	tests := []struct {
+		name, source, base, body string
+	}{
+		{"SupJav query page", sourceSupJav, supjavBaseURL,
+			`<div class="pagination"><a href="/uncensored?page=2">2</a></div>`},
+		{"PPP category page", sourcePPP, pppBaseURL,
+			`<a href="/new/2/">下一頁</a>`},
+		{"Madou category page", sourceMadou, madouBaseURL,
+			`<a class="page-numbers" href="/category/麻豆传媒/page/2">2</a>`},
+		{"91Porna query page", source91Porna, ninetyOneBaseURL,
+			`<a rel="next" href="/comic/index/video?category=play&amp;page=2">下一頁</a>`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if !extraAdultHasNextPage(test.body, test.base, 1, test.source) {
+				t.Fatal("provider next page was not detected")
+			}
+			if extraAdultHasNextPage(test.body, test.base, 2, test.source) {
+				t.Fatal("page-two link was incorrectly treated as a page-three link")
+			}
+		})
+	}
+	if extraAdultHasNextPage(
+		`<a href="https://evil.example/new/2/">下一頁</a>`,
+		pppBaseURL, 1, sourcePPP,
+	) {
+		t.Fatal("external pagination host was accepted")
+	}
+}
+
+func TestExtraAdultAdvancedSearchPathsIncludePageNumber(t *testing.T) {
+	tests := []struct {
+		source string
+		want string
+	}{
+		{sourceSupJav, "/search?keyword=sample&page=2"},
+		{sourcePPP, "/search/?q=sample&page=2"},
+		{sourceMadou, "/page/2/?s=sample"},
+		{source91Porna, "/comic/index/search?keyword=sample&page=2"},
+	}
+	for _, test := range tests {
+		got, paged, err := extraAdultSearchPath(test.source, 2, "sample")
+		if err != nil || !paged || got != test.want {
+			t.Fatalf("search path for %s = %q, paged=%v, err=%v; want %q",
+				test.source, got, paged, err, test.want)
+		}
+	}
+}
+
 func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 	if !extraAdultValidCategory(source91Porna, "play") ||
 		!extraAdultValidCategory(source91Porna, "month_hot") {
