@@ -745,11 +745,13 @@ class _PlayerControlsState extends State<PlayerControls> {
     required IconData icon,
     required VoidCallback? onPressed,
     bool selected = false,
+    GlobalKey? anchorKey,
   }) => _toolButton(
     key: key,
     tooltip: tooltip,
     onPressed: onPressed,
     selected: selected,
+    anchorKey: anchorKey,
     child: Icon(icon, size: 22),
   );
 
@@ -759,10 +761,12 @@ class _PlayerControlsState extends State<PlayerControls> {
     required String label,
     required VoidCallback? onPressed,
     double width = 52,
+    GlobalKey? anchorKey,
   }) => _toolButton(
     key: key,
     tooltip: tooltip,
     onPressed: onPressed,
+    anchorKey: anchorKey,
     visualWidth: width,
     child: Text(
       label,
@@ -779,6 +783,7 @@ class _PlayerControlsState extends State<PlayerControls> {
     required VoidCallback? onPressed,
     bool selected = false,
     double visualWidth = 36,
+    GlobalKey? anchorKey,
   }) {
     final scheme = Theme.of(context).colorScheme;
     final enabled = onPressed != null;
@@ -793,6 +798,7 @@ class _PlayerControlsState extends State<PlayerControls> {
         : Colors.white.withValues(alpha: .08);
     final targetWidth = visualWidth < 40 ? 48.0 : visualWidth + 8;
     return Tooltip(
+      key: anchorKey,
       message: tooltip,
       child: Semantics(
         button: true,
@@ -873,14 +879,16 @@ class _PlayerControlsState extends State<PlayerControls> {
     final tools = [
       if (showSpeedQuality) ...[
         _toolText(
-          key: _speedAnchorKey,
+          key: const ValueKey('player-speed'),
+          anchorKey: _speedAnchorKey,
           tooltip: '倍速',
           label: '${widget.speed}x',
           onPressed: widget.enabled ? () => _anchoredPanel(_speedAnchorKey, widget.onSpeed) : null,
           width: 50,
         ),
         _toolText(
-          key: _qualityAnchorKey,
+          key: const ValueKey('player-quality'),
+          anchorKey: _qualityAnchorKey,
           tooltip: '畫質',
           label: widget.qualityLabel,
           onPressed: widget.enabled ? () => _anchoredPanel(_qualityAnchorKey, widget.onQuality) : null,
@@ -890,7 +898,8 @@ class _PlayerControlsState extends State<PlayerControls> {
       if (showPush) _castTool(const ValueKey('fullscreen-lan-push')),
       if (widget.onAspectRatio != null)
         _toolIcon(
-          key: _aspectRatioAnchorKey,
+          key: const ValueKey('player-aspect-ratio'),
+          anchorKey: _aspectRatioAnchorKey,
           tooltip: '畫面比例：${widget.aspectRatioLabel}',
           icon: Icons.aspect_ratio_rounded,
           onPressed: widget.enabled
@@ -899,7 +908,8 @@ class _PlayerControlsState extends State<PlayerControls> {
         ),
       if (widget.onSleepTimer != null)
         _toolIcon(
-          key: _sleepTimerAnchorKey,
+          key: const ValueKey('player-sleep-timer'),
+          anchorKey: _sleepTimerAnchorKey,
           tooltip: '睡眠計時：${widget.sleepTimerLabel}',
           icon: Icons.bedtime_rounded,
           onPressed: widget.enabled
@@ -960,14 +970,16 @@ class _PlayerControlsState extends State<PlayerControls> {
   Widget _mobileControlRow({required bool fullscreen}) {
     final tools = [
       _toolText(
-        key: _speedAnchorKey,
+        key: const ValueKey('player-speed'),
+          anchorKey: _speedAnchorKey,
         tooltip: '倍速',
         label: '${widget.speed}x',
         onPressed: widget.enabled ? () => _anchoredPanel(_speedAnchorKey, widget.onSpeed) : null,
         width: 50,
       ),
       _toolText(
-        key: _qualityAnchorKey,
+        key: const ValueKey('player-quality'),
+          anchorKey: _qualityAnchorKey,
         tooltip: '畫質',
         label: widget.qualityLabel,
         onPressed: widget.enabled ? () => _anchoredPanel(_qualityAnchorKey, widget.onQuality) : null,
@@ -977,7 +989,8 @@ class _PlayerControlsState extends State<PlayerControls> {
         _castTool(const ValueKey('fullscreen-lan-push')),
       if (widget.onAspectRatio != null)
         _toolIcon(
-          key: _aspectRatioAnchorKey,
+          key: const ValueKey('player-aspect-ratio'),
+          anchorKey: _aspectRatioAnchorKey,
           tooltip: '畫面比例：${widget.aspectRatioLabel}',
           icon: Icons.aspect_ratio_rounded,
           onPressed: widget.enabled
@@ -986,7 +999,8 @@ class _PlayerControlsState extends State<PlayerControls> {
         ),
       if (widget.onSleepTimer != null)
         _toolIcon(
-          key: _sleepTimerAnchorKey,
+          key: const ValueKey('player-sleep-timer'),
+          anchorKey: _sleepTimerAnchorKey,
           tooltip: '睡眠計時：${widget.sleepTimerLabel}',
           icon: Icons.bedtime_rounded,
           onPressed: widget.enabled
