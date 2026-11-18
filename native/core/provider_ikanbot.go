@@ -489,12 +489,17 @@ func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Dra
 	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,OnlineDate:year,Tags:tags,TotalEpisode:len(chapters),EpisodeCount:len(chapters),ChannelName:"愛看機器人",CategoryName:"影集"}
 	return drama,chapters,nil
 }
+func ikanbotIsHLSURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8")
+}
+
 func (d *Downloader) resolveIkanbotMedia(ctx context.Context,task Task)(providerMedia,error){
 	source,id,ok:=splitProviderDramaID(task.DramaID);prefix:=providerChapterID(sourceIkanBot,id,"");if !ok||source!=sourceIkanBot||!ikanbotNumericID(id)||!strings.HasPrefix(task.Chapter.ID,prefix){return providerMedia{},errors.New("愛看機器人播放分集資訊無效，請重新整理")}
 	mediaURL:=strings.TrimSpace(task.Chapter.VideoURL);if !isProviderHTTPMediaURL(mediaURL){return providerMedia{},errors.New("愛看機器人播放網址無效")}
 	ref:=firstNonEmpty(task.Chapter.Referer,task.Chapter.PageURL,ikanbotBaseURL+"/");cred:=&providerMediaCredentials{referer:ref,userAgent:ikanbotUserAgent}
 	media:=providerMedia{URL:mediaURL,Referer:ref,credentials:cred,StandardHTTP:runtime.GOOS=="android"}
 	for _,item:=range task.Chapter.PlaybackVariants{qualityText,address,found:=strings.Cut(item,":");if !found||!isProviderHTTPMediaURL(address){continue};quality,_:=strconv.Atoi(qualityText);media.Variants=append(media.Variants,providerMedia{URL:address,Referer:ref,credentials:cred,Quality:quality})}
-	if strings.HasSuffix(strings.ToLower(mediaURL),".m3u8"){return d.prepareWebProviderMedia(ctx,media,"愛看機器人")}
+	if ikanbotIsHLSURL(mediaURL){return d.prepareWebProviderMedia(ctx,media,"愛看機器人")}
 	return media,nil
 }
