@@ -433,13 +433,18 @@ void main() {
     ).first;
     for (final source in SourceSite.restrictedValues) {
       final title = find.text(source.name);
-      await tester.scrollUntilVisible(
-        title,
-        220,
-        scrollable: scrollable,
-      );
+      final badge = find.byKey(ValueKey('restricted-badge-${source.id}'));
+      // The lazy sliver may not build a far-off row yet. Scroll by a bounded
+      // distance and retry until both the row and its badge are in the tree.
+      var found = title.evaluate().isNotEmpty;
+      for (var attempt = 0; !found && attempt < 24; attempt++) {
+        await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -220));
+        await tester.pumpAndSettle();
+        found = title.evaluate().isNotEmpty;
+      }
+      expect(found, isTrue, reason: '${source.name} should be reachable in the advanced source list');
       expect(
-        find.byKey(ValueKey('restricted-badge-${source.id}')),
+        badge,
         findsOneWidget,
         reason: '${source.name} should display 限制級',
       );
