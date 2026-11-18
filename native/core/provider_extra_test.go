@@ -69,8 +69,12 @@ func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 		t.Fatal("91Porn current playing or previous-month category is not registered")
 	}
 	got, err := extraAdultCategoryPath(source91Porna, 1, "")
-	if err != nil || got != "/comic/index/video?category=play&page=1" {
+	if err != nil || got != "/comic/index/video?category=play" {
 		t.Fatalf("91Porn default category path = %q, err=%v", got, err)
+	}
+	got, err = extraAdultCategoryPath(source91Porna, 2, "")
+	if err != nil || got != "/comic/index/video?category=play&page=2" {
+		t.Fatalf("91Porn second-page category path = %q, err=%v", got, err)
 	}
 	if got := extraAdultDetailURL(source91Porna, "key_123"); got != "https://91porna.com/comic/index/detail?video_key=key_123" {
 		t.Fatalf("91Porn detail URL = %q", got)
