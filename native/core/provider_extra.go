@@ -195,12 +195,26 @@ func (d *Downloader) fetchExtraAdultCatalog(ctx context.Context,source string,pa
 	items:=[]Drama{};seen:=map[string]bool{};for _,block:=range extraAdultSegments(body,source){item,ok:=extraAdultParseCard(source,block,base);if !ok||seen[item.ID]{continue};seen[item.ID]=true;items=append(items,item);if len(items)>=100{break}}
 	limit:=20;if source==sourcePPP||source==sourceMadou{limit=12};if source==source91Porna{limit=10};return items,paged&&len(items)>=limit,nil
 }
+// extraAdultMobileScanRequired detects the current 91Porna desktop detail
+// template, which exposes a phone-browser QR handoff instead of a web player.
+func extraAdultMobileScanRequired(body string) bool {
+	plain := adultClean(body)
+	return strings.Contains(plain, "手機瀏覽器") &&
+		(strings.Contains(plain, "掃碼觀看") || strings.Contains(plain, "扫码观看"))
+}
+
 func extraAdultTitle(body,fallback string)string{
 	t:=adultClean(adultMetaValue(body,"og:title"));if t==""{t=adultClean(adultMetaValue(body,"twitter:title"))};if t==""{if m:=regexp.MustCompile("(?is)<h1\\b[^>]*>(.*?)</h1>").FindStringSubmatch(body);len(m)>1{t=adultClean(m[1])}};if t==""{if m:=regexp.MustCompile("(?is)<title\\b[^>]*>(.*?)</title>").FindStringSubmatch(body);len(m)>1{t=adultClean(m[1])}};if t==""{t=fallback};t=regexp.MustCompile("(?i)\\s*[-|]\\s*(?:SupJav|PPP\\.Porn|麻豆.*|91porna|91視頻).*$").ReplaceAllString(t,"");return strings.TrimSpace(t)
 }
 func (d *Downloader) fetchExtraAdultDetail(ctx context.Context,source,id string)(Drama,[]Chapter,error){
 	source=canonicalProviderSource(source);if !extraAdultValidID(source,id){return Drama{},nil,errors.New("作品識別碼無效")};base:=extraAdultBaseURL(source);body,final,e:=extraAdultFetch(ctx,d,source,extraAdultDetailURL(source,id),base+"/");if e!=nil{return Drama{},nil,fmt.Errorf("%s 作品詳情讀取失敗：%w",extraAdultSourceName(source),e)}
-	title:=extraAdultTitle(body,id);desc:=adultClean(adultMetaValue(body,"description"));cover:="";for _,k:=range []string{"og:image","twitter:image"}{if v:=adultSafeImageURL(base,adultMetaValue(body,k));v!=""{cover=v;break}};if cover==""{images:=adultImageCandidates(body,base,source);if len(images)>0{cover=images[0]}}
+	title:=extraAdultTitle(body,id);desc:=adultClean(adultMetaValue(body,"description"))
+	if source==source91Porna && extraAdultMobileScanRequired(body) {
+		const note = "此作品目前僅提供手機瀏覽器掃碼觀看，桌面網頁沒有 D-TV 可直接播放的影片網址。"
+		if desc!="" { desc += "\n\n" }
+		desc += note
+	}
+	cover:="";for _,k:=range []string{"og:image","twitter:image"}{if v:=adultSafeImageURL(base,adultMetaValue(body,k));v!=""{cover=v;break}};if cover==""{images:=adultImageCandidates(body,base,source);if len(images)>0{cover=images[0]}}
 	drama:=Drama{ID:providerDramaID(source,id),Source:source,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Desc:truncate(desc,12000),Intro:truncate(desc,12000),Cover:cover,CoverURL:cover,ChannelName:extraAdultSourceName(source),CategoryName:extraAdultSourceName(source),TotalEpisode:1,EpisodeCount:1}
 	ch:=Chapter{ID:providerChapterID(source,id,final),Source:source,Title:"正片",PageURL:final,Referer:final,VideoURL:"adult-page://"+final,CurrentEpisode:json.RawMessage("1")};return drama,[]Chapter{ch},nil
 }
@@ -221,7 +235,15 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 	case sourceSupJav:
 		media:=extraAdultHLS(body,final);referer:=final;if media==""{frame:=extraAdultFrame(final,body);u,err:=url.Parse(frame);if err!=nil||u.Scheme!="https"||u.User!=nil{return providerMedia{},errors.New("SupJav 播放器網址無效")};embed,eu,err:=extraAdultFetch(ctx,d,source,frame,final);if err!=nil{return providerMedia{},err};referer=eu;media=extraAdultHLS(embed,eu);if media==""{if m:=regexp.MustCompile("(?is)window\\.PLAYER_CONFIG\\s*=\\s*(\\{[\\s\\S]*?\\})\\s*;").FindStringSubmatch(embed);len(m)>1{var cfg map[string]any;if json.Unmarshal([]byte(m[1]),&cfg)==nil{for _,k:=range []string{"m3u8","url","hls","file"}{if s,ok:=cfg[k].(string);ok{media=adultResolvePlaybackURL(eu,s);if media!=""{break}}}}}}};if media==""{return providerMedia{},errors.New("SupJav 播放器沒有提供 HLS 網址")};cred:=&providerMediaCredentials{referer:referer,userAgent:adultUserAgent};return d.prepareWebProviderMedia(ctx,providerMedia{URL:media,Referer:referer,credentials:cred,StandardHTTP:runtime.GOOS=="android"},"SupJav")
 	case source91Porna:
-		m:=regexp.MustCompile("(?i)data-video=['\\x22]([0-9]+)['\\x22]").FindStringSubmatch(body);if len(m)<2{return providerMedia{},errors.New("91Porn 詳情頁缺少播放識別碼")};api:=ninetyOneBaseURL+"/api/videos/"+m[1]+"/playback";req,err:=http.NewRequestWithContext(ctx,http.MethodPost,api,strings.NewReader("{}"));if err!=nil{return providerMedia{},err};req.Header.Set("User-Agent",adultUserAgent);req.Header.Set("Accept","application/json, text/plain, */*");req.Header.Set("Content-Type","application/json");req.Header.Set("Referer",final);req.Header.Set("Origin",ninetyOneBaseURL);resp,err:=d.doCatalogRequestWithTimeout(req,providerTimeout);if err!=nil{return providerMedia{},err};defer resp.Body.Close();data,err:=io.ReadAll(io.LimitReader(resp.Body,4<<20));if err!=nil{return providerMedia{},err};if resp.StatusCode<200||resp.StatusCode>=300{return providerMedia{},fmt.Errorf("91Porn 播放 API 回應 HTTP %d",resp.StatusCode)};var payload struct{Data struct{Streams map[string]string "json:\"streams\""} "json:\"data\""};if json.Unmarshal(data,&payload)!=nil{return providerMedia{},errors.New("91Porn 播放 API 回應格式無效")};media:=firstNonEmpty(payload.Data.Streams["main"],payload.Data.Streams["hevc"],payload.Data.Streams["preview"]);if !isProviderHTTPMediaURL(media){return providerMedia{},errors.New("91Porn 播放 API 沒有回傳有效網址")};cred:=&providerMediaCredentials{referer:final,userAgent:adultUserAgent};return d.prepareWebProviderMedia(ctx,providerMedia{URL:media,Referer:final,credentials:cred,StandardHTTP:runtime.GOOS=="android"},"91Porn")
+		if extraAdultMobileScanRequired(body) {
+			return providerMedia{}, errors.New("91Porn 目前僅提供手機瀏覽器掃碼觀看，桌面頁沒有 D-TV 可直接播放的串流網址")
+		}
+		media := adultFindM3U8(body, final)
+		if !isProviderHTTPMediaURL(media) {
+			return providerMedia{}, errors.New("91Porn 詳情頁目前沒有可辨識的直接播放網址")
+		}
+		cred := &providerMediaCredentials{referer: final, userAgent: adultUserAgent}
+		return d.prepareWebProviderMedia(ctx, providerMedia{URL: media, Referer: final, credentials: cred, StandardHTTP: runtime.GOOS == "android"}, "91Porn")
 	}
 	return providerMedia{},errors.New("不支援的進階片源")
 }
