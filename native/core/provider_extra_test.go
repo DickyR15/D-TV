@@ -174,6 +174,17 @@ func TestExtraAdultMadouUsesCurrentCategorySlugs(t *testing.T) {
 	}
 }
 
+func TestExtraAdultMadouCategoryListHasOnlyOneAllOption(t *testing.T) {
+	for _, category := range extraAdultCategoriesFor(sourceMadou) {
+		if category.Name == "全部" {
+			t.Fatalf("Madou provider list should not duplicate the shared 全部 option: %#v", category)
+		}
+	}
+	if !extraAdultValidCategory(sourceMadou, "0") {
+		t.Fatal("legacy Madou category ID 0 should remain accepted for saved preferences")
+	}
+}
+
 func TestExtraAdultMadouAcceptsUnicodeDetailSlugsSafely(t *testing.T) {
 	const slug = "大象传媒-中文作品"
 	raw := "/%E5%A4%A7%E8%B1%A1%E4%BC%A0%E5%AA%92-%E4%B8%AD%E6%96%87%E4%BD%9C%E5%93%81.html"
@@ -256,7 +267,7 @@ func TestExtraAdult91PornaExtractsCurrentEmbedPlaybackParameters(t *testing.T) {
 		var src = encodeURIComponent("https://91porna.com/comic/index/embed?id=169397");
 	</script>`
 	img, encodedURL := extraAdult91PornaPlayParams(body)
-	if img != "poster%2Fabc123" {
+	if img != "poster/abc123" {
 		t.Fatalf("91Porna embed image parameter = %q", img)
 	}
 	if encodedURL != "https://91porna.com/comic/index/embed?id=169397" {
@@ -270,13 +281,24 @@ func TestExtraAdult91PornaExtractsEscapedEmbedPlayArguments(t *testing.T) {
   var src = encodeURIComponent(\"https:\/\/91porna.com\/comic\/index\/embed?id=169397\");
 </script>`
 	img, encodedURL := extraAdult91PornaPlayParams(body)
-	if img != "poster%2Ffolder%3D1" {
+	if img != "poster/folder=1" {
 		t.Fatalf("91Porna img query value changed: %q", img)
 	}
 	if encodedURL != "https://91porna.com/comic/index/embed?id=169397" {
 		t.Fatalf("91Porna escaped embed URL = %q", encodedURL)
 	}
 }
+func TestExtraAdult91PornaExtractsEmbedScriptSrcQueryParameters(t *testing.T) {
+	body := `<script src="/index/embed_play.js?img=poster%2Ffolder%3D1&amp;u=https%3A%2F%2F91porna.com%2Fcomic%2Findex%2Fembed%3Fid%3D169397&amp;t=123"></script>`
+	img, encodedURL := extraAdult91PornaPlayParams(body)
+	if img != "poster/folder=1" {
+		t.Fatalf("91Porna script src img parameter = %q", img)
+	}
+	if encodedURL != "https://91porna.com/comic/index/embed?id=169397" {
+		t.Fatalf("91Porna script src u parameter = %q", encodedURL)
+	}
+}
+
 func TestExtraAdult91PornaExtractsDirectUVariable(t *testing.T) {
 	body := `<script>var img='cover%2F123'; var u='https://91porna.com/comic/index/embed?id=169397';</script>`
 	img, encodedURL := extraAdult91PornaPlayParams(body)
