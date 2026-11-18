@@ -453,6 +453,7 @@ class GoogleCastController {
     address: address,
     port: port,
     advertisedName: metadata['fn'],
+    modelName: metadata['md'],
     serviceName: service.name,
     advertisedId: metadata['id'],
     metadata: metadata,
