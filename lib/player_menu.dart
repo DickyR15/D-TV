@@ -213,7 +213,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
 
 
   Widget _buildCompactPopover() {
-    final maxHeight = math.max(80.0, MediaQuery.sizeOf(context).height - 16);
+    final maxHeight = math.max(80.0, MediaQuery.sizeOf(context).height - 16).toDouble();
     return Material(
       key: const ValueKey('player-quick-menu'),
       color: const Color(0xF022262D),
