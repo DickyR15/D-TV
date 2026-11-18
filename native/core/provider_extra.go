@@ -2,6 +2,10 @@ package core
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -276,11 +280,8 @@ func extraAdult91PornaPlayParams(body string) (string, string) {
 	return img, encodedURL
 }
 
-func extraAdult91PornaMediaURL(body, page string) string {
+func extraAdult91PornaDirectMediaURL(body, page string) string {
 	body = strings.NewReplacer("\\/", "/", "\\u002F", "/", "&amp;", "&").Replace(body)
-	if unpacked := adultUnpackPacker(body); unpacked != "" {
-		body += "\n" + unpacked
-	}
 	if match := adultM3U8Pattern.FindString(body); match != "" {
 		media := adultResolvePlaybackURL(page, strings.TrimRight(match, "\\),;]"))
 		if isProviderHTTPMediaURL(media) {
@@ -292,6 +293,72 @@ func extraAdult91PornaMediaURL(body, page string) string {
 		media := adultResolvePlaybackURL(page, strings.TrimRight(match, "\\),;]"))
 		if isProviderHTTPMediaURL(media) {
 			return media
+		}
+	}
+	return ""
+}
+
+func extraAdult91PornaDecryptAES(ciphertext []byte) []byte {
+	if len(ciphertext) == 0 || len(ciphertext)%aes.BlockSize != 0 {
+		return nil
+	}
+	key := []byte("f5d965df75336270")
+	iv := []byte("97b60394abc2fbe1")
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil
+	}
+	plain := make([]byte, len(ciphertext))
+	cipher.NewCBCDecrypter(block, iv).CryptBlocks(plain, ciphertext)
+	padding := int(plain[len(plain)-1])
+	if padding < 1 || padding > aes.BlockSize || padding > len(plain) {
+		return nil
+	}
+	for _, value := range plain[len(plain)-padding:] {
+		if int(value) != padding {
+			return nil
+		}
+	}
+	return plain[:len(plain)-padding]
+}
+
+func extraAdult91PornaMediaURL(body, page string) string {
+	body = strings.NewReplacer("\\/", "/", "\\u002F", "/", "&amp;", "&").Replace(body)
+	if unpacked := adultUnpackPacker(body); unpacked != "" {
+		body += "\\n" + unpacked
+	}
+	if media := extraAdult91PornaDirectMediaURL(body, page); media != "" {
+		return media
+	}
+
+	// Current player scripts can carry an AES-CBC encrypted URL as either
+	// base64 or hex; decode only the well-known player payload format.
+	base64Pattern := regexp.MustCompile("[A-Za-z0-9+/]{40,}={0,2}")
+	for _, encoded := range base64Pattern.FindAllString(body, 128) {
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			decoded, err = base64.RawStdEncoding.DecodeString(strings.TrimRight(encoded, "="))
+		}
+		if err != nil {
+			continue
+		}
+		if plain := extraAdult91PornaDecryptAES(decoded); len(plain) > 0 {
+			if media := extraAdult91PornaDirectMediaURL(string(plain), page); media != "" {
+				return media
+			}
+		}
+	}
+
+	hexPattern := regexp.MustCompile("(?i)[0-9a-f]{64,}")
+	for _, encoded := range hexPattern.FindAllString(body, 128) {
+		decoded, err := hex.DecodeString(encoded)
+		if err != nil {
+			continue
+		}
+		if plain := extraAdult91PornaDecryptAES(decoded); len(plain) > 0 {
+			if media := extraAdult91PornaDirectMediaURL(string(plain), page); media != "" {
+				return media
+			}
 		}
 	}
 	return ""
