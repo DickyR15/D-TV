@@ -589,7 +589,7 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 					}
 					return providerMedia{}, errors.New("91Porna 嵌入頁缺少 embed_play.js 參數")
 				}
-				if strings.ContainsAny(img, "&\\r\\n") {
+				if strings.ContainsAny(img, "&\r\n") {
 					return providerMedia{}, errors.New("91Porna 播放腳本 img 參數無效")
 				}
 				jsQuery := url.Values{}
