@@ -11,10 +11,40 @@ import 'diary_service.dart';
 
 enum PlayerMenuSection { episodes, speed, quality, aspectRatio, sleepTimer, settings }
 
+/// Positions a compact player menu relative to the control that opened it.
+/// The menu prefers the space above the anchor and flips below only when
+/// there is not enough room, while keeping the popup inside the viewport.
+Rect playerMenuPopoverRect({
+  required Rect anchor,
+  required Size viewport,
+  required Size menuSize,
+  double gap = 8,
+  double margin = 8,
+}) {
+  final availableWidth = math.max(0.0, viewport.width - margin * 2);
+  final availableHeight = math.max(0.0, viewport.height - margin * 2);
+  final width = menuSize.width.clamp(0.0, availableWidth).toDouble();
+  final height = menuSize.height.clamp(0.0, availableHeight).toDouble();
+  final minLeft = math.min(margin, viewport.width - width);
+  final maxLeft = math.max(minLeft, viewport.width - width - margin);
+  final left = (anchor.center.dx - width / 2)
+      .clamp(minLeft, maxLeft)
+      .toDouble();
+  final minTop = math.min(margin, viewport.height - height);
+  final maxTop = math.max(minTop, viewport.height - height - margin);
+  final above = anchor.top - gap - height;
+  final below = anchor.bottom + gap;
+  final top = (above >= minTop ? above : below)
+      .clamp(minTop, maxTop)
+      .toDouble();
+  return Rect.fromLTWH(left, top, width, height);
+}
+
 class PlayerMenu extends StatefulWidget {
   const PlayerMenu({
     super.key,
     required this.section,
+    this.compactPopover = false,
     required this.episodes,
     required this.currentIndex,
     required this.preferences,
@@ -35,6 +65,7 @@ class PlayerMenu extends StatefulWidget {
   });
 
   final PlayerMenuSection section;
+  final bool compactPopover;
   final List<Episode> episodes;
   final int currentIndex;
   final PlaybackPreferences preferences;
@@ -52,6 +83,21 @@ class PlayerMenu extends StatefulWidget {
   final ValueChanged<int> onEpisode;
   final Future<void> Function(PlaybackPreferences) onPreferences;
   final Future<void> Function() onFavorite;
+
+  static double compactPopoverHeight(
+    PlayerMenuSection section,
+    List<int> qualities,
+  ) {
+    final optionCount = switch (section) {
+      PlayerMenuSection.speed => playbackSpeeds.length,
+      PlayerMenuSection.quality =>
+        {0, ...qualities.where((quality) => quality > 0)}.length,
+      PlayerMenuSection.aspectRatio => PlaybackAspectRatio.values.length,
+      PlayerMenuSection.sleepTimer => 6,
+      _ => 1,
+    };
+    return optionCount * 42.0 + 8.0;
+  }
 
   @override
   State<PlayerMenu> createState() => _PlayerMenuState();
@@ -78,6 +124,7 @@ class _PlayerMenuState extends State<PlayerMenu> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.compactPopover) return _buildCompactPopover();
     final size = MediaQuery.sizeOf(context);
     final viewPadding = MediaQuery.viewPaddingOf(context);
     final landscape = size.width > size.height;
@@ -157,6 +204,150 @@ class _PlayerMenuState extends State<PlayerMenu> {
                       padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
                       child: _settings(),
                     ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildCompactPopover() {
+    final maxHeight = math.max(80.0, MediaQuery.sizeOf(context).height - 16);
+    return Material(
+      key: const ValueKey('player-quick-menu'),
+      color: const Color(0xF022262D),
+      elevation: 16,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: _compactOptions(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _compactOptions() {
+    final preferences = widget.preferences;
+    switch (widget.section) {
+      case PlayerMenuSection.speed:
+        return playbackSpeeds.reversed
+            .map(
+              (speed) => _quickOption(
+                key: ValueKey('menu-speed-$speed'),
+                label: '${speed}x',
+                selected: speed == preferences.speed,
+                onSelected: () => widget.onPreferences(
+                  preferences.copyWith(speed: speed),
+                ),
+              ),
+            )
+            .toList();
+      case PlayerMenuSection.quality:
+        final qualities = <int>{
+          0,
+          ...widget.qualities.where((quality) => quality > 0),
+          if (preferences.quality > 0) preferences.quality,
+        }.toList()
+          ..sort((a, b) {
+            if (a == 0) return 1;
+            if (b == 0) return -1;
+            return b.compareTo(a);
+          });
+        return qualities
+            .map(
+              (quality) => _quickOption(
+                key: ValueKey('menu-quality-$quality'),
+                label: quality == 0 ? '自動' : '${quality}P',
+                selected: quality == preferences.quality,
+                onSelected: () => widget.onPreferences(
+                  preferences.copyWith(quality: quality),
+                ),
+              ),
+            )
+            .toList();
+      case PlayerMenuSection.aspectRatio:
+        return PlaybackAspectRatio.values
+            .map(
+              (ratio) => _quickOption(
+                key: ValueKey('menu-aspect-${ratio.name}'),
+                label: playbackAspectRatioLabel(ratio),
+                selected: ratio == preferences.aspectRatio,
+                onSelected: () => widget.onPreferences(
+                  preferences.copyWith(aspectRatio: ratio),
+                ),
+              ),
+            )
+            .toList();
+      case PlayerMenuSection.sleepTimer:
+        return [
+          _quickOption(
+            key: const ValueKey('sleep-timer-off'),
+            label: '關閉',
+            selected: widget.sleepMinutes == 0 && !widget.sleepAtEpisodeEnd,
+            onSelected: () => widget.onSleepTimer!(0, false),
+          ),
+          _quickOption(
+            key: const ValueKey('sleep-timer-episode'),
+            label: '播完本集',
+            selected: widget.sleepAtEpisodeEnd,
+            onSelected: () => widget.onSleepTimer!(0, true),
+          ),
+          for (final minutes in [15, 30, 60, 90])
+            _quickOption(
+              key: ValueKey('sleep-timer-$minutes'),
+              label: '$minutes 分鐘',
+              selected: widget.sleepMinutes == minutes &&
+                  !widget.sleepAtEpisodeEnd,
+              onSelected: () => widget.onSleepTimer!(minutes, false),
+            ),
+        ];
+      case PlayerMenuSection.episodes:
+      case PlayerMenuSection.settings:
+        return const [];
+    }
+  }
+
+  Widget _quickOption({
+    required Key key,
+    required String label,
+    required bool selected,
+    required Future<void> Function() onSelected,
+  }) {
+    final foreground = selected
+        ? const Color(0xFF9FC8FF)
+        : Colors.white.withValues(alpha: .94);
+    return InkWell(
+      key: key,
+      onTap: _busy ? null : () => _run(onSelected),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        height: 42,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0x443B82D6) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
             ),
           ],
         ),
