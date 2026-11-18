@@ -281,7 +281,7 @@ func TestExtraAdult91PornaExtractsEscapedEmbedPlayArguments(t *testing.T) {
   var src = encodeURIComponent(\"https:\/\/91porna.com\/comic\/index\/embed?id=169397\");
 </script>`
 	img, encodedURL := extraAdult91PornaPlayParams(body)
-	if img != "poster%2Ffolder%3D1" {
+	if img != "poster/folder=1" {
 		t.Fatalf("91Porna img query value changed: %q", img)
 	}
 	if encodedURL != "https://91porna.com/comic/index/embed?id=169397" {
