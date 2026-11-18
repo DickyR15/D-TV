@@ -1,6 +1,11 @@
 package core
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"testing"
+)
 
 func adultCategoryURLMust(source, category string) string {
 	address, err := adultCategoryURL(source, category)
@@ -132,5 +137,24 @@ func TestAdultProviderRejectsUntrustedURLsAndParsesPlaybackHints(t *testing.T) {
 	}
 	if got := adultFindM3U8("<script>source=\"https://cdn.example.test/master.m3u8?token=abc\"</script>"); got != "https://cdn.example.test/master.m3u8?token=abc" {
 		t.Fatalf("M3U8 extraction = %q", got)
+	}
+}
+
+
+func TestGetHuangguoChaptersDispatchesAdultProvider(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.Hostname() != "madou.club" || request.URL.Path != "/sample-video" {
+			return nil, fmt.Errorf("unexpected madou request: %s", request.URL)
+		}
+		body := "<html><head><meta property=\"og:title\" content=\"madou 診斷測試作品\"></head><body></body></html>"
+		return sourceFixtureResponse(request, http.StatusOK, body), nil
+	})
+	title, chapters, err := d.GetHuangguoChapters(context.Background(), sourceMadou, "sample-video")
+	if err != nil {
+		t.Fatalf("GetHuangguoChapters(madou) failed: %v", err)
+	}
+	if title != "madou 診斷測試作品" || len(chapters) != 1 ||
+		chapters[0].Source != sourceMadou || chapters[0].Title != "正片" {
+		t.Fatalf("madou health-check detail = %q, %#v", title, chapters)
 	}
 }
