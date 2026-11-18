@@ -89,7 +89,10 @@ func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 func TestExtraAdultMadouUsesCurrentCategorySlugs(t *testing.T) {
 	if !extraAdultValidCategory(sourceMadou, "大象传媒") ||
 		!extraAdultValidCategory(sourceMadou, "猫爪影像") ||
-		!extraAdultValidCategory(sourceMadou, "KISS糖果屋") {
+		!extraAdultValidCategory(sourceMadou, "hongkongdoll") ||
+		!extraAdultValidCategory(sourceMadou, "psychoporntw") ||
+		!extraAdultValidCategory(sourceMadou, "sa国际传媒") ||
+		!extraAdultValidCategory(sourceMadou, "kiss糖果屋") {
 		t.Fatal("current Madou categories are missing")
 	}
 
@@ -100,6 +103,7 @@ func TestExtraAdultMadouUsesCurrentCategorySlugs(t *testing.T) {
 		{page: 2, category: "0", want: "/page/2/"},
 		{page: 1, category: "大象传媒", want: "/category/%E5%A4%A7%E8%B1%A1%E4%BC%A0%E5%AA%92"},
 		{page: 2, category: "大象传媒", want: "/category/%E5%A4%A7%E8%B1%A1%E4%BC%A0%E5%AA%92/page/2"},
+		{page: 1, category: "hongkongdoll", want: "/category/hongkongdoll"},
 	}
 	for _, test := range tests {
 		got, err := extraAdultCategoryPath(sourceMadou, test.page, test.category)
@@ -127,7 +131,7 @@ func TestExtraAdultMadouAcceptsUnicodeDetailSlugsSafely(t *testing.T) {
 
 func TestExtraAdultMadouParsesUnicodeDetailCard(t *testing.T) {
 	html := `<article class="excerpt">
-		<a class="thumbnail" href="/%E5%A4%A7%E8%B1%A1%E4%BC%A0%E5%AA%92-%E4%B8%AD%E6%96%87%E4%BD%9C%E5%93%81.html">
+		<a href="/%E5%A4%A7%E8%B1%A1%E4%BC%A0%E5%AA%92-%E4%B8%AD%E6%96%87%E4%BD%9C%E5%93%81.html" class="thumbnail">
 			<img data-src="/wp-content/uploads/poster.webp" alt="大象传媒中文作品">
 		</a>
 		<h2>大象传媒中文作品</h2>
