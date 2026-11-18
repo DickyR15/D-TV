@@ -303,6 +303,40 @@ void main() {
     expect(find.byKey(const ValueKey('dtv-brand-toast')), findsOneWidget);
   });
 
+  testWidgets('automatic fullscreen setting is visible and persists', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppLayout(
+          television: false,
+          formFactor: FormFactor.window,
+          child: PlaybackSettingsScreen(
+            store: store,
+            portraitBlurSupported: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final finder = find.byKey(const ValueKey('playback-auto-fullscreen'));
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(finder).value, isTrue);
+    await tester.tap(finder);
+    await tester.pumpAndSettle();
+
+    expect(store.playbackPreferences.autoFullscreen, isFalse);
+    expect(
+      PlaybackPreferences.fromJson(store.playbackPreferences.toJson())
+          .autoFullscreen,
+      isFalse,
+    );
+  });
+
   testWidgets('compatible renderer prompt starts on Cancel; Select cannot restart accidentally', (tester) async {
     Future<bool?>? result;
     await tester.pumpWidget(
