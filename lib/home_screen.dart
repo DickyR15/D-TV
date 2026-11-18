@@ -2200,6 +2200,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           : _openPhoneSearch,
                     ),
                 ],
+                if (_isCatalogTab && !_showRecommendations)
+                  IconButton(
+                    key: const ValueKey('home-refresh'),
+                    tooltip: '重新整理',
+                    onPressed: () {
+                      DiaryService.add(
+                        '[Catalog] manual_refresh group=${_group.id} '
+                        'category=$_category',
+                      );
+                      unawaited(_load(force: true));
+                      unawaited(_loadCategories(force: true));
+                    },
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
                 PopupMenuButton<String>(
                   key: const ValueKey('home-more-menu'),
                   tooltip: '更多',
@@ -2239,15 +2253,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ).whenComplete(
                         () => _resetBackConfirmation(ignoreTrailingBack: true),
                       );
-                    } else if (value == 'refresh') {
-                      if (_isCatalogTab && !_showRecommendations) {
-                        DiaryService.add(
-                          '[Catalog] manual_refresh group=${_group.id} '
-                          'category=$_category',
-                        );
-                        unawaited(_load(force: true));
-                        unawaited(_loadCategories(force: true));
-                      }
                     } else if (value == 'display') {
                       _chooseDisplayMode();
                     } else if (value == 'about') {
@@ -2275,17 +2280,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         child: const Text('使用者管理'),
                       ),
                     ),
-                    if (_isCatalogTab && !_showRecommendations)
-                      const PopupMenuItem(
-                        value: 'refresh',
-                        child: Row(
-                          children: [
-                            Icon(Icons.refresh_rounded, size: 18),
-                            SizedBox(width: 10),
-                            Text('重新整理目錄'),
-                          ],
-                        ),
-                      ),
                     const PopupMenuItem(
                       value: 'settings',
                       child: Text('設定與備份'),
