@@ -265,3 +265,24 @@ func TestIkanbotPlaybackUsesSourceVideoIDButSignsCurrentID(t *testing.T) {
 		t.Fatal("API did not use the signature derived from current_id")
 	}
 }
+
+
+func TestIkanbotHLSURLRecognizesSignedPlaylistURLs(t *testing.T) {
+	for _, address := range []string{
+		"https://cdn.example.test/playlist.m3u8",
+		"https://cdn.example.test/playlist.m3u8?token=abc%2F123&expires=456",
+	} {
+		if !ikanbotIsHLSURL(address) {
+			t.Fatalf("IkanBot did not recognize HLS URL: %s", address)
+		}
+	}
+	for _, address := range []string{
+		"https://cdn.example.test/video.mp4?token=abc",
+		"https://cdn.example.test/path/playlist.m3u8.txt?token=abc",
+		"not a URL",
+	} {
+		if ikanbotIsHLSURL(address) {
+			t.Fatalf("IkanBot incorrectly classified non-HLS URL: %s", address)
+		}
+	}
+}
