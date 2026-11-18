@@ -27,7 +27,7 @@ var (
 	adultTagPattern    = regexp.MustCompile("(?is)<[^>]+>")
 	adultM3U8Pattern   = regexp.MustCompile("(?i)https?://[^\"'<>\\s]+\\.m3u8(?:\\?[^\"'<>\\s]*)?")
 	adultMissAVMediaPattern = regexp.MustCompile("(?i)https?://surrit\\.com/[0-9a-f-]{36}/playlist\\.m3u8(?:\\?[^\\\"'<>\\s]*)?")
-	adultPackerPattern = regexp.MustCompile("(?s)eval\\(function\\(p,a,c,k,e,d\\)\\{.*?\\}\\('((?:[^'\\\\]|\\\\.)*)',\\s*(\\d+),\\s*(\\d+),\\s*'((?:[^'\\\\]|\\\\.)*)'\\.split\\('\\|'\\)")
+	adultPackerPattern = regexp.MustCompile("(?s)eval\\(function\\(p,a,c,k,e,(?:d|r)\\)\\{.*?\\}\\('((?:[^'\\\\]|\\\\.)*)',\\s*(\\d+),\\s*(\\d+),\\s*'((?:[^'\\\\]|\\\\.)*)'\\.split\\('\\|'\\)")
 	adultWordPattern   = regexp.MustCompile("\\b([0-9a-zA-Z_]+)\\b")
 	adultCSSImagePattern = regexp.MustCompile("(?i)url\\(([^)]+)\\)")
 	adultMissAVGenrePath = regexp.MustCompile("(?i)/(?:dm[0-9]+/)?cn/genres/([^/?#]+)/?$")
