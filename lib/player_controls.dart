@@ -61,8 +61,8 @@ class PlayerControls extends StatefulWidget {
   final String title;
   final VoidCallback onTogglePlayback;
   final Future<void> Function() onEpisodes;
-  final Future<void> Function() onSpeed;
-  final Future<void> Function() onQuality;
+  final Future<void> Function(Rect anchorRect) onSpeed;
+  final Future<void> Function(Rect anchorRect) onQuality;
   final double speed;
   final String qualityLabel;
   final VoidCallback onFocusSurface;
@@ -72,8 +72,8 @@ class PlayerControls extends StatefulWidget {
   final Future<void> Function()? onPush;
   final Future<void> Function()? onPictureInPicture;
   final Future<void> Function()? onSettings;
-  final Future<void> Function()? onAspectRatio;
-  final Future<void> Function()? onSleepTimer;
+  final Future<void> Function(Rect anchorRect)? onAspectRatio;
+  final Future<void> Function(Rect anchorRect)? onSleepTimer;
   final VoidCallback? onCinemaMode;
   final String aspectRatioLabel;
   final String sleepTimerLabel;
@@ -100,6 +100,10 @@ class _PlayerControlsState extends State<PlayerControls> {
       PlaybackAutoAdvanceVisibility();
   bool _lastPlaying = false;
   double? _seekValue;
+  final GlobalKey _speedAnchorKey = GlobalKey(debugLabel: 'player-speed-anchor');
+  final GlobalKey _qualityAnchorKey = GlobalKey(debugLabel: 'player-quality-anchor');
+  final GlobalKey _aspectRatioAnchorKey = GlobalKey(debugLabel: 'player-aspect-anchor');
+  final GlobalKey _sleepTimerAnchorKey = GlobalKey(debugLabel: 'player-sleep-anchor');
 
   bool get _hideForCompletedAutoAdvance =>
       _autoAdvanceVisibility.suppressOverlay;
@@ -306,6 +310,25 @@ class _PlayerControlsState extends State<PlayerControls> {
     widget.onFocusSurface();
     setState(() => _visible = !_visible);
     _scheduleHide();
+  }
+
+  Rect? _anchorRect(GlobalKey key) {
+    final renderObject = key.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return null;
+    final topLeft = renderObject.localToGlobal(Offset.zero);
+    return topLeft & renderObject.size;
+  }
+
+  Future<void> _anchoredPanel(
+    GlobalKey anchorKey,
+    Future<void> Function(Rect anchorRect) open,
+  ) async {
+    _hideTimer?.cancel();
+    widget.interactions.cancel();
+    final anchor = _anchorRect(anchorKey);
+    if (anchor == null) return;
+    await open(anchor);
+    _show();
   }
 
   Future<void> _panel(Future<void> Function() open) async {
@@ -850,37 +873,37 @@ class _PlayerControlsState extends State<PlayerControls> {
     final tools = [
       if (showSpeedQuality) ...[
         _toolText(
-          key: const ValueKey('player-speed'),
+          key: _speedAnchorKey,
           tooltip: '倍速',
           label: '${widget.speed}x',
-          onPressed: widget.enabled ? () => _panel(widget.onSpeed) : null,
+          onPressed: widget.enabled ? () => _anchoredPanel(_speedAnchorKey, widget.onSpeed) : null,
           width: 50,
         ),
         _toolText(
-          key: const ValueKey('player-quality'),
+          key: _qualityAnchorKey,
           tooltip: '畫質',
           label: widget.qualityLabel,
-          onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
+          onPressed: widget.enabled ? () => _anchoredPanel(_qualityAnchorKey, widget.onQuality) : null,
           width: 52,
         ),
       ],
       if (showPush) _castTool(const ValueKey('fullscreen-lan-push')),
       if (widget.onAspectRatio != null)
         _toolIcon(
-          key: const ValueKey('player-aspect-ratio'),
+          key: _aspectRatioAnchorKey,
           tooltip: '畫面比例：${widget.aspectRatioLabel}',
           icon: Icons.aspect_ratio_rounded,
           onPressed: widget.enabled
-              ? () => _panel(widget.onAspectRatio!)
+              ? () => _anchoredPanel(_aspectRatioAnchorKey, widget.onAspectRatio!)
               : null,
         ),
       if (widget.onSleepTimer != null)
         _toolIcon(
-          key: const ValueKey('player-sleep-timer'),
+          key: _sleepTimerAnchorKey,
           tooltip: '睡眠計時：${widget.sleepTimerLabel}',
           icon: Icons.bedtime_rounded,
           onPressed: widget.enabled
-              ? () => _panel(widget.onSleepTimer!)
+              ? () => _anchoredPanel(_sleepTimerAnchorKey, widget.onSleepTimer!)
               : null,
         ),
       if (widget.onCinemaMode != null)
@@ -937,37 +960,37 @@ class _PlayerControlsState extends State<PlayerControls> {
   Widget _mobileControlRow({required bool fullscreen}) {
     final tools = [
       _toolText(
-        key: const ValueKey('player-speed'),
+        key: _speedAnchorKey,
         tooltip: '倍速',
         label: '${widget.speed}x',
-        onPressed: widget.enabled ? () => _panel(widget.onSpeed) : null,
+        onPressed: widget.enabled ? () => _anchoredPanel(_speedAnchorKey, widget.onSpeed) : null,
         width: 50,
       ),
       _toolText(
-        key: const ValueKey('player-quality'),
+        key: _qualityAnchorKey,
         tooltip: '畫質',
         label: widget.qualityLabel,
-        onPressed: widget.enabled ? () => _panel(widget.onQuality) : null,
+        onPressed: widget.enabled ? () => _anchoredPanel(_qualityAnchorKey, widget.onQuality) : null,
         width: 52,
       ),
       if (widget.onPush != null)
         _castTool(const ValueKey('fullscreen-lan-push')),
       if (widget.onAspectRatio != null)
         _toolIcon(
-          key: const ValueKey('player-aspect-ratio'),
+          key: _aspectRatioAnchorKey,
           tooltip: '畫面比例：${widget.aspectRatioLabel}',
           icon: Icons.aspect_ratio_rounded,
           onPressed: widget.enabled
-              ? () => _panel(widget.onAspectRatio!)
+              ? () => _anchoredPanel(_aspectRatioAnchorKey, widget.onAspectRatio!)
               : null,
         ),
       if (widget.onSleepTimer != null)
         _toolIcon(
-          key: const ValueKey('player-sleep-timer'),
+          key: _sleepTimerAnchorKey,
           tooltip: '睡眠計時：${widget.sleepTimerLabel}',
           icon: Icons.bedtime_rounded,
           onPressed: widget.enabled
-              ? () => _panel(widget.onSleepTimer!)
+              ? () => _anchoredPanel(_sleepTimerAnchorKey, widget.onSleepTimer!)
               : null,
         ),
       if (fullscreen)
