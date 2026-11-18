@@ -242,4 +242,72 @@ void main() {
       );
     }
   });
+  testWidgets(
+    'iKanBot keeps all episodes and hides manual playback-line selection',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = testStore(await SharedPreferences.getInstance());
+      addTearDown(store.dispose);
+      const drama = Drama(
+        id: 'ikanbot:1023900',
+        source: 'ikanbot',
+        title: '愛看多線測試',
+        episodes: 3,
+      );
+      final repository = _SeriesFixtureRepository(
+        const [],
+        episodes: [
+          Episode({
+            'id': 'ikanbot:1023900:1',
+            'title': '第1集',
+            'currentEpisode': 1,
+            'playLine': '1080P',
+          }, 1),
+          Episode({
+            'id': 'ikanbot:1023900:2',
+            'title': '第2集',
+            'currentEpisode': 2,
+            'playLine': '720P',
+          }, 2),
+          Episode({
+            'id': 'ikanbot:1023900:3',
+            'title': '第3集',
+            'currentEpisode': 3,
+            'playLine': '480P',
+          }, 3),
+        ],
+      );
+      tester.view.physicalSize = const Size(1920, 1080);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        AppLayout(
+          television: true,
+          formFactor: FormFactor.television,
+          child: MaterialApp(
+            home: DetailScreen(
+              drama: drama,
+              repository: repository,
+              store: store,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('播放線路'), findsNothing);
+      expect(find.text('3 集'), findsOneWidget);
+      for (final episode in [1, 2, 3]) {
+        expect(
+          find.byKey(ValueKey('episode-$episode')),
+          findsOneWidget,
+          reason: 'episode $episode must remain visible across source lines',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
 }

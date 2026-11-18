@@ -498,7 +498,7 @@ func (d *Downloader) resolveIkanbotMedia(ctx context.Context,task Task)(provider
 	source,id,ok:=splitProviderDramaID(task.DramaID);prefix:=providerChapterID(sourceIkanBot,id,"");if !ok||source!=sourceIkanBot||!ikanbotNumericID(id)||!strings.HasPrefix(task.Chapter.ID,prefix){return providerMedia{},errors.New("愛看機器人播放分集資訊無效，請重新整理")}
 	mediaURL:=strings.TrimSpace(task.Chapter.VideoURL);if !isProviderHTTPMediaURL(mediaURL){return providerMedia{},errors.New("愛看機器人播放網址無效")}
 	ref:=firstNonEmpty(task.Chapter.Referer,task.Chapter.PageURL,ikanbotBaseURL+"/");cred:=&providerMediaCredentials{referer:ref,userAgent:ikanbotUserAgent}
-	media:=providerMedia{URL:mediaURL,Referer:ref,credentials:cred,StandardHTTP:runtime.GOOS=="android"}
+	media:=providerMedia{URL:mediaURL,Referer:ref,credentials:cred,StandardHTTP:runtime.GOOS=="android",Quality:ikanbotQuality(task.Chapter.PlayLine)}
 	for _,item:=range task.Chapter.PlaybackVariants{qualityText,address,found:=strings.Cut(item,":");if !found||!isProviderHTTPMediaURL(address){continue};quality,_:=strconv.Atoi(qualityText);media.Variants=append(media.Variants,providerMedia{URL:address,Referer:ref,credentials:cred,Quality:quality})}
 	if ikanbotIsHLSURL(mediaURL){return d.prepareWebProviderMedia(ctx,media,"愛看機器人")}
 	return media,nil

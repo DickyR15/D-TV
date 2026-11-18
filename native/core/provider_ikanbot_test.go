@@ -361,3 +361,42 @@ func TestIkanbotResolveMediaLoadsSignedHLSPlaylist(t *testing.T) {
 		t.Fatalf("signed iKanBot HLS playlist was not prepared: %#v", media)
 	}
 }
+
+
+func TestIkanbotAutomaticRouteSelectionPrefersHighestQuality(t *testing.T) {
+	const pageURL = "https://admin-api.aikanbot.com/play/1023900"
+	chapter := Chapter{
+		ID: providerChapterID(sourceIkanBot, "1023900", "1"),
+		Source: sourceIkanBot,
+		VideoURL: "https://cdn.example.test/720/episode.mp4",
+		PlayLine: "720P",
+		Referer: pageURL,
+		PageURL: pageURL,
+		PlaybackVariants: []string{
+			"1080:https://cdn.example.test/1080/episode.mp4",
+			"480:https://cdn.example.test/480/episode.mp4",
+		},
+	}
+	media, err := (&Downloader{}).resolveIkanbotMedia(context.Background(), Task{
+		DramaID: providerDramaID(sourceIkanBot, "1023900"),
+		Chapter: chapter,
+		Index: 1,
+	})
+	if err != nil {
+		t.Fatalf("resolveIkanbotMedia failed: %v", err)
+	}
+	choice := nativePlaybackChoices(media, 0)
+	want := []string{
+		"https://cdn.example.test/1080/episode.mp4",
+		"https://cdn.example.test/720/episode.mp4",
+		"https://cdn.example.test/480/episode.mp4",
+	}
+	if len(choice.media) != len(want) {
+		t.Fatalf("automatic routes = %d, want %d", len(choice.media), len(want))
+	}
+	for index, address := range want {
+		if choice.media[index].URL != address {
+			t.Fatalf("automatic route %d = %q, want %q", index, choice.media[index].URL, address)
+		}
+	}
+}

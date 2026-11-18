@@ -165,7 +165,8 @@ class _DetailScreenState extends State<DetailScreen> {
           : availableLines.first;
       final visibleEpisodes = _episodesForLine(
         detail.episodes,
-        selectedLine,
+        source: requestedDrama.source,
+        requestedLine: selectedLine,
       );
       final resumeIndex = resumeEpisodeIndex(
         visibleEpisodes,
@@ -345,7 +346,10 @@ class _DetailScreenState extends State<DetailScreen> {
         !widget.store.allowsSource(detail.drama.source)) {
       return;
     }
-    final episodes = _episodesForLine(detail.episodes);
+    final episodes = _episodesForLine(
+      detail.episodes,
+      source: detail.drama.source,
+    );
     if (index < 0 || index >= episodes.length) {
       return;
     }
@@ -452,7 +456,7 @@ class _DetailScreenState extends State<DetailScreen> {
     final watched = widget.store.watched(drama.id);
     final allEpisodes = _detail?.episodes ?? <Episode>[];
     final playLines = _playLineNames(allEpisodes);
-    final episodes = _episodesForLine(allEpisodes);
+    final episodes = _episodesForLine(allEpisodes, source: drama.source);
     // 新劇預設第 1 集；有觀看記錄時使用續播集數（未看完則停在原進度）。
     final resumeIndex = resumeEpisodeIndex(episodes, watched);
     final resumeEpisodeNumber = episodes.isEmpty
@@ -540,7 +544,8 @@ class _DetailScreenState extends State<DetailScreen> {
                                     if (_error != null || episodes.isEmpty)
                                       Expanded(child: _episodeStatus())
                                     else ...[
-                                      _playLineSelector(playLines),
+                                      if (drama.source != SourceSite.ikanbot.id)
+                                        _playLineSelector(playLines),
                                       Expanded(
                                         child: EpisodeBrowser(
                                           episodes: episodes,
@@ -585,7 +590,8 @@ class _DetailScreenState extends State<DetailScreen> {
                             child: _episodeStatus(),
                           )
                         else ...[
-                          SliverToBoxAdapter(child: _playLineSelector(playLines)),
+                          if (drama.source != SourceSite.ikanbot.id)
+                            SliverToBoxAdapter(child: _playLineSelector(playLines)),
                           SliverToBoxAdapter(
                             child: _episodeSummary(
                               episodes,
@@ -718,9 +724,14 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   List<Episode> _episodesForLine(
-    List<Episode> episodes, [
+    List<Episode> episodes, {
+    String source = '',
     String? requestedLine,
-  ]) {
+  }) {
+    // iKanBot's episode list already contains the preferred URL and its
+    // alternate routes. Keep every episode visible and let playback recovery
+    // switch URLs automatically rather than filtering by a user-selected line.
+    if (source == SourceSite.ikanbot.id) return episodes;
     final lines = _playLineNames(episodes);
     if (lines.isEmpty) return episodes;
     final selected = requestedLine ?? _selectedPlayLine;
@@ -732,7 +743,11 @@ class _DetailScreenState extends State<DetailScreen> {
 
   void _selectPlayLine(String? line) {
     if (line == null || line == _selectedPlayLine || _detail == null) return;
-    final episodes = _episodesForLine(_detail!.episodes, line);
+    final episodes = _episodesForLine(
+      _detail!.episodes,
+      source: _detail!.drama.source,
+      requestedLine: line,
+    );
     final resumeIndex = resumeEpisodeIndex(
       episodes,
       widget.store.watched(_detail!.drama.id),
