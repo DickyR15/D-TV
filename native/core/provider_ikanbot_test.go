@@ -1,6 +1,7 @@
 package core
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
@@ -74,5 +75,42 @@ func TestIkanbotImageSupportsLazyImageAttributes(t *testing.T) {
 	}
 	if got := ikanbotImage(image, ikanbotBaseURL+"/play/1023899"); got != ikanbotBaseURL+"/covers/lazy.webp" {
 		t.Fatalf("IkanBot lazy cover = %q", got)
+	}
+}
+
+func TestIkanbotPlaybackAPIUsesResolvedPageHost(t *testing.T) {
+	for _, host := range []string{"www.ikanbot.com", "v.aikanbot.com", "www1.aikanbot.com"} {
+		got, err := ikanbotPlaybackAPIURL(
+			"https://"+host+"/play/853970",
+			"853970",
+			"2",
+			"722ae90e3a9be1a774fa099083c3cd15",
+		)
+		if err != nil {
+			t.Fatalf("IkanBot API URL for %s: %v", host, err)
+		}
+		parsed, err := url.Parse(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		query := parsed.Query()
+		if parsed.Host != host || parsed.Path != "/api/getResN" ||
+			query.Get("videoId") != "853970" ||
+			query.Get("mtype") != "2" ||
+			query.Get("token") != "722ae90e3a9be1a774fa099083c3cd15" {
+			t.Fatalf("unexpected IkanBot API URL: %s", got)
+		}
+	}
+}
+
+func TestIkanbotPlaybackAPIRejectsUntrustedPageHosts(t *testing.T) {
+	for _, page := range []string{
+		"http://www.ikanbot.com/play/853970",
+		"https://evil.example/play/853970",
+		"https://img1.ikanbot.com/play/853970",
+	} {
+		if _, err := ikanbotPlaybackAPIURL(page, "853970", "2", "signed-token"); err == nil {
+			t.Fatalf("IkanBot API builder accepted untrusted page %q", page)
+		}
 	}
 }
