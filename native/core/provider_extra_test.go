@@ -257,7 +257,7 @@ func TestExtraAdultSourceNamesUseRequestedLabels(t *testing.T) {
 	if got := extraAdultSourceName(sourcePPP); got != "ppp" {
 		t.Fatalf("PPP source display name = %q", got)
 	}
-	if got := extraAdultSourceName(sourceMadou); got != "麻豆傳媒" {
+	if got := extraAdultSourceName(sourceMadou); got != "麻豆社" {
 		t.Fatalf("Madou source display name = %q", got)
 	}
 }
