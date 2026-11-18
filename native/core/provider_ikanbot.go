@@ -237,8 +237,9 @@ func ikanbotParseResData(raw string) []ikanbotResEntry {
 
 	// Some responses contain a JSON string which is escaped one extra time.
 	normalized := strings.NewReplacer(
-		`\\\"`, `"`,
-		`\\/`, `/`,
+		`\\\"`, `\"`,
+		`\"`, `"`,
+		`\/`, `/`,
 		`&amp;`, `&`,
 	).Replace(raw)
 	if normalized != raw {
