@@ -33,6 +33,18 @@ void main() {
       expect(payload['id'], '192.168.50.191:8009');
     });
 
+    test('uses receiver model metadata when friendly name is missing', () {
+      final payload = googleCastPayloadFromAddress(
+        address: InternetAddress('192.168.50.192'),
+        port: 8009,
+        modelName: 'onn 4K Pro',
+        serviceName: 'Chromecast-7f31',
+      );
+
+      expect(payload, isNotNull);
+      expect(payload!['name'], 'onn 4K Pro');
+    });
+
     test('rejects loopback, multicast and IPv6 endpoints', () {
       expect(
         googleCastPayloadFromAddress(
