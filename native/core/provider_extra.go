@@ -369,20 +369,48 @@ func extraAdult91PornaPlayParams(body string) (string, string) {
 	if unpacked == "" {
 		unpacked = body
 	}
-	unpacked = strings.NewReplacer("\\/", "/", "\\u002F", "/", "&amp;", "&").Replace(unpacked)
-	img := ""
-	for _, source := range []string{unpacked, body} {
-		if match := regexp.MustCompile("(?is)embed_play\\.js\\?img=([^\\x22'&\\s]+)").FindStringSubmatch(source); len(match) > 1 {
-			img = strings.TrimSpace(match[1])
-			break
-		}
+	unpacked = strings.NewReplacer(
+		"\\/", "/",
+		"\\u002F", "/",
+		"\\\"", "\"",
+		"\\'", "'",
+		"&amp;", "&",
+	).Replace(unpacked)
+	normalizedBody := strings.NewReplacer(
+		"\\/", "/",
+		"\\u002F", "/",
+		"\\\"", "\"",
+		"&amp;", "&",
+	).Replace(body)
+
+	var img string
+	imgPatterns := []*regexp.Regexp{
+		regexp.MustCompile("(?is)embed_play\\.js\\?[^\\x22'&\\s]*?img=([^\\x22'&\\s]+)"),
+		regexp.MustCompile("(?is)\\bimg\\s*=\\s*['\\x22]([^'\\x22]+)['\\x22]"),
 	}
-	encodedURL := ""
-	for _, source := range []string{unpacked, body} {
-		if match := regexp.MustCompile("(?is)encodeURIComponent\\(\\s*['\\x22]([^'\\x22]+)['\\x22]\\s*\\)").FindStringSubmatch(source); len(match) > 1 {
-			encodedURL = strings.TrimSpace(match[1])
-			break
+	for _, source := range []string{unpacked, normalizedBody} {
+		for _, pattern := range imgPatterns {
+			if match := pattern.FindStringSubmatch(source); len(match) > 1 {
+				img = strings.TrimSpace(match[1])
+				break
+			}
 		}
+		if img != "" { break }
+	}
+
+	var encodedURL string
+	uPatterns := []*regexp.Regexp{
+		regexp.MustCompile("(?is)encodeURIComponent\\s*\\(\\s*['\\x22]([^'\\x22]+)['\\x22]\\s*\\)"),
+		regexp.MustCompile("(?is)\\b(?:var|let|const)\\s+u\\s*=\\s*['\\x22]([^'\\x22]+)['\\x22]"),
+	}
+	for _, source := range []string{unpacked, normalizedBody} {
+		for _, pattern := range uPatterns {
+			if match := pattern.FindStringSubmatch(source); len(match) > 1 {
+				encodedURL = strings.TrimSpace(match[1])
+				break
+			}
+		}
+		if encodedURL != "" { break }
 	}
 	return img, encodedURL
 }
@@ -506,12 +534,11 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 				if img == "" || encodedURL == "" {
 					return providerMedia{}, errors.New("91Porna 嵌入頁缺少 embed_play.js 參數")
 				}
-				imgValue, decodeErr := url.QueryUnescape(img)
-				if decodeErr != nil {
-					imgValue = img
+				if strings.ContainsAny(img, "&\\r\\n") {
+					return providerMedia{}, errors.New("91Porna 播放腳本 img 參數無效")
 				}
 				jsURL := ninetyOneBaseURL + "/index/embed_play.js?img=" +
-					url.QueryEscape(imgValue) + "&u=" + url.QueryEscape(encodedURL) +
+					img + "&u=" + url.QueryEscape(encodedURL) +
 					"&t=" + strconv.FormatInt(time.Now().Unix()/1800, 10)
 				jsBody, _, jsErr := extraAdultFetch(ctx, d, source, jsURL, embedFinal)
 				if jsErr != nil {
