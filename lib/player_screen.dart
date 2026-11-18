@@ -3812,7 +3812,10 @@ class _PlayerScreenState extends State<PlayerScreen>
           final viewport = MediaQuery.sizeOf(menuContext);
           final requestedHeight = PlayerMenu.compactPopoverHeight(
             section,
-            _plan?.qualities ?? [],
+            [
+              ...(_plan?.qualities ?? const <int>[]),
+              _preferences.quality,
+            ],
           );
           final rect = playerMenuPopoverRect(
             anchor: anchor,
