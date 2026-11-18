@@ -48,6 +48,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
       );
   late bool _preloadEnabled;
   late bool _autoAdvance;
+  late bool _autoFullscreen = widget.store.playbackPreferences.autoFullscreen;
   late bool _autoPictureInPicture;
   late bool _pictureInPictureEnabled =
       widget.store.playbackPreferences.pictureInPictureEnabled;
@@ -142,6 +143,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
           pictureInPictureEnabled: _pictureInPictureEnabled,
           desktopAlwaysOnTop: _desktopAlwaysOnTop,
           showTelevisionClock: _showTelevisionClock,
+          autoFullscreen: _autoFullscreen,
         ),
       );
       if (mounted) onSaved?.call();
@@ -190,6 +192,11 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
 
   void _updatePreload(bool value) {
     setState(() => _preloadEnabled = value);
+    unawaited(_persistPreferences());
+  }
+
+  void _updateAutoFullscreen(bool value) {
+    setState(() => _autoFullscreen = value);
     unawaited(_persistPreferences());
   }
 
@@ -312,7 +319,18 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
                 if (value != null) _updateAspectRatio(value);
               },
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              key: const ValueKey('playback-auto-fullscreen'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('播放時自動全螢幕'),
+              subtitle: const Text(
+                '開啟後進入影片時自動全螢幕；關閉後以一般視窗或目前方向開啟，仍可在播放器手動切換。電視版播放介面維持全螢幕。',
+              ),
+              value: _autoFullscreen,
+              onChanged: _updateAutoFullscreen,
+            ),
+            const SizedBox(height: 8),
             if (AppLayout.isTelevision(context)) ...[
               SwitchListTile(
                 key: const ValueKey('playback-tv-clock'),
@@ -448,7 +466,7 @@ class _PlaybackSettingsScreenState extends State<PlaybackSettingsScreen> {
             ],
             const SizedBox(height: 16),
             const Text(
-              '倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入、自動連播、子母畫面、時鐘顯示，以及電腦播放視窗置頂都會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
+              '自動全螢幕、倍速、畫質、畫面比例、解碼方式、直式影片模糊背景、下一集預載入、自動連播、子母畫面、時鐘顯示，以及電腦播放視窗置頂都會在變更時自動儲存；模糊背景使用同一個即時影格，不會啟動第二個解碼器。',
             ),
           ],
         ),
