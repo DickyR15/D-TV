@@ -427,7 +427,10 @@ void main() {
 
     // Every advanced source receives the same label, regardless of its
     // provider-level adult metadata. General sources (including Guipian) do not.
-    final scrollable = find.byType(Scrollable).first;
+    final scrollable = find.descendant(
+      of: find.byType(CustomScrollView),
+      matching: find.byType(Scrollable),
+    ).first;
     for (final source in SourceSite.restrictedValues) {
       final title = find.text(source.name);
       await tester.scrollUntilVisible(

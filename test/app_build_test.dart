@@ -17,7 +17,7 @@ void main() {
     final store = testStore(await SharedPreferences.getInstance());
     expect(appSlug, 'dtv');
     // 一般版與全片源版都預設開啟紅果、韓小圈、鬼片、多多追劇及愛看機器人。
-    expect(store.sources.length, 6);
+    expect(store.sources.length, 5);
     expect(
       store.sources.map((source) => source.id),
       ['hongguo', 'hanxiaoquan', 'guipian', 'duoduo', 'ikanbot'],

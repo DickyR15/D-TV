@@ -123,7 +123,7 @@ func (d *Downloader) fetchIkanbotCatalogPage(ctx context.Context,page int,catego
 	if strings.TrimSpace(query)!=""{return ikanbotParseSearch(doc,final),false,nil}
 	items:=ikanbotParseCards(doc,final,category)
 	maxPage:=page
-	re:=regexp.MustCompile("-p-([0-9]+)\\\\.html")
+	re:=regexp.MustCompile("-p-([0-9]+)\\.html")
 	for _,m:=range re.FindAllStringSubmatch(body,-1){if len(m)>1{if n,e:=strconv.Atoi(m[1]);e==nil&&n>maxPage&&n<100000{maxPage=n}}}
 	more:=maxPage>page||len(items)>=ikanbotPageSize
 	return items,more,nil
