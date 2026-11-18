@@ -199,28 +199,130 @@ func ikanbotQuality(flag string)int{
 func ikanbotEpisodeOrder(name string,fallback int)int{
 	m:=regexp.MustCompile("([0-9]{1,4})").FindStringSubmatch(name);if len(m)>1{if n,e:=strconv.Atoi(m[1]);e==nil&&n>0&&n<100000{return n}};return fallback
 }
-func ikanbotParseLines(payload map[string]any)[]ikanbotLine{
-	data,_:=payload["data"].(map[string]any);rows,_:=data["list"].([]any);lines:=[]ikanbotLine{}
-	for _,row:=range rows{
-		obj,_:=row.(map[string]any);raw,_:=obj["resData"].(string);if raw==""{continue}
-		var entries []struct{Flag string "json:\"flag\"";URL string "json:\"url\""}
-		if json.Unmarshal([]byte(raw),&entries)!=nil{continue}
-		for _,entry:=range entries{
-			if strings.TrimSpace(entry.Flag)==""||entry.URL==""{continue}
-			line:=ikanbotLine{Flag:strings.TrimSpace(entry.Flag)}
-			for index,piece:=range strings.Split(entry.URL,"#"){
-				piece=strings.TrimSpace(piece);if piece==""{continue};parts:=strings.SplitN(piece,"$",2);if len(parts)<2{continue}
-				name:=strings.TrimSpace(parts[0]);media:=strings.TrimSpace(parts[1]);if extra:=strings.Index(media,"$");extra>=0{media=media[:extra]}
-				u,e:=url.Parse(media);if e!=nil||u.User!=nil||!isProviderHTTPMediaURL(media){continue}
-				line.Episodes=append(line.Episodes,ikanbotEpisode{Name:name,URL:media,Order:ikanbotEpisodeOrder(name,index+1)})
+type ikanbotResEntry struct {
+	Flag string `json:"flag"`
+	URL  string `json:"url"`
+}
+
+func ikanbotParseResData(raw string) []ikanbotResEntry {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var entries []ikanbotResEntry
+	if json.Unmarshal([]byte(raw), &entries) == nil && len(entries) > 0 {
+		return entries
+	}
+	var single ikanbotResEntry
+	if json.Unmarshal([]byte(raw), &single) == nil &&
+		strings.TrimSpace(single.Flag) != "" && strings.TrimSpace(single.URL) != "" {
+		return []ikanbotResEntry{single}
+	}
+
+	// Some responses contain a JSON string which is escaped one extra time.
+	normalized := strings.NewReplacer(
+		`\\\"`, `"`,
+		`\\/`, `/`,
+		`&amp;`, `&`,
+	).Replace(raw)
+	if normalized != raw {
+		if json.Unmarshal([]byte(normalized), &entries) == nil && len(entries) > 0 {
+			return entries
+		}
+		if json.Unmarshal([]byte(normalized), &single) == nil &&
+			strings.TrimSpace(single.Flag) != "" && strings.TrimSpace(single.URL) != "" {
+			return []ikanbotResEntry{single}
+		}
+		raw = normalized
+	}
+
+	// Fallback to the field-pair structure used by the original IkanBot module.
+	pattern := regexp.MustCompile(`(?is)"flag"\s*:\s*"((?:\\.|[^"\\])*)"\s*,\s*"url"\s*:\s*"((?:\\.|[^"\\])*)"`)
+	matches := pattern.FindAllStringSubmatch(raw, ikanbotMaxLines)
+	for _, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
+		flag, flagErr := strconv.Unquote("\"" + match[1] + "\"")
+		if flagErr != nil {
+			flag = match[1]
+		}
+		urlValue, urlErr := strconv.Unquote("\"" + match[2] + "\"")
+		if urlErr != nil {
+			urlValue = match[2]
+		}
+		entries = append(entries, ikanbotResEntry{Flag: flag, URL: urlValue})
+	}
+	return entries
+}
+
+func ikanbotParseLines(payload map[string]any) []ikanbotLine {
+	data, _ := payload["data"].(map[string]any)
+	rows, _ := data["list"].([]any)
+	lines := make([]ikanbotLine, 0)
+	for _, row := range rows {
+		obj, _ := row.(map[string]any)
+		raw := ""
+		switch value := obj["resData"].(type) {
+		case string:
+			raw = value
+		case []any, map[string]any:
+			if encoded, err := json.Marshal(value); err == nil {
+				raw = string(encoded)
 			}
-			if len(line.Episodes)>0{lines=append(lines,line)}
-			if len(lines)>=ikanbotMaxLines{return lines}
+		}
+		for _, entry := range ikanbotParseResData(raw) {
+			flag := strings.TrimSpace(entry.Flag)
+			if flag == "" || strings.TrimSpace(entry.URL) == "" {
+				continue
+			}
+			line := ikanbotLine{Flag: flag}
+			for index, piece := range strings.Split(entry.URL, "#") {
+				piece = strings.TrimSpace(piece)
+				if piece == "" {
+					continue
+				}
+				parts := strings.SplitN(piece, "$", 2)
+				name := ""
+				media := piece
+				if len(parts) == 2 {
+					name = strings.TrimSpace(parts[0])
+					media = strings.TrimSpace(parts[1])
+				}
+				if extra := strings.Index(media, "$"); extra >= 0 {
+					media = media[:extra]
+				}
+				media = strings.TrimSpace(strings.ReplaceAll(media, `\/`, "/"))
+				u, err := url.Parse(media)
+				if err != nil || u.User != nil || !isProviderHTTPMediaURL(media) {
+					continue
+				}
+				if name == "" {
+					name = fmt.Sprintf("第 %d 集", index+1)
+				}
+				line.Episodes = append(line.Episodes, ikanbotEpisode{
+					Name: name,
+					URL: media,
+					Order: ikanbotEpisodeOrder(name, index+1),
+				})
+			}
+			if len(line.Episodes) > 0 {
+				lines = append(lines, line)
+			}
+			if len(lines) >= ikanbotMaxLines {
+				break
+			}
+		}
+		if len(lines) >= ikanbotMaxLines {
+			break
 		}
 	}
-	sort.SliceStable(lines,func(i,j int)bool{return len(lines[i].Episodes)>len(lines[j].Episodes)})
+	sort.SliceStable(lines, func(i, j int) bool {
+		return len(lines[i].Episodes) > len(lines[j].Episodes)
+	})
 	return lines
 }
+
 func ikanbotPlaybackAPIURL(pageURL, videoID, mtype, signedToken string) (string, error) {
 	page, err := url.Parse(strings.TrimSpace(pageURL))
 	if err != nil || page.Scheme != "https" || page.User != nil {
