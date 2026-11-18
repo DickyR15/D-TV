@@ -72,6 +72,17 @@ void main() {
 
       expect(find.text('熱門榜單・收藏追劇・隨選即播'), findsOneWidget);
 
+      final refreshButton = find.byKey(const ValueKey('home-refresh'));
+      expect(refreshButton, findsOneWidget);
+      expect(
+        find.ancestor(
+          of: refreshButton,
+          matching: find.byType(PopupMenuButton<String>),
+        ),
+        findsNothing,
+        reason: 'catalog refresh must stay visible outside the overflow menu',
+      );
+
       final moreButton = find.byTooltip('更多');
       expect(moreButton, findsOneWidget);
       // find.byTooltip resolves to the internal RawTooltip rather than the
@@ -88,6 +99,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('片源管理'), findsNothing);
+      expect(find.text('重新整理目錄'), findsNothing);
       expect(find.text('更新劇庫'), findsNothing);
       expect(find.text('檢測連線與播放'), findsNothing);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
