@@ -253,6 +253,15 @@ func TestExtraAdult91PornaDecryptsEncodedMediaURL(t *testing.T) {
 	}
 }
 
+func TestExtraAdultSourceNamesUseRequestedLabels(t *testing.T) {
+	if got := extraAdultSourceName(sourcePPP); got != "ppp" {
+		t.Fatalf("PPP source display name = %q", got)
+	}
+	if got := extraAdultSourceName(sourceMadou); got != "麻豆傳媒" {
+		t.Fatalf("Madou source display name = %q", got)
+	}
+}
+
 func TestExtraAdult91PornaUsesOfficialDisplayName(t *testing.T) {
 	if got := extraAdultSourceName(source91Porna); got != "91porna" {
 		t.Fatalf("91Porna display name = %q", got)
