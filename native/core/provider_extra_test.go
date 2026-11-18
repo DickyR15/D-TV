@@ -254,7 +254,7 @@ func TestExtraAdult91PornaDecryptsEncodedMediaURL(t *testing.T) {
 }
 
 func TestExtraAdult91PornaUsesOfficialDisplayName(t *testing.T) {
-	if got := extraAdultSourceName(source91Porna); got != "91Porna" {
+	if got := extraAdultSourceName(source91Porna); got != "91porna" {
 		t.Fatalf("91Porna display name = %q", got)
 	}
 }
