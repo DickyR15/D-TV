@@ -219,15 +219,71 @@ func ikanbotParseLines(payload map[string]any)[]ikanbotLine{
 	sort.SliceStable(lines,func(i,j int)bool{return len(lines[i].Episodes)>len(lines[j].Episodes)})
 	return lines
 }
-func (d *Downloader) fetchIkanbotLines(ctx context.Context,sourceID,currentID,token,mtype,pageURL string)([]ikanbotLine,error){
-	signed:=ikanbotSignToken(currentID,token);if signed==""{return nil,errors.New("愛看機器人播放令牌無效，請重新整理詳情")}
-	if mtype==""{mtype="1"}
-	address:=ikanbotBaseURL+"/api/getResN?videoId="+url.QueryEscape(currentID)+"&mtype="+url.QueryEscape(mtype)+"&token="+url.QueryEscape(signed)
-	ctx=context.WithValue(ctx,providerTextUserAgentKey{},ikanbotUserAgent)
-	body,err:=d.fetchProviderText(ctx,address,pageURL);if err!=nil{return nil,fmt.Errorf("愛看機器人播放線路讀取失敗：%w",err)}
-	var payload map[string]any;if json.Unmarshal([]byte(body),&payload)!=nil{return nil,errors.New("愛看機器人線路回應格式無效")}
-	if state,ok:=payload["state"].(float64);ok&&state!=1{return nil,fmt.Errorf("愛看機器人線路取得失敗：%v",payload["message"])}
-	lines:=ikanbotParseLines(payload);if len(lines)==0{return nil,errors.New("愛看機器人目前沒有可播放線路")};return lines,nil
+func ikanbotPlaybackAPIURL(pageURL, currentID, mtype, signedToken string) (string, error) {
+	page, err := url.Parse(strings.TrimSpace(pageURL))
+	if err != nil || page.Scheme != "https" || page.User != nil {
+		return "", errors.New("愛看機器人播放頁網址無效")
+	}
+	host := strings.ToLower(page.Hostname())
+	switch host {
+	case "ikanbot.com", "www.ikanbot.com", "v.aikanbot.com", "www1.aikanbot.com":
+	default:
+		return "", errors.New("愛看機器人播放頁網域不受信任")
+	}
+	if !ikanbotNumericID(currentID) || strings.TrimSpace(signedToken) == "" {
+		return "", errors.New("愛看機器人播放參數無效")
+	}
+	if mtype == "" {
+		mtype = "1"
+	}
+	query := url.Values{}
+	query.Set("videoId", currentID)
+	query.Set("mtype", mtype)
+	query.Set("token", signedToken)
+	return page.Scheme + "://" + page.Host + "/api/getResN?" + query.Encode(), nil
+}
+
+func (d *Downloader) fetchIkanbotLines(ctx context.Context, sourceID, currentID, token, mtype, pageURL string) ([]ikanbotLine, error) {
+	signed := ikanbotSignToken(currentID, token)
+	if signed == "" {
+		return nil, errors.New("愛看機器人播放令牌無效，請重新整理詳情")
+	}
+	address, err := ikanbotPlaybackAPIURL(pageURL, currentID, mtype, signed)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", ikanbotUserAgent)
+	req.Header.Set("Referer", pageURL)
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("Accept", "*/*")
+	resp, err := d.doCatalogRequestWithTimeout(req, providerTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("愛看機器人播放線路讀取失敗：%w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, fmt.Errorf("愛看機器人播放線路讀取失敗：%w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("愛看機器人播放線路讀取失敗：HTTP %d", resp.StatusCode)
+	}
+	var payload map[string]any
+	if json.Unmarshal(body, &payload) != nil {
+		return nil, errors.New("愛看機器人線路回應格式無效")
+	}
+	if state, ok := payload["state"].(float64); ok && state != 1 {
+		return nil, fmt.Errorf("愛看機器人線路取得失敗：%v", payload["message"])
+	}
+	lines := ikanbotParseLines(payload)
+	if len(lines) == 0 {
+		return nil, errors.New("愛看機器人目前沒有可播放線路")
+	}
+	return lines, nil
 }
 func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Drama,[]Chapter,error){
 	if !ikanbotNumericID(sourceID){return Drama{},nil,errors.New("愛看機器人作品識別碼無效")}
@@ -246,7 +302,7 @@ func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Dra
 		name:=strings.TrimSpace(ep.Name);if name==""{name=fmt.Sprintf("第 %d 集",order)}
 		var alternatives []string;seen:=map[string]bool{ep.URL:true}
 		for _,line:=range lines{for _,other:=range line.Episodes{if other.Order==order&&!seen[other.URL]{seen[other.URL]=true;alternatives=append(alternatives,fmt.Sprintf("%d:%s",ikanbotQuality(line.Flag),other.URL))}}}
-		chapters=append(chapters,Chapter{ID:providerChapterID(sourceIkanBot,sourceID,strconv.Itoa(order)),Source:sourceIkanBot,Title:truncate(name,128),VideoURL:ep.URL,PlaybackVariants:alternatives,PlayLine:primary.Flag,PageURL:final,Referer:ikanbotBaseURL+"/",CurrentEpisode:json.RawMessage(strconv.Itoa(order))})
+		chapters=append(chapters,Chapter{ID:providerChapterID(sourceIkanBot,sourceID,strconv.Itoa(order)),Source:sourceIkanBot,Title:truncate(name,128),VideoURL:ep.URL,PlaybackVariants:alternatives,PlayLine:primary.Flag,PageURL:final,Referer:final,CurrentEpisode:json.RawMessage(strconv.Itoa(order))})
 	}
 	sort.SliceStable(chapters,func(i,j int)bool{return chapters[i].EpisodeString(i+1)<chapters[j].EpisodeString(j+1)})
 	if len(chapters)==0{return Drama{},nil,errors.New("愛看機器人目前沒有可播放分集")}
