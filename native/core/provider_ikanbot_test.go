@@ -686,3 +686,23 @@ func TestIkanbotMovieSameSourceQualityRowsStayTogetherButDifferentSourcesSplit(t
 		t.Fatalf("same-source resolution fallback was not retained: %#v", chapters[0].PlaybackVariants)
 	}
 }
+
+
+func TestIkanbotMovieLanguageTracksKeepSameSourceQualityFallback(t *testing.T) {
+	lines := []ikanbotLine{
+		{Flag: "來源甲 1080P", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-a.example.test/mandarin-1080.mp4", Order: 1}}},
+		{Flag: "來源甲 720P", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-a.example.test/mandarin-720.mp4", Order: 1}}},
+		{Flag: "來源乙 1080P", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-b.example.test/mandarin-1080.mp4", Order: 1}}},
+	}
+	chapters := ikanbotBuildChapters("1023906", "https://admin-api.aikanbot.com/play/1023906", lines, true)
+	if len(chapters) != 2 {
+		t.Fatalf("language/source grouping = %d choices, want two providers: %#v", len(chapters), chapters)
+	}
+	if chapters[0].Title != "國語版（來源甲）" || chapters[1].Title != "國語版（來源乙）" {
+		t.Fatalf("language/source labels are incorrect: %#v", chapters)
+	}
+	if len(chapters[0].PlaybackVariants) != 1 ||
+		chapters[0].PlaybackVariants[0] != "720:https://source-a.example.test/mandarin-720.mp4" {
+		t.Fatalf("same-source language quality fallback was not retained: %#v", chapters[0].PlaybackVariants)
+	}
+}
