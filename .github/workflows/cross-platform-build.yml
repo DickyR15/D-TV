@@ -354,13 +354,18 @@ jobs:
       - name: Best-effort install and launch on x86_64 Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         continue-on-error: true
-        timeout-minutes: 15
+        # APK build/signature/ABI verification and artifact upload are required;
+        # emulator boot is a best-effort smoke test on shared, non-KVM runners.
+        # Allow a slower cold boot without failing or blocking the release APK.
+        timeout-minutes: 25
         with:
           api-level: 35
           arch: x86_64
           target: google_apis
           profile: pixel_7
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-boot-timeout: 900
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
             adb install -r "dist/android/DTV-${{ steps.build-universal.outputs.app_version }}-Android.apk"
             adb shell am start -n com.dickyr15.dtv/.MainActivity
