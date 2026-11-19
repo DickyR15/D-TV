@@ -187,16 +187,21 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 	}
 	var media providerMedia
 	var keyURL, segmentURL string
+	var mediaProbeBytes []byte
+	var mediaProbeTrace nativeHealthStep
 	if !run("播放網址與播放清單", func() (string, error) {
 		var err error
 		media, err = engine.downloader.resolveProviderMedia(ctx, Task{DramaID: drama.ID, Chapter: chapter, Index: 1})
 		if err != nil {
 			return "", err
 		}
-		media, keyURL, segmentURL, err = engine.downloader.sourceProbePlayableRoute(ctx, media)
+		media, keyURL, segmentURL, mediaProbeBytes, err = engine.downloader.sourceProbePlayableRoute(ctx, media)
 		if err != nil {
 			return "", err
 		}
+		trace.mu.Lock()
+		mediaProbeTrace = trace.last
+		trace.mu.Unlock()
 		return "已驗證至少一條可讀取的播放線路", nil
 	}) {
 		return failure
@@ -225,11 +230,16 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		return failure
 	}
 	run("媒體連線", func() (string, error) {
-		body, err := engine.downloader.sourceProbeBytesWithMedia(ctx, media, segmentURL, false)
-		if err == nil && len(body) == 0 {
-			err = errors.New("媒體伺服器回傳空內容")
+		// sourceProbePlayableRoute already read and validated the first segment
+		// while selecting a working same-episode fallback. Reuse those bounded
+		// bytes here instead of issuing a second identical CDN request.
+		trace.mu.Lock()
+		trace.last = mediaProbeTrace
+		trace.mu.Unlock()
+		if len(mediaProbeBytes) == 0 {
+			return "", errors.New("媒體伺服器回傳空內容")
 		}
-		return "已讀取媒體開頭；實際播放效果請在播放器中確認", err
+		return "已讀取媒體開頭；沿用前一步的 1KB 連線驗證結果", nil
 	})
 	engine.changeSourceRecord(source, func(record *nativeSourceRecord) { record.Completed = len(report.Steps) })
 	return failure
@@ -296,7 +306,7 @@ func (d *Downloader) sourceProbeResources(ctx context.Context, media providerMed
 // candidate and returns the first route whose playlist and first segment can
 // be read. A CDN failure on the preferred URL must not mark a source unhealthy
 // when its retained fallback route is still playable.
-func (d *Downloader) sourceProbePlayableRoute(ctx context.Context, media providerMedia) (providerMedia, string, string, error) {
+func (d *Downloader) sourceProbePlayableRoute(ctx context.Context, media providerMedia) (providerMedia, string, string, []byte, error) {
 	candidates := append([]providerMedia{media}, media.Variants...)
 	seen := map[string]bool{}
 	var failures []error
@@ -315,16 +325,21 @@ func (d *Downloader) sourceProbePlayableRoute(ctx context.Context, media provide
 			failures = append(failures, fmt.Errorf("播放線路：%w", err))
 			continue
 		}
-		if _, err := d.sourceProbeBytesWithMedia(ctx, candidate, segmentURL, false); err != nil {
+		segmentBytes, err := d.sourceProbeBytesWithMedia(ctx, candidate, segmentURL, false)
+		if err != nil {
 			failures = append(failures, fmt.Errorf("媒體片段：%w", err))
 			continue
 		}
-		return candidate, keyURL, segmentURL, nil
+		if len(segmentBytes) == 0 {
+			failures = append(failures, errors.New("媒體片段：伺服器回傳空內容"))
+			continue
+		}
+		return candidate, keyURL, segmentURL, segmentBytes, nil
 	}
 	if len(failures) == 0 {
-		return providerMedia{}, "", "", errors.New("沒有可供檢測的播放路線")
+		return providerMedia{}, "", "", nil, errors.New("沒有可供檢測的播放路線")
 	}
-	return providerMedia{}, "", "", errors.Join(failures...)
+	return providerMedia{}, "", "", nil, errors.Join(failures...)
 }
 
 func (d *Downloader) sourceProbeBytes(ctx context.Context, address, referer string, key bool) ([]byte, error) {
