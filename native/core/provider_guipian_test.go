@@ -109,3 +109,27 @@ func TestGuipianCoverCandidatesPreferLazyImagesAndKeepFallbacks(t *testing.T) {
 		if got[index] != want[index] { t.Fatalf("cover candidate %d = %q, want %q", index, got[index], want[index]) }
 	}
 }
+
+func TestGuipianPickPlaylistRetainsOtherLinePagesForEachEpisode(t *testing.T) {
+	body := `
+<li class="swiper-slide ewave-tab" data-target="#ewave-playlist-1">線路一</li>
+<li class="swiper-slide ewave-tab" data-target="#ewave-playlist-2">線路二</li>
+<div id="ewave-playlist-1"><div class="playlist-slide"><li><a title='第1集' href='/play/123-1-1.html'>1</a></li><li><a title='第2集' href='/play/123-1-2.html'>2</a></li></div></div>
+<div id="ewave-playlist-2"><div class="playlist-slide"><li><a title='第1集' href='/play/123-2-1.html'>1</a></li></div></div>
+`
+	_, chapters, err := guipianPickPlaylist(body)
+	if err != nil {
+		t.Fatalf("guipianPickPlaylist failed: %v", err)
+	}
+	if len(chapters) != 2 {
+		t.Fatalf("display episodes = %d, want 2", len(chapters))
+	}
+	if len(chapters[0].PlaybackVariants) != 1 ||
+		chapters[0].PlaybackVariants[0] != "https://guipianwu.com/play/123-2-1.html" {
+		t.Fatalf("episode 1 alternative line was not retained: %#v", chapters[0])
+	}
+	if len(chapters[1].PlaybackVariants) != 0 {
+		t.Fatalf("episode 2 should not receive another episode's route: %#v", chapters[1])
+	}
+}
+

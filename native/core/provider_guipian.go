@@ -309,23 +309,28 @@ func guipianActors(body string) string {
 }
 
 // guipianPickPlaylist 选出分集最多的一条线路。
+// guipianPickPlaylist chooses the fullest line as the display list, but
+// retains same-episode play-page URLs from the other lines as silent fallbacks.
 func guipianPickPlaylist(body string) (string, []Chapter, error) {
 	tabs := reGuipianTab.FindAllStringSubmatch(body, -1)
 	if len(tabs) == 0 {
 		return "", nil, errors.New("鬼片网未找到可用播放线路")
 	}
-	site := guipianSiteBaseURL
+	type routeEpisode struct {
+		order int
+		url string
+		title string
+	}
 	bestName := ""
 	var best []Chapter
-	seen := map[string]bool{}
+	allRoutes := map[int][]string{}
+	seenTabs := map[string]bool{}
 	for _, tab := range tabs {
 		anchor, name := tab[1], strings.TrimSpace(tab[2])
-		if anchor == "" || seen[anchor] {
+		if anchor == "" || seenTabs[anchor] {
 			continue
 		}
-		seen[anchor] = true
-		// Go RE2 不支持 lookahead，改用显式字符串截断：从本容器标记之后
-		// 截到下一个 playlist-slide 或 </section>，避免消耗式分组吃掉下一条线路的开头。
+		seenTabs[anchor] = true
 		marker := fmt.Sprintf(`id="%s"`, anchor)
 		start := strings.Index(body, marker)
 		if start < 0 {
@@ -359,14 +364,15 @@ func guipianPickPlaylist(body string) (string, []Chapter, error) {
 			if epTitle == "" {
 				epTitle = fmt.Sprintf("第 %d 集", order)
 			}
+			allRoutes[order] = append(allRoutes[order], playURL)
 			chapters = append(chapters, Chapter{
-				ID:             providerChapterID(sourceGuipian, "", playURL),
-				Source:         sourceGuipian,
-				Title:          truncate(epTitle, 128),
+				ID: providerChapterID(sourceGuipian, "", playURL),
+				Source: sourceGuipian,
+				Title: truncate(epTitle, 128),
 				CurrentEpisode: rawEpisode(order),
-				VideoURL:       "guipian-play://" + playURL,
-				PageURL:        playURL,
-				Referer:        site + "/",
+				VideoURL: "guipian-play://" + playURL,
+				PageURL: playURL,
+				Referer: guipianSiteBaseURL + "/",
 			})
 		}
 		if len(chapters) > len(best) {
@@ -381,6 +387,16 @@ func guipianPickPlaylist(body string) (string, []Chapter, error) {
 		right, _ := strconv.Atoi(best[j].EpisodeString(j + 1))
 		return left < right
 	})
+	for index := range best {
+		order, err := strconv.Atoi(best[index].EpisodeString(index + 1))
+		if err != nil { continue }
+		seen := map[string]bool{best[index].PageURL: true}
+		for _, candidate := range allRoutes[order] {
+			if candidate == "" || seen[candidate] { continue }
+			seen[candidate] = true
+			best[index].PlaybackVariants = append(best[index].PlaybackVariants, candidate)
+		}
+	}
 	return bestName, best, nil
 }
 
@@ -590,10 +606,49 @@ func (d *Downloader) resolveGuipianMediaForPlatform(ctx context.Context, task Ta
 		credentials = &providerMediaCredentials{referer: referer, userAgent: userAgent}
 	}
 	media := providerMedia{URL: address, Referer: referer, StandardHTTP: standardHTTP, credentials: credentials}
-	if strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
-		return d.prepareWebProviderMedia(ctx, media, "鬼片网")
+	for _, alternativePage := range task.Chapter.PlaybackVariants {
+		alternativePage = guipianPlayURL(alternativePage)
+		if alternativePage == "" || alternativePage == playURL {
+			continue
+		}
+		alternativeResponses := &playbackResponseURLs{}
+		alternativeContext := context.WithValue(ctx, playbackResponseURLsKey{}, alternativeResponses)
+		alternativeContext = context.WithValue(alternativeContext, providerTextUserAgentKey{}, guipianUserAgent)
+		alternativeBody, fetchErr := d.fetchProviderText(alternativeContext, alternativePage, guipianSiteBaseURL+"/")
+		if fetchErr != nil {
+			continue
+		}
+		alternativeFinal := alternativePage
+		if actual, found := alternativeResponses.values.Load(alternativePage); found {
+			if resolved, ok := actual.(string); ok && resolved != "" {
+				alternativeFinal = resolved
+			}
+		}
+		alternativeAddress := ""
+		if match := reGuipianNow.FindStringSubmatch(alternativeBody); len(match) > 1 {
+			alternativeAddress = strings.TrimSpace(match[1])
+		}
+		if alternativeAddress == "" {
+			alternativeAddress = reGuipianMediaAny.FindString(alternativeBody)
+		}
+		alternativeAddress = guipianResolveMediaURL(alternativeFinal, alternativeAddress)
+		if alternativeAddress == "" || alternativeAddress == address {
+			continue
+		}
+		alternativeReferer := guipianSiteBaseURL+"/"
+		if alternativeFinal != alternativePage {
+			alternativeReferer = alternativeFinal
+		}
+		var alternativeCredentials *providerMediaCredentials
+		if standardHTTP {
+			alternativeCredentials = &providerMediaCredentials{referer: alternativeReferer, userAgent: userAgent}
+		}
+		media.Variants = append(media.Variants, providerMedia{
+			URL: alternativeAddress, Referer: alternativeReferer,
+			StandardHTTP: standardHTTP, credentials: alternativeCredentials,
+		})
 	}
-	return media, nil
+	return d.prepareWebProviderMediaWithFallback(ctx, media, "鬼片網")
 }
 
 // searchGuipian 在 RSS 最新条目里做标题匹配（站点搜索接口已停用）。
