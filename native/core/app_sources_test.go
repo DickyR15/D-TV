@@ -379,7 +379,7 @@ func TestWaitForPlaybackIdlePausesCatalogDuringPlayback(t *testing.T) {
 func TestResolveExtraAdultMediaUsesOfficial91PornaPlaybackAPI(t *testing.T) {
 	const (
 		id = "key_123"
-		detailURL = "https://91porna.com/comic/index/avdetail?video_key=key_123"
+		detailURL = "https://91porna.com/comic/index/detail?video_key=key_123"
 		mediaURL = "https://media.example.test/master.m3u8?token=abc"
 		mediaID = "987654"
 	)
@@ -387,17 +387,17 @@ func TestResolveExtraAdultMediaUsesOfficial91PornaPlaybackAPI(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		switch {
 		case request.URL.Host == "91porna.com" &&
-			request.Method == http.MethodGet && request.URL.Path == "/comic/index/avdetail":
+			request.Method == http.MethodGet && request.URL.Path == "/comic/index/detail":
 			seenDetail++
-			if got := request.Header.Get("User-Agent"); got != adultUserAgent {
-				return nil, fmt.Errorf("91Porna detail request UA = %q, want upstream Chrome UA", got)
+			if got := request.Header.Get("User-Agent"); got != ninetyOneMobileUserAgent {
+				return nil, fmt.Errorf("91Porna detail request UA = %q, want mobile UA", got)
 			}
 			return sourceFixtureResponse(request, http.StatusOK,
 				"<html><head><title>91Porna API 測試作品</title></head><body><div data-video=\""+mediaID+"\"></div></body></html>"), nil
 		case request.URL.Host == "91porna.com" &&
 			request.Method == http.MethodPost && request.URL.Path == "/api/videos/"+mediaID+"/playback":
 			seenPlaybackAPI++
-			if got := request.Header.Get("User-Agent"); got != adultUserAgent {
+			if got := request.Header.Get("User-Agent"); got != ninetyOneMobileUserAgent {
 				return nil, fmt.Errorf("91Porna playback API UA = %q", got)
 			}
 			if got := request.Header.Get("Referer"); got != detailURL {
