@@ -441,7 +441,9 @@ func (cache *nativeCoverCache) downloadDuoduoPosterPair(
 				pairCtx,
 				nativeCoverAttemptTimeout(source, attempt.address, "provider"),
 			)
-			data, requestErr := cache.download(attemptCtx, attempt.address, attempt.referer)
+			data, requestErr := cache.downloadAttempt(
+				attemptCtx, attempt.address, attempt.referer, source, "provider",
+			)
 			attemptCancel()
 			cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, requestErr)
 			if requestErr == nil {
@@ -588,7 +590,8 @@ func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDram
 	cache.mu.Lock()
 	fallback := ""
 	if entry, found := cache.entries[key]; found {
-		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == entry.size {
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() &&
+			info.Size() == entry.size && nativeCoverCacheImageValid(source, "provider", path) {
 			entry.usedAt = time.Now()
 			cache.entries[key] = entry
 			age := time.Since(entry.updatedAt)
@@ -600,6 +603,7 @@ func (cache *nativeCoverCache) loadAddress(ctx context.Context, drama nativeDram
 				fallback = path
 			}
 		} else {
+			_ = os.Remove(path)
 			delete(cache.entries, key)
 			cache.size -= entry.size
 		}
@@ -670,7 +674,13 @@ func (cache *nativeCoverCache) fetch(key string, drama nativeDrama, referer, fal
 				attemptCtx, attemptCancel := context.WithTimeout(
 					ctx, nativeCoverAttemptTimeout(coverSource, attempt.address),
 				)
-				data, err = cache.download(attemptCtx, attempt.address, attempt.referer)
+				cacheClass := ""
+				if coverSource == sourceDuoduo {
+					cacheClass = "provider"
+				}
+				data, err = cache.downloadAttempt(
+					attemptCtx, attempt.address, attempt.referer, coverSource, cacheClass,
+				)
 				attemptCancel()
 				cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, err)
 				if err == nil {
@@ -770,6 +780,59 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 	data = nativeDecodeCover(data)
 	if err := nativeValidateCoverImage(data); err != nil {
 		return nil, err
+	}
+	return data, nil
+}
+
+const (
+	nativeDuoduoPosterMinimumWidth  = 48
+	nativeDuoduoPosterMinimumHeight = 72
+)
+
+// nativeValidateDuoduoProviderPoster rejects tiny, technically valid image
+// containers commonly returned as anti-hotlink placeholders. It is limited to
+// provider artwork; external catalogues and verified fallback images are not
+// subject to this provider-specific size rule.
+func nativeValidateDuoduoProviderPoster(data []byte) error {
+	config, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		// WebP/AVIF/HEIC signatures are accepted by nativeValidateCoverImage,
+		// but the standard library may not expose their dimensions.
+		if format == "" && nativeIsCoverImage(data) {
+			return nil
+		}
+		return fmt.Errorf("多多追劇海報尺寸檢查失敗：%w", err)
+	}
+	if config.Width < nativeDuoduoPosterMinimumWidth ||
+		config.Height < nativeDuoduoPosterMinimumHeight {
+		return fmt.Errorf(
+			"多多追劇海報尺寸過小（%dx%d），疑似防盜鏈佔位圖",
+			config.Width, config.Height,
+		)
+	}
+	return nil
+}
+
+func nativeCoverCacheImageValid(source, cacheClass, path string) bool {
+	if source != sourceDuoduo || cacheClass != "provider" {
+		return true
+	}
+	data, err := os.ReadFile(path)
+	return err == nil && nativeValidateDuoduoProviderPoster(data) == nil
+}
+
+func (cache *nativeCoverCache) downloadAttempt(
+	ctx context.Context,
+	address, referer, source, cacheClass string,
+) ([]byte, error) {
+	data, err := cache.download(ctx, address, referer)
+	if err != nil {
+		return nil, err
+	}
+	if source == sourceDuoduo && cacheClass == "provider" {
+		if err := nativeValidateDuoduoProviderPoster(data); err != nil {
+			return nil, err
+		}
 	}
 	return data, nil
 }
