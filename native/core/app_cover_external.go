@@ -230,6 +230,43 @@ func validDoubanPosterAddress(raw string) string {
 	}
 }
 
+// These are verified localized/original-title groups used only as exact
+// aliases. They widen catalogue lookup without enabling fuzzy title matching.
+var nativePosterTitleAliasGroups = [][]string{
+	{
+		"鷹峰同學請穿上衣服", "拜託請穿上，鷹峰同學", "拜托请穿上，鹰峰同学",
+		"履いてください、鷹峰さん", "Haite Kudasai, Takamine-san",
+		"Please Put Them On, Takamine-san", "Please Put These On, Takamine-san",
+	},
+	{
+		"只能觸控一分鐘哦", "只能觸摸一分鐘哦", "只能触摸一分钟哦",
+		"「只能触摸一分钟哦...」合租房的秘密规则。",
+		"「1分間だけ触れてもいいよ...」シェアハウスの秘密ルール。",
+		"Ippunkan dake Furete mo Ii yo... Share House no Himitsu Rule",
+		"The Share House's Secret Rule",
+	},
+	{
+		"進擊的巨人", "進撃の巨人", "Attack on Titan", "Shingeki no Kyojin",
+	},
+	{
+		"斗羅大陸", "斗罗大陆", "Douluo Dalu", "Soul Land",
+	},
+}
+
+func nativePosterTitleAliasGroup(value string) []string {
+	wanted := normalizeBangumiPosterTitle(value)
+	base := normalizeBangumiPosterTitle(bangumiPosterBaseTitle(value))
+	for _, group := range nativePosterTitleAliasGroups {
+		for _, alias := range group {
+			key := normalizeBangumiPosterTitle(alias)
+			if key != "" && (key == wanted || key == base) {
+				return group
+			}
+		}
+	}
+	return nil
+}
+
 // posterTitleVariants adds only conservative, title-like alternatives. It
 // does not accept fuzzy similarity: every external candidate must still equal
 // one of these normalized variants exactly.
@@ -252,6 +289,7 @@ func posterTitleVariants(value string) []string {
 	}
 	baseTitle := bangumiPosterBaseTitle(value)
 	candidates := []string{value, baseTitle, withoutYear}
+	candidates = append(candidates, nativePosterTitleAliasGroup(value)...)
 	baseKey := normalizeBangumiPosterTitle(baseTitle)
 	if baseKey == normalizeBangumiPosterTitle("緊急呼救") ||
 		baseKey == normalizeBangumiPosterTitle("紧急呼救") {
@@ -275,7 +313,7 @@ func posterTitleVariants(value string) []string {
 		}
 		seen[normalized] = true
 		result = append(result, strings.TrimSpace(candidate))
-		if len(result) >= 4 {
+		if len(result) >= 10 {
 			break
 		}
 	}
@@ -991,60 +1029,75 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 	query.Set("offset", "0")
 	endpoint.RawQuery = query.Encode()
 
-	payload := bangumiPosterSearchRequest{Keyword: title, Sort: "match"}
-	payload.Filter.Type = types
-	payload.Filter.NSFW = false
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-	searchCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	searchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	request, err := http.NewRequestWithContext(
-		context.WithValue(searchCtx, nativeCoverNetworkKey{}, true),
-		http.MethodPost,
-		endpoint.String(),
-		strings.NewReader(string(body)),
-	)
-	if err != nil {
-		return "", err
-	}
-	request.Header.Set("User-Agent", userAgent)
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Content-Type", "application/json")
-
-	client := *d.client
-	response, err := client.Do(request)
-	if err != nil {
-		return "", err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("外部海報搜尋回應 HTTP %d", response.StatusCode)
-	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
-	if err != nil {
-		return "", err
-	}
-	var result bangumiPosterSearchResponse
-	if err := json.Unmarshal(data, &result); err != nil {
-		return "", errors.New("外部海報搜尋回應格式無效")
-	}
-
-	queryTitle := normalizeBangumiPosterTitle(title)
-	matches := make([]bangumiPosterSubject, 0, len(result.Data))
 	allowedTypes := make(map[int]bool, len(types))
 	for _, subjectType := range types {
 		allowedTypes[subjectType] = true
 	}
-	for _, candidate := range result.Data {
-		if candidate.ID <= 0 || !allowedTypes[candidate.Type] {
+	matchesByID := make(map[int]bangumiPosterSubject)
+	var lastErr error
+	for _, keyword := range posterTitleVariants(title) {
+		if err := searchCtx.Err(); err != nil {
+			lastErr = err
+			break
+		}
+		payload := bangumiPosterSearchRequest{Keyword: keyword, Sort: "match"}
+		payload.Filter.Type = types
+		payload.Filter.NSFW = false
+		body, marshalErr := json.Marshal(payload)
+		if marshalErr != nil {
+			return "", marshalErr
+		}
+		request, requestErr := http.NewRequestWithContext(
+			context.WithValue(searchCtx, nativeCoverNetworkKey{}, true),
+			http.MethodPost,
+			endpoint.String(),
+			strings.NewReader(string(body)),
+		)
+		if requestErr != nil {
+			return "", requestErr
+		}
+		request.Header.Set("User-Agent", userAgent)
+		request.Header.Set("Accept", "application/json")
+		request.Header.Set("Content-Type", "application/json")
+
+		client := *d.client
+		response, requestErr := client.Do(request)
+		if requestErr != nil {
+			lastErr = requestErr
 			continue
 		}
-		if normalizeBangumiPosterTitle(candidate.NameCN) != queryTitle &&
-			normalizeBangumiPosterTitle(candidate.Name) != queryTitle {
+		data, readErr := io.ReadAll(io.LimitReader(response.Body, 2<<20))
+		response.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
 			continue
 		}
+		if response.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("外部海報搜尋回應 HTTP %d", response.StatusCode)
+			continue
+		}
+		var result bangumiPosterSearchResponse
+		if err := json.Unmarshal(data, &result); err != nil {
+			lastErr = errors.New("外部海報搜尋回應格式無效")
+			continue
+		}
+		for _, candidate := range result.Data {
+			if candidate.ID <= 0 || !allowedTypes[candidate.Type] ||
+				!nativePosterTitleMatches(title, candidate.NameCN, candidate.Name) {
+				continue
+			}
+			matchesByID[candidate.ID] = candidate
+		}
+		// The first keyword yielding exact title matches is sufficient. Do not
+		// poll every alias after an authoritative exact result is available.
+		if len(matchesByID) > 0 {
+			break
+		}
+	}
+	matches := make([]bangumiPosterSubject, 0, len(matchesByID))
+	for _, candidate := range matchesByID {
 		matches = append(matches, candidate)
 	}
 
@@ -1067,11 +1120,17 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 		case len(unknownYearMatches) > 0:
 			matches = unknownYearMatches
 		default:
+			if len(matches) == 0 && lastErr != nil {
+				return "", lastErr
+			}
 			return "", errors.New("外部作品年份與原片資料不符")
 		}
 	}
 	if len(matches) != 1 {
 		if len(matches) == 0 {
+			if lastErr != nil {
+				return "", lastErr
+			}
 			return "", errors.New("找不到片名與類型完全相符的外部海報")
 		}
 		return "", errors.New("外部海報有多個同名候選，為避免錯配已略過")
