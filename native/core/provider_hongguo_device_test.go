@@ -125,6 +125,7 @@ func TestHongguoRegistrationHTTP444IncludesEdgeDiagnostics(t *testing.T) {
 	})
 	logPath := filepath.Join(t.TempDir(), "app.log")
 	d.diagnostics = &diagnosticLog{path: logPath, limit: diagnosticLogBytes}
+	d.hongguoClient().state.Registered = false
 
 	err := d.ensureHongguoDevice(context.Background(), "")
 	if err == nil {
