@@ -193,9 +193,11 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		if err != nil {
 			return "", err
 		}
-		ctx = providerMediaContext(ctx, media.credentials)
-		keyURL, segmentURL, err = engine.downloader.sourceProbeResources(ctx, media)
-		return "已取得可辨識的播放網址", err
+		media, keyURL, segmentURL, err = engine.downloader.sourceProbePlayableRoute(ctx, media)
+		if err != nil {
+			return "", err
+		}
+		return "已驗證至少一條可讀取的播放線路", nil
 	}) {
 		return failure
 	}
@@ -214,7 +216,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 			}
 			return "内嵌密钥有效", nil
 		}
-		body, err := engine.downloader.sourceProbeBytes(ctx, keyURL, media.Referer, true)
+		body, err := engine.downloader.sourceProbeBytesWithMedia(ctx, media, keyURL, true)
 		if err == nil && len(body) != 16 {
 			err = errors.New("回傳的播放金鑰不是 16 位元組")
 		}
@@ -223,7 +225,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		return failure
 	}
 	run("媒體連線", func() (string, error) {
-		body, err := engine.downloader.sourceProbeBytes(ctx, segmentURL, media.Referer, false)
+		body, err := engine.downloader.sourceProbeBytesWithMedia(ctx, media, segmentURL, false)
 		if err == nil && len(body) == 0 {
 			err = errors.New("媒體伺服器回傳空內容")
 		}
@@ -236,7 +238,17 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 func (d *Downloader) sourceProbeResources(ctx context.Context, media providerMedia) (string, string, error) {
 	ctx = providerMediaContext(ctx, media.credentials)
 	if media.Playlist == "" {
-		return "", media.URL, nil
+		parsed, parseErr := url.Parse(media.URL)
+		if parseErr != nil || !strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
+			return "", media.URL, nil
+		}
+		playlist, finalURL, fetchErr := d.fetchMediaPlaylistWithClient(
+			ctx, media.URL, media.Referer, d.providerMediaHTTPClient(media),
+		)
+		if fetchErr != nil {
+			return "", "", fetchErr
+		}
+		media.Playlist, media.URL = playlist, finalURL
 	}
 	body, address := media.Playlist, media.URL
 	for depth := 0; depth < 6; depth++ {
@@ -282,7 +294,51 @@ func (d *Downloader) sourceProbeResources(ctx context.Context, media providerMed
 	return "", "", errors.New("播放清單巢狀層級過多")
 }
 
+// sourceProbePlayableRoute checks the actual media path for each same-episode
+// candidate and returns the first route whose playlist and first segment can
+// be read. A CDN failure on the preferred URL must not mark a source unhealthy
+// when its retained fallback route is still playable.
+func (d *Downloader) sourceProbePlayableRoute(ctx context.Context, media providerMedia) (providerMedia, string, string, error) {
+	candidates := append([]providerMedia{media}, media.Variants...)
+	seen := map[string]bool{}
+	var failures []error
+	for _, candidate := range candidates {
+		if !isProviderHTTPMediaURL(candidate.URL) {
+			continue
+		}
+		identity := nativePlaybackMediaIdentity(candidate)
+		if seen[identity] {
+			continue
+		}
+		seen[identity] = true
+		candidate.Variants = nil
+		keyURL, segmentURL, err := d.sourceProbeResources(ctx, candidate)
+		if err != nil {
+			failures = append(failures, fmt.Errorf("%s: %w", nativeStreamTarget(candidate.URL), err))
+			continue
+		}
+		if _, err := d.sourceProbeBytesWithMedia(ctx, candidate, segmentURL, false); err != nil {
+			failures = append(failures, fmt.Errorf("%s: %w", nativeStreamTarget(segmentURL), err))
+			continue
+		}
+		return candidate, keyURL, segmentURL, nil
+	}
+	if len(failures) == 0 {
+		return providerMedia{}, "", "", errors.New("沒有可供檢測的播放路線")
+	}
+	return providerMedia{}, "", "", errors.Join(failures...)
+}
+
 func (d *Downloader) sourceProbeBytes(ctx context.Context, address, referer string, key bool) ([]byte, error) {
+	return d.sourceProbeBytesWithClient(ctx, address, referer, key, d.client)
+}
+
+func (d *Downloader) sourceProbeBytesWithMedia(ctx context.Context, media providerMedia, address string, key bool) ([]byte, error) {
+	ctx = providerMediaContext(ctx, media.credentials)
+	return d.sourceProbeBytesWithClient(ctx, address, media.Referer, key, d.providerMediaHTTPClient(media))
+}
+
+func (d *Downloader) sourceProbeBytesWithClient(ctx context.Context, address, referer string, key bool, client *http.Client) ([]byte, error) {
 	if !isProviderHTTPMediaURL(address) {
 		return nil, errors.New("媒體網址無效")
 	}
@@ -299,7 +355,7 @@ func (d *Downloader) sourceProbeBytes(ctx context.Context, address, referer stri
 	} else {
 		request.Header.Set("Range", "bytes=0-1023")
 	}
-	response, err := d.doMediaRequest(request)
+	response, err := d.doMediaRequestWithClient(request, client)
 	if err != nil {
 		return nil, err
 	}
