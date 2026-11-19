@@ -529,14 +529,15 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 	languageIndexes := make(map[string]int)
 	seenSourceURLs := make(map[string]bool)
 	sourceFlagCounts := make(map[string]int)
-	for _, line := range orderedLines {
+	sourceFlagOrdinals := make(map[int]int)
+	for lineIndex, line := range orderedLines {
 		flag := strings.TrimSpace(line.Flag)
 		if flag != "" && !ikanbotQualityOnlyLabel(flag) {
 			key := strings.ToLower(strings.Join(strings.Fields(flag), " "))
 			sourceFlagCounts[key]++
+			sourceFlagOrdinals[lineIndex] = sourceFlagCounts[key]
 		}
 	}
-	sourceFlagSeen := make(map[string]int)
 	for lineIndex, line := range orderedLines {
 		for _, episode := range line.Episodes {
 			if !isProviderHTTPMediaURL(episode.URL) {
@@ -556,8 +557,7 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 					group = flagKey + "\x00" + strconv.Itoa(lineIndex)
 					if flagLanguage == language {
 						if sourceFlagCounts[flagKey] > 1 {
-							sourceFlagSeen[flagKey]++
-							label = fmt.Sprintf("%s（片源 %d）", language, sourceFlagSeen[flagKey])
+							label = fmt.Sprintf("%s（片源 %d）", language, sourceFlagOrdinals[lineIndex])
 						}
 					} else {
 						label = language + "（" + truncate(flag, 32) + "）"
