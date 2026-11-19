@@ -456,7 +456,7 @@ func TestDuoduoPosterRaceFallsBackImmediatelyWhenEdgeFails(t *testing.T) {
 }
 
 func TestDuoduoStaleCachedPosterReturnsImmediatelyWhileRefreshing(t *testing.T) {
-	image := posterTestPNG(t)
+	image := posterTestPNGSize(t, 120, 180)
 	client := &http.Client{
 		Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
 			return &http.Response{
