@@ -528,7 +528,16 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 	selections := make([]movieSelection, 0, len(orderedLines))
 	languageIndexes := make(map[string]int)
 	seenSourceURLs := make(map[string]bool)
+	sourceFlagCounts := make(map[string]int)
 	for _, line := range orderedLines {
+		flag := strings.TrimSpace(line.Flag)
+		if flag != "" && !ikanbotQualityOnlyLabel(flag) {
+			key := strings.ToLower(strings.Join(strings.Fields(flag), " "))
+			sourceFlagCounts[key]++
+		}
+	}
+	sourceFlagSeen := make(map[string]int)
+	for lineIndex, line := range orderedLines {
 		for _, episode := range line.Episodes {
 			if !isProviderHTTPMediaURL(episode.URL) {
 				continue
@@ -539,11 +548,20 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 				flagLanguage := ikanbotMovieLanguageLabel(flag, "")
 				group := "quality"
 				label := language
-				// Different named source flags remain separate movie choices.
-				// Resolution-only flags for the same language stay as fallbacks.
-				if flag != "" && !ikanbotQualityOnlyLabel(flag) && flagLanguage != language {
-					group = strings.ToLower(strings.Join(strings.Fields(flag), " "))
-					label = language + "（" + truncate(flag, 32) + "）"
+				// Only resolution variants collapse together. A named playback
+				// source remains a separate selectable movie item, even when the
+				// source flag itself is also the language label.
+				if flag != "" && !ikanbotQualityOnlyLabel(flag) {
+					flagKey := strings.ToLower(strings.Join(strings.Fields(flag), " "))
+					group = flagKey + "\\x00" + strconv.Itoa(lineIndex)
+					if flagLanguage == language {
+						if sourceFlagCounts[flagKey] > 1 {
+							sourceFlagSeen[flagKey]++
+							label = fmt.Sprintf("%s（片源 %d）", language, sourceFlagSeen[flagKey])
+						}
+					} else {
+						label = language + "（" + truncate(flag, 32) + "）"
+					}
 				}
 				groupKey := language + "\\x00" + group
 				if index, found := languageIndexes[groupKey]; found {
