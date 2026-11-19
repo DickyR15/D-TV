@@ -9,10 +9,25 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
+
+type nativeRPZFallbackKey struct{}
+
+var rpzLandingCertificatePattern = regexp.MustCompile(`(?i)\brpz[0-9]+-landing\b`)
+
+func isRPZLandingCertificateMessage(message string) bool {
+	lower := strings.ToLower(message)
+	return rpzLandingCertificatePattern.MatchString(lower) &&
+		strings.Contains(lower, "certificate is not standards compliant")
+}
+
+func isRPZLandingCertificateError(err error) bool {
+	return err != nil && isRPZLandingCertificateMessage(err.Error())
+}
 
 type cdnRoute struct {
 	address string
@@ -181,7 +196,8 @@ func (transport *cdnTransport) RoundTrip(request *http.Request) (*http.Response,
 
 	protected := protectedCDNHost(request.URL.Hostname()) || request.Context().Value(nativeCoverNetworkKey{}) == true
 	mediaRetry := transport.fallbackOnUnknownAuthority && request.Context().Value(nativeMediaRequestKey{}) == true
-	if !protected && !mediaRetry {
+	rpzRetry := transport.fallbackOnUnknownAuthority && request.Context().Value(nativeRPZFallbackKey{}) == true
+	if !protected && !mediaRetry && !rpzRetry {
 		return transport.base.RoundTrip(request)
 	}
 
@@ -261,7 +277,7 @@ func (transport *cdnTransport) RoundTrip(request *http.Request) (*http.Response,
 
 func isUnknownAuthorityError(err error) bool {
 	var authorityError x509.UnknownAuthorityError
-	return errors.As(err, &authorityError)
+	return errors.As(err, &authorityError) || isRPZLandingCertificateError(err)
 }
 
 func (transport *cdnTransport) roundTripAddress(request *http.Request, proxyURL *url.URL, routeKey, address string) (*http.Response, error) {

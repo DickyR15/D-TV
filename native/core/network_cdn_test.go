@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"errors"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -529,5 +530,88 @@ func TestHostDoHTransportDoesNotHandleOtherHostsOrProxyTraffic(t *testing.T) {
 	}
 	if proxyCalls.Load() != 1 {
 		t.Fatalf("system proxy was not used: calls=%d", proxyCalls.Load())
+	}
+}
+
+func TestRPZLandingCertificateTriggersVerifiedDNSFallback(t *testing.T) {
+	const host = "91porna.com"
+	const fallbackIP = "93.184.216.34"
+	var directAttempts, dohLookups, recoveredRequests atomic.Int32
+
+	goodServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.TLS == nil || request.TLS.ServerName != host || request.Host == fallbackIP {
+			t.Errorf("RPZ recovery changed TLS identity: host=%q tls=%+v", request.Host, request.TLS)
+		}
+		recoveredRequests.Add(1)
+		_, _ = io.WriteString(writer, "verified 91porna page")
+	}))
+	defer goodServer.Close()
+	_, port, err := net.SplitHostPort(goodServer.Listener.Addr().String())
+	if err != nil { t.Fatal(err) }
+	trustedRoots := x509.NewCertPool()
+	trustedRoots.AddCert(goodServer.Certificate())
+
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	base.Proxy = nil
+	base.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: trustedRoots}
+	base.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		switch address {
+		case net.JoinHostPort(host, port):
+			directAttempts.Add(1)
+			return nil, errors.New("tls: failed to verify certificate: x509: \"rpz10-landing\" certificate is not standards compliant")
+		case net.JoinHostPort(fallbackIP, port):
+			return (&net.Dialer{}).DialContext(ctx, network, goodServer.Listener.Addr().String())
+		default:
+			t.Errorf("unexpected dial destination %s", address)
+			return nil, io.EOF
+		}
+	}
+	resolver := newDNSResolver(base)
+	resolver.endpoints = []string{"https://dns.example.test/resolve"}
+	resolver.client = &http.Client{
+		Transport: sourceFixtureTransport(func(request *http.Request) (*http.Response, error) {
+			dohLookups.Add(1)
+			if request.URL.Query().Get("name") != host {
+				t.Errorf("DoH queried the wrong hostname: %s", request.URL)
+			}
+			return sourceFixtureResponse(request, http.StatusOK,
+				"{\"Status\":0,\"Answer\":[{\"type\":1,\"TTL\":120,\"data\":\"93.184.216.34\"}]}"), nil
+		}),
+	}
+	transport := newCDNTransport(base, resolver)
+	transport.fallbackOnUnknownAuthority = true
+	defer transport.CloseIdleConnections()
+	request, err := http.NewRequestWithContext(
+		context.WithValue(context.Background(), nativeRPZFallbackKey{}, true),
+		http.MethodGet, "https://"+host+":"+port+"/comic/index/video", nil,
+	)
+	if err != nil { t.Fatal(err) }
+	response, err := (&http.Client{Transport: transport}).Do(request)
+	if err != nil { t.Fatalf("RPZ landing certificate did not recover through verified DoH: %v", err) }
+	body, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	if readErr != nil || response.StatusCode != http.StatusOK || string(body) != "verified 91porna page" {
+		t.Fatalf("unexpected RPZ recovery response: status=%d body=%q err=%v", response.StatusCode, body, readErr)
+	}
+	if directAttempts.Load() != 1 || dohLookups.Load() != 1 || recoveredRequests.Load() != 1 {
+		t.Fatalf("unexpected RPZ recovery attempts: direct=%d DoH=%d success=%d", directAttempts.Load(), dohLookups.Load(), recoveredRequests.Load())
+	}
+	if base.TLSClientConfig == nil || base.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("RPZ DNS recovery must keep normal TLS certificate verification enabled")
+	}
+}
+
+func TestRPZLandingCertificateErrorIsExplainedWithoutLeakingSignedURLs(t *testing.T) {
+	raw := "Get \"https://91porna.com/comic/index/video?token=secret\": tls: failed to verify certificate: x509: \"rpz10-landing\" certificate is not standards compliant"
+	if !isRPZLandingCertificateMessage(raw) || !isRPZLandingCertificateError(errors.New(raw)) {
+		t.Fatal("RPZ landing certificate signature was not recognized")
+	}
+	display := redactErrorString(raw)
+	if !strings.Contains(display, "RPZ") || !strings.Contains(display, "TLS 憑證驗證仍保持啟用") ||
+		strings.Contains(display, "token=secret") {
+		t.Fatalf("RPZ user message is not safe/actionable: %q", display)
+	}
+	if isRPZLandingCertificateMessage("x509: certificate signed by unknown authority") {
+		t.Fatal("ordinary unknown-authority TLS failures must not be mislabeled as RPZ")
 	}
 }

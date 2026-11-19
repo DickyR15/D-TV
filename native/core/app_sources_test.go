@@ -482,3 +482,80 @@ func TestMadouHealthCheckWarnsOnCatalog404ButVerifiesPlaybackFromCachedDrama(t *
 		}
 	}
 }
+
+func TestResolveExtraAdultPPPUsesEmbeddedPlayerAndSignedHLS(t *testing.T) {
+	const (
+		id = "abc123"
+		detailURL = "https://ppp.porn/v/abc123/"
+		embedURL = "https://cdnlab.live/embed/abc123"
+		mediaURL = "https://media.example.test/master.m3u8?token=a%2Fb"
+	)
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.URL.Hostname() == "ppp.porn" || request.URL.Hostname() == "cdnlab.live" {
+			if got := request.Header.Get("User-Agent"); got != adultUserAgent {
+				return nil, fmt.Errorf("PPP request user-agent = %q", got)
+			}
+			if request.Context().Value(nativeRPZFallbackKey{}) != true {
+				return nil, fmt.Errorf("PPP request did not enable verified RPZ DNS retry: %s", request.URL)
+			}
+		}
+		switch {
+		case request.URL.Host == "ppp.porn" && request.URL.Path == "/v/abc123/":
+			return sourceFixtureResponse(request, http.StatusOK, "<iframe id=\"player\" src=\"https://cdnlab.live/embed/abc123\"></iframe>"), nil
+		case request.URL.Host == "cdnlab.live" && request.URL.Path == "/embed/abc123":
+			return sourceFixtureResponse(request, http.StatusOK, "window.player = {\"file\":\""+mediaURL+"\"};"), nil
+		case request.URL.Host == "media.example.test" && request.URL.Path == "/master.m3u8":
+			if request.Header.Get("Referer") != embedURL {
+				return nil, fmt.Errorf("PPP playlist Referer = %q, want %q", request.Header.Get("Referer"), embedURL)
+			}
+			return sourceFixtureResponse(request, http.StatusOK, "#EXTM3U\n#EXTINF:6,\nsegment.ts?token=a%2Fb\n#EXT-X-ENDLIST\n"), nil
+		default:
+			return nil, fmt.Errorf("unexpected PPP playback request: %s", request.URL)
+		}
+	})
+	chapter := Chapter{
+		ID: providerChapterID(sourcePPP, id, detailURL),
+		Source: sourcePPP,
+		Title: "正片",
+		PageURL: detailURL,
+		Referer: detailURL,
+		VideoURL: "adult-page://" + detailURL,
+	}
+	media, err := d.resolveExtraAdultMedia(context.Background(), Task{
+		DramaID: providerDramaID(sourcePPP, id),
+		Chapter: chapter,
+		Index: 1,
+	})
+	if err != nil {
+		t.Fatalf("resolveExtraAdultMedia(PPP) failed: %v", err)
+	}
+	if media.URL != mediaURL || !strings.HasPrefix(media.Playlist, "#EXTM3U") || media.Referer != embedURL {
+		t.Fatalf("PPP embedded player did not produce the expected prepared media: %#v", media)
+	}
+}
+
+func TestExtraAdultRPZFallbackIsEnabledOnlyFor91PornaAndPPP(t *testing.T) {
+	for _, test := range []struct {
+		source string
+		want bool
+	}{
+		{source91Porna, true},
+		{sourcePPP, true},
+		{sourceMadou, false},
+	} {
+		t.Run(test.source, func(t *testing.T) {
+			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+				got := request.Context().Value(nativeRPZFallbackKey{}) == true
+				if got != test.want {
+					return nil, fmt.Errorf("RPZ fallback context = %v, want %v", got, test.want)
+				}
+				return sourceFixtureResponse(request, http.StatusOK, "<html></html>"), nil
+			})
+			_, _, err := extraAdultFetch(context.Background(), d, test.source,
+				extraAdultBaseURL(test.source)+"/", extraAdultBaseURL(test.source)+"/")
+			if err != nil {
+				t.Fatalf("extraAdultFetch failed: %v", err)
+			}
+		})
+	}
+}

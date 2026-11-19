@@ -27,6 +27,9 @@ func (err redactedError) Error() string { return redactErrorString(err.cause.Err
 func (err redactedError) Unwrap() error { return err.cause }
 
 func redactErrorString(s string) string {
+	if isRPZLandingCertificateMessage(s) {
+		return "目前網路的 DNS 將此網域導向 RPZ 封鎖頁；D-TV 已嘗試安全的 DNS 備援仍無法連線。請切換網路或 DNS 後重試。TLS 憑證驗證仍保持啟用。"
+	}
 	return rePublicURL.ReplaceAllStringFunc(s, func(raw string) string {
 		u, err := url.Parse(raw)
 		if err != nil {

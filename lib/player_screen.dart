@@ -2608,24 +2608,25 @@ class _PlayerScreenState extends State<PlayerScreen>
     final androidRedFruit = Platform.isAndroid &&
         const {'hongguo', 'redfruit'}.contains(widget.detail.drama.source);
     final duoduoSource = widget.detail.drama.source == 'duoduo';
+    final guipianSource = widget.detail.drama.source == 'guipian';
+    final multiRouteRecovery = duoduoSource || guipianSource;
     final action = current.local
         ? PlaybackRecoveryAction.stop
         : _recovery.next(
             current,
-            // Duoduo aggregates can expose many routes. Keep one alternate and
-            // one refresh, then surface a retryable error instead of cycling
-            // through a long route list while the viewer cannot easily exit.
+            // Duoduo and Guipian can retain a stale stream session after
+            // route changes. Try two alternates, refresh once, then recreate
+            // the player once; recoveryRestarted prevents a restart loop.
             allowPlayerRecreate: !androidRedFruit &&
-                !duoduoSource &&
                 !widget.recoveryRestarted &&
                 widget.handoff == null &&
                 widget.playerFactory == null &&
                 widget.videoBuilder == null,
-            alternativeAttemptLimit: androidRedFruit ? 2 : duoduoSource ? 1 : null,
+            alternativeAttemptLimit: androidRedFruit ? 2 : multiRouteRecovery ? 2 : null,
             recoveryDurationLimit: androidRedFruit
                 ? const Duration(seconds: 75)
-                : duoduoSource
-                ? const Duration(seconds: 35)
+                : multiRouteRecovery
+                ? const Duration(seconds: 60)
                 : null,
           );
     DiaryService.add(
@@ -4092,7 +4093,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  void _exitPlayback() {
+  void _exitPlayback({bool force = false}) {
     if (Platform.isIOS &&
         _pictureInPictureRequested &&
         !_pictureInPictureActive) {
@@ -4105,6 +4106,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     final override = widget.onBackOverride;
     if (override != null) {
       override();
+      return;
+    }
+    if (_panelOpen && force) {
+      final navigator = Navigator.of(context);
+      // Dismiss an active episode/settings dialog first, then pop the player
+      // route on the next frame. If no dialog is present the first pop exits
+      // this screen, and the mounted guard prevents a second pop.
+      if (navigator.canPop()) navigator.pop();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _closed || !navigator.mounted) return;
+        if (_panelOpen) setState(() => _panelOpen = false);
+        if (navigator.canPop()) navigator.pop();
+      });
       return;
     }
     if (_panelOpen) return;
@@ -4123,7 +4137,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       loading: _loading,
       hasError: _error != null,
     )) {
-      _exitPlayback();
+      _exitPlayback(force: _error != null || _loading);
       return;
     }
     if (_television) {
@@ -4827,7 +4841,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                       children: [
                         IconButton(
                           tooltip: _error != null ? '返回上一頁' : '退出全螢幕',
-                          onPressed: _error != null ? _exitPlayback : _rotate,
+                          onPressed: _error != null ? () => _exitPlayback(force: true) : _rotate,
                           style: IconButton.styleFrom(
                             backgroundColor: Colors.white.withValues(alpha: .18),
                             foregroundColor: Colors.white,

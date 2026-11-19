@@ -479,4 +479,72 @@ void main() {
     );
   });
 
+
+  test('Duoduo and Guipian get bounded retries then one clean player recreation', () {
+    for (final source in ['多多追劇', '鬼片網']) {
+      final recovery = PlaybackRecovery();
+      const alternativeLimit = 2;
+      const durationLimit = Duration(seconds: 60);
+
+      expect(
+        recovery.next(
+          route(0, count: 5),
+          alternativeAttemptLimit: alternativeLimit,
+          recoveryDurationLimit: durationLimit,
+          allowPlayerRecreate: true,
+        ),
+        PlaybackRecoveryAction.alternative,
+        reason: '$source first alternate',
+      );
+      expect(
+        recovery.next(
+          route(1, count: 5),
+          alternativeAttemptLimit: alternativeLimit,
+          recoveryDurationLimit: durationLimit,
+          allowPlayerRecreate: true,
+        ),
+        PlaybackRecoveryAction.alternative,
+        reason: '$source second alternate',
+      );
+      expect(
+        recovery.next(
+          route(2, count: 5),
+          alternativeAttemptLimit: alternativeLimit,
+          recoveryDurationLimit: durationLimit,
+          allowPlayerRecreate: true,
+        ),
+        PlaybackRecoveryAction.refresh,
+        reason: '$source refreshes URLs once',
+      );
+      expect(
+        recovery.next(
+          route(0, count: 5),
+          alternativeAttemptLimit: alternativeLimit,
+          recoveryDurationLimit: durationLimit,
+          allowPlayerRecreate: true,
+        ),
+        PlaybackRecoveryAction.alternative,
+      );
+      expect(
+        recovery.next(
+          route(1, count: 5),
+          alternativeAttemptLimit: alternativeLimit,
+          recoveryDurationLimit: durationLimit,
+          allowPlayerRecreate: true,
+        ),
+        PlaybackRecoveryAction.alternative,
+      );
+      expect(
+        recovery.next(
+          route(2, count: 5),
+          alternativeAttemptLimit: alternativeLimit,
+          recoveryDurationLimit: durationLimit,
+          allowPlayerRecreate: true,
+        ),
+        PlaybackRecoveryAction.recreatePlayer,
+        reason: '$source recreates once after refreshed routes fail',
+      );
+    }
+  });
+
 }
