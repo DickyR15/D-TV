@@ -630,3 +630,21 @@ func TestIkanbotMovieKeepsSameLanguageFromDifferentSourcesSeparate(t *testing.T)
 		t.Fatalf("different movie source names were not preserved: %#v", chapters)
 	}
 }
+
+
+func TestIkanbotMovieKeepsRepeatedLanguageSourceFlagsAsSeparateChoices(t *testing.T) {
+	lines := []ikanbotLine{
+		{Flag: "國語", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-a.example.test/movie.mp4", Order: 1}}},
+		{Flag: "國語", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-b.example.test/movie.mp4", Order: 1}}},
+	}
+	chapters := ikanbotBuildChapters("1023903", "https://admin-api.aikanbot.com/play/1023903", lines, true)
+	if len(chapters) != 2 {
+		t.Fatalf("repeated language source flags = %d choices, want 2: %#v", len(chapters), chapters)
+	}
+	if chapters[0].Title != "國語版（片源 1）" || chapters[1].Title != "國語版（片源 2）" {
+		t.Fatalf("same-language source numbering is incorrect: %#v", chapters)
+	}
+	if chapters[0].VideoURL == chapters[1].VideoURL {
+		t.Fatalf("distinct source URLs were collapsed: %#v", chapters)
+	}
+}
