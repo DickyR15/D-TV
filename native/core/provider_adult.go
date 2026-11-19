@@ -206,6 +206,19 @@ func adultHTMLFirst(node *htmlnet.Node, match func(*htmlnet.Node) bool) *htmlnet
 	return found
 }
 
+func adultMissAVDMPathPrefix(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if !strings.HasPrefix(value, "dm") || len(value) <= 2 {
+		return false
+	}
+	for _, character := range value[2:] {
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func adultSourceIDFromHref(raw, base, source string) (string, string) {
 	address := adultSafeURL(base, raw, source)
 	if address == "" {
@@ -215,16 +228,26 @@ func adultSourceIDFromHref(raw, base, source string) (string, string) {
 	if err != nil {
 		return "", ""
 	}
-segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	for index := 0; index < len(segments)-1; index++ {
-		if strings.EqualFold(segments[index], "cn") {
-			slug := segments[index+1]
-			if adultSlugPattern.MatchString(slug) && !strings.HasPrefix(strings.ToLower(slug), "dm") {
-				return slug, address
-			}
-		}
+	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	var slug string
+	switch {
+	case len(segments) == 2 && strings.EqualFold(segments[0], "cn"):
+		slug = segments[1]
+	case len(segments) == 3 && adultMissAVDMPathPrefix(segments[0]) &&
+		strings.EqualFold(segments[1], "cn"):
+		slug = segments[2]
+	default:
+		return "", ""
 	}
-	return "", ""
+	if !adultSlugPattern.MatchString(slug) {
+		return "", ""
+	}
+	switch strings.ToLower(slug) {
+	case "genres", "search", "new", "videos", "release", "today-hot",
+		"weekly-hot", "monthly-hot":
+		return "", ""
+	}
+	return slug, address
 }
 
 func adultHTMLCardNodes(document *htmlnet.Node, source string) []*htmlnet.Node {
@@ -238,6 +261,47 @@ func adultHTMLCardNodes(document *htmlnet.Node, source string) []*htmlnet.Node {
 			cards = append(cards, node)
 		}
 	})
+	return cards
+}
+
+// adultMissAVCardCandidates keeps the known selector first, then discovers
+// cards from exact detail links when the site's wrapper classes change.
+// Every fallback candidate must contain an image, so navigation and genre
+// links cannot be mistaken for video cards.
+func adultMissAVCardCandidates(document *htmlnet.Node, base string) []*htmlnet.Node {
+	cards := adultHTMLCardNodes(document, sourceMissAV)
+	seen := make(map[*htmlnet.Node]bool, len(cards))
+	for _, card := range cards {
+		seen[card] = true
+	}
+	for _, anchor := range providerHTMLNodes(document, func(node *htmlnet.Node) bool {
+		return node.Type == htmlnet.ElementNode && node.Data == "a"
+	}) {
+		if _, _ = adultSourceIDFromHref(providerHTMLAttr(anchor, "href"), base, sourceMissAV); false {
+			continue
+		}
+		candidate := anchor
+		for parent := anchor.Parent; parent != nil; parent = parent.Parent {
+			if parent.Type != htmlnet.ElementNode {
+				continue
+			}
+			switch parent.Data {
+			case "div", "article", "li":
+				if len(adultNodeImages(parent, base, sourceMissAV)) > 0 {
+					candidate = parent
+					break
+				}
+			}
+			if candidate != anchor {
+				break
+			}
+		}
+		if len(adultNodeImages(candidate, base, sourceMissAV)) == 0 || seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		cards = append(cards, candidate)
+	}
 	return cards
 }
 
@@ -262,7 +326,13 @@ func adultNodeImages(card *htmlnet.Node, base, source string) []string {
 		}
 		attrs := []string{"data-original", "data-src", "data-lazy-src", "data-lazyload", "data-srcset", "srcset", "data-image", "data-url", "data-background-image", "data-bg", "src"}
 		if source == sourceMissAV {
-			attrs = []string{"data-src", "src", "data-original", "data-lazy-src", "data-lazyload", "data-srcset", "srcset"}
+			// Prefer real lazy/original poster URLs over a placeholder src.
+			// Some page variants also place the poster in data-bg/style.
+			attrs = []string{
+				"data-original", "data-src", "data-lazy-src", "data-lazyload",
+				"data-srcset", "srcset", "data-image", "data-url",
+				"data-background-image", "data-bg", "src",
+			}
 		}
 		for _, attr := range attrs {
 			raw := providerHTMLAttr(node, attr)
@@ -329,7 +399,11 @@ func adultParseCards(body, base, source string) []Drama {
 	}
 	var items []Drama
 	seen := map[string]bool{}
-	for _, card := range adultHTMLCardNodes(document, source) {
+	cards := adultHTMLCardNodes(document, source)
+	if source == sourceMissAV {
+		cards = adultMissAVCardCandidates(document, base)
+	}
+	for _, card := range cards {
 		var anchor *htmlnet.Node
 		var slug string
 		for _, candidate := range providerHTMLNodes(card, func(node *htmlnet.Node) bool {
@@ -356,7 +430,23 @@ func adultParseCards(body, base, source string) []Drama {
 				title = providerHTMLText(titleNode)
 			}
 			if title == "" {
+				for _, headingTag := range []string{"h2", "h3", "h4"} {
+					titleNode := adultHTMLFirst(card, func(node *htmlnet.Node) bool {
+						return node.Type == htmlnet.ElementNode && node.Data == headingTag
+					})
+					if titleNode != nil {
+						title = providerHTMLText(titleNode)
+						if title != "" {
+							break
+						}
+					}
+				}
+			}
+			if title == "" {
 				title = adultImageAlt(card)
+			}
+			if title == "" {
+				title = providerHTMLText(anchor)
 			}
 			if title == "" {
 				title = slug
@@ -472,12 +562,21 @@ func adultHasMorePages(body string, page int) bool {
 		if parseErr != nil {
 			continue
 		}
-		pageNumber, parseErr := strconv.Atoi(parsed.Query().Get("page"))
+		query := parsed.Query()
+		pageValue := firstNonEmpty(query.Get("page"), query.Get("p"))
+		pageNumber, parseErr := strconv.Atoi(pageValue)
 		if parseErr == nil && pageNumber > maxPage {
 			maxPage = pageNumber
 		}
 	}
 	return maxPage > page
+}
+
+func adultCatalogHasMorePages(body string, page, parsedItemCount int) bool {
+	// Prefer the site's explicit paginator. A full page is a safe fallback for
+	// page variants that omit paginator links; one final empty request simply
+	// closes the list instead of hiding later videos.
+	return adultHasMorePages(body, page) || parsedItemCount >= 20
 }
 
 func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page int, category, query string) ([]Drama, bool, error) {
@@ -517,7 +616,7 @@ func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page 
 		return nil, false, fmt.Errorf("%s 目錄讀取失敗：%w", adultSourceName(source), err)
 	}
 	items := adultParseCards(body, base, source)
-	return items, adultHasMorePages(body, page), nil
+	return items, adultCatalogHasMorePages(body, page, len(items)), nil
 }
 
 func adultEncodeBase(value, base int) string {
