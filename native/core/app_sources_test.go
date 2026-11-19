@@ -377,65 +377,74 @@ func TestWaitForPlaybackIdlePausesCatalogDuringPlayback(t *testing.T) {
 	}
 }
 
-func TestResolveExtraAdultMediaUsesMobileBrowserFor91Porna(t *testing.T) {
+func TestResolveExtraAdultMediaUsesOfficial91PornaPlaybackAPI(t *testing.T) {
 	const (
 		id = "key_123"
-		detailURL = "https://91porna.com/comic/index/detail?video_key=key_123"
-		embedURL = "https://91porna.com/comic/index/embed?id=key_123"
+		detailURL = "https://91porna.com/comic/index/avdetail?video_key=key_123"
 		mediaURL = "https://media.example.test/master.m3u8?token=abc"
+		mediaID = "987654"
 	)
-	encodedEmbed := url.QueryEscape(embedURL)
-	seenMobile := 0
+	seenDetail, seenPlaybackAPI, seenPlaylist := 0, 0, 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
-		if request.URL.Hostname() == "91porna.com" {
-			if got := request.Header.Get("User-Agent"); got != ninetyOneMobileUserAgent {
-				return nil, fmt.Errorf("91Porna request did not use mobile browser UA: %q", got)
-			}
-			seenMobile++
-		}
 		switch {
-		case request.URL.Host == "91porna.com" && request.URL.Path == "/comic/index/detail":
-			return sourceFixtureResponse(request, http.StatusOK, "<main>使用手機瀏覽器掃碼觀看</main>"), nil
-		case request.URL.Host == "91porna.com" && request.URL.Path == "/comic/index/embed":
-			body := "<script src='/comic/index/embed_play.js?img=poster%2Fkey_123&amp;u=" + encodedEmbed + "&amp;t=1723456&amp;key=fixture-token'></script>"
-			return sourceFixtureResponse(request, http.StatusOK, body), nil
-		case request.URL.Host == "91porna.com" && request.URL.Path == "/comic/index/embed_play.js":
-			if request.URL.Query().Get("img") != "poster/key_123" ||
-				request.URL.Query().Get("u") != embedURL ||
-				request.URL.Query().Get("t") != "1723456" ||
-				request.URL.Query().Get("key") != "fixture-token" {
-				return nil, fmt.Errorf("91Porna player script parameters were not preserved: %s", request.URL.RawQuery)
+		case request.URL.Host == "91porna.com" &&
+			request.Method == http.MethodGet && request.URL.Path == "/comic/index/avdetail":
+			seenDetail++
+			if got := request.Header.Get("User-Agent"); got != adultUserAgent {
+				return nil, fmt.Errorf("91Porna detail request UA = %q, want upstream Chrome UA", got)
 			}
-			body := "document.write('<video src=" + mediaURL + "></video>');"
-			return sourceFixtureResponse(request, http.StatusOK, body), nil
-		case request.URL.Host == "media.example.test" && request.URL.Path == "/master.m3u8":
-			return sourceFixtureResponse(request, http.StatusOK, "#EXTM3U\n#EXTINF:6,\nsegment.ts?token=abc\n#EXT-X-ENDLIST\n"), nil
+			return sourceFixtureResponse(request, http.StatusOK,
+				"<html><head><title>91Porna API 測試作品</title></head><body><div data-video=\""+mediaID+"\"></div></body></html>"), nil
+		case request.URL.Host == "91porna.com" &&
+			request.Method == http.MethodPost && request.URL.Path == "/api/videos/"+mediaID+"/playback":
+			seenPlaybackAPI++
+			if got := request.Header.Get("User-Agent"); got != adultUserAgent {
+				return nil, fmt.Errorf("91Porna playback API UA = %q", got)
+			}
+			if got := request.Header.Get("Referer"); got != detailURL {
+				return nil, fmt.Errorf("91Porna playback API Referer = %q", got)
+			}
+			if got := request.Header.Get("Content-Type"); got != "application/json" {
+				return nil, fmt.Errorf("91Porna playback API Content-Type = %q", got)
+			}
+			body, err := io.ReadAll(request.Body)
+			if err != nil || string(body) != "{}" {
+				return nil, fmt.Errorf("91Porna playback API body = %q, err=%v", body, err)
+			}
+			return sourceFixtureResponse(request, http.StatusOK,
+				`{"data":{"streams":{"main":"`+mediaURL+`"}}}`), nil
+		case request.URL.Host == "media.example.test" && request.Method == http.MethodGet &&
+			request.URL.Path == "/master.m3u8":
+			seenPlaylist++
+			if got := request.Header.Get("Referer"); got != detailURL {
+				return nil, fmt.Errorf("91Porna media Referer = %q", got)
+			}
+			return sourceFixtureResponse(request, http.StatusOK,
+				"#EXTM3U\n#EXTINF:6,\nsegment.ts?token=abc\n#EXT-X-ENDLIST\n"), nil
 		default:
-			return nil, fmt.Errorf("unexpected 91Porna playback request: %s", request.URL)
+			return nil, fmt.Errorf("unexpected 91Porna playback request: %s %s", request.Method, request.URL)
 		}
 	})
 	chapter := Chapter{
 		ID: providerChapterID(source91Porna, id, detailURL),
-		Source: source91Porna,
-		PageURL: detailURL,
-		Referer: detailURL,
+		Source: source91Porna, PageURL: detailURL, Referer: detailURL,
 		VideoURL: "adult-page://" + detailURL,
 	}
 	media, err := d.resolveExtraAdultMedia(context.Background(), Task{
-		DramaID: providerDramaID(source91Porna, id),
-		Chapter: chapter,
-		Index: 1,
+		DramaID: providerDramaID(source91Porna, id), Chapter: chapter, Index: 1,
 	})
 	if err != nil {
 		t.Fatalf("resolveExtraAdultMedia(91Porna) failed: %v", err)
 	}
-	if seenMobile != 3 {
-		t.Fatalf("91Porna mobile detail/embed/script requests = %d, want 3", seenMobile)
+	if seenDetail != 1 || seenPlaybackAPI != 1 || seenPlaylist != 1 {
+		t.Fatalf("91Porna request counts detail/API/playlist = %d/%d/%d, want 1/1/1",
+			seenDetail, seenPlaybackAPI, seenPlaylist)
 	}
 	if media.URL != mediaURL || !strings.HasPrefix(media.Playlist, "#EXTM3U") {
-		t.Fatalf("mobile 91Porna player media was not prepared: %#v", media)
+		t.Fatalf("official 91Porna API media was not prepared: %#v", media)
 	}
 }
+
 func TestMadouHealthCheckWarnsOnCatalog404ButVerifiesPlaybackFromCachedDrama(t *testing.T) {
 	const detailPath = "/sample-123.html"
 	const sharePath = "/share/fixture"
