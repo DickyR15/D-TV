@@ -345,6 +345,7 @@ func (d *Downloader) fetchHuangguoVideoDetail(ctx context.Context, sourceID stri
 }
 
 func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer string) (string, error) {
+	source := providerSourceForURL(rawURL)
 	retries := d.cfg.Retries
 	if retries <= 0 {
 		retries = 3
@@ -372,12 +373,20 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 					return "", ctx.Err()
 				}
 			}
+			started := time.Now()
+			recordAttempt := func(requestErr error) {
+				if source == sourceChaoliu {
+					d.recordProviderEndpoint(sourceChaoliu, "site", candidate, time.Since(started), requestErr)
+				}
+			}
 			timeout := providerTimeout
 			if len(candidates) > 1 {
 				timeout = 5 * time.Second
 			}
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, candidate, nil)
 			if err != nil {
+				lastErr = err
+				recordAttempt(err)
 				return "", err
 			}
 			req.Header.Set("User-Agent", userAgent)
@@ -399,6 +408,7 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 			resp, err := d.doCatalogRequestWithTimeout(req, timeout)
 			if err != nil {
 				lastErr = err
+				recordAttempt(err)
 				var backoff *requestBackoff
 				if errors.As(err, &backoff) {
 					break
@@ -409,33 +419,60 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 			closeErr := resp.Body.Close()
 			if readErr != nil {
 				lastErr = readErr
+				recordAttempt(readErr)
 				continue
 			}
 			if closeErr != nil {
 				lastErr = closeErr
+				recordAttempt(closeErr)
 				continue
 			}
 			if len(body) > providerMaxBodyBytes {
 				lastErr = fmt.Errorf("response exceeds %d bytes", providerMaxBodyBytes)
+				recordAttempt(lastErr)
 				continue
 			}
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 || catalogResponseBlockReason(resp, body) != "" {
+			blockReason := catalogResponseBlockReason(resp, body)
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 || blockReason != "" {
 				lastErr = d.catalogResponseError(req, resp, body)
-				if catalogResponseBlockReason(resp, body) != "" || resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != 408 {
+				recordAttempt(lastErr)
+				// Chaoliu mirrors can differ in availability: retry temporary
+				// access denials against the next explicitly allow-listed site.
+				temporaryDenial := source == sourceChaoliu &&
+					(resp.StatusCode == http.StatusForbidden ||
+						resp.StatusCode == http.StatusTooManyRequests ||
+						resp.StatusCode == http.StatusServiceUnavailable)
+				if blockReason != "" || (resp.StatusCode >= 400 && resp.StatusCode < 500 &&
+					resp.StatusCode != http.StatusRequestTimeout && !temporaryDenial) {
 					break
 				}
 				continue
 			}
-			if source := providerSourceForURL(rawURL); source != "" {
-				effectiveURL := req.URL
-				if resp.Request != nil {
-					effectiveURL = resp.Request.URL
+			if validator, ok := ctx.Value(providerTextValidatorKey{}).(providerTextValidator); ok && validator != nil {
+				if validationErr := validator(candidate, resp.StatusCode, body); validationErr != nil {
+					lastErr = validationErr
+					recordAttempt(validationErr)
+					continue
 				}
+			}
+			effectiveURL := req.URL
+			if resp.Request != nil && resp.Request.URL != nil {
+				effectiveURL = resp.Request.URL
+			}
+			if source == sourceChaoliu && !isChaoliuSiteHost(effectiveURL.Hostname()) {
+				lastErr = fmt.Errorf("潮流 AV 請求重新導向至未允許的站點：%s", effectiveURL.Hostname())
+				recordAttempt(lastErr)
+				continue
+			}
+			if source != "" {
 				d.providerMu.Lock()
-				if d.providerHosts == nil { d.providerHosts = map[string]string{} }
+				if d.providerHosts == nil {
+					d.providerHosts = map[string]string{}
+				}
 				d.providerHosts[source] = effectiveURL.Scheme + "://" + effectiveURL.Host
 				d.providerMu.Unlock()
 			}
+			recordAttempt(nil)
 			rememberPlaybackResponseURL(ctx, rawURL, resp)
 			return string(body), nil
 		}

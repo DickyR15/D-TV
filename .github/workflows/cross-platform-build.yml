@@ -35,6 +35,7 @@ on:
       - ready_for_review
     branches:
       - main
+      - release/v1.0.8-candidate
     paths:
       - ".github/workflows/cross-platform-build.yml"
       - ".github/workflows/duoduo-entry-probe.yml"
