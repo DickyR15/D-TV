@@ -199,6 +199,9 @@ func nativeCoverRefererForDrama(downloader *Downloader, drama nativeDrama, addre
 				host == "hdslb.com" || strings.HasSuffix(host, ".hdslb.com") {
 				return "https://www.bilibili.com/"
 			}
+			if host == "af-original.com" || strings.HasSuffix(host, ".af-original.com") {
+				return "https://" + host + "/"
+			}
 		}
 		if _, sourceID, valid := splitProviderDramaID(drama.ID); valid && webProviderNumericID.MatchString(sourceID) {
 			base := strings.TrimRight(downloader.providerBaseURL(source), "/")
