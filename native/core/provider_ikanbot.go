@@ -509,6 +509,20 @@ func ikanbotMovieLanguageLabel(name, lineFlag string) string {
 // Movie listings are not episodes. Each distinct non-language source is one
 // selectable movie entry, while audio-language variants share one entry and
 // retain alternate URLs as playback fallbacks.
+func ikanbotMovieSourceFlagBase(flag string) string {
+	value := strings.ToLower(strings.TrimSpace(flag))
+	value = regexp.MustCompile(`(?i)(2160|1440|1080|720|480)\\s*p?`).ReplaceAllString(value, "")
+	value = strings.NewReplacer(
+		"超高清", "", "超清", "", "高清", "", "標清", "", "标清", "",
+		"藍光", "", "蓝光", "", "uhd", "", "fhd", "", "hd", "", "sd", "",
+		"4k", "", " ", "", "-", "", "_", "", "．", "", ".", "",
+	).Replace(value)
+	return strings.TrimSpace(value)
+}
+
+// Movie listings are not episodes. Audio-language variants use language names;
+// different source lines remain separate options; resolution-only rows for the
+// same language/source are retained as automatic playback fallbacks.
 func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []Chapter {
 	type movieSelection struct {
 		episode  ikanbotEpisode
@@ -525,82 +539,118 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 		}
 		return len(orderedLines[i].Episodes) > len(orderedLines[j].Episodes)
 	})
-	selections := make([]movieSelection, 0, len(orderedLines))
-	languageIndexes := make(map[string]int)
-	seenSourceURLs := make(map[string]bool)
+
 	sourceFlagCounts := make(map[string]int)
-	sourceFlagOrdinals := make(map[int]int)
-	for lineIndex, line := range orderedLines {
+	for _, line := range orderedLines {
 		flag := strings.TrimSpace(line.Flag)
-		if flag != "" && !ikanbotQualityOnlyLabel(flag) {
-			key := strings.ToLower(strings.Join(strings.Fields(flag), " "))
-			sourceFlagCounts[key]++
-			sourceFlagOrdinals[lineIndex] = sourceFlagCounts[key]
+		base := ikanbotMovieSourceFlagBase(flag)
+		if base != "" {
+			sourceFlagCounts[base]++
 		}
 	}
+	sourceFlagOrdinals := make(map[int]int)
+	sourceCounters := make(map[string]int)
 	for lineIndex, line := range orderedLines {
+		base := ikanbotMovieSourceFlagBase(line.Flag)
+		if base != "" {
+			sourceCounters[base]++
+			sourceFlagOrdinals[lineIndex] = sourceCounters[base]
+		}
+	}
+
+	selections := make([]movieSelection, 0, len(orderedLines))
+	selectionIndexes := make(map[string]int)
+	for lineIndex, line := range orderedLines {
+		flag := strings.TrimSpace(line.Flag)
+		flagBase := ikanbotMovieSourceFlagBase(flag)
+		flagLanguage := ikanbotMovieLanguageLabel(flag, "")
+		flagHasResolution := ikanbotQuality(flag) > 0
+		flagIsQualityOnly := flagBase == ""
+
 		for _, episode := range line.Episodes {
 			if !isProviderHTTPMediaURL(episode.URL) {
 				continue
 			}
-			language := ikanbotMovieLanguageLabel(episode.Name, line.Flag)
-			if language != "" {
-				flag := strings.TrimSpace(line.Flag)
-				flagLanguage := ikanbotMovieLanguageLabel(flag, "")
-				group := "quality"
-				label := language
-				// Only resolution variants collapse together. A named playback
-				// source remains a separate selectable movie item, even when the
-				// source flag itself is also the language label.
-				if flag != "" && !ikanbotQualityOnlyLabel(flag) {
-					flagKey := strings.ToLower(strings.Join(strings.Fields(flag), " "))
-					group = flagKey + "\x00" + strconv.Itoa(lineIndex)
-					if flagLanguage == language {
-						if sourceFlagCounts[flagKey] > 1 {
-							label = fmt.Sprintf("%s（片源 %d）", language, sourceFlagOrdinals[lineIndex])
-						}
-					} else {
+			language := ikanbotMovieLanguageLabel(episode.Name, flag)
+			groupKey := ""
+			label := ""
+			switch {
+			case language != "":
+				label = language
+				switch {
+				case flagIsQualityOnly:
+					// 1080P/720P versions of the same audio track are backups.
+					groupKey = "audio:" + language
+				case flagHasResolution && (flagLanguage == language || flagBase == normalizeBangumiPosterTitle(language)):
+					// A flag such as 國語1080P still describes one language track.
+					groupKey = "audio:" + language
+				case flagLanguage == language:
+					// Repeated source lines with the same language are distinct
+					// providers unless their only difference is resolution.
+					groupKey = fmt.Sprintf("audio:%s:source:%d", language, lineIndex)
+					if sourceFlagCounts[flagBase] > 1 {
+						label = fmt.Sprintf("%s（片源 %d）", language, sourceFlagOrdinals[lineIndex])
+					}
+				default:
+					// The episode is language-labelled and the line identifies
+					// a provider, so keep each provider independently selectable.
+					groupKey = fmt.Sprintf("audio:%s:source:%d", language, lineIndex)
+					if flag != "" {
 						label = language + "（" + truncate(flag, 32) + "）"
 					}
 				}
-				groupKey := language + "\x00" + group
-				if index, found := languageIndexes[groupKey]; found {
-					entry := &selections[index]
-					if entry.seenURLs[episode.URL] {
-						continue
-					}
-					entry.seenURLs[episode.URL] = true
-					entry.variants = append(entry.variants, fmt.Sprintf("%d:%s", ikanbotQuality(line.Flag), episode.URL))
+			case flagIsQualityOnly:
+				// An unlabelled 1080P/720P movie is one movie with quality
+				// fallbacks, not two consecutive episodes.
+				groupKey = "movie:quality"
+				label = "電影版"
+			case flagHasResolution && flagBase != "":
+				// Preserve a named provider while merging only its resolution
+				// variants (e.g. SourceA 1080P + SourceA 720P).
+				groupKey = "movie:source:" + flagBase
+				label = "片源 " + strconv.Itoa(sourceFlagOrdinals[lineIndex])
+				if sourceFlagCounts[flagBase] > 1 {
+					label += "（" + truncate(flagBase, 32) + "）"
+				} else if flag != "" {
+					label += "（" + truncate(flag, 32) + "）"
+				}
+			default:
+				// Non-quality flags identify distinct upstream source lines.
+				groupKey = fmt.Sprintf("movie:source-line:%d", lineIndex)
+				label = fmt.Sprintf("片源 %d", sourceFlagOrdinals[lineIndex])
+				if label == "片源 0" {
+					label = fmt.Sprintf("片源 %d", lineIndex+1)
+				}
+				if flag != "" {
+					label += "（" + truncate(flag, 32) + "）"
+				}
+			}
+
+			if index, found := selectionIndexes[groupKey]; found {
+				entry := &selections[index]
+				if entry.seenURLs[episode.URL] {
 					continue
 				}
-				languageIndexes[groupKey] = len(selections)
-				selections = append(selections, movieSelection{
-					episode: episode,
-					lineFlag: line.Flag,
-					label: label,
-					seenURLs: map[string]bool{episode.URL: true},
-				})
+				entry.seenURLs[episode.URL] = true
+				entry.variants = append(entry.variants, fmt.Sprintf("%d:%s", ikanbotQuality(line.Flag), episode.URL))
 				continue
 			}
-			// A source URL must not be collapsed into another source merely
-			// because both are labelled "第1集" or have the same ordinal.
-			if seenSourceURLs[episode.URL] {
-				continue
-			}
-			seenSourceURLs[episode.URL] = true
+			selectionIndexes[groupKey] = len(selections)
 			selections = append(selections, movieSelection{
 				episode: episode,
-					lineFlag: line.Flag,
-					seenURLs: map[string]bool{episode.URL: true},
+				lineFlag: line.Flag,
+				label: label,
+				seenURLs: map[string]bool{episode.URL: true},
 			})
 		}
 	}
+
 	chapters := make([]Chapter, 0, len(selections))
 	for index, entry := range selections {
 		order := index + 1
-		label := entry.label
+		label := strings.TrimSpace(entry.label)
 		if label == "" {
-			label = fmt.Sprintf("第 %d 集", order)
+			label = fmt.Sprintf("片源 %d", order)
 		}
 		chapters = append(chapters, Chapter{
 			ID: providerChapterID(sourceIkanBot, sourceID, strconv.Itoa(order)),
