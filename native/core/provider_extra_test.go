@@ -351,6 +351,30 @@ func TestExtraAdult91PornaBuildsScriptURLFromLegacyVariables(t *testing.T) {
 	}
 }
 
+func TestExtraAdult91PornaPrefersCurrentVideoKeyEmbedRoute(t *testing.T) {
+	const page = "https://91porna.com/comic/index/detail?video_key=key_123"
+	candidates := extraAdult91PornaEmbedCandidates("key_123", page, "")
+	if len(candidates) < 2 {
+		t.Fatalf("91Porna embed candidates = %#v", candidates)
+	}
+	if candidates[0] != "https://91porna.com/comic/index/embed?video_key=key_123" ||
+		candidates[1] != "https://91porna.com/comic/index/embed?id=key_123" {
+		t.Fatalf("current video_key and legacy id fallbacks are not ordered correctly: %#v", candidates)
+	}
+}
+
+func TestExtraAdult91PornaImageFallbackUsesPosterAndOpenGraph(t *testing.T) {
+	const page = "https://91porna.com/comic/index/embed?video_key=key_123"
+	poster := `<video poster="/uploads/player-cover.jpg"></video>`
+	if got := extraAdult91PornaImageFallback(poster, page); got != "uploads/player-cover.jpg" {
+		t.Fatalf("poster image fallback = %q", got)
+	}
+	og := `<meta property="og:image" content="https://91porna.com/uploads/og-cover.jpg">`
+	if got := extraAdult91PornaImageFallback(og, page); got != "uploads/og-cover.jpg" {
+		t.Fatalf("Open Graph image fallback = %q", got)
+	}
+}
+
 func TestExtraAdult91PornaAcceptsSrcVariableAndFillsMissingEmbedU(t *testing.T) {
 	const page = "https://91porna.com/comic/index/embed?id=169397"
 	body := `<script>var player = "embed_play.js?img=poster%2Fabc123"; var src = "https%3A%2F%2F91porna.com%2Fcomic%2Findex%2Fembed%3Fid%3D169397";</script>`
