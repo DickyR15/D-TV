@@ -501,7 +501,7 @@ func TestResolveExtraAdultPPPUsesEmbeddedPlayerAndSignedHLS(t *testing.T) {
 		id = "abc123"
 		detailURL = "https://ppp.porn/v/abc123/"
 		embedURL = "https://cdnlab.live/embed/abc123"
-		mediaURL = "https://media.example.test/master.m3u8?token=a%2Fb"
+		mediaURL = "https://hokcap.ppp.porn/stream/token/1760000000/1/12345/12345.m3u8?token=a%2Fb"
 	)
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		if request.URL.Hostname() == "ppp.porn" || request.URL.Hostname() == "cdnlab.live" {
@@ -517,7 +517,7 @@ func TestResolveExtraAdultPPPUsesEmbeddedPlayerAndSignedHLS(t *testing.T) {
 			return sourceFixtureResponse(request, http.StatusOK, "<iframe id=\"player\" src=\"https://cdnlab.live/embed/abc123\"></iframe>"), nil
 		case request.URL.Host == "cdnlab.live" && request.URL.Path == "/embed/abc123":
 			return sourceFixtureResponse(request, http.StatusOK, "window.player = {\"file\":\""+mediaURL+"\"};"), nil
-		case request.URL.Host == "media.example.test" && request.URL.Path == "/master.m3u8":
+		case request.URL.Host == "hokcap.ppp.porn" && strings.Contains(request.URL.Path, "/stream/"):
 			if request.Header.Get("Referer") != embedURL {
 				return nil, fmt.Errorf("PPP playlist Referer = %q, want %q", request.Header.Get("Referer"), embedURL)
 			}
@@ -573,16 +573,14 @@ func TestExtraAdultRPZFallbackIsEnabledOnlyFor91PornaAndPPP(t *testing.T) {
 	}
 }
 
-func TestExtraAdultPPPStreamURLsCollectsPlayerCandidates(t *testing.T) {
-	body := "window.player = {file:'https://cdn-a.example.test/first.m3u8', backup:'https://cdn-b.example.test/second.m3u8'}; " +
+func TestExtraAdultPPPStreamURLsCollectsOnlyFullPlayerCandidates(t *testing.T) {
+	first := "https://hokcap.ppp.porn/stream/a/1760000000/1/12345/12345.m3u8?token=one"
+	second := "https://cdnlab.live/stream/b/1760000000/1/67890/67890.m3u8?token=two"
+	body := "window.player = {file:'" + first + "', backup:'" + second + "'}; " +
 		"<source src='https://cdn-c.example.test/fallback.mp4'>"
 	got := extraAdultPPPStreamURLs(body, "https://cdnlab.live/embed/abc123")
-	want := []string{
-		"https://cdn-a.example.test/first.m3u8",
-		"https://cdn-b.example.test/second.m3u8",
-		"https://cdn-c.example.test/fallback.mp4",
-	}
-	if len(got) != len(want) { t.Fatalf("PPP candidates = %#v, want %#v", got, want) }
+	want := []string{first, second}
+	if len(got) != len(want) { t.Fatalf("PPP full-stream candidates = %#v, want %#v", got, want) }
 	for i := range want {
 		if got[i] != want[i] { t.Fatalf("PPP candidate %d=%q, want %q", i, got[i], want[i]) }
 	}
@@ -590,8 +588,8 @@ func TestExtraAdultPPPStreamURLsCollectsPlayerCandidates(t *testing.T) {
 
 func TestResolveExtraAdultPPPUsesSecondPlaylistWhenFirstFails(t *testing.T) {
 	const pageURL = "https://ppp.porn/v/multi/"
-	const firstURL = "https://cdnlab.live/first.m3u8"
-	const secondURL = "https://cdnlab.live/second.m3u8"
+	const firstURL = "https://cdnlab.live/stream/first/1760000000/1/1/1.m3u8"
+	const secondURL = "https://cdnlab.live/stream/second/1760000000/1/2/2.m3u8"
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		switch {
 		case request.URL.Host == "ppp.porn" && request.URL.Path == "/v/multi/":
