@@ -314,11 +314,11 @@ func (d *Downloader) sourceProbePlayableRoute(ctx context.Context, media provide
 		candidate.Variants = nil
 		keyURL, segmentURL, err := d.sourceProbeResources(ctx, candidate)
 		if err != nil {
-			failures = append(failures, fmt.Errorf("%s: %w", nativeStreamTarget(candidate.URL), err))
+			failures = append(failures, fmt.Errorf("播放線路：%w", err))
 			continue
 		}
 		if _, err := d.sourceProbeBytesWithMedia(ctx, candidate, segmentURL, false); err != nil {
-			failures = append(failures, fmt.Errorf("%s: %w", nativeStreamTarget(segmentURL), err))
+			failures = append(failures, fmt.Errorf("媒體片段：%w", err))
 			continue
 		}
 		return candidate, keyURL, segmentURL, nil
