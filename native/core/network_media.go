@@ -176,16 +176,30 @@ func (d *Downloader) doMediaRequestWithClient(request *http.Request, client *htt
 	return nil, errors.New("播放憑證重新整理失敗")
 }
 
+func (d *Downloader) providerMediaHTTPClient(media providerMedia) *http.Client {
+	if !media.StandardHTTP && d.streamClient != nil {
+		return d.streamClient
+	}
+	return d.client
+}
+
 func (d *Downloader) fetchMediaPlaylist(ctx context.Context, address, referer string) (string, string, error) {
+	return d.fetchMediaPlaylistWithClient(ctx, address, referer, d.client)
+}
+
+func (d *Downloader) fetchMediaPlaylistWithClient(ctx context.Context, address, referer string, client *http.Client) (string, string, error) {
 	if !isProviderHTTPMediaURL(address) {
 		return "", "", errors.New("播放清單網址無效")
+	}
+	if client == nil {
+		client = d.client
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return "", "", err
 	}
 	request.Header.Set("Referer", referer)
-	response, err := d.doMediaRequest(request)
+	response, err := d.doMediaRequestWithClient(request, client)
 	if err != nil {
 		return "", "", err
 	}
