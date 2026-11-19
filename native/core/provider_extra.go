@@ -404,7 +404,12 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 		parsed, err := url.Parse(media)
 		if err != nil || !isProviderHTTPMediaURL(media) || parsed.User != nil { continue }
 		mediaPath := strings.ToLower(parsed.Path)
-		if !(strings.HasSuffix(mediaPath, ".m3u8") || strings.HasSuffix(mediaPath, ".mp4")) || seen[media] { continue }
+		// PPP's upstream module identifies the full recording exclusively by
+		// its /stream/ HLS route. Preview MP4/HLS URLs are not valid fallbacks.
+		if !strings.Contains(mediaPath, "/stream/") ||
+			!strings.HasSuffix(mediaPath, ".m3u8") || seen[media] {
+			continue
+		}
 		seen[media] = true
 		result = append(result, media)
 		if len(result) >= 16 { break }
@@ -431,9 +436,8 @@ func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page
 	}
 	addPage := func(sourceBody, sourcePage string) {
 		candidates := extraAdultPPPStreamURLs(sourceBody, sourcePage)
-		if len(candidates) == 0 {
-			if candidate := extraAdultHLS(sourceBody, sourcePage); candidate != "" { candidates = append(candidates, candidate) }
-		}
+		// Do not fall back to generic HLS or MP4 selectors here: PPP pages
+		// can contain short preview clips alongside the actual /stream/ playlist.
 		for _, address := range candidates { add(address, sourcePage) }
 	}
 	addPage(body, page)
@@ -453,7 +457,7 @@ func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page
 		}
 	}
 	if len(routes) == 0 {
-		return nil, errors.New("PPP 播放器沒有找到有效的 HLS／MP4 網址")
+		return nil, errors.New("PPP 頁面沒有找到完整的 /stream/ HLS 播放清單（已略過預覽影片）")
 	}
 	media := make([]providerMedia, 0, len(routes))
 	for _, candidate := range routes {

@@ -264,8 +264,16 @@ func TestExtraAdultPPPFullStreamWinsOverPreviewURLs(t *testing.T) {
 	<video src="https://preview.example.test/trailer.mp4"></video>`
 	got := extraAdultPPPStreamURLs(body, pppBaseURL+"/v/sample/")
 	want := "https://hokcap.ppp.porn/stream/token/1760000000/1/12345/12345.m3u8?auth=full%2Ftoken"
-	if len(got) < 2 || got[0] != want {
-		t.Fatalf("PPP full stream must be preferred over previews: %v", got)
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("PPP must keep only the full /stream/ HLS route: %v", got)
+	}
+}
+
+func TestExtraAdultPPPIgnoresPreviewOnlyMedia(t *testing.T) {
+	body := `<video src="https://preview.example.test/trailer.mp4"></video>
+	<script>var m3u8 = "https://preview.example.test/clip/preview.m3u8";</script>`
+	if got := extraAdultPPPStreamURLs(body, pppBaseURL+"/v/sample/"); len(got) != 0 {
+		t.Fatalf("PPP preview media must not be treated as a full movie: %v", got)
 	}
 }
 
