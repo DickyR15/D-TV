@@ -593,12 +593,18 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 					}
 				default:
 					// The episode is language-labelled and the line identifies
-					// a provider, so keep each provider independently selectable.
-					groupKey = fmt.Sprintf("audio:%s:source:%d", language, lineIndex)
-					if flag != "" {
+					// a provider. Merge only resolution variants of that same
+					// provider; keep other providers independently selectable.
+					if flagHasResolution && flagBase != "" {
+						groupKey = "audio:" + language + ":source:" + flagBase
 						label = language + "（" + truncate(flagBase, 32) + "）"
-						if sourceFlagCounts[flagBase] > 1 {
-							label = fmt.Sprintf("%s（%s · 片源 %d）", language, truncate(flagBase, 24), sourceFlagOrdinals[lineIndex])
+					} else {
+						groupKey = fmt.Sprintf("audio:%s:source:%d", language, lineIndex)
+						if flag != "" {
+						label = language + "（" + truncate(flagBase, 32) + "）"
+							if sourceFlagCounts[flagBase] > 1 {
+								label = fmt.Sprintf("%s（%s · 片源 %d）", language, truncate(flagBase, 24), sourceFlagOrdinals[lineIndex])
+							}
 						}
 					}
 				}
