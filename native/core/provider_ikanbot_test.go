@@ -457,4 +457,3 @@ func TestIkanbotImageCandidatesSupportsLazyAndSrcset(t *testing.T) {
 	}
 }
 
-}
