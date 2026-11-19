@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"errors"
 	"fmt"
 	"io"
