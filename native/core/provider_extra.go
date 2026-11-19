@@ -359,9 +359,15 @@ func extraAdultFrames(page, body, source string) []string {
 }
 
 func extraAdultFrame(page, body string) string {
-	frames := extraAdultFrames(page, body, sourcePPP)
-	if len(frames) > 0 { return frames[0] }
-	return ""
+	// Keep this helper provider-neutral: Madou and SupJav have their own
+	// stricter host validation immediately after extracting the iframe URL.
+	pattern := regexp.MustCompile("(?is)<iframe\\b[^>]*\\bsrc\\s*=\\s*(?:['\\x22]([^'\\x22]+)['\\x22]|([^\\s>]+))")
+	match := pattern.FindStringSubmatch(body)
+	if len(match) < 3 {
+		return ""
+	}
+	raw := firstNonEmpty(match[1], match[2])
+	return adultResolvePlaybackURL(page, strings.TrimRight(raw, "/>"))
 }
 
 func extraAdultPPPStreamURLs(body, page string) []string {
