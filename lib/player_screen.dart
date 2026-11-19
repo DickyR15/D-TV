@@ -678,8 +678,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       )) {
         final startup = state.position == Duration.zero &&
             state.duration == Duration.zero;
-        final startupSeconds =
-            PlaybackHealth.startupTimeoutForRoute(routeIndex).inSeconds;
+        final startupSeconds = PlaybackHealth.startupTimeoutForSource(
+          widget.detail.drama.source,
+          routeIndex,
+        ).inSeconds;
         unawaited(
           _recover(
             reason: startup

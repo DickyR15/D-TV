@@ -543,6 +543,11 @@ func extraAdult91PornaPlayScriptURL(body, page string) (string, error) {
 		if embedURL == "" {
 			embedURL = uFallback
 		}
+		// Some current templates provide img in the script URL but omit u.
+		// The validated current embed page is the intended u target.
+		if embedURL == "" {
+			embedURL = normalize91PornaEmbedURL(page, base)
+		}
 		if img == "" || strings.ContainsAny(img, "\r\n\x00") || embedURL == "" {
 			continue
 		}
@@ -655,7 +660,7 @@ func extraAdult91PornaPlayParams(body string) (string, string) {
 	if encodedURL == "" {
 		uPatterns := []*regexp.Regexp{
 			regexp.MustCompile("(?is)encodeURIComponent\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)"),
-			regexp.MustCompile("(?is)\\b(?:var|let|const)\\s+u\\s*=\\s*['\"]([^'\"]+)['\"]"),
+			regexp.MustCompile("(?is)\\b(?:var|let|const)\\s+(?:u|src|embedUrl|embed_url|embed)\\s*=\\s*['\"]([^'\"]+)['\"]"),
 		}
 		for _, source := range []string{unpacked, normalizedBody} {
 			for _, pattern := range uPatterns {

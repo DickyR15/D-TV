@@ -351,6 +351,31 @@ func TestExtraAdult91PornaBuildsScriptURLFromLegacyVariables(t *testing.T) {
 	}
 }
 
+func TestExtraAdult91PornaAcceptsSrcVariableAndFillsMissingEmbedU(t *testing.T) {
+	const page = "https://91porna.com/comic/index/embed?id=169397"
+	body := `<script>var player = "embed_play.js?img=poster%2Fabc123"; var src = "https%3A%2F%2F91porna.com%2Fcomic%2Findex%2Fembed%3Fid%3D169397";</script>`
+	img, encodedURL := extraAdult91PornaPlayParams(body)
+	base, err := url.Parse(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if img != "poster/abc123" || normalize91PornaEmbedURL(encodedURL, base) != page {
+		t.Fatalf("91Porna src variable parameters = %q, %q", img, encodedURL)
+	}
+	body = `<script src="/comic/index/embed_play.js?img=poster%2Fabc123"></script>`
+	got, err := extraAdult91PornaPlayScriptURL(body, page)
+	if err != nil {
+		t.Fatalf("script URL should use the current embed page as u fallback: %v", err)
+	}
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Query().Get("img") != "poster/abc123" || parsed.Query().Get("u") != page {
+		t.Fatalf("completed 91Porna embed arguments = %s", parsed.RawQuery)
+	}
+}
+
 func TestExtraAdult91PornaExtractsHLSAndMP4FromEmbedPlayerScript(t *testing.T) {
 	hls := `document.write('<video src="https://media.example.test/playlist.m3u8?auth=one%2Ftwo"></video>');`
 	if got := extraAdult91PornaMediaURL(hls, ninetyOneBaseURL+"/comic/index/embed?id=169397"); got != "https://media.example.test/playlist.m3u8?auth=one%2Ftwo" {

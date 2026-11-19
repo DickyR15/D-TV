@@ -402,7 +402,7 @@ func TestIkanbotAutomaticRouteSelectionPrefersHighestQuality(t *testing.T) {
 }
 
 func TestIkanbotQualityLabelsDoNotBecomeEpisodeNumbers(t *testing.T) {
-	for _, label := range []string{"720", "720P", "1080", "1080p", "480"} {
+	for _, label := range []string{"720", "720P", "1080", "1080p", "480", "720集", "1080集", "720P高清", "高清720", "藍光1080"} {
 		if !ikanbotQualityOnlyLabel(label) {
 			t.Fatalf("quality label %q was not recognized", label)
 		}
@@ -434,6 +434,46 @@ func TestIkanbotBuildChaptersKeepsEpisodeOneWhenLineLabelIs720(t *testing.T) {
 	if chapters[0].PlayLine != "1080P" || len(chapters[0].PlaybackVariants) != 1 ||
 		!strings.Contains(chapters[0].PlaybackVariants[0], "cdn-a.example.test") {
 		t.Fatalf("highest quality primary and automatic backup were not selected: %#v", chapters[0])
+	}
+}
+
+func TestIkanbotMovieQualityLabelsMergeIntoOneEpisodeWithFallback(t *testing.T) {
+	payload := map[string]any{
+		"data": map[string]any{
+			"list": []any{
+				map[string]any{"resData": `[{"flag":"720P","url":"720集$https://cdn-low.example.test/movie.mp4"}]`},
+				map[string]any{"resData": `[{"flag":"1080P","url":"1080集$https://cdn-high.example.test/movie.mp4"}]`},
+			},
+		},
+	}
+	lines := ikanbotParseLines(payload)
+	chapters := ikanbotBuildChapters("1023900", "https://admin-api.aikanbot.com/play/1023900", lines)
+	if len(chapters) != 1 {
+		t.Fatalf("quality-only movie lines produced %d episodes, want one: %#v", len(chapters), chapters)
+	}
+	chapter := chapters[0]
+	if chapter.Title != "1" || string(chapter.CurrentEpisode) != "1" {
+		t.Fatalf("movie quality label was treated as an episode number: %#v", chapter)
+	}
+	if chapter.PlayLine != "1080P" || chapter.VideoURL != "https://cdn-high.example.test/movie.mp4" {
+		t.Fatalf("highest-quality source was not selected as primary: %#v", chapter)
+	}
+	if len(chapter.PlaybackVariants) != 1 || chapter.PlaybackVariants[0] != "720:https://cdn-low.example.test/movie.mp4" {
+		t.Fatalf("lower-quality source was not preserved as fallback: %#v", chapter.PlaybackVariants)
+	}
+	d := &Downloader{}
+	media, err := d.resolveIkanbotMedia(context.Background(), Task{
+		DramaID: providerDramaID(sourceIkanBot, "1023900"),
+		Chapter: chapter,
+	})
+	if err != nil {
+		t.Fatalf("resolveIkanbotMedia failed: %v", err)
+	}
+	choice := nativePlaybackChoices(media, 0)
+	if len(choice.media) != 2 ||
+		choice.media[0].URL != "https://cdn-high.example.test/movie.mp4" ||
+		choice.media[1].URL != "https://cdn-low.example.test/movie.mp4" {
+		t.Fatalf("automatic playback did not keep high-quality-first fallback order: %#v", choice.media)
 	}
 }
 

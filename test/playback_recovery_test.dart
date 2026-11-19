@@ -250,6 +250,10 @@ void main() {
 
     expect(PlaybackHealth.startupTimeoutForRoute(0), const Duration(seconds: 16));
     expect(PlaybackHealth.startupTimeoutForRoute(1), const Duration(seconds: 14));
+    expect(PlaybackHealth.startupTimeoutForSource('duoduo', 0), const Duration(seconds: 12));
+    expect(PlaybackHealth.startupTimeoutForSource('guipian', 0), const Duration(seconds: 12));
+    expect(PlaybackHealth.startupTimeoutForSource('other', 0), const Duration(seconds: 16));
+    expect(PlaybackHealth.startupTimeoutForSource('duoduo', 1), const Duration(seconds: 14));
     expect(stalled(0), isFalse);
     expect(stalled(10), isFalse);
     expect(stalled(15), isFalse);

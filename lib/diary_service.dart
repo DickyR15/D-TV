@@ -100,9 +100,11 @@ class DiaryService {
   static bool matchesFilter(String entry, String filter) {
     if (filter == 'all') return true;
     final value = entry.toLowerCase();
-    final isError = RegExp(
-      r'error|fatal|warn|exception|失敗|錯誤|403|404',
+    final warningSeverity = RegExp(
+      r'"level"\s*:\s*"warn(?:ing)?"|\blevel\s*[:=]\s*warn(?:ing)?\b',
     ).hasMatch(value);
+    final isError = !warningSeverity &&
+        RegExp(r'error|fatal|exception|失敗|錯誤|403|404').hasMatch(value);
     if (filter == 'errors') return isError;
     if (filter == 'network') {
       return RegExp(

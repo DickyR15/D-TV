@@ -146,6 +146,18 @@ class PlaybackHealth {
   static Duration startupTimeoutForRoute(int routeIndex) =>
       routeIndex <= 0 ? startupStallTimeout : alternativeStartupStallTimeout;
 
+  static Duration startupTimeoutForSource(String source, int routeIndex) {
+    final normalized = source.trim().toLowerCase();
+    if (routeIndex <= 0 &&
+        (normalized == 'duoduo' || normalized == 'guipian')) {
+      // These providers can return a syntactically valid first URL that never
+      // yields playable bytes. Keep a grace window for slow headers, then let
+      // the existing same-episode route fallback run automatically.
+      return const Duration(seconds: 12);
+    }
+    return startupTimeoutForRoute(routeIndex);
+  }
+
   Duration? _position;
   Duration? _highestBuffer;
   DateTime? _lastProgress;

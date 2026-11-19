@@ -136,6 +136,35 @@ void main() {
     expect(text, isNot(contains('private')));
   });
 
+  test('warning-level source and MPV diagnostics are not classified as errors', () {
+    const samples = [
+      '[MPV] level=warn prefix=lavf text=Failed to create file cache.',
+      '{"level":"warn","event":"stream.host_cooldown","message":"reason=timeout"}',
+      '{"level":"warning","event":"source.health","message":"temporary catalog warning"}',
+    ];
+    for (final sample in samples) {
+      expect(
+        DiaryService.matchesFilter(sample, 'errors'),
+        isFalse,
+        reason: sample,
+      );
+    }
+    expect(
+      DiaryService.matchesFilter(
+        '[Play] flow_error generation=3 error=HTTP 403',
+        'errors',
+      ),
+      isTrue,
+    );
+    expect(
+      DiaryService.matchesFilter(
+        '{"level":"error","event":"playback.route_refresh","message":"state=failed"}',
+        'errors',
+      ),
+      isTrue,
+    );
+  });
+
   test('fatal MPV demuxer failures trigger fast route recovery', () {
     for (final sample in [
       (
