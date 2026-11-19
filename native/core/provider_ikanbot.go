@@ -572,14 +572,20 @@ func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Dra
 		for _, address := range ikanbotImageCandidates(node, final) { addCover(address) }
 	}
 	cover := ""
-	if len(coverCandidates) > 0 { cover = coverCandidates[0] }
+	var coverFallbacks []string
+	if len(coverCandidates) > 0 {
+		cover = coverCandidates[0]
+		if len(coverCandidates) > 1 {
+			coverFallbacks = append([]string(nil), coverCandidates[1:]...)
+		}
+	}
 	currentID:=ikanbotInput(doc,"current_id");if currentID==""{currentID=sourceID};token:=ikanbotInput(doc,"e_token");mtype:=ikanbotInput(doc,"mtype");if token==""{return Drama{},nil,errors.New("愛看機器人缺少播放驗證資訊")}
 	lines,err:=d.fetchIkanbotLines(ctx,sourceID,currentID,token,mtype,final);if err!=nil{return Drama{},nil,err}
 	meta:=[]string{};for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="h3"&&providerHTMLClass(n,"meta")}){v:=providerHTMLText(n);if v!=""{meta=append(meta,v)}}
 	tags:=[]string{};year:="";for _,v:=range meta{if year==""&&regexp.MustCompile("^(19|20)[0-9]{2}$").MatchString(v){year=v};if strings.Contains(v,"/"){tags=append(tags,truncate(v,64))}}
 	chapters := ikanbotBuildChapters(sourceID, final, lines)
 	if len(chapters)==0{return Drama{},nil,errors.New("愛看機器人目前沒有可播放分集")}
-	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,CoverCandidates:append([]string(nil),coverCandidates[1:]...),OnlineDate:year,Tags:tags,TotalEpisode:len(chapters),EpisodeCount:len(chapters),ChannelName:"愛看機器人",CategoryName:"影集"}
+	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,CoverCandidates:coverFallbacks,OnlineDate:year,Tags:tags,TotalEpisode:len(chapters),EpisodeCount:len(chapters),ChannelName:"愛看機器人",CategoryName:"影集"}
 	return drama,chapters,nil
 }
 func ikanbotIsHLSURL(raw string) bool {

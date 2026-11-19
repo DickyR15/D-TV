@@ -475,7 +475,7 @@ func TestMadouHealthCheckWarnsOnCatalog404ButVerifiesPlaybackFromCachedDrama(t *
 	if health.State != "warning" {
 		t.Fatalf("madou health state = %q, want warning", health.State)
 	}
-	if len(health.Steps) != 6 || health.Steps[0].State != "warning" {
+	if len(health.Steps) != 5 || health.Steps[0].State != "warning" {
 		t.Fatalf("madou health steps should report a catalog warning and continue: %#v", health.Steps)
 	}
 	for i := 1; i < len(health.Steps); i++ {

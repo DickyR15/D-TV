@@ -371,11 +371,11 @@ func extraAdultFrame(page, body string) string {
 }
 
 func extraAdultPPPStreamURLs(body, page string) []string {
-	body = strings.NewReplacer("\\\\/", "/", "\\\\u002F", "/", "\\\\u0026", "&").Replace(html.UnescapeString(body))
+	body = strings.NewReplacer("\\/", "/", "\\u002F", "/", "\\u0026", "&").Replace(html.UnescapeString(body))
 	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?is)(?:var|let|const)s+(?:stream|m3u8|videoUrl|video_url|url|file|hls|backup|backup_url)s*=s*['"]([^'"]+)['"]`),
-		regexp.MustCompile(`(?is)['"](?:m3u8|hls|file|url|videoUrl|video_url|backup|backup_url)['"]s*:s*['"]([^'"]+)['"]`),
-		regexp.MustCompile(`(?is)(?:src|file|url)s*:s*['"]([^'"]+)['"]`),
+		regexp.MustCompile(`(?is)\b(?:var|let|const)\s+(?:stream|m3u8|videoUrl|video_url|url|file|hls|backup|backup_url)\s*=\s*['"]([^'"]+)['"]`),
+		regexp.MustCompile(`(?is)['"](?:m3u8|hls|file|url|videoUrl|video_url|backup|backup_url)['"]\s*:\s*['"]([^'"]+)['"]`),
+		regexp.MustCompile(`(?is)\b(?:src|file|url)\s*:\s*['"]([^'"]+)['"]`),
 	}
 	candidates := make([]string, 0, 24)
 	for _, pattern := range patterns {

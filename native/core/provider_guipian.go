@@ -316,11 +316,6 @@ func guipianPickPlaylist(body string) (string, []Chapter, error) {
 	if len(tabs) == 0 {
 		return "", nil, errors.New("鬼片网未找到可用播放线路")
 	}
-	type routeEpisode struct {
-		order int
-		url string
-		title string
-	}
 	bestName := ""
 	var best []Chapter
 	allRoutes := map[int][]string{}
@@ -337,8 +332,11 @@ func guipianPickPlaylist(body string) (string, []Chapter, error) {
 			continue
 		}
 		segment := body[start+len(marker):]
-		if end := strings.Index(segment, `<div class="playlist-slide`); end >= 0 {
-			segment = segment[:end]
+		// A target playlist may contain its own nested playlist-slide.
+		// Stop only when the next target playlist begins.
+		nextPlaylistID := regexp.MustCompile(`(?i)id=["']ewave-playlist-[0-9]+["']`)
+		if next := nextPlaylistID.FindStringIndex(segment); next != nil {
+			segment = segment[:next[0]]
 		} else if end := strings.Index(segment, `</section>`); end >= 0 {
 			segment = segment[:end]
 		}
