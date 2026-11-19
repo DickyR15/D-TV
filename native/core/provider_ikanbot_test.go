@@ -648,3 +648,41 @@ func TestIkanbotMovieKeepsRepeatedLanguageSourceFlagsAsSeparateChoices(t *testin
 		t.Fatalf("distinct source URLs were collapsed: %#v", chapters)
 	}
 }
+
+
+func TestIkanbotMovieQualityOnlyRowsBecomeOneMovieChoice(t *testing.T) {
+	lines := []ikanbotLine{
+		{Flag: "1080P", Episodes: []ikanbotEpisode{{Name: "1080P", URL: "https://cdn-high.example.test/movie.mp4", Order: 1}}},
+		{Flag: "720P", Episodes: []ikanbotEpisode{{Name: "720P", URL: "https://cdn-low.example.test/movie.mp4", Order: 1}}},
+	}
+	chapters := ikanbotBuildChapters("1023904", "https://admin-api.aikanbot.com/play/1023904", lines, true)
+	if len(chapters) != 1 {
+		t.Fatalf("quality-only movie rows = %d choices, want one: %#v", len(chapters), chapters)
+	}
+	if chapters[0].Title != "電影版" || chapters[0].VideoURL != "https://cdn-high.example.test/movie.mp4" {
+		t.Fatalf("quality-only movie choice is incorrect: %#v", chapters[0])
+	}
+	if len(chapters[0].PlaybackVariants) != 1 ||
+		chapters[0].PlaybackVariants[0] != "720:https://cdn-low.example.test/movie.mp4" {
+		t.Fatalf("lower-quality movie route was not kept as fallback: %#v", chapters[0].PlaybackVariants)
+	}
+}
+
+func TestIkanbotMovieSameSourceQualityRowsStayTogetherButDifferentSourcesSplit(t *testing.T) {
+	lines := []ikanbotLine{
+		{Flag: "來源甲 1080P", Episodes: []ikanbotEpisode{{Name: "第1集", URL: "https://source-a.example.test/1080.mp4", Order: 1}}},
+		{Flag: "來源甲 720P", Episodes: []ikanbotEpisode{{Name: "第1集", URL: "https://source-a.example.test/720.mp4", Order: 1}}},
+		{Flag: "來源乙 1080P", Episodes: []ikanbotEpisode{{Name: "第1集", URL: "https://source-b.example.test/1080.mp4", Order: 1}}},
+	}
+	chapters := ikanbotBuildChapters("1023905", "https://admin-api.aikanbot.com/play/1023905", lines, true)
+	if len(chapters) != 2 {
+		t.Fatalf("movie source/quality choices = %d, want 2 sources: %#v", len(chapters), chapters)
+	}
+	if chapters[0].Title != "片源 1（來源甲）" || chapters[1].Title != "片源 3（來源乙）" {
+		t.Fatalf("movie source labels are incorrect: %#v", chapters)
+	}
+	if len(chapters[0].PlaybackVariants) != 1 ||
+		chapters[0].PlaybackVariants[0] != "720:https://source-a.example.test/720.mp4" {
+		t.Fatalf("same-source resolution fallback was not retained: %#v", chapters[0].PlaybackVariants)
+	}
+}
