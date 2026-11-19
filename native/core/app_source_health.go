@@ -197,12 +197,12 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		for _, candidate := range candidates {
 			_, id, valid := splitProviderDramaID(candidate.ID)
 			if !valid || id == "" {
-				failures = append(failures, fmt.Errorf("%s：作品識別碼無效", candidate.DisplayTitle()))
+				failures = append(failures, fmt.Errorf("%s：作品識別碼無效", firstNonEmpty(candidate.Title, candidate.ID)))
 				continue
 			}
 			_, chapters, err := engine.downloader.GetHuangguoChapters(ctx, source, id)
 			if err != nil {
-				failures = append(failures, fmt.Errorf("%s：%w", candidate.DisplayTitle(), err))
+				failures = append(failures, fmt.Errorf("%s：%w", firstNonEmpty(candidate.Title, candidate.ID), err))
 				if ctx.Err() != nil {
 					return "", ctx.Err()
 				}
