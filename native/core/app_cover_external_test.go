@@ -59,6 +59,40 @@ func posterTestJPEG(t *testing.T) []byte {
 	return posterTestJPEGVariant(t, 42)
 }
 
+func posterTestJPEGSize(t *testing.T, width, height int) []byte {
+	t.Helper()
+	canvas := stdimage.NewRGBA(stdimage.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			canvas.SetRGBA(x, y, color.RGBA{
+				R: uint8(60 + x%80), G: uint8(80 + y%80), B: 120, A: 255,
+			})
+		}
+	}
+	var buffer bytes.Buffer
+	if err := jpeg.Encode(&buffer, canvas, &jpeg.Options{Quality: 85}); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
+}
+
+func posterTestPNGSize(t *testing.T, width, height int) []byte {
+	t.Helper()
+	canvas := stdimage.NewRGBA(stdimage.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			canvas.SetRGBA(x, y, color.RGBA{
+				R: uint8(70 + x%70), G: uint8(90 + y%70), B: 130, A: 255,
+			})
+		}
+	}
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, canvas); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
+}
+
 func posterTestPNGVariant(t *testing.T, seed uint8) []byte {
 	t.Helper()
 	var buffer bytes.Buffer
@@ -502,7 +536,7 @@ func TestNativeNormalizeRetainsAlternativePosterFields(t *testing.T) {
 }
 
 func TestNativeCoverLoadTriesCatalogueVariantBeforeMetadataRepair(t *testing.T) {
-	image := posterTestPNG(t)
+	image := posterTestPNGSize(t, 120, 180)
 	var requests []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		requests = append(requests, request.URL.Host)
@@ -798,7 +832,7 @@ func TestDuoduoExternalDoubanPosterKeepsDoubanReferer(t *testing.T) {
 func TestDuoduoSatanTheDarkPosterLoadsThroughNativeCache(t *testing.T) {
 	const poster = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p2932687546.jpg"
 	edge := duoduoPosterProxyURL(poster)
-	imageBytes := posterTestJPEG(t)
+	imageBytes := posterTestJPEGSize(t, 120, 180)
 	var seenReferer, seenAddress string
 	var originCalls, edgeCalls int
 	var unexpectedURLs []string
@@ -1044,7 +1078,7 @@ func TestExternalPosterAddressFallsBackToBangumiWhenDoubanIsDenied(t *testing.T)
 
 func TestDuoduoPosterDecodeFailureFallsBackFromEdgeToOrigin(t *testing.T) {
 	const poster = "https://img.example.test/poster.jpg"
-	validImage := posterTestJPEG(t)
+	validImage := posterTestJPEGSize(t, 120, 180)
 	invalidEdgeImage := []byte{0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00}
 	var edgeCalls, originCalls int
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
