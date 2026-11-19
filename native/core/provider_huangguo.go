@@ -39,6 +39,7 @@ const (
 	sourcePPP             = "ppp"
 	sourceMadou            = "madou"
 	source91Porna          = "91porna"
+	sourceChaoliu          = "chaoliu"
 
 	providerMaxBodyBytes = 20 * 1024 * 1024
 	providerTimeout      = 12 * time.Second
@@ -103,7 +104,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceHeitao, sourceGuipian, sourceMissAV, sourceIkanBot, sourceSupJav, sourcePPP, sourceMadou, source91Porna:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceHeitao, sourceGuipian, sourceMissAV, sourceIkanBot, sourceSupJav, sourcePPP, sourceMadou, source91Porna, sourceChaoliu:
 		return true
 	default:
 		return false
@@ -148,6 +149,8 @@ func canonicalProviderSource(source string) string {
 		return sourceMadou
 	case "91porna", "91porna.com", "www.91porna.com":
 		return source91Porna
+	case "chaoliu", "潮流av", "18av", "mjv001.com", "mjv002.com", "mjv003.com", "mjv004.com", "mjv005.com", "mjv006.com", "mjv007.com", "mjv008.com", "mjv009.com", "mjv010.com", "mjv011.com", "mjv012.com", "mjv013.com", "mjv014.com", "mjv015.com":
+		return sourceChaoliu
 	case "missav", "missav.ai", "www.missav.ai", "missav.ws", "www.missav.ws", "missav.live", "www.missav.live", "missav123.com", "www.missav123.com":
 		return sourceMissAV
 	default:
@@ -429,6 +432,7 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 					effectiveURL = resp.Request.URL
 				}
 				d.providerMu.Lock()
+				if d.providerHosts == nil { d.providerHosts = map[string]string{} }
 				d.providerHosts[source] = effectiveURL.Scheme + "://" + effectiveURL.Host
 				d.providerMu.Unlock()
 			}
