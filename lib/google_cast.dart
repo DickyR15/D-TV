@@ -169,6 +169,29 @@ Future<Map<String, dynamic>?> googleCastPayloadFromNsdService(
   );
 }
 
+String googleCastDiscoveryIdentity(Map<String, dynamic> payload) {
+  final id = payload['id']?.toString().trim() ?? '';
+  if (id.isNotEmpty) return 'id:${id.toLowerCase()}';
+  final address = payload['address']?.toString().trim() ?? '';
+  final port = payload['port']?.toString().trim() ?? '';
+  if (address.isNotEmpty && port.isNotEmpty) return 'endpoint:$address:$port';
+  return '';
+}
+
+List<Map<String, dynamic>> mergeGoogleCastPayloads(
+  Iterable<Map<String, dynamic>> payloads,
+) {
+  final byIdentity = <String, Map<String, dynamic>>{};
+  for (final payload in payloads) {
+    final identity = googleCastDiscoveryIdentity(payload);
+    if (identity.isNotEmpty) byIdentity.putIfAbsent(identity, () => payload);
+  }
+  return byIdentity.values.toList(growable: false)
+    ..sort((a, b) => (a['name']?.toString() ?? '')
+        .toLowerCase()
+        .compareTo((b['name']?.toString() ?? '').toLowerCase()));
+}
+
 /// Chromecast V2 sender. Only Google Cast is registered here; AirPlay is
 /// deliberately excluded because iOS projection was removed from D-TV.
 class GoogleCastController {
@@ -208,20 +231,7 @@ class GoogleCastController {
       }),
     ]);
 
-    final devices = <String, Map<String, dynamic>>{};
-    for (final payload in results.expand((items) => items)) {
-      final address = payload['address']?.toString() ?? '';
-      final port = payload['port']?.toString() ?? '';
-      final key = address.isNotEmpty && port.isNotEmpty
-          ? '$address:$port'
-          : payload['id']?.toString() ?? '';
-      if (key.isNotEmpty) devices.putIfAbsent(key, () => payload);
-    }
-    final merged = devices.values.toList(growable: false)
-      ..sort((a, b) => (a['name'] as String)
-          .toLowerCase()
-          .compareTo((b['name'] as String).toLowerCase()));
-    return merged;
+    return mergeGoogleCastPayloads(results.expand((items) => items));
   }
 
   Future<List<Map<String, dynamic>>> _discoverWindowsDnsSd() async {
@@ -235,25 +245,14 @@ class GoogleCastController {
       // Windows NSD reports discoveries asynchronously. Keep the browse alive
       // for the same window as the existing Chromecast search before reading
       // the fully resolved host, port and TXT data.
-      await Future<void>.delayed(const Duration(seconds: 10));
-      final services = discovery.services.take(64).toList(growable: false);
+      await Future<void>.delayed(const Duration(seconds: 15));
+      final services = discovery.services.toList(growable: false);
+      debugPrint('[GoogleCast] Windows DNS-SD services=${services.length}');
       final resolved = await Future.wait(
         services.map(googleCastPayloadFromNsdService),
       );
-      final devices = <String, Map<String, dynamic>>{};
-      for (final payload in resolved) {
-        if (payload == null) continue;
-        final address = payload['address']?.toString() ?? '';
-        final port = payload['port']?.toString() ?? '';
-        final key = address.isNotEmpty && port.isNotEmpty
-            ? '$address:$port'
-            : payload['id']?.toString() ?? '';
-        if (key.isNotEmpty) devices.putIfAbsent(key, () => payload);
-      }
-      final result = devices.values.toList(growable: false)
-        ..sort((a, b) => (a['name'] as String)
-            .toLowerCase()
-            .compareTo((b['name'] as String).toLowerCase()));
+      final result = mergeGoogleCastPayloads(resolved.whereType<Map<String, dynamic>>());
+      debugPrint('[GoogleCast] Windows DNS-SD resolved=${result.length}');
       return result;
     } finally {
       if (discovery != null) {
@@ -263,27 +262,24 @@ class GoogleCastController {
   }
 
   Future<List<Map<String, dynamic>>> _discoverWithDartCast() async {
-    final discovered = <String, dc.CastDevice>{};
+    final discovered = <Map<String, dynamic>>[];
     final discovery = _service
-        .startDiscovery(timeout: const Duration(seconds: 12))
+        .startDiscovery(timeout: const Duration(seconds: 15))
         .timeout(
-          const Duration(seconds: 14),
+          const Duration(seconds: 17),
           onTimeout: (sink) => sink.close(),
         );
     await for (final devices in discovery) {
-      // Merge each partial snapshot so a later network-interface update cannot
-      // accidentally hide a receiver that was already discovered.
+      // Keep every partial discovery snapshot; TXT receiver IDs are more
+      // stable than a network-interface-specific endpoint.
       for (final device in devices) {
         if (device.protocol != dc.CastProtocol.chromecast) continue;
-        final key = '${device.address.address}:${device.port}';
-        discovered.putIfAbsent(key, () => device);
+        final payload = Map<String, dynamic>.from(device.toJson());
+        payload['transport'] = 'google_cast';
+        discovered.add(payload);
       }
     }
-    return discovered.values.map((device) {
-      final payload = Map<String, dynamic>.from(device.toJson());
-      payload['transport'] = 'google_cast';
-      return payload;
-    }).toList(growable: false);
+    return mergeGoogleCastPayloads(discovered);
   }
 
   Future<void> play({
