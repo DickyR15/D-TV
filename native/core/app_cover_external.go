@@ -234,7 +234,7 @@ func validDoubanPosterAddress(raw string) string {
 // aliases. They widen catalogue lookup without enabling fuzzy title matching.
 var nativePosterTitleAliasGroups = [][]string{
 	{
-		"鷹峰同學請穿上衣服", "拜託請穿上，鷹峰同學", "拜托请穿上，鹰峰同学",
+		"鷹峰同學請穿上衣服", "鹰峰同学请穿上衣服", "拜託請穿上，鷹峰同學", "拜托请穿上，鹰峰同学",
 		"履いてください、鷹峰さん", "Haite Kudasai, Takamine-san",
 		"Please Put Them On, Takamine-san", "Please Put These On, Takamine-san",
 	},
