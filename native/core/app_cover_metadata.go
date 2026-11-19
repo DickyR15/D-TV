@@ -105,6 +105,14 @@ func (d *Downloader) nativeCoverRecoveryMetadata(ctx context.Context, drama *nat
 		fresh, _, err = d.fetchHanxiaoquanDetail(ctx, id)
 	case sourceGuipian:
 		fresh, _, err = d.fetchGuipianDetail(ctx, id)
+	case sourceChaoliu:
+		fresh, _, err = d.fetchChaoliuDetail(ctx, id)
+	case sourceIkanBot:
+		fresh, _, err = d.fetchIkanbotDetail(ctx, id)
+	case sourceMissAV:
+		fresh, _, err = d.fetchAdultDetail(ctx, source, id)
+	case sourceSupJav, sourcePPP, sourceMadou, source91Porna:
+		fresh, _, err = d.fetchExtraAdultDetail(ctx, source, id)
 	case sourceHeitao:
 		// Use the same exact-title stale-ID recovery as the detail/player path.
 		// A retired Heitao catalogue ID should not block poster repair when
@@ -297,6 +305,18 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 		return nativeCoverAddressesFromDrama(fresh), err
 	case sourceGuipian:
 		fresh, _, err := d.fetchGuipianDetail(ctx, id)
+		return nativeCoverAddressesFromDrama(fresh), err
+	case sourceChaoliu:
+		fresh, _, err := d.fetchChaoliuDetail(ctx, id)
+		return nativeCoverAddressesFromDrama(fresh), err
+	case sourceIkanBot:
+		fresh, _, err := d.fetchIkanbotDetail(ctx, id)
+		return nativeCoverAddressesFromDrama(fresh), err
+	case sourceMissAV:
+		fresh, _, err := d.fetchAdultDetail(ctx, source, id)
+		return nativeCoverAddressesFromDrama(fresh), err
+	case sourceSupJav, sourcePPP, sourceMadou, source91Porna:
+		fresh, _, err := d.fetchExtraAdultDetail(ctx, source, id)
 		return nativeCoverAddressesFromDrama(fresh), err
 	case sourceCloudFront:
 		if !rankingSourceID.MatchString(id) {

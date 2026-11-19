@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"net/url"
 	"strings"
@@ -35,4 +36,16 @@ func TestProviderEndpointRankingPrefersKnownFastHealthyHost(t *testing.T) {
 	got:=d.orderProviderEndpoints(sourceDuoduo,"api",[]string{slow,fast});if len(got)!=2||got[0]!=fast{t.Fatalf("未優先選擇較快且健康的 API：%v",got)}
 	d.recordProviderEndpoint(sourceDuoduo,"api",fast,100*time.Millisecond,errors.New("timeout"));d.recordProviderEndpoint(sourceDuoduo,"api",fast,100*time.Millisecond,errors.New("timeout"))
 	got=d.orderProviderEndpoints(sourceDuoduo,"api",[]string{fast,slow});if got[0]!=slow{t.Fatalf("冷卻中的端點不應優先：%v",got)}
+}
+
+func TestGetHuangguoChaptersDispatchesGuipianAndChaoliu(t *testing.T) {
+	d := &Downloader{cfg: defaultConfig()}
+	_, _, err := d.GetHuangguoChapters(context.Background(), sourceGuipian, "invalid-id")
+	if err == nil || strings.Contains(err.Error(), "unsupported provider source") || !strings.Contains(err.Error(), "鬼片网视频 ID 无效") {
+		t.Fatalf("鬼片健康檢查未進入專屬分集解析：%v", err)
+	}
+	_, _, err = d.GetHuangguoChapters(context.Background(), sourceChaoliu, "invalid-id")
+	if err == nil || strings.Contains(err.Error(), "unsupported provider source") || !strings.Contains(err.Error(), "潮流 AV 作品識別碼無效") {
+		t.Fatalf("潮流 AV 健康檢查未進入專屬分集解析：%v", err)
+	}
 }

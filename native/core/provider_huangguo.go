@@ -271,6 +271,12 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 	case sourceHeitao:
 		drama, chapters, err := d.fetchHeitaoDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
+	case sourceGuipian:
+		drama, chapters, err := d.fetchGuipianDetail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
+	case sourceChaoliu:
+		drama, chapters, err := d.fetchChaoliuDetail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
 	case sourceMissAV, sourceSupJav, sourcePPP, sourceMadou, source91Porna:
 		drama, chapters, err := d.fetchAdultDetail(ctx, canonicalProviderSource(source), sourceID)
 		return drama.DisplayTitle(), chapters, err
