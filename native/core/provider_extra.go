@@ -343,93 +343,123 @@ func (d *Downloader) fetchExtraAdultDetail(ctx context.Context,source,id string)
 	drama:=Drama{ID:providerDramaID(source,id),Source:source,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Desc:truncate(desc,12000),Intro:truncate(desc,12000),Cover:cover,CoverURL:cover,ChannelName:extraAdultSourceName(source),CategoryName:extraAdultSourceName(source),TotalEpisode:1,EpisodeCount:1}
 	ch:=Chapter{ID:providerChapterID(source,id,final),Source:source,Title:"正片",PageURL:final,Referer:final,VideoURL:"adult-page://"+final,CurrentEpisode:json.RawMessage("1")};return drama,[]Chapter{ch},nil
 }
-func extraAdultFrame(page, body string) string {
-	// Some current pages emit iframe src without quotes.
+func extraAdultFrames(page, body, source string) []string {
 	pattern := regexp.MustCompile("(?is)<iframe\\b[^>]*\\bsrc\\s*=\\s*(?:['\\x22]([^'\\x22]+)['\\x22]|([^\\s>]+))")
-	match := pattern.FindStringSubmatch(body)
-	if len(match) < 3 {
-		return ""
+	seen := map[string]bool{}
+	var result []string
+	for _, match := range pattern.FindAllStringSubmatch(body, 16) {
+		if len(match) < 3 { continue }
+		raw := firstNonEmpty(match[1], match[2])
+		address := adultResolvePlaybackURL(page, strings.TrimRight(raw, "/>"))
+		if address == "" || adultSafeURL(page, address, source) == "" || seen[address] { continue }
+		seen[address] = true
+		result = append(result, address)
 	}
-	raw := firstNonEmpty(match[1], match[2])
-	return adultResolvePlaybackURL(page, strings.TrimRight(raw, "/>"))
+	return result
 }
 
-// PPP may expose media directly, in a player config object, or through an embed iframe.
-func extraAdultPPPStreamURL(body, page string) string {
-	body = strings.NewReplacer("\\/", "/", "\\u002F", "/", "\\u0026", "&").Replace(html.UnescapeString(body))
+func extraAdultFrame(page, body string) string {
+	frames := extraAdultFrames(page, body, sourcePPP)
+	if len(frames) > 0 { return frames[0] }
+	return ""
+}
+
+func extraAdultPPPStreamURLs(body, page string) []string {
+	body = strings.NewReplacer("\\\\/", "/", "\\\\u002F", "/", "\\\\u0026", "&").Replace(html.UnescapeString(body))
 	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?is)\b(?:var|let|const)\s+(?:stream|m3u8|videoUrl|video_url|url|file|hls)\s*=\s*['"]([^'"]+)['"]`),
-		regexp.MustCompile(`(?is)['"](?:m3u8|hls|file|url|videoUrl|video_url)['"]\s*:\s*['"]([^'"]+)['"]`),
-		regexp.MustCompile(`(?is)\b(?:src|file|url)\s*:\s*['"]([^'"]+)['"]`),
+		regexp.MustCompile(`(?is)(?:var|let|const)s+(?:stream|m3u8|videoUrl|video_url|url|file|hls|backup|backup_url)s*=s*['"]([^'"]+)['"]`),
+		regexp.MustCompile(`(?is)['"](?:m3u8|hls|file|url|videoUrl|video_url|backup|backup_url)['"]s*:s*['"]([^'"]+)['"]`),
+		regexp.MustCompile(`(?is)(?:src|file|url)s*:s*['"]([^'"]+)['"]`),
 	}
-	candidates := make([]string, 0, 16)
+	candidates := make([]string, 0, 24)
 	for _, pattern := range patterns {
-		for _, match := range pattern.FindAllStringSubmatch(body, 32) {
-			if len(match) > 1 {
-				candidates = append(candidates, match[1])
-			}
+		for _, match := range pattern.FindAllStringSubmatch(body, 64) {
+			if len(match) > 1 { candidates = append(candidates, match[1]) }
 		}
 	}
-	tagPattern := regexp.MustCompile(`(?is)<(?:video|source)\b[^>]*>`)
-	for _, tag := range tagPattern.FindAllString(body, 32) {
+	tagPattern := regexp.MustCompile(`(?is)<(?:video|source)[^>]*>`)
+	for _, tag := range tagPattern.FindAllString(body, 64) {
 		if raw := firstNonEmpty(adultAttribute(tag, "src"), adultAttribute(tag, "data-src")); raw != "" {
 			candidates = append(candidates, raw)
 		}
 	}
-	directPattern := regexp.MustCompile(`(?i)https?://[^"'<>\s\\]+?\.(?:m3u8|mp4)(?:\?[^"'<>\s\\]*)?`)
-	candidates = append(candidates, directPattern.FindAllString(body, 64)...)
+	directPattern := regexp.MustCompile(`(?i)https?://[^"'<>s\]+?.(?:m3u8|mp4)(?:?[^"'<>s\]*)?`)
+	candidates = append(candidates, directPattern.FindAllString(body, 128)...)
+	seen := map[string]bool{}
+	var result []string
 	for _, raw := range candidates {
 		media := adultResolvePlaybackURL(page, strings.TrimRight(strings.TrimSpace(raw), "),;]}"))
 		parsed, err := url.Parse(media)
-		if err != nil || !isProviderHTTPMediaURL(media) || parsed.User != nil {
-			continue
-		}
+		if err != nil || !isProviderHTTPMediaURL(media) || parsed.User != nil { continue }
 		mediaPath := strings.ToLower(parsed.Path)
-		if strings.HasSuffix(mediaPath, ".m3u8") || strings.HasSuffix(mediaPath, ".mp4") {
-			return media
+		if !(strings.HasSuffix(mediaPath, ".m3u8") || strings.HasSuffix(mediaPath, ".mp4")) || seen[media] { continue }
+		seen[media] = true
+		result = append(result, media)
+		if len(result) >= 16 { break }
+	}
+	return result
+}
+
+func extraAdultPPPStreamURL(body, page string) string {
+	candidates := extraAdultPPPStreamURLs(body, page)
+	if len(candidates) == 0 { return "" }
+	return candidates[0]
+}
+
+func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page string) ([]providerMedia, error) {
+	type route struct { address, referer string }
+	var routes []route
+	seen := map[string]bool{}
+	add := func(address, referer string) {
+		address = strings.TrimSpace(address)
+		parsed, err := url.Parse(address)
+		if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil || seen[address] { return }
+		seen[address] = true
+		routes = append(routes, route{address: address, referer: referer})
+	}
+	addPage := func(sourceBody, sourcePage string) {
+		candidates := extraAdultPPPStreamURLs(sourceBody, sourcePage)
+		if len(candidates) == 0 {
+			if candidate := extraAdultHLS(sourceBody, sourcePage); candidate != "" { candidates = append(candidates, candidate) }
+		}
+		for _, address := range candidates { add(address, sourcePage) }
+	}
+	addPage(body, page)
+	for _, frame := range extraAdultFrames(page, body, sourcePPP) {
+		if len(routes) >= 12 { break }
+		embed, embedURL, err := extraAdultFetch(ctx, d, sourcePPP, frame, page)
+		if err != nil { continue }
+		before := len(routes)
+		addPage(embed, embedURL)
+		if len(routes) == before {
+			for _, nestedFrame := range extraAdultFrames(embedURL, embed, sourcePPP) {
+				if len(routes) >= 12 { break }
+				nested, nestedURL, nestedErr := extraAdultFetch(ctx, d, sourcePPP, nestedFrame, embedURL)
+				if nestedErr != nil { continue }
+				addPage(nested, nestedURL)
+			}
 		}
 	}
-	return ""
+	if len(routes) == 0 {
+		return nil, errors.New("PPP 播放器沒有找到有效的 HLS／MP4 網址")
+	}
+	media := make([]providerMedia, 0, len(routes))
+	for _, candidate := range routes {
+		credentials := &providerMediaCredentials{referer: candidate.referer, userAgent: adultUserAgent}
+		media = append(media, providerMedia{
+			URL: candidate.address, Referer: candidate.referer,
+			credentials: credentials, StandardHTTP: runtime.GOOS == "android",
+		})
+	}
+	return media, nil
 }
 
 func (d *Downloader) resolveExtraAdultPPPStream(ctx context.Context, body, page string) (string, string, error) {
-	if media := extraAdultPPPStreamURL(body, page); media != "" {
-		return media, page, nil
-	}
-	frame := extraAdultFrame(page, body)
-	if frame == "" || adultSafeURL(page, frame, sourcePPP) == "" {
-		return "", page, errors.New("PPP 播放頁沒有可用的直連網址或允許的嵌入播放器")
-	}
-	embed, embedURL, err := extraAdultFetch(ctx, d, sourcePPP, frame, page)
-	if err != nil {
-		return "", embedURL, fmt.Errorf("PPP 嵌入播放器讀取失敗：%w", err)
-	}
-	media := extraAdultPPPStreamURL(embed, embedURL)
-	if media == "" {
-		media = extraAdultHLS(embed, embedURL)
-	}
-	if media != "" {
-		return media, embedURL, nil
-	}
-	// One nested player frame is supported, with every hop checked against
-	// PPP's trusted site/CDN hosts to avoid creating an open proxy.
-	nestedFrame := extraAdultFrame(embedURL, embed)
-	if nestedFrame == "" || adultSafeURL(embedURL, nestedFrame, sourcePPP) == "" {
-		return "", embedURL, errors.New("PPP 嵌入播放器沒有提供可辨識的 HLS／MP4 網址")
-	}
-	nested, nestedURL, err := extraAdultFetch(ctx, d, sourcePPP, nestedFrame, embedURL)
-	if err != nil {
-		return "", nestedURL, fmt.Errorf("PPP 第二層播放器讀取失敗：%w", err)
-	}
-	media = extraAdultPPPStreamURL(nested, nestedURL)
-	if media == "" {
-		media = extraAdultHLS(nested, nestedURL)
-	}
-	if media == "" {
-		return "", nestedURL, errors.New("PPP 播放器沒有回傳有效的 HLS／MP4 網址")
-	}
-	return media, nestedURL, nil
+	routes, err := d.resolveExtraAdultPPPStreams(ctx, body, page)
+	if err != nil { return "", page, err }
+	return routes[0].URL, routes[0].Referer, nil
 }
+
 
 // extraAdult91PornaPlayScriptURL prefers the exact script src emitted by the
 // embed page. Rebuilding only img/u used to drop additional signed arguments
@@ -743,15 +773,13 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 	base:=extraAdultBaseURL(source);page:=firstNonEmpty(task.Chapter.PageURL,strings.TrimPrefix(task.Chapter.ID,prefix));if page==""{page=extraAdultDetailURL(source,id)};body,final,e:=extraAdultFetchWithUserAgent(ctx,d,source,page,base+"/",userAgent);if e!=nil{return providerMedia{},fmt.Errorf("%s 播放頁讀取失敗：%w",extraAdultSourceName(source),e)}
 	switch source{
 	case sourcePPP:
-		media, referer, resolveErr := d.resolveExtraAdultPPPStream(ctx, body, final)
+		routes, resolveErr := d.resolveExtraAdultPPPStreams(ctx, body, final)
 		if resolveErr != nil {
 			return providerMedia{}, resolveErr
 		}
-		if !isProviderHTTPMediaURL(media) {
-			return providerMedia{}, errors.New("PPP 頁面沒有找到有效的 HLS／MP4 播放網址")
-		}
-		cred := &providerMediaCredentials{referer: referer, userAgent: adultUserAgent}
-		return d.prepareWebProviderMedia(ctx, providerMedia{URL: media, Referer: referer, credentials: cred, StandardHTTP: runtime.GOOS == "android"}, "PPP")
+		primary := routes[0]
+		primary.Variants = append([]providerMedia(nil), routes[1:]...)
+		return d.prepareWebProviderMediaWithFallback(ctx, primary, "PPP")
 	case sourceMadou:
 		frame:=extraAdultFrame(final,body);u,err:=url.Parse(frame);if err!=nil||u.Scheme!="https"||!strings.EqualFold(u.Hostname(),"dash.madou.club")||u.User!=nil{return providerMedia{},errors.New("madou 播放器分享網址無效")};share,surl,err:=extraAdultFetch(ctx,d,source,frame,final);if err!=nil{return providerMedia{},err};token:="";if m:=regexp.MustCompile("(?i)\\bvar\\s+token\\s*=\\s*['\\x22]([^'\\x22]*)['\\x22]").FindStringSubmatch(share);len(m)>1{token=m[1]};media:="";if m:=regexp.MustCompile("(?i)\\bvar\\s+m3u8\\s*=\\s*['\\x22]([^'\\x22]+)['\\x22]").FindStringSubmatch(share);len(m)>1{media=adultResolvePlaybackURL(surl,m[1])};if media==""{if m:=regexp.MustCompile("(?i)['\\x22](/videos/[^'\\x22]+\\.m3u8[^'\\x22]*)['\\x22]").FindStringSubmatch(share);len(m)>1{media=adultResolvePlaybackURL(madouDashBaseURL+"/",m[1])}};if media==""{return providerMedia{},errors.New("madou 分享頁沒有提供 HLS 播放網址")};if token!=""{u,_:=url.Parse(media);q:=u.Query();if q.Get("token")==""{q.Set("token",token);u.RawQuery=q.Encode();media=u.String()}};cred:=&providerMediaCredentials{referer:surl,userAgent:adultUserAgent};return d.prepareWebProviderMedia(ctx,providerMedia{URL:media,Referer:surl,credentials:cred,StandardHTTP:runtime.GOOS=="android"},"madou")
 	case sourceSupJav:

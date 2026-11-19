@@ -561,3 +561,49 @@ func TestExtraAdultRPZFallbackIsEnabledOnlyFor91PornaAndPPP(t *testing.T) {
 		})
 	}
 }
+
+func TestExtraAdultPPPStreamURLsCollectsPlayerCandidates(t *testing.T) {
+	body := "window.player = {file:'https://cdn-a.example.test/first.m3u8', backup:'https://cdn-b.example.test/second.m3u8'}; " +
+		"<source src='https://cdn-c.example.test/fallback.mp4'>"
+	got := extraAdultPPPStreamURLs(body, "https://cdnlab.live/embed/abc123")
+	want := []string{
+		"https://cdn-a.example.test/first.m3u8",
+		"https://cdn-b.example.test/second.m3u8",
+		"https://cdn-c.example.test/fallback.mp4",
+	}
+	if len(got) != len(want) { t.Fatalf("PPP candidates = %#v, want %#v", got, want) }
+	for i := range want {
+		if got[i] != want[i] { t.Fatalf("PPP candidate %d=%q, want %q", i, got[i], want[i]) }
+	}
+}
+
+func TestResolveExtraAdultPPPUsesSecondPlaylistWhenFirstFails(t *testing.T) {
+	const pageURL = "https://ppp.porn/v/multi/"
+	const firstURL = "https://cdnlab.live/first.m3u8"
+	const secondURL = "https://cdnlab.live/second.m3u8"
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch {
+		case request.URL.Host == "ppp.porn" && request.URL.Path == "/v/multi/":
+			return sourceFixtureResponse(request, http.StatusOK,
+				"window.player={file:'"+firstURL+"',backup:'"+secondURL+"'};"), nil
+		case request.URL.String() == firstURL:
+			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
+		case request.URL.String() == secondURL:
+			return sourceFixtureResponse(request, http.StatusOK, "#EXTM3U\n#EXTINF:6,\nsegment.ts\n#EXT-X-ENDLIST\n"), nil
+		default:
+			return nil, fmt.Errorf("unexpected PPP request: %s", request.URL)
+		}
+	})
+	chapter := Chapter{
+		ID: providerChapterID(sourcePPP, "multi", pageURL),
+		Source: sourcePPP, Title: "正片", PageURL: pageURL, Referer: pageURL,
+		VideoURL: "adult-page://" + pageURL,
+	}
+	media, err := d.resolveExtraAdultMedia(context.Background(), Task{
+		DramaID: providerDramaID(sourcePPP, "multi"), Chapter: chapter, Index: 1,
+	})
+	if err != nil { t.Fatalf("PPP should move to the next playlist before returning an error: %v", err) }
+	if media.URL != secondURL || !strings.HasPrefix(media.Playlist, "#EXTM3U") {
+		t.Fatalf("PPP did not select the playable second route: %#v", media)
+	}
+}

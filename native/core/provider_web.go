@@ -146,3 +146,53 @@ func (d *Downloader) prepareWebProviderMedia(ctx context.Context, media provider
 	}
 	return media, nil
 }
+
+func (d *Downloader) prepareWebProviderMediaWithFallback(ctx context.Context, media providerMedia, sourceName string) (providerMedia, error) {
+	candidates := append([]providerMedia{media}, media.Variants...)
+	seen := map[string]bool{}
+	var lastErr error
+	for index, candidate := range candidates {
+		if !isProviderHTTPMediaURL(candidate.URL) {
+			continue
+		}
+		identity := nativePlaybackMediaIdentity(candidate)
+		if seen[identity] {
+			continue
+		}
+		seen[identity] = true
+		candidate.Variants = nil
+		parsed, err := url.Parse(candidate.URL)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		prepared := candidate
+		if strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
+			prepared, err = d.prepareWebProviderMedia(ctx, candidate, sourceName)
+			if err != nil {
+				lastErr = err
+				if ctx.Err() != nil {
+					return providerMedia{}, ctx.Err()
+				}
+				continue
+			}
+		}
+		for _, fallback := range candidates[index+1:] {
+			if !isProviderHTTPMediaURL(fallback.URL) {
+				continue
+			}
+			key := nativePlaybackMediaIdentity(fallback)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			fallback.Variants = nil
+			prepared.Variants = append(prepared.Variants, fallback)
+		}
+		return prepared, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("%s沒有可用的播放線路", sourceName)
+	}
+	return providerMedia{}, lastErr
+}
