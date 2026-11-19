@@ -358,7 +358,7 @@ func TestDuoduoKeepsAllPosterCandidatesInsideNestedFields(t *testing.T) {
 }
 
 func TestDuoduoPosterRaceStartsOriginFallbackWhenEdgeIsSlow(t *testing.T) {
-	image := posterTestJPEGVariant(t, 71)
+	image := posterTestJPEGSize(t, 120, 180)
 	var originCalls, proxyCalls atomic.Int32
 	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Hostname() {
@@ -394,7 +394,7 @@ func TestDuoduoPosterRaceStartsOriginFallbackWhenEdgeIsSlow(t *testing.T) {
 	}
 }
 func TestDuoduoPosterRaceDoesNotStartOriginWhenEdgeIsFast(t *testing.T) {
-	image := posterTestJPEGVariant(t, 72)
+	image := posterTestJPEGSize(t, 120, 180)
 	var originCalls, proxyCalls atomic.Int32
 	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Hostname() == "wsrv.nl" {
@@ -421,7 +421,7 @@ func TestDuoduoPosterRaceDoesNotStartOriginWhenEdgeIsFast(t *testing.T) {
 	}
 }
 func TestDuoduoPosterRaceFallsBackImmediatelyWhenEdgeFails(t *testing.T) {
-	image := posterTestJPEGVariant(t, 73)
+	image := posterTestJPEGSize(t, 120, 180)
 	var originCalls, proxyCalls atomic.Int32
 	client := &http.Client{Transport: posterTestRoundTripper(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Hostname() == "wsrv.nl" {
