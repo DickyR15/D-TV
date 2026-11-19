@@ -475,7 +475,15 @@ func ikanbotBuildChapters(sourceID, pageURL string, lines []ikanbotLine) []Chapt
 		seenURLs map[string]bool
 	}
 	selected := make(map[int]*selectedEpisode)
-	for _, line := range lines {
+	orderedLines := append([]ikanbotLine(nil), lines...)
+	sort.SliceStable(orderedLines, func(i, j int) bool {
+		left, right := ikanbotQuality(orderedLines[i].Flag), ikanbotQuality(orderedLines[j].Flag)
+		if left != right {
+			return left > right
+		}
+		return len(orderedLines[i].Episodes) > len(orderedLines[j].Episodes)
+	})
+	for _, line := range orderedLines {
 		for index, episode := range line.Episodes {
 			order := episode.Order
 			if order <= 0 {

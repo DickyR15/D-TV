@@ -399,6 +399,7 @@ func TestIkanbotAutomaticRouteSelectionPrefersHighestQuality(t *testing.T) {
 			t.Fatalf("automatic route %d = %q, want %q", index, choice.media[index].URL, address)
 		}
 	}
+}
 
 func TestIkanbotQualityLabelsDoNotBecomeEpisodeNumbers(t *testing.T) {
 	for _, label := range []string{"720", "720P", "1080", "1080p", "480"} {
