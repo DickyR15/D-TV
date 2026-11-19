@@ -551,7 +551,6 @@ func (d *Downloader) ikanbotPreferHighestHLS(ctx context.Context, media provider
 	if media.Playlist == "" || !ikanbotIsHLSURL(media.URL) {
 		return media
 	}
-	client := d.providerMediaHTTPClient(media)
 	for depth := 0; depth < 6; depth++ {
 		lines := strings.Split(strings.ReplaceAll(media.Playlist, "\r\n", "\n"), "\n")
 		selectedLines, height, master := nativeHLSSelect(lines, media.Quality)

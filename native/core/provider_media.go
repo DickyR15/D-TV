@@ -163,10 +163,10 @@ func (d *Downloader) providerURLCandidates(raw string) []string {
 		source == sourceMadou || source == source91Porna {
 		return []string{raw}
 	}
-	parsed, _ := url.Parse(raw)
 	d.providerMu.Lock()
 	preferred := d.providerHosts[source]
 	d.providerMu.Unlock()
+	parsed, _ = url.Parse(raw)
 	var candidates []string
 	seen := map[string]bool{}
 	add := func(candidate string) {
