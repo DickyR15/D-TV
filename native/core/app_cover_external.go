@@ -545,15 +545,15 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		address: "https://static.tvmaze.com/uploads/images/medium_portrait/213/533462.jpg",
 	},
 	{
-		// Duoduo ID 1192 is the 2025 Japanese anime デキちゃうまで婚.
-		// Use the official programme site's key visual because the source CDN
-		// has no public DNS record. Require the exact ID, anime category and year.
+		// Duoduo's 2025 Japanese anime デキちゃうまで婚.
+		// Duplicate catalogue IDs are common, so match the exact title, Duoduo
+		// source, anime type and year rather than pinning one catalogue ID.
 		title: "奉子成婚",
 		source: sourceDuoduo,
-		sourceID: "1192",
 		year: "2025",
 		workType: "anime",
 		preferred: true,
+		overrideProvider: true,
 		address: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 	},
 	{
