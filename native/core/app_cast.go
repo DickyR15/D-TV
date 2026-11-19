@@ -19,10 +19,11 @@ import (
 )
 
 type castDevice struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	control string
-	service string
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	control      string
+	service      string
+	identityKeys []string
 }
 
 type nativeCast struct {
@@ -34,7 +35,11 @@ type nativeCast struct {
 }
 
 type castDescriptionDevice struct {
-	Name     string `xml:"friendlyName"`
+	Name         string `xml:"friendlyName"`
+	UDN          string `xml:"UDN"`
+	Manufacturer string `xml:"manufacturer"`
+	ModelName    string `xml:"modelName"`
+	ModelNumber  string `xml:"modelNumber"`
 	Services []struct {
 		Type    string `xml:"serviceType"`
 		Control string `xml:"controlURL"`
@@ -110,6 +115,59 @@ func castSearchLocations(ctx context.Context) []string {
 	return locations
 }
 
+func castDescriptionUDN(device castDescriptionDevice) string {
+	if value := strings.TrimSpace(device.UDN); value != "" {
+		return strings.ToLower(value)
+	}
+	for _, child := range device.Devices {
+		if value := castDescriptionUDN(child); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func castDescriptionModel(device castDescriptionDevice) string {
+	parts := []string{strings.TrimSpace(device.Manufacturer), strings.TrimSpace(device.ModelName), strings.TrimSpace(device.ModelNumber)}
+	value := strings.ToLower(strings.Join(strings.Fields(strings.Join(parts, " ")), " "))
+	if value != "" {
+		return value
+	}
+	for _, child := range device.Devices {
+		if value := castDescriptionModel(child); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// UDN is the strongest renderer identity. Some boxes expose several UDNs
+// for the same UPnP renderer; same-host manufacturer/model is a safe alias.
+func castDeviceIdentityKeys(location string, device castDescriptionDevice) []string {
+	keys := make([]string, 0, 2)
+	if udn := castDescriptionUDN(device); udn != "" {
+		keys = append(keys, "udn:"+udn)
+	}
+	parsed, err := url.Parse(location)
+	if err == nil && parsed.Hostname() != "" {
+		if model := castDescriptionModel(device); model != "" {
+			keys = append(keys, "model:"+strings.ToLower(parsed.Hostname())+"|"+model)
+		}
+	}
+	if len(keys) == 0 && strings.TrimSpace(location) != "" {
+		keys = append(keys, "location:"+strings.TrimSpace(location))
+	}
+	return keys
+}
+
+func castDeviceIdentity(location string, device castDescriptionDevice) string {
+	keys := castDeviceIdentityKeys(location, device)
+	if len(keys) == 0 {
+		return strings.TrimSpace(location)
+	}
+	return keys[0]
+}
+
 func castTransportService(device castDescriptionDevice) (string, string, bool) {
 	for _, service := range device.Services {
 		if strings.Contains(service.Type, ":service:AVTransport:") {
@@ -157,7 +215,9 @@ func castDescribe(ctx context.Context, location string) (castDevice, error) {
 	if name == "" {
 		name = base.Hostname()
 	}
-	return castDevice{ID: location, Name: name, control: base.ResolveReference(reference).String(), service: service}, nil
+	keys := castDeviceIdentityKeys(location, description.Device)
+	return castDevice{ID: castDeviceIdentity(location, description.Device), Name: name,
+		control: base.ResolveReference(reference).String(), service: service, identityKeys: keys}, nil
 }
 
 func (engine *nativeEngine) castDiscover(ctx context.Context) []castDevice {
@@ -175,10 +235,28 @@ func (engine *nativeEngine) castDiscover(ctx context.Context) []castDevice {
 	known := map[string]castDevice{}
 	items := []castDevice{}
 	for _, device := range devices {
-		if device.ID != "" {
-			known[device.ID] = device
-			items = append(items, device)
+		if device.ID == "" {
+			continue
 		}
+		keys := device.identityKeys
+		if len(keys) == 0 {
+			keys = []string{device.ID}
+		}
+		duplicate := false
+		for _, key := range keys {
+			if _, exists := known[key]; exists {
+				duplicate = true
+				break
+			}
+		}
+		if duplicate {
+			continue
+		}
+		for _, key := range keys {
+			known[key] = device
+		}
+		known[device.ID] = device
+		items = append(items, device)
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
 	engine.cast.mu.Lock()

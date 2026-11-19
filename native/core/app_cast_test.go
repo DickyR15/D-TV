@@ -142,3 +142,30 @@ func TestCastStreamServesRewrittenPlaylistsOnLAN(t *testing.T) {
 		}
 	}
 }
+
+func TestCastDeviceIdentityDeduplicatesRendererAliases(t *testing.T) {
+	first := castDescriptionDevice{
+		Name: "Amlogic_GTKing_PRO", UDN: "uuid:renderer-001",
+		Manufacturer: "Amlogic", ModelName: "GT-KING PRO",
+	}
+	second := castDescriptionDevice{
+		Name: "GTKing_PRO-95[DLNA]", UDN: "uuid:renderer-002",
+		Manufacturer: "Amlogic", ModelName: "GT-KING PRO",
+	}
+	firstKeys := castDeviceIdentityKeys("http://192.168.50.95:49152/desc.xml", first)
+	secondKeys := castDeviceIdentityKeys("http://192.168.50.95:49153/root.xml", second)
+	seen := map[string]bool{}
+	for _, key := range firstKeys { seen[key] = true }
+	duplicate := false
+	for _, key := range secondKeys { if seen[key] { duplicate = true; break } }
+	if !duplicate {
+		t.Fatalf("same Amlogic renderer advertised through two locations was not recognised: %v / %v", firstKeys, secondKeys)
+	}
+}
+
+func TestCastDeviceIdentityKeepsSeparateHostsSeparate(t *testing.T) {
+	device := castDescriptionDevice{UDN: "uuid:renderer", Manufacturer: "Amlogic", ModelName: "GT-KING PRO"}
+	first := castDeviceIdentity("http://192.168.50.95:49152/desc.xml", device)
+	second := castDeviceIdentity("http://192.168.50.96:49152/desc.xml", device)
+	if first == second { t.Fatalf("different network devices were merged: %q", first) }
+}
