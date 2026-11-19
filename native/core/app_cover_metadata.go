@@ -303,6 +303,16 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 	case sourceHanxiaoquan:
 		fresh, _, err := d.fetchHanxiaoquanDetail(ctx, id)
 		return nativeCoverAddressesFromDrama(fresh), err
+	case sourceIkanBot:
+		fresh, _, err := d.fetchIkanbotDetail(ctx, id)
+		return nativeCoverAddressesFromDrama(fresh), err
+	case sourceHeitao:
+		lookupID := id
+		if candidate := strings.TrimSpace(drama.SourceID); webProviderNumericID.MatchString(candidate) {
+			lookupID = candidate
+		}
+		fresh, _, err := d.fetchHeitaoDetailWithFallback(ctx, id, lookupID, drama.Title)
+		return nativeCoverAddressesFromDrama(fresh), err
 	case sourceGuipian:
 		fresh, _, err := d.fetchGuipianDetail(ctx, id)
 		return nativeCoverAddressesFromDrama(fresh), err
