@@ -319,9 +319,6 @@ func (d *Downloader) nativeCoverAddresses(ctx context.Context, drama nativeDrama
 	case sourceChaoliu:
 		fresh, _, err := d.fetchChaoliuDetail(ctx, id)
 		return nativeCoverAddressesFromDrama(fresh), err
-	case sourceIkanBot:
-		fresh, _, err := d.fetchIkanbotDetail(ctx, id)
-		return nativeCoverAddressesFromDrama(fresh), err
 	case sourceMissAV:
 		fresh, _, err := d.fetchAdultDetail(ctx, source, id)
 		return nativeCoverAddressesFromDrama(fresh), err
