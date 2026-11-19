@@ -380,7 +380,7 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 		regexp.MustCompile(`(?is)\b(?:src|file|url)\s*:\s*['"]([^'"]+)['"]`),
 	}
 	candidates := make([]string, 0, 32)
-	fullStreamPattern := regexp.MustCompile(`(?i)https://[^"'< >[:space:]\\]+/stream/[^"'< >[:space:]\\]+\\.m3u8(?:\\?[^"'< >[:space:]\\]*)?`)
+	fullStreamPattern := regexp.MustCompile(`(?i)https://[^"'<>[:space:]\\]+/stream/[^"'<>[:space:]\\]+\.m3u8(?:\?[^"'<>[:space:]\\]*)?`)
 	for _, match := range fullStreamPattern.FindAllString(body, 64) {
 		candidates = append(candidates, match)
 	}
@@ -872,7 +872,7 @@ func extraAdult91PornaMediaURL(body, page string) string {
 	return ""
 }
 
-var extraAdult91PornaMediaIDPattern = regexp.MustCompile(`(?i)\\bdata-video\\s*=\\s*['"]([0-9]{1,20})['"]`)
+var extraAdult91PornaMediaIDPattern = regexp.MustCompile(`(?i)\bdata-video\s*=\s*['"]([0-9]{1,20})['"]`)
 
 // The current upstream module resolves detail -> data-video media ID ->
 // POST /api/videos/{id}/playback. Prefer that documented API path; the older
@@ -1839,46 +1839,48 @@ func extraAdult91PornaMediaURL(body, page string) string {
 }
 
 func (d *Downloader) resolveExtraAdult91PornaAPI(ctx context.Context, sourceID string, body, page string) (providerMedia, error) {
-	type detailPage struct {
-		body string
-		url  string
+	tryPage := func(candidateBody, candidateURL string) (providerMedia, bool, error) {
+		mediaID := extraAdult91PornaMediaID(candidateBody)
+		if mediaID == "" {
+			return providerMedia{}, false, nil
+		}
+		media, err := d.fetchExtraAdult91PornaPlayback(ctx, mediaID, candidateURL)
+		if err != nil {
+			return providerMedia{}, false, err
+		}
+		return media, true, nil
 	}
-	pages := []detailPage{{body: body, url: page}}
+	if media, ok, err := tryPage(body, page); ok || err != nil {
+		return media, err
+	}
+	var lastErr error
 	for _, path := range []string{
 		"/comic/index/avdetail?video_key=" + url.QueryEscape(sourceID),
 		"/comic/index/detail?video_key=" + url.QueryEscape(sourceID),
 	} {
 		address := ninetyOneBaseURL + path
-		duplicate := false
-		for _, existing := range pages {
-			if existing.url == address {
-				duplicate = true
-				break
-			}
-		}
-		if duplicate {
+		if address == page {
 			continue
 		}
-		pageBody, finalURL, fetchErr := extraAdultFetchWithUserAgent(
+		candidateBody, finalURL, fetchErr := extraAdultFetchWithUserAgent(
 			ctx, d, source91Porna, address, ninetyOneBaseURL+"/", adultUserAgent,
 		)
-		if fetchErr == nil {
-			pages = append(pages, detailPage{body: pageBody, url: finalURL})
-		}
-	}
-	var lastErr error
-	for _, candidate := range pages {
-		mediaID := extraAdult91PornaMediaID(candidate.body)
-		if mediaID == "" {
+		if fetchErr != nil {
+			lastErr = fetchErr
+			if ctx.Err() != nil {
+				return providerMedia{}, ctx.Err()
+			}
 			continue
 		}
-		media, err := d.fetchExtraAdult91PornaPlayback(ctx, mediaID, candidate.url)
-		if err == nil {
+		media, ok, resolveErr := tryPage(candidateBody, finalURL)
+		if ok {
 			return media, nil
 		}
-		lastErr = err
-		if ctx.Err() != nil {
-			return providerMedia{}, ctx.Err()
+		if resolveErr != nil {
+			lastErr = resolveErr
+			if ctx.Err() != nil {
+				return providerMedia{}, ctx.Err()
+			}
 		}
 	}
 	if lastErr != nil {
@@ -1895,7 +1897,6 @@ func extraAdultHLS(body,page string)string{
 func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(providerMedia,error){
 	source,id,ok:=splitProviderDramaID(task.DramaID);prefix:=providerChapterID(source,id,"");if !ok||!extraAdultValidID(source,id)||!strings.HasPrefix(task.Chapter.ID,prefix){return providerMedia{},errors.New("進階片源分集資訊無效，請重新整理")}
 	userAgent:=adultUserAgent
-	if source==source91Porna { userAgent=ninetyOneMobileUserAgent }
 	base:=extraAdultBaseURL(source);page:=firstNonEmpty(task.Chapter.PageURL,strings.TrimPrefix(task.Chapter.ID,prefix));if page==""{page=extraAdultDetailURL(source,id)};body,final,e:=extraAdultFetchWithUserAgent(ctx,d,source,page,base+"/",userAgent);if e!=nil{return providerMedia{},fmt.Errorf("%s 播放頁讀取失敗：%w",extraAdultSourceName(source),e)}
 	switch source{
 	case sourcePPP:
