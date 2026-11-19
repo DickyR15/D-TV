@@ -384,7 +384,9 @@ func adultParseCards(body, base, source string) []Drama {
 			ChannelName: adultSourceName(source), CategoryName: adultSourceName(source),
 			TotalEpisode: 1, EpisodeCount: 1,
 		})
-		if len(items) >= 100 {
+		// Match the upstream MissAV module's 500-card page limit.
+		// A 100-card cap silently drops valid entries from larger pages.
+		if len(items) >= 500 {
 			break
 		}
 	}
@@ -450,6 +452,34 @@ func (d *Downloader) fetchAdultCategories(ctx context.Context, source string) ([
 	return categories, nil
 }
 
+// adultHasMorePages follows MissAV's published pagination links (?page=N).
+// Do not infer this from the number of parsed cards: valid pages can contain
+// fewer than 20 cards, and markup changes must not silently stop pagination.
+func adultHasMorePages(body string, page int) bool {
+	document, err := htmlnet.Parse(strings.NewReader(body))
+	if err != nil {
+		return false
+	}
+	maxPage := 0
+	for _, anchor := range providerHTMLNodes(document, func(node *htmlnet.Node) bool {
+		return node.Type == htmlnet.ElementNode && node.Data == "a"
+	}) {
+		href := strings.TrimSpace(providerHTMLAttr(anchor, "href"))
+		if href == "" {
+			continue
+		}
+		parsed, parseErr := url.Parse(href)
+		if parseErr != nil {
+			continue
+		}
+		pageNumber, parseErr := strconv.Atoi(parsed.Query().Get("page"))
+		if parseErr == nil && pageNumber > maxPage {
+			maxPage = pageNumber
+		}
+	}
+	return maxPage > page
+}
+
 func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page int, category, query string) ([]Drama, bool, error) {
 	source = canonicalProviderSource(source)
 	if source != sourceMissAV { return d.fetchExtraAdultCatalog(ctx, source, page, category, query) }
@@ -487,7 +517,7 @@ func (d *Downloader) fetchAdultCatalog(ctx context.Context, source string, page 
 		return nil, false, fmt.Errorf("%s 目錄讀取失敗：%w", adultSourceName(source), err)
 	}
 	items := adultParseCards(body, base, source)
-	return items, len(items) >= 20, nil
+	return items, adultHasMorePages(body, page), nil
 }
 
 func adultEncodeBase(value, base int) string {

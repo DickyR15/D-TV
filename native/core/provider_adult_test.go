@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -96,6 +97,65 @@ func TestAdultCardParsingAndLazyCoverFallback(t *testing.T) {
 		items[0].Title != "SAMPLE-543" ||
 		items[0].Cover != "https://missav.live/covers/sample.webp" {
 		t.Fatalf("unexpected MISS AV card: %#v", items[0])
+	}
+}
+
+func TestAdultMissAVPaginationUsesPublishedPageLinks(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		page int
+		want bool
+	}{
+		{
+			name: "next page remains available with fewer than twenty cards",
+			body: `<nav><a href="/cn/new?page=1">1</a><a href="/cn/new?page=2">2</a></nav>`,
+			page: 1,
+			want: true,
+		},
+		{
+			name: "search pagination recognizes a later page",
+			body: `<nav><a href="/cn/search/test?page=3">3</a></nav>`,
+			page: 2,
+			want: true,
+		},
+		{
+			name: "last advertised page closes pagination",
+			body: `<nav><a href="/cn/new?page=1">1</a><a href="/cn/new?page=2">2</a></nav>`,
+			page: 2,
+			want: false,
+		},
+		{
+			name: "genre links without a page number do not extend pagination",
+			body: `<nav><a href="/cn/genres/uncensored">分類</a><a href="/cn/new">最新</a></nav>`,
+			page: 1,
+			want: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := adultHasMorePages(test.body, test.page); got != test.want {
+				t.Fatalf("adultHasMorePages(page=%d) = %v, want %v", test.page, got, test.want)
+			}
+		})
+	}
+}
+
+func TestAdultMissAVCardParserKeepsMoreThanOneHundredEntries(t *testing.T) {
+	var body strings.Builder
+	for index := 0; index < 125; index++ {
+		slug := fmt.Sprintf("sample-%03d", index)
+		fmt.Fprintf(&body,
+			`<div class="thumbnail group"><a href="/cn/%s"><img data-src="/covers/%s.webp" alt="%s"></a><div class="my-2">%s</div></div>`,
+			slug, slug, slug, slug,
+		)
+	}
+	items := adultParseCards(body.String(), missAVBaseURL, sourceMissAV)
+	if len(items) != 125 {
+		t.Fatalf("MISS AV parser returned %d cards, want all 125", len(items))
+	}
+	if items[124].SourceID != "sample-124" {
+		t.Fatalf("last parsed card = %q, want sample-124", items[124].SourceID)
 	}
 }
 
