@@ -575,3 +575,97 @@ func TestDuoduoPosterPairSkipsCooledEdgeNodeAndUsesOrigin(t *testing.T) {
 		t.Fatal("successful origin request incorrectly cleared the unrelated edge node cooldown")
 	}
 }
+
+
+func TestDuoduoProviderPosterValidationRejectsTinyAntiHotlinkPlaceholder(t *testing.T) {
+	if err := nativeValidateDuoduoProviderPoster(posterTestJPEG(t)); err == nil {
+		t.Fatal("tiny but syntactically valid image should be rejected as a placeholder")
+	}
+	if err := nativeValidateDuoduoProviderPoster(posterTestJPEGSize(t, 120, 180)); err != nil {
+		t.Fatalf("normal poster dimensions should pass: %v", err)
+	}
+}
+
+func TestDuoduoCachedProviderPlaceholderIsEvicted(t *testing.T) {
+	downloader := &Downloader{client: &http.Client{}, cfg: defaultConfig()}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	if err := os.MkdirAll(cache.directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	key := strings.Repeat("a", 64)
+	path := filepathJoinCover(cache.directory, key+".img")
+	placeholder := posterTestJPEG(t)
+	if err := os.WriteFile(path, placeholder, 0600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	cache.entries[key] = nativeCoverEntry{
+		size: int64(len(placeholder)), updatedAt: now, usedAt: now,
+	}
+	cache.size = int64(len(placeholder))
+
+	if _, ok := cache.cachedCoverPath(key, sourceDuoduo, "provider"); ok {
+		t.Fatal("cached anti-hotlink placeholder should not be returned")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("invalid cached placeholder was not removed: %v", err)
+	}
+	if cache.size != 0 {
+		t.Fatalf("cache size after placeholder eviction = %d, want 0", cache.size)
+	}
+}
+
+func TestDuoduoProviderPosterTinyPlaceholderFallsBackToOrigin(t *testing.T) {
+	const originURL = "https://img.example.test/poster.jpg"
+	edgeURL := duoduoPosterProxyURL(originURL)
+	placeholder := posterTestJPEG(t)
+	poster := posterTestJPEGSize(t, 120, 180)
+	var edgeCalls, originCalls int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "wsrv.nl":
+			edgeCalls++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(placeholder)),
+				ContentLength: int64(len(placeholder)),
+				Request: request,
+			}, nil
+		case "img.example.test":
+			originCalls++
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{"Content-Type": []string{"image/jpeg"}},
+				Body: io.NopCloser(bytes.NewReader(poster)),
+				ContentLength: int64(len(poster)),
+				Request: request,
+			}, nil
+		default:
+			return posterLookupJSONResponse(request, "unexpected poster request"), nil
+		}
+	})}
+	downloader := &Downloader{
+		client: client,
+		cfg: defaultConfig(),
+		providerHosts: map[string]string{sourceDuoduo: "https://323433ssdfd.top"},
+	}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	path, err := cache.load(context.Background(), nativeDrama{
+		ID: "duoduo:10998", Source: sourceDuoduo, SourceID: "10998",
+		Title: "佔位海報備援測試", Cover: originURL,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(data, poster) {
+		t.Fatal("Duoduo cached the tiny edge placeholder instead of the original poster")
+	}
+	if edgeCalls != 1 || originCalls != 1 {
+		t.Fatalf("Duoduo poster attempts edge=%d origin=%d; want one each (edge URL %s)", edgeCalls, originCalls, edgeURL)
+	}
+}
