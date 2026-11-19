@@ -26,7 +26,7 @@ type nativeCoverRepair struct {
 // cachedCoverPath checks the on-disk cache without starting a network request.
 // A verified fallback image can therefore render immediately while an origin
 // URL is slow or temporarily unreachable.
-func (cache *nativeCoverCache) cachedCoverPath(key string) (string, bool) {
+func (cache *nativeCoverCache) cachedCoverPath(key, source, cacheClass string) (string, bool) {
 	path := filepathJoinCover(cache.directory, key+".img")
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
@@ -35,7 +35,9 @@ func (cache *nativeCoverCache) cachedCoverPath(key string) (string, bool) {
 		return "", false
 	}
 	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() != entry.size {
+	if err != nil || !info.Mode().IsRegular() || info.Size() != entry.size ||
+		!nativeCoverCacheImageValid(source, cacheClass, path) {
+		_ = os.Remove(path)
 		delete(cache.entries, key)
 		cache.size -= entry.size
 		return "", false
@@ -63,7 +65,7 @@ func (cache *nativeCoverCache) cachedPrimaryCoverPath(drama nativeDrama) (string
 	}
 	referer := nativeCoverRefererForDrama(cache.downloader, drama, drama.Cover)
 	digest := sha256.Sum256([]byte(source + "\x00" + drama.Cover + "\x00" + referer))
-	return cache.cachedCoverPath(hex.EncodeToString(digest[:]))
+	return cache.cachedCoverPath(hex.EncodeToString(digest[:]), source, "provider")
 }
 
 func (cache *nativeCoverCache) cachedAlternativeCoverPath(
@@ -88,7 +90,7 @@ func (cache *nativeCoverCache) cachedAlternativeCoverPath(
 		referer = nativeCoverFallbackReferer(cache.downloader, drama, address)
 	}
 	digest := sha256.Sum256([]byte(source + "\x00" + cacheClass + "\x00" + address + "\x00" + referer))
-	return cache.cachedCoverPath(hex.EncodeToString(digest[:]))
+	return cache.cachedCoverPath(hex.EncodeToString(digest[:]), source, cacheClass)
 }
 
 // load keeps a strict source-preference order:
@@ -525,7 +527,8 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 	cache.mu.Lock()
 	var stalePath string
 	if entry, found := cache.entries[key]; found {
-		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Size() == entry.size {
+		if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() &&
+			info.Size() == entry.size && nativeCoverCacheImageValid(source, cacheClass, path) {
 			entry.usedAt = time.Now()
 			cache.entries[key] = entry
 			age := time.Since(entry.updatedAt)
@@ -537,6 +540,7 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 				stalePath = path
 			}
 		} else {
+			_ = os.Remove(path)
 			delete(cache.entries, key)
 			cache.size -= entry.size
 		}
@@ -597,7 +601,9 @@ func (cache *nativeCoverCache) loadAlternativeAddress(
 			attemptCtx, attemptCancel := context.WithTimeout(
 				requestCtx, nativeCoverAttemptTimeout(source, attempt.address, cacheClass),
 			)
-			data, downloadErr = cache.download(attemptCtx, attempt.address, attempt.referer)
+			data, downloadErr = cache.downloadAttempt(
+				attemptCtx, attempt.address, attempt.referer, source, cacheClass,
+			)
 			attemptCancel()
 			cache.recordDuoduoPosterAttempt(drama, attempt, index+1, started, data, downloadErr)
 			if downloadErr == nil {
