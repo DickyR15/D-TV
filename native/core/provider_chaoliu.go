@@ -103,10 +103,41 @@ func (d *Downloader) fetchChaoliuText(ctx context.Context,rawURL,referer string)
 	body,err:=d.fetchProviderText(ctx,rawURL,firstNonEmpty(referer,chaoliuSites[0]+"/"));if err!=nil{return "","",fmt.Errorf("潮流 AV 站點請求失敗：%w",err)}
 	finalURL:=rawURL
 	if chaoliuIsAgeGate(body) {
-		gate:=*parsed;gate.Path="/zh/chinese_IamOverEighteenYearsOld/19/index.html";gate.RawQuery="";gate.Fragment=""
-		if _,gateErr:=d.fetchProviderText(ctx,gate.String(),parsed.Scheme+"://"+parsed.Host+"/");gateErr!=nil{return "","",fmt.Errorf("潮流 AV 年齡確認頁無法通過：%w",gateErr)}
-		body,err=d.fetchProviderText(ctx,rawURL,finalURL);if err!=nil{return "","",err}
-		if chaoliuIsAgeGate(body){return "","",errors.New("潮流 AV 年齡確認頁仍未通過")}
+		gatePaths := []string{}
+		redirects := regexp.MustCompile("(?i)window\\.location\\s*=\\s*['\\x22]([^'\\x22]+)['\\x22]")
+		for _, match := range redirects.FindAllStringSubmatch(body, 8) {
+			if len(match) < 2 || !strings.Contains(strings.ToLower(match[1]), "iamover18yearsold") { continue }
+			path := match[1]
+			if target, parseErr := url.Parse(path); parseErr == nil && target.IsAbs() {
+				if !strings.EqualFold(target.Hostname(), parsed.Hostname()) { continue }
+				path = target.RequestURI()
+			}
+			if strings.HasPrefix(path, "/") && !containsString(gatePaths, path) { gatePaths = append(gatePaths, path) }
+		}
+		for _, path := range []string{
+			"/zh/chinese_IamOverEighteenYearsOld/19/index.html",
+			"/zh/chinese_IamOverEighteenYearsOld/19/",
+			"/zh/censored_IamOverEighteenYearsOld/19/index.html",
+		} {
+			if !containsString(gatePaths, path) { gatePaths = append(gatePaths, path) }
+		}
+		passed := false
+		for index, path := range gatePaths {
+			if index >= 4 { break }
+			gate := *parsed
+			gate.Path, gate.RawQuery, gate.Fragment = path, "", ""
+			gateBody, gateErr := d.fetchProviderText(ctx, gate.String(), parsed.Scheme+"://"+parsed.Host+"/")
+			if gateErr == nil && !chaoliuIsAgeGate(gateBody) && !chaoliuLooksOffsite(gateBody) {
+				passed = true
+				break
+			}
+		}
+		if !passed { return "", "", errors.New("潮流 AV 年齡確認頁無法通過") }
+		body, err = d.fetchProviderText(ctx, rawURL, finalURL)
+		if err != nil { return "", "", err }
+		if chaoliuIsAgeGate(body) || chaoliuLooksOffsite(body) {
+			return "", "", errors.New("潮流 AV 年齡確認後仍未取得有效頁面")
+		}
 	}
 	return body,finalURL,nil
 }

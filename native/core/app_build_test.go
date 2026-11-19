@@ -11,7 +11,7 @@ import (
 )
 
 func TestNativeBuildAuthorization(t *testing.T) {
-	for _, source := range []string{sourceHongguo, sourceHanxiaoquan, sourceGuipian, sourceDuoduo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, "unknown"} {
+	for _, source := range []string{sourceHongguo, sourceHanxiaoquan, sourceGuipian, sourceDuoduo, sourceHuangdou, sourceHuangguoVideo, sourceHuangguoAI, sourceCloudFront, sourceDSD, sourceChaoliu, "unknown"} {
 		allowed := nativeSourceAvailable(source)
 		for _, action := range []string{"catalog", "cached", "sourceStatus", "sourceJob", "cancelSourceJob", "detail", "followCheck", "cover", "prepareCover", "resolve", "enqueueDownloads", "localPlayback"} {
 			input := nativeInput{Action: action, Source: source, Drama: nativeDrama{ID: source + ":123", Source: source}}
