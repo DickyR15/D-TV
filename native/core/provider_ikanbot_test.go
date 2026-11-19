@@ -399,4 +399,61 @@ func TestIkanbotAutomaticRouteSelectionPrefersHighestQuality(t *testing.T) {
 			t.Fatalf("automatic route %d = %q, want %q", index, choice.media[index].URL, address)
 		}
 	}
+
+func TestIkanbotQualityLabelsDoNotBecomeEpisodeNumbers(t *testing.T) {
+	for _, label := range []string{"720", "720P", "1080", "1080p", "480"} {
+		if !ikanbotQualityOnlyLabel(label) {
+			t.Fatalf("quality label %q was not recognized", label)
+		}
+		if got := ikanbotEpisodeOrder(label, 1); got != 1 {
+			t.Fatalf("quality label %q became episode %d; want fallback episode 1", label, got)
+		}
+	}
+	for _, test := range []struct { name string; want int }{
+		{"第2集", 2}, {"EP03", 3}, {"Episode 4", 4}, {"第12話", 12},
+	} {
+		if got := ikanbotEpisodeOrder(test.name, 1); got != test.want {
+			t.Fatalf("episode label %q = %d, want %d", test.name, got, test.want)
+		}
+	}
+}
+
+func TestIkanbotBuildChaptersKeepsEpisodeOneWhenLineLabelIs720(t *testing.T) {
+	lines := []ikanbotLine{
+		{Flag: "720P", Episodes: []ikanbotEpisode{{Name: "720", URL: "https://cdn-a.example.test/720/1.m3u8", Order: 1}}},
+		{Flag: "1080P", Episodes: []ikanbotEpisode{{Name: "720", URL: "https://cdn-b.example.test/1080/1.m3u8", Order: 1}}},
+	}
+	chapters := ikanbotBuildChapters("1023899", "https://admin-api.aikanbot.com/play/1023899", lines)
+	if len(chapters) != 1 {
+		t.Fatalf("chapters = %d, want one episode: %#v", len(chapters), chapters)
+	}
+	if string(chapters[0].CurrentEpisode) != "1" || chapters[0].Title != "1" {
+		t.Fatalf("720 route label was not normalized to episode 1: %#v", chapters[0])
+	}
+	if chapters[0].PlayLine != "1080P" || len(chapters[0].PlaybackVariants) != 1 ||
+		!strings.Contains(chapters[0].PlaybackVariants[0], "cdn-a.example.test") {
+		t.Fatalf("highest quality primary and automatic backup were not selected: %#v", chapters[0])
+	}
+}
+
+func TestIkanbotImageCandidatesSupportsLazyAndSrcset(t *testing.T) {
+	body := "<div style=\"background-image:url('/poster/background.webp')\"><img src=\"data:image/gif;base64,placeholder\" data-original=\"/poster/original.jpg\" data-srcset=\"/poster/small.jpg 1x, /poster/large.jpg 2x\"></div>"
+	doc, err := htmlnet.Parse(strings.NewReader(body))
+	if err != nil { t.Fatal(err) }
+	var node *htmlnet.Node
+	for _, candidate := range providerHTMLNodes(doc, func(n *htmlnet.Node) bool {
+		return n.Type == htmlnet.ElementNode && n.Data == "img"
+	}) { node = candidate; break }
+	got := ikanbotImageCandidates(node, "https://admin-api.aikanbot.com/play/1023899")
+	want := []string{
+		"https://admin-api.aikanbot.com/poster/original.jpg",
+		"https://admin-api.aikanbot.com/poster/small.jpg",
+		"https://admin-api.aikanbot.com/poster/large.jpg",
+	}
+	if len(got) != len(want) { t.Fatalf("image candidates = %#v, want %#v", got, want) }
+	for index := range want {
+		if got[index] != want[index] { t.Fatalf("candidate %d=%q, want %q", index, got[index], want[index]) }
+	}
+}
+
 }

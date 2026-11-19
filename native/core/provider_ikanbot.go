@@ -71,25 +71,57 @@ func ikanbotCategoryPath(page int,category string)(string,error){
 	if page==1{return "/hot/index-"+category+".html",nil}
 	return fmt.Sprintf("/hot/index-%s-p-%d.html",category,page),nil
 }
-func ikanbotImage(node *htmlnet.Node,pageURL string)string{
-	if node==nil{return ""}
-	for _,attribute:=range []string{"data-original","data-src","data-lazy-src","data-lazyload","data-image","src"}{
-		raw:=strings.TrimSpace(providerHTMLAttr(node,attribute))
-		if raw==""||strings.HasPrefix(strings.ToLower(raw),"data:"){continue}
-		resolved:=resolveProviderURL(pageURL,raw)
-		if isProviderHTTPMediaURL(resolved){return resolved}
+func ikanbotImageCandidates(node *htmlnet.Node, pageURL string) []string {
+	if node == nil {
+		return nil
 	}
-	srcset:=strings.TrimSpace(providerHTMLAttr(node,"srcset"))
-	if srcset!=""{
-		for _,candidate:=range strings.Split(srcset,","){
-			fields:=strings.Fields(strings.TrimSpace(candidate))
-			if len(fields)==0{continue}
-			resolved:=resolveProviderURL(pageURL,fields[0])
-			if isProviderHTTPMediaURL(resolved){return resolved}
+	seen := map[string]bool{}
+	var result []string
+	add := func(raw string) {
+		raw = strings.TrimSpace(html.UnescapeString(raw))
+		if raw == "" || strings.HasPrefix(strings.ToLower(raw), "data:") ||
+			strings.HasPrefix(strings.ToLower(raw), "blob:") {
+			return
+		}
+		address := resolveProviderURL(pageURL, raw)
+		if !isProviderHTTPMediaURL(address) || seen[address] {
+			return
+		}
+		seen[address] = true
+		result = append(result, address)
+	}
+	for _, attribute := range []string{
+		"data-original", "data-original-src", "data-src", "data-lazy-src",
+		"data-lazyload", "data-image", "data-url", "data-bg", "src",
+	} {
+		add(providerHTMLAttr(node, attribute))
+	}
+	for _, attribute := range []string{"data-srcset", "data-lazy-srcset", "srcset"} {
+		for _, candidate := range strings.Split(providerHTMLAttr(node, attribute), ",") {
+			fields := strings.Fields(strings.TrimSpace(candidate))
+			if len(fields) > 0 {
+				add(fields[0])
+			}
 		}
 	}
-	return ""
+	style := providerHTMLAttr(node, "style")
+	backgroundPattern := regexp.MustCompile("(?i)url\\(\\s*['\\x22]?([^'\\x22)]+)")
+	for _, match := range backgroundPattern.FindAllStringSubmatch(style, 8) {
+		if len(match) > 1 {
+			add(match[1])
+		}
+	}
+	return result
 }
+
+func ikanbotImage(node *htmlnet.Node, pageURL string) string {
+	candidates := ikanbotImageCandidates(node, pageURL)
+	if len(candidates) == 0 {
+		return ""
+	}
+	return candidates[0]
+}
+
 func ikanbotFindCard(root *htmlnet.Node)[]*htmlnet.Node{
 	return providerHTMLNodes(root,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&providerHTMLClass(n,"item")})
 }
@@ -142,9 +174,13 @@ func ikanbotParseCards(root *htmlnet.Node,pageURL,category string)[]Drama{
 			}
 		}
 		if title==""{continue}
-		cover:=ikanbotImage(image,pageURL)
+		coverCandidates := ikanbotImageCandidates(image, pageURL)
+		cover := ""
+		if len(coverCandidates) > 0 {
+			cover = coverCandidates[0]
+		}
 		seen[id]=true
-		out=append(out,Drama{ID:providerDramaID(sourceIkanBot,id),Source:sourceIkanBot,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,ChannelName:"愛看機器人",CategoryName:ikanbotCategoryKind(category)})
+		out=append(out,Drama{ID:providerDramaID(sourceIkanBot,id),Source:sourceIkanBot,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,CoverCandidates:append([]string(nil),coverCandidates[1:]...),ChannelName:"愛看機器人",CategoryName:ikanbotCategoryKind(category)})
 		if len(out)>=500{break}
 	}
 	return out
@@ -163,7 +199,10 @@ func ikanbotParseSearch(root *htmlnet.Node,pageURL string)[]Drama{
 		for _,node:=range providerHTMLNodes(block,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="img"}){image=node;break}
 		if title==""&&image!=nil{title=providerHTMLAttr(image,"alt")}
 		title=providerHTMLPlainText(title);if title==""{continue};seen[m[1]]=true
-		out=append(out,Drama{ID:providerDramaID(sourceIkanBot,m[1]),Source:sourceIkanBot,SourceID:m[1],Title:truncate(title,512),Name:truncate(title,512),Cover:ikanbotImage(image,pageURL),CoverURL:ikanbotImage(image,pageURL),ChannelName:"愛看機器人",CategoryName:"影集"})
+		coverCandidates := ikanbotImageCandidates(image, pageURL)
+		cover := ""
+		if len(coverCandidates) > 0 { cover = coverCandidates[0] }
+		out=append(out,Drama{ID:providerDramaID(sourceIkanBot,m[1]),Source:sourceIkanBot,SourceID:m[1],Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,CoverCandidates:append([]string(nil),coverCandidates[1:]...),ChannelName:"愛看機器人",CategoryName:"影集"})
 		if len(out)>=100{break}
 	}
 	return out
@@ -196,6 +235,17 @@ func ikanbotSignToken(currentID,token string)string{
 func ikanbotQuality(flag string)int{
 	m:=regexp.MustCompile("(2160|1440|1080|720|480)").FindStringSubmatch(strings.ToLower(flag));if len(m)>1{n,_:=strconv.Atoi(m[1]);return n};return 0
 }
+func ikanbotQualityOnlyLabel(name string) bool {
+	value := strings.TrimSpace(strings.ToLower(name))
+	value = strings.TrimSuffix(value, "p")
+	switch value {
+	case "480", "720", "1080", "1440", "2160":
+		return true
+	default:
+		return false
+	}
+}
+
 func ikanbotEpisodeOrder(name string, fallback int) int {
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile("(?i)第\\s*0*([0-9]{1,4})\\s*[集話话期]"),
@@ -207,6 +257,9 @@ func ikanbotEpisodeOrder(name string, fallback int) int {
 				return order
 			}
 		}
+	}
+	if ikanbotQualityOnlyLabel(name) {
+		return fallback
 	}
 	if match := regexp.MustCompile("([0-9]{1,4})").FindStringSubmatch(name); len(match) > 1 {
 		if order, err := strconv.Atoi(match[1]); err == nil && order > 0 && order < 100000 {
@@ -335,6 +388,10 @@ func ikanbotParseLines(payload map[string]any) []ikanbotLine {
 		}
 	}
 	sort.SliceStable(lines, func(i, j int) bool {
+		leftQuality, rightQuality := ikanbotQuality(lines[i].Flag), ikanbotQuality(lines[j].Flag)
+		if leftQuality != rightQuality {
+			return leftQuality > rightQuality
+		}
 		return len(lines[i].Episodes) > len(lines[j].Episodes)
 	})
 	return lines
@@ -455,8 +512,10 @@ func ikanbotBuildChapters(sourceID, pageURL string, lines []ikanbotLine) []Chapt
 	for _, order := range orders {
 		entry := selected[order]
 		name := strings.TrimSpace(entry.episode.Name)
-		if name == "" {
-			name = fmt.Sprintf("第 %d 集", order)
+		if name == "" || ikanbotQualityOnlyLabel(name) {
+			// Some line APIs put a resolution label (e.g. "720") in the
+			// episode-name slot. The position is the actual episode.
+			name = strconv.Itoa(order)
 		}
 		chapters = append(chapters, Chapter{
 			ID: providerChapterID(sourceIkanBot, sourceID, strconv.Itoa(order)),
@@ -479,14 +538,39 @@ func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Dra
 	doc,body,final,err:=fetchIkanbotPage(ctx,d,pageURL,ikanbotBaseURL+"/");if err!=nil{return Drama{},nil,fmt.Errorf("愛看機器人作品詳情讀取失敗：%w",err)}
 	title:="";for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="h1"&&providerHTMLAttr(n,"id")=="video_title"}){title=providerHTMLText(n);break}
 	if title==""{title=providerHTMLPlainText(adultMetaValue(body,"og:title"))};if title==""{return Drama{},nil,errors.New("愛看機器人詳情缺少標題")}
-	var cover string;for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="img"}){if providerHTMLClass(n,"cover"){cover=ikanbotImage(n,final);break}};if cover==""{for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="img"}){cover=ikanbotImage(n,final);if cover!=""{break}}}
+	var coverCandidates []string
+	seenCover := map[string]bool{}
+	addCover := func(address string) {
+		address = strings.TrimSpace(address)
+		if address != "" && isProviderHTTPMediaURL(address) && !seenCover[address] {
+			seenCover[address] = true
+			coverCandidates = append(coverCandidates, address)
+		}
+	}
+	for _, node := range providerHTMLNodes(doc, func(n *htmlnet.Node) bool {
+		return n.Type == htmlnet.ElementNode && n.Data == "img" && providerHTMLClass(n, "cover")
+	}) {
+		for _, address := range ikanbotImageCandidates(node, final) { addCover(address) }
+	}
+	for _, key := range []string{"og:image", "twitter:image"} {
+		if raw := adultMetaValue(body, key); raw != "" {
+			addCover(resolveProviderURL(final, raw))
+		}
+	}
+	for _, node := range providerHTMLNodes(doc, func(n *htmlnet.Node) bool {
+		return n.Type == htmlnet.ElementNode && n.Data == "img"
+	}) {
+		for _, address := range ikanbotImageCandidates(node, final) { addCover(address) }
+	}
+	cover := ""
+	if len(coverCandidates) > 0 { cover = coverCandidates[0] }
 	currentID:=ikanbotInput(doc,"current_id");if currentID==""{currentID=sourceID};token:=ikanbotInput(doc,"e_token");mtype:=ikanbotInput(doc,"mtype");if token==""{return Drama{},nil,errors.New("愛看機器人缺少播放驗證資訊")}
 	lines,err:=d.fetchIkanbotLines(ctx,sourceID,currentID,token,mtype,final);if err!=nil{return Drama{},nil,err}
 	meta:=[]string{};for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="h3"&&providerHTMLClass(n,"meta")}){v:=providerHTMLText(n);if v!=""{meta=append(meta,v)}}
 	tags:=[]string{};year:="";for _,v:=range meta{if year==""&&regexp.MustCompile("^(19|20)[0-9]{2}$").MatchString(v){year=v};if strings.Contains(v,"/"){tags=append(tags,truncate(v,64))}}
 	chapters := ikanbotBuildChapters(sourceID, final, lines)
 	if len(chapters)==0{return Drama{},nil,errors.New("愛看機器人目前沒有可播放分集")}
-	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,OnlineDate:year,Tags:tags,TotalEpisode:len(chapters),EpisodeCount:len(chapters),ChannelName:"愛看機器人",CategoryName:"影集"}
+	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,CoverCandidates:append([]string(nil),coverCandidates[1:]...),OnlineDate:year,Tags:tags,TotalEpisode:len(chapters),EpisodeCount:len(chapters),ChannelName:"愛看機器人",CategoryName:"影集"}
 	return drama,chapters,nil
 }
 func ikanbotIsHLSURL(raw string) bool {
