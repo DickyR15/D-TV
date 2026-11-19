@@ -100,6 +100,78 @@ func TestAdultCardParsingAndLazyCoverFallback(t *testing.T) {
 	}
 }
 
+func TestAdultMissAVDetailPathParserRejectsNonVideoRoutes(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{path: "/cn/sone-543", want: "sone-543"},
+		{path: "/dm298/cn/sone-543", want: "sone-543"},
+		{path: "/cn/genres/uncensored-leak"},
+		{path: "/dm298/cn/genres/uncensored-leak"},
+		{path: "/cn/search/sample"},
+		{path: "/cn/sone-543/extra"},
+	}
+	for _, test := range tests {
+		t.Run(test.path, func(t *testing.T) {
+			got, _ := adultSourceIDFromHref(test.path, missAVBaseURL, sourceMissAV)
+			if got != test.want {
+				t.Fatalf("adultSourceIDFromHref(%q) = %q, want %q", test.path, got, test.want)
+			}
+		})
+	}
+}
+
+func TestAdultMissAVCardParserFallsBackWhenCardClassesChange(t *testing.T) {
+	body := `<section class="catalog-grid">
+		<article class="video-tile">
+			<a href="/dm298/cn/sone-543">
+				<img src="/covers/placeholder.jpg" data-original="/covers/real-poster.webp" alt="SAMPLE-543">
+			</a>
+		</article>
+		<a href="/cn/genres/uncensored-leak">分類導覽</a>
+	</section>`
+	items := adultParseCards(body, missAVBaseURL, sourceMissAV)
+	if len(items) != 1 {
+		t.Fatalf("MissAV flexible card parser returned %d items, want one: %#v", len(items), items)
+	}
+	if items[0].SourceID != "sone-543" || items[0].Title != "SAMPLE-543" {
+		t.Fatalf("unexpected flexible MissAV card: %#v", items[0])
+	}
+	if items[0].Cover != "https://missav.live/covers/real-poster.webp" {
+		t.Fatalf("lazy poster candidate = %q, want original artwork URL", items[0].Cover)
+	}
+}
+
+func TestAdultMissAVCardParserAcceptsBackgroundAndLazyImageAttributes(t *testing.T) {
+	body := `<article class="item">
+		<a href="/cn/abc-123"><span class="poster" data-bg="/covers/background.jpg"></span></a>
+		<h3>ABC-123 title</h3>
+	</article>
+	<article class="item">
+		<a href="/cn/def-456"><img src="/covers/blank.gif" data-lazy-src="/covers/lazy.jpg" alt="DEF-456"></a>
+	</article>`
+	items := adultParseCards(body, missAVBaseURL, sourceMissAV)
+	if len(items) != 2 {
+		t.Fatalf("MissAV image-attribute parser returned %d items, want two: %#v", len(items), items)
+	}
+	if items[0].Cover != "https://missav.live/covers/background.jpg" {
+		t.Fatalf("background poster = %q", items[0].Cover)
+	}
+	if items[1].Cover != "https://missav.live/covers/lazy.jpg" {
+		t.Fatalf("lazy poster = %q", items[1].Cover)
+	}
+}
+
+func TestAdultMissAVPaginationFallsBackToFullPageCardCount(t *testing.T) {
+	if !adultCatalogHasMorePages("<html></html>", 1, 20) {
+		t.Fatal("a full MissAV catalogue page should keep pagination available when links are missing")
+	}
+	if adultCatalogHasMorePages("<html></html>", 1, 19) {
+		t.Fatal("a short final MissAV page without a paginator should close")
+	}
+}
+
 func TestAdultMissAVPaginationUsesPublishedPageLinks(t *testing.T) {
 	tests := []struct {
 		name string
