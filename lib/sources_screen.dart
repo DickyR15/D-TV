@@ -358,8 +358,13 @@ class _SourcesScreenState extends State<SourcesScreen> {
     final pollingError = _errors[source.id] ?? '';
     final taskError = status?.error ?? '';
     final health = status?.health;
-    final taskErrorIsPlaybackCheck =
-        status?.operation == 'check' || status?.operation == 'checkCatalog';
+    final taskErrorIsPlaybackCheck = status?.operation == 'check';
+    final taskErrorIsCatalogCheck = status?.operation == 'checkCatalog';
+    final taskErrorLabel = switch (status?.operation) {
+      'check' => '上次播放檢測未通過：',
+      'checkCatalog' => '上次目錄連線檢查未通過（快取作品仍可能可播放）：',
+      _ => '上次${status?.operationLabel ?? '片源'}任務未完成（不代表影片無法播放）：',
+    };
     final healthExpanded = _expandedHealth.contains(source.id);
     final colors = Theme.of(context).colorScheme;
     return Card(
@@ -406,7 +411,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: SelectableText(
-                  '${taskErrorIsPlaybackCheck ? '上次播放檢測未通過：' : '上次${status?.operationLabel ?? '片源'}任務未完成（不代表影片無法播放）：'}${uiTraditional(taskError)}',
+                  '${taskErrorLabel}${uiTraditional(taskError)}',
                   style: TextStyle(
                     color: taskErrorIsPlaybackCheck ? colors.error : colors.tertiary,
                   ),
