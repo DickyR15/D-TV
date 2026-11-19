@@ -307,6 +307,50 @@ func TestExtraAdult91PornaExtractsDirectUVariable(t *testing.T) {
 	}
 }
 
+
+func TestExtraAdult91PornaPreservesFullEmbedPlayScriptURL(t *testing.T) {
+	const page = "https://91porna.com/comic/index/embed?id=169397"
+	body := `<html><script src="/comic/index/embed_play.js?img=poster%2Ffolder%3D1&amp;u=https%3A%2F%2F91porna.com%2Fcomic%2Findex%2Fembed%3Fid%3D169397&amp;t=1723456&amp;key=signed-token&amp;v=2"></script></html>`
+	got, err := extraAdult91PornaPlayScriptURL(body, page)
+	if err != nil {
+		t.Fatalf("script URL extraction failed: %v", err)
+	}
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Path != "/comic/index/embed_play.js" {
+		t.Fatalf("script path = %q; expected the exact embed page script path", parsed.Path)
+	}
+	query := parsed.Query()
+	if query.Get("img") != "poster/folder=1" {
+		t.Fatalf("img argument = %q", query.Get("img"))
+	}
+	if query.Get("u") != page {
+		t.Fatalf("u argument = %q; want %q", query.Get("u"), page)
+	}
+	if query.Get("t") != "1723456" || query.Get("key") != "signed-token" || query.Get("v") != "2" {
+		t.Fatalf("original embed_play.js arguments were not preserved: %s", parsed.RawQuery)
+	}
+}
+
+func TestExtraAdult91PornaBuildsScriptURLFromLegacyVariables(t *testing.T) {
+	body := `<script>var player = "embed_play.js?img=poster%2F123"; var u = "https://91porna.com/comic/index/embed?id=169397";</script>`
+	got, err := extraAdult91PornaPlayScriptURL(body, "https://91porna.com/comic/index/embed?id=169397")
+	if err != nil {
+		t.Fatalf("legacy script URL fallback failed: %v", err)
+	}
+	parsed, err := url.Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Path != "/index/embed_play.js" || parsed.Query().Get("img") != "poster/123" ||
+		parsed.Query().Get("u") != "https://91porna.com/comic/index/embed?id=169397" ||
+		parsed.Query().Get("t") == "" {
+		t.Fatalf("legacy script URL arguments are incomplete: %s", got)
+	}
+}
+
 func TestExtraAdult91PornaExtractsHLSAndMP4FromEmbedPlayerScript(t *testing.T) {
 	hls := `document.write('<video src="https://media.example.test/playlist.m3u8?auth=one%2Ftwo"></video>');`
 	if got := extraAdult91PornaMediaURL(hls, ninetyOneBaseURL+"/comic/index/embed?id=169397"); got != "https://media.example.test/playlist.m3u8?auth=one%2Ftwo" {

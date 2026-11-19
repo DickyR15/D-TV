@@ -430,6 +430,132 @@ func (d *Downloader) resolveExtraAdultPPPStream(ctx context.Context, body, page 
 	return media, nestedURL, nil
 }
 
+// extraAdult91PornaPlayScriptURL prefers the exact script src emitted by the
+// embed page. Rebuilding only img/u used to drop additional signed arguments
+// and could also call the wrong path when the site moved embed_play.js.
+func extraAdult91PornaPlayScriptURL(body, page string) (string, error) {
+	normalize := func(value string) string {
+		return strings.NewReplacer(
+			"\\/", "/",
+			"\\u002F", "/",
+			"\\u0026", "&",
+			"\\u003D", "=",
+			"&amp;", "&",
+			"\\\"", "\"",
+		).Replace(html.UnescapeString(value))
+	}
+	base, err := url.Parse(strings.TrimSpace(page))
+	if err != nil || base.Scheme != "https" ||
+		(base.Hostname() != "91porna.com" && base.Hostname() != "www.91porna.com") ||
+		base.User != nil {
+		return "", errors.New("91Porna 嵌入頁網址無效")
+	}
+
+	imgFallback, uFallback := extraAdult91PornaPlayParams(body)
+	imgFallback = strings.TrimSpace(imgFallback)
+	if decoded, decodeErr := url.QueryUnescape(imgFallback); decodeErr == nil && decoded != "" {
+		imgFallback = decoded
+	}
+	uFallback = normalize91PornaEmbedURL(uFallback, base)
+
+	candidates := make([]string, 0, 8)
+	document, parseErr := htmlnet.Parse(strings.NewReader(body))
+	if parseErr == nil {
+		for _, node := range providerHTMLNodes(document, func(node *htmlnet.Node) bool {
+			return node.Type == htmlnet.ElementNode && node.Data == "script"
+		}) {
+			for _, attribute := range []string{"src", "data-src"} {
+				if value := strings.TrimSpace(providerHTMLAttr(node, attribute)); value != "" {
+					candidates = append(candidates, normalize(value))
+				}
+			}
+		}
+	}
+	normalizedBody := normalize(body)
+	scriptPattern := regexp.MustCompile(`(?is)(?:https?:)?//[^"'<>[:space:]]*embed_play\.js(?:\?[^"'<>[:space:]]*)?|(?:\.\.?/|/)?[A-Za-z0-9_./-]*embed_play\.js(?:\?[^"'<>[:space:]]*)?`)
+	for _, match := range scriptPattern.FindAllString(normalizedBody, 32) {
+		candidates = append(candidates, strings.TrimRight(match, `);,]}`))
+	}
+
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(strings.Trim(candidate, `"'`))
+		if candidate == "" {
+			continue
+		}
+		reference, parseErr := url.Parse(candidate)
+		if parseErr != nil || reference.User != nil {
+			continue
+		}
+		target := base.ResolveReference(reference)
+		host := strings.ToLower(target.Hostname())
+		if target.Scheme != "https" ||
+			(host != "91porna.com" && host != "www.91porna.com") ||
+			!strings.EqualFold(path.Base(target.Path), "embed_play.js") {
+			continue
+		}
+
+		query, queryErr := url.ParseQuery(target.RawQuery)
+		if queryErr != nil {
+			continue
+		}
+		img := strings.TrimSpace(query.Get("img"))
+		if img == "" {
+			img = imgFallback
+		}
+		embedURL := normalize91PornaEmbedURL(query.Get("u"), base)
+		if embedURL == "" {
+			embedURL = uFallback
+		}
+		if img == "" || strings.ContainsAny(img, "\r\n\x00") || embedURL == "" {
+			continue
+		}
+		query.Set("img", img)
+		query.Set("u", embedURL)
+		if query.Get("t") == "" {
+			query.Set("t", strconv.FormatInt(time.Now().Unix()/1800, 10))
+		}
+		target.RawQuery = query.Encode()
+		target.Fragment = ""
+		return target.String(), nil
+	}
+
+	// Compatibility fallback for older pages where the script URL is assembled
+	// from inline img/u variables rather than exposed in a script src attribute.
+	if imgFallback == "" || strings.ContainsAny(imgFallback, "\r\n\x00") || uFallback == "" {
+		return "", errors.New("91Porna 嵌入頁缺少 embed_play.js 的 img/u 引數")
+	}
+	query := url.Values{}
+	query.Set("img", imgFallback)
+	query.Set("u", uFallback)
+	query.Set("t", strconv.FormatInt(time.Now().Unix()/1800, 10))
+	return "https://91porna.com/index/embed_play.js?" + query.Encode(), nil
+}
+
+func normalize91PornaEmbedURL(raw string, base *url.URL) string {
+	raw = strings.TrimSpace(html.UnescapeString(raw))
+	raw = strings.NewReplacer("\\/", "/", "\\u002F", "/", "\\u0026", "&").Replace(raw)
+	for attempt := 0; attempt < 3 && raw != ""; attempt++ {
+		reference, err := url.Parse(raw)
+		if err == nil {
+			target := base.ResolveReference(reference)
+			host := strings.ToLower(target.Hostname())
+			if target.Scheme == "https" &&
+				(host == "91porna.com" || host == "www.91porna.com") &&
+				strings.HasPrefix(strings.ToLower(target.Path), "/comic/index/embed") &&
+				target.User == nil {
+				target.Fragment = ""
+				return target.String()
+			}
+		}
+		decoded, decodeErr := url.QueryUnescape(raw)
+		if decodeErr != nil || decoded == raw {
+			break
+		}
+		raw = decoded
+	}
+	return ""
+}
+
 // 91Porna playback: detail -> embed?id=... -> embed_play.js -> HLS/MP4.
 func extraAdult91PornaPlayParams(body string) (string, string) {
 	normalize := func(value string) string {
@@ -642,21 +768,13 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 			scanOnly = scanOnly || extraAdultMobileScanRequired(embed)
 			media = extraAdult91PornaMediaURL(embed, embedFinal)
 			if media == "" {
-				img, encodedURL := extraAdult91PornaPlayParams(embed)
-				if img == "" || encodedURL == "" {
+				jsURL, scriptErr := extraAdult91PornaPlayScriptURL(embed, embedFinal)
+				if scriptErr != nil {
 					if scanOnly {
 						return providerMedia{}, errors.New("91Porna 目前仍只回傳手機掃碼入口，未提供可直接播放的嵌入資料")
 					}
-					return providerMedia{}, errors.New("91Porna 嵌入頁缺少 embed_play.js 參數")
+					return providerMedia{}, scriptErr
 				}
-				if strings.ContainsAny(img, "&\r\n") {
-					return providerMedia{}, errors.New("91Porna 播放腳本 img 參數無效")
-				}
-				jsQuery := url.Values{}
-				jsQuery.Set("img", img)
-				jsQuery.Set("u", encodedURL)
-				jsQuery.Set("t", strconv.FormatInt(time.Now().Unix()/1800, 10))
-				jsURL := ninetyOneBaseURL + "/index/embed_play.js?" + jsQuery.Encode()
 				jsBody, _, jsErr := extraAdultFetchWithUserAgent(ctx, d, source, jsURL, embedFinal, ninetyOneMobileUserAgent)
 				if jsErr != nil {
 					return providerMedia{}, fmt.Errorf("91Porna 播放腳本讀取失敗：%w", jsErr)

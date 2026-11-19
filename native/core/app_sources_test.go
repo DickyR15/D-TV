@@ -394,11 +394,13 @@ func TestResolveExtraAdultMediaUsesMobileBrowserFor91Porna(t *testing.T) {
 		case request.URL.Host == "91porna.com" && request.URL.Path == "/comic/index/detail":
 			return sourceFixtureResponse(request, http.StatusOK, "<main>使用手機瀏覽器掃碼觀看</main>"), nil
 		case request.URL.Host == "91porna.com" && request.URL.Path == "/comic/index/embed":
-			body := "<script src='/index/embed_play.js?img=poster%2Fkey_123&amp;u=" + encodedEmbed + "'></script>"
+			body := "<script src='/comic/index/embed_play.js?img=poster%2Fkey_123&amp;u=" + encodedEmbed + "&amp;t=1723456&amp;key=fixture-token'></script>"
 			return sourceFixtureResponse(request, http.StatusOK, body), nil
-		case request.URL.Host == "91porna.com" && request.URL.Path == "/index/embed_play.js":
+		case request.URL.Host == "91porna.com" && request.URL.Path == "/comic/index/embed_play.js":
 			if request.URL.Query().Get("img") != "poster/key_123" ||
-				request.URL.Query().Get("u") != embedURL {
+				request.URL.Query().Get("u") != embedURL ||
+				request.URL.Query().Get("t") != "1723456" ||
+				request.URL.Query().Get("key") != "fixture-token" {
 				return nil, fmt.Errorf("91Porna player script parameters were not preserved: %s", request.URL.RawQuery)
 			}
 			body := "document.write('<video src=" + mediaURL + "></video>');"
