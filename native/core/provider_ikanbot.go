@@ -544,6 +544,52 @@ func ikanbotBuildChapters(sourceID, pageURL string, lines []ikanbotLine) []Chapt
 	return chapters
 }
 
+// ikanbotPreferHighestHLS locks the master playlist to the resolution
+// selected by the source line. Without this step MPV adaptive selection can
+// start at a smaller variant even though Auto chose a 1080P source line.
+func (d *Downloader) ikanbotPreferHighestHLS(ctx context.Context, media providerMedia) providerMedia {
+	if media.Playlist == "" || !ikanbotIsHLSURL(media.URL) {
+		return media
+	}
+	client := d.providerMediaHTTPClient(media)
+	for depth := 0; depth < 6; depth++ {
+		lines := strings.Split(strings.ReplaceAll(media.Playlist, "\r\n", "\n"), "\n")
+		selectedLines, height, master := nativeHLSSelect(lines, media.Quality)
+		if !master {
+			return media
+		}
+		selectedURI := ""
+		for _, line := range selectedLines {
+			line = strings.TrimSpace(line)
+			if line != "" && !strings.HasPrefix(line, "#") {
+				selectedURI = line
+				break
+			}
+		}
+		base, err := url.Parse(media.URL)
+		if err != nil || selectedURI == "" {
+			return media
+		}
+		reference, err := url.Parse(selectedURI)
+		if err != nil {
+			return media
+		}
+		nextURL := base.ResolveReference(reference).String()
+		if !isProviderHTTPMediaURL(nextURL) {
+			return media
+		}
+		playlist, finalURL, err := d.fetchMediaPlaylistWithClient(ctx, nextURL, media.Referer, client)
+		if err != nil {
+			return media
+		}
+		media.Playlist, media.URL = playlist, finalURL
+		if height > 0 {
+			media.Quality = height
+		}
+	}
+	return media
+}
+
 func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Drama,[]Chapter,error){
 	if !ikanbotNumericID(sourceID){return Drama{},nil,errors.New("愛看機器人作品識別碼無效")}
 	pageURL:=ikanbotBaseURL+"/play/"+sourceID
@@ -602,6 +648,12 @@ func (d *Downloader) resolveIkanbotMedia(ctx context.Context,task Task)(provider
 	ref:=firstNonEmpty(task.Chapter.Referer,task.Chapter.PageURL,ikanbotBaseURL+"/");cred:=&providerMediaCredentials{referer:ref,userAgent:ikanbotUserAgent}
 	media:=providerMedia{URL:mediaURL,Referer:ref,credentials:cred,StandardHTTP:runtime.GOOS=="android",Quality:ikanbotQuality(task.Chapter.PlayLine)}
 	for _,item:=range task.Chapter.PlaybackVariants{qualityText,address,found:=strings.Cut(item,":");if !found||!isProviderHTTPMediaURL(address){continue};quality,_:=strconv.Atoi(qualityText);media.Variants=append(media.Variants,providerMedia{URL:address,Referer:ref,credentials:cred,Quality:quality})}
-	if ikanbotIsHLSURL(mediaURL){return d.prepareWebProviderMediaWithFallback(ctx,media,"愛看機器人")}
+	if ikanbotIsHLSURL(mediaURL) {
+		prepared, err := d.prepareWebProviderMediaWithFallback(ctx, media, "愛看機器人")
+		if err != nil {
+			return providerMedia{}, err
+		}
+		return d.ikanbotPreferHighestHLS(ctx, prepared), nil
+	}
 	return media,nil
 }

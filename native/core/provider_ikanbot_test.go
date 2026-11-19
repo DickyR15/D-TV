@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -474,6 +475,39 @@ func TestIkanbotMovieQualityLabelsMergeIntoOneEpisodeWithFallback(t *testing.T) 
 		choice.media[0].URL != "https://cdn-high.example.test/movie.mp4" ||
 		choice.media[1].URL != "https://cdn-low.example.test/movie.mp4" {
 		t.Fatalf("automatic playback did not keep high-quality-first fallback order: %#v", choice.media)
+	}
+}
+
+func TestIkanbotAutoSelectsHighestHLSRendition(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/master.m3u8":
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1800000,RESOLUTION=1280x720\n720/index.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080\n1080/index.m3u8\n"))
+		case "/1080/index.m3u8":
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			_, _ = w.Write([]byte("#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nsegment-1080.ts\n#EXT-X-ENDLIST\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	d := &Downloader{client: server.Client()}
+	media, err := d.prepareWebProviderMedia(context.Background(), providerMedia{
+		URL: server.URL + "/master.m3u8",
+		Referer: server.URL + "/",
+		Quality: 1080,
+		StandardHTTP: true,
+	}, "愛看機器人")
+	if err != nil {
+		t.Fatalf("prepareWebProviderMedia failed: %v", err)
+	}
+	media = d.ikanbotPreferHighestHLS(context.Background(), media)
+	if !strings.HasSuffix(media.URL, "/1080/index.m3u8") ||
+		!strings.Contains(media.Playlist, "segment-1080.ts") ||
+		media.Quality != 1080 {
+		t.Fatalf("Auto did not lock the 1080P rendition: URL=%s quality=%d playlist=%s",
+			media.URL, media.Quality, media.Playlist)
 	}
 }
 
