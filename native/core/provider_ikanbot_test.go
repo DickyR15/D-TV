@@ -531,3 +531,87 @@ func TestIkanbotImageCandidatesSupportsLazyAndSrcset(t *testing.T) {
 	}
 }
 
+
+
+func TestIkanbotMovieChaptersUseLanguageLabelsAndKeepDifferentSourcesSeparate(t *testing.T) {
+	lines := []ikanbotLine{
+		{Flag: "1080P", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://cdn.example.test/mandarin-1080.mp4", Order: 1}}},
+		{Flag: "1080P", Episodes: []ikanbotEpisode{{Name: "日語版", URL: "https://cdn.example.test/japanese.mp4", Order: 1}}},
+		{Flag: "720P", Episodes: []ikanbotEpisode{{Name: "国语", URL: "https://cdn.example.test/mandarin-720.mp4", Order: 1}}},
+		{Flag: "來源甲", Episodes: []ikanbotEpisode{{Name: "第1集", URL: "https://cdn-a.example.test/movie.mp4", Order: 1}}},
+		{Flag: "來源乙", Episodes: []ikanbotEpisode{{Name: "第1集", URL: "https://cdn-b.example.test/movie.mp4", Order: 1}}},
+	}
+	chapters := ikanbotBuildChapters("1023901", "https://admin-api.aikanbot.com/play/1023901", lines, true)
+	if len(chapters) != 4 {
+		t.Fatalf("movie choices = %d, want two audio versions plus two separate sources: %#v", len(chapters), chapters)
+	}
+	if chapters[0].Title != "國語版" || chapters[1].Title != "日語版" {
+		t.Fatalf("audio versions were not shown by language: %#v", chapters[:2])
+	}
+	if chapters[0].VideoURL != "https://cdn.example.test/mandarin-1080.mp4" ||
+		chapters[0].PlayLine != "1080P" || len(chapters[0].PlaybackVariants) != 1 ||
+		chapters[0].PlaybackVariants[0] != "720:https://cdn.example.test/mandarin-720.mp4" {
+		t.Fatalf("same-language alternate route was not retained as a fallback: %#v", chapters[0])
+	}
+	if chapters[2].VideoURL != "https://cdn-a.example.test/movie.mp4" ||
+		chapters[3].VideoURL != "https://cdn-b.example.test/movie.mp4" ||
+		chapters[2].Title == chapters[3].Title {
+		t.Fatalf("different movie sources were merged instead of listed separately: %#v", chapters[2:])
+	}
+}
+
+func TestIkanbotMovieMTypeAndAudioLanguageRecognition(t *testing.T) {
+	for _, value := range []string{"1", " movie ", "FILM"} {
+		if !ikanbotIsMovieMType(value) {
+			t.Errorf("movie mtype %q was not recognized", value)
+		}
+	}
+	for _, value := range []string{"", "2", "tv"} {
+		if ikanbotIsMovieMType(value) {
+			t.Errorf("non-movie mtype %q was classified as movie", value)
+		}
+	}
+	cases := map[string]string{
+		"國語版": "國語版",
+		"国语": "國語版",
+		"粵語": "粵語版",
+		"Cantonese": "粵語版",
+		"日語": "日語版",
+		"English": "英語版",
+		"韓文": "韓語版",
+		"原聲": "原聲版",
+		"雙語": "雙語版",
+	}
+	for input, want := range cases {
+		if got := ikanbotMovieLanguageLabel(input, "1080P"); got != want {
+			t.Errorf("language label for %q = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestGetHuangguoChaptersDispatchesIkanbotMovieAsSingleSelectableVersions(t *testing.T) {
+	token := strings.Repeat("a", 80)
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/play/1023901":
+			body := fmt.Sprintf("<html><h1 id=\\"video_title\\">電影測試作品</h1><input id=\\"current_id\\" value=\\"1023901\\"><input id=\\"e_token\\" value=\\"%s\\"><input id=\\"mtype\\" value=\\"1\\"></html>", token)
+			return sourceFixtureResponse(request, http.StatusOK, body), nil
+		case "/api/getResN":
+			body := "{\\\"state\\\":1,\\\"data\\\":{\\\"list\\\":[{\\\"resData\\\":\\\"[{\\\\\\\"flag\\\\\\\":\\\\\\\"1080P\\\\\\\",\\\\\\\"url\\\\\\\":\\\\\\\"國語$https://cdn.example.test/mandarin.mp4\\\\\\\"}]\\\"},{\\\"resData\\\":\\\"[{\\\\\\\"flag\\\\\\\":\\\\\\\"1080P\\\\\\\",\\\\\\\"url\\\\\\\":\\\\\\\"日語$https://cdn.example.test/japanese.mp4\\\\\\\"}]\\\"}]}}"
+			return sourceFixtureResponse(request, http.StatusOK, body), nil
+		default:
+			return nil, fmt.Errorf("unexpected iKanBot movie request: %s", request.URL)
+		}
+	})
+	title, chapters, err := d.GetHuangguoChapters(context.Background(), sourceIkanBot, "1023901")
+	if err != nil {
+		t.Fatalf("GetHuangguoChapters(iKanBot movie) failed: %v", err)
+	}
+	if title != "電影測試作品" || len(chapters) != 2 ||
+		chapters[0].Title != "國語版" || chapters[1].Title != "日語版" {
+		t.Fatalf("movie mtype did not return language-labelled choices: title=%q chapters=%#v", title, chapters)
+	}
+	if chapters[0].Source != sourceIkanBot || chapters[1].Source != sourceIkanBot {
+		t.Fatalf("movie chapters lost source identity: %#v", chapters)
+	}
+}
