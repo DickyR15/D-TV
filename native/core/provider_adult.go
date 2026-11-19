@@ -277,7 +277,7 @@ func adultMissAVCardCandidates(document *htmlnet.Node, base string) []*htmlnet.N
 	for _, anchor := range providerHTMLNodes(document, func(node *htmlnet.Node) bool {
 		return node.Type == htmlnet.ElementNode && node.Data == "a"
 	}) {
-		if _, _ = adultSourceIDFromHref(providerHTMLAttr(anchor, "href"), base, sourceMissAV); false {
+		if slug, _ := adultSourceIDFromHref(providerHTMLAttr(anchor, "href"), base, sourceMissAV); slug == "" {
 			continue
 		}
 		candidate := anchor
@@ -406,13 +406,21 @@ func adultParseCards(body, base, source string) []Drama {
 	for _, card := range cards {
 		var anchor *htmlnet.Node
 		var slug string
-		for _, candidate := range providerHTMLNodes(card, func(node *htmlnet.Node) bool {
-			return node.Type == htmlnet.ElementNode && node.Data == "a"
-		}) {
-			candidateSlug, _ := adultSourceIDFromHref(providerHTMLAttr(candidate, "href"), base, source)
-			if candidateSlug != "" {
-				anchor, slug = candidate, candidateSlug
-				break
+		if card.Type == htmlnet.ElementNode && card.Data == "a" {
+			slug, _ = adultSourceIDFromHref(providerHTMLAttr(card, "href"), base, source)
+			if slug != "" {
+				anchor = card
+			}
+		}
+		if anchor == nil {
+			for _, candidate := range providerHTMLNodes(card, func(node *htmlnet.Node) bool {
+				return node.Type == htmlnet.ElementNode && node.Data == "a"
+			}) {
+				candidateSlug, _ := adultSourceIDFromHref(providerHTMLAttr(candidate, "href"), base, source)
+				if candidateSlug != "" {
+					anchor, slug = candidate, candidateSlug
+					break
+				}
 			}
 		}
 		if anchor == nil || seen[slug] {
