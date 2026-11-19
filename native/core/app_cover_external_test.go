@@ -450,6 +450,11 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
 			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 		},
+		{
+			name: "奉子成婚 duplicate Duoduo ID with verified title/type/year",
+			drama: nativeDrama{ID: "duoduo:99123", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
+			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
