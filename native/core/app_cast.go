@@ -165,6 +165,13 @@ func castDeviceIdentity(location string, device castDescriptionDevice) string {
 	if len(keys) == 0 {
 		return strings.TrimSpace(location)
 	}
+	if udn := castDescriptionUDN(device); udn != "" {
+		if parsed, err := url.Parse(location); err == nil && parsed.Hostname() != "" {
+			// Keep the public ID unique across separate hosts while identityKeys
+			// still collapse the same UDN advertised by multiple locations.
+			return "udn:" + udn + "@" + strings.ToLower(parsed.Hostname())
+		}
+	}
 	return keys[0]
 }
 

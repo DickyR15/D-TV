@@ -578,7 +578,7 @@ func (d *Downloader) ikanbotPreferHighestHLS(ctx context.Context, media provider
 		if !isProviderHTTPMediaURL(nextURL) {
 			return media
 		}
-		playlist, finalURL, err := d.fetchMediaPlaylistWithClient(ctx, nextURL, media.Referer, client)
+		playlist, finalURL, err := d.fetchProviderMediaPlaylist(ctx, media, nextURL)
 		if err != nil {
 			return media
 		}

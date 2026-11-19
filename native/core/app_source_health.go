@@ -242,9 +242,7 @@ func (d *Downloader) sourceProbeResources(ctx context.Context, media providerMed
 		if parseErr != nil || !strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") {
 			return "", media.URL, nil
 		}
-		playlist, finalURL, fetchErr := d.fetchMediaPlaylistWithClient(
-			ctx, media.URL, media.Referer, d.providerMediaHTTPClient(media),
-		)
+		playlist, finalURL, fetchErr := d.fetchProviderMediaPlaylist(ctx, media, media.URL)
 		if fetchErr != nil {
 			return "", "", fetchErr
 		}
@@ -335,7 +333,13 @@ func (d *Downloader) sourceProbeBytes(ctx context.Context, address, referer stri
 
 func (d *Downloader) sourceProbeBytesWithMedia(ctx context.Context, media providerMedia, address string, key bool) ([]byte, error) {
 	ctx = providerMediaContext(ctx, media.credentials)
-	return d.sourceProbeBytesWithClient(ctx, address, media.Referer, key, d.providerMediaHTTPClient(media))
+	body, err := d.sourceProbeBytesWithClient(ctx, address, media.Referer, key, d.client)
+	if err == nil || media.StandardHTTP || d.streamClient == nil || d.streamClient == d.client {
+		return body, err
+	}
+	// Probe with the same specialised transport that the native player uses
+	// when the general media client cannot reach a CDN edge.
+	return d.sourceProbeBytesWithClient(ctx, address, media.Referer, key, d.streamClient)
 }
 
 func (d *Downloader) sourceProbeBytesWithClient(ctx context.Context, address, referer string, key bool, client *http.Client) ([]byte, error) {

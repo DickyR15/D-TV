@@ -176,11 +176,19 @@ func (d *Downloader) doMediaRequestWithClient(request *http.Request, client *htt
 	return nil, errors.New("播放憑證重新整理失敗")
 }
 
-func (d *Downloader) providerMediaHTTPClient(media providerMedia) *http.Client {
-	if !media.StandardHTTP && d.streamClient != nil {
-		return d.streamClient
+func (d *Downloader) fetchProviderMediaPlaylist(ctx context.Context, media providerMedia, address string) (string, string, error) {
+	playlist, finalURL, err := d.fetchMediaPlaylistWithClient(ctx, address, media.Referer, d.client)
+	if err == nil || media.StandardHTTP || d.streamClient == nil || d.streamClient == d.client {
+		return playlist, finalURL, err
 	}
-	return d.client
+	// Preserve the established manifest transport first. If that path fails
+	// (for example a CDN/TLS edge denial), try the dedicated stream transport
+	// before treating the selected source route as unavailable.
+	fallbackPlaylist, fallbackURL, fallbackErr := d.fetchMediaPlaylistWithClient(ctx, address, media.Referer, d.streamClient)
+	if fallbackErr == nil {
+		return fallbackPlaylist, fallbackURL, nil
+	}
+	return "", "", errors.Join(err, fallbackErr)
 }
 
 func (d *Downloader) fetchMediaPlaylist(ctx context.Context, address, referer string) (string, string, error) {
