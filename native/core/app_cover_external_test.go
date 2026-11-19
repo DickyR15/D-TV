@@ -1731,3 +1731,16 @@ func TestBangumiPosterAddressRetriesVerifiedJapaneseTitleAlias(t *testing.T) {
 		t.Fatalf("Bangumi lookup did not try the verified Japanese title alias: %#v", requested)
 	}
 }
+
+
+func TestNativeCoverOriginRefererSupportsAFOriginalImages(t *testing.T) {
+	for _, host := range []string{
+		"dekichaumade-kon.af-original.com",
+		"ipufure.af-original.com",
+	} {
+		address := "https://" + host + "/wp-content/themes/template/img/visual.jpg"
+		if got, want := nativeCoverOriginReferer(address), "https://"+host+"/"; got != want {
+			t.Errorf("AF Original Referer for %s = %q, want %q", host, got, want)
+		}
+	}
+}
