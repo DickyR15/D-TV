@@ -1651,7 +1651,7 @@ func TestPosterTitleVariantsIncludeVerifiedLocalizedAnimeAliases(t *testing.T) {
 	}{
 		{
 			title: "鷹峰同學請穿上衣服",
-			aliases: []string{"拜託請穿上，鷹峰同學", "履いてください、鷹峰さん", "Please Put Them On, Takamine-san"},
+			aliases: []string{"鹰峰同学请穿上衣服", "拜託請穿上，鷹峰同學", "履いてください、鷹峰さん", "Please Put Them On, Takamine-san"},
 		},
 		{
 			title: "只能觸控一分鐘哦",
