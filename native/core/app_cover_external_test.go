@@ -1637,3 +1637,92 @@ func TestDuoduoYongshengOfficialArtworkOverridesAntiHotlinkCache(t *testing.T) {
 		t.Fatalf("anti-hotlink provider image was requested %d times before official override", originalRequests)
 	}
 }
+
+
+func TestPosterTitleVariantsIncludeVerifiedLocalizedAnimeAliases(t *testing.T) {
+	cases := []struct {
+		title   string
+		aliases []string
+	}{
+		{
+			title: "鷹峰同學請穿上衣服",
+			aliases: []string{"拜託請穿上，鷹峰同學", "履いてください、鷹峰さん", "Please Put Them On, Takamine-san"},
+		},
+		{
+			title: "只能觸控一分鐘哦",
+			aliases: []string{"只能触摸一分钟哦", "「1分間だけ触れてもいいよ...」シェアハウスの秘密ルール。", "The Share House's Secret Rule"},
+		},
+		{
+			title: "進擊的巨人第一季",
+			aliases: []string{"進撃の巨人", "Attack on Titan", "Shingeki no Kyojin"},
+		},
+		{
+			title: "斗羅大陸第二季",
+			aliases: []string{"斗罗大陆", "Soul Land", "Douluo Dalu"},
+		},
+	}
+	for _, test := range cases {
+		variants := posterTitleVariants(test.title)
+		for _, alias := range test.aliases {
+			found := false
+			for _, variant := range variants {
+				if normalizeBangumiPosterTitle(variant) == normalizeBangumiPosterTitle(alias) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("posterTitleVariants(%q) is missing exact alias %q: %#v", test.title, alias, variants)
+			}
+			if !nativePosterTitleMatches(test.title, alias) {
+				t.Errorf("exact localized alias %q did not match source title %q", alias, test.title)
+			}
+		}
+	}
+}
+
+func TestBangumiPosterAddressRetriesVerifiedJapaneseTitleAlias(t *testing.T) {
+	const expected = "https://lain.bgm.tv/pic/cover/takamine.jpg"
+	var requested []string
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		var payload bangumiPosterSearchRequest
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		requested = append(requested, payload.Keyword)
+		if len(payload.Filter.Type) != 1 || payload.Filter.Type[0] != 2 {
+			t.Fatalf("anime type filter was not retained: %#v", payload.Filter.Type)
+		}
+		if payload.Keyword != "履いてください、鷹峰さん" {
+			return posterLookupJSONResponse(request, `{"data":[]}`), nil
+		}
+		return posterLookupJSONResponse(request, `{
+			"data":[{
+				"id":525733,
+				"type":2,
+				"name":"履いてください、鷹峰さん",
+				"date":"2025-04-02",
+				"images":{"large":"`+expected+`"}
+			}]
+		}`), nil
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
+		Title: "鷹峰同學請穿上衣服", Category: "動漫", OnlineDate: "2025",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != expected {
+		t.Fatalf("Bangumi poster = %q, want %q", address, expected)
+	}
+	foundJapaneseQuery := false
+	for _, keyword := range requested {
+		if keyword == "履いてください、鷹峰さん" {
+			foundJapaneseQuery = true
+		}
+	}
+	if !foundJapaneseQuery {
+		t.Fatalf("Bangumi lookup did not try the verified Japanese title alias: %#v", requested)
+	}
+}
