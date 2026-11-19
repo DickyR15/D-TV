@@ -62,7 +62,7 @@ var castSearchTargets = []string{
 }
 
 func castSearchRequest(searchTarget string) []byte {
-	return []byte("M-SEARCH * HTTP/1.1\\r\\nHOST: 239.255.255.250:1900\\r\\nMAN: \\"ssdp:discover\\"\\r\\nMX: 2\\r\\nST: " + searchTarget + "\\r\\n\\r\\n")
+	return []byte("M-SEARCH * HTTP/1.1\r\n" + "HOST: 239.255.255.250:1900\r\n" + "MAN: \"ssdp:discover\"\r\n" + "MX: 2\r\nST: " + searchTarget + "\r\n\r\n")
 }
 
 func castSearchBindAddresses() []net.IP {
