@@ -17,7 +17,7 @@ func TestChaoliuCategoriesAndPaths(t *testing.T) {
 func TestChaoliuListAndSafeIdentity(t *testing.T) {
 	body:=`<div class="post"><h3><a href="/zh/chinese_content/19/sample-title.html">測試作品</a></h3><img data-original="/images/test.jpg"></div>`
 	items:=parseChaoliuList(body,"https://mjv011.com/zh/chinese_list/all/1.html")
-	if len(items)!=1||items[0].Source!=sourceChaoliu||items[0].SourceID!="chinese_content/19/sample-title"||items[0].Title!="測試作品"||items[0].Cover!="https://mjv011.com/images/test.jpg"{t.Fatalf("潮流 AV 卡片解析失敗：%+v",items)}
+	if len(items)!=1||items[0].Source!=sourceChaoliu||items[0].SourceID!="chinese_content/19/sample-title"||items[0].Title!="測試作品"||items[0].Cover!="https://mjv011.com/images/test.jpg"||items[0].ChannelName!="chaoliu"||items[0].CategoryName!="chaoliu"{t.Fatalf("潮流 AV 卡片解析失敗：%+v",items)}
 	if !validChaoliuID("chinese_content/19/sample-title")||validChaoliuID("../other/content")||validChaoliuID("https://evil.example/x"){t.Fatal("潮流 AV 識別碼驗證錯誤")}
 }
 func TestChaoliuHostRoleSeparation(t *testing.T) {

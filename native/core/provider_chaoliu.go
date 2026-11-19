@@ -251,7 +251,7 @@ func (d *Downloader) fetchChaoliuDetail(ctx context.Context,sourceID string)(Dra
 	if v:=chaoliuMetaField(body,"發行商");v!=""&&v!="未知"{desc=strings.TrimSpace(desc+"\n發行商："+v)}
 	if v:=chaoliuMetaField(body,"製作商");v!=""&&v!="未知"{desc=strings.TrimSpace(desc+"\n製作商："+v)}
 	if len(parseChaoliuQualities(body))==0{desc=strings.TrimSpace(desc+"\n站方未提供播放密文，目前無法直接播放。")}
-	drama:=Drama{ID:providerDramaID(sourceChaoliu,sourceID),Source:sourceChaoliu,SourceID:sourceID,Title:title,Name:title,Desc:desc,Intro:desc,Cover:cover,CoverURL:cover,ChannelName:"潮流 AV",CategoryName:"潮流 AV",TotalEpisode:1,EpisodeCount:1}
+	drama:=Drama{ID:providerDramaID(sourceChaoliu,sourceID),Source:sourceChaoliu,SourceID:sourceID,Title:title,Name:title,Desc:desc,Intro:desc,Cover:cover,CoverURL:cover,ChannelName:"chaoliu",CategoryName:"chaoliu",TotalEpisode:1,EpisodeCount:1}
 	chapter:=Chapter{ID:providerChapterID(sourceChaoliu,sourceID,final),Source:sourceChaoliu,Title:"正片",PageURL:final,Referer:final,VideoURL:"chaoliu-page://"+final,CurrentEpisode:json.RawMessage("1")}
 	return drama,[]Chapter{chapter},nil
 }
