@@ -596,7 +596,10 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 					// a provider, so keep each provider independently selectable.
 					groupKey = fmt.Sprintf("audio:%s:source:%d", language, lineIndex)
 					if flag != "" {
-						label = language + "（" + truncate(flag, 32) + "）"
+						label = language + "（" + truncate(flagBase, 32) + "）"
+						if sourceFlagCounts[flagBase] > 1 {
+							label = fmt.Sprintf("%s（%s · 片源 %d）", language, truncate(flagBase, 24), sourceFlagOrdinals[lineIndex])
+						}
 					}
 				}
 			case flagIsQualityOnly:
@@ -608,11 +611,9 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 				// Preserve a named provider while merging only its resolution
 				// variants (e.g. SourceA 1080P + SourceA 720P).
 				groupKey = "movie:source:" + flagBase
-				label = "片源 " + strconv.Itoa(sourceFlagOrdinals[lineIndex])
-				if sourceFlagCounts[flagBase] > 1 {
+				label = "片源 " + strconv.Itoa(lineIndex+1)
+				if flagBase != "" {
 					label += "（" + truncate(flagBase, 32) + "）"
-				} else if flag != "" {
-					label += "（" + truncate(flag, 32) + "）"
 				}
 			default:
 				// Non-quality flags identify distinct upstream source lines.
