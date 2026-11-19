@@ -511,7 +511,7 @@ func ikanbotMovieLanguageLabel(name, lineFlag string) string {
 // retain alternate URLs as playback fallbacks.
 func ikanbotMovieSourceFlagBase(flag string) string {
 	value := strings.ToLower(strings.TrimSpace(flag))
-	value = regexp.MustCompile(`(?i)(2160|1440|1080|720|480)\\s*p?`).ReplaceAllString(value, "")
+	value = regexp.MustCompile(`(?i)(2160|1440|1080|720|480)\s*p?`).ReplaceAllString(value, "")
 	value = strings.NewReplacer(
 		"超高清", "", "超清", "", "高清", "", "標清", "", "标清", "",
 		"藍光", "", "蓝光", "", "uhd", "", "fhd", "", "hd", "", "sd", "",
