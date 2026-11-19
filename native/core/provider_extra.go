@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"html"
 	"net/url"
+	"path"
 	"regexp"
 	"runtime"
 	"strconv"
