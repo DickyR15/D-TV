@@ -140,7 +140,7 @@ func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 	detailURLs := extraAdultDetailURLs(source91Porna, "key_123")
 	if len(detailURLs) != 2 ||
 		detailURLs[0] != "https://91porna.com/comic/index/detail?video_key=key_123" ||
-		detailURLs[1] != "https://91porna.com/comic/index/detail?video_key=key_123" {
+		detailURLs[1] != "https://91porna.com/comic/index/avdetail?video_key=key_123" {
 		t.Fatalf("91Porna detail fallback order = %#v", detailURLs)
 	}
 	if extraAdultUserAgent(source91Porna) != ninetyOneMobileUserAgent {
