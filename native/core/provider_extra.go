@@ -263,6 +263,74 @@ func extraAdultHasNextPage(body, baseURL string, currentPage int, source string)
 	return false
 }
 
+// extraAdult91PornaDetailLink normalizes both relative and absolute
+// links returned by the live catalogue. The old selector only matched
+// href="/comic/index/detail?..."; absolute hrefs (and //host/... links) were
+// silently dropped, leaving stale cached video_key values to be diagnosed.
+func extraAdult91PornaDetailLink(raw, base string) (string, bool) {
+	raw = strings.TrimSpace(html.UnescapeString(raw))
+	if raw == "" || strings.ContainsAny(raw, "\r\n\x00") {
+		return "", false
+	}
+	baseURL, err := url.Parse(strings.TrimSpace(base))
+	if err != nil || baseURL.Scheme != "https" ||
+		(baseURL.Hostname() != "91porna.com" && baseURL.Hostname() != "www.91porna.com") {
+		return "", false
+	}
+	reference, err := url.Parse(raw)
+	if err != nil || reference.User != nil {
+		return "", false
+	}
+	target := baseURL.ResolveReference(reference)
+	if target.Scheme != "https" || target.User != nil ||
+		(target.Hostname() != "91porna.com" && target.Hostname() != "www.91porna.com") {
+		return "", false
+	}
+	if target.Path != "/comic/index/detail" && target.Path != "/comic/index/avdetail" {
+		return "", false
+	}
+	id := strings.TrimSpace(target.Query().Get("video_key"))
+	if !extraAdultValidID(source91Porna, id) {
+		return "", false
+	}
+	return id, true
+}
+
+// extraAdult91PornaDetailPageError avoids treating a 200 challenge/login shell
+// or a redirect to a different page as a valid detail result. It also makes a
+// route fallback meaningful: a failed /detail candidate can be followed by
+// /avdetail, rather than stopping on the first non-empty HTTP response.
+func extraAdult91PornaDetailPageError(id, body, page string) error {
+	parsed, err := url.Parse(strings.TrimSpace(page))
+	if err != nil || parsed.Scheme != "https" ||
+		(parsed.Hostname() != "91porna.com" && parsed.Hostname() != "www.91porna.com") ||
+		(parsed.Path != "/comic/index/detail" && parsed.Path != "/comic/index/avdetail") ||
+		parsed.Query().Get("video_key") != id {
+		return errors.New("91Porna 詳情頁網址與作品 video_key 不相符")
+	}
+	lower := strings.ToLower(body)
+	for _, marker := range []string{
+		"just a moment", "cf-chl-", "challenge-platform",
+		"checking your browser", "access denied", "video not found",
+		"video has been removed", "該影片已刪除", "影片不存在",
+		"視頻不存在", "视频不存在",
+	} {
+		if strings.Contains(lower, strings.ToLower(marker)) {
+			return fmt.Errorf("91Porna 詳情頁回傳驗證頁或作品不存在訊息：%s", marker)
+		}
+	}
+	hasDetailMarker := strings.Contains(lower, "<h1") ||
+		strings.Contains(lower, "<title") ||
+		strings.Contains(lower, "og:title") ||
+		strings.Contains(lower, "data-video") ||
+		strings.Contains(lower, "embed_play.js") ||
+		strings.Contains(lower, "/comic/index/embed")
+	if !hasDetailMarker {
+		return errors.New("91Porna 回應不是可辨識的作品詳情頁")
+	}
+	return nil
+}
+
 func extraAdultParseCard(source,chunk,base string)(Drama,bool){
 	var id,title,cover,remark string
 	switch source{
@@ -294,7 +362,33 @@ func extraAdultParseCard(source,chunk,base string)(Drama,bool){
 			title = adultClean(match[1])
 		}
 	case source91Porna:
-		m:=regexp.MustCompile("(?i)href=['\\x22]/comic/index/(?:avdetail|detail)\\?video_key=([A-Za-z0-9_-]+)['\\x22]").FindStringSubmatch(chunk);if len(m)<2{return Drama{},false};id=m[1];img:=regexp.MustCompile("(?is)<img\\b[^>]*>").FindString(chunk);if img!=""{cover=adultAttribute(img,"data-src");if cover==""{cover=adultAttribute(img,"src")};title=adultAttribute(img,"alt")};if m:=regexp.MustCompile("(?i)([0-9]{1,3}:[0-9]{2})").FindStringSubmatch(chunk);len(m)>1{remark=m[1]}
+		for _, anchor := range adultAnchorPattern.FindAllStringSubmatch(chunk, -1) {
+			if len(anchor) < 3 {
+				continue
+			}
+			href := adultAttribute("<a "+anchor[1]+">", "href")
+			if candidate, ok := extraAdult91PornaDetailLink(href, base); ok {
+				id = candidate
+				break
+			}
+		}
+		if id == "" {
+			return Drama{}, false
+		}
+		img := regexp.MustCompile("(?is)<img\\b[^>]*>").FindString(chunk)
+		if img != "" {
+			cover = adultAttribute(img, "data-src")
+			if cover == "" {
+				cover = adultAttribute(img, "data-original")
+			}
+			if cover == "" {
+				cover = adultAttribute(img, "src")
+			}
+			title = adultAttribute(img, "alt")
+		}
+		if m := regexp.MustCompile("(?i)([0-9]{1,3}:[0-9]{2})").FindStringSubmatch(chunk); len(m) > 1 {
+			remark = m[1]
+		}
 	}
 	if !extraAdultValidID(source,id){return Drama{},false};title=adultClean(title);if title==""{title=id};cover=adultSafeImageURL(base,cover)
 	return Drama{ID:providerDramaID(source,id),Source:source,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,ChannelName:extraAdultSourceName(source),CategoryName:extraAdultSourceName(source),Remark:truncate(remark,64),TotalEpisode:1,EpisodeCount:1},true
@@ -351,6 +445,11 @@ func (d *Downloader) fetchExtraAdultDetail(ctx context.Context,source,id string)
 	var e error
 	for _,address:=range extraAdultDetailURLs(source,id) {
 		body,final,e=extraAdultFetch(ctx,d,source,address,base+"/")
+		if e == nil && source == source91Porna {
+			if validationErr := extraAdult91PornaDetailPageError(id, body, final); validationErr != nil {
+				e = validationErr
+			}
+		}
 		if e==nil { break }
 		if ctx.Err()!=nil { return Drama{},nil,ctx.Err() }
 	}

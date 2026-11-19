@@ -157,6 +157,98 @@ func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 	}
 }
 
+
+func TestExtraAdult91PornaParsesCurrentAbsoluteDetailLinks(t *testing.T) {
+	tests := []struct {
+		name string
+		href string
+		want string
+	}{
+		{
+			name: "absolute current detail link",
+			href: "https://91porna.com/comic/index/detail?video_key=455755",
+			want: "455755",
+		},
+		{
+			name: "absolute legacy avdetail link",
+			href: "https://91porna.com/comic/index/avdetail?video_key=key_123",
+			want: "key_123",
+		},
+		{
+			name: "protocol relative current detail link",
+			href: "//91porna.com/comic/index/detail?video_key=455755",
+			want: "455755",
+		},
+		{
+			name: "www current detail link",
+			href: "https://www.91porna.com/comic/index/detail?video_key=455755",
+			want: "455755",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			html := `<div class="video-item"><a href="` + test.href + `"><img data-src="/poster.jpg" alt="91 test"></a><span>12:34</span></div>`
+			blocks := extraAdultSegments(html, source91Porna)
+			if len(blocks) != 1 {
+				t.Fatalf("card block count = %d, want 1", len(blocks))
+			}
+			item, ok := extraAdultParseCard(source91Porna, blocks[0], ninetyOneBaseURL)
+			if !ok || item.SourceID != test.want {
+				t.Fatalf("absolute detail link parsed as %#v, ok=%t; want ID %q", item, ok, test.want)
+			}
+		})
+	}
+}
+
+func TestExtraAdult91PornaRejectsForeignAndNonDetailLinks(t *testing.T) {
+	for _, href := range []string{
+		"https://evil.example/comic/index/detail?video_key=455755",
+		"https://91porna.com/comic/index/video?category=play",
+		"http://91porna.com/comic/index/detail?video_key=455755",
+		"https://91porna.com/comic/index/detail?video_key=bad%2Fid",
+	} {
+		if _, ok := extraAdult91PornaDetailLink(href, ninetyOneBaseURL); ok {
+			t.Fatalf("untrusted or invalid 91Porna link was accepted: %s", href)
+		}
+	}
+}
+
+func TestExtraAdult91PornaValidatesActualDetailResponse(t *testing.T) {
+	const detailURL = "https://91porna.com/comic/index/detail?video_key=455755"
+	valid := `<!doctype html><html><head><title>91 video detail</title><meta property="og:title" content="Example"></head><body><h1>Example</h1><div data-video="19330"></div></body></html>`
+	if err := extraAdult91PornaDetailPageError("455755", valid, detailURL); err != nil {
+		t.Fatalf("valid current 91Porna detail page rejected: %v", err)
+	}
+	tests := []struct {
+		name string
+		body string
+		page string
+	}{
+		{
+			name: "cloudflare challenge",
+			body: `<!doctype html><html><head><title>Just a moment</title></head><body>Checking your browser</body></html>`,
+			page: detailURL,
+		},
+		{
+			name: "wrong video key after redirect",
+			body: valid,
+			page: "https://91porna.com/comic/index/detail?video_key=other",
+		},
+		{
+			name: "redirected to catalogue",
+			body: valid,
+			page: "https://91porna.com/comic/index/video?category=play",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := extraAdult91PornaDetailPageError("455755", test.body, test.page); err == nil {
+				t.Fatal("invalid detail response was accepted")
+			}
+		})
+	}
+}
+
 func TestExtraAdultMadouUsesCurrentCategorySlugs(t *testing.T) {
 	if !extraAdultValidCategory(sourceMadou, "大象传媒") ||
 		!extraAdultValidCategory(sourceMadou, "猫爪影像") ||
