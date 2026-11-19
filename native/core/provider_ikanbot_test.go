@@ -615,3 +615,18 @@ func TestGetHuangguoChaptersDispatchesIkanbotMovieAsSingleSelectableVersions(t *
 		t.Fatalf("movie chapters lost source identity: %#v", chapters)
 	}
 }
+
+
+func TestIkanbotMovieKeepsSameLanguageFromDifferentSourcesSeparate(t *testing.T) {
+	lines := []ikanbotLine{
+		{Flag: "來源甲", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-a.example.test/movie.mp4", Order: 1}}},
+		{Flag: "來源乙", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-b.example.test/movie.mp4", Order: 1}}},
+	}
+	chapters := ikanbotBuildChapters("1023902", "https://admin-api.aikanbot.com/play/1023902", lines, true)
+	if len(chapters) != 2 {
+		t.Fatalf("same-language different sources = %d choices, want 2: %#v", len(chapters), chapters)
+	}
+	if chapters[0].Title != "國語版（來源甲）" || chapters[1].Title != "國語版（來源乙）" {
+		t.Fatalf("different movie source names were not preserved: %#v", chapters)
+	}
+}
