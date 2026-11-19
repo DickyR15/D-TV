@@ -30,6 +30,30 @@ void main() {
       expect(merged.map((item) => item['id']), contains('receiver-123'));
     });
 
+    test('merges the same receiver endpoint even when TXT IDs differ', () {
+      final merged = mergeGoogleCastPayloads([
+        {
+          'id': 'receiver-first-interface',
+          'name': 'onn 4K Pro',
+          'address': '192.168.50.20',
+          'port': 8009,
+        },
+        {
+          'id': 'receiver-second-interface',
+          'name': 'Chromecast-onn',
+          'address': '192.168.50.20',
+          'port': 8009,
+        },
+      ]);
+
+      expect(merged, hasLength(1));
+      expect(googleCastDiscoveryIdentities(merged.single), contains('id:receiver-first-interface'));
+      expect(
+        googleCastDiscoveryIdentities(merged.single),
+        contains('endpoint:192.168.50.20:8009'),
+      );
+    });
+
     test('uses endpoint identity when TXT id is absent', () {
       expect(
         googleCastDiscoveryIdentity({

@@ -2142,6 +2142,24 @@ class _PlayerScreenState extends State<PlayerScreen>
               );
             }
           }
+          DiaryService.add(
+            '[Cast] discovery_summary dlna=${dlnaItems.length} google_cast=${googleCastItems.length}',
+          );
+          for (final item in dlnaItems.whereType<Map>()) {
+            DiaryService.add(
+              '[Cast] dlna_receiver name=${item['name'] ?? ''} id=${item['id'] ?? ''}',
+            );
+          }
+          for (final item in googleCastItems) {
+            final metadata = item['metadata'] is Map
+                ? Map<String, dynamic>.from(item['metadata'] as Map)
+                : const <String, dynamic>{};
+            DiaryService.add(
+              '[Cast] google_cast_receiver name=${item['name'] ?? ''} '
+              'id=${item['id'] ?? ''} address=${item['address'] ?? ''} '
+              'port=${item['port'] ?? ''} model=${metadata['md'] ?? ''}',
+            );
+          }
           final items = <dynamic>[...dlnaItems, ...googleCastItems];
           items.sort((a, b) {
             final nameA = a is Map ? (a['name'] ?? '').toString() : '';

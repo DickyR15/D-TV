@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -131,6 +135,89 @@ type hongguoRegistrationPayload struct {
 	GenTime  int64  `json:"_gen_time"`
 }
 
+
+var hongguoRegistrationHTMLTags = regexp.MustCompile(`(?s)<[^>]*>`)
+
+// hongguoRegistrationBodySummary keeps only a short, non-sensitive response
+// hint. The registration request body and generated device identifiers must
+// never be written to diagnostics.
+func hongguoRegistrationBodySummary(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	var payload map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	if decoder.Decode(&payload) == nil && payload != nil {
+		var hints []string
+		for _, key := range []string{"message", "msg", "error", "detail", "error_description", "code", "error_code"} {
+			value, ok := payload[key]
+			if !ok || value == nil {
+				continue
+			}
+			text := strings.TrimSpace(fmt.Sprint(value))
+			if text != "" && text != "<nil>" {
+				hints = append(hints, key+"="+text)
+			}
+		}
+		if len(hints) > 0 {
+			return truncate(redactErrorString(strings.Join(hints, " ")), 180)
+		}
+	}
+	text := html.UnescapeString(string(body))
+	text = hongguoRegistrationHTMLTags.ReplaceAllString(text, " ")
+	text = strings.Join(strings.Fields(text), " ")
+	return truncate(redactErrorString(text), 180)
+}
+
+func hongguoRegistrationResponseDetails(response *http.Response, body []byte) string {
+	if response == nil {
+		return ""
+	}
+	var details []string
+	for _, header := range []string{"Server", "Via", "Content-Type", "Retry-After", "X-Tt-Logid", "X-Request-Id"} {
+		value := strings.Join(strings.Fields(response.Header.Get(header)), " ")
+		if value != "" {
+			details = append(details, strings.ToLower(header)+"="+truncate(value, 96))
+		}
+	}
+	if location := strings.TrimSpace(response.Header.Get("Location")); location != "" {
+		if parsed, err := url.Parse(location); err == nil && parsed.Hostname() != "" {
+			details = append(details, "redirectHost="+strings.ToLower(parsed.Hostname()))
+		}
+	}
+	if hint := hongguoRegistrationBodySummary(body); hint != "" {
+		details = append(details, "body="+hint)
+	}
+	return strings.Join(details, "; ")
+}
+
+func (downloader *Downloader) recordHongguoRegistrationResponse(response *http.Response, body []byte, successful bool) {
+	if response == nil {
+		return
+	}
+	host := "log.snssdk.com"
+	if response.Request != nil && response.Request.URL != nil && response.Request.URL.Hostname() != "" {
+		host = strings.ToLower(response.Request.URL.Hostname())
+	}
+	level := "warning"
+	message := "紅果裝置註冊回應"
+	if successful {
+		level = "info"
+		message = "紅果裝置註冊請求成功"
+	} else if details := hongguoRegistrationResponseDetails(response, body); details != "" {
+		message += "；" + details
+	}
+	downloader.recordDiagnostic(diagnosticEvent{
+		Level: level, Event: "hongguo.device_registration", Source: sourceHongguo,
+		Host: host, HTTPStatus: response.StatusCode,
+		Client: "Android 16 / Redmi 25053RT47C / App 7.3.5.32",
+		CFRay: truncate(strings.TrimSpace(response.Header.Get("CF-Ray")), 128),
+		ResponseType: truncate(strings.TrimSpace(response.Header.Get("Content-Type")), 128),
+		Message: message,
+	})
+}
+
 func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string, string, error) {
 	header := hongguoRegistrationHeader{
 		DisplayName: "红果免费短剧", Aid: 8662, AppVersion: "7.3.5.32", VersionCode: 73532,
@@ -174,7 +261,11 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 		return "", "", err
 	}
 	if response.StatusCode != http.StatusOK {
+		downloader.recordHongguoRegistrationResponse(response, content, false)
 		statusErr := fmt.Errorf("紅果設備註冊 HTTP %d", response.StatusCode)
+		if details := hongguoRegistrationResponseDetails(response, content); details != "" {
+			statusErr = fmt.Errorf("%w（%s）", statusErr, details)
+		}
 		// 只有明確的客戶端拒絕才進入 10 分鐘冷卻；逾時、限流及伺服器錯誤都應允許下一次請求立即重試。
 		if response.StatusCode == http.StatusUnauthorized ||
 			response.StatusCode == http.StatusForbidden ||
@@ -190,11 +281,14 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.UseNumber()
 	if err := decoder.Decode(&result); err != nil {
+		downloader.recordHongguoRegistrationResponse(response, content, false)
 		return "", "", hongguoRegisterRejection{errors.New("紅果裝置註冊回傳格式異常")}
 	}
 	deviceID, installID := mapString(result, "device_id_str", "device_id"), mapString(result, "install_id_str", "install_id")
 	if !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0" {
+		downloader.recordHongguoRegistrationResponse(response, content, false)
 		return "", "", hongguoRegisterRejection{errors.New("紅果裝置註冊未提供裝置編號")}
 	}
+	downloader.recordHongguoRegistrationResponse(response, content, true)
 	return deviceID, installID, nil
 }

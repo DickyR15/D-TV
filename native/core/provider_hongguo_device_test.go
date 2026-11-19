@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -18,7 +20,7 @@ func TestHongguoAppBaseURLMatchesUpstreamFallbackHost(t *testing.T) {
 	}
 }
 
-func TestHongguoDeviceRegistrationMatchesGuoAppModuleV102(t *testing.T) {
+func TestHongguoDeviceRegistrationMatchesGuoAppModuleV104(t *testing.T) {
 	var calls int
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		calls++
@@ -108,6 +110,52 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV102(t *testing.T) {
 	state := d.hongguoCatalogSnapshot()
 	if !state.Registered || state.DeviceID != "1001" || state.InstallID != "10019" {
 		t.Fatalf("registered state = %#v", state)
+	}
+}
+
+
+func TestHongguoRegistrationHTTP444IncludesEdgeDiagnostics(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		response := sourceFixtureResponse(request, 444, `{"message":"request blocked by edge","code":"device_policy"}`)
+		response.Header.Set("Server", "edge-filter")
+		response.Header.Set("Content-Type", "application/json")
+		response.Header.Set("CF-Ray", "abc123-HKG")
+		response.Header.Set("X-Tt-Logid", "trace-456")
+		return response, nil
+	})
+	logPath := filepath.Join(t.TempDir(), "app.log")
+	d.diagnostics = &diagnosticLog{path: logPath, limit: diagnosticLogBytes}
+
+	err := d.ensureHongguoDevice(context.Background(), "")
+	if err == nil {
+		t.Fatal("HTTP 444 registration rejection was accepted")
+	}
+	for _, hint := range []string{
+		"HTTP 444", "server=edge-filter", "content-type=application/json",
+		"x-tt-logid=trace-456", "body=message=request blocked by edge code=device_policy",
+	} {
+		if !strings.Contains(err.Error(), hint) {
+			t.Errorf("registration error omitted %q: %v", hint, err)
+		}
+	}
+
+	logged, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatalf("registration diagnostic was not written: %v", readErr)
+	}
+	for _, hint := range []string{
+		`"event":"hongguo.device_registration"`,
+		`"httpStatus":444`,
+		`"cfRay":"abc123-HKG"`,
+		`"responseType":"application/json"`,
+		"request blocked by edge",
+	} {
+		if !strings.Contains(string(logged), hint) {
+			t.Errorf("registration log omitted %q: %s", hint, logged)
+		}
+	}
+	if strings.Contains(string(logged), `"magic_tag"`) || strings.Contains(string(logged), `"clientudid"`) {
+		t.Fatal("registration request payload or generated identifiers leaked into diagnostics")
 	}
 }
 
