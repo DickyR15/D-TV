@@ -1742,5 +1742,10 @@ func TestNativeCoverOriginRefererSupportsAFOriginalImages(t *testing.T) {
 		if got, want := nativeCoverOriginReferer(address), "https://"+host+"/"; got != want {
 			t.Errorf("AF Original Referer for %s = %q, want %q", host, got, want)
 		}
+		if got, want := nativeCoverRefererForDrama(&Downloader{}, nativeDrama{
+			ID: "duoduo:1192", Source: sourceDuoduo, Title: "奉子成婚",
+		}, address), "https://"+host+"/"; got != want {
+			t.Errorf("Duoduo AF Original Referer for %s = %q, want %q", host, got, want)
+		}
 	}
 }
