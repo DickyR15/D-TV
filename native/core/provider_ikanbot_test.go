@@ -678,7 +678,7 @@ func TestIkanbotMovieSameSourceQualityRowsStayTogetherButDifferentSourcesSplit(t
 	if len(chapters) != 2 {
 		t.Fatalf("movie source/quality choices = %d, want 2 sources: %#v", len(chapters), chapters)
 	}
-	if chapters[0].Title != "片源 1（來源甲）" || chapters[1].Title != "片源 3（來源乙）" {
+	if chapters[0].Title != "片源 1（來源甲）" || chapters[1].Title != "片源 2（來源乙）" {
 		t.Fatalf("movie source labels are incorrect: %#v", chapters)
 	}
 	if len(chapters[0].PlaybackVariants) != 1 ||
