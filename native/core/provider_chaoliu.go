@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type providerTextValidatorKey struct{}
@@ -101,7 +102,7 @@ func (d *Downloader) fetchChaoliuText(ctx context.Context,rawURL,referer string)
 	ctx=context.WithValue(ctx,providerTextUserAgentKey{},"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
 	ctx=context.WithValue(ctx,providerTextValidatorKey{},providerTextValidator(chaoliuValidator))
 	body,err:=d.fetchProviderText(ctx,rawURL,firstNonEmpty(referer,chaoliuSites[0]+"/"));if err!=nil{return "","",fmt.Errorf("潮流 AV 站點請求失敗：%w",err)}
-	finalURL:=rawURL
+	finalURL:=d.providerBaseURL(sourceChaoliu)+parsed.RequestURI()
 	if chaoliuIsAgeGate(body) {
 		gatePaths := []string{}
 		redirects := regexp.MustCompile("(?i)window\\.location\\s*=\\s*['\\x22]([^'\\x22]+)['\\x22]")
@@ -133,8 +134,10 @@ func (d *Downloader) fetchChaoliuText(ctx context.Context,rawURL,referer string)
 			}
 		}
 		if !passed { return "", "", errors.New("潮流 AV 年齡確認頁無法通過") }
+		finalURL = d.providerBaseURL(sourceChaoliu) + parsed.RequestURI()
 		body, err = d.fetchProviderText(ctx, rawURL, finalURL)
 		if err != nil { return "", "", err }
+		finalURL = d.providerBaseURL(sourceChaoliu) + parsed.RequestURI()
 		if chaoliuIsAgeGate(body) || chaoliuLooksOffsite(body) {
 			return "", "", errors.New("潮流 AV 年齡確認後仍未取得有效頁面")
 		}
@@ -251,8 +254,26 @@ func (d *Downloader) resolveChaoliuMedia(ctx context.Context,task Task)(provider
 		playerURL:=baseParsed.Scheme+"://"+baseParsed.Host+playPath
 		playerBody,playerFinal,fetchErr:=d.fetchChaoliuText(ctx,playerURL,final);if fetchErr!=nil{lastErr=fetchErr;continue}
 		sources:=parseChaoliuSources(playerBody,playerFinal);if len(sources)==0{lastErr=errors.New("潮流 AV 播放頁沒有提供有效的 HLS 或 MP4 網址");continue}
-		media,prepareErr:=d.prepareWebProviderMedia(ctx,providerMedia{URL:sources[0].URL,Referer:baseParsed.Scheme+"://"+baseParsed.Host+"/"},"潮流 AV")
-		if prepareErr==nil{return media,nil};lastErr=prepareErr
+		orderedURLs:=make([]string,0,len(sources))
+		sourceByURL:=make(map[string]chaoliuMediaSource,len(sources))
+		for _,candidate:=range sources{orderedURLs=append(orderedURLs,candidate.URL);sourceByURL[candidate.URL]=candidate}
+		orderedURLs=d.orderProviderEndpoints(sourceChaoliu,"media",orderedURLs)
+		var prepared providerMedia
+		preparedOK:=false
+		for index,mediaURL:=range orderedURLs {
+			started:=time.Now()
+			candidate,prepareErr:=d.prepareWebProviderMedia(ctx,providerMedia{URL:mediaURL,Referer:baseParsed.Scheme+"://"+baseParsed.Host+"/"},"潮流 AV")
+			d.recordProviderEndpoint(sourceChaoliu,"media",mediaURL,time.Since(started),prepareErr)
+			if prepareErr!=nil {lastErr=prepareErr;if ctx.Err()!=nil{return providerMedia{},ctx.Err()};continue}
+			for _,fallbackURL:=range orderedURLs[index+1:] {
+				fallback:=sourceByURL[fallbackURL]
+				candidate.Variants=append(candidate.Variants,providerMedia{URL:fallback.URL,Referer:baseParsed.Scheme+"://"+baseParsed.Host+"/"})
+			}
+			prepared=candidate
+			preparedOK=true
+			break
+		}
+		if preparedOK{return prepared,nil}
 	}
 	if lastErr==nil{lastErr=errors.New("潮流 AV 所有畫質線路皆無法解析")};return providerMedia{},lastErr
 }
