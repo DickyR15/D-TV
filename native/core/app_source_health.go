@@ -186,7 +186,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		return failure
 	}
 	var media providerMedia
-	var keyURL, segmentURL string
+	var keyURL string
 	var mediaProbeBytes []byte
 	var mediaProbeTrace nativeHealthStep
 	if !run("播放網址與播放清單", func() (string, error) {
@@ -195,7 +195,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		if err != nil {
 			return "", err
 		}
-		media, keyURL, segmentURL, mediaProbeBytes, err = engine.downloader.sourceProbePlayableRoute(ctx, media)
+		media, keyURL, _, mediaProbeBytes, err = engine.downloader.sourceProbePlayableRoute(ctx, media)
 		if err != nil {
 			return "", err
 		}
