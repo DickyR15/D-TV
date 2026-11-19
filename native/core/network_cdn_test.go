@@ -538,7 +538,7 @@ func TestRPZLandingCertificateTriggersVerifiedDNSFallback(t *testing.T) {
 	const fallbackIP = "93.184.216.34"
 	var directAttempts, dohLookups, recoveredRequests atomic.Int32
 
-	goodServer := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	goodServer := newUntrustedTLSServer(t, host, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.TLS == nil || request.TLS.ServerName != host || request.Host == fallbackIP {
 			t.Errorf("RPZ recovery changed TLS identity: host=%q tls=%+v", request.Host, request.TLS)
 		}
