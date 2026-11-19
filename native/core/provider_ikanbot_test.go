@@ -594,7 +594,7 @@ func TestGetHuangguoChaptersDispatchesIkanbotMovieAsSingleSelectableVersions(t *
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/play/1023901":
-			body := fmt.Sprintf("<html><h1 id=\\"video_title\\">電影測試作品</h1><input id=\\"current_id\\" value=\\"1023901\\"><input id=\\"e_token\\" value=\\"%s\\"><input id=\\"mtype\\" value=\\"1\\"></html>", token)
+			body := fmt.Sprintf(`<html><h1 id="video_title">電影測試作品</h1><input id="current_id" value="1023901"><input id="e_token" value="%s"><input id="mtype" value="1"></html>`, token)
 			return sourceFixtureResponse(request, http.StatusOK, body), nil
 		case "/api/getResN":
 			body := `{"state":1,"data":{"list":[{"resData":"[{\"flag\":\"1080P\",\"url\":\"國語$https://cdn.example.test/mandarin.mp4\"}]"},{"resData":"[{\"flag\":\"1080P\",\"url\":\"日語$https://cdn.example.test/japanese.mp4\"}]"}]}}`
