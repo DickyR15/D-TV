@@ -55,6 +55,35 @@ func observeSourceResponse(ctx context.Context, response *http.Response) {
 	trace.mu.Unlock()
 }
 
+// sourceHealthSampleCandidates prevents one stale/deleted catalogue entry
+// from marking an otherwise healthy source as unavailable. Explicitly selected
+// works (for a detail-page diagnostic) are never silently replaced.
+func sourceHealthSampleCandidates(selected nativeDrama, items []nativeDrama) []nativeDrama {
+	if strings.TrimSpace(selected.ID) != "" {
+		return []nativeDrama{selected}
+	}
+	candidates := make([]nativeDrama, 0, 5)
+	seen := make(map[string]bool, len(items))
+	appendGroup := func(vip bool) {
+		for _, item := range items {
+			isVIP := item.VIP != nil && *item.VIP
+			if isVIP != vip || strings.TrimSpace(item.ID) == "" || seen[item.ID] {
+				continue
+			}
+			seen[item.ID] = true
+			candidates = append(candidates, item)
+			if len(candidates) >= 5 {
+				return
+			}
+		}
+	}
+	appendGroup(false)
+	if len(candidates) < 5 {
+		appendGroup(true)
+	}
+	return candidates
+}
+
 func (engine *nativeEngine) checkSource(ctx context.Context, source string, selected nativeDrama, playback bool) error {
 	report := nativeSourceHealth{CheckedAt: time.Now(), State: "checking", Steps: []nativeHealthStep{}}
 	trace := &sourceResponseTrace{}
@@ -158,30 +187,52 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 		return failure
 	}
 	drama := selected
-	if drama.ID == "" {
-		drama = page.Items[0]
-		for _, item := range page.Items {
-			if item.VIP == nil || !*item.VIP {
-				drama = item
-				break
-			}
-		}
-	}
-	report.Sample = drama.Title
 	var chapter Chapter
 	if !run("分集目录", func() (string, error) {
-		_, id, _ := splitProviderDramaID(drama.ID)
-		_, chapters, err := engine.downloader.GetHuangguoChapters(ctx, source, id)
-		if err != nil {
-			return "", err
+		candidates := sourceHealthSampleCandidates(selected, page.Items)
+		if len(candidates) == 0 {
+			return "", errors.New("目錄中沒有可供檢測的作品")
 		}
-		for _, item := range chapters {
-			if !item.VIP {
-				chapter = item
-				return fmt.Sprintf("%d 集，检测第 %s 集", len(chapters), item.EpisodeString(1)), nil
+		var failures []error
+		for _, candidate := range candidates {
+			_, id, valid := splitProviderDramaID(candidate.ID)
+			if !valid || id == "" {
+				failures = append(failures, fmt.Errorf("%s：作品識別碼無效", candidate.DisplayTitle()))
+				continue
 			}
+			_, chapters, err := engine.downloader.GetHuangguoChapters(ctx, source, id)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("%s：%w", candidate.DisplayTitle(), err))
+				if ctx.Err() != nil {
+					return "", ctx.Err()
+				}
+				continue
+			}
+			var playable *Chapter
+			for index := range chapters {
+				if !chapters[index].VIP {
+					playable = &chapters[index]
+					break
+				}
+			}
+			if playable == nil {
+				failures = append(failures, fmt.Errorf("%s：沒有可用的免費分集", candidate.DisplayTitle()))
+				continue
+			}
+			drama = candidate
+			chapter = *playable
+			report.Sample = drama.Title
+			skipped := len(failures)
+			message := fmt.Sprintf("%d 集，檢測第 %s 集", len(chapters), chapter.EpisodeString(1))
+			if skipped > 0 {
+				message += fmt.Sprintf("（略過 %d 部無法取得詳情或分集的作品）", skipped)
+			}
+			return message, nil
 		}
-		return "", errors.New("没有可用于检测的免费分集")
+		if len(failures) == 0 {
+			return "", errors.New("沒有可用的免費分集")
+		}
+		return "", fmt.Errorf("前 %d 部候選作品皆無法取得可播放分集：%w", len(candidates), errors.Join(failures...))
 	}) {
 		return failure
 	}

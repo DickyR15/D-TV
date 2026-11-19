@@ -8,6 +8,41 @@ import (
 	"testing"
 )
 
+func TestSourceHealthSampleCandidatesSkipsVIPAndChecksSeveralFreeWorks(t *testing.T) {
+	vip := true
+	nonVIP := false
+	items := []nativeDrama{
+		{ID:"91porna:stale-1",Title:"第一部失效作品",VIP:&nonVIP},
+		{ID:"91porna:vip-1",Title:"VIP 作品",VIP:&vip},
+		{ID:"91porna:stale-2",Title:"第二部失效作品",VIP:&nonVIP},
+		{ID:"91porna:free-3",Title:"第三部免費作品",VIP:&nonVIP},
+		{ID:"91porna:free-4",Title:"第四部免費作品",VIP:&nonVIP},
+		{ID:"91porna:free-5",Title:"第五部免費作品",VIP:&nonVIP},
+		{ID:"91porna:free-6",Title:"第六部免費作品",VIP:&nonVIP},
+	}
+	got := sourceHealthSampleCandidates(nativeDrama{}, items)
+	if len(got) != 5 {
+		t.Fatalf("health sample candidate count = %d, want 5: %#v", len(got), got)
+	}
+	for _, item := range got {
+		if item.VIP != nil && *item.VIP {
+			t.Fatalf("VIP item should not be selected while free candidates exist: %#v", item)
+		}
+	}
+	if got[0].ID != "91porna:stale-1" || got[1].ID != "91porna:stale-2" {
+		t.Fatalf("catalogue order was not preserved among free samples: %#v", got)
+	}
+}
+
+func TestSourceHealthSampleCandidatesKeepsExplicitSelection(t *testing.T) {
+	selected := nativeDrama{ID:"91porna:selected",Title:"明確選取的作品"}
+	items := []nativeDrama{{ID:"91porna:other",Title:"其他作品"}}
+	got := sourceHealthSampleCandidates(selected, items)
+	if len(got) != 1 || got[0].ID != selected.ID {
+		t.Fatalf("explicit diagnostic selection was silently replaced: %#v", got)
+	}
+}
+
 func TestSourceProbePlayableRouteFallsBackWhenPreferredCDNIsDenied(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

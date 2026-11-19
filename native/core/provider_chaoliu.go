@@ -89,15 +89,67 @@ func chaoliuValidator(candidate string,status int,body []byte) error {
 		if len(parseChaoliuSources(text,candidate)) > 0 { return nil }
 		return errors.New("chaoliu 播放解析端點未回傳有效的 HLS／MP4 媒體網址")
 	}
-	if len(text)<100{return errors.New("潮流 AV 回應內容過短")}
-	if chaoliuLooksOffsite(text){return errors.New("潮流 AV 回應被導向廣告頁")}
-	if chaoliuIsAgeGate(text){return nil}
-	if !chaoliuLooksLikeSite(text){return errors.New("潮流 AV 回應不是有效的站點頁面")}
+	if len(text) < 100 {
+		return errors.New("潮流 AV 回應內容過短")
+	}
+	if chaoliuLooksOffsite(text) {
+		return errors.New("潮流 AV 回應被導向廣告頁")
+	}
+	if chaoliuIsAgeGate(text) {
+		return nil
+	}
+	if !chaoliuLooksLikeSite(text) && !chaoliuLooksLikeDetailHTML(candidate, text) {
+		return errors.New("潮流 AV 回應不是有效的站點頁面")
+	}
 	return nil
 }
 func chaoliuLooksLikeSite(body string) bool {
-	lower:=strings.ToLower(body)
-	for _,marker:=range []string{"_content/","_list/","fc_search","mvarr","application/ld+json","play.php","18av","chinese_list","jfun_show"} {if strings.Contains(lower,strings.ToLower(marker)){return true}}
+	lower := strings.ToLower(body)
+	for _, marker := range []string{
+		"_content/", "_list/", "fc_search", "mvarr",
+		"application/ld+json", "play.php", "18av",
+		"chinese_list", "jfun_show", "og:title",
+		"og:image", "video_title", "numresolution=",
+		"__play", "playerconfig",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// chaoliuLooksLikeDetailHTML accepts a real HTML document for an explicitly
+// allow-listed detail route even when the site removes its historical marker
+// strings. It rejects Cloudflare/access-denied shells so one valid 200 detail
+// response is not needlessly replayed against all 15 mirrors.
+func chaoliuLooksLikeDetailHTML(candidate, body string) bool {
+	parsed, err := url.Parse(candidate)
+	if err != nil || !isChaoliuSiteHost(parsed.Hostname()) {
+		return false
+	}
+	path := strings.ToLower(parsed.Path)
+	if !strings.Contains(path, "_content/") && !strings.Contains(path, "jfun_show") {
+		return false
+	}
+	lower := strings.ToLower(body)
+	for _, blocked := range []string{
+		"just a moment", "cf-chl-", "challenge-platform",
+		"attention required", "access denied", "checking your browser",
+		"security check", "error 403", "error 404", "error 410",
+	} {
+		if strings.Contains(lower, blocked) {
+			return false
+		}
+	}
+	if !strings.Contains(lower, "<html") && !strings.Contains(lower, "<!doctype html") {
+		return false
+	}
+	for _, marker := range []string{"<title", "<h1", "<meta", "<video", "application/ld+json"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
 	return false
 }
 func chaoliuIsAgeGate(body string) bool {

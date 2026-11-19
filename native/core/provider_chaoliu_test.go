@@ -50,6 +50,29 @@ func TestGetHuangguoChaptersDispatchesGuipianAndChaoliu(t *testing.T) {
 	}
 }
 
+func TestChaoliuValidatorAcceptsValidDetailHTMLWithoutLegacyMarkers(t *testing.T) {
+	candidate := "https://mjv011.com/zh/chinese_content/19/new-layout-title.html"
+	body := []byte(`<!doctype html><html><head><title>Example detail</title><meta property="og:title" content="Example"></head><body><h1>Example</h1><video></video></body></html>`)
+	if err := chaoliuValidator(candidate, 200, body); err != nil {
+		t.Fatalf("valid detail HTML without legacy markers was rejected: %v", err)
+	}
+}
+
+func TestChaoliuValidatorRejectsChallengeHTMLOnDetailRoute(t *testing.T) {
+	candidate := "https://mjv011.com/zh/chinese_content/19/sample.html"
+	body := []byte(`<!doctype html><html><head><title>Just a moment...</title></head><body><div>Checking your browser</div></body></html>`)
+	if err := chaoliuValidator(candidate, 200, body); err == nil {
+		t.Fatal("Cloudflare challenge HTML must not pass as a valid detail page")
+	}
+}
+
+func TestChaoliuValidatorDoesNotAcceptGenericHTMLFromUntrustedHost(t *testing.T) {
+	body := []byte(`<!doctype html><html><head><title>Example</title></head><body><h1>Example</h1></body></html>`)
+	if err := chaoliuValidator("https://evil.example/zh/chinese_content/19/sample.html", 200, body); err == nil {
+		t.Fatal("generic HTML from an untrusted host was accepted")
+	}
+}
+
 func TestChaoliuValidatorAcceptsPlayerEndpointMediaPayload(t *testing.T) {
 	candidate := "https://mjv011.com/js/player/play.php?numresolution=1080&id=sample"
 	body := []byte(`{"url":"https:\/\/mavrtracktor.com\/playlist\/index.m3u8?token=x"}`)
