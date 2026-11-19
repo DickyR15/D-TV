@@ -216,7 +216,7 @@ func (engine *nativeEngine) checkSource(ctx context.Context, source string, sele
 				}
 			}
 			if playable == nil {
-				failures = append(failures, fmt.Errorf("%s：沒有可用的免費分集", candidate.DisplayTitle()))
+				failures = append(failures, fmt.Errorf("%s：沒有可用的免費分集", firstNonEmpty(candidate.Title, candidate.ID)))
 				continue
 			}
 			drama = candidate
