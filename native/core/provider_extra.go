@@ -156,11 +156,23 @@ func extraAdultDetailURL(source,id string)string{
 	case sourceSupJav:if strings.HasPrefix(id,"video.php?")||strings.HasPrefix(id,"video/"){return base+"/"+id};return base+"/video/"+id
 	case sourcePPP:return base+"/v/"+url.PathEscape(id)+"/"
 	case sourceMadou:return base+"/"+url.PathEscape(id)
-	case source91Porna:return base+"/comic/index/avdetail?video_key="+url.QueryEscape(id)
+	case source91Porna:return base+"/comic/index/detail?video_key="+url.QueryEscape(id)
 	};return ""
 }
+func extraAdultDetailURLs(source,id string)[]string {
+	primary:=extraAdultDetailURL(source,id)
+	if primary=="" { return nil }
+	if canonicalProviderSource(source)!=source91Porna { return []string{primary} }
+	legacy:=extraAdultBaseURL(source)+"/comic/index/avdetail?video_key="+url.QueryEscape(id)
+	if legacy==primary { return []string{primary} }
+	return []string{primary,legacy}
+}
+func extraAdultUserAgent(source string) string {
+	if canonicalProviderSource(source)==source91Porna { return ninetyOneMobileUserAgent }
+	return adultUserAgent
+}
 func extraAdultFetch(ctx context.Context,d *Downloader,source,address,referer string)(string,string,error){
-	return extraAdultFetchWithUserAgent(ctx,d,source,address,referer,adultUserAgent)
+	return extraAdultFetchWithUserAgent(ctx,d,source,address,referer,extraAdultUserAgent(source))
 }
 
 func extraAdultFetchWithUserAgent(ctx context.Context,d *Downloader,source,address,referer,agent string)(string,string,error){
@@ -334,7 +346,15 @@ func extraAdultTitle(body,fallback string)string{
 	t:=adultClean(adultMetaValue(body,"og:title"));if t==""{t=adultClean(adultMetaValue(body,"twitter:title"))};if t==""{if m:=regexp.MustCompile("(?is)<h1\\b[^>]*>(.*?)</h1>").FindStringSubmatch(body);len(m)>1{t=adultClean(m[1])}};if t==""{if m:=regexp.MustCompile("(?is)<title\\b[^>]*>(.*?)</title>").FindStringSubmatch(body);len(m)>1{t=adultClean(m[1])}};if t==""{t=fallback};t=regexp.MustCompile("(?i)\\s*[-|]\\s*(?:SupJav|PPP\\.Porn|麻豆.*|91porna|91視頻).*$").ReplaceAllString(t,"");return strings.TrimSpace(t)
 }
 func (d *Downloader) fetchExtraAdultDetail(ctx context.Context,source,id string)(Drama,[]Chapter,error){
-	source=canonicalProviderSource(source);if !extraAdultValidID(source,id){return Drama{},nil,errors.New("作品識別碼無效")};base:=extraAdultBaseURL(source);body,final,e:=extraAdultFetch(ctx,d,source,extraAdultDetailURL(source,id),base+"/");if e!=nil{return Drama{},nil,fmt.Errorf("%s 作品詳情讀取失敗：%w",extraAdultSourceName(source),e)}
+	source=canonicalProviderSource(source);if !extraAdultValidID(source,id){return Drama{},nil,errors.New("作品識別碼無效")};base:=extraAdultBaseURL(source)
+	var body,final string
+	var e error
+	for _,address:=range extraAdultDetailURLs(source,id) {
+		body,final,e=extraAdultFetch(ctx,d,source,address,base+"/")
+		if e==nil { break }
+		if ctx.Err()!=nil { return Drama{},nil,ctx.Err() }
+	}
+	if e!=nil{return Drama{},nil,fmt.Errorf("%s 作品詳情讀取失敗：%w",extraAdultSourceName(source),e)}
 	title:=extraAdultTitle(body,id);desc:=adultClean(adultMetaValue(body,"description"))
 	if source==source91Porna && extraAdultMobileScanRequired(body) {
 		const note = "網站頁面顯示手機掃碼入口；D-TV 會另外解析作品嵌入播放器，若頁面沒有提供可用串流才會無法播放。"
@@ -930,8 +950,8 @@ func (d *Downloader) fetchExtraAdult91PornaPlayback(ctx context.Context, mediaID
 	if err != nil {
 		return providerMedia{}, err
 	}
-	request.Header.Set("User-Agent", adultUserAgent)
-	request.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	request.Header.Set("User-Agent", ninetyOneMobileUserAgent)
+	request.Header.Set("Accept", "application/json, text/plain, */*")
 	request.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
 	request.Header.Set("Referer", page)
 	request.Header.Set("Content-Type", "application/json")
@@ -958,7 +978,7 @@ func (d *Downloader) fetchExtraAdult91PornaPlayback(ctx context.Context, mediaID
 	if len(addresses) == 0 {
 		return providerMedia{}, errors.New("91Porna 播放 API 沒有提供 main、hevc 或 preview 串流")
 	}
-	credentials := &providerMediaCredentials{referer: page, userAgent: adultUserAgent}
+	credentials := &providerMediaCredentials{referer: page, userAgent: ninetyOneMobileUserAgent}
 	media := providerMedia{
 		URL: addresses[0], Referer: page, credentials: credentials,
 		StandardHTTP: runtime.GOOS == "android",
@@ -991,15 +1011,15 @@ func (d *Downloader) resolveExtraAdult91PornaAPI(ctx context.Context, sourceID s
 		lastErr = err
 	}
 	for _, detailPath := range []string{
-		"/comic/index/avdetail?video_key=" + url.QueryEscape(sourceID),
 		"/comic/index/detail?video_key=" + url.QueryEscape(sourceID),
+		"/comic/index/avdetail?video_key=" + url.QueryEscape(sourceID),
 	} {
 		address := ninetyOneBaseURL + detailPath
 		if address == page {
 			continue
 		}
 		candidateBody, finalURL, fetchErr := extraAdultFetchWithUserAgent(
-			ctx, d, source91Porna, address, ninetyOneBaseURL+"/", adultUserAgent,
+			ctx, d, source91Porna, address, ninetyOneBaseURL+"/", ninetyOneMobileUserAgent,
 		)
 		if fetchErr != nil {
 			lastErr = fetchErr
@@ -1032,7 +1052,7 @@ func extraAdultHLS(body,page string)string{
 }
 func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(providerMedia,error){
 	source,id,ok:=splitProviderDramaID(task.DramaID);prefix:=providerChapterID(source,id,"");if !ok||!extraAdultValidID(source,id)||!strings.HasPrefix(task.Chapter.ID,prefix){return providerMedia{},errors.New("進階片源分集資訊無效，請重新整理")}
-	userAgent:=adultUserAgent
+	userAgent:=extraAdultUserAgent(source)
 	base:=extraAdultBaseURL(source);page:=firstNonEmpty(task.Chapter.PageURL,strings.TrimPrefix(task.Chapter.ID,prefix));if page==""{page=extraAdultDetailURL(source,id)};body,final,e:=extraAdultFetchWithUserAgent(ctx,d,source,page,base+"/",userAgent);if e!=nil{return providerMedia{},fmt.Errorf("%s 播放頁讀取失敗：%w",extraAdultSourceName(source),e)}
 	switch source{
 	case sourcePPP:

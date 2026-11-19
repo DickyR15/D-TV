@@ -134,8 +134,17 @@ func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 	if err != nil || got != "/comic/index/video?category=play&page=2" {
 		t.Fatalf("91Porna second-page category path = %q, err=%v", got, err)
 	}
-	if got := extraAdultDetailURL(source91Porna, "key_123"); got != "https://91porna.com/comic/index/avdetail?video_key=key_123" {
+	if got := extraAdultDetailURL(source91Porna, "key_123"); got != "https://91porna.com/comic/index/detail?video_key=key_123" {
 		t.Fatalf("91Porna detail URL = %q", got)
+	}
+	detailURLs := extraAdultDetailURLs(source91Porna, "key_123")
+	if len(detailURLs) != 2 ||
+		detailURLs[0] != "https://91porna.com/comic/index/detail?video_key=key_123" ||
+		detailURLs[1] != "https://91porna.com/comic/index/avdetail?video_key=key_123" {
+		t.Fatalf("91Porna detail fallback order = %#v", detailURLs)
+	}
+	if extraAdultUserAgent(source91Porna) != ninetyOneMobileUserAgent {
+		t.Fatal("91Porna must use its mobile browser user agent")
 	}
 	html := `<div class="video-item"><a href="/comic/index/detail?video_key=key_123"><img data-src="/poster.jpg" alt="91 current detail route"></a><span>12:34</span></div>`
 	segments := extraAdultSegments(html, source91Porna)

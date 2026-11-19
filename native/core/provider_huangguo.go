@@ -484,7 +484,11 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 		}
 	}
 	if len(candidates) > 1 && lastErr != nil {
-		return "", fmt.Errorf("黃果來源要求失敗：已嘗試 %d 個網域，最後錯誤：%w", tried, lastErr)
+		sourceName := "黃果來源"
+		if source == sourceChaoliu {
+			sourceName = "chaoliu"
+		}
+		return "", fmt.Errorf("%s 要求失敗：已嘗試 %d 個網域，最後錯誤：%w", sourceName, tried, lastErr)
 	}
 	return "", lastErr
 }

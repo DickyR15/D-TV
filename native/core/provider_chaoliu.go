@@ -73,9 +73,23 @@ func chaoliuSearchPath(page int,query string)(string,error) {
 	query=strings.NewReplacer("/"," ","\\"," ","?"," ","#"," ","%"," ").Replace(query)
 	return "/zh/fc_search/all/"+url.PathEscape(query)+"/"+strconv.Itoa(page)+".html",nil
 }
+func chaoliuPlayerEndpoint(candidate string) bool {
+	parsed, err := url.Parse(candidate)
+	return err == nil && strings.EqualFold(strings.TrimRight(parsed.Path, "/"), "/js/player/play.php")
+}
+
 func chaoliuValidator(candidate string,status int,body []byte) error {
 	if status<200||status>=300{return fmt.Errorf("潮流 AV HTTP %d",status)}
-	text:=string(body);if len(text)<100{return errors.New("潮流 AV 回應內容過短")}
+	text:=string(body)
+	// play.php is a media API, not an article/catalogue HTML page. Its JSON
+	// response can legitimately omit all site-shell markers. Validate it by
+	// the actual HLS/MP4 payload instead of retrying the same API on all 15
+	// mirrors because it is not an HTML document.
+	if chaoliuPlayerEndpoint(candidate) {
+		if len(parseChaoliuSources(text,candidate)) > 0 { return nil }
+		return errors.New("chaoliu 播放解析端點未回傳有效的 HLS／MP4 媒體網址")
+	}
+	if len(text)<100{return errors.New("潮流 AV 回應內容過短")}
 	if chaoliuLooksOffsite(text){return errors.New("潮流 AV 回應被導向廣告頁")}
 	if chaoliuIsAgeGate(text){return nil}
 	if !chaoliuLooksLikeSite(text){return errors.New("潮流 AV 回應不是有效的站點頁面")}
@@ -155,7 +169,7 @@ func parseChaoliuList(body,pageURL string) []Drama {
 		if title==""{title=strings.ReplaceAll(slug,"-"," ")}
 		cover:="";if image:=regexp.MustCompile("(?is)<img\\b[^>]*>").FindString(chunk);image!=""{cover=extractAttr(image,"data-original","data-src","src")}
 		cover=resolveProviderURL(pageURL,html.UnescapeString(cover))
-		out=append(out,Drama{ID:providerDramaID(sourceChaoliu,sourceID),Source:sourceChaoliu,SourceID:sourceID,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,ChannelName:"潮流 AV",CategoryName:"潮流 AV",TotalEpisode:1,EpisodeCount:1})
+		out=append(out,Drama{ID:providerDramaID(sourceChaoliu,sourceID),Source:sourceChaoliu,SourceID:sourceID,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,ChannelName:"chaoliu",CategoryName:"chaoliu",TotalEpisode:1,EpisodeCount:1})
 	}
 	return out
 }
@@ -210,6 +224,7 @@ func chaoliuDecodePlayID(encoded string,constants chaoliuConstants)(string,error
 	return "",errors.New("潮流 AV 播放地址解密失敗")
 }
 func parseChaoliuSources(body,pageURL string) []chaoliuMediaSource {
+	body=html.UnescapeString(strings.NewReplacer("\\/", "/", "\\u002F", "/", "\\u0026", "&").Replace(body))
 	out:=[]chaoliuMediaSource{};seen:=map[string]bool{}
 	add:=func(raw string,size int64){address:=resolveProviderURL(pageURL,strings.TrimSpace(raw));parsed,e:=url.Parse(address);if e!=nil||!isProviderHTTPMediaURL(address)||parsed.User!=nil{return};p:=strings.ToLower(parsed.Path);if !(strings.HasSuffix(p,".m3u8")||strings.HasSuffix(p,".mp4"))||seen[address]{return};seen[address]=true;out=append(out,chaoliuMediaSource{address,size})}
 	for _,m:=range chaoliuSourcePattern.FindAllStringSubmatch(body,-1){if len(m)>1{var size int64;if len(m)>2{size,_=strconv.ParseInt(m[2],10,64)};add(m[1],size)}}
@@ -262,7 +277,7 @@ func (d *Downloader) resolveChaoliuMedia(ctx context.Context,task Task)(provider
 		preparedOK:=false
 		for index,mediaURL:=range orderedURLs {
 			started:=time.Now()
-			candidate,prepareErr:=d.prepareWebProviderMedia(ctx,providerMedia{URL:mediaURL,Referer:baseParsed.Scheme+"://"+baseParsed.Host+"/"},"潮流 AV")
+			candidate,prepareErr:=d.prepareWebProviderMedia(ctx,providerMedia{URL:mediaURL,Referer:baseParsed.Scheme+"://"+baseParsed.Host+"/"},"chaoliu")
 			d.recordProviderEndpoint(sourceChaoliu,"media",mediaURL,time.Since(started),prepareErr)
 			if prepareErr!=nil {lastErr=prepareErr;if ctx.Err()!=nil{return providerMedia{},ctx.Err()};continue}
 			for _,fallbackURL:=range orderedURLs[index+1:] {

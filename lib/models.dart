@@ -82,7 +82,7 @@ class SourceSite {
     SourceSite('ppp', 'ppp', '分類 · 搜尋 · 播放', adult: true),
     SourceSite('madou', 'madou', '分類 · 搜尋 · 多線播放', adult: true),
     SourceSite('91porna', '91porna', '分類 · 搜尋 · 多線播放', adult: true),
-    SourceSite('chaoliu', '潮流 AV', '分類 · 搜尋 · 多畫質播放', adult: true),
+    SourceSite('chaoliu', 'chaoliu', '分類 · 搜尋 · 多畫質播放', adult: true),
   ];
   /// Retired providers remain recognizable for saved library records only.
   /// They are not available for new catalog browsing or source management.

@@ -303,7 +303,7 @@ func nativePosterTypeCompatible(drama nativeDrama, kind string) bool {
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
 	isMovie := bangumiPosterContainsAny(category, "電影", "电影", "movie", "film")
 	isTV := bangumiPosterContainsAny(category, "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "韓劇", "韩剧", "日劇", "日剧", "美劇", "美剧", "短劇", "短剧", "series", "tv")
-	isAnime := bangumiPosterContainsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
+	isAnime := bangumiPosterContainsAny(category, "動漫", "动漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
 	isVariety := bangumiPosterContainsAny(category, "綜藝", "综艺", "真人秀", "實境秀", "真人實境", "variety")
 	if isAnime || isVariety || (!isMovie && !isTV) {
 		return true
@@ -619,7 +619,7 @@ func nativePreferredOfficialPosterAddress(drama nativeDrama) (string, bool) {
 
 func nativePosterIsAnime(drama nativeDrama) bool {
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
-	return bangumiPosterContainsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
+	return bangumiPosterContainsAny(category, "動漫", "动漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
 }
 
 func nativePosterIsTVSeries(drama nativeDrama) bool {
@@ -1102,7 +1102,7 @@ func bangumiPosterSubjectTypes(drama nativeDrama) []int {
 		// Bangumi classifies variety programmes under real-world media (type 6).
 		// Exact title/year checks below still prevent unrelated matches.
 		return []int{6}
-	case bangumiPosterContainsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime"):
+	case bangumiPosterContainsAny(category, "動漫", "动漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime"):
 		return []int{2}
 	case bangumiPosterContainsAny(category, "電影", "电影", "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "短劇", "短剧", "movie", "tv"):
 		return []int{6}

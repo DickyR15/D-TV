@@ -49,3 +49,18 @@ func TestGetHuangguoChaptersDispatchesGuipianAndChaoliu(t *testing.T) {
 		t.Fatalf("潮流 AV 健康檢查未進入專屬分集解析：%v", err)
 	}
 }
+
+func TestChaoliuValidatorAcceptsPlayerEndpointMediaPayload(t *testing.T) {
+	candidate := "https://mjv011.com/js/player/play.php?numresolution=1080&id=sample"
+	body := []byte(`{"url":"https:\/\/mavrtracktor.com\/playlist\/index.m3u8?token=x"}`)
+	if err := chaoliuValidator(candidate, 200, body); err != nil {
+		t.Fatalf("valid play.php media response was rejected: %v", err)
+	}
+	if got := parseChaoliuSources(string(body), candidate); len(got) != 1 ||
+		!strings.Contains(got[0].URL, "mavrtracktor.com/playlist/index.m3u8") {
+		t.Fatalf("play.php media URLs were not parsed: %#v", got)
+	}
+	if err := chaoliuValidator("https://mjv011.com/zh/chinese_content/19/sample.html", 200, body); err == nil {
+		t.Fatal("a player JSON payload must not pass as a catalogue/detail HTML page")
+	}
+}

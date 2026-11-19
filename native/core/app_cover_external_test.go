@@ -1603,3 +1603,22 @@ func TestDuoduoYongshengOfficialArtworkOverridesAntiHotlinkCache(t *testing.T) {
 		t.Fatalf("anti-hotlink provider image was requested %d times before official override", originalRequests)
 	}
 }
+
+func TestDuoduoSimplifiedAnimeCategoryEnablesPosterRecovery(t *testing.T) {
+	drama := nativeDrama{
+		ID: "duoduo:1192", Title: "奉子成婚",
+		Category: "动漫", OnlineDate: "2025",
+	}
+	if !nativePosterIsAnime(drama) {
+		t.Fatal("simplified Duoduo anime category was not recognized")
+	}
+	types := bangumiPosterSubjectTypes(drama)
+	if len(types) != 1 || types[0] != 2 {
+		t.Fatalf("Bangumi subject types = %#v, want anime-only type [2]", types)
+	}
+	const expected = "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg"
+	address, ok := nativePreferredOfficialPosterAddress(drama)
+	if !ok || address != expected {
+		t.Fatalf("preferred official anime poster = %q, ok=%t; want %q", address, ok, expected)
+	}
+}
