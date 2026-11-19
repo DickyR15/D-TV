@@ -328,7 +328,7 @@ func TestSourceHealthChecksHLSKeyAndBoundedMedia(t *testing.T) {
 		t.Fatal(err)
 	}
 	health := engine.sourceStatus(sourceHuangguoVideo).Health
-	if health.State != "ok" || len(health.Steps) != 4 || segments.Load() != 1 {
+	if health.State != "ok" || len(health.Steps) != 5 || segments.Load() != 1 {
 		t.Fatal("incomplete health report", health)
 	}
 	body, err := os.ReadFile(filepath.Join(engine.directory, "sources.json"))
