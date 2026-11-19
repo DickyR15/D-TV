@@ -553,7 +553,7 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 				// source flag itself is also the language label.
 				if flag != "" && !ikanbotQualityOnlyLabel(flag) {
 					flagKey := strings.ToLower(strings.Join(strings.Fields(flag), " "))
-					group = flagKey + "\\x00" + strconv.Itoa(lineIndex)
+					group = flagKey + "\x00" + strconv.Itoa(lineIndex)
 					if flagLanguage == language {
 						if sourceFlagCounts[flagKey] > 1 {
 							sourceFlagSeen[flagKey]++
@@ -563,7 +563,7 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 						label = language + "（" + truncate(flag, 32) + "）"
 					}
 				}
-				groupKey := language + "\\x00" + group
+				groupKey := language + "\x00" + group
 				if index, found := languageIndexes[groupKey]; found {
 					entry := &selections[index]
 					if entry.seenURLs[episode.URL] {
