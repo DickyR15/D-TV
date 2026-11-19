@@ -140,7 +140,7 @@ func TestExtraAdult91PornaUsesCurrentPublicRoutes(t *testing.T) {
 	detailURLs := extraAdultDetailURLs(source91Porna, "key_123")
 	if len(detailURLs) != 2 ||
 		detailURLs[0] != "https://91porna.com/comic/index/detail?video_key=key_123" ||
-		detailURLs[1] != "https://91porna.com/comic/index/avdetail?video_key=key_123" {
+		detailURLs[1] != "https://91porna.com/comic/index/detail?video_key=key_123" {
 		t.Fatalf("91Porna detail fallback order = %#v", detailURLs)
 	}
 	if extraAdultUserAgent(source91Porna) != ninetyOneMobileUserAgent {
@@ -317,14 +317,15 @@ func TestExtraAdult91PornaExtractsOfficialMediaIDAndStreamPriority(t *testing.T)
 }
 
 func TestExtraAdult91PornaPlaybackAPIUsesOfficialEndpointAndHeaders(t *testing.T) {
-	const page = "https://91porna.com/comic/index/avdetail?video_key=key_123"
+	const page = "https://91porna.com/comic/index/detail?video_key=key_123"
 	responseBody := `{"data":{"streams":{"main":"https://media.example.test/full.m3u8?auth=ok","hevc":"https://media.example.test/hevc.m3u8","preview":"https://media.example.test/preview.m3u8"}}}`
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		if request.Method != http.MethodPost || request.URL.String() != "https://91porna.com/api/videos/987654/playback" {
 			return nil, fmt.Errorf("unexpected 91Porna API request: %s %s", request.Method, request.URL)
 		}
-		if request.Header.Get("Referer") != page || request.Header.Get("User-Agent") != adultUserAgent ||
-			request.Header.Get("Content-Type") != "application/json" {
+		if request.Header.Get("Referer") != page || request.Header.Get("User-Agent") != ninetyOneMobileUserAgent ||
+			request.Header.Get("Content-Type") != "application/json" ||
+			request.Header.Get("Accept") != "application/json, text/plain, */*" {
 			return nil, fmt.Errorf("91Porna API headers mismatch: %+v", request.Header)
 		}
 		body, err := io.ReadAll(request.Body)
