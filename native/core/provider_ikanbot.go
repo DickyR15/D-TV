@@ -535,7 +535,18 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 			}
 			language := ikanbotMovieLanguageLabel(episode.Name, line.Flag)
 			if language != "" {
-				if index, found := languageIndexes[language]; found {
+				flag := strings.TrimSpace(line.Flag)
+				flagLanguage := ikanbotMovieLanguageLabel(flag, "")
+				group := "quality"
+				label := language
+				// Different named source flags remain separate movie choices.
+				// Resolution-only flags for the same language stay as fallbacks.
+				if flag != "" && !ikanbotQualityOnlyLabel(flag) && flagLanguage != language {
+					group = strings.ToLower(strings.Join(strings.Fields(flag), " "))
+					label = language + "（" + truncate(flag, 32) + "）"
+				}
+				groupKey := language + "\\x00" + group
+				if index, found := languageIndexes[groupKey]; found {
 					entry := &selections[index]
 					if entry.seenURLs[episode.URL] {
 						continue
@@ -544,11 +555,11 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 					entry.variants = append(entry.variants, fmt.Sprintf("%d:%s", ikanbotQuality(line.Flag), episode.URL))
 					continue
 				}
-				languageIndexes[language] = len(selections)
+				languageIndexes[groupKey] = len(selections)
 				selections = append(selections, movieSelection{
 					episode: episode,
 					lineFlag: line.Flag,
-					label: language,
+					label: label,
 					seenURLs: map[string]bool{episode.URL: true},
 				})
 				continue
