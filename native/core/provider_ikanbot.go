@@ -470,7 +470,133 @@ func (d *Downloader) fetchIkanbotLines(ctx context.Context, sourceID, currentID,
 	}
 	return lines, nil
 }
-func ikanbotBuildChapters(sourceID, pageURL string, lines []ikanbotLine) []Chapter {
+// ikanbotMovieLanguageLabel maps audio/dubbing markers to a stable display label.
+// It checks both the episode name and the source flag because iKanBot places
+// the language in either field depending on the upstream provider.
+func ikanbotMovieLanguageLabel(name, lineFlag string) string {
+	value := strings.ToLower(strings.TrimSpace(name + " " + lineFlag))
+	value = strings.NewReplacer("繁體", "繁体", "台灣", "台湾").Replace(value)
+	contains := func(values ...string) bool {
+		for _, candidate := range values {
+			if strings.Contains(value, candidate) {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case contains("雙語", "双语", "dual audio", "bilingual"):
+		return "雙語版"
+	case contains("粵語", "粤语", "廣東話", "广东话", "粵配", "粤配", "cantonese"):
+		return "粵語版"
+	case contains("台語", "台语", "閩南語", "闽南语", "taiwanese"):
+		return "台語版"
+	case contains("國語", "国语", "普通話", "普通话", "國配", "国配", "mandarin"):
+		return "國語版"
+	case contains("日語", "日语", "日文", "日配", "japanese"):
+		return "日語版"
+	case contains("英語", "英语", "英文", "英配", "english"):
+		return "英語版"
+	case contains("韓語", "韩语", "韓文", "韩文", "韓配", "korean"):
+		return "韓語版"
+	case contains("原聲", "原声", "原音", "原版", "original audio", "original version"):
+		return "原聲版"
+	default:
+		return ""
+	}
+}
+
+// Movie listings are not episodes. Each distinct non-language source is one
+// selectable movie entry, while audio-language variants share one entry and
+// retain alternate URLs as playback fallbacks.
+func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []Chapter {
+	type movieSelection struct {
+		episode  ikanbotEpisode
+		lineFlag string
+		label    string
+		variants []string
+		seenURLs map[string]bool
+	}
+	orderedLines := append([]ikanbotLine(nil), lines...)
+	sort.SliceStable(orderedLines, func(i, j int) bool {
+		left, right := ikanbotQuality(orderedLines[i].Flag), ikanbotQuality(orderedLines[j].Flag)
+		if left != right {
+			return left > right
+		}
+		return len(orderedLines[i].Episodes) > len(orderedLines[j].Episodes)
+	})
+	selections := make([]movieSelection, 0, len(orderedLines))
+	languageIndexes := make(map[string]int)
+	seenSourceURLs := make(map[string]bool)
+	for _, line := range orderedLines {
+		for _, episode := range line.Episodes {
+			if !isProviderHTTPMediaURL(episode.URL) {
+				continue
+			}
+			language := ikanbotMovieLanguageLabel(episode.Name, line.Flag)
+			if language != "" {
+				if index, found := languageIndexes[language]; found {
+					entry := &selections[index]
+					if entry.seenURLs[episode.URL] {
+						continue
+					}
+					entry.seenURLs[episode.URL] = true
+					entry.variants = append(entry.variants, fmt.Sprintf("%d:%s", ikanbotQuality(line.Flag), episode.URL))
+					continue
+				}
+				languageIndexes[language] = len(selections)
+				selections = append(selections, movieSelection{
+					episode: episode,
+					lineFlag: line.Flag,
+					label: language,
+					seenURLs: map[string]bool{episode.URL: true},
+				})
+				continue
+			}
+			// A source URL must not be collapsed into another source merely
+			// because both are labelled "第1集" or have the same ordinal.
+			if seenSourceURLs[episode.URL] {
+				continue
+			}
+			seenSourceURLs[episode.URL] = true
+			selections = append(selections, movieSelection{
+				episode: episode,
+					lineFlag: line.Flag,
+					seenURLs: map[string]bool{episode.URL: true},
+			})
+		}
+	}
+	chapters := make([]Chapter, 0, len(selections))
+	for index, entry := range selections {
+		order := index + 1
+		label := entry.label
+		if label == "" {
+			label = fmt.Sprintf("第 %d 集", order)
+		}
+		chapters = append(chapters, Chapter{
+			ID: providerChapterID(sourceIkanBot, sourceID, strconv.Itoa(order)),
+			Source: sourceIkanBot,
+			Title: truncate(label, 128),
+			VideoURL: entry.episode.URL,
+			PlaybackVariants: entry.variants,
+			PlayLine: entry.lineFlag,
+			PageURL: pageURL,
+			Referer: pageURL,
+			CurrentEpisode: json.RawMessage(strconv.Itoa(order)),
+		})
+	}
+	return chapters
+}
+
+func ikanbotIsMovieMType(mtype string) bool {
+	mtype = strings.ToLower(strings.TrimSpace(mtype))
+	return mtype == "1" || mtype == "movie" || mtype == "film"
+}
+
+func ikanbotBuildChapters(sourceID, pageURL string, lines []ikanbotLine, movie ...bool) []Chapter {
+	if len(movie) > 0 && movie[0] {
+		return ikanbotBuildMovieChapters(sourceID, pageURL, lines)
+	}
 	type selectedEpisode struct {
 		episode  ikanbotEpisode
 		lineFlag string
@@ -631,9 +757,12 @@ func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Dra
 	lines,err:=d.fetchIkanbotLines(ctx,sourceID,currentID,token,mtype,final);if err!=nil{return Drama{},nil,err}
 	meta:=[]string{};for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="h3"&&providerHTMLClass(n,"meta")}){v:=providerHTMLText(n);if v!=""{meta=append(meta,v)}}
 	tags:=[]string{};year:="";for _,v:=range meta{if year==""&&regexp.MustCompile("^(19|20)[0-9]{2}$").MatchString(v){year=v};if strings.Contains(v,"/"){tags=append(tags,truncate(v,64))}}
-	chapters := ikanbotBuildChapters(sourceID, final, lines)
+	isMovie := ikanbotIsMovieMType(mtype)
+	chapters := ikanbotBuildChapters(sourceID, final, lines, isMovie)
 	if len(chapters)==0{return Drama{},nil,errors.New("愛看機器人目前沒有可播放分集")}
-	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,CoverCandidates:coverFallbacks,OnlineDate:year,Tags:tags,TotalEpisode:len(chapters),EpisodeCount:len(chapters),ChannelName:"愛看機器人",CategoryName:"影集"}
+	categoryName := "影集"
+	if isMovie { categoryName = "電影" }
+	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,CoverCandidates:coverFallbacks,OnlineDate:year,Tags:tags,TotalEpisode:len(chapters),EpisodeCount:len(chapters),ChannelName:"愛看機器人",CategoryName:categoryName}
 	return drama,chapters,nil
 }
 func ikanbotIsHLSURL(raw string) bool {
