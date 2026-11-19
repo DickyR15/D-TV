@@ -146,6 +146,8 @@ func nativeCoverOriginReferer(address string) string {
 		return "https://news.sina.com.cn/"
 	case host == "live.ykimg.com" || strings.HasSuffix(host, ".ykimg.com"):
 		return "https://www.youku.com/"
+	case host == "af-original.com" || strings.HasSuffix(host, ".af-original.com"):
+		return "https://" + host + "/"
 	default:
 		return ""
 	}
