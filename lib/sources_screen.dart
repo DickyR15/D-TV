@@ -150,11 +150,39 @@ class _SourcesScreenState extends State<SourcesScreen> {
     }
   }
 
+  Future<void> _runHealthCheck(SourceSite source) async {
+    final id = source.id;
+    final revision = (_revisions[id] ?? 0) + 1;
+    _revisions[id] = revision;
+    final epoch = widget.store.profileEpoch;
+    if (mounted) {
+      setState(() => _errors.remove(id));
+    }
+    try {
+      final status = await widget.repository.startAutomaticSourceCheck(id);
+      if (!mounted ||
+          epoch != widget.store.profileEpoch ||
+          revision != (_revisions[id] ?? 0)) {
+        return;
+      }
+      setState(() => _statuses[id] = status);
+    } catch (error) {
+      if (mounted &&
+          epoch == widget.store.profileEpoch &&
+          revision == (_revisions[id] ?? 0)) {
+        setState(() => _errors[id] = error.toString());
+      }
+    }
+  }
+
   String _diagnosticText(SourceSite source, SourceStatus status) {
     final text = StringBuffer('${uiTraditional(source.name)}\n');
     text.writeln(
       '快取 ${status.count} 部，更新 ${sourceTimestamp(status.updatedAt)}',
     );
+    if (status.operation.isNotEmpty) {
+      text.writeln('最近任務：${status.operationLabel} · ${status.stage}');
+    }
     final health = status.health;
     if (health != null) {
       text.writeln(
@@ -327,8 +355,11 @@ class _SourcesScreenState extends State<SourcesScreen> {
 
   Widget _sourceCard(SourceSite source) {
     final status = _statuses[source.id];
-    final error = _errors[source.id] ?? status?.error ?? '';
+    final pollingError = _errors[source.id] ?? '';
+    final taskError = status?.error ?? '';
     final health = status?.health;
+    final taskErrorIsPlaybackCheck =
+        status?.operation == 'check' || status?.operation == 'checkCatalog';
     final healthExpanded = _expandedHealth.contains(source.id);
     final colors = Theme.of(context).colorScheme;
     return Card(
@@ -363,12 +394,22 @@ class _SourcesScreenState extends State<SourcesScreen> {
               const SizedBox(height: 8),
               Text(uiTraditional(status?.stage ?? '自動檢查中')),
             ],
-            if (error.isNotEmpty)
+            if (pollingError.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: SelectableText(
-                  uiTraditional(error),
+                  uiTraditional(pollingError),
                   style: TextStyle(color: colors.error),
+                ),
+              ),
+            if (taskError.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: SelectableText(
+                  '${taskErrorIsPlaybackCheck ? '上次播放檢測未通過：' : '上次${status?.operationLabel ?? '片源'}任務未完成（不代表影片無法播放）：'}${uiTraditional(taskError)}',
+                  style: TextStyle(
+                    color: taskErrorIsPlaybackCheck ? colors.error : colors.tertiary,
+                  ),
                 ),
               ),
             if (status != null && status.storageError.isNotEmpty)
@@ -429,6 +470,13 @@ class _SourcesScreenState extends State<SourcesScreen> {
                         ),
                       ),
                     ),
+                  ),
+                  IconButton(
+                    tooltip: '重新執行播放檢測',
+                    onPressed: status?.running == true
+                        ? null
+                        : () => _runHealthCheck(source),
+                    icon: const Icon(Icons.refresh_rounded),
                   ),
                   IconButton(
                     tooltip: '複製診斷資訊',
@@ -510,8 +558,19 @@ class _SourcesScreenState extends State<SourcesScreen> {
                   ),
                 ),
             ] else ...[
-              const SizedBox(height: 12),
-              const Text('尚無自動檢查記錄'),
+              const Divider(height: 28),
+              Row(
+                children: [
+                  const Expanded(child: Text('尚無播放健康檢查記錄')),
+                  TextButton.icon(
+                    onPressed: status?.running == true
+                        ? null
+                        : () => _runHealthCheck(source),
+                    icon: const Icon(Icons.health_and_safety_outlined),
+                    label: const Text('立即檢測'),
+                  ),
+                ],
+              ),
             ],
           ],
         ),

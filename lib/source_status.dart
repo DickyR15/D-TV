@@ -73,6 +73,17 @@ class SourceStatus {
   final DateTime? updatedAt, startedAt, finishedAt, retryAt;
   final SourceHealth? health;
 
+  String get operationLabel => switch (operation) {
+    'update' => '目錄更新',
+    'more' => '載入更多目錄',
+    'metadata' => '補齊劇集資料',
+    'vipMetadata' => '補齊 VIP 資料',
+    'check' => '播放健康檢查',
+    'checkCatalog' => '目錄連線檢查',
+    'retrySave' => '重試儲存',
+    _ => '片源任務',
+  };
+
   int get retrySeconds {
     if (retryAt == null) return 0;
     return ((retryAt!.difference(DateTime.now()).inMilliseconds / 1000).ceil())

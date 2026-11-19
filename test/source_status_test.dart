@@ -8,6 +8,21 @@ void main() {
     expect(SourceHealth.fromJson({'state': 'failed'}).label, '檢測未通過');
   });
 
+  test('source task operations have distinct diagnostic labels', () {
+    expect(
+      SourceStatus.fromJson({'operation': 'update'}).operationLabel,
+      '目錄更新',
+    );
+    expect(
+      SourceStatus.fromJson({'operation': 'check'}).operationLabel,
+      '播放健康檢查',
+    );
+    expect(
+      SourceStatus.fromJson({'operation': 'metadata'}).operationLabel,
+      '補齊劇集資料',
+    );
+  });
+
   test('diagnostics hide advanced sources without an administrator password', () {
     final visible = sourceDiagnosticsSources(
       enabledSources: [
