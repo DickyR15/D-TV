@@ -383,7 +383,7 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 			candidates = append(candidates, raw)
 		}
 	}
-	directPattern := regexp.MustCompile(`(?i)https?://[^"'<>s\]+?.(?:m3u8|mp4)(?:?[^"'<>s\]*)?`)
+	directPattern := regexp.MustCompile(`(?i)https?://[^"'<>[:space:]\\]+?\.(?:m3u8|mp4)(?:\?[^"'<>[:space:]\\]*)?`)
 	candidates = append(candidates, directPattern.FindAllString(body, 128)...)
 	seen := map[string]bool{}
 	var result []string
