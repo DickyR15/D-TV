@@ -1173,9 +1173,13 @@ func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput
 	if err != nil {
 		return nativePlan{}, err
 	}
-	// Open the provider-preferred route immediately. Probing every signed
-	// CDN candidate here can add up to 1.5 seconds before video even starts.
-	// Keep route ranking for recovery after real playback failures.
 	choice := nativeInitialPlaybackChoice(media, input.Quality, task)
+	switch source {
+	case sourceIkanBot, sourcePPP, sourceDuoduo, sourceGuipian:
+		// These providers can return several signed/CDN routes for the same
+		// episode. A bounded probe selects a responsive first route before
+		// the viewer enters the player, avoiding a visible extra source switch.
+		choice = engine.rankNativePlaybackRoutes(ctx, choice, task)
+	}
 	return engine.nativeOpenPlayback(ctx, choice)
 }
