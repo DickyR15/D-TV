@@ -344,7 +344,7 @@ func TestExtraAdult91PornaBuildsScriptURLFromLegacyVariables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed.Path != "/index/embed_play.js" || parsed.Query().Get("img") != "poster/123" ||
+	if parsed.Path != "/comic/index/embed_play.js" || parsed.Query().Get("img") != "poster/123" ||
 		parsed.Query().Get("u") != "https://91porna.com/comic/index/embed?id=169397" ||
 		parsed.Query().Get("t") == "" {
 		t.Fatalf("legacy script URL arguments are incomplete: %s", got)
