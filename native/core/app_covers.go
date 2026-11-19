@@ -785,8 +785,10 @@ func (cache *nativeCoverCache) download(ctx context.Context, address, referer st
 }
 
 const (
-	nativeDuoduoPosterMinimumWidth  = 48
-	nativeDuoduoPosterMinimumHeight = 72
+	// Reject only tiny pixel/thumbnail placeholders. Some valid source images
+	// are intentionally delivered at 16x24 and must remain usable.
+	nativeDuoduoPosterMinimumWidth  = 8
+	nativeDuoduoPosterMinimumHeight = 12
 )
 
 // nativeValidateDuoduoProviderPoster rejects tiny, technically valid image
