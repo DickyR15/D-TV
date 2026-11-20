@@ -399,6 +399,7 @@ func (d *Downloader) refreshProviderCompatibility(ctx context.Context) error {
 	d.compatibilityRefreshMu.Lock()
 	defer d.compatibilityRefreshMu.Unlock()
 
+	d.compatibilityStartupVerified.Store(false)
 	now := time.Now()
 	d.compatibilityMu.RLock()
 	lastFetch := d.compatibilityLastFetch
@@ -451,6 +452,7 @@ func (d *Downloader) refreshProviderCompatibility(ctx context.Context) error {
 			d.compatibilityLastFetch = time.Now()
 			d.compatibilityLastError = ""
 			d.compatibilityMu.Unlock()
+			d.compatibilityStartupVerified.Store(true)
 			return nil
 		}
 		cache := providerCompatibilityCache{
@@ -478,6 +480,7 @@ func (d *Downloader) refreshProviderCompatibility(ctx context.Context) error {
 		d.compatibilityLastError = ""
 		d.compatibilityOrigin = "remote"
 		d.compatibilityMu.Unlock()
+		d.compatibilityStartupVerified.Store(true)
 		return nil
 	}
 	if lastErr == nil {
