@@ -264,7 +264,9 @@ internal static class Program
                 {
                     try
                     {
-                        TryDeleteFile(Path.Combine(options.InstallDirectory, relative));
+                        var createdDestination = Path.Combine(options.InstallDirectory, relative);
+                        if (File.Exists(createdDestination))
+                            File.Delete(createdDestination);
                     }
                     catch (Exception ex)
                     {
@@ -274,7 +276,7 @@ internal static class Program
                 }
             }
 
-            if (!IsProcessRunning(options.ProcessId) && installStarted)
+            if (!IsProcessRunning(options.ProcessId))
             {
                 try
                 {
