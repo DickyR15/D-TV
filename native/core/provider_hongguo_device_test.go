@@ -230,7 +230,10 @@ func hongguoDeviceFixture(t *testing.T, rejected map[string]bool, registerFails 
 	var requests []string
 	registered := 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
-		if request.URL.String() == hongguoDeviceRegisterURL+"?"+request.URL.RawQuery {
+		if request.URL.Path == hongguoDeviceRegisterPath {
+			if request.URL.Host != "applog.snssdk.com" && request.URL.Host != "log.snssdk.com" {
+				t.Fatalf("unexpected registration host %q", request.URL.Host)
+			}
 			registered++
 			requests = append(requests, "register")
 			if request.URL.Query().Get("device_id") != "" || request.Header.Get("X-Argus") != "" {
