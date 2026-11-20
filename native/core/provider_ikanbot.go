@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -658,3 +659,144 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 	}
 	return chapters
 }
+
+func ikanbotDisplayEpisodeCount(isMovie bool, choiceCount int) int {
+	if isMovie || choiceCount < 0 {
+		return 0
+	}
+	return choiceCount
+}
+
+func ikanbotIsMovieMType(mtype string) bool {
+	mtype = strings.ToLower(strings.TrimSpace(mtype))
+	return mtype == "1" || mtype == "movie" || mtype == "film"
+}
+
+func ikanbotBuildChapters(sourceID, pageURL string, lines []ikanbotLine, movie ...bool) []Chapter {
+	if len(movie) > 0 && movie[0] {
+		return ikanbotBuildMovieChapters(sourceID, pageURL, lines)
+	}
+	type selectedEpisode struct {
+		episode  ikanbotEpisode
+		lineFlag string
+		variants []string
+		seenURLs map[string]bool
+	}
+	selected := make(map[int]*selectedEpisode)
+	orderedLines := append([]ikanbotLine(nil), lines...)
+	sort.SliceStable(orderedLines, func(i, j int) bool {
+		left, right := ikanbotQuality(orderedLines[i].Flag), ikanbotQuality(orderedLines[j].Flag)
+		if left != right {
+			return left > right
+		}
+		return len(orderedLines[i].Episodes) > len(orderedLines[j].Episodes)
+	})
+	for _, line := range orderedLines {
+		for index, episode := range line.Episodes {
+			order := episode.Order
+			if order <= 0 {
+				order = ikanbotEpisodeOrder(episode.Name, index+1)
+			}
+			if order <= 0 || !isProviderHTTPMediaURL(episode.URL) {
+				continue
+			}
+			entry := selected[order]
+			if entry == nil {
+				entry = &selectedEpisode{
+					episode: episode,
+					lineFlag: line.Flag,
+					seenURLs: map[string]bool{episode.URL: true},
+				}
+				selected[order] = entry
+				continue
+			}
+			if entry.seenURLs[episode.URL] {
+				continue
+			}
+			entry.seenURLs[episode.URL] = true
+			entry.variants = append(
+				entry.variants,
+				fmt.Sprintf("%d:%s", ikanbotQuality(line.Flag), episode.URL),
+			)
+		}
+	}
+	orders := make([]int, 0, len(selected))
+	for order := range selected {
+		orders = append(orders, order)
+	}
+	sort.Ints(orders)
+	chapters := make([]Chapter, 0, len(orders))
+	for _, order := range orders {
+		entry := selected[order]
+		name := strings.TrimSpace(entry.episode.Name)
+		if name == "" || ikanbotQualityOnlyLabel(name) {
+			// Some line APIs put a resolution label (e.g. "720") in the
+			// episode-name slot. The position is the actual episode.
+			name = strconv.Itoa(order)
+		}
+		chapters = append(chapters, Chapter{
+			ID: providerChapterID(sourceIkanBot, sourceID, strconv.Itoa(order)),
+			Source: sourceIkanBot,
+			Title: truncate(name, 128),
+			VideoURL: entry.episode.URL,
+			PlaybackVariants: entry.variants,
+			PlayLine: entry.lineFlag,
+			PageURL: pageURL,
+			Referer: pageURL,
+			CurrentEpisode: json.RawMessage(strconv.Itoa(order)),
+		})
+	}
+	return chapters
+}
+
+// ikanbotPreferHighestHLS locks the master playlist to the resolution
+// selected by the source line. Without this step MPV adaptive selection can
+// start at a smaller variant even though Auto chose a 1080P source line.
+func (d *Downloader) ikanbotPreferHighestHLS(ctx context.Context, media providerMedia) providerMedia {
+	if media.Playlist == "" || !ikanbotIsHLSURL(media.URL) {
+		return media
+	}
+	for depth := 0; depth < 6; depth++ {
+		lines := strings.Split(strings.ReplaceAll(media.Playlist, "\r\n", "\n"), "\n")
+		selectedLines, height, master := nativeHLSSelect(lines, media.Quality)
+		if !master {
+			return media
+		}
+		selectedURI := ""
+		for _, line := range selectedLines {
+			line = strings.TrimSpace(line)
+			if line != "" && !strings.HasPrefix(line, "#") {
+				selectedURI = line
+				break
+			}
+		}
+		base, err := url.Parse(media.URL)
+		if err != nil || selectedURI == "" {
+			return media
+		}
+		reference, err := url.Parse(selectedURI)
+		if err != nil {
+			return media
+		}
+		nextURL := base.ResolveReference(reference).String()
+		if !isProviderHTTPMediaURL(nextURL) {
+			return media
+		}
+		playlist, finalURL, err := d.fetchProviderMediaPlaylist(ctx, media, nextURL)
+		if err != nil {
+			return media
+		}
+		media.Playlist, media.URL = playlist, finalURL
+		if height > 0 {
+			media.Quality = height
+		}
+	}
+	return media
+}
+
+
+func ikanbotIsHLSURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8")
+}
+
