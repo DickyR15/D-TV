@@ -2027,9 +2027,20 @@ func TestDuoduoSimplifiedAnimeCategoryEnablesPosterRecovery(t *testing.T) {
 	if len(types) != 1 || types[0] != 2 {
 		t.Fatalf("Bangumi subject types = %#v, want anime-only type [2]", types)
 	}
-	const expected = "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg"
-	address, ok := nativePreferredOfficialPosterAddress(drama)
-	if !ok || address != expected {
-		t.Fatalf("preferred official anime poster = %q, ok=%t; want %q", address, ok, expected)
+	const expectedPrimary = "https://image.pmgstatic.com/cache/resized/w663/files/images/film/posters/170/203/170203811_rde8py.jpg"
+	const expectedOfficialFallback = "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg"
+	addresses := nativePreferredOfficialPosterAddresses(drama)
+	if len(addresses) == 0 || addresses[0] != expectedPrimary {
+		t.Fatalf("preferred official anime poster addresses = %#v; want primary %q", addresses, expectedPrimary)
+	}
+	hasOfficialFallback := false
+	for _, address := range addresses[1:] {
+		if address == expectedOfficialFallback {
+			hasOfficialFallback = true
+			break
+		}
+	}
+	if !hasOfficialFallback {
+		t.Fatalf("official anime image missing from fallback addresses: %#v", addresses)
 	}
 }
