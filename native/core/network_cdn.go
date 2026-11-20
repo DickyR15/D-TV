@@ -200,7 +200,9 @@ func (transport *hostDoHTransport) roundTripAddress(request *http.Request, addre
 			return nil, errors.New("紅果註冊請求不支援安全重試")
 		}
 		body, err := request.GetBody()
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		attempt.Body = body
 	}
 	return clone.RoundTrip(attempt)
