@@ -12,6 +12,18 @@ import (
 	htmlnet "golang.org/x/net/html"
 )
 
+func TestIkanbotDisplayEpisodeCountSeparatesMovieChoicesFromTVEpisodes(t *testing.T) {
+	if got := ikanbotDisplayEpisodeCount(true, 31); got != 0 {
+		t.Fatalf("movie display episode count = %d, want 0", got)
+	}
+	if got := ikanbotDisplayEpisodeCount(false, 31); got != 31 {
+		t.Fatalf("TV display episode count = %d, want 31", got)
+	}
+	if got := ikanbotDisplayEpisodeCount(false, -1); got != 0 {
+		t.Fatalf("negative episode count = %d, want 0", got)
+	}
+}
+
 func TestIkanbotParseResDataSupportsArrayObjectAndEscapedJSON(t *testing.T) {
 	tests := []struct {
 		name string
