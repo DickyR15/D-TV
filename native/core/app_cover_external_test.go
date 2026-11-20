@@ -2018,7 +2018,7 @@ func TestNativeCoverOriginRefererSupportsAFOriginalImages(t *testing.T) {
 func TestDuoduoSimplifiedAnimeCategoryEnablesPosterRecovery(t *testing.T) {
 	drama := nativeDrama{
 		ID: "duoduo:1192", Title: "奉子成婚",
-		Category: "动漫", OnlineDate: "2025",
+		Category: "動漫", OnlineDate: "2025",
 	}
 	if !nativePosterIsAnime(drama) {
 		t.Fatal("simplified Duoduo anime category was not recognized")
