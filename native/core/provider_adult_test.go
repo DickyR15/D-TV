@@ -100,6 +100,38 @@ func TestAdultCardParsingAndLazyCoverFallback(t *testing.T) {
 	}
 }
 
+func TestAdultMissAVPosterSelectionSkipsFlagsAndSiteLogos(t *testing.T) {
+	base := adultProviderBaseURL(sourceMissAV)
+	body := `<div class="thumbnail">
+		<img class="country-flag" src="/images/flags/china-flag.png" alt="China flag" width="32" height="20">
+		<img class="site-logo" src="/images/d-tv-logo.webp" alt="site logo" width="120" height="32">
+		<a href="/cn/sone-543" title="SAMPLE-543">
+			<img class="poster" data-src="/covers/sample.webp" alt="video poster" width="225" height="338">
+		</a>
+	</div>`
+	items := adultParseCards(body, base, sourceMissAV)
+	if len(items) != 1 {
+		t.Fatalf("MissAV cards = %d, want 1", len(items))
+	}
+	want := strings.TrimRight(base, "/") + "/covers/sample.webp"
+	if items[0].Cover != want {
+		t.Fatalf("MissAV selected a flag/logo instead of the poster: got %q want %q", items[0].Cover, want)
+	}
+}
+
+func TestAdultImageCandidatesPreferPortraitPosterOverWideArtwork(t *testing.T) {
+	base := adultProviderBaseURL(sourceMissAV)
+	body := `<div>
+		<img class="backdrop" src="/images/wide-art.webp" width="640" height="360">
+		<img class="poster" data-src="/images/real-poster.webp" width="225" height="338">
+	</div>`
+	covers := adultImageCandidates(body, base, sourceMissAV)
+	want := strings.TrimRight(base, "/") + "/images/real-poster.webp"
+	if len(covers) < 2 || covers[0] != want {
+		t.Fatalf("poster ranking = %v, want %q first", covers, want)
+	}
+}
+
 func TestAdultMissAVDetailPathParserRejectsNonVideoRoutes(t *testing.T) {
 	tests := []struct {
 		path string
