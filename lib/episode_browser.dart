@@ -18,6 +18,7 @@ class EpisodeRangeBar extends StatelessWidget {
     this.currentNumber,
     this.title = '選集',
     this.note = '',
+    this.movieOptions = false,
   });
   final List<Episode> episodes;
   final int page;
@@ -25,6 +26,7 @@ class EpisodeRangeBar extends StatelessWidget {
   final int? currentNumber;
   final String title;
   final String note;
+  final bool movieOptions;
 
   Future<void> _jump(BuildContext context) async {
     final controller = TextEditingController();
@@ -39,20 +41,20 @@ class EpisodeRangeBar extends StatelessWidget {
               (episode) => episode.number == number,
             );
             if (found < 0) {
-              setState(() => error = '沒有找到這一集，請輸入已有集數');
+              setState(() => error = movieOptions ? '沒有找到這個片源選項' : '沒有找到這一集，請輸入已有集數');
             } else {
               Navigator.pop(context, found);
             }
           }
 
           return AlertDialog(
-            title: const Text('跳轉到指定集數'),
+            title: Text(movieOptions ? '跳轉到指定片源' : '跳轉到指定集數'),
             content: TextField(
               controller: controller,
               autofocus: true,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(labelText: '集數', errorText: error),
+              decoration: InputDecoration(labelText: movieOptions ? '片源順序' : '集數', errorText: error),
               onSubmitted: (_) => submit(),
             ),
             actions: [
@@ -87,7 +89,7 @@ class EpisodeRangeBar extends StatelessWidget {
                 child: Text(
                   [
                     title,
-                    '${episodes.length} 集',
+                    movieOptions ? '${episodes.length} 個選項' : '${episodes.length} 集',
                     if (note.isNotEmpty) note,
                   ].join(' · '),
                   style: Theme.of(context).textTheme.titleMedium,
@@ -96,10 +98,10 @@ class EpisodeRangeBar extends StatelessWidget {
               if (current >= 0)
                 TextButton(
                   onPressed: () => onLocate(current),
-                  child: const Text('回到目前集數'),
+                  child: Text(movieOptions ? '回到目前片源' : '回到目前集數'),
                 ),
               IconButton(
-                tooltip: '跳至指定集數',
+                tooltip: movieOptions ? '跳至指定片源' : '跳至指定集數',
                 onPressed: episodes.isEmpty ? null : () => _jump(context),
                 icon: const Icon(Icons.pin_outlined),
               ),
@@ -126,7 +128,9 @@ class EpisodeRangeBar extends StatelessWidget {
                           DropdownMenuItem(
                             value: i,
                             child: Text(
-                              '第 ${episodes[i * episodePageSize].number}–${episodes[min((i + 1) * episodePageSize, episodes.length) - 1].number} 集',
+                              movieOptions
+                                  ? '片源 ${episodes[i * episodePageSize].number}–${episodes[min((i + 1) * episodePageSize, episodes.length) - 1].number}'
+                                  : '第 ${episodes[i * episodePageSize].number}–${episodes[min((i + 1) * episodePageSize, episodes.length) - 1].number} 集',
                             ),
                           ),
                       ],
@@ -161,6 +165,7 @@ class EpisodeBrowser extends StatefulWidget {
     this.keyPrefix = 'episode',
     this.title = '選集',
     this.note = '',
+    this.movieOptions = false,
     this.compact = false,
     this.onExitLeft,
   });
@@ -171,6 +176,7 @@ class EpisodeBrowser extends StatefulWidget {
   final String keyPrefix;
   final String title;
   final String note;
+  final bool movieOptions;
   final bool compact;
   final VoidCallback? onExitLeft;
   @override
@@ -230,6 +236,7 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
           title: widget.title,
           note: widget.note,
           currentNumber: widget.currentNumber,
+          movieOptions: widget.movieOptions,
           onLocate: (index) => setState(() {
             _page = index ~/ episodePageSize;
             _located = widget.episodes[index].number;
@@ -239,7 +246,7 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final digits = visible.fold<int>(
-                1,
+                widget.movieOptions ? 7 : 1,
                 (value, episode) =>
                     max(value, episode.number.toString().length),
               );
@@ -320,6 +327,7 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                   return RemoteEpisodeButton(
                     key: ValueKey('${widget.keyPrefix}-${episode.number}'),
                     number: episode.number,
+                    displayLabel: widget.movieOptions ? episode.title : null,
                     vip: episode.vip,
                     compact: widget.compact,
                     current:
@@ -388,7 +396,7 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
       final television = formFactor == FormFactor.television;
       final scale = MediaQuery.textScalerOf(context);
       final digits = widget.episodes.fold<int>(
-        1,
+        widget.movieOptions ? 7 : 1,
         (value, episode) => max(value, episode.number.toString().length),
       );
       final minimum = max(40.0, scale.scale(14) * digits * .62 + 22);
@@ -447,6 +455,7 @@ class _EpisodeBrowserState extends State<EpisodeBrowser> {
                 return RemoteEpisodeButton(
                   key: ValueKey('${widget.keyPrefix}-${episode.number}'),
                   number: episode.number,
+                  displayLabel: widget.movieOptions ? episode.title : null,
                   vip: episode.vip,
                   compact: true,
                   current:
