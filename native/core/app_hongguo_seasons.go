@@ -21,55 +21,32 @@ type nativeDramaSeason struct {
 }
 
 const (
-	hongguoAppSeasonPlanPath      = "/reading/bookapi/plan/v1/"
+	hongguoAppSeasonPlanPath = "/reading/bookapi/plan/v1/"
 	hongguoShowTypeSeriesSeasons = "547"
 )
 
 type hongguoSeasonPlanRequestKey struct{}
 
-var hongguoOfficialSeasonLabel = regexp.MustCompile(`^第([1-9][0-9]*)季package core
+var hongguoOfficialSeasonLabel = regexp.MustCompile(`^第([1-9][0-9]*)季$`)
 
-import (
-	"context"
-	"errors"
-	"fmt"
-	"net/http"
-	"net/url"
-	"regexp"
-	"strconv"
-	"strings"
-)
-
-type nativeDramaSeason struct {
-	Drama       nativeDrama `json:"drama"`
-	Number      int         `json:"number"`
-	Label       string      `json:"label"`
-	Subtitle    string      `json:"subtitle,omitempty"`
-	Upcoming    bool        `json:"upcoming"`
-	Playable    bool        `json:"playable"`
-}
-
-)
-
-// The official detail-page selector is a plan feed. Keep the API's exact
-// discriminator and session fields; the response's show_type=547 cell is the
-// only cell that represents the series-season relationship.
+// The official detail-page selector is a plan feed. Keep its exact
+// discriminator and session fields; only show_type=547 contains season rows.
 func hongguoAppSeasonQuery(seriesID string) url.Values {
 	return url.Values{
-		"from":                     {"single_col_same_ip_series"},
-		"scene":                    {"10"},
-		"book_id":                  {seriesID},
-		"session_uuid":             {uuidLike()},
-		"user_is_login":            {"0"},
-		"filter_ids":               {seriesID},
-		"cdid":                     {uuidLike()},
-		"openudid":                 {randomHex(8)},
-		"dragon_device_type":       {"phone"},
-		"pv_player":                {"74332"},
-		"compliance_status":        {"0"},
-		"need_personal_recommend":  {"1"},
-		"player_so_load":           {"1"},
-		"is_android_pad_screen":    {"0"},
+		"from": {"single_col_same_ip_series"},
+		"scene": {"10"},
+		"book_id": {seriesID},
+		"session_uuid": {uuidLike()},
+		"user_is_login": {"0"},
+		"filter_ids": {seriesID},
+		"cdid": {uuidLike()},
+		"openudid": {randomHex(8)},
+		"dragon_device_type": {"phone"},
+		"pv_player": {"74332"},
+		"compliance_status": {"0"},
+		"need_personal_recommend": {"1"},
+		"player_so_load": {"1"},
+		"is_android_pad_screen": {"0"},
 	}
 }
 
@@ -85,9 +62,7 @@ func hongguoNeedsSeasonFallback(err error) bool {
 		return false
 	}
 	message := err.Error()
-	if strings.Contains(message, "HTTP 444") ||
-		strings.Contains(message, "HTTP 403") ||
-		strings.Contains(message, "HTTP 429") {
+	if strings.Contains(message, "HTTP 444") || strings.Contains(message, "HTTP 403") || strings.Contains(message, "HTTP 429") {
 		return false
 	}
 	return strings.Contains(message, "101116") ||
@@ -107,7 +82,6 @@ func hongguoShouldUseCurrentSeasonFallback(err error) bool {
 		strings.Contains(message, "介面未返回有效資料") ||
 		strings.Contains(message, "接口未返回有效資料")
 }
-
 func (downloader *Downloader) hongguoAppSeasons(
 	ctx context.Context,
 	seriesID string,
@@ -319,7 +293,7 @@ func hongguoCurrentSeasonFallback(drama nativeDrama) []nativeDramaSeason {
 		Drama: drama,
 		Number: drama.SeriesSeasonNumber,
 		Label: label,
-		Subtitle: "紅果季別服務暫時無法連線，先保留目前作品",
+		Subtitle: "紅果季別資料暫不可用，先保留目前作品",
 		Playable: drama.Episodes > 0,
 		Upcoming: false,
 	}}
@@ -337,7 +311,7 @@ func (engine *nativeEngine) nativeSeasons(
 	case sourceHongguo:
 		items, err := engine.downloader.hongguoAppSeasons(ctx, sourceID)
 		if err != nil {
-			if hongguoRegistrationWasRateLimited(err) {
+			if hongguoShouldUseCurrentSeasonFallback(err) {
 				return map[string]any{
 					"items": hongguoCurrentSeasonFallback(drama),
 					"warning": err.Error(),
