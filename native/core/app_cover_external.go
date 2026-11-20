@@ -580,6 +580,7 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		title: "永生",
 		titleAliases: []string{"永生之無盡仙途", "永生之无尽仙途"},
 		source: sourceDuoduo,
+		sourceID: "99999",
 		year: "2022",
 		workType: "anime",
 		preferred: true,
