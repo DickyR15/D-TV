@@ -385,7 +385,7 @@ func TestHongguoTemporaryHTTPRegistrationFailuresCanRetryWithoutDeviceCooldown(t
 					t.Fatalf("HTTP 429 incorrectly created device cooldown until %v", paused)
 				}
 				d.limiter.mu.Lock()
-				backoff := d.limiter.backoffs["log.snssdk.com"]
+				backoff := d.limiter.backoffs["applog.snssdk.com"]
 				if backoff == nil || backoff.status != http.StatusTooManyRequests {
 					d.limiter.mu.Unlock()
 					t.Fatal("HTTP 429 Retry-After backoff was not preserved")
