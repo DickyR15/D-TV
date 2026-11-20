@@ -8,6 +8,22 @@ import (
 	"time"
 )
 
+func TestProviderCompatibilityManifestURLsPreferStableBranchesAndKeepCandidateFallbackLast(t *testing.T) {
+	want := []string{
+		"https://raw.githubusercontent.com/DickyR15/D-TV/release/v1.0.8-candidate/config/provider-compatibility.json",
+		"https://raw.githubusercontent.com/DickyR15/D-TV/main/config/provider-compatibility.json",
+		"https://raw.githubusercontent.com/DickyR15/D-TV/fix/v1.0.8-mobile-playback-posters/config/provider-compatibility.json",
+	}
+	if len(providerCompatibilityManifestURLs) != len(want) {
+		t.Fatalf("manifest URL count = %d, want %d", len(providerCompatibilityManifestURLs), len(want))
+	}
+	for index, address := range want {
+		if providerCompatibilityManifestURLs[index] != address {
+			t.Errorf("manifest URL[%d] = %q, want %q", index, providerCompatibilityManifestURLs[index], address)
+		}
+	}
+}
+
 func TestProviderCompatibilityManifestSignature(t *testing.T) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
