@@ -422,7 +422,7 @@ func TestCDNTransportRetriesUnknownAuthorityThroughVerifiedDoHForMediaHosts(t *t
 
 
 func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testing.T) {
-	const host = "log.snssdk.com"
+	const host = "applog.snssdk.com"
 	const fallbackIP = "93.184.216.34"
 	var directAttempts, dohLookups, recoveredRequests atomic.Int32
 	var receivedBody string
@@ -467,7 +467,7 @@ func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testi
 		if request.URL.Query().Get("name")!=host { t.Errorf("DoH queried unexpected host %s",request.URL) }
 		return sourceFixtureResponse(request,http.StatusOK,`{"Status":0,"Answer":[{"type":1,"TTL":120,"data":"93.184.216.34"}]}`),nil
 	})
-	transport:=&hostDoHTransport{base:base,resolver:resolver,host:host}
+	transport:=&hostDoHTransport{base:base,resolver:resolver,hosts:hongguoDeviceRegisterHosts()}
 	client:=&http.Client{Transport:transport}
 	body:=[]byte(`{"magic_tag":"ss_app_log","header":{"aid":8662}}`)
 	request,err:=http.NewRequest(http.MethodPost,"https://"+host+":"+port+"/service/2/device_register/",bytes.NewReader(body))
