@@ -472,6 +472,7 @@ type nativeVerifiedOfficialPoster struct {
 	workType        string
 	titleAliases    []string
 	fallbackAddresses []string
+	allowMissingYear bool
 }
 
 // These two assets were independently identified from programme-owner /
@@ -559,6 +560,7 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		workType: "anime",
 		preferred: true,
 		overrideProvider: true,
+		allowMissingYear: true,
 		address: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 		// The official site image may be blocked by some CDN/network paths.
 		// Keep the same exact key visual as a second source, not a title search.
@@ -626,6 +628,7 @@ func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficia
 			// source and anime category still identify this verified artwork;
 			// reject any conflicting year when the catalogue does provide one.
 			if !nativePosterIsAnime(drama) ||
+				(year == "" && !candidate.allowMissingYear) ||
 				(year != "" && year != candidate.year) {
 				continue
 			}
