@@ -194,6 +194,80 @@ func TestBangumiPosterAddressUsesExactTitleAndCategoryType(t *testing.T) {
 	}
 }
 
+func TestDuoduoYongshengFifthSeasonAliasesUseExactBangumiArtwork(t *testing.T) {
+	const expected = "https://lain.bgm.tv/pic/cover/yongsheng-fifth-season.jpg"
+	for _, title := range []string{"永生之大道歸一", "永生之太元仙府", "永生新篇章"} {
+		t.Run(title, func(t *testing.T) {
+			requests := 0
+			client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+				requests++
+				var payload bangumiPosterSearchRequest
+				if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+					t.Fatal(err)
+				}
+				if payload.Keyword != "永生 第五季" ||
+					len(payload.Filter.Type) != 1 || payload.Filter.Type[0] != 2 {
+					t.Fatalf("unexpected season-alias search: %+v", payload)
+				}
+				// The old parent entry must never be used as the fifth-season
+				// poster, even if it appears beside the exact season result.
+				return posterLookupJSONResponse(request, `{"data":[
+					{"id":487853,"type":2,"name_cn":"永生 第五季","date":"2025-12-20","images":{"large":"https://lain.bgm.tv/pic/cover/yongsheng-fifth-season.jpg"}},
+					{"id":264,"type":2,"name_cn":"永生","date":"2022-01-01","images":{"large":"https://lain.bgm.tv/pic/cover/yongsheng-old-season.jpg"}}
+				]}`), nil
+			})}
+			downloader := &Downloader{client: client, cfg: defaultConfig()}
+			address, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
+				ID: "duoduo:1192", Source: sourceDuoduo, Title: title,
+				Category: "動漫", OnlineDate: "2026",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if address != expected {
+				t.Fatalf("Bangumi poster = %q, want fifth-season artwork %q", address, expected)
+			}
+			if requests != 1 {
+				t.Fatalf("Bangumi requests = %d, want one canonical-season lookup", requests)
+			}
+		})
+	}
+}
+
+func TestBangumiPosterAddressSearchesTitleWithoutTrailingYear(t *testing.T) {
+	const expected = "https://lain.bgm.tv/pic/cover/death-note-2026.jpg"
+	requests := 0
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requests++
+		var payload bangumiPosterSearchRequest
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		switch payload.Keyword {
+		case "死亡筆記 2026":
+			return posterLookupJSONResponse(request, `{"data":[]}`), nil
+		case "死亡筆記":
+			return posterLookupJSONResponse(request, `{"data":[{"id":902026,"type":6,"name_cn":"死亡筆記","date":"2026-03-01","images":{"large":"https://lain.bgm.tv/pic/cover/death-note-2026.jpg"}}]}`), nil
+		default:
+			t.Fatalf("unexpected poster search keyword %q", payload.Keyword)
+			return nil, errors.New("unexpected keyword")
+		}
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
+		Title: "死亡筆記 2026", Category: "劇集", OnlineDate: "2026",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != expected {
+		t.Fatalf("Bangumi poster = %q, want %q", address, expected)
+	}
+	if requests != 2 {
+		t.Fatalf("Bangumi requests = %d, want original title plus year-free title", requests)
+	}
+}
+
 func TestBangumiPosterAddressSupportsVarietyAndSeasonSpecificSeries(t *testing.T) {
 	tests := []struct {
 		name      string
