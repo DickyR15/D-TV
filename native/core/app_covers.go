@@ -50,16 +50,19 @@ func nativeCoverAlternativeTimeout(source, cacheClass string) time.Duration {
 	return 0
 }
 func nativeCoverAttemptTimeout(source, address string, cacheClass ...string) time.Duration {
-	// External artwork (for example a Douban fallback) is not routed through
-	// Duoduo's provider proxy and must retain the normal download window.
-	if source != sourceDuoduo || len(cacheClass) > 0 && cacheClass[0] != "provider" {
-		return 12 * time.Second
+	if source == sourceDuoduo {
+		parsed, err := url.Parse(strings.TrimSpace(address))
+		if err == nil && strings.EqualFold(parsed.Hostname(), "wsrv.nl") {
+			return 6 * time.Second
+		}
+		if len(cacheClass) > 0 && cacheClass[0] == "provider" {
+			return 2500 * time.Millisecond
+		}
+		// Curated/external mirrors must fail over quickly. A dead official
+		// artwork host should not hold a poster card for the old 12s window.
+		return 4 * time.Second
 	}
-	parsed, err := url.Parse(strings.TrimSpace(address))
-	if err == nil && strings.EqualFold(parsed.Hostname(), "wsrv.nl") {
-		return 6 * time.Second
-	}
-	return 2500 * time.Millisecond
+	return 12 * time.Second
 }
 
 const nativeCoverRepairConcurrency = 4
