@@ -28,7 +28,7 @@ func hongguoRegistrationXGorgon(rawQuery string, body []byte, timestamp uint32, 
 	const flags uint16 = 0x4481
 	key := [8]byte{
 		0x4a, byte(flags >> 8), 0x16, byte(variant),
-		0x47, 0x6c, byte(flags), byte(variant >> 8),
+		0x47, 0x6c, byte(flags & 0xff), byte(variant >> 8),
 	}
 	stream := hongguoRegistrationBrokenRC4(key[:], len(payload))
 	for i := range payload {
@@ -39,7 +39,7 @@ func hongguoRegistrationXGorgon(rawQuery string, body []byte, timestamp uint32, 
 		next := payload[(i+1)%len(payload)]
 		payload[i] = 0x14 ^ ^bits.Reverse8(nibbleSwapped^next)
 	}
-	result := []byte{0x84, 0x04, byte(variant >> 8), byte(variant), byte(flags >> 8), byte(flags)}
+	result := []byte{0x84, 0x04, byte(variant >> 8), byte(variant), byte(flags >> 8), byte(flags & 0xff)}
 	result = append(result, payload...)
 	return hex.EncodeToString(result)
 }
