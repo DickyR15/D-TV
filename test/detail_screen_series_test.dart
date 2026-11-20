@@ -81,7 +81,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('片源 · 3 個選項'), findsOneWidget);
+    expect(find.text('片源 · 3 個選項'), findsOneWidget);
     expect(find.text('國語版'), findsOneWidget);
     expect(find.text('日語版'), findsOneWidget);
     expect(find.text('片源 2（來源乙）'), findsOneWidget);
