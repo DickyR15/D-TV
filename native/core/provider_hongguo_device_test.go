@@ -25,7 +25,7 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV102(t *testing.T) {
 	var calls int
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		calls++
-		if request.Method != http.MethodPost || request.URL.Host != "applog.snssdk.com" || request.URL.Path != "/service/2/device_register/" {
+		if request.Method != http.MethodPost || request.URL.Host != "log.snssdk.com" || request.URL.Path != "/service/2/device_register/" {
 			t.Fatalf("unexpected registration request: %s %s", request.Method, request.URL.String())
 		}
 		if got := request.Header.Get("User-Agent"); got != hongguoAppUserAgent {
@@ -33,6 +33,11 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV102(t *testing.T) {
 		}
 		if got := request.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
 			t.Fatalf("registration content-type = %q", got)
+		}
+		for _, name := range []string{"X-Khronos", "X-Gorgon", "X-Argus"} {
+			if request.Header.Get(name) == "" {
+				t.Errorf("registration missing signed header %s", name)
+			}
 		}
 		query := request.URL.Query()
 		expected := map[string]string{
@@ -133,8 +138,8 @@ func TestHongguoDeviceRegistrationFallsBackToLegacyHostAfterAlternateHTTP444(t *
 	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
 		t.Fatal(err)
 	}
-	if len(hosts) != 2 || hosts[0] != "applog.snssdk.com" || hosts[1] != "log.snssdk.com" {
-		t.Fatalf("registration host order = %#v, want applog then legacy log", hosts)
+	if len(hosts) != 2 || hosts[0] != "log.snssdk.com" || hosts[1] != "applog.snssdk.com" {
+		t.Fatalf("registration host order = %#v, want legacy log then applog", hosts)
 	}
 	state := d.hongguoCatalogSnapshot()
 	if !state.Registered || state.DeviceID != "1001" || state.InstallID != "10019" {
@@ -150,7 +155,7 @@ func TestHongguoDeviceRegistrationFallsBackAfterTengineTLB404(t *testing.T) {
 			t.Fatalf("unexpected registration request: %s %s", request.Method, request.URL)
 		}
 		hosts = append(hosts, request.URL.Host)
-		if request.URL.Host == "applog.snssdk.com" {
+		if request.URL.Host == "log.snssdk.com" {
 			response := sourceFixtureResponse(request, http.StatusNotFound, "<html><body>404 Not Found TLB</body></html>")
 			response.Header.Set("Server", "Tengine")
 			response.Header.Set("Content-Type", "text/html")
@@ -283,8 +288,13 @@ func hongguoDeviceFixture(t *testing.T, rejected map[string]bool, registerFails 
 			}
 			registered++
 			requests = append(requests, "register")
-			if request.URL.Query().Get("device_id") != "" || request.Header.Get("X-Argus") != "" {
-				t.Error("device registration leaked an old device or a signature")
+			if request.URL.Query().Get("device_id") != "" || request.URL.Query().Get("iid") != "" {
+				t.Error("device registration leaked a prior device identity")
+			}
+			for _, name := range []string{"X-Khronos", "X-Gorgon", "X-Argus"} {
+				if request.Header.Get(name) == "" {
+					t.Errorf("device registration omitted %s", name)
+				}
 			}
 			if registerFails {
 				return sourceFixtureResponse(request, http.StatusOK, `{"device_id":0,"install_id":0}`), nil
@@ -423,7 +433,7 @@ func TestHongguoTemporaryHTTPRegistrationFailuresCanRetryWithoutDeviceCooldown(t
 					t.Fatalf("HTTP 429 incorrectly created device cooldown until %v", paused)
 				}
 				d.limiter.mu.Lock()
-				backoff := d.limiter.backoffs["applog.snssdk.com"]
+				backoff := d.limiter.backoffs["log.snssdk.com"]
 				if backoff == nil || backoff.status != http.StatusTooManyRequests {
 					d.limiter.mu.Unlock()
 					t.Fatal("HTTP 429 Retry-After backoff was not preserved")
