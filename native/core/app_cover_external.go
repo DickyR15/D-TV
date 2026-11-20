@@ -779,17 +779,6 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 	},
 }
 
-func normalizeBangumiPosterExactTitle(value string) string {
-	value = bangumiPosterChineseVariants.Replace(strings.TrimSpace(value))
-	var normalized strings.Builder
-	for _, character := range strings.ToLower(value) {
-		if unicode.IsLetter(character) || unicode.IsDigit(character) {
-			normalized.WriteRune(character)
-		}
-	}
-	return normalized.String()
-}
-
 func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficialPoster, bool) {
 	title := normalizeBangumiPosterExactTitle(drama.Title)
 	year := bangumiPosterYear(drama.OnlineDate)
