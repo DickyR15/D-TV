@@ -34,7 +34,7 @@ func TestResolveHongguoV5MediaUsesPlayerV1Endpoint(t *testing.T) {
 		if request.Header.Get("User-Agent") != hongguoPlaybackUserAgent {
 			t.Errorf("playback user-agent mismatch: %q", request.Header.Get("User-Agent"))
 		}
-		if request.URL.Query().Get("version_name") != "7.3.9.32" ||
+		if request.URL.Query().Get("version_name") != "7.4.3.32" ||
 			request.URL.Query().Get("channel") != "update_64" ||
 			request.URL.Query().Get("device_type") != "25053RT47C" {
 			t.Errorf("playback device profile did not match the current official route: %v", request.URL.Query())
