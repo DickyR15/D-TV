@@ -381,6 +381,10 @@ class Drama {
         mergedCoverCandidates.add(normalized);
       }
     }
+    final freshIsIkanbotMovie = fresh.source == 'ikanbot' &&
+        const {'電影', '电影', 'movie', 'film'}.contains(
+          fresh.category.trim().toLowerCase(),
+        );
     return Drama(
       id: id.isEmpty ? fresh.id : id,
       source: fresh.source.isEmpty ? source : fresh.source,
@@ -398,11 +402,18 @@ class Drama {
       description: fresh.description.isEmpty ? description : fresh.description,
       cover: fresh.cover.isEmpty ? cover : fresh.cover,
       coverCandidates: mergedCoverCandidates,
-      episodes: fresh.episodes > 0 ? fresh.episodes : episodes,
-      episodesVerified:
-          episodesVerified ||
-          fresh.episodesVerified ||
-          (fresh.episodes > 0 && fresh.source != 'hongguo'),
+      // Older cached Ikanbot movie records may contain the number of
+      // selectable tracks as an episode count. Clear that stale TV metadata.
+      episodes: freshIsIkanbotMovie
+          ? 0
+          : fresh.episodes > 0
+          ? fresh.episodes
+          : episodes,
+      episodesVerified: freshIsIkanbotMovie
+          ? false
+          : episodesVerified ||
+                fresh.episodesVerified ||
+                (fresh.episodes > 0 && fresh.source != 'hongguo'),
       category:
           fresh.category.isEmpty ||
               genericCategories.contains(fresh.category) &&
