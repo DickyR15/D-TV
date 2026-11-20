@@ -51,7 +51,7 @@ func decodeHongguoFlexibleBase64(value string) ([]byte, error) {
 // The previous contentKey decoder remains as a compatibility fallback.
 func hongguoSpadeAKey(value string) ([]byte, error) {
 	raw, err := decodeHongguoFlexibleBase64(value)
-	if err != nil || len(raw) < 35 {
+	if err != nil || len(raw) < 34 {
 		return nil, errors.New("紅果 spade_a 金鑰資料無效")
 	}
 	length := len(raw) - int(raw[0]^raw[1]^raw[2]) + 47
