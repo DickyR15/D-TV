@@ -419,6 +419,45 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 	}
 }
 
+func TestDuoduoOfficialPosterRetriesVerifiedMirrorWhenOfficialHostFails(t *testing.T) {
+	image := posterTestJPEG(t)
+	var requestedHosts []string
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requestedHosts = append(requestedHosts, request.URL.Host)
+		if request.URL.Host == "dekichaumade-kon.af-original.com" {
+			return &http.Response{
+				StatusCode: http.StatusForbidden,
+				Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader("hotlink blocked")),
+				Request: request,
+			}, nil
+		}
+		if request.URL.Host == "images.anime-sommelier.com" {
+			return posterLookupJSONResponse(request, string(image)), nil
+		}
+		return nil, errors.New("unexpected poster host: " + request.URL.Host)
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	cache := newNativeCoverCache(t.TempDir(), downloader)
+	path, err := cache.load(context.Background(), nativeDrama{
+		ID: "duoduo:99124", Source: sourceDuoduo, Title: "奉子成婚",
+		Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025",
+		Cover: "https://provider.example.test/invalid-cover.jpg",
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(body, image) {
+		t.Fatalf("verified mirror artwork was not cached: %v", err)
+	}
+	if len(requestedHosts) != 2 ||
+		requestedHosts[0] != "dekichaumade-kon.af-original.com" ||
+		requestedHosts[1] != "images.anime-sommelier.com" {
+		t.Fatalf("poster fallback hosts = %#v, want official host then verified mirror", requestedHosts)
+	}
+}
+
 func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *testing.T) {
 	tests := []struct {
 		name  string
