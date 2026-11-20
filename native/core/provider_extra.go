@@ -571,9 +571,7 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 	}
 	tagPattern := regexp.MustCompile(`(?is)<(?:video|source)\b[^>]*>`)
 	for _, tag := range tagPattern.FindAllString(body, 64) {
-		if raw := firstNonEmpty(adultAttribute(tag, "src"), adultAttribute(tag, "data-src")); raw != "" {
-			candidates = append(candidates, raw)
-		}
+		if raw := firstNonEmpty(adultAttribute(tag, "src"), adultAttribute(tag, "data-src")); raw != "" { candidates = append(candidates, raw) }
 	}
 	directPattern := regexp.MustCompile(`(?i)https?://[^"'<>[:space:]\\]+?\.(?:m3u8|mp4)(?:\?[^"'<>[:space:]\\]*)?`)
 	candidates = append(candidates, directPattern.FindAllString(body, 128)...)
@@ -584,18 +582,14 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 		parsed, err := url.Parse(media)
 		if err != nil || !isProviderHTTPMediaURL(media) || parsed.User != nil { continue }
 		mediaPath := strings.ToLower(parsed.Path)
-		if !strings.Contains(mediaPath, "/stream/") ||
-			!strings.HasSuffix(mediaPath, ".m3u8") ||
-			extraAdultPPPIsPreviewMediaURL(media) || seen[media] {
-			continue
-		}
+		if !strings.Contains(mediaPath, "/stream/") || !strings.HasSuffix(mediaPath, ".m3u8") ||
+			extraAdultPPPIsPreviewMediaURL(media) || seen[media] { continue }
 		seen[media] = true
 		result = append(result, media)
 		if len(result) >= 16 { break }
 	}
 	return result
 }
-
 func extraAdultPPPStreamURL(body, page string) string {
 	candidates := extraAdultPPPStreamURLs(body, page)
 	if len(candidates) == 0 { return "" }
