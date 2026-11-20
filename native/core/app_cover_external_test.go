@@ -1803,6 +1803,22 @@ func TestPosterTitleVariantsIncludeVerifiedLocalizedAnimeAliases(t *testing.T) {
 			title: "奉子成婚",
 			aliases: []string{"デキちゃうまで婚", "Deki Chau Made Kon", "Marry Me, Let's Have a Baby!"},
 		},
+		{
+			title: "永生之大道歸一",
+			aliases: []string{"永生之大道归一", "永生大道归一", "Immortality: Tao Returns to One"},
+		},
+		{
+			title: "25歲的女高中生",
+			aliases: []string{"25岁的女高中生", "25歳の女子高生", "25-sai no Joshi Kousei"},
+		},
+		{
+			title: "蘇東坡與杭州的故事",
+			aliases: []string{"苏东坡与杭州的故事", "Su Dongpo and the Story of Hangzhou"},
+		},
+		{
+			title: "電鋸人",
+			aliases: []string{"电锯人", "鏈鋸人", "チェンソーマン", "Chainsaw Man"},
+		},
 	}
 	for _, test := range cases {
 		variants := posterTitleVariants(test.title)
