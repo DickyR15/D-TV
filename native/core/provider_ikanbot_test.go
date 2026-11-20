@@ -12,19 +12,6 @@ import (
 	htmlnet "golang.org/x/net/html"
 )
 
-package core
-
-import (
-	"context"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
-	"strings"
-	"testing"
-
-	htmlnet "golang.org/x/net/html"
-)
 
 func TestIkanbotDisplayEpisodeCountSeparatesMovieChoicesFromTVEpisodes(t *testing.T) {
 	if got := ikanbotDisplayEpisodeCount(true, 31); got != 0 {
