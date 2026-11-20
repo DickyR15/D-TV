@@ -348,10 +348,23 @@ jobs:
           path: dist/android/DTV-*.apk
           if-no-files-found: error
           retention-days: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref != 'refs/tags/v1.0.3' && 7 || 3 }}
-      # Emulator startup is best-effort on GitHub's Linux runners: this runner
-      # has no KVM access and x86_64 cold boots can remain ADB-offline. APK
-      # integrity/signature/package/ABI checks above remain required.
+      # GitHub-hosted Linux runners may not expose KVM. Detect it before
+      # starting QEMU: without hardware acceleration, x86_64 cold boots can
+      # time out before ADB creates emulator-5554. APK checks above stay required.
+      - name: Check Android emulator hardware acceleration
+        id: android-emulator-kvm
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "KVM is available; the Android emulator smoke test can run."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping Android emulator smoke test because this Linux runner does not expose usable KVM. Universal APK signature, package ID and all three ABI checks remain required and have already passed."
+          fi
       - name: Best-effort install and launch on x86_64 Android emulator
+        if: steps.android-emulator-kvm.outputs.available == 'true'
         uses: reactivecircus/android-emulator-runner@v2
         continue-on-error: true
         # APK build/signature/ABI verification and artifact upload are required;
