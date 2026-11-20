@@ -134,12 +134,15 @@ class PlaybackPreloader extends ChangeNotifier {
     int quality = 0,
     bool online = false,
   }) {
+    final hasIdentity = _identity != null;
     final identityMatches =
-        _identity == _key(drama, episode, quality, online);
+        hasIdentity && _identity == _key(drama, episode, quality, online);
     final notExpired = _now().isBefore(_expires);
     final result = identityMatches && notExpired ? _ready : null;
     final reason = result != null
         ? 'ready'
+        : !hasIdentity
+        ? 'not_prepared'
         : !identityMatches
         ? 'identity_mismatch'
         : !notExpired
