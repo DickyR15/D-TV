@@ -569,6 +569,74 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		},
 	},
 	{
+		// Duoduo anime: Please Put Them On, Takamine-san (2025).
+		// The artwork is the verified Japanese series key visual.
+		title: "鷹峰同學請穿上衣服",
+		titleAliases: []string{
+			"鹰峰同学请穿上衣服", "拜託請穿上，鷹峰同學", "拜托请穿上，鹰峰同学",
+			"履いてください、鷹峰さん", "Please Put Them On, Takamine-san",
+			"Please Put These On, Takamine-san",
+		},
+		source: sourceDuoduo,
+		year: "2025",
+		workType: "anime",
+		preferred: true,
+		overrideProvider: true,
+		allowMissingYear: true,
+		address: "https://thetv.jp/i/pgw/series_images/0001051910_k.jpg?w=716",
+	},
+	{
+		// Duoduo anime: The Share House's Secret Rule (2025).
+		// The image is the on-air key visual published by Anime! Anime!.
+		title: "只能觸控一分鐘哦",
+		titleAliases: []string{
+			"只能觸摸一分鐘哦", "只能触摸一分钟哦",
+			"「只能触摸一分钟哦...」合租房的秘密规则。",
+			"「1分間だけ触れてもいいよ...」シェアハウスの秘密ルール。",
+			"「１分間だけ触れてもいいよ…」シェアハウスの秘密ルール｡",
+			"The Share House's Secret Rule",
+		},
+		source: sourceDuoduo,
+		year: "2025",
+		workType: "anime",
+		preferred: true,
+		overrideProvider: true,
+		allowMissingYear: true,
+		address: "https://animeanime.jp/imgs/zoom/722848.jpg",
+	},
+	{
+		// Duoduo anime: Attack on Titan Season 1 (2013).
+		// Keep every alias season-specific so later seasons cannot inherit it.
+		title: "進擊的巨人第一季",
+		titleAliases: []string{
+			"进击的巨人第一季", "進撃の巨人 Season 1",
+			"Attack on Titan Season 1", "Shingeki no Kyojin Season 1",
+		},
+		source: sourceDuoduo,
+		year: "2013",
+		workType: "anime",
+		preferred: true,
+		overrideProvider: true,
+		allowMissingYear: true,
+		address: "https://images.justwatch.com/poster/130288291/s718/season-1.jpg",
+	},
+	{
+		// Duoduo anime: Soul Land 2 / The Peerless Tang Clan (2023).
+		// Use season-two key art and do not match the original Soul Land title.
+		title: "斗羅大陸第二季",
+		titleAliases: []string{
+			"斗罗大陆第二季", "斗羅大陸2 絕世唐門", "斗罗大陆2 绝世唐门",
+			"Soul Land 2: The Peerless Tang Clan", "Douluo Dalu 2: The Peerless Tang Clan",
+		},
+		source: sourceDuoduo,
+		year: "2023",
+		workType: "anime",
+		preferred: true,
+		overrideProvider: true,
+		allowMissingYear: true,
+		address: "https://media.animeoshi.com/anime/images/jikan/1080/1813129939.jpg?w=3840",
+	},
+	{
 		// Duoduo ID 66452 is the 2014 micro-film 逆愛2後會無期.
 		// The archive page matches the exact title, synopsis, director and cast.
 		// Keep this image as a fallback only for this exact source record.
