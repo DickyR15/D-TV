@@ -115,30 +115,21 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	// the official image (including its local cache) before trusting the
 	// provider's previously cached placeholder.
 	if preferredOfficialOverride && preferredOfficialAddress != "" {
-		for _, officialAddress := range nativePreferredOfficialPosterAddresses(drama) {
-			referer := nativeCoverFallbackReferer(
-				cache.downloader, drama, officialAddress,
-			)
-			if !force {
+		officialAddresses := nativePreferredOfficialPosterAddresses(drama)
+		if !force {
+			// Reuse any already-cached curated artwork before downloading.
+			for _, officialAddress := range officialAddresses {
+				referer := nativeCoverFallbackReferer(
+					cache.downloader, drama, officialAddress,
+				)
 				if path, ok := cache.cachedAlternativeCoverPath(
 					drama, officialAddress, referer, "external",
 				); ok {
 					return path, nil
 				}
 			}
-			path, err := cache.loadAlternativeAddress(
-				ctx, drama, officialAddress, referer, "external", force,
-			)
-			if err == nil {
-				return path, nil
-			}
-			if ctx.Err() != nil {
-				return "", ctx.Err()
-			}
-		}
-		if !force {
-			// A previously verified external fallback can still provide an
-			// immediate image while the curated official host is unavailable.
+			// A verified repaired image from an earlier run takes precedence
+			// over a new network request, preserving instant repeat opens.
 			_, cachedExternal := cache.cachedRepair(drama.ID)
 			for _, externalAddress := range duoduoUniqueStrings([]string{
 				strings.TrimSpace(drama.FallbackCover),
@@ -154,6 +145,20 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 				); ok {
 					return path, nil
 				}
+			}
+		}
+		// Try every verified official mirror only after checking local cache.
+		for _, officialAddress := range officialAddresses {
+			path, err := cache.loadAlternativeAddress(
+				ctx, drama, officialAddress,
+				nativeCoverFallbackReferer(cache.downloader, drama, officialAddress),
+				"external", force,
+			)
+			if err == nil {
+				return path, nil
+			}
+			if ctx.Err() != nil {
+				return "", ctx.Err()
 			}
 		}
 	}
