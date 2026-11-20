@@ -440,15 +440,34 @@ func signHongguoPlaybackV5(base string, values map[string]string, body []byte, n
 		}
 		f13,err:=hongguoV5Hash(queryHash,bodyMD5,timestamp)
 		if err!=nil { continue }
-		headers:=make(http.Header)
+
+		// THLRedGuo's official request path sends the Gorgon/Ladon/Argus
+		// compatibility headers together with the V5 Helios/Medusa headers.
+		// Reuse D-TV's native legacy signer for that header family, then
+		// overwrite the V5-specific values and the exact signed request ticket.
+		signedURL := base+"?"+query
+		parsedURL, parseErr := url.Parse(signedURL)
+		if parseErr != nil {
+			return "",nil,parseErr
+		}
+		legacyRequest := &http.Request{URL: parsedURL, Header: make(http.Header)}
+		signHongguoPlayerRequest(legacyRequest,body,now)
+		headers := legacyRequest.Header.Clone()
 		headers.Set("X-Khronos",strconv.FormatUint(uint64(timestamp),10))
 		headers.Set("X-Helios",hongguoV5Helios(timestamp))
 		headers.Set("X-Medusa",hongguoV5Medusa(queryHash,f13,timestamp,params,now))
+		headers.Set("X-SS-Req-Ticket",params["_rticket"])
+		headers.Set("X-XS-From-Web","0")
+		headers.Set("X-TT-Request-Tag","t=0;n=0")
+		headers.Set("Passport-SDK-Version","50561")
+		headers.Set("X-Vc-Bdturing-Sdk-Version","3.7.2.cn")
+		headers.Set("X-TT-Dt","")
+		headers.Set("Accept","application/json; charset=utf-8,application/x-protobuf")
 		if body!=nil {
 			headers.Set("X-SS-STUB",strings.ToUpper(hex.EncodeToString(bodyMD5)))
-			headers.Set("Content-Type","application/json; charset=utf-8")
+			headers.Set("Content-Type","application/json; charset=UTF-8")
 		}
-		return base+"?"+query,headers,nil
+		return signedURL,headers,nil
 	}
 	return "",nil,errors.New("紅果無法在 1024 次 ticket 嘗試內產生 V5 播放簽章")
 }
