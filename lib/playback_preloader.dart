@@ -165,11 +165,14 @@ class PlaybackPreloader extends ChangeNotifier {
     if (!_now().isBefore(_expires)) {
       _lastTakeResolveMs = 0;
       _ready = null;
+      _readyResolveMs = 0;
       _release(ready);
       DiaryService.add(
         '[NextEpisodePreload] take hit=false source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality reason=expired preloadResolveMs=0',
       );
-      clear();
+      // Keep the same playback identity after releasing an expired session.
+      // The playback layer may immediately call take() again for the same
+      // episode; that must report not_ready, not a false identity_mismatch.
       return null;
     }
 
