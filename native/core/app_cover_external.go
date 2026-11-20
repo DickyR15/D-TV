@@ -373,7 +373,17 @@ func posterTitleVariants(value string) []string {
 
 
 func normalizeBangumiPosterExactTitle(value string) string {
-	return normalizeBangumiPosterTitle(value)
+	// Keep season suffixes here. normalizeBangumiPosterTitle intentionally
+	// removes them for parent-series search, but curated artwork matching must
+	// distinguish season one from season two and similar catalogue entries.
+	value = bangumiPosterChineseVariants.Replace(strings.TrimSpace(value))
+	var normalized strings.Builder
+	for _, character := range strings.ToLower(strings.TrimSpace(value)) {
+		if unicode.IsLetter(character) || unicode.IsDigit(character) {
+			normalized.WriteRune(character)
+		}
+	}
+	return normalized.String()
 }
 
 // Duoduo labels the fifth 永生 season with episode-arc subtitles. Bind only
@@ -575,12 +585,12 @@ type nativeVerifiedOfficialPoster struct {
 var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 	{
 		// Duoduo's image for 永生 returns a valid anti-hotlink notice graphic.
-		// Override only the exact Duoduo anime title and 2022 series record with
-		// Bilibili's official programme artwork.
+		// Override only the exact Duoduo anime title, type and 2022 year with
+		// Bilibili's official programme artwork. Duplicate catalogue IDs can
+		// refer to the same work, so do not pin this title to one numeric ID.
 		title: "永生",
 		titleAliases: []string{"永生之無盡仙途", "永生之无尽仙途"},
 		source: sourceDuoduo,
-		sourceID: "99999",
 		year: "2022",
 		workType: "anime",
 		preferred: true,
@@ -782,10 +792,6 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 
 func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficialPoster, bool) {
 	source, sourceID, hasSourceID := splitProviderDramaID(drama.ID)
-	if !hasSourceID && strings.TrimSpace(drama.ID) == "" {
-		// Curated artwork must never be selected for an unscoped title alone.
-		return nativeVerifiedOfficialPoster{}, false
-	}
 	title := normalizeBangumiPosterExactTitle(drama.Title)
 	year := bangumiPosterYear(drama.OnlineDate)
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
