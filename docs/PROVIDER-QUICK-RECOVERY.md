@@ -53,14 +53,28 @@ Poster resolution follows this order:
 
 Every automatic external match must be checked against normalized title aliases, work type, release year when available, and uniqueness. Never choose the first fuzzy search result. Keep a list of alternative image URLs when there are verified mirrors so a slow or blocked host does not hold the poster slot indefinitely.
 
-## Long-term fast hotfix path
+## Remote compatibility manifest and mandatory startup update
 
-For future releases, keep provider compatibility data separate from parser code where possible:
+The live manifest is stored in this repository at `config/provider-compatibility.json`, with its detached Ed25519 signature at `config/provider-compatibility.json.sig`.
 
-- A small versioned manifest should hold allowed hosts, endpoint paths, response mode, and parser profile names.
-- The app should ship a known-good embedded manifest and may fetch a newer signed/HTTPS manifest.
-- Validate every remote manifest against a strict schema, version ceiling, host allowlist, and rollback policy.
-- The manifest may switch among parser profiles already implemented in the app; it must never provide executable code, arbitrary JavaScript, or unrestricted URLs.
-- When the official site changes beyond existing parser profiles, make a narrow code update and add a fixture so the same break does not recur.
+- Every app launch downloads the current manifest and signature from the repository's `main` branch, then the `release/v1.0.8-candidate` branch as a secondary location.
+- The app verifies the signature against the Ed25519 public key pinned in the native core. It then validates the schema, expiry, monotonically increasing version, HTTPS host allowlists, endpoint names, path templates, and built-in parser profile names.
+- Native source and playback actions remain locked until a fresh manifest has been downloaded and verified. If GitHub is unreachable, the manifest is expired, or its signature is invalid, D-TV stays on the retry screen rather than silently using an unverified configuration.
+- The manifest can switch only among parser strategies already compiled into D-TV. It cannot contain JavaScript, executable code, arbitrary redirects, credentials, device IDs, or API tokens.
 
-This allows a route or selector change to be corrected centrally without waiting for a full app-store release, while preserving a safe embedded fallback when the remote manifest is unavailable.
+### Updating the manifest
+
+1. Edit `config/provider-compatibility.json` and increment `manifestVersion`. Keep `generatedAt` current and `expiresAt` within 90 days.
+2. Push the JSON change to `main` or a `release/**` branch. The `Sign Provider Compatibility Manifest` workflow creates the matching `.sig` file.
+3. The workflow requires the repository Actions secret `DTV_PROVIDER_COMPAT_SIGNING_PRIVATE_KEY`. Its value is the Base64-encoded 32-byte Ed25519 seed supplied to the repository owner. Never commit the private key or put it in the manifest.
+4. Wait until the signature workflow succeeds before expecting clients to accept the new manifest. A JSON file whose signature is missing or stale is intentionally rejected.
+
+The app does not use a stale cache to bypass the startup check. This is an intentional fail-closed policy because startup freshness is a user requirement.
+
+## Red Fruit (Hongguo) route recovery
+
+The Red Fruit playback adapter uses multiple built-in official API routes and remembers the last successful route for five minutes. The signed manifest controls the route order. On the response side, D-TV handles single-video and multi-video model shapes, `fallback_api`, `backup_url_list`, the current `spade_a` envelope, and encrypted media URLs that require `key_seed`.
+
+The public THLRedGuo source also uses a private signing profile supplied through its own GitHub Actions secret. That secret is not present in the public repository and is not copied into D-TV. D-TV keeps its own native signing path and adapts the public API-route, response parsing, media-key, and fallback behavior. If the upstream signing protocol changes, treat that as a code-level compatibility update and add a fixture test; do not place signing material in the public JSON.
+
+The goal is to correct a host, API path, or route order centrally without waiting for an app-store release, while keeping parser changes, signature verification, and device-specific signing logic inside the reviewed native code.
