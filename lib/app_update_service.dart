@@ -418,6 +418,26 @@ try {
 
   $success = $true
   Write-UpdateLog 'Update completed and the new D TV process is running.'
+
+  # The downloaded ZIP is no longer needed after the new process has
+  # survived the startup check. Remove it without making cleanup failure
+  # undo an otherwise successful update.
+  try {
+    if (Test-Path -LiteralPath $ArchivePath -PathType Leaf) {
+      Remove-Item -LiteralPath $ArchivePath -Force
+      Write-UpdateLog 'Removed downloaded update archive.'
+    }
+    $archiveDirectory = Split-Path -Parent $ArchivePath
+    if (Test-Path -LiteralPath $archiveDirectory -PathType Container) {
+      $remainingItems = @(Get-ChildItem -LiteralPath $archiveDirectory -Force)
+      if ($remainingItems.Count -eq 0) {
+        Remove-Item -LiteralPath $archiveDirectory -Force
+        Write-UpdateLog 'Removed empty update download directory.'
+      }
+    }
+  } catch {
+    Write-UpdateLog "ARCHIVE CLEANUP WARNING: $($_.Exception.Message)"
+  }
 }
 catch {
   $failure = $_.Exception.Message
