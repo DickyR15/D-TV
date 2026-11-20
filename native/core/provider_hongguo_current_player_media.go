@@ -74,7 +74,6 @@ func (downloader *Downloader) resolveHongguoCurrentPlayerWithIdentity(
 ) (providerMedia, error) {
 	body, err := hongguoCurrentPlayerRequestBody(videoID, level)
 	if err != nil { return providerMedia{}, err }
-	now := time.Now()
 	nowMillis := downloader.hongguoCurrentPlayerSigningMillis(ctx)
 	pairs := hongguoCurrentPlayerPairs(identity)
 	query, signedHeaders, err := signHongguoCurrentPlayer(pairs, nowMillis, identity.DeviceID, hongguoCurrentPlayerVersion, body, nil)
