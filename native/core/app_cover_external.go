@@ -780,6 +780,10 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 }
 
 func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficialPoster, bool) {
+	if !hasSourceID && strings.TrimSpace(drama.ID) == "" {
+		// Curated artwork must never be selected for an unscoped title alone.
+		return nativeVerifiedOfficialPoster{}, false
+	}
 	title := normalizeBangumiPosterExactTitle(drama.Title)
 	year := bangumiPosterYear(drama.OnlineDate)
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
