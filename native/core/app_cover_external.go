@@ -471,6 +471,7 @@ type nativeVerifiedOfficialPoster struct {
 	overrideProvider bool
 	workType        string
 	titleAliases    []string
+	fallbackAddresses []string
 }
 
 // These two assets were independently identified from programme-owner /
@@ -559,6 +560,11 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		preferred: true,
 		overrideProvider: true,
 		address: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+		// The official site image may be blocked by some CDN/network paths.
+		// Keep the same exact key visual as a second source, not a title search.
+		fallbackAddresses: []string{
+			"https://images.anime-sommelier.com/img/PK1rLZIoZ2eoqvWk0XXG8Q/7530-ODM5MWUwMjIxOG-10610899209241630/pub",
+		},
 	},
 	{
 		// Duoduo ID 66452 is the 2014 micro-film 逆愛2後會無期.
@@ -655,12 +661,20 @@ func nativeVerifiedOfficialPosterAddress(drama nativeDrama) (string, bool) {
 	return candidate.address, true
 }
 
-func nativePreferredOfficialPosterAddress(drama nativeDrama) (string, bool) {
+func nativePreferredOfficialPosterAddresses(drama nativeDrama) []string {
 	candidate, ok := nativeVerifiedOfficialPosterEntry(drama)
 	if !ok || !candidate.preferred {
+		return nil
+	}
+	return nativeUniqueCoverAddresses(append([]string{candidate.address}, candidate.fallbackAddresses...)...)
+}
+
+func nativePreferredOfficialPosterAddress(drama nativeDrama) (string, bool) {
+	addresses := nativePreferredOfficialPosterAddresses(drama)
+	if len(addresses) == 0 {
 		return "", false
 	}
-	return candidate.address, true
+	return addresses[0], true
 }
 
 func nativePosterIsAnime(drama nativeDrama) bool {
