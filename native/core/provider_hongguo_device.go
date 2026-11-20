@@ -218,6 +218,27 @@ func hongguoRegistrationHTTPStage(status int) string {
 	}
 }
 
+func hongguoRegistrationIsTLBNotFound(response *http.Response, body []byte) bool {
+	if response == nil || response.StatusCode != http.StatusNotFound {
+		return false
+	}
+	bodyHint := strings.ToLower(hongguoRegistrationBodySummary(body))
+	server := strings.ToLower(response.Header.Get("Server"))
+	contentType := strings.ToLower(response.Header.Get("Content-Type"))
+	via := strings.ToLower(response.Header.Get("Via"))
+	return strings.Contains(bodyHint, "tlb") &&
+		(strings.Contains(server, "tengine") ||
+			strings.Contains(contentType, "text/html") ||
+			strings.Contains(via, "cache"))
+}
+
+func hongguoShouldTryAlternateRegistrationResponse(response *http.Response, body []byte) bool {
+	if response == nil {
+		return false
+	}
+	return response.StatusCode == 444 || hongguoRegistrationIsTLBNotFound(response, body)
+}
+
 func hongguoRegistrationTransportStage(err error) string {
 	if err == nil {
 		return "unknown"
@@ -364,17 +385,21 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 		if response.StatusCode != http.StatusOK {
 			statusErr := fmt.Errorf("紅果設備註冊 HTTP %d", response.StatusCode)
 			elapsed := time.Since(started)
-			downloader.recordHongguoRegistrationResponse(response, content, attempt, elapsed, hongguoRegistrationHTTPStage(response.StatusCode), false)
+			stage := hongguoRegistrationHTTPStage(response.StatusCode)
+			if hongguoRegistrationIsTLBNotFound(response, content) {
+				stage = "http_404_tlb_edge_route"
+			}
+			downloader.recordHongguoRegistrationResponse(response, content, attempt, elapsed, stage, false)
 			if details := hongguoRegistrationResponseDetails(response, content); details != "" {
 				statusErr = fmt.Errorf("%w（%s）", statusErr, details)
 			}
 			failures = append(failures, fmt.Errorf("%s: %w", host, statusErr))
 
-			// HTTP 444 is treated as a hostname/edge-path failure only:
-			// try the known first-party alias with the same request identity.
-			// Explicit 401/403 policy rejections are never bypassed by changing
-			// the hostname. Rate limits, 5xx and timeouts preserve backoff.
-			if response.StatusCode == 444 && hostIndex+1 < len(hosts) {
+			// HTTP 444 and a Tengine/TLB HTML 404 can indicate a failed edge
+			// route for this hostname. Try the known first-party alias once
+			// with the same registration identity. Do not fail over arbitrary
+			// application 404s or explicit 401/403 policy rejections.
+			if hongguoShouldTryAlternateRegistrationResponse(response, content) && hostIndex+1 < len(hosts) {
 				continue
 			}
 			if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden || response.StatusCode == 444 {
