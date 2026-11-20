@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -413,6 +414,7 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 		}
 	}
 	duration, _ := strconv.ParseFloat(mapString(model, "video_duration", "duration"), 64)
+	modelKeySeed := mapString(model, "key_seed")
 	var keyErr error
 	hasH266Variant := false
 	type scoredMedia struct {
@@ -422,39 +424,81 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 	var choices []scoredMedia
 	for _, row := range variants {
 		variant, _ := row.(map[string]any)
+		if len(variant) == 0 {
+			continue
+		}
 		meta := nestedMap(variant, "video_meta")
-		codec := strings.ToLower(mapString(meta, "codec_type"))
-		if codec == "bytevc2" || strings.Contains(strings.ToLower(mapString(variant, "gear_des_key")), "bytevc2") {
+		codec := strings.ToLower(mapString(variant, "codec_type", "codec"))
+		if codec == "" {
+			codec = strings.ToLower(mapString(meta, "codec_type", "codec"))
+		}
+		if strings.Contains(codec, "bytevc2") ||
+			strings.Contains(strings.ToLower(mapString(variant, "gear_des_key")), "bytevc2") {
 			hasH266Variant = true
 			continue
 		}
-		addresses := hongguoMediaAddresses(variant)
+		addresses := hongguoMediaAddressesForModel(variant, firstNonEmpty(mapString(variant, "key_seed"), modelKeySeed))
 		if len(addresses) == 0 {
 			continue
 		}
-		media := providerMedia{Referer: "https://novel.snssdk.com/", Duration: time.Duration(duration * float64(time.Second))}
+		media := providerMedia{
+			Referer: "https://novelquickapp.com/",
+			Duration: time.Duration(duration * float64(time.Second)),
+		}
 		encryption := nestedMap(variant, "encrypt_info")
-		spade := mapString(encryption, "spade_a")
-		if spade != "" || encryption["encrypt"] == true || mapString(encryption, "encryption_method") == "cenc-aes-ctr" {
-			var err error
-			media.CENCKey, err = hongguoContentKey(spade)
+		spade := firstNonEmpty(mapString(variant, "spade_a"), mapString(encryption, "spade_a"))
+		encrypted := encryption["encrypt"] == true ||
+			mapString(encryption, "encryption_method") == "cenc-aes-ctr" ||
+			spade != ""
+		if encrypted {
+			if spade == "" {
+				keyErr = errors.New("紅果加密影片缺少 spade_a")
+				continue
+			}
+			key, err := hongguoSpadeAKey(spade)
+			if err != nil {
+				key, err = hongguoContentKey(spade)
+			}
 			if err != nil {
 				keyErr = err
 				continue
 			}
+			media.CENCKey = key
 		}
-		width, _ := strconv.Atoi(mapString(meta, "vwidth"))
-		height, _ := strconv.Atoi(mapString(meta, "vheight"))
-		definition, _ := strconv.Atoi(hongguoQualityNumber.FindString(mapString(meta, "definition")))
+		width, _ := strconv.Atoi(mapString(variant, "vwidth", "width"))
+		height, _ := strconv.Atoi(mapString(variant, "vheight", "height"))
+		if width <= 0 {
+			width, _ = strconv.Atoi(mapString(meta, "vwidth", "width"))
+		}
+		if height <= 0 {
+			height, _ = strconv.Atoi(mapString(meta, "vheight", "height"))
+		}
+		definitionText := mapString(variant, "quality_desc", "definition")
+		if definitionText == "" {
+			definitionText = mapString(meta, "quality_desc", "definition")
+		}
+		definition, _ := strconv.Atoi(hongguoQualityNumber.FindString(definitionText))
 		media.Quality = hongguoMediaShortEdgeQuality(width, height, definition)
-		height = media.Quality
-		quality := height * 10
-		if codec == "h264" || codec == "avc1" {
-			quality++
+		codecRank := 0
+		switch codec {
+		case "h264", "avc", "avc1":
+			codecRank = 3
+		case "hevc", "h265", "hvc1", "hev1", "bytevc1":
+			codecRank = 2
+		case "", "mp4", "mpeg":
+			codecRank = 1
+		default:
+			codecRank = 0
+		}
+		score := media.Quality*100 + codecRank
+		if codecRank == 0 {
+			continue
 		}
 		for _, address := range addresses {
-			media.URL = address
-			choices = append(choices, scoredMedia{media: media, score: quality})
+			candidate := media
+			candidate.URL = address
+			candidate.CENCKey = append([]byte(nil), media.CENCKey...)
+			choices = append(choices, scoredMedia{media: candidate, score: score})
 		}
 	}
 	if len(choices) > 0 {
@@ -472,6 +516,51 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 		return providerMedia{}, errHongguoH266Only
 	}
 	return providerMedia{}, errors.New("紅果 App 未提供相容的媒體，已略過不支援的編碼")
+}
+
+func hongguoMediaAddressesForModel(info map[string]any, keySeed string) []string {
+	var addresses []string
+	seen := map[string]bool{}
+	var add func(any)
+	add = func(value any) {
+		switch current := value.(type) {
+		case string:
+			raw := strings.TrimSpace(current)
+			if raw == "" || len(raw) > 32<<10 {
+				return
+			}
+			address, err := hongguoDecryptVideoURL(raw, keySeed)
+			if err != nil {
+				// Some older responses Base64-wrap a public URL without using
+				// the encrypted spade URL envelope.
+				if decoded, decodeErr := decodeHongguoFlexibleBase64(raw); decodeErr == nil {
+					candidate := strings.TrimSpace(string(decoded))
+					if parsed, parseErr := url.Parse(candidate); parseErr == nil &&
+						parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil {
+						address = candidate
+					}
+				}
+			}
+			if address != "" && !seen[address] {
+				if parsed, parseErr := url.Parse(address); parseErr == nil &&
+					parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil {
+					seen[address] = true
+					addresses = append(addresses, address)
+				}
+			}
+		case []any:
+			for _, item := range current {
+				add(item)
+			}
+		}
+	}
+	for _, key := range []string{
+		"main_url", "backup_url", "backup_url_1", "backup_url_2", "backup_url_3",
+		"backup_url_list", "backup_urls", "url_list",
+	} {
+		add(info[key])
+	}
+	return addresses
 }
 
 func hongguoMediaAddresses(info map[string]any) []string {
