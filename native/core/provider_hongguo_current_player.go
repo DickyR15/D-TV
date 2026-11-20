@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
@@ -569,7 +570,7 @@ func hongguoCurrentRandomEntropy() ([]byte, error) {
 }
 
 func signHongguoCurrentPlayer(pairs []hongguoQueryPair, nowMillis int64, did, version string, body []byte, entropy []byte) (string, http.Header, error) {
-	if nowMillis < 1000 || nowMillis > int64(^uint32(0))*1000-128 || did == "" || len(did) > 64 || version == "" || len(version) > 32 {
+	if nowMillis < 1000 || nowMillis > int64(^uint32(0)>>1)*1000-128 || did == "" || len(did) > 64 || version == "" || len(version) > 32 {
 		return "", nil, errors.New("invalid current-player signing parameters")
 	}
 	if entropy == nil {
