@@ -60,6 +60,15 @@ class _DetailScreenState extends State<DetailScreen> {
   bool _supportsSeriesSeasons(String source) =>
       supportsNativeSeriesSeasons(source);
 
+  bool _isIkanbotMovie(Drama drama) {
+    if (drama.source != SourceSite.ikanbot.id) return false;
+    final category = drama.category.trim().toLowerCase();
+    return category.contains('電影') ||
+        category.contains('电影') ||
+        category.contains('movie') ||
+        category.contains('film');
+  }
+
   void _syncSeasonFocusNodes(Iterable<DramaSeason> seasons) {
     final ids = seasons.map((season) => season.drama.id).toSet();
     for (final id in _seasonFocusNodes.keys.toList()) {
@@ -453,6 +462,7 @@ class _DetailScreenState extends State<DetailScreen> {
   @override
   Widget build(BuildContext context) {
     final drama = _detail?.drama ?? _activeDrama;
+    final movieOptions = _isIkanbotMovie(drama);
     final watched = widget.store.watched(drama.id);
     final allEpisodes = _detail?.episodes ?? <Episode>[];
     final playLines = _playLineNames(allEpisodes);
@@ -550,6 +560,8 @@ class _DetailScreenState extends State<DetailScreen> {
                                         child: EpisodeBrowser(
                                           episodes: episodes,
                                           currentNumber: resumeEpisodeNumber,
+                                          title: movieOptions ? '片源' : '分組',
+                                          movieOptions: movieOptions,
                                           onSelected: (index) => _play(index),
                                           onExitLeft: television
                                               ? () => _favoriteFocus.requestFocus()
@@ -596,6 +608,7 @@ class _DetailScreenState extends State<DetailScreen> {
                             child: _episodeSummary(
                               episodes,
                               currentNumber: resumeEpisodeNumber,
+                              movieOptions: movieOptions,
                             ),
                           ),
                           SliverToBoxAdapter(
@@ -603,7 +616,8 @@ class _DetailScreenState extends State<DetailScreen> {
                               key: _episodeAnchor,
                               episodes: episodes,
                               page: _episodePage,
-                              title: '分組',
+                              title: movieOptions ? '片源' : '分組',
+                              movieOptions: movieOptions,
                               currentNumber: resumeEpisodeNumber,
                               onLocate: _locateEpisode,
                             ),
@@ -616,6 +630,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                     crossAxisCount: _episodeColumns(
                                       constraints.maxWidth,
                                       episodes,
+                                      movieOptions: movieOptions,
                                     ),
                                     mainAxisExtent: math.max(
                                       54,
@@ -635,6 +650,7 @@ class _DetailScreenState extends State<DetailScreen> {
                                 return RemoteEpisodeButton(
                                   key: ValueKey('episode-${episode.number}'),
                                   number: episode.number,
+                                  displayLabel: movieOptions ? episode.title : null,
                                   vip: episode.vip,
                                   current: episode.number == resumeEpisodeNumber,
                                   onPressed: () => _play(start + index),
@@ -695,7 +711,11 @@ class _DetailScreenState extends State<DetailScreen> {
                           icon: const Icon(Icons.play_arrow_rounded, size: 26),
                           label: Text(
                             watched != null && episodes.isNotEmpty
-                                ? '繼續播放 · 第 ${episodes[resumeIndex].number} 集'
+                                ? movieOptions
+                                    ? '繼續播放 · ${episodes[resumeIndex].title}'
+                                    : '繼續播放 · 第 ${episodes[resumeIndex].number} 集'
+                                : movieOptions
+                                ? '播放電影'
                                 : '播放',
                             textAlign: TextAlign.center,
                           ),
@@ -816,8 +836,14 @@ class _DetailScreenState extends State<DetailScreen> {
       );
     }
     return StatusPanel(
-      title: _error != null ? '劇集資訊暫時不可用' : '暫時沒有可播放的集數',
-      message: _error == null ? '可以更新劇集資訊後重試。' : uiTraditional(_error!),
+      title: _isIkanbotMovie(_detail?.drama ?? _activeDrama)
+          ? (_error != null ? '電影片源暫時不可用' : '暫時沒有可用片源')
+          : (_error != null ? '劇集資訊暫時不可用' : '暫時沒有可播放的集數'),
+      message: _error == null
+          ? (_isIkanbotMovie(_detail?.drama ?? _activeDrama)
+              ? '可以更新電影片源後重試。'
+              : '可以更新劇集資訊後重試。')
+          : uiTraditional(_error!),
       onRetry: _load,
       secondaryAction: _secondaryStatusActions,
     );
@@ -826,9 +852,15 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget _episodeSummary(
     List<Episode> episodes, {
     required int? currentNumber,
+    bool movieOptions = false,
   }) {
     final colors = Theme.of(context).colorScheme;
-    final current = currentNumber == null ? '' : ' · 目前第 $currentNumber 集';
+    final currentEpisode = episodes.where((episode) => episode.number == currentNumber).firstOrNull;
+    final current = currentNumber == null
+        ? ''
+        : movieOptions
+        ? ' · 目前 ${currentEpisode?.title ?? '片源 $currentNumber'}'
+        : ' · 目前第 $currentNumber 集';
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
       child: DecoratedBox(
@@ -844,7 +876,9 @@ class _DetailScreenState extends State<DetailScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '選集 · ${episodes.length} 集$current',
+                  movieOptions
+                      ? '片源 · ${episodes.length} 個選項$current'
+                      : '選集 · ${episodes.length} 集$current',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -876,7 +910,11 @@ class _DetailScreenState extends State<DetailScreen> {
         54,
         MediaQuery.textScalerOf(context).scale(20) + 30,
       );
-      final columns = _episodeColumns(render.size.width, episodes);
+      final columns = _episodeColumns(
+        render.size.width,
+        episodes,
+        movieOptions: _isIkanbotMovie(_detail?.drama ?? _activeDrama),
+      );
       final target =
           start +
           render.size.height +
@@ -890,9 +928,13 @@ class _DetailScreenState extends State<DetailScreen> {
     });
   }
 
-  int _episodeColumns(double width, List<Episode> episodes) {
+  int _episodeColumns(
+    double width,
+    List<Episode> episodes, {
+    bool movieOptions = false,
+  }) {
     final digits = episodes.fold<int>(
-      1,
+      movieOptions ? 7 : 1,
       (value, episode) => math.max(value, episode.number.toString().length),
     );
     final minimum = math.max(
@@ -956,7 +998,8 @@ class _DetailScreenState extends State<DetailScreen> {
     final colors = Theme.of(context).colorScheme;
     final meta = [
       SourceSite.byId(drama.source).name,
-      if (drama.episodes > 0) '共 ${drama.episodes} 集',
+      if (!_isIkanbotMovie(drama) && drama.episodes > 0)
+        '共 ${drama.episodes} 集',
       if (drama.releaseStatus.isNotEmpty && drama.releaseStatus != 'unknown')
         uiTraditional(drama.releaseLabel),
     ];
