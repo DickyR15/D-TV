@@ -1501,7 +1501,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final asset = update.assetForPlatform(Platform.operatingSystem);
       final platformNote = switch (Platform.operatingSystem) {
         'android' => '將下載 APK，接著由 Android 系統安裝程式確認更新。',
-        'windows' => '將下載免安裝 ZIP，關閉 D TV 後自動替換檔案並重新啟動。',
+        'windows' => '將下載更新 ZIP，使用獨立 DTV-Updater.exe 完成檔案替換；新版啟動驗證成功才會清除備份，失敗會自動還原。',
         'macos' => '將下載 DMG 並開啟安裝映像檔，請將新版 D TV 拖曳至「應用程式」替換。',
         'ios' => '將開啟該版本 GitHub Releases 頁面；查看更新內容與 SHA-256 校驗碼後，再自行下載 IPA 側載安裝。',
         _ => '將依目前裝置提供可用的更新檔案。',
@@ -1639,6 +1639,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return;
     }
 
+    if (Platform.isWindows && asset.sha256 == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '此 Windows Release 沒有提供 ZIP SHA-256，已停止自動更新以保護現有程式。',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     var progressDialogOpen = true;
     final progressDialog = showDialog<void>(
       context: context,
@@ -1677,7 +1690,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           );
         }
       } else if (Platform.isWindows) {
-        await service.launchWindowsUpdater(file, releaseUrl: update.releaseUrl);
+        final bundledUpdater = File(
+          File(Platform.resolvedExecutable).parent.path +
+              Platform.pathSeparator +
+              'DTV-Updater.exe',
+        );
+        File? downloadedUpdater;
+        if (!await bundledUpdater.exists()) {
+          final updaterAsset = update.windowsUpdaterAsset;
+          if (updaterAsset == null || updaterAsset.sha256 == null) {
+            throw const FormatException(
+              '此 Windows Release 缺少可驗證的 DTV-Updater.exe，已停止更新以保護現有程式。',
+            );
+          }
+          downloadedUpdater = await service.downloadAsset(updaterAsset);
+        }
+        await service.launchWindowsUpdater(
+          file,
+          updaterFile: downloadedUpdater,
+          expectedVersion: update.version,
+          releaseUrl: update.releaseUrl,
+        );
         exit(0);
       } else if (Platform.isMacOS) {
         await service.openMacDmg(file);

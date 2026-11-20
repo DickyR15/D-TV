@@ -229,6 +229,80 @@ func TestBangumiPosterAddressUsesExactTitleAndCategoryType(t *testing.T) {
 	}
 }
 
+func TestDuoduoYongshengFifthSeasonAliasesUseExactBangumiArtwork(t *testing.T) {
+	const expected = "https://lain.bgm.tv/pic/cover/yongsheng-fifth-season.jpg"
+	for _, title := range []string{"永生之大道歸一", "永生之太元仙府"} {
+		t.Run(title, func(t *testing.T) {
+			requests := 0
+			client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+				requests++
+				var payload bangumiPosterSearchRequest
+				if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+					t.Fatal(err)
+				}
+				if payload.Keyword != "永生 第五季" ||
+					len(payload.Filter.Type) != 1 || payload.Filter.Type[0] != 2 {
+					t.Fatalf("unexpected season-alias search: %+v", payload)
+				}
+				// The old parent entry must never be used as the fifth-season
+				// poster, even if it appears beside the exact season result.
+				return posterLookupJSONResponse(request, `{"data":[
+					{"id":487853,"type":2,"name_cn":"永生 第五季","date":"2025-12-20","images":{"large":"https://lain.bgm.tv/pic/cover/yongsheng-fifth-season.jpg"}},
+					{"id":264,"type":2,"name_cn":"永生","date":"2022-01-01","images":{"large":"https://lain.bgm.tv/pic/cover/yongsheng-old-season.jpg"}}
+				]}`), nil
+			})}
+			downloader := &Downloader{client: client, cfg: defaultConfig()}
+			address, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
+				ID: "duoduo:99001", Source: sourceDuoduo, Title: title,
+				Category: "動漫", OnlineDate: "2026",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if address != expected {
+				t.Fatalf("Bangumi poster = %q, want fifth-season artwork %q", address, expected)
+			}
+			if requests != 1 {
+				t.Fatalf("Bangumi requests = %d, want one canonical-season lookup", requests)
+			}
+		})
+	}
+}
+
+func TestBangumiPosterAddressSearchesTitleWithoutTrailingYear(t *testing.T) {
+	const expected = "https://lain.bgm.tv/pic/cover/death-note-2026.jpg"
+	requests := 0
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		requests++
+		var payload bangumiPosterSearchRequest
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		switch payload.Keyword {
+		case "死亡筆記 2026":
+			return posterLookupJSONResponse(request, `{"data":[]}`), nil
+		case "死亡筆記":
+			return posterLookupJSONResponse(request, `{"data":[{"id":902026,"type":6,"name_cn":"死亡筆記","date":"2026-03-01","images":{"large":"https://lain.bgm.tv/pic/cover/death-note-2026.jpg"}}]}`), nil
+		default:
+			t.Fatalf("unexpected poster search keyword %q", payload.Keyword)
+			return nil, errors.New("unexpected keyword")
+		}
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
+		Title: "死亡筆記 2026", Category: "劇集", OnlineDate: "2026",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != expected {
+		t.Fatalf("Bangumi poster = %q, want %q", address, expected)
+	}
+	if requests != 2 {
+		t.Fatalf("Bangumi requests = %d, want original title plus year-free title", requests)
+	}
+}
+
 func TestBangumiPosterAddressSupportsVarietyAndSeasonSpecificSeries(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -373,6 +447,11 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 			name: "traditional second-season title",
 			drama: nativeDrama{Title: "這是我的西遊 第二季", Category: "綜藝", OnlineDate: "2026"},
 			want: xiyouURL,
+		},
+		{
+			name: "Duoduo 2026 anime 萬人之上 uses verified iQIYI artwork",
+			drama: nativeDrama{ID: "duoduo:123456", Title: "萬人之上", Category: "動漫", OnlineDate: "2026"},
+			want: "https://pic2.iqiyipic.com/image/20251205/9b/cd/a_100570559_m_601_m4_400_400.jpg",
 		},
 		{
 			name: "Duoduo 87221 Single's Inferno Season 5 uses Netflix key art",
@@ -1424,6 +1503,17 @@ func TestValidNativeCoverURLRejectsZXKIImageAPI(t *testing.T) {
 	}
 }
 
+func TestNativeVerifiedOfficialPosterRejectsWrongTypeOrYear(t *testing.T) {
+	for _, invalid := range []nativeDrama{
+		{ID: "duoduo:123456", Title: "萬人之上", Category: "劇集", OnlineDate: "2026"},
+		{ID: "duoduo:123456", Title: "萬人之上", Category: "動漫", OnlineDate: "2025"},
+	} {
+		if _, ok := nativeVerifiedOfficialPosterAddress(invalid); ok {
+			t.Fatalf("unverified category/year received the 萬人之上 artwork: %+v", invalid)
+		}
+	}
+}
+
 func TestDoubanSuggestedPosterAddressUsesExactTitleTypeAndYear(t *testing.T) {
 	const expected = "https://img9.doubanio.com/view/photo/s_ratio_poster/public/p1234567890.jpg"
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
@@ -1803,6 +1893,42 @@ func TestPosterTitleVariantsIncludeVerifiedLocalizedAnimeAliases(t *testing.T) {
 			title: "奉子成婚",
 			aliases: []string{"デキちゃうまで婚", "Deki Chau Made Kon", "Marry Me, Let's Have a Baby!"},
 		},
+		{
+			title: "永生之大道歸一",
+			aliases: []string{"永生之大道归一", "永生大道归一", "Immortality: Tao Returns to One"},
+		},
+		{
+			title: "25歲的女高中生",
+			aliases: []string{"25岁的女高中生", "25歳の女子高生", "25-sai no Joshi Kousei"},
+		},
+		{
+			title: "蘇東坡與杭州的故事",
+			aliases: []string{"苏东坡与杭州的故事", "Su Dongpo and the Story of Hangzhou"},
+		},
+		{
+			title: "電鋸人",
+			aliases: []string{"电锯人", "鏈鋸人", "チェンソーマン", "Chainsaw Man"},
+		},
+		{
+			title: "死亡筆記 2006",
+			aliases: []string{"死亡筆記", "死亡笔记", "デスノート", "Death Note", "Death Note (2006)"},
+		},
+		{
+			title: "凡人修先傳：虛天戰紀",
+			aliases: []string{"凡人修仙傳：虛天戰紀", "凡人修仙传：虚天战纪", "凡人修仙傳之虛天戰紀"},
+		},
+		{
+			title: "凡人修仙傳(重製版)",
+			aliases: []string{"凡人修仙傳（重製版）", "凡人修仙传(重制版)"},
+		},
+		{
+			title: "相親物件是自己的學生",
+			aliases: []string{"相親對象是自己的學生", "相亲对象是自己的学生"},
+		},
+		{
+			title: "強勢的問題兒童",
+			aliases: []string{"强势的问题儿童", "強勢問題兒童"},
+		},
 	}
 	for _, test := range cases {
 		variants := posterTitleVariants(test.title)
@@ -1885,5 +2011,36 @@ func TestNativeCoverOriginRefererSupportsAFOriginalImages(t *testing.T) {
 		}, address), "https://"+host+"/"; got != want {
 			t.Errorf("Duoduo AF Original Referer for %s = %q, want %q", host, got, want)
 		}
+	}
+}
+
+
+func TestDuoduoSimplifiedAnimeCategoryEnablesPosterRecovery(t *testing.T) {
+	drama := nativeDrama{
+		ID: "duoduo:1192", Title: "奉子成婚",
+		Category: "動漫", OnlineDate: "2025",
+	}
+	if !nativePosterIsAnime(drama) {
+		t.Fatal("simplified Duoduo anime category was not recognized")
+	}
+	types := bangumiPosterSubjectTypes(drama)
+	if len(types) != 1 || types[0] != 2 {
+		t.Fatalf("Bangumi subject types = %#v, want anime-only type [2]", types)
+	}
+	const expectedPrimary = "https://image.pmgstatic.com/cache/resized/w663/files/images/film/posters/170/203/170203811_rde8py.jpg"
+	const expectedOfficialFallback = "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg"
+	addresses := nativePreferredOfficialPosterAddresses(drama)
+	if len(addresses) == 0 || addresses[0] != expectedPrimary {
+		t.Fatalf("preferred official anime poster addresses = %#v; want primary %q", addresses, expectedPrimary)
+	}
+	hasOfficialFallback := false
+	for _, address := range addresses[1:] {
+		if address == expectedOfficialFallback {
+			hasOfficialFallback = true
+			break
+		}
+	}
+	if !hasOfficialFallback {
+		t.Fatalf("official anime image missing from fallback addresses: %#v", addresses)
 	}
 }

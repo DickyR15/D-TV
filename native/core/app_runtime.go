@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -55,6 +56,8 @@ type Downloader struct {
 	huangdouDetailPending map[string]*huangdouDetailCall
 	providerMu            sync.Mutex
 	providerHosts         map[string]string
+	providerHealthMu      sync.Mutex
+	providerHealth        map[string]providerEndpointHealth
 	huangguoEdgeMu        sync.Mutex
 	huangguoEdgeSession   *huangguoEdgeSession
 	limiter               *requestLimiter
@@ -74,6 +77,18 @@ type Downloader struct {
 	legacy                *legacyAPIClient
 	previewMu             sync.Mutex
 	previewSessions       map[string]*huangguoPreviewSession
+	compatibilityMu       sync.RWMutex
+	compatibilityRefreshMu sync.Mutex
+	compatibilityRefreshOnce sync.Once
+	compatibilityManifest *providerCompatibilityManifest
+	compatibilityLastFetch time.Time
+	compatibilityLastError string
+	compatibilityOrigin    string
+	compatibilityStartupVerified atomic.Bool
+	hongguoPlaybackMu sync.Mutex
+	hongguoPlaybackPreferredRoute string
+	hongguoPlaybackPreferredUntil time.Time
+	hongguoPlaybackModels map[string]hongguoPlaybackModelCacheEntry
 }
 
 func defaultConfig() Config { return Config{MaxPagesPerSort: 50, PageSize: 30, Retries: 2} }
@@ -403,20 +418,25 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	router := &proxyRouter{}
 	d := &Downloader{cfg: cfg, providerHosts: map[string]string{}, proxyRouter: router,
 		limiter: newRequestLimiter(3, 250*time.Millisecond), diagnostics: newDiagnosticLog(directory)}
+	d.loadProviderCompatibilityCache()
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	transport.MaxIdleConnsPerHost = 8
 	transport.ResponseHeaderTimeout = 20 * time.Second
 	transport.Proxy = router.proxy
-	cdn := newCDNTransport(transport, newDNSResolver(transport))
+	resolver := newDNSResolver(transport)
+	cdn := newCDNTransport(transport, resolver)
 	// Media requests may be redirected to a DNS-RPZ landing IP by the system
 	// resolver. Only requests marked by doMediaRequestWithClient retry unknown-
 	// authority TLS failures via public DoH, without weakening certificate checks.
 	cdn.fallbackOnUnknownAuthority = true
-	// Keep the normal CDN-aware transport for every supported first-party
-	// provider route. The retired third-party Hongguo playback host no longer
-	// needs a dedicated HTTP/1.1 ALPN fallback.
-	providerTransport := cdn
+	// Registration is a POST, so route only the two known Redfruit aliases
+	// through a host-scoped verified DoH fallback. All other requests keep the
+	// normal CDN-aware transport and proxy behaviour.
+	providerTransport := &hostDoHTransport{
+		base: transport, resolver: resolver, router: router,
+		hosts: hongguoDeviceRegisterHosts(), upstream: cdn,
+	}
 	checkRedirect := func(request *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return errors.New("片源重新導向次數過多")
@@ -515,13 +535,31 @@ func nativeDispatch(input nativeInput) (any, error) {
 			}
 			nativeState.engine = engine
 		}
+		engine := nativeState.engine
 		nativeState.Unlock()
-		return map[string]any{"version": "0.2.17", "standalone": true, "allSources": buildAllSources == "true"}, nil
+
+		// D-TV blocks the main application until a fresh, signed compatibility
+		// manifest has been downloaded from the owner's GitHub repository.
+		// A cached manifest never bypasses this startup check.
+		refreshContext, cancel := context.WithTimeout(context.Background(), 24*time.Second)
+		defer cancel()
+		if err := engine.downloader.refreshProviderCompatibility(refreshContext); err != nil {
+			return nil, fmt.Errorf("必須先更新 D-TV 片源相容性設定才能繼續使用：%w", err)
+		}
+		return map[string]any{
+			"version": "0.2.17",
+			"standalone": true,
+			"allSources": buildAllSources == "true",
+			"providerCompatibility": engine.downloader.providerCompatibilityStatus(),
+		}, nil
 	}
 	engine := nativeState.engine
 	nativeState.Unlock()
 	if engine == nil {
 		return nil, errors.New("应用核心尚未就绪，请重新打开应用")
+	}
+	if !engine.downloader.compatibilityStartupVerified.Load() {
+		return nil, errors.New("必須先完成 D-TV GitHub 片源相容性設定更新，才能使用片源與播放功能")
 	}
 	duration := 60 * time.Second
 	if input.Action == "moveDownloads" {
@@ -541,6 +579,13 @@ func nativeDispatch(input nativeInput) (any, error) {
 		ctx = work
 	}
 	switch input.Action {
+	case "providerCompatibility":
+		if input.Command == "refresh" {
+			if err := engine.downloader.refreshProviderCompatibility(ctx); err != nil {
+				return engine.downloader.providerCompatibilityStatus(), err
+			}
+		}
+		return engine.downloader.providerCompatibilityStatus(), nil
 	case "lan":
 		return engine.nativeLAN(ctx, input.Command, input.LAN)
 	case "cast":

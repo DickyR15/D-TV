@@ -54,20 +54,60 @@ type castDescription struct {
 
 var castClient = &http.Client{Timeout: 6 * time.Second, Transport: &http.Transport{}}
 
-const castSearch = "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: urn:schemas-upnp-org:service:AVTransport:1\r\n\r\n"
+var castSearchTargets = []string{
+	"urn:schemas-upnp-org:service:AVTransport:1",
+	"urn:schemas-upnp-org:device:MediaRenderer:1",
+	"upnp:rootdevice",
+	"ssdp:all",
+}
 
-func castSearchLocations(ctx context.Context) []string {
+func castSearchRequest(searchTarget string) []byte {
+	return []byte("M-SEARCH * HTTP/1.1\r\n" + "HOST: 239.255.255.250:1900\r\n" + "MAN: \"ssdp:discover\"\r\n" + "MX: 2\r\nST: " + searchTarget + "\r\n\r\n")
+}
+
+func castSearchBindAddresses() []net.IP {
 	bind := []net.IP{nil}
-	if addresses, err := net.InterfaceAddrs(); err == nil {
+	seen := map[string]bool{}
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return bind
+	}
+	for _, networkInterface := range interfaces {
+		if networkInterface.Flags&net.FlagUp == 0 || networkInterface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addresses, err := networkInterface.Addrs()
+		if err != nil {
+			continue
+		}
 		for _, address := range addresses {
-			if network, ok := address.(*net.IPNet); ok {
-				if ip := network.IP.To4(); ip != nil && !ip.IsLoopback() {
-					bind = append(bind, ip)
-				}
+			var ip net.IP
+			switch value := address.(type) {
+			case *net.IPNet:
+				ip = value.IP.To4()
+			case *net.IPAddr:
+				ip = value.IP.To4()
 			}
+			if ip == nil || ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() {
+				continue
+			}
+			key := ip.String()
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			bind = append(bind, append(net.IP(nil), ip...))
 		}
 	}
+	return bind
+}
+
+func castSearchLocations(ctx context.Context) []string {
+	bind := castSearchBindAddresses()
 	deadline := time.Now().Add(3 * time.Second)
+	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
+		deadline = ctxDeadline
+	}
 	target := &net.UDPAddr{IP: net.IPv4(239, 255, 255, 250), Port: 1900}
 	var mu sync.Mutex
 	var group sync.WaitGroup
@@ -78,18 +118,23 @@ func castSearchLocations(ctx context.Context) []string {
 			continue
 		}
 		group.Add(1)
-		go func() {
+		go func(connection *net.UDPConn) {
 			defer group.Done()
-			defer conn.Close()
-			stop := context.AfterFunc(ctx, func() { _ = conn.SetReadDeadline(time.Now()) })
+			defer connection.Close()
+			stop := context.AfterFunc(ctx, func() { _ = connection.SetReadDeadline(time.Now()) })
 			defer stop()
-			_ = conn.SetReadDeadline(deadline)
+			_ = connection.SetReadDeadline(deadline)
 			for range 2 {
-				_, _ = conn.WriteToUDP([]byte(castSearch), target)
+				for _, searchTarget := range castSearchTargets {
+					if ctx.Err() != nil {
+						return
+					}
+					_, _ = connection.WriteToUDP(castSearchRequest(searchTarget), target)
+				}
 			}
 			buffer := make([]byte, 4096)
 			for {
-				size, _, err := conn.ReadFromUDP(buffer)
+				size, _, err := connection.ReadFromUDP(buffer)
 				if err != nil {
 					return
 				}
@@ -98,20 +143,23 @@ func castSearchLocations(ctx context.Context) []string {
 					continue
 				}
 				location := response.Header.Get("Location")
+				statusOK := response.StatusCode == http.StatusOK
 				_ = response.Body.Close()
-				if parsed, err := url.Parse(location); err == nil && parsed.Scheme == "http" && parsed.Host != "" {
+				parsed, parseErr := url.Parse(strings.TrimSpace(location))
+				if statusOK && parseErr == nil && parsed.Scheme == "http" && parsed.Host != "" && parsed.User == nil {
 					mu.Lock()
-					found[location] = true
+					found[parsed.String()] = true
 					mu.Unlock()
 				}
 			}
-		}()
+		}(conn)
 	}
 	group.Wait()
 	locations := make([]string, 0, len(found))
 	for location := range found {
 		locations = append(locations, location)
 	}
+	sort.Strings(locations)
 	return locations
 }
 
@@ -128,17 +176,22 @@ func castDescriptionUDN(device castDescriptionDevice) string {
 }
 
 func castDescriptionModel(device castDescriptionDevice) string {
-	parts := []string{strings.TrimSpace(device.Manufacturer), strings.TrimSpace(device.ModelName), strings.TrimSpace(device.ModelNumber)}
-	value := strings.ToLower(strings.Join(strings.Fields(strings.Join(parts, " ")), " "))
-	if value != "" {
-		return value
+	manufacturer := strings.TrimSpace(device.Manufacturer)
+	modelName := strings.TrimSpace(device.ModelName)
+	modelNumber := strings.TrimSpace(device.ModelNumber)
+	if modelName != "" || modelNumber != "" {
+		parts := []string{manufacturer, modelName, modelNumber}
+		return strings.ToLower(strings.Join(strings.Fields(strings.Join(parts, " ")), " "))
 	}
 	for _, child := range device.Devices {
 		if value := castDescriptionModel(child); value != "" {
+			if manufacturer != "" && !strings.Contains(value, strings.ToLower(manufacturer)) {
+				return strings.ToLower(manufacturer + " " + value)
+			}
 			return value
 		}
 	}
-	return ""
+	return strings.ToLower(manufacturer)
 }
 
 // UDN is the strongest renderer identity. Some boxes expose several UDNs
@@ -266,6 +319,12 @@ func (engine *nativeEngine) castDiscover(ctx context.Context) []castDevice {
 		items = append(items, device)
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	if engine.downloader != nil {
+		engine.downloader.recordDiagnostic(diagnosticEvent{
+			Level: "info", Event: "cast.ssdp_discovery", Source: "cast",
+			Message: fmt.Sprintf("SSDP 探索完成：搜尋目標 %d 個、回應位置 %d 個、可播放裝置 %d 個", len(castSearchTargets), len(locations), len(items)),
+		})
+	}
 	engine.cast.mu.Lock()
 	if engine.cast.active {
 		known[engine.cast.device.ID] = engine.cast.device

@@ -9,6 +9,8 @@ on:
       - build/pre-missav-and-advanced-reorder
       - feature/advanced-source-reorder-cross-platform
       - release/v1.0.8-candidate
+      - fix/**
+      - hotfix/**
     paths:
       - ".github/workflows/cross-platform-build.yml"
       - "CHANGELOG.md"
@@ -21,6 +23,7 @@ on:
       - "test/app_update_service_test.dart"
       - "test/catalog_sort_test.dart"
       - "scripts/**"
+      - "windows_updater/**"
       - "lib/**"
       - "native/**"
       - "test/**"
@@ -35,6 +38,7 @@ on:
       - ready_for_review
     branches:
       - main
+      - release/**
     paths:
       - ".github/workflows/cross-platform-build.yml"
       - ".github/workflows/duoduo-entry-probe.yml"
@@ -45,6 +49,7 @@ on:
       - "macos/**"
       - "windows/**"
       - "scripts/**"
+      - "windows_updater/**"
       - "assets/**"
       - "test/**"
       - "pubspec.yaml"
@@ -115,6 +120,9 @@ jobs:
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
       - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
@@ -560,6 +568,11 @@ jobs:
           ios_ipa="release-artifacts/DTV-iOS-IPA/DTV-${version}-iOS.ipa"
 
           test -d "$windows_dir"
+          windows_updater="$windows_dir/DTV-Updater.exe"
+          if [[ ! -s "$windows_updater" ]]; then
+            echo "Windows Portable bundle 缺少獨立更新器：$windows_updater" >&2
+            exit 1
+          fi
           for package in "$android_apk" "$macos_dmg" "$ios_ipa"; do
             if [[ ! -s "$package" ]]; then
               echo "缺少正式發布檔案或檔案為空：$package" >&2
@@ -573,6 +586,7 @@ jobs:
             zip -qr "$GITHUB_WORKSPACE/release-files/DTV-${version}-Windows-Portable.zip" .
           )
           cp "$android_apk" "$macos_dmg" "$ios_ipa" release-files/
+          cp "$windows_updater" release-files/DTV-Updater.exe
 
           # Match checksum order to GitHub's alphabetical Release Assets order.
           (
@@ -582,6 +596,7 @@ jobs:
               "DTV-${version}-iOS.ipa" \
               "DTV-${version}-macOS.dmg" \
               "DTV-${version}-Windows-Portable.zip" \
+              "DTV-Updater.exe" \
               > SHA256SUMS.txt
           )
 
@@ -592,7 +607,7 @@ jobs:
             fi
             ls -lh "$package"
           done
-          test "$(find release-files -maxdepth 1 -type f | wc -l)" -eq 5
+          test "$(find release-files -maxdepth 1 -type f | wc -l)" -eq 6
           checksums="$(cat release-files/SHA256SUMS.txt)"
           delimiter="DTV_SHA256_$(date +%s)"
           {
@@ -630,7 +645,7 @@ jobs:
 
             ### 下載檔案
             - Android／Android TV：Universal APK（ARM64、ARMv7、x86_64）
-            - Windows x64：免安裝 ZIP（解壓後即可執行）
+            - Windows x64：免安裝 ZIP（解壓後即可執行），另附獨立 DTV-Updater.exe 自動更新程序
             - macOS：Apple Silicon／Intel Universal DMG
             - iOS：未簽章 IPA，需自行簽署後側載安裝
 
@@ -651,6 +666,7 @@ jobs:
             release-files/DTV-${{ steps.release-files.outputs.version }}-iOS.ipa
             release-files/DTV-${{ steps.release-files.outputs.version }}-macOS.dmg
             release-files/DTV-${{ steps.release-files.outputs.version }}-Windows-Portable.zip
+            release-files/DTV-Updater.exe
             release-files/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

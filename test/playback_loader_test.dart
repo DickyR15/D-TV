@@ -47,6 +47,21 @@ void main() {
       Episode({'id': '$number', 'currentEpisode': number}, number);
   Future<void> tick() => Future<void>.delayed(Duration.zero);
 
+  test('a prepared detail handoff is reused without a second resolve', () async {
+    final repository = DeferredRepository();
+    final loader = PlaybackLoader(repository);
+    const prepared = PlaybackPlan(
+      url: 'https://example.test/prepared.m3u8',
+      session: 'detail-handoff',
+    );
+
+    final result = await loader.use(prepared);
+    expect(result?.session, 'detail-handoff');
+    expect(repository.pending, isEmpty);
+    expect(repository.cancellations, 0);
+    await loader.close();
+  });
+
   test('a later episode can start before an old resolver completes', () async {
     final repository = DeferredRepository();
     final loader = PlaybackLoader(repository);

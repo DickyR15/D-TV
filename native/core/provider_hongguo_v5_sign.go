@@ -23,7 +23,7 @@ import (
 // existing App API signing path.
 const hongguoPlaybackBaseURL = "https://api5-normal-sinfonlinea.fqnovel.com"
 const hongguoPlaybackPath = "/novel/player/multi_video_model/player/v1"
-const hongguoPlaybackUserAgent = "com.phoenix.read/73932 (Linux; U; Android 12; zh_CN_#Hans; PGT-AN10; Build/V417IR;tt-ok/3.12.13.20)"
+const hongguoPlaybackUserAgent = "com.phoenix.read/74332 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 
 var (
 	hongguoV5Magic = mustHongguoHex("2d4b4fca49750d433fb5ae2c226dcc56")
@@ -440,15 +440,34 @@ func signHongguoPlaybackV5(base string, values map[string]string, body []byte, n
 		}
 		f13,err:=hongguoV5Hash(queryHash,bodyMD5,timestamp)
 		if err!=nil { continue }
-		headers:=make(http.Header)
+
+		// THLRedGuo's official request path sends the Gorgon/Ladon/Argus
+		// compatibility headers together with the V5 Helios/Medusa headers.
+		// Reuse D-TV's native legacy signer for that header family, then
+		// overwrite the V5-specific values and the exact signed request ticket.
+		signedURL := base+"?"+query
+		parsedURL, parseErr := url.Parse(signedURL)
+		if parseErr != nil {
+			return "",nil,parseErr
+		}
+		legacyRequest := &http.Request{URL: parsedURL, Header: make(http.Header)}
+		signHongguoPlayerRequest(legacyRequest,body,now)
+		headers := legacyRequest.Header.Clone()
 		headers.Set("X-Khronos",strconv.FormatUint(uint64(timestamp),10))
 		headers.Set("X-Helios",hongguoV5Helios(timestamp))
 		headers.Set("X-Medusa",hongguoV5Medusa(queryHash,f13,timestamp,params,now))
+		headers.Set("X-SS-Req-Ticket",params["_rticket"])
+		headers.Set("X-XS-From-Web","0")
+		headers.Set("X-TT-Request-Tag","t=0;n=0")
+		headers.Set("Passport-SDK-Version","50561")
+		headers.Set("X-Vc-Bdturing-Sdk-Version","3.7.2.cn")
+		headers.Set("X-TT-Dt","")
+		headers.Set("Accept","application/json; charset=utf-8,application/x-protobuf")
 		if body!=nil {
 			headers.Set("X-SS-STUB",strings.ToUpper(hex.EncodeToString(bodyMD5)))
-			headers.Set("Content-Type","application/json; charset=utf-8")
+			headers.Set("Content-Type","application/json; charset=UTF-8")
 		}
-		return base+"?"+query,headers,nil
+		return signedURL,headers,nil
 	}
 	return "",nil,errors.New("紅果無法在 1024 次 ticket 嘗試內產生 V5 播放簽章")
 }
@@ -459,11 +478,28 @@ func hongguoPlaybackQuery(deviceID, installID string) map[string]string {
 		"app_name": "novelread",
 		"version_code": "74332",
 		"version_name": "7.4.3.32",
-		"channel": "vivo_8662_64",
-		"device_platform": "android",
-		"device_type": "PGT-AN10",
-		"os_version": "12",
+		"manifest_version_code": "74332",
 		"update_version_code": "74332",
+		"pv_player": "74332",
+		"channel": "update_64",
+		"device_platform": "android",
+		"os": "android",
+		"ssmix": "a",
+		"device_type": "25053RT47C",
+		"device_brand": "Redmi",
+		"device_manufacturer": "Xiaomi",
+		"language": "zh",
+		"os_api": "36",
+		"os_version": "16",
+		"resolution": "1280*2772",
+		"dpi": "520",
+		"ac": "wifi",
+		"host_abi": "arm64-v8a",
+		"dragon_device_type": "phone",
+		"compliance_status": "0",
+		"need_personal_recommend": "1",
+		"player_so_load": "1",
+		"is_android_pad_screen": "0",
 		"iid": installID,
 		"cdid": uuidLike(),
 		"device_id": deviceID,

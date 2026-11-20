@@ -17,7 +17,7 @@ import (
 
 const hongguoAppBaseURL = "https://api5-normal-sinfonlineb.fqnovel.com"
 
-const hongguoAppUserAgent = "com.phoenix.read/73532 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
+const hongguoAppUserAgent = "com.phoenix.read/74332 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 
 type hongguoCatalogCursor struct {
 	Offset        int       `json:"offset"`
@@ -154,8 +154,8 @@ func hongguoCatalogHasMore(state *hongguoCatalogState) bool {
 
 func hongguoAppQuery(deviceID, installID string) url.Values {
 	return url.Values{
-		"aid": {"8662"}, "app_name": {"novelread"}, "version_code": {"73532"}, "version_name": {"7.3.5.32"},
-		"manifest_version_code": {"73532"}, "update_version_code": {"73532"}, "channel": {"update_64"},
+		"aid": {"8662"}, "app_name": {"novelread"}, "version_code": {"74332"}, "version_name": {"7.4.3.32"},
+		"manifest_version_code": {"74332"}, "update_version_code": {"74332"}, "channel": {"update_64"},
 		"device_platform": {"android"}, "os": {"android"}, "ssmix": {"a"}, "device_type": {"25053RT47C"},
 		"device_brand": {"Redmi"}, "language": {"zh"}, "os_api": {"36"}, "os_version": {"16"},
 		"resolution": {"1280*2772"}, "dpi": {"520"}, "ac": {"wifi"}, "device_id": {deviceID}, "iid": {installID},
@@ -173,11 +173,30 @@ func (downloader *Downloader) hongguoHelperAppRequest(ctx context.Context, metho
 	return downloader.hongguoAppRequest(helperCtx, method, path, extra, payload)
 }
 
+func (downloader *Downloader) hongguoCompatibilityPath(path string) string {
+	name := ""
+	switch path {
+	case "/novel/player/video_detail/v1/":
+		name = "videoDetail"
+	case "/novel/player/video_model/v1/":
+		name = "videoModel"
+	case hongguoPlaybackPath:
+		name = "playback"
+	case hongguoSearchTabPath:
+		name = "searchTab"
+	}
+	if name == "" {
+		return path
+	}
+	return downloader.providerCompatibilityPath(sourceHongguo, name, nil, path)
+}
+
 func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
 	client := downloader.hongguoClient()
 	helper, _ := ctx.Value(hongguoHelperDeviceKey{}).(bool)
 	signed := path != hongguoBookmallTabPath
 	playback := path == hongguoPlaybackPath
+	path = downloader.hongguoCompatibilityPath(path)
 	var registerErr error
 	if signed {
 		// 暫時性註冊失敗仍可沿用既有設備識別碼；首次啟動閘門會要求完成雙設備註冊。
@@ -187,8 +206,12 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	base := client.baseURL
 	deviceID, installID, registered := client.deviceLocked(helper)
 	client.mu.Unlock()
+	base = downloader.providerCompatibilityAPIBaseURL(
+		sourceHongguo,
+		downloader.providerCompatibilityBaseURL(sourceHongguo, base),
+	)
 	if playback {
-		base = hongguoPlaybackBaseURL
+		base = downloader.providerCompatibilityPlaybackBaseURL(sourceHongguo, hongguoPlaybackBaseURL)
 	}
 	if helper && (!signed || !registered || !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0") {
 		return nil, errors.New("紅果輔助設備尚未完成註冊")

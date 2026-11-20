@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -163,6 +164,49 @@ func hongguoVideoModelFromAppResult(result map[string]any) map[string]any {
 	return model
 }
 
+func (downloader *Downloader) resolveHongguoFallbackAPI(
+	ctx context.Context, model map[string]any,
+) (providerMedia, error) {
+	fallbackURL := hongguoFallbackAPI(model["fallback_api"])
+	if fallbackURL == "" {
+		return providerMedia{}, errors.New("紅果播放模型沒有 fallback_api")
+	}
+	parsed, err := url.Parse(fallbackURL)
+	if err != nil || parsed.Scheme != "https" || parsed.User != nil ||
+		parsed.Hostname() == "" ||
+		!(strings.HasSuffix(strings.ToLower(parsed.Hostname()), ".fqnovel.com") ||
+			strings.EqualFold(parsed.Hostname(), "fqnovel.com") ||
+			strings.HasSuffix(strings.ToLower(parsed.Hostname()), ".snssdk.com") ||
+			strings.EqualFold(parsed.Hostname(), "snssdk.com")) {
+		return providerMedia{}, errors.New("紅果 fallback_api 網址不受信任")
+	}
+	query := parsed.Query()
+	query.Del("force_fids")
+	query.Set("format_type", "mp4")
+	query.Set("codec_type", "1")
+	parsed.RawQuery = query.Encode()
+
+	requestCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	body, err := downloader.fetchProviderText(requestCtx, parsed.String(), "https://novelquickapp.com/")
+	if err != nil {
+		return providerMedia{}, fmt.Errorf("取得紅果 fallback_api 失敗：%w", err)
+	}
+	var response map[string]any
+	decoder := json.NewDecoder(strings.NewReader(body))
+	decoder.UseNumber()
+	if err := decoder.Decode(&response); err != nil || response == nil {
+		return providerMedia{}, errors.New("紅果 fallback_api 回應格式異常")
+	}
+	for _, candidate := range []map[string]any{response, nestedMap(response, "video_info")} {
+		code := firstNonEmpty(mapString(candidate, "Code", "code", "status_code"))
+		if code != "" && code != "0" {
+			return providerMedia{}, fmt.Errorf("紅果 fallback_api 業務回應 %s", truncate(code, 24))
+		}
+	}
+	return hongguoMediaFromFallbackResponse(response)
+}
+
 func (downloader *Downloader) resolveHongguoMultiModelResult(
 	ctx context.Context, result map[string]any, videoID string,
 ) (providerMedia, error) {
@@ -171,24 +215,20 @@ func (downloader *Downloader) resolveHongguoMultiModelResult(
 		return providerMedia{}, err
 	}
 	if hongguoHasVideoList(model["video_list"]) {
-		return selectHongguoAppMedia(model)
+		media, selectErr := selectHongguoAppMedia(model)
+		if selectErr == nil {
+			return media, nil
+		}
+		fallbackMedia, fallbackErr := downloader.resolveHongguoFallbackAPI(ctx, model)
+		if fallbackErr == nil {
+			return fallbackMedia, nil
+		}
+		return providerMedia{}, fmt.Errorf(
+			"紅果多清晰度模型解析失敗：%v；fallback_api 備援失敗：%w",
+			publicError(selectErr), fallbackErr,
+		)
 	}
-
-	fallbackURL := hongguoFallbackAPI(model["fallback_api"])
-	if fallbackURL == "" || !isProviderHTTPMediaURL(fallbackURL) {
-		return providerMedia{}, errors.New("紅果備用播放模型沒有可用的 fallback_api")
-	}
-	body, err := downloader.fetchProviderText(ctx, fallbackURL, "https://novelquickapp.com/")
-	if err != nil {
-		return providerMedia{}, fmt.Errorf("取得紅果備用播放資訊失敗：%w", err)
-	}
-	var response map[string]any
-	decoder := json.NewDecoder(strings.NewReader(body))
-	decoder.UseNumber()
-	if err := decoder.Decode(&response); err != nil || response == nil {
-		return providerMedia{}, errors.New("紅果備用播放資訊格式異常")
-	}
-	return hongguoMediaFromFallbackResponse(response)
+	return downloader.resolveHongguoFallbackAPI(ctx, model)
 }
 
 func hongguoMultiModelFromResponse(response map[string]any, videoID string) (map[string]any, error) {

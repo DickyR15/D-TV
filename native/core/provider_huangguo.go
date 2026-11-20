@@ -39,6 +39,7 @@ const (
 	sourcePPP             = "ppp"
 	sourceMadou            = "madou"
 	source91Porna          = "91porna"
+	sourceChaoliu          = "chaoliu"
 
 	providerMaxBodyBytes = 20 * 1024 * 1024
 	providerTimeout      = 12 * time.Second
@@ -103,7 +104,7 @@ func splitProviderDramaID(id string) (source, sourceID string, ok bool) {
 
 func isHuangguoProviderSource(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceHeitao, sourceGuipian, sourceMissAV, sourceIkanBot, sourceSupJav, sourcePPP, sourceMadou, source91Porna:
+	case sourceHuangguoAI, sourceHuangguoVideo, sourceHuangdou, sourceHongguo, sourceHuangju, sourceYeguo, sourceDSD, sourceCloudFront, sourceDuoduo, sourceHanxiaoquan, sourceHeitao, sourceGuipian, sourceMissAV, sourceIkanBot, sourceSupJav, sourcePPP, sourceMadou, source91Porna, sourceChaoliu:
 		return true
 	default:
 		return false
@@ -148,6 +149,8 @@ func canonicalProviderSource(source string) string {
 		return sourceMadou
 	case "91porna", "91porna.com", "www.91porna.com":
 		return source91Porna
+	case "chaoliu", "潮流av", "18av", "mjv001.com", "mjv002.com", "mjv003.com", "mjv004.com", "mjv005.com", "mjv006.com", "mjv007.com", "mjv008.com", "mjv009.com", "mjv010.com", "mjv011.com", "mjv012.com", "mjv013.com", "mjv014.com", "mjv015.com":
+		return sourceChaoliu
 	case "missav", "missav.ai", "www.missav.ai", "missav.ws", "www.missav.ws", "missav.live", "www.missav.live", "missav123.com", "www.missav123.com":
 		return sourceMissAV
 	default:
@@ -268,6 +271,12 @@ func (d *Downloader) GetHuangguoChapters(ctx context.Context, source, sourceID s
 	case sourceHeitao:
 		drama, chapters, err := d.fetchHeitaoDetail(ctx, sourceID)
 		return drama.DisplayTitle(), chapters, err
+	case sourceGuipian:
+		drama, chapters, err := d.fetchGuipianDetail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
+	case sourceChaoliu:
+		drama, chapters, err := d.fetchChaoliuDetail(ctx, sourceID)
+		return drama.DisplayTitle(), chapters, err
 	case sourceMissAV, sourceSupJav, sourcePPP, sourceMadou, source91Porna:
 		drama, chapters, err := d.fetchAdultDetail(ctx, canonicalProviderSource(source), sourceID)
 		return drama.DisplayTitle(), chapters, err
@@ -342,6 +351,7 @@ func (d *Downloader) fetchHuangguoVideoDetail(ctx context.Context, sourceID stri
 }
 
 func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer string) (string, error) {
+	source := providerSourceForURL(rawURL)
 	retries := d.cfg.Retries
 	if retries <= 0 {
 		retries = 3
@@ -369,12 +379,20 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 					return "", ctx.Err()
 				}
 			}
+			started := time.Now()
+			recordAttempt := func(requestErr error) {
+				if source == sourceChaoliu {
+					d.recordProviderEndpoint(sourceChaoliu, "site", candidate, time.Since(started), requestErr)
+				}
+			}
 			timeout := providerTimeout
 			if len(candidates) > 1 {
 				timeout = 5 * time.Second
 			}
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, candidate, nil)
 			if err != nil {
+				lastErr = err
+				recordAttempt(err)
 				return "", err
 			}
 			req.Header.Set("User-Agent", userAgent)
@@ -396,6 +414,7 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 			resp, err := d.doCatalogRequestWithTimeout(req, timeout)
 			if err != nil {
 				lastErr = err
+				recordAttempt(err)
 				var backoff *requestBackoff
 				if errors.As(err, &backoff) {
 					break
@@ -406,38 +425,70 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 			closeErr := resp.Body.Close()
 			if readErr != nil {
 				lastErr = readErr
+				recordAttempt(readErr)
 				continue
 			}
 			if closeErr != nil {
 				lastErr = closeErr
+				recordAttempt(closeErr)
 				continue
 			}
 			if len(body) > providerMaxBodyBytes {
 				lastErr = fmt.Errorf("response exceeds %d bytes", providerMaxBodyBytes)
+				recordAttempt(lastErr)
 				continue
 			}
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 || catalogResponseBlockReason(resp, body) != "" {
+			blockReason := catalogResponseBlockReason(resp, body)
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 || blockReason != "" {
 				lastErr = d.catalogResponseError(req, resp, body)
-				if catalogResponseBlockReason(resp, body) != "" || resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != 408 {
+				recordAttempt(lastErr)
+				// Chaoliu mirrors can differ in availability: retry temporary
+				// access denials against the next explicitly allow-listed site.
+				temporaryDenial := source == sourceChaoliu &&
+					(resp.StatusCode == http.StatusForbidden ||
+						resp.StatusCode == http.StatusTooManyRequests ||
+						resp.StatusCode == http.StatusServiceUnavailable)
+				if blockReason != "" || (resp.StatusCode >= 400 && resp.StatusCode < 500 &&
+					resp.StatusCode != http.StatusRequestTimeout && !temporaryDenial) {
 					break
 				}
 				continue
 			}
-			if source := providerSourceForURL(rawURL); source != "" {
-				effectiveURL := req.URL
-				if resp.Request != nil {
-					effectiveURL = resp.Request.URL
+			if validator, ok := ctx.Value(providerTextValidatorKey{}).(providerTextValidator); ok && validator != nil {
+				if validationErr := validator(candidate, resp.StatusCode, body); validationErr != nil {
+					lastErr = validationErr
+					recordAttempt(validationErr)
+					continue
 				}
+			}
+			effectiveURL := req.URL
+			if resp.Request != nil && resp.Request.URL != nil {
+				effectiveURL = resp.Request.URL
+			}
+			if source == sourceChaoliu && !isChaoliuSiteHost(effectiveURL.Hostname()) {
+				lastErr = fmt.Errorf("潮流 AV 請求重新導向至未允許的站點：%s", effectiveURL.Hostname())
+				recordAttempt(lastErr)
+				continue
+			}
+			if source != "" {
 				d.providerMu.Lock()
+				if d.providerHosts == nil {
+					d.providerHosts = map[string]string{}
+				}
 				d.providerHosts[source] = effectiveURL.Scheme + "://" + effectiveURL.Host
 				d.providerMu.Unlock()
 			}
+			recordAttempt(nil)
 			rememberPlaybackResponseURL(ctx, rawURL, resp)
 			return string(body), nil
 		}
 	}
 	if len(candidates) > 1 && lastErr != nil {
-		return "", fmt.Errorf("黃果來源要求失敗：已嘗試 %d 個網域，最後錯誤：%w", tried, lastErr)
+		sourceName := "黃果來源"
+		if source == sourceChaoliu {
+			sourceName = "chaoliu"
+		}
+		return "", fmt.Errorf("%s 要求失敗：已嘗試 %d 個網域，最後錯誤：%w", sourceName, tried, lastErr)
 	}
 	return "", lastErr
 }

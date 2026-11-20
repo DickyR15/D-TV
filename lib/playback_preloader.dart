@@ -134,29 +134,64 @@ class PlaybackPreloader extends ChangeNotifier {
     int quality = 0,
     bool online = false,
   }) {
+    final hasIdentity = _identity != null;
+    if (!hasIdentity) {
+      _lastTakeResolveMs = 0;
+      DiaryService.add(
+        '[NextEpisodePreload] take hit=false source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality reason=not_prepared preloadResolveMs=0',
+      );
+      clear();
+      return null;
+    }
     final identityMatches =
         _identity == _key(drama, episode, quality, online);
-    final notExpired = _now().isBefore(_expires);
-    final result = identityMatches && notExpired ? _ready : null;
-    final reason = result != null
-        ? 'ready'
-        : !identityMatches
-        ? 'identity_mismatch'
-        : !notExpired
-        ? 'expired'
-        : loading || _delay != null
-        ? 'still_loading'
-        : error.isNotEmpty
-        ? 'preload_failed'
-        : 'not_ready';
-    final resolvedMs = result == null ? 0 : _readyResolveMs;
-    _lastTakeResolveMs = resolvedMs;
+    if (!identityMatches) {
+      _lastTakeResolveMs = 0;
+      DiaryService.add(
+        '[NextEpisodePreload] take hit=false source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality reason=identity_mismatch preloadResolveMs=0',
+      );
+      clear();
+      return null;
+    }
+
+    // A take can race the 600 ms scheduling delay or the asynchronous
+    // resolver. Do not clear the identity or cancel the in-flight preload:
+    // playback will call take again when the session is actually needed.
+    final ready = _ready;
+    if (ready == null) {
+      final reason = loading || _delay != null
+          ? 'still_loading'
+          : error.isNotEmpty
+          ? 'preload_failed'
+          : 'not_ready';
+      _lastTakeResolveMs = 0;
+      DiaryService.add(
+        '[NextEpisodePreload] take hit=false source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality reason=$reason preloadResolveMs=0',
+      );
+      return null;
+    }
+
+    if (!_now().isBefore(_expires)) {
+      _lastTakeResolveMs = 0;
+      _ready = null;
+      _readyResolveMs = 0;
+      _release(ready);
+      DiaryService.add(
+        '[NextEpisodePreload] take hit=false source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality reason=expired preloadResolveMs=0',
+      );
+      // Keep the same playback identity after releasing an expired session.
+      // The playback layer may immediately call take() again for the same
+      // episode; that must report not_ready, not a false identity_mismatch.
+      return null;
+    }
+
+    _ready = null;
+    _lastTakeResolveMs = _readyResolveMs;
     DiaryService.add(
-      '[NextEpisodePreload] take hit=${result != null} source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality reason=$reason preloadResolveMs=$resolvedMs',
+      '[NextEpisodePreload] take hit=true source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality reason=ready preloadResolveMs=$_readyResolveMs',
     );
-    if (result != null) _ready = null;
     clear();
-    return result;
+    return ready;
   }
 
   void pause() {

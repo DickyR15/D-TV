@@ -65,6 +65,13 @@ void main() {
             'digest': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           },
           {
+            'name': 'DTV-Updater.exe',
+            'browser_download_url':
+                'https://github.com/DickyR15/D-TV/releases/download/v1.0.1/DTV-Updater.exe',
+            'size': 1048576,
+            'digest': 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          },
+          {
             'name': 'DTV-1.0.1-macOS.dmg',
             'browser_download_url':
                 'https://github.com/DickyR15/D-TV/releases/download/v1.0.1/DTV-1.0.1-macOS.dmg',
@@ -90,6 +97,8 @@ void main() {
     expect(info.assetForPlatform('android')?.name, 'DTV-1.0.1-Android.apk');
     expect(info.assetForPlatform('windows')?.name, 'DTV-1.0.1-Windows-Portable.zip');
     expect(info.assetForPlatform('windows')?.sha256, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    expect(info.windowsUpdaterAsset?.name, 'DTV-Updater.exe');
+    expect(info.windowsUpdaterAsset?.sha256, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
     expect(info.assetForPlatform('macos')?.name, 'DTV-1.0.1-macOS.dmg');
     expect(info.assetForPlatform('ios')?.name, 'DTV-1.0.1-iOS.ipa');
   });

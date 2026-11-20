@@ -1,6 +1,10 @@
 package core
 
 import (
+	"net/http"
+	"io"
+	"fmt"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
@@ -451,5 +455,250 @@ func TestExtraAdultSourceNamesUseRequestedLabels(t *testing.T) {
 func TestExtraAdult91PornaUsesOfficialDisplayName(t *testing.T) {
 	if got := extraAdultSourceName(source91Porna); got != "91porna" {
 		t.Fatalf("91Porna display name = %q", got)
+	}
+}
+
+
+func TestExtraAdultPPPSkipsBlurredPreviewMediaAndKeepsFullStream(t *testing.T) {
+	body := `<script>
+		var preview = 'https://cdn.ppp.porn/video/preview/teaser.mp4?token=blurred';
+		var stream = 'https://cdn.ppp.porn/video/stream/full/index.m3u8?token=real';
+	</script>`
+	got := extraAdultPPPStreamURLs(body, pppBaseURL+"/v/example/")
+	if len(got) != 1 || got[0] != "https://cdn.ppp.porn/video/stream/full/index.m3u8?token=real" {
+		t.Fatalf("PPP preview was not excluded or full stream was lost: %#v", got)
+	}
+}
+func TestExtraAdultPPPLowResolutionPreviewIsLastResort(t *testing.T) {
+	for _, address := range []string{
+		"https://cdn.ppp.porn/video/180p/clip.mp4",
+		"https://cdn.ppp.porn/video/clip-240p.mp4",
+		"https://cdn.ppp.porn/video/clip.mp4?quality=180",
+		"https://cdn.ppp.porn/video/index.m3u8?resolution=180p",
+	} {
+		if !extraAdultPPPLowResolutionMediaURL(address) {
+			t.Errorf("low-resolution stream was not detected: %s", address)
+		}
+	}
+	for _, address := range []string{
+		"https://cdn.ppp.porn/video/360p/episode.mp4",
+		"https://cdn.ppp.porn/video/episode.mp4?quality=720",
+		"https://cdn.ppp.porn/video/index.m3u8?token=180p-is-part-of-token",
+	} {
+		if extraAdultPPPLowResolutionMediaURL(address) {
+			t.Errorf("normal stream was incorrectly marked low resolution: %s", address)
+		}
+	}
+}
+
+func TestExtraAdultPPPPrefersFullStreamEvenWhen180pCandidateAppearsFirst(t *testing.T) {
+	routes := []extraAdultPPPStreamRoute{
+		{address: "https://cdn.ppp.porn/video/180p/teaser.mp4", lowResolution: true},
+		{address: "https://cdn.ppp.porn/video/full/index.m3u8"},
+		{address: "https://cdn.ppp.porn/video/720p/episode.mp4"},
+	}
+	extraAdultPPPPreferFullStreams(routes)
+	if routes[0].address != "https://cdn.ppp.porn/video/full/index.m3u8" ||
+		routes[1].address != "https://cdn.ppp.porn/video/720p/episode.mp4" ||
+		routes[2].address != "https://cdn.ppp.porn/video/180p/teaser.mp4" {
+		t.Fatalf("PPP did not put full streams ahead of the low-resolution fallback: %+v", routes)
+	}
+	fallbackOnly := []extraAdultPPPStreamRoute{
+		{address: "https://cdn.ppp.porn/video/180p/teaser.mp4", lowResolution: true},
+	}
+	extraAdultPPPPreferFullStreams(fallbackOnly)
+	if len(fallbackOnly) != 1 {
+		t.Fatalf("low-resolution fallback should be retained when it is the only route: %+v", fallbackOnly)
+	}
+}
+
+func TestExtraAdultPPPDetectsPreviewMarkersWithoutRejectingNormalMedia(t *testing.T) {
+	for _, address := range []string{
+		"https://cdn.ppp.porn/video/preview/clip.mp4",
+		"https://cdn.ppp.porn/trailers/clip.mp4",
+		"https://cdn.ppp.porn/video/clip.mp4?is_preview=1",
+	} {
+		if !extraAdultPPPIsPreviewMediaURL(address) {
+			t.Errorf("preview media was not identified: %s", address)
+		}
+	}
+	for _, address := range []string{
+		"https://cdn.ppp.porn/video/episode-01.mp4",
+		"https://cdn.ppp.porn/video/index.m3u8?token=preview-proof-but-not-a-preview-flag",
+	} {
+		if extraAdultPPPIsPreviewMediaURL(address) {
+			t.Errorf("normal media was incorrectly identified as preview: %s", address)
+		}
+	}
+}
+
+func TestExtraAdult91PornaParsesCurrentAbsoluteDetailLinks(t *testing.T) {
+	tests := []struct {
+		name string
+		href string
+		want string
+	}{
+		{
+			name: "absolute current detail link",
+			href: "https://91porna.com/comic/index/detail?video_key=455755",
+			want: "455755",
+		},
+		{
+			name: "absolute legacy avdetail link",
+			href: "https://91porna.com/comic/index/avdetail?video_key=key_123",
+			want: "key_123",
+		},
+		{
+			name: "protocol relative current detail link",
+			href: "//91porna.com/comic/index/detail?video_key=455755",
+			want: "455755",
+		},
+		{
+			name: "www current detail link",
+			href: "https://www.91porna.com/comic/index/detail?video_key=455755",
+			want: "455755",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			html := `<div class="video-item"><a href="` + test.href + `"><img data-src="/poster.jpg" alt="91 test"></a><span>12:34</span></div>`
+			blocks := extraAdultSegments(html, source91Porna)
+			if len(blocks) != 1 {
+				t.Fatalf("card block count = %d, want 1", len(blocks))
+			}
+			item, ok := extraAdultParseCard(source91Porna, blocks[0], ninetyOneBaseURL)
+			if !ok || item.SourceID != test.want {
+				t.Fatalf("absolute detail link parsed as %#v, ok=%t; want ID %q", item, ok, test.want)
+			}
+		})
+	}
+}
+
+func TestExtraAdult91PornaRejectsForeignAndNonDetailLinks(t *testing.T) {
+	for _, href := range []string{
+		"https://evil.example/comic/index/detail?video_key=455755",
+		"https://91porna.com/comic/index/video?category=play",
+		"http://91porna.com/comic/index/detail?video_key=455755",
+		"https://91porna.com/comic/index/detail?video_key=bad%2Fid",
+	} {
+		if _, ok := extraAdult91PornaDetailLink(href, ninetyOneBaseURL); ok {
+			t.Fatalf("untrusted or invalid 91Porna link was accepted: %s", href)
+		}
+	}
+}
+
+func TestExtraAdult91PornaValidatesActualDetailResponse(t *testing.T) {
+	const detailURL = "https://91porna.com/comic/index/detail?video_key=455755"
+	valid := `<!doctype html><html><head><title>91 video detail</title><meta property="og:title" content="Example"></head><body><h1>Example</h1><div data-video="19330"></div></body></html>`
+	if err := extraAdult91PornaDetailPageError("455755", valid, detailURL); err != nil {
+		t.Fatalf("valid current 91Porna detail page rejected: %v", err)
+	}
+	tests := []struct {
+		name string
+		body string
+		page string
+	}{
+		{
+			name: "cloudflare challenge",
+			body: `<!doctype html><html><head><title>Just a moment</title></head><body>Checking your browser</body></html>`,
+			page: detailURL,
+		},
+		{
+			name: "wrong video key after redirect",
+			body: valid,
+			page: "https://91porna.com/comic/index/detail?video_key=other",
+		},
+		{
+			name: "redirected to catalogue",
+			body: valid,
+			page: "https://91porna.com/comic/index/video?category=play",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := extraAdult91PornaDetailPageError("455755", test.body, test.page); err == nil {
+				t.Fatal("invalid detail response was accepted")
+			}
+		})
+	}
+}
+
+func TestExtraAdultPPPFullStreamWinsOverPreviewURLs(t *testing.T) {
+	body := `<script>
+		var preview = "https://preview.example.test/clip/preview.m3u8?token=p";
+		var video = "https://hokcap.ppp.porn/stream/token/1760000000/1/12345/12345.m3u8?auth=full%2Ftoken";
+	</script>
+	<video src="https://preview.example.test/trailer.mp4"></video>`
+	got := extraAdultPPPStreamURLs(body, pppBaseURL+"/v/sample/")
+	want := "https://hokcap.ppp.porn/stream/token/1760000000/1/12345/12345.m3u8?auth=full%2Ftoken"
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("PPP must keep only the full /stream/ HLS route: %v", got)
+	}
+}
+
+func TestExtraAdultPPPIgnoresPreviewOnlyMedia(t *testing.T) {
+	body := `<video src="https://preview.example.test/trailer.mp4"></video>
+	<script>var m3u8 = "https://preview.example.test/clip/preview.m3u8";</script>`
+	if got := extraAdultPPPStreamURLs(body, pppBaseURL+"/v/sample/"); len(got) != 0 {
+		t.Fatalf("PPP preview media must not be treated as a full movie: %v", got)
+	}
+}
+
+func TestExtraAdult91PornaExtractsOfficialMediaIDAndStreamPriority(t *testing.T) {
+	if got := extraAdult91PornaMediaID(`<div data-video="123456789"></div>`); got != "123456789" {
+		t.Fatalf("91Porna media ID = %q", got)
+	}
+	if got := extraAdult91PornaMediaID(`<div data-video="not-numeric"></div>`); got != "" {
+		t.Fatalf("invalid 91Porna media ID accepted: %q", got)
+	}
+	payload := map[string]any{
+		"data": map[string]any{"streams": map[string]any{
+			"main": "https://media.example.test/full.m3u8?auth=a%2Fb",
+			"hevc": "https://media.example.test/hevc.m3u8",
+			"preview": "https://media.example.test/preview.m3u8",
+		}},
+	}
+	got := extraAdult91PornaPlaybackURLs(payload, ninetyOneBaseURL+"/comic/index/avdetail?video_key=key_123")
+	want := []string{
+		"https://media.example.test/full.m3u8?auth=a%2Fb",
+		"https://media.example.test/hevc.m3u8",
+		"https://media.example.test/preview.m3u8",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("91Porna playback variants = %v", got)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("91Porna stream order = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestExtraAdult91PornaPlaybackAPIUsesOfficialEndpointAndHeaders(t *testing.T) {
+	const page = "https://91porna.com/comic/index/detail?video_key=key_123"
+	responseBody := `{"data":{"streams":{"main":"https://media.example.test/full.m3u8?auth=ok","hevc":"https://media.example.test/hevc.m3u8","preview":"https://media.example.test/preview.m3u8"}}}`
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPost || request.URL.String() != "https://91porna.com/api/videos/987654/playback" {
+			return nil, fmt.Errorf("unexpected 91Porna API request: %s %s", request.Method, request.URL)
+		}
+		if request.Header.Get("Referer") != page || request.Header.Get("User-Agent") != ninetyOneMobileUserAgent ||
+			request.Header.Get("Content-Type") != "application/json" ||
+			request.Header.Get("Accept") != "application/json, text/plain, */*" {
+			return nil, fmt.Errorf("91Porna API headers mismatch: %+v", request.Header)
+		}
+		body, err := io.ReadAll(request.Body)
+		if err != nil || string(body) != "{}" {
+			return nil, fmt.Errorf("91Porna API body = %q, err=%v", body, err)
+		}
+		return sourceFixtureResponse(request, http.StatusOK, responseBody), nil
+	})
+	media, err := d.fetchExtraAdult91PornaPlayback(context.Background(), "987654", page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if media.URL != "https://media.example.test/full.m3u8?auth=ok" || len(media.Variants) != 2 ||
+		media.Variants[0].URL != "https://media.example.test/hevc.m3u8" ||
+		media.Variants[1].URL != "https://media.example.test/preview.m3u8" {
+		t.Fatalf("91Porna resolved media = %+v", media)
 	}
 }

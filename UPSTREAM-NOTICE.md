@@ -33,3 +33,34 @@ Copyright (C) 2026 DickyR15
 ## 修改版本識別
 
 本專案與上游原始專案並非同一發行版本。若重新散布或修改，請保留適用的著作權及授權聲明，並清楚標示修改者、修改日期及版本差異；不得將修改版誤稱為上游官方版本。
+
+## Hongguo device-registration signature
+
+The basic device-registration headers (`X-Khronos`, `X-Gorgon`, `X-Argus`)
+in `native/core/provider_hongguo_registration_sign.go` are a Go port of the
+registration-signing behavior in iDuanJu's `STV/Providers/Hongguo/HGSign.swift`
+(`basicHeaders`, `xGorgon`, and `xArgus`) from
+[my-name-is-alan/iDuanJu](https://github.com/my-name-is-alan/iDuanJu),
+distributed under GPL-3.0. The port is adapted for D TV's native Go core and
+keeps registration authentication separate from the V5 playback signer.
+The full GPL-3.0 license remains in the repository's `LICENSE` file.
+
+
+## Hongguo Current Player signer
+
+The shared Go implementation in `native/core/provider_hongguo_current_player.go`,
+its fixed protocol profile, and synthetic test vectors are adapted from the
+Current Player implementation in [my-name-is-alan/iDuanJu](https://github.com/my-name-is-alan/iDuanJu)
+(`HGCurrentPlayer.swift`, `HGCurrentPlayer.kt`, and `HGCurrentProfile.*`,
+GPL-3.0). The implementation keeps the registration, query, timestamp, and
+six-header signing dialect in D-TV's shared Go core so all supported platforms
+use the same code.
+
+The KS/custom transform lineage identified by that upstream project originates
+from OpenHongguo commit
+`05aa580a2fa914becabc5ae4be5b05539c66bda6` under Apache-2.0. The corresponding
+license and upstream notice are retained in
+`native/core/third_party/HGCurrentPlayer-Apache-2.0.txt` and
+`native/core/third_party/HGCurrentPlayer-NOTICE.md`. The included protocol
+fixtures are synthetic test vectors and do not contain captured device
+credentials. Live server acceptance may change independently of this code.

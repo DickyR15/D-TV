@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nsd/nsd.dart' as nsd;
 
 import 'models.dart';
+import 'diary_service.dart';
 
 enum GoogleCastMediaKind { hls, mp4, mkv, mpegTs }
 
@@ -169,24 +170,51 @@ Future<Map<String, dynamic>?> googleCastPayloadFromNsdService(
   );
 }
 
-String googleCastDiscoveryIdentity(Map<String, dynamic> payload) {
+List<String> googleCastDiscoveryIdentities(Map<String, dynamic> payload) {
+  final identities = <String>[];
   final id = payload['id']?.toString().trim() ?? '';
-  if (id.isNotEmpty) return 'id:${id.toLowerCase()}';
+  if (id.isNotEmpty) identities.add('id:${id.toLowerCase()}');
   final address = payload['address']?.toString().trim() ?? '';
   final port = payload['port']?.toString().trim() ?? '';
-  if (address.isNotEmpty && port.isNotEmpty) return 'endpoint:$address:$port';
-  return '';
+  if (address.isNotEmpty && port.isNotEmpty) {
+    identities.add('endpoint:${address.toLowerCase()}:$port');
+  }
+  return identities;
+}
+
+String googleCastDiscoveryIdentity(Map<String, dynamic> payload) {
+  final identities = googleCastDiscoveryIdentities(payload);
+  return identities.isEmpty ? '' : identities.first;
 }
 
 List<Map<String, dynamic>> mergeGoogleCastPayloads(
   Iterable<Map<String, dynamic>> payloads,
 ) {
   final byIdentity = <String, Map<String, dynamic>>{};
+  final merged = <Map<String, dynamic>>[];
   for (final payload in payloads) {
-    final identity = googleCastDiscoveryIdentity(payload);
-    if (identity.isNotEmpty) byIdentity.putIfAbsent(identity, () => payload);
+    final identities = googleCastDiscoveryIdentities(payload);
+    if (identities.isEmpty) continue;
+    Map<String, dynamic>? existing;
+    for (final identity in identities) {
+      existing = byIdentity[identity];
+      if (existing != null) break;
+    }
+    if (existing != null) {
+      // A receiver can advertise different TXT IDs through different
+      // interfaces while retaining the same address and port. Keep one row
+      // and register every alias against the same selected device.
+      for (final identity in identities) {
+        byIdentity.putIfAbsent(identity, () => existing!);
+      }
+      continue;
+    }
+    merged.add(payload);
+    for (final identity in identities) {
+      byIdentity[identity] = payload;
+    }
   }
-  return byIdentity.values.toList(growable: false)
+  return merged
     ..sort((a, b) => (a['name']?.toString() ?? '')
         .toLowerCase()
         .compareTo((b['name']?.toString() ?? '').toLowerCase()));
@@ -231,7 +259,12 @@ class GoogleCastController {
       }),
     ]);
 
-    return mergeGoogleCastPayloads(results.expand((items) => items));
+    final merged = mergeGoogleCastPayloads(results.expand((items) => items));
+    final summary = '[GoogleCast] discovery_summary dnsSd=${results[0].length} '
+        'mDNS=${results[1].length} merged=${merged.length}';
+    debugPrint(summary);
+    DiaryService.add(summary);
+    return merged;
   }
 
   Future<List<Map<String, dynamic>>> _discoverWindowsDnsSd() async {
@@ -248,11 +281,37 @@ class GoogleCastController {
       await Future<void>.delayed(const Duration(seconds: 15));
       final services = discovery.services.toList(growable: false);
       debugPrint('[GoogleCast] Windows DNS-SD services=${services.length}');
+      DiaryService.add('[GoogleCast] windows_dnssd_services count=${services.length}');
+      for (final service in services) {
+        final addresses = (service.addresses ?? const <InternetAddress>[])
+            .map((address) => address.address)
+            .join(',');
+        final txtKeys = service.txt?.keys.join(',') ?? '';
+        debugPrint(
+          '[GoogleCast] DNS-SD entry name=${service.name} host=${service.host ?? ''} '
+          'port=${service.port ?? 0} addresses=$addresses txtKeys=$txtKeys',
+        );
+        DiaryService.add(
+          '[GoogleCast] dnssd_entry name=${service.name} host=${service.host ?? ''} '
+          'port=${service.port ?? 0} addresses=$addresses txtKeys=$txtKeys',
+        );
+      }
       final resolved = await Future.wait(
         services.map(googleCastPayloadFromNsdService),
       );
       final result = mergeGoogleCastPayloads(resolved.whereType<Map<String, dynamic>>());
       debugPrint('[GoogleCast] Windows DNS-SD resolved=${result.length}');
+      DiaryService.add('[GoogleCast] windows_dnssd_resolved count=${result.length}');
+      for (final device in result) {
+        final metadata = device['metadata'] is Map
+            ? Map<String, dynamic>.from(device['metadata'] as Map)
+            : const <String, dynamic>{};
+        final message = '[GoogleCast] dnssd_receiver name=${device['name']} '
+            'id=${device['id']} address=${device['address']} '
+            'port=${device['port']} model=${metadata['md'] ?? ''}';
+        debugPrint(message);
+        DiaryService.add(message);
+      }
       return result;
     } finally {
       if (discovery != null) {
@@ -276,6 +335,10 @@ class GoogleCastController {
         if (device.protocol != dc.CastProtocol.chromecast) continue;
         final payload = Map<String, dynamic>.from(device.toJson());
         payload['transport'] = 'google_cast';
+        final message = '[GoogleCast] mdns_receiver name=${payload['name']} '
+            'id=${payload['id']} address=${payload['address']} port=${payload['port']}';
+        debugPrint(message);
+        DiaryService.add(message);
         discovered.add(payload);
       }
     }

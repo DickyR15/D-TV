@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "manifestVersion": 1,
+  "generatedAt": "2026-11-20T10:10:00Z",
+  "expiresAt": "2027-02-18T10:10:00Z",
+  "providers": {
+    "hongguo": {
+      "apiBaseUrl": "https://api5-normal-sinfonlineb.fqnovel.com",
+      "playbackBaseUrl": "https://api5-normal-sinfonlinea.fqnovel.com",
+      "allowedHosts": [
+        "api5-normal-sinfonlineb.fqnovel.com",
+        "api5-normal-sinfonlinea.fqnovel.com",
+        "api5-normal.fqnovel.com",
+        "reading.snssdk.com",
+        "log.snssdk.com"
+      ],
+      "endpoints": {
+        "deviceRegister": "https://log.snssdk.com/service/2/device_register/"
+      },
+      "paths": {
+        "videoDetail": "/novel/player/video_detail/v1/",
+        "videoModel": "/novel/player/video_model/v1/",
+        "playback": "/novel/player/multi_video_model/player/v1",
+        "searchTab": "/reading/bookapi/search/tab/v/"
+      },
+      "playbackRouteOrder": [
+        "playbackPrimary",
+        "playbackReadingMulti",
+        "playbackReadingSingle",
+        "playbackFqMulti",
+        "playbackLegacy"
+      ],
+      "parserProfile": "hongguo_v5_first"
+    }
+  }
+}

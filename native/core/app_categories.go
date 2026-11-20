@@ -76,6 +76,8 @@ func validNativeCategory(source, category string) bool {
 		return validIkanbotCategory(category)
 	case sourceMissAV, sourceSupJav, sourcePPP, sourceMadou, source91Porna:
 		return validAdultProviderCategory(source, category)
+	case sourceChaoliu:
+		return validChaoliuCategory(category)
 	}
 	return false
 }
@@ -97,6 +99,8 @@ func (engine *nativeEngine) nativeCategories(ctx context.Context, source string,
 		return append(all, ikanbotCategories...), nil
 	case sourceSupJav, sourcePPP, sourceMadou, source91Porna:
 		return append(all, parseExtraAdultCategories(source)...), nil
+	case sourceChaoliu:
+		return append(all, chaoliuCategories...), nil
 	case sourceMissAV:
 		engine.mu.Lock()
 		cached := append([]nativeCategory{}, engine.categoryOptions[source]...)

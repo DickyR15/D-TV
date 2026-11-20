@@ -422,7 +422,7 @@ func TestCDNTransportRetriesUnknownAuthorityThroughVerifiedDoHForMediaHosts(t *t
 
 
 func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testing.T) {
-	const host = "log.snssdk.com"
+	const host = "applog.snssdk.com"
 	const fallbackIP = "93.184.216.34"
 	var directAttempts, dohLookups, recoveredRequests atomic.Int32
 	var receivedBody string
@@ -467,7 +467,7 @@ func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testi
 		if request.URL.Query().Get("name")!=host { t.Errorf("DoH queried unexpected host %s",request.URL) }
 		return sourceFixtureResponse(request,http.StatusOK,`{"Status":0,"Answer":[{"type":1,"TTL":120,"data":"93.184.216.34"}]}`),nil
 	})
-	transport:=&hostDoHTransport{base:base,resolver:resolver,host:host}
+	transport:=&hostDoHTransport{base:base,resolver:resolver,hosts:hongguoDeviceRegisterHosts()}
 	client:=&http.Client{Transport:transport}
 	body:=[]byte(`{"magic_tag":"ss_app_log","header":{"aid":8662}}`)
 	request,err:=http.NewRequest(http.MethodPost,"https://"+host+":"+port+"/service/2/device_register/",bytes.NewReader(body))
@@ -480,6 +480,20 @@ func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testi
 	if receivedBody!=string(body){t.Fatalf("POST body changed after DNS retry: %q",receivedBody)}
 	if directAttempts.Load()!=1||dohLookups.Load()!=1||recoveredRequests.Load()!=1{t.Fatalf("unexpected attempts: system=%d doh=%d recovered=%d",directAttempts.Load(),dohLookups.Load(),recoveredRequests.Load())}
 	if base.TLSClientConfig.InsecureSkipVerify {t.Fatal("DoH fallback disabled TLS verification")}
+}
+
+func TestHostDoHTransportIsScopedToBothRedfruitRegistrationAliases(t *testing.T) {
+	transport := &hostDoHTransport{hosts: hongguoDeviceRegisterHosts()}
+	for _, host := range []string{"applog.snssdk.com", "log.snssdk.com"} {
+		if !transport.handlesHost(host) {
+			t.Errorf("registration alias %q was not routed through verified DoH", host)
+		}
+	}
+	for _, host := range []string{"api5-normal-sinfonlineb.fqnovel.com", "example.test"} {
+		if transport.handlesHost(host) {
+			t.Errorf("unrelated host %q was routed through registration DoH", host)
+		}
+	}
 }
 
 func TestHostDoHTransportDoesNotHandleOtherHostsOrProxyTraffic(t *testing.T) {

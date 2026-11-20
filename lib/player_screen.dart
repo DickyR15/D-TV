@@ -707,14 +707,41 @@ class _PlayerScreenState extends State<PlayerScreen>
       _loading = false;
       _error = '播放接收已取消';
     } else {
-      _play(
-        _index,
-        position: widget.initialPosition,
-        handoffPlan: handoff?.plan ?? widget.preparedPlan,
-        // A clean-player restart is part of automatic recovery; don't flash
-        // the control overlay while the replacement stream begins.
-        showControlsOnReady: !widget.recoveryRestarted,
+      final initialIndex = _index;
+      final initialPosition = widget.initialPosition;
+      final initialPlan = handoff?.plan ?? widget.preparedPlan;
+      // Wait until the first frame has attached the video texture/surface.
+      // Cold iOS MPV startup can race an open() from initState; entering the
+      // same player again works because its output is already initialized.
+      DiaryService.add(
+        '[PlayStartup] waiting_first_frame platform=${Platform.operatingSystem} '
+        'preparedPlan=${initialPlan != null}',
       );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            _closed ||
+            _profileEpoch != widget.store.profileEpoch ||
+            handoff?.cancelled == true) {
+          if (initialPlan != null) {
+            unawaited(
+              _releasePlayback(initialPlan.session, 'initial_frame_cancelled'),
+            );
+          }
+          return;
+        }
+        DiaryService.add(
+          '[PlayStartup] first_frame_ready platform=${Platform.operatingSystem} '
+          'preparedPlan=${initialPlan != null}',
+        );
+        _play(
+          initialIndex,
+          position: initialPosition,
+          handoffPlan: initialPlan,
+          // A clean-player restart is part of automatic recovery; don't flash
+          // the control overlay while the replacement stream begins.
+          showControlsOnReady: !widget.recoveryRestarted,
+        );
+      });
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && !_closed) {
@@ -2115,6 +2142,24 @@ class _PlayerScreenState extends State<PlayerScreen>
               );
             }
           }
+          DiaryService.add(
+            '[Cast] discovery_summary dlna=${dlnaItems.length} google_cast=${googleCastItems.length}',
+          );
+          for (final item in dlnaItems.whereType<Map>()) {
+            DiaryService.add(
+              '[Cast] dlna_receiver name=${item['name'] ?? ''} id=${item['id'] ?? ''}',
+            );
+          }
+          for (final item in googleCastItems) {
+            final metadata = item['metadata'] is Map
+                ? Map<String, dynamic>.from(item['metadata'] as Map)
+                : const <String, dynamic>{};
+            DiaryService.add(
+              '[Cast] google_cast_receiver name=${item['name'] ?? ''} '
+              'id=${item['id'] ?? ''} address=${item['address'] ?? ''} '
+              'port=${item['port'] ?? ''} model=${metadata['md'] ?? ''}',
+            );
+          }
           final items = <dynamic>[...dlnaItems, ...googleCastItems];
           items.sort((a, b) {
             final nameA = a is Map ? (a['name'] ?? '').toString() : '';
@@ -2870,6 +2915,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     PlaybackPlan? warmed;
     var preloadBypassReason = '';
     if (handoffPlan != null) {
+      // The detail page transfers ownership of an already-resolved session.
+      // Consume it directly instead of resolving a second session for the
+      // same episode. Ignoring this plan can leave the original proxy session
+      // released while the player is still using the newly-resolved one.
+      warmed = handoffPlan;
       preloadBypassReason = 'handoff';
     } else if (recoveryAction != null) {
       preloadBypassReason = 'recovery';
@@ -2997,7 +3047,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         return;
       }
       final resolveClock = Stopwatch()..start();
-      if (retained != null) {
+      if (handoffPlan != null) {
+        // DetailScreen already resolved this exact episode. Consume the
+        // transferred plan instead of resolving it a second time on Android
+        // and iOS, where an unnecessary API round-trip can add seconds.
+        prepared = await _loader.use(handoffPlan);
+      } else if (retained != null) {
         prepared = await _loader.fallback(retained!);
       } else if (warmed != null) {
         prepared = await _loader.use(warmed);
@@ -3060,9 +3115,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         final setupClock = Stopwatch()..start();
         final platform = _player.platform;
         if (platform is NativePlayer) {
-          if (Platform.isWindows) {
-            // The Windows log repeatedly reports file-cache creation failures.
-            // Keep short-form streaming cache in RAM and use display-clock pacing.
+          if (Platform.isWindows || Platform.isIOS) {
+            // Windows and iOS traces report MPV file-cache creation failures.
+            // Keep streaming cache in RAM on these sandboxes.
             try {
               await _setPlaybackProperty(platform, 'cache-on-disk', 'no');
               DiaryService.add('[MPV] cache_on_disk=no');
