@@ -728,10 +728,12 @@ class RemoteEpisodeButton extends StatelessWidget {
     this.vip = false,
     this.current = false,
     this.compact = false,
+    this.displayLabel,
     this.focusNode,
     this.onFocus,
   });
   final int number;
+  final String? displayLabel;
   final bool vip;
   final bool current;
   final bool compact;
@@ -749,18 +751,25 @@ class RemoteEpisodeButton extends StatelessWidget {
     borderWidth: compact ? 1.2 : 2,
     outlined: true,
     onPressed: onPressed,
-    label: '第 $number 集${vip ? '，VIP 試看' : ''}',
+    label: displayLabel?.trim().isNotEmpty == true
+        ? '選擇 ${displayLabel!.trim()}${vip ? '，VIP 試看' : ''}'
+        : '第 $number 集${vip ? '，VIP 試看' : ''}',
     child: Center(
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(
             child: Text(
-              '$number',
-              maxLines: 1,
+              displayLabel?.trim().isNotEmpty == true
+                  ? displayLabel!.trim()
+                  : '$number',
+              maxLines: displayLabel?.trim().isNotEmpty == true ? 2 : 1,
+              textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: compact ? 14 : 20,
+                fontSize: displayLabel?.trim().isNotEmpty == true
+                    ? (compact ? 11 : 14)
+                    : (compact ? 14 : 20),
                 fontWeight: current ? FontWeight.w700 : FontWeight.w500,
               ),
             ),
