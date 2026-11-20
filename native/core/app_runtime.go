@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -81,6 +82,7 @@ type Downloader struct {
 	compatibilityLastFetch time.Time
 	compatibilityLastError string
 	compatibilityOrigin    string
+	compatibilityStartupVerified atomic.Bool
 }
 
 func defaultConfig() Config { return Config{MaxPagesPerSort: 50, PageSize: 30, Retries: 2} }
@@ -545,6 +547,9 @@ func nativeDispatch(input nativeInput) (any, error) {
 	nativeState.Unlock()
 	if engine == nil {
 		return nil, errors.New("应用核心尚未就绪，请重新打开应用")
+	}
+	if !engine.downloader.compatibilityStartupVerified.Load() {
+		return nil, errors.New("必須先完成 D-TV GitHub 片源相容性設定更新，才能使用片源與播放功能")
 	}
 	duration := 60 * time.Second
 	if input.Action == "moveDownloads" {
