@@ -3,6 +3,9 @@ package core
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +47,7 @@ type providerCompatibilityManifest struct {
 type providerCompatibilityEntry struct {
 	BaseURL          string            `json:"baseUrl,omitempty"`
 	APIBaseURL       string            `json:"apiBaseUrl,omitempty"`
+	PlaybackBaseURL  string            `json:"playbackBaseUrl,omitempty"`
 	Endpoints        map[string]string `json:"endpoints,omitempty"`
 	AllowedHosts     []string          `json:"allowedHosts,omitempty"`
 	FallbackBaseURLs []string          `json:"fallbackBaseUrls,omitempty"`
@@ -52,8 +56,9 @@ type providerCompatibilityEntry struct {
 }
 
 type providerCompatibilityCache struct {
-	DownloadedAt time.Time                    `json:"downloadedAt"`
-	Manifest     providerCompatibilityManifest `json:"manifest"`
+	DownloadedAt time.Time       `json:"downloadedAt"`
+	Manifest     json.RawMessage `json:"manifest"`
+	Signature    string          `json:"signature"`
 }
 
 func knownCompatibilityProvider(source string) bool {
@@ -229,6 +234,11 @@ func validateProviderCompatibilityManifest(manifest providerCompatibilityManifes
 				return fmt.Errorf("%s API：%w", source, err)
 			}
 		}
+		if entry.PlaybackBaseURL != "" {
+			if err := validateCompatibilityURL(entry.PlaybackBaseURL, entry.AllowedHosts); err != nil {
+				return fmt.Errorf("%s 播放 API：%w", source, err)
+			}
+		}
 		for _, raw := range entry.FallbackBaseURLs {
 			if err := validateCompatibilityURL(raw, entry.AllowedHosts); err != nil {
 				return fmt.Errorf("%s 備用網址：%w", source, err)
@@ -255,6 +265,30 @@ func validateProviderCompatibilityManifest(manifest providerCompatibilityManifes
 	return nil
 }
 
+const providerCompatibilityPublicKeyHex = "2db63a7d05b8c645c5f53a73a815e71827c0adbedfc3e4f7d301d864a5f41668"
+
+func verifyProviderCompatibilitySignatureWithKey(body []byte, encodedSignature string, publicKey ed25519.PublicKey) error {
+	if len(publicKey) != ed25519.PublicKeySize {
+		return errors.New("App 內建相容性公開金鑰無效")
+	}
+	signature, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encodedSignature))
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return errors.New("遠端相容性簽章格式無效")
+	}
+	if !ed25519.Verify(publicKey, body, signature) {
+		return errors.New("遠端相容性簽章驗證失敗，已拒絕套用")
+	}
+	return nil
+}
+
+func verifyProviderCompatibilitySignature(body []byte, encodedSignature string) error {
+	publicKeyBytes, err := hex.DecodeString(providerCompatibilityPublicKeyHex)
+	if err != nil || len(publicKeyBytes) != ed25519.PublicKeySize {
+		return errors.New("App 內建相容性公開金鑰無效")
+	}
+	return verifyProviderCompatibilitySignatureWithKey(body, encodedSignature, ed25519.PublicKey(publicKeyBytes))
+}
+
 func decodeProviderCompatibilityManifest(body []byte, now time.Time) (providerCompatibilityManifest, error) {
 	var manifest providerCompatibilityManifest
 	decoder := json.NewDecoder(bytes.NewReader(body))
@@ -277,7 +311,7 @@ func (d *Downloader) loadProviderCompatibilityCache() {
 	}
 	address := filepath.Join(d.cfg.dataDir, providerCompatibilityCacheName)
 	info, err := os.Stat(address)
-	if err != nil || info.Size() <= 0 || info.Size() > providerCompatibilityMaxBytes {
+	if err != nil || info.Size() <= 0 || info.Size() > providerCompatibilityMaxBytes+(16<<10) {
 		return
 	}
 	body, err := os.ReadFile(address)
@@ -287,18 +321,34 @@ func (d *Downloader) loadProviderCompatibilityCache() {
 	var cache providerCompatibilityCache
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&cache); err != nil || cache.DownloadedAt.IsZero() {
+	if err := decoder.Decode(&cache); err != nil || cache.DownloadedAt.IsZero() ||
+		len(cache.Manifest) == 0 || len(cache.Manifest) > providerCompatibilityMaxBytes ||
+		verifyProviderCompatibilitySignature(cache.Manifest, cache.Signature) != nil {
 		return
 	}
-	if err := validateProviderCompatibilityManifest(cache.Manifest, time.Now(), true); err != nil {
+	manifest, err := decodeProviderCompatibilityManifestForCache(cache.Manifest)
+	if err != nil || validateProviderCompatibilityManifest(manifest, time.Now(), true) != nil {
 		return
 	}
 	d.compatibilityMu.Lock()
-	copy := cache.Manifest
+	copy := manifest
 	d.compatibilityManifest = &copy
 	d.compatibilityLastFetch = cache.DownloadedAt
 	d.compatibilityOrigin = "cache"
 	d.compatibilityMu.Unlock()
+}
+
+func decodeProviderCompatibilityManifestForCache(body []byte) (providerCompatibilityManifest, error) {
+	var manifest providerCompatibilityManifest
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&manifest); err != nil {
+		return manifest, err
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return manifest, errors.New("本機相容性快取包含多餘資料")
+	}
+	return manifest, nil
 }
 
 func (d *Downloader) startProviderCompatibilityRefresh() {
@@ -309,6 +359,40 @@ func (d *Downloader) startProviderCompatibilityRefresh() {
 			_ = d.refreshProviderCompatibility(ctx)
 		}()
 	})
+}
+
+func fetchProviderCompatibilityResource(ctx context.Context, client *http.Client, resourceURL string) ([]byte, error) {
+	parsed, err := url.Parse(resourceURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() != "raw.githubusercontent.com" || parsed.User != nil {
+		return nil, errors.New("相容性設定資源網址無效")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, resourceURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Accept", "application/json, text/plain")
+	request.Header.Set("User-Agent", "D-TV-Compatibility/1")
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.Request == nil || response.Request.URL == nil ||
+		!strings.EqualFold(response.Request.URL.Scheme, "https") ||
+		!strings.EqualFold(response.Request.URL.Hostname(), "raw.githubusercontent.com") {
+		return nil, errors.New("相容性設定重新導向至不受信任的網域")
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("相容性設定服務回應 HTTP %d", response.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(response.Body, providerCompatibilityMaxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) == 0 || len(body) > providerCompatibilityMaxBytes {
+		return nil, errors.New("遠端相容性設定大小無效")
+	}
+	return body, nil
 }
 
 func (d *Downloader) refreshProviderCompatibility(ctx context.Context) error {
@@ -334,42 +418,22 @@ func (d *Downloader) refreshProviderCompatibility(ctx context.Context) error {
 	var lastErr error
 	for _, manifestURL := range providerCompatibilityManifestURLs {
 		requestContext, cancel := context.WithTimeout(ctx, 8*time.Second)
-		request, err := http.NewRequestWithContext(requestContext, http.MethodGet, manifestURL, nil)
-		if err != nil {
+		body, fetchErr := fetchProviderCompatibilityResource(requestContext, client, manifestURL)
+		if fetchErr != nil {
 			cancel()
-			lastErr = err
+			lastErr = fetchErr
 			continue
 		}
-		request.Header.Set("Accept", "application/json")
-		request.Header.Set("User-Agent", "D-TV-Compatibility/1")
-		response, err := client.Do(request)
-		if err != nil {
-			cancel()
-			lastErr = err
-			continue
-		}
-		if response.Request == nil || response.Request.URL == nil ||
-			!strings.EqualFold(response.Request.URL.Hostname(), "raw.githubusercontent.com") {
-			response.Body.Close()
-			cancel()
-			lastErr = errors.New("相容性設定來源未通過 GitHub 網域驗證")
-			continue
-		}
-		if response.StatusCode != http.StatusOK {
-			response.Body.Close()
-			cancel()
-			lastErr = fmt.Errorf("相容性設定服務回應 HTTP %d", response.StatusCode)
-			continue
-		}
-		body, readErr := io.ReadAll(io.LimitReader(response.Body, providerCompatibilityMaxBytes+1))
-		response.Body.Close()
+		signatureURL := manifestURL + ".sig"
+		signatureBody, signatureErr := fetchProviderCompatibilityResource(requestContext, client, signatureURL)
 		cancel()
-		if readErr != nil {
-			lastErr = readErr
+		if signatureErr != nil {
+			lastErr = signatureErr
 			continue
 		}
-		if len(body) == 0 || len(body) > providerCompatibilityMaxBytes {
-			lastErr = errors.New("遠端相容性設定大小無效")
+		signature := strings.TrimSpace(string(signatureBody))
+		if err := verifyProviderCompatibilitySignature(body, signature); err != nil {
+			lastErr = err
 			continue
 		}
 		manifest, decodeErr := decodeProviderCompatibilityManifest(body, time.Now())
@@ -377,10 +441,22 @@ func (d *Downloader) refreshProviderCompatibility(ctx context.Context) error {
 			lastErr = decodeErr
 			continue
 		}
-		if manifest.ManifestVersion <= currentVersion {
+		if manifest.ManifestVersion < currentVersion {
+			lastErr = errors.New("遠端相容性設定版本倒退，已拒絕套用")
+			continue
+		}
+		if manifest.ManifestVersion == currentVersion {
+			d.compatibilityMu.Lock()
+			d.compatibilityLastFetch = time.Now()
+			d.compatibilityLastError = ""
+			d.compatibilityMu.Unlock()
 			return nil
 		}
-		cache := providerCompatibilityCache{DownloadedAt: time.Now(), Manifest: manifest}
+		cache := providerCompatibilityCache{
+			DownloadedAt: time.Now(),
+			Manifest: append(json.RawMessage(nil), body...),
+			Signature: signature,
+		}
 		encoded, marshalErr := json.Marshal(cache)
 		if marshalErr != nil {
 			return marshalErr
@@ -398,6 +474,7 @@ func (d *Downloader) refreshProviderCompatibility(ctx context.Context) error {
 		copy := manifest
 		d.compatibilityManifest = &copy
 		d.compatibilityLastFetch = time.Now()
+		d.compatibilityLastError = ""
 		d.compatibilityOrigin = "remote"
 		d.compatibilityMu.Unlock()
 		return nil
@@ -435,6 +512,14 @@ func (d *Downloader) providerCompatibilityAPIBaseURL(source, fallback string) st
 		return strings.TrimRight(fallback, "/")
 	}
 	return strings.TrimRight(entry.APIBaseURL, "/")
+}
+
+func (d *Downloader) providerCompatibilityPlaybackBaseURL(source, fallback string) string {
+	entry := d.compatibilityEntry(source)
+	if entry.PlaybackBaseURL == "" {
+		return strings.TrimRight(fallback, "/")
+	}
+	return strings.TrimRight(entry.PlaybackBaseURL, "/")
 }
 
 func (d *Downloader) providerCompatibilityEndpointURL(source, name, fallback string) string {
