@@ -44,6 +44,7 @@ type providerCompatibilityManifest struct {
 type providerCompatibilityEntry struct {
 	BaseURL          string            `json:"baseUrl,omitempty"`
 	APIBaseURL       string            `json:"apiBaseUrl,omitempty"`
+	Endpoints        map[string]string `json:"endpoints,omitempty"`
 	AllowedHosts     []string          `json:"allowedHosts,omitempty"`
 	FallbackBaseURLs []string          `json:"fallbackBaseUrls,omitempty"`
 	Paths            map[string]string `json:"paths,omitempty"`
@@ -69,6 +70,8 @@ func knownCompatibilityProvider(source string) bool {
 
 func compatibilityPathNames(source string) map[string]bool {
 	switch canonicalProviderSource(source) {
+	case sourceHongguo:
+		return map[string]bool{"videoDetail": true, "videoModel": true, "playback": true, "searchTab": true}
 	case sourceIkanBot:
 		return map[string]bool{"catalog": true, "catalogPage": true, "search": true, "detail": true, "getRes": true}
 	case sourcePPP:
@@ -88,8 +91,19 @@ func compatibilityPathNames(source string) map[string]bool {
 	}
 }
 
+func compatibilityEndpointNames(source string) map[string]bool {
+	switch canonicalProviderSource(source) {
+	case sourceHongguo:
+		return map[string]bool{"deviceRegister": true}
+	default:
+		return map[string]bool{}
+	}
+}
+
 func compatibilityParserProfiles(source string) map[string]bool {
 	switch canonicalProviderSource(source) {
+	case sourceHongguo:
+		return map[string]bool{"hongguo_v5_first": true, "hongguo_legacy_first": true, "hongguo_web_first": true}
 	case sourcePPP:
 		return map[string]bool{"ppp_regex_v1": true, "ppp_dom_v1": true}
 	case sourceIkanBot:
@@ -194,7 +208,7 @@ func validateProviderCompatibilityManifest(manifest providerCompatibilityManifes
 		if !knownCompatibilityProvider(source) || canonicalProviderSource(source) != source {
 			return fmt.Errorf("遠端相容性設定包含未知片源：%s", source)
 		}
-		if len(entry.AllowedHosts) > 32 || len(entry.FallbackBaseURLs) > 8 || len(entry.Paths) > 16 {
+		if len(entry.AllowedHosts) > 32 || len(entry.FallbackBaseURLs) > 8 || len(entry.Paths) > 16 || len(entry.Endpoints) > 8 {
 			return errors.New("遠端相容性設定項目數量超過限制")
 		}
 		hostSet := map[string]bool{}
@@ -218,6 +232,14 @@ func validateProviderCompatibilityManifest(manifest providerCompatibilityManifes
 		for _, raw := range entry.FallbackBaseURLs {
 			if err := validateCompatibilityURL(raw, entry.AllowedHosts); err != nil {
 				return fmt.Errorf("%s 備用網址：%w", source, err)
+			}
+		}
+		for name, raw := range entry.Endpoints {
+			if !compatibilityEndpointNames(source)[name] {
+				return fmt.Errorf("%s 包含不支援的端點名稱：%s", source, name)
+			}
+			if err := validateCompatibilityURL(raw, entry.AllowedHosts); err != nil {
+				return fmt.Errorf("%s 端點 %s：%w", source, name, err)
 			}
 		}
 		allowedPaths := compatibilityPathNames(source)
@@ -413,6 +435,14 @@ func (d *Downloader) providerCompatibilityAPIBaseURL(source, fallback string) st
 		return strings.TrimRight(fallback, "/")
 	}
 	return strings.TrimRight(entry.APIBaseURL, "/")
+}
+
+func (d *Downloader) providerCompatibilityEndpointURL(source, name, fallback string) string {
+	entry := d.compatibilityEntry(source)
+	if address := entry.Endpoints[name]; address != "" {
+		return address
+	}
+	return fallback
 }
 
 func (d *Downloader) providerCompatibilityPath(source, name string, values map[string]string, fallback string) string {
