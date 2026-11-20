@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
 	"time"
 )
@@ -33,13 +34,35 @@ func nativePlaybackQualityAllowed(quality int) bool {
 	return quality == 0 || quality >= nativeMinimumPlaybackQuality
 }
 
+// Some providers expose direct per-quality URLs without filling providerMedia.Quality.
+// Infer only explicit resolution markers in the URL path/query; keep truly unknown
+// routes rather than guessing from bandwidth or host names.
+func nativePlaybackMediaQuality(option providerMedia) int {
+	if option.Quality > 0 {
+		return option.Quality
+	}
+	parsed, err := url.Parse(option.URL)
+	if err != nil {
+		return 0
+	}
+	uri := parsed.EscapedPath()
+	if parsed.RawQuery != "" {
+		uri += "?" + parsed.RawQuery
+	}
+	return nativeHLSVariantQuality("", uri)
+}
+
 func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoice {
 	choice := nativePlaybackChoice{qualities: []int{}}
 	seen := map[string]bool{}
 	qualities := map[int]bool{}
 	for _, option := range append([]providerMedia{media}, media.Variants...) {
-		if !isProviderHTTPMediaURL(option.URL) || !nativePlaybackQualityAllowed(option.Quality) {
+		qualityValue := nativePlaybackMediaQuality(option)
+		if !isProviderHTTPMediaURL(option.URL) || !nativePlaybackQualityAllowed(qualityValue) {
 			continue
+		}
+		if option.Quality == 0 && qualityValue > 0 {
+			option.Quality = qualityValue
 		}
 		identity := nativePlaybackMediaIdentity(option)
 		if seen[identity] {
@@ -296,8 +319,12 @@ func nativeExcludeAttemptedPlaybackRoutes(candidates, attempted []providerMedia)
 	seen := make(map[string]bool, len(candidates))
 	result := make([]providerMedia, 0, len(candidates))
 	for _, option := range candidates {
-		if !isProviderHTTPMediaURL(option.URL) || !nativePlaybackQualityAllowed(option.Quality) {
+		qualityValue := nativePlaybackMediaQuality(option)
+		if !isProviderHTTPMediaURL(option.URL) || !nativePlaybackQualityAllowed(qualityValue) {
 			continue
+		}
+		if option.Quality == 0 && qualityValue > 0 {
+			option.Quality = qualityValue
 		}
 		identity := nativePlaybackMediaIdentity(option)
 		if used[identity] || seen[identity] {
@@ -315,8 +342,12 @@ func nativeMergePlaybackRoutes(primary, fallback []providerMedia) []providerMedi
 	result := make([]providerMedia, 0, len(primary)+len(fallback))
 	for _, group := range [][]providerMedia{primary, fallback} {
 		for _, option := range group {
-			if !isProviderHTTPMediaURL(option.URL) || !nativePlaybackQualityAllowed(option.Quality) {
+			qualityValue := nativePlaybackMediaQuality(option)
+			if !isProviderHTTPMediaURL(option.URL) || !nativePlaybackQualityAllowed(qualityValue) {
 				continue
+			}
+			if option.Quality == 0 && qualityValue > 0 {
+				option.Quality = qualityValue
 			}
 			identity := nativePlaybackMediaIdentity(option)
 			if seen[identity] {
