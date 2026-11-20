@@ -87,7 +87,9 @@ func TestAdultMissAVPosterSelectionSkipsFlagsAndSiteLogos(t *testing.T) {
 	body := `<div class="thumbnail">
 		<img class="country-flag" src="/images/flags/china-flag.png" alt="China flag" width="32" height="20">
 		<img class="site-logo" src="/images/d-tv-logo.webp" alt="site logo" width="120" height="32">
-		<img class="poster" data-src="/covers/sample.webp" alt="video poster" width="225" height="338">
+		<a href="/en/sone-543" title="SAMPLE-543">
+			<img class="poster" data-src="/covers/sample.webp" alt="video poster" width="225" height="338">
+		</a>
 	</div>`
 	items := adultParseCards(body, missAVBaseURL, sourceMissAV)
 	if len(items) != 1 {
