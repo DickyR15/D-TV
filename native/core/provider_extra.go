@@ -410,7 +410,9 @@ type extraAdultPPPStreamRoute struct {
 }
 
 func extraAdultPPPPreferFullStreams(routes []extraAdultPPPStreamRoute) {
-	extraAdultPPPPreferFullStreams(routes)
+	sort.SliceStable(routes, func(i, j int) bool {
+		return !routes[i].lowResolution && routes[j].lowResolution
+	})
 }
 
 // PPP occasionally exposes a short, low-resolution teaser before the actual
