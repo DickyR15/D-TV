@@ -49,6 +49,55 @@ func TestHongguoBackupAddressesAndCodecAlternatives(t *testing.T) {
 	}
 }
 
+func TestNativePlaybackChoicesKeep720PAndHigherForEveryProvider(t *testing.T) {
+	media := providerMedia{
+		URL: "https://provider.test/360p.m3u8",
+		Quality: 360,
+		Variants: []providerMedia{
+			{URL: "https://provider.test/480p.m3u8", Quality: 480},
+			{URL: "https://provider.test/720p.m3u8", Quality: 720},
+			{URL: "https://provider.test/1080p.m3u8", Quality: 1080},
+			{URL: "https://provider.test/unknown.m3u8"},
+		},
+	}
+	choice := nativePlaybackChoices(media, 0)
+	var got []int
+	for _, option := range choice.media {
+		got = append(got, option.Quality)
+	}
+	if !reflect.DeepEqual(got, []int{1080, 720, 0}) {
+		t.Fatalf("playback qualities=%v, want [1080 720 0]", got)
+	}
+	if !reflect.DeepEqual(choice.qualities, []int{1080, 720}) {
+		t.Fatalf("quality menu=%v, want [1080 720]", choice.qualities)
+	}
+	if selected := nativePlaybackChoices(media, 480); len(selected.media) != 3 {
+		t.Fatalf("a saved sub-720p preference should fall back to allowed routes, got %+v", selected.media)
+	}
+	if selected := nativePlaybackChoices(media, 720); len(selected.media) != 1 || selected.media[0].Quality != 720 {
+		t.Fatalf("manual 720p selection was not preserved: %+v", selected.media)
+	}
+}
+
+func TestNativePlaybackRefreshCannotReintroduceBelow720PRoutes(t *testing.T) {
+	primary := []providerMedia{
+		{URL: "https://fresh.test/480p.m3u8", Quality: 480},
+		{URL: "https://fresh.test/1080p.m3u8", Quality: 1080},
+	}
+	fallback := []providerMedia{
+		{URL: "https://old.test/360p.m3u8", Quality: 360},
+		{URL: "https://old.test/720p.m3u8", Quality: 720},
+	}
+	merged := nativeMergePlaybackRoutes(primary, fallback)
+	if len(merged) != 2 || merged[0].Quality != 1080 || merged[1].Quality != 720 {
+		t.Fatalf("refreshed routes retained sub-720p or lost 720p: %+v", merged)
+	}
+	qualities := nativeMergePlaybackQualities([]int{480, 1080}, []int{360, 720})
+	if !reflect.DeepEqual(qualities, []int{1080, 720}) {
+		t.Fatalf("refreshed quality menu=%v, want [1080 720]", qualities)
+	}
+}
+
 func TestNativeInitialPlaybackChoiceKeepsProviderPreferredRoute(t *testing.T) {
 	media := providerMedia{
 		URL: "https://provider-first.test/episode.mp4",
