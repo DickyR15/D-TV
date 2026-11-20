@@ -279,16 +279,35 @@ func (stream *nativeStreamServer) nativeRequest(request *http.Request, standardH
 var nativePlaylistURI = regexp.MustCompile(`URI="([^"]+)"`)
 
 var (
-	nativeHLSResolutionPattern = regexp.MustCompile(`(?i)RESOLUTION\s*=\s*([0-9]+)x([0-9]+)`)
-	nativeHLSURLQualityPattern = regexp.MustCompile(`(?i)(?:^|[^0-9])([0-9]{3,4})p(?:[^a-z0-9]|$)`)
-	nativeHLSURLDimensionsPattern = regexp.MustCompile(`(?i)(?:^|[^0-9])([0-9]{3,4})x([0-9]{3,4})(?:[^0-9]|$)`)
-	nativeHLSQualityParameterPattern = regexp.MustCompile(`(?i)(?:quality|resolution|definition|height)[=_-]?([0-9]{3,4})`)
+	nativeHLSResolutionPattern     = regexp.MustCompile(`(?i)RESOLUTION\s*=\s*([0-9]+)x([0-9]+)`)
+	nativeHLSURLQualityPattern     = regexp.MustCompile(`(?i)(?:^|[^0-9])([0-9]{3,4})p(?:[^a-z0-9]|$)`)
+	nativeHLSURLDimensionsPattern  = regexp.MustCompile(`(?i)(?:^|[^0-9])([0-9]{3,4})x([0-9]{3,4})(?:[^0-9]|$)`)
 )
 
+func nativeHLSQualityFromValue(value string) int {
+	value = strings.TrimSpace(value)
+	if match := nativeHLSURLDimensionsPattern.FindStringSubmatch(value); len(match) == 3 {
+		width, widthErr := strconv.Atoi(match[1])
+		height, heightErr := strconv.Atoi(match[2])
+		if widthErr == nil && heightErr == nil && width > 0 && height > 0 {
+			return min(width, height)
+		}
+	}
+	if match := nativeHLSURLQualityPattern.FindStringSubmatch(value); len(match) == 2 {
+		if quality, err := strconv.Atoi(match[1]); err == nil && quality > 0 {
+			return quality
+		}
+	}
+	if quality, err := strconv.Atoi(value); err == nil && quality >= 100 && quality <= 9999 {
+		return quality
+	}
+	return 0
+}
+
 // nativeHLSVariantQuality returns the visible pixel height for a master-playlist
-// variant. Portrait streams use their shorter edge, matching the quality labels
-// used by the provider resolvers. Zero means the playlist did not disclose a
-// dependable resolution and must be preserved.
+// variant. Portrait streams use their shorter edge. Only explicit resolution
+// query parameter names are inspected; opaque signed-token values are never
+// scanned for accidental "480" or "720" text. Unknown quality is preserved.
 func nativeHLSVariantQuality(streamInfo, uri string) int {
 	if match := nativeHLSResolutionPattern.FindStringSubmatch(streamInfo); len(match) == 3 {
 		width, widthErr := strconv.Atoi(match[1])
@@ -297,21 +316,35 @@ func nativeHLSVariantQuality(streamInfo, uri string) int {
 			return min(width, height)
 		}
 	}
-	if match := nativeHLSURLDimensionsPattern.FindStringSubmatch(uri); len(match) == 3 {
+
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return 0
+	}
+	path := parsed.EscapedPath()
+	if match := nativeHLSURLDimensionsPattern.FindStringSubmatch(path); len(match) == 3 {
 		width, widthErr := strconv.Atoi(match[1])
 		height, heightErr := strconv.Atoi(match[2])
 		if widthErr == nil && heightErr == nil && width > 0 && height > 0 {
 			return min(width, height)
 		}
 	}
-	if match := nativeHLSURLQualityPattern.FindStringSubmatch(uri); len(match) == 2 {
+	if match := nativeHLSURLQualityPattern.FindStringSubmatch(path); len(match) == 2 {
 		if quality, err := strconv.Atoi(match[1]); err == nil && quality > 0 {
 			return quality
 		}
 	}
-	if match := nativeHLSQualityParameterPattern.FindStringSubmatch(uri); len(match) == 2 {
-		if quality, err := strconv.Atoi(match[1]); err == nil && quality > 0 {
-			return quality
+
+	values := parsed.Query()
+	for key, candidates := range values {
+		switch strings.ToLower(key) {
+		case "quality", "resolution", "definition", "height",
+			"video_quality", "video_resolution", "video_definition", "video_height":
+			for _, candidate := range candidates {
+				if quality := nativeHLSQualityFromValue(candidate); quality > 0 {
+					return quality
+				}
+			}
 		}
 	}
 	return 0
