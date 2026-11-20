@@ -254,6 +254,22 @@ var nativePosterTitleAliasGroups = [][]string{
 	{
 		"奉子成婚", "デキちゃうまで婚", "Deki Chau Made Kon", "Marry Me, Let's Have a Baby!",
 	},
+	{
+		"永生之大道歸一", "永生之大道归一", "永生大道归一",
+		"永生之太元仙府", "Immortality: Tao Returns to One",
+	},
+	{
+		"25歲的女高中生", "25岁的女高中生", "25歳の女子高生",
+		"25-sai no Joshi Kousei", "A 25-Year-Old High School Girl",
+	},
+	{
+		"蘇東坡與杭州的故事", "苏东坡与杭州的故事",
+		"Su Dongpo and the Story of Hangzhou",
+	},
+	{
+		"電鋸人", "电锯人", "鏈鋸人", "链锯人",
+		"チェンソーマン", "Chainsaw Man",
+	},
 }
 
 func nativePosterTitleAliasGroup(value string) []string {
