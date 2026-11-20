@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestResolveHongguoV5MediaUsesPlayerV1Endpoint(t *testing.T) {
@@ -149,6 +150,9 @@ func TestResolveHongguoV5MediaRemembersSuccessfulRoute(t *testing.T) {
 	if _, err := d.resolveHongguoV5Media(context.Background(), videoID); err != nil {
 		t.Fatal(err)
 	}
+	d.hongguoPlaybackMu.Lock()
+	d.hongguoPlaybackModels = nil
+	d.hongguoPlaybackMu.Unlock()
 	if _, err := d.resolveHongguoV5Media(context.Background(), videoID); err != nil {
 		t.Fatal(err)
 	}
