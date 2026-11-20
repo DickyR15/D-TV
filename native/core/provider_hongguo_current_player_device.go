@@ -131,6 +131,7 @@ func (downloader *Downloader) registerHongguoCurrentPlayerIdentity(ctx context.C
 	if err != nil { return hongguoCurrentPlayerIdentity{}, err }
 
 	var failures []error
+	policyRejected := false
 	hosts := hongguoDeviceRegisterHosts()
 	for index, host := range hosts {
 		if err := ctx.Err(); err != nil { return hongguoCurrentPlayerIdentity{}, err }
@@ -163,6 +164,9 @@ func (downloader *Downloader) registerHongguoCurrentPlayerIdentity(ctx context.C
 			return hongguoCurrentPlayerIdentity{}, fmt.Errorf("%s: 讀取播放器註冊回應失敗：%w", host, readErr)
 		}
 		if response.StatusCode != http.StatusOK {
+			if policyRejected || response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusForbidden || response.StatusCode == 444 {
+				policyRejected = true
+			}
 			stage := hongguoRegistrationHTTPStage(response.StatusCode)
 			if hongguoRegistrationIsTLBNotFound(response, content) { stage = "http_404_tlb_edge_route" }
 			downloader.recordHongguoRegistrationResponse(response, content, index+1, time.Since(now), stage, false)
