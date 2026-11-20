@@ -1328,6 +1328,9 @@ func TestValidNativeCoverURLRejectsZXKIImageAPI(t *testing.T) {
 	if validNativeCoverURL(address) {
 		t.Fatal("paid API gateway must not be treated as a public image CDN")
 	}
+}
+
+func TestNativeVerifiedOfficialPosterRejectsWrongTypeOrYear(t *testing.T) {
 	for _, invalid := range []nativeDrama{
 		{ID: "duoduo:123456", Title: "萬人之上", Category: "劇集", OnlineDate: "2026"},
 		{ID: "duoduo:123456", Title: "萬人之上", Category: "動漫", OnlineDate: "2025"},
