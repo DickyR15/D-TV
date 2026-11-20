@@ -174,9 +174,14 @@ func TestHongguoRegistrationHTTP444IncludesEdgeDiagnostics(t *testing.T) {
 	for _, hint := range []string{
 		`"event":"hongguo.device_registration"`,
 		`"httpStatus":444`,
+		`"attempt":1`,
 		`"cfRay":"abc123-HKG"`,
 		`"responseType":"application/json"`,
+		"stage=http_444_edge_reject",
+		"elapsedMs=",
 		"request blocked by edge",
+		"applog.snssdk.com",
+		"log.snssdk.com",
 	} {
 		if !strings.Contains(string(logged), hint) {
 			t.Errorf("registration log omitted %q: %s", hint, logged)
@@ -184,6 +189,47 @@ func TestHongguoRegistrationHTTP444IncludesEdgeDiagnostics(t *testing.T) {
 	}
 	if strings.Contains(string(logged), `"magic_tag"`) || strings.Contains(string(logged), `"clientudid"`) {
 		t.Fatal("registration request payload or generated identifiers leaked into diagnostics")
+	}
+}
+
+func TestHongguoInvalidRegistrationPayloadDoesNotCreateDeviceRejectionCooldown(t *testing.T) {
+	var calls int
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		calls++
+		if calls <= 2 {
+			return sourceFixtureResponse(request, http.StatusOK, "not-json"), nil
+		}
+		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
+	})
+	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
+		t.Fatal("invalid registration payload was accepted")
+	}
+	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+		t.Fatalf("invalid response must not create device-rejection cooldown: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("registration calls = %d, want 3 (two bad hosts, then immediate retry)", calls)
+	}
+}
+
+func TestHongguoRegistrationTransportStageClassifiesNetworkFailures(t *testing.T) {
+	cases := []struct {
+		name string
+		err error
+		want string
+	}{
+		{name: "dns", err: errors.New("紅果設備註冊 DNS 解析失敗"), want: "dns"},
+		{name: "tls", err: errors.New("x509: certificate signed by unknown authority"), want: "tls"},
+		{name: "timeout", err: context.DeadlineExceeded, want: "timeout"},
+		{name: "connect", err: errors.New("dial tcp: connection refused"), want: "connect"},
+		{name: "other", err: errors.New("unexpected response"), want: "network"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hongguoRegistrationTransportStage(tc.err); got != tc.want {
+				t.Fatalf("failure stage = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
