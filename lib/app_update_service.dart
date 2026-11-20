@@ -293,8 +293,8 @@ class AppUpdateService {
       throw const FormatException('目前執行檔不是受支援的 DTV.exe');
     }
 
-    // Prefer the updater already shipped in the portable bundle. Older
-    // installations (for example 1.0.7) bootstrap it from the Release asset.
+    // Prefer the updater already shipped in the portable bundle. A transitional
+    // build without the helper can bootstrap it from the verified Release asset.
     final bundledUpdater = File(
       path.join(installDirectory, 'DTV-Updater.exe'),
     );
