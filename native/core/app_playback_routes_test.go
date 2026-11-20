@@ -280,3 +280,47 @@ func TestNativePlaybackRefreshDoesNotDropOldRoutesWhenRefreshAddsNothing(t *test
 		t.Fatalf("refresh discarded the only untried old route: %+v", merged.media)
 	}
 }
+
+func TestNativePlaybackChoicesExcludeUnder720pAndKeep720pOrHigher(t *testing.T) {
+	media := providerMedia{
+		URL: "https://media.test/360p.mp4",
+		Quality: 360,
+		Variants: []providerMedia{
+			{URL: "https://media.test/480p.mp4", Quality: 480},
+			{URL: "https://media.test/720p.mp4", Quality: 720},
+			{URL: "https://media.test/1080p.mp4", Quality: 1080},
+			{URL: "https://media.test/2160p.mp4", Quality: 2160},
+			{URL: "https://media.test/unknown.mp4", Quality: 0},
+		},
+	}
+	choice := nativePlaybackChoices(media, 0)
+	var got []string
+	for _, option := range choice.media {
+		got = append(got, option.URL)
+	}
+	want := []string{
+		"https://media.test/2160p.mp4",
+		"https://media.test/1080p.mp4",
+		"https://media.test/720p.mp4",
+		"https://media.test/unknown.mp4",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("playback routes=%v, want %v", got, want)
+	}
+	if !reflect.DeepEqual(choice.qualities, []int{2160, 1080, 720}) {
+		t.Fatalf("qualities=%v, want [2160 1080 720]", choice.qualities)
+	}
+
+	selected := nativePlaybackChoices(media, 720)
+	if len(selected.media) != 1 || selected.media[0].Quality != 720 {
+		t.Fatalf("720p selection did not keep exactly the 720p route: %+v", selected.media)
+	}
+	// A saved preference below 720p must not bring a low-resolution route back.
+	fallback := nativePlaybackChoices(media, 480)
+	for _, option := range fallback.media {
+		if option.Quality > 0 && option.Quality < nativeMinimumPlaybackQuality {
+			t.Fatalf("under-720p fallback remained: %+v", option)
+		}
+	}
+}
+
