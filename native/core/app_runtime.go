@@ -83,6 +83,10 @@ type Downloader struct {
 	compatibilityLastError string
 	compatibilityOrigin    string
 	compatibilityStartupVerified atomic.Bool
+	hongguoPlaybackMu sync.Mutex
+	hongguoPlaybackPreferredRoute string
+	hongguoPlaybackPreferredUntil time.Time
+	hongguoPlaybackModels map[string]hongguoPlaybackModelCacheEntry
 }
 
 func defaultConfig() Config { return Config{MaxPagesPerSort: 50, PageSize: 30, Retries: 2} }
