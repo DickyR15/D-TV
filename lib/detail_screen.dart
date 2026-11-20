@@ -865,7 +865,7 @@ class _DetailScreenState extends State<DetailScreen> {
     final current = currentNumber == null
         ? ''
         : movieOptions
-        ? ' · 目前 ${currentEpisode?.title ?? '片源 $currentNumber'}'
+        ? '目前片源 · ${currentEpisode?.title ?? '片源 $currentNumber'}'
         : ' · 目前第 $currentNumber 集';
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
@@ -883,7 +883,7 @@ class _DetailScreenState extends State<DetailScreen> {
               Expanded(
                 child: Text(
                   movieOptions
-                      ? '片源 · ${episodes.length} 個選項$current'
+                      ? current
                       : '選集 · ${episodes.length} 集$current',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
