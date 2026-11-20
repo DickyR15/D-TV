@@ -115,18 +115,30 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 	// the official image (including its local cache) before trusting the
 	// provider's previously cached placeholder.
 	if preferredOfficialOverride && preferredOfficialAddress != "" {
-		referer := nativeCoverFallbackReferer(
-			cache.downloader, drama, preferredOfficialAddress,
-		)
-		if !force {
-			if path, ok := cache.cachedAlternativeCoverPath(
-				drama, preferredOfficialAddress, referer, "external",
-			); ok {
+		for _, officialAddress := range nativePreferredOfficialPosterAddresses(drama) {
+			referer := nativeCoverFallbackReferer(
+				cache.downloader, drama, officialAddress,
+			)
+			if !force {
+				if path, ok := cache.cachedAlternativeCoverPath(
+					drama, officialAddress, referer, "external",
+				); ok {
+					return path, nil
+				}
+			}
+			path, err := cache.loadAlternativeAddress(
+				ctx, drama, officialAddress, referer, "external", force,
+			)
+			if err == nil {
 				return path, nil
 			}
-			// The curated image is preferred over a known hotlink-blocked
-			// provider cache, but a previously verified external fallback is
-			// still better for first-screen rendering than another network wait.
+			if ctx.Err() != nil {
+				return "", ctx.Err()
+			}
+		}
+		if !force {
+			// A previously verified external fallback can still provide an
+			// immediate image while the curated official host is unavailable.
 			_, cachedExternal := cache.cachedRepair(drama.ID)
 			for _, externalAddress := range duoduoUniqueStrings([]string{
 				strings.TrimSpace(drama.FallbackCover),
@@ -143,15 +155,6 @@ func (cache *nativeCoverCache) load(ctx context.Context, drama nativeDrama, forc
 					return path, nil
 				}
 			}
-		}
-		path, err := cache.loadAlternativeAddress(
-			ctx, drama, preferredOfficialAddress, referer, "external", force,
-		)
-		if err == nil {
-			return path, nil
-		}
-		if ctx.Err() != nil {
-			return "", ctx.Err()
 		}
 	}
 	primaryErr := errors.New("片源尚未提供原始海報網址")
