@@ -114,6 +114,21 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV104(t *testing.T) {
 }
 
 
+func TestHongguoDeviceRegistrationPrefersPreviouslySuccessfulHost(t *testing.T) {
+	var hosts []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		hosts = append(hosts, request.URL.Host)
+		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
+	})
+	d.recordProviderEndpoint(sourceHongguo, "device_register", "https://log.snssdk.com", 100*time.Millisecond, nil)
+	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 1 || hosts[0] != "log.snssdk.com" {
+		t.Fatalf("registration hosts = %#v, want previously healthy log.snssdk.com first", hosts)
+	}
+}
+
 func TestHongguoDeviceRegistrationFallsBackToLegacyHostAfterAlternateHTTP444(t *testing.T) {
 	var hosts []string
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
