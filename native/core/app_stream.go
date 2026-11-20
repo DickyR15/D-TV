@@ -381,6 +381,25 @@ func (stream *nativeStreamServer) nativeAsset(token string, session *nativeStrea
 }
 
 func (stream *nativeStreamServer) nativeRewrite(token string, session *nativeStreamSession, body, base string) (string, error) {
+	filteredBody, removedVariants, filterErr := nativeFilterHLSMasterVariants(body)
+	if filterErr != nil {
+		stream.nativeLog(
+			nativeStreamDiagnostic{session: session.diagnosticID, asset: "entry_playlist", started: session.created},
+			"playlist_quality_filter_rejected", base,
+			fmt.Sprintf("removed_below_%dp=%d", nativeMinimumPlaybackQuality, removedVariants),
+			0, "application/vnd.apple.mpegurl",
+		)
+		return "", filterErr
+	}
+	if removedVariants > 0 {
+		stream.nativeLog(
+			nativeStreamDiagnostic{session: session.diagnosticID, asset: "entry_playlist", started: session.created},
+			"playlist_quality_filter", base,
+			fmt.Sprintf("removed_below_%dp=%d", nativeMinimumPlaybackQuality, removedVariants),
+			0, "application/vnd.apple.mpegurl",
+		)
+	}
+	body = filteredBody
 	var output []string
 	nextPlaylist := false
 	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
