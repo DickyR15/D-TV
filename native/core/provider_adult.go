@@ -236,13 +236,297 @@ func adultSafeImageURL(base, raw string) string {
 	return resolved.String()
 }
 
+var (
+	adultDecorativeImagePathPattern = regexp.MustCompile(`(?i)(?:^|[/_.-])(flags?|countries?|languages?|locales?|logos?|avatars?|icons?|badges?|sprites?|placeholders?|no[-_]?image|default)(?:$|[/_.-])`)
+	adultLocaleFlagFilenamePattern = regexp.MustCompile(`(?i)^(?:flag[-_]?)?(?:zh(?:[-_]?(?:cn|tw))?|cn|tw|us|jp|kr|ko|en)\.(?:svg|png|webp|gif|jpe?g)package core
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"html"
+	"net/url"
+	"regexp"
+	"runtime"
+	"strconv"
+	"strings"
+
+	htmlnet "golang.org/x/net/html"
+)
+
+const (
+	missAVBaseURL  = "https://missav.ws"
+	supJavBaseURL  = "https://supjav.com"
+	adultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
+var (
+	adultAnchorPattern = regexp.MustCompile("(?is)<a\\b([^>]*)>(.*?)</a>")
+	adultImagePattern  = regexp.MustCompile("(?is)<img\\b[^>]*>")
+	adultMetaPattern   = regexp.MustCompile("(?is)<meta\\b[^>]*>")
+	adultTagPattern    = regexp.MustCompile("(?is)<[^>]+>")
+	adultM3U8Pattern   = regexp.MustCompile("(?i)https?://[^\"'<>\\s]+\\.m3u8(?:\\?[^\"'<>\\s]*)?")
+	adultPackerPattern = regexp.MustCompile("(?s)eval\\(function\\(p,a,c,k,e,d\\)\\{.*?\\}\\('([^']*)',\\s*(\\d+),\\s*(\\d+),\\s*'([^']*)'\\.split\\('\\|'\\)")
+	adultWordPattern   = regexp.MustCompile("\\b([0-9a-zA-Z_]+)\\b")
+	adultSlugPattern   = regexp.MustCompile("(?i)^[a-z0-9][a-z0-9_-]{0,127}$")
+)
+
+func adultSourceName(source string) string {
+	switch canonicalProviderSource(source) {
+	case sourceMissAV:
+		return "MissAV"
+	case sourceSupJav:
+		return "SupJav"
+	default:
+		return "進階片源"
+	}
+}
+
+func adultProviderBaseURL(source string) string {
+	switch canonicalProviderSource(source) {
+	case sourceMissAV:
+		return missAVBaseURL
+	case sourceSupJav:
+		return supJavBaseURL
+	default:
+		return ""
+	}
+}
+
+func adultProviderCategories(source string) []nativeCategory {
+	switch canonicalProviderSource(source) {
+	case sourceMissAV:
+		return []nativeCategory{
+			{ID: "today-hot", Name: "今日熱門"},
+			{ID: "weekly-hot", Name: "本週熱門"},
+			{ID: "monthly-hot", Name: "本月熱門"},
+			{ID: "chinese-subtitle", Name: "中文字幕"},
+			{ID: "new", Name: "最近更新"},
+			{ID: "release", Name: "新作上市"},
+			{ID: "uncensored-leak", Name: "無碼流出"},
+		}
+	case sourceSupJav:
+		return []nativeCategory{
+			{ID: "popular", Name: "熱門總榜"},
+			{ID: "weekly-hot", Name: "本週熱門"},
+			{ID: "monthly-hot", Name: "本月熱門"},
+			{ID: "uncensored-jav", Name: "無碼"},
+			{ID: "censored-jav", Name: "有碼"},
+			{ID: "amateur", Name: "素人"},
+			{ID: "chinese-subtitles", Name: "中文字幕"},
+			{ID: "english-subtitles", Name: "英文字幕"},
+			{ID: "reducing-mosaic", Name: "破壞版"},
+		}
+	default:
+		return nil
+	}
+}
+
+func validAdultProviderCategory(source, category string) bool {
+	if category == "" {
+		return true
+	}
+	for _, item := range adultProviderCategories(source) {
+		if item.ID == category {
+			return true
+		}
+	}
+	return false
+}
+
+func adultDetailURL(source, sourceID string) string {
+	base := adultProviderBaseURL(source)
+	sourceID = strings.TrimSpace(sourceID)
+	if base == "" || !adultSlugPattern.MatchString(sourceID) {
+		return ""
+	}
+	switch canonicalProviderSource(source) {
+	case sourceMissAV:
+		if !strings.ContainsAny(sourceID, "0123456789") {
+			return ""
+		}
+		// Current MissAV detail links include a language segment (/en/<code>).
+		// The previous root-level /<code> route no longer consistently
+		// serves the player page.
+		return base + "/en/" + url.PathEscape(sourceID)
+	case sourceSupJav:
+		if _, err := strconv.Atoi(sourceID); err != nil {
+			return ""
+		}
+		return base + "/zh/" + url.PathEscape(sourceID) + ".html"
+	default:
+		return ""
+	}
+}
+
+func adultCategoryURL(source, category string) (string, error) {
+	base := adultProviderBaseURL(source)
+	if base == "" || !validAdultProviderCategory(source, category) {
+		return "", errors.New("片源分類無效")
+	}
+	if category == "" {
+		if source == sourceSupJav {
+			return base + "/zh/", nil
+		}
+		return base + "/", nil
+	}
+	if source == sourceMissAV {
+		paths := map[string]string{
+			"today-hot": "/dm298/today-hot",
+			"weekly-hot": "/dm170/weekly-hot",
+			"monthly-hot": "/dm270/monthly-hot",
+			"chinese-subtitle": "/dm278/chinese-subtitle",
+			"new": "/dm539/new",
+			"release": "/dm634/release",
+			"uncensored-leak": "/dm817/uncensored-leak",
+		}
+		if path, ok := paths[category]; ok {
+			return base + path, nil
+		}
+	}
+	if source == sourceSupJav {
+		paths := map[string]string{
+			"popular": "/popular",
+			"weekly-hot": "/popular?sort=week",
+			"monthly-hot": "/popular?sort=month",
+			"uncensored-jav": "/category/uncensored-jav",
+			"censored-jav": "/category/censored-jav",
+			"amateur": "/category/amateur",
+			"chinese-subtitles": "/category/chinese-subtitles",
+			"english-subtitles": "/category/english-subtitles",
+			"reducing-mosaic": "/category/reducing-mosaic",
+		}
+		if path, ok := paths[category]; ok {
+			if strings.HasPrefix(path, "/popular") {
+				return base + path, nil
+			}
+			return base + "/zh" + path, nil
+		}
+	}
+	return "", errors.New("片源分類目前沒有對應網址")
+}
+
+func adultAttribute(tag, wanted string) string {
+	pattern := regexp.MustCompile("(?is)\\b" + regexp.QuoteMeta(wanted) + "\\s*=\\s*['\\\"]([^'\\\"]*)['\\\"]")
+	match := pattern.FindStringSubmatch(tag)
+	if len(match) < 2 {
+		return ""
+	}
+	return html.UnescapeString(strings.TrimSpace(match[1]))
+}
+
+func adultClean(value string) string {
+	value = adultTagPattern.ReplaceAllString(value, " ")
+	value = html.UnescapeString(value)
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func adultSafeURL(base, raw, source string) string {
+	raw = html.UnescapeString(strings.TrimSpace(strings.ReplaceAll(raw, "\\/", "/")))
+	if raw == "" {
+		return ""
+	}
+	baseURL, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+	reference, err := url.Parse(raw)
+	if err != nil || reference.User != nil {
+		return ""
+	}
+	resolved := baseURL.ResolveReference(reference)
+	if resolved.Scheme != "https" || resolved.User != nil || resolved.Hostname() == "" {
+		return ""
+	}
+	host := strings.ToLower(resolved.Hostname())
+	switch canonicalProviderSource(source) {
+	case sourceMissAV:
+		if host != "missav.ai" && host != "www.missav.ai" &&
+			host != "missav.ws" && host != "www.missav.ws" &&
+			host != "missav.live" && host != "www.missav.live" &&
+			host != "missav123.com" && host != "www.missav123.com" {
+			return ""
+		}
+	case sourceSupJav:
+		if host != "supjav.com" && host != "www.supjav.com" {
+			return ""
+		}
+	default:
+		return ""
+	}
+	return resolved.String()
+}
+
+func adultSafeImageURL(base, raw string) string {
+	raw = html.UnescapeString(strings.TrimSpace(strings.ReplaceAll(raw, "\\/", "/")))
+	baseURL, err := url.Parse(base)
+	if err != nil || raw == "" {
+		return ""
+	}
+	reference, err := url.Parse(raw)
+	if err != nil || reference.User != nil {
+		return ""
+	}
+	resolved := baseURL.ResolveReference(reference)
+	if resolved.User != nil || !isProviderHTTPMediaURL(resolved.String()) {
+		return ""
+	}
+	return resolved.String()
+}
+
+)
+	adultDecorativeImageAttrPattern = regexp.MustCompile(`(?i)(?:^|[\s_-])(flag|country|language|locale|logo|avatar|icon|badge|sprite|placeholder)(?:$|[\s_-])`)
+)
+
+// adultSafePosterImageURL rejects shared UI artwork before it enters the poster
+// cache. MissAV cards can contain language/country flags and site icons beside
+// the real video thumbnail; treating the first <img> as the poster made that
+// same flag appear on unrelated titles.
+func adultSafePosterImageURL(base, raw, metadata string) string {
+	address := adultSafeImageURL(base, raw)
+	if address == "" {
+		return ""
+	}
+	parsed, err := url.Parse(address)
+	if err != nil {
+		return ""
+	}
+	imagePath := strings.ToLower(parsed.EscapedPath())
+	filename := imagePath
+	if slash := strings.LastIndex(filename, "/"); slash >= 0 {
+		filename = filename[slash+1:]
+	}
+	if adultDecorativeImagePathPattern.MatchString(imagePath) ||
+		adultLocaleFlagFilenamePattern.MatchString(filename) ||
+		adultDecorativeImageAttrPattern.MatchString(strings.ToLower(metadata)) {
+		return ""
+	}
+	// Tiny explicitly-sized images are almost always flags, badges or icons.
+	for _, attribute := range []string{"width", "height"} {
+		rawSize := adultAttribute(metadata, attribute)
+		if rawSize == "" {
+			continue
+		}
+		digits := regexp.MustCompile(`^[0-9]+`).FindString(rawSize)
+		if digits == "" {
+			continue
+		}
+		if size, parseErr := strconv.Atoi(digits); parseErr == nil && size > 0 && size < 80 {
+			return ""
+		}
+	}
+	return address
+}
+
 func adultImageCandidates(fragment, base, source string) []string {
 	seen := map[string]bool{}
 	var result []string
 	for _, tag := range adultImagePattern.FindAllString(fragment, -1) {
 		for _, attr := range []string{"data-original", "data-src", "data-lazy-src", "data-lazyload", "src"} {
 			if raw := adultAttribute(tag, attr); raw != "" {
-				address := adultSafeImageURL(base, raw)
+				address := adultSafePosterImageURL(base, raw, tag)
 				if address != "" && !seen[address] {
 					seen[address] = true
 					result = append(result, address)
@@ -320,9 +604,16 @@ func adultNodeImages(card *htmlnet.Node, base, source string) []string {
 		if node.Type != htmlnet.ElementNode || node.Data != "img" {
 			return
 		}
+		metadata := strings.Join([]string{
+			providerHTMLAttr(node, "class"),
+			providerHTMLAttr(node, "id"),
+			providerHTMLAttr(node, "alt"),
+			providerHTMLAttr(node, "title"),
+			providerHTMLAttr(node, "aria-label"),
+		}, " ")
 		for _, attr := range []string{"data-original", "data-src", "data-lazy-src", "data-lazyload", "src"} {
 			if raw := providerHTMLAttr(node, attr); raw != "" {
-				address := adultSafeImageURL(base, raw)
+				address := adultSafePosterImageURL(base, raw, metadata)
 				if address != "" && !seen[address] {
 					seen[address] = true
 					covers = append(covers, address)
@@ -764,7 +1055,7 @@ func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID stri
 	}
 	covers := adultImageCandidates(body, base, source)
 	if raw := adultMetaValue(body, "og:image"); raw != "" {
-		if cover := adultSafeImageURL(base, raw); cover != "" {
+		if cover := adultSafePosterImageURL(base, raw, "og:image"); cover != "" {
 			covers = append([]string{cover}, covers...)
 		}
 	}
