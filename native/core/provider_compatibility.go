@@ -30,8 +30,12 @@ const (
 )
 
 var providerCompatibilityManifestURLs = []string{
-	"https://raw.githubusercontent.com/DickyR15/D-TV/main/config/provider-compatibility.json",
+	// Stable locations are preferred for release builds.
 	"https://raw.githubusercontent.com/DickyR15/D-TV/release/v1.0.8-candidate/config/provider-compatibility.json",
+	"https://raw.githubusercontent.com/DickyR15/D-TV/main/config/provider-compatibility.json",
+	// PR builds need a signed candidate source before the manifest is merged
+	// into the stable branch. Keep it last so releases never depend on it.
+	"https://raw.githubusercontent.com/DickyR15/D-TV/fix/v1.0.8-mobile-playback-posters/config/provider-compatibility.json",
 }
 
 var providerCompatibilityHostLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
