@@ -127,8 +127,8 @@ func TestAdultImageCandidatesPreferPortraitPosterOverWideArtwork(t *testing.T) {
 	</div>`
 	covers := adultImageCandidates(body, base, sourceMissAV)
 	want := strings.TrimRight(base, "/") + "/images/real-poster.webp"
-	if len(covers) < 2 || covers[0] != want {
-		t.Fatalf("poster ranking = %v, want %q first", covers, want)
+	if len(covers) != 1 || covers[0] != want {
+		t.Fatalf("poster ranking = %v, want only the valid portrait poster %q", covers, want)
 	}
 }
 
