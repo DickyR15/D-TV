@@ -141,6 +141,7 @@ void main() {
   testWidgets('an expired detail plan is released instead of transferred', (
     tester,
   ) async {
+    DiaryService.clear();
     var now = DateTime(2026, 11, 13, 12);
     final repository = DetailPreloadRepository(
       const PlaybackPlan(
