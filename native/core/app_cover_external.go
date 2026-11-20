@@ -653,7 +653,10 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		// Keep this match source- and year-specific; never reuse it for the
 		// original 2006 Death Note film or another similarly named short.
 		title: "死亡筆記-1",
-		titleAliases: []string{"死亡笔记-1", "死亡筆記", "死亡笔记"},
+		titleAliases: []string{
+			"死亡笔记-1", "死亡筆記", "死亡笔记",
+			"死亡筆記2026", "死亡笔记2026", "死亡筆記 2026", "死亡笔记 2026",
+		},
 		source: sourceDuoduo,
 		year: "2026",
 		preferred: true,
