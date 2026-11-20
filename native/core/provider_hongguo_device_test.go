@@ -126,10 +126,10 @@ func TestHongguoDeviceRegistrationFallsBackToLegacyHostAfterAlternateHTTP444(t *
 			t.Fatalf("unexpected registration request: %s %s", request.Method, request.URL)
 		}
 		hosts = append(hosts, request.URL.Host)
-		if request.URL.Host == "applog.snssdk.com" {
+		if request.URL.Host == "log.snssdk.com" {
 			return sourceFixtureResponse(request, 444, `{"message":"request blocked by edge","code":"device_policy"}`), nil
 		}
-		if request.URL.Host != "log.snssdk.com" {
+		if request.URL.Host != "applog.snssdk.com" {
 			t.Fatalf("unexpected fallback host %q", request.URL.Host)
 		}
 		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
@@ -162,7 +162,7 @@ func TestHongguoDeviceRegistrationFallsBackAfterTengineTLB404(t *testing.T) {
 			response.Header.Set("Via", "cache12.edge[13,0]")
 			return response, nil
 		}
-		if request.URL.Host != "log.snssdk.com" {
+		if request.URL.Host != "applog.snssdk.com" {
 			t.Fatalf("unexpected fallback host %q", request.URL.Host)
 		}
 		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"2001","install_id_str":"20019"}`), nil
@@ -171,8 +171,8 @@ func TestHongguoDeviceRegistrationFallsBackAfterTengineTLB404(t *testing.T) {
 	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
 		t.Fatal(err)
 	}
-	if len(hosts) != 2 || hosts[0] != "applog.snssdk.com" || hosts[1] != "log.snssdk.com" {
-		t.Fatalf("registration host order = %#v, want applog then legacy log", hosts)
+	if len(hosts) != 2 || hosts[0] != "log.snssdk.com" || hosts[1] != "applog.snssdk.com" {
+		t.Fatalf("registration host order = %#v, want legacy log then applog", hosts)
 	}
 }
 
@@ -186,7 +186,7 @@ func TestHongguoDeviceRegistrationDoesNotFailoverForApplication404(t *testing.T)
 	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
 		t.Fatal("application 404 must remain a hard failure")
 	}
-	if len(hosts) != 1 || hosts[0] != "applog.snssdk.com" {
+	if len(hosts) != 1 || hosts[0] != "log.snssdk.com" {
 		t.Fatalf("application 404 unexpectedly triggered host failover: %#v", hosts)
 	}
 }
