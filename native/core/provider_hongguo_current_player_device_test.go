@@ -167,7 +167,10 @@ func TestHongguoCurrentPlayerRegistrationCoolsDownAfter444ThenTLB404(t *testing.
 		case "log.snssdk.com":
 			return sourceFixtureResponse(request, 444, `<html>Access Denied X-TT-System-Error: 3</html>`), nil
 		case "applog.snssdk.com":
-			return sourceFixtureResponse(request, http.StatusNotFound, `<html><body>404 Not Found TLB</body></html>`), nil
+			response := sourceFixtureResponse(request, http.StatusNotFound, `<html><body>404 Not Found TLB</body></html>`)
+			response.Header.Set("Content-Type", "text/html; charset=utf-8")
+			response.Header.Set("Server", "Tengine")
+			return response, nil
 		default:
 			t.Fatalf("unexpected Current Player registration host %q", request.URL.Host)
 			return nil, nil
