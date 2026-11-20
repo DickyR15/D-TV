@@ -404,6 +404,15 @@ func extraAdultPPPIsPreviewMediaURL(raw string) bool {
 	return false
 }
 
+type extraAdultPPPStreamRoute struct {
+	address, referer string
+	lowResolution    bool
+}
+
+func extraAdultPPPPreferFullStreams(routes []extraAdultPPPStreamRoute) {
+	extraAdultPPPPreferFullStreams(routes)
+}
+
 // PPP occasionally exposes a short, low-resolution teaser before the actual
 // player stream. Keep these URLs as a last-resort fallback, but never let a
 // 180p/240p rendition outrank a normal-resolution stream.
@@ -477,11 +486,7 @@ func extraAdultPPPStreamURL(body, page string) string {
 }
 
 func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page string) ([]providerMedia, error) {
-	type route struct {
-		address, referer string
-		lowResolution    bool
-	}
-	var routes []route
+	var routes []extraAdultPPPStreamRoute
 	seen := map[string]bool{}
 	add := func(address, referer string) {
 		address = strings.TrimSpace(address)
@@ -490,7 +495,7 @@ func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page
 			return
 		}
 		seen[address] = true
-		routes = append(routes, route{
+		routes = append(routes, extraAdultPPPStreamRoute{
 			address: address, referer: referer,
 			lowResolution: extraAdultPPPLowResolutionMediaURL(address),
 		})
