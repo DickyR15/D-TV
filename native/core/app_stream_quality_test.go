@@ -64,3 +64,44 @@ func TestNativeHLSVariantQualityUsesURIWhenResolutionTagIsMissing(t *testing.T) 
 		}
 	}
 }
+
+func TestNativeHLSVariantQualityIgnoresOpaqueSignedTokenValues(t *testing.T) {
+	tests := []struct {
+		name string
+		uri  string
+		want int
+	}{
+		{
+			name: "opaque token contains quality digits",
+			uri:  "https://cdn.example/master.m3u8?token=abc-quality480-def",
+			want: 0,
+		},
+		{
+			name: "opaque token contains resolution text",
+			uri:  "https://cdn.example/master.m3u8?token=resolution%3D480%26height%3D360",
+			want: 0,
+		},
+		{
+			name: "explicit quality query parameter",
+			uri:  "https://cdn.example/master.m3u8?quality=480&token=opaque",
+			want: 480,
+		},
+		{
+			name: "explicit portrait resolution query parameter",
+			uri:  "https://cdn.example/master.m3u8?resolution=720x1280&token=opaque",
+			want: 720,
+		},
+		{
+			name: "explicit video height query parameter",
+			uri:  "https://cdn.example/master.m3u8?video_height=360&token=opaque",
+			want: 360,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := nativeHLSVariantQuality("", test.uri); got != test.want {
+				t.Fatalf("nativeHLSVariantQuality(%q)=%d, want %d", test.uri, got, test.want)
+			}
+		})
+	}
+}
