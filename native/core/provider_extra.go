@@ -424,7 +424,7 @@ func extraAdultPPPLowResolutionMediaURL(raw string) bool {
 		return true
 	}
 	qualityPattern := regexp.MustCompile(`(?i)(?:^|[^0-9])(144|180|240)(?:p|[^0-9]|$)`)
-	if qualityPattern.MatchString(parsed.Path) || qualityPattern.MatchString(parsed.RawQuery) {
+	if qualityPattern.MatchString(parsed.Path) {
 		return true
 	}
 	for key, values := range parsed.Query() {
