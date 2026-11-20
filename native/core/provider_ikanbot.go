@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -522,6 +521,56 @@ func ikanbotMovieSourceFlagBase(flag string) string {
 
 // Movie listings are not episodes. Keep one selectable entry per explicit
 // audio language; treat every unlabelled CDN/source row as an automatic fallback.
+func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Drama,[]Chapter,error){
+	if !ikanbotNumericID(sourceID){return Drama{},nil,errors.New("愛看機器人作品識別碼無效")}
+	pageURL:=ikanbotBaseURL+"/play/"+sourceID
+	doc,body,final,err:=fetchIkanbotPage(ctx,d,pageURL,ikanbotBaseURL+"/");if err!=nil{return Drama{},nil,fmt.Errorf("愛看機器人作品詳情讀取失敗：%w",err)}
+	title:="";for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="h1"&&providerHTMLAttr(n,"id")=="video_title"}){title=providerHTMLText(n);break}
+	if title==""{title=providerHTMLPlainText(adultMetaValue(body,"og:title"))};if title==""{return Drama{},nil,errors.New("愛看機器人詳情缺少標題")}
+	var coverCandidates []string
+	seenCover := map[string]bool{}
+	addCover := func(address string) {
+		address = strings.TrimSpace(address)
+		if address != "" && isProviderHTTPMediaURL(address) && !seenCover[address] {
+			seenCover[address] = true
+			coverCandidates = append(coverCandidates, address)
+		}
+	}
+	for _, node := range providerHTMLNodes(doc, func(n *htmlnet.Node) bool {
+		return n.Type == htmlnet.ElementNode && n.Data == "img" && providerHTMLClass(n, "cover")
+	}) {
+		for _, address := range ikanbotImageCandidates(node, final) { addCover(address) }
+	}
+	for _, key := range []string{"og:image", "twitter:image"} {
+		if raw := adultMetaValue(body, key); raw != "" {
+			addCover(resolveProviderURL(final, raw))
+		}
+	}
+	for _, node := range providerHTMLNodes(doc, func(n *htmlnet.Node) bool {
+		return n.Type == htmlnet.ElementNode && n.Data == "img"
+	}) {
+		for _, address := range ikanbotImageCandidates(node, final) { addCover(address) }
+	}
+	cover := ""
+	var coverFallbacks []string
+	if len(coverCandidates) > 0 {
+		cover = coverCandidates[0]
+		if len(coverCandidates) > 1 {
+			coverFallbacks = append([]string(nil), coverCandidates[1:]...)
+		}
+	}
+	currentID:=ikanbotInput(doc,"current_id");if currentID==""{currentID=sourceID};token:=ikanbotInput(doc,"e_token");mtype:=ikanbotInput(doc,"mtype");if token==""{return Drama{},nil,errors.New("愛看機器人缺少播放驗證資訊")}
+	lines,err:=d.fetchIkanbotLines(ctx,sourceID,currentID,token,mtype,final);if err!=nil{return Drama{},nil,err}
+	meta:=[]string{};for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="h3"&&providerHTMLClass(n,"meta")}){v:=providerHTMLText(n);if v!=""{meta=append(meta,v)}}
+	tags:=[]string{};year:="";for _,v:=range meta{if year==""&&regexp.MustCompile("^(19|20)[0-9]{2}$").MatchString(v){year=v};if strings.Contains(v,"/"){tags=append(tags,truncate(v,64))}}
+	isMovie := ikanbotIsMovieMType(mtype)
+	chapters := ikanbotBuildChapters(sourceID, final, lines, isMovie)
+	if len(chapters)==0{return Drama{},nil,errors.New("愛看機器人目前沒有可播放分集")}
+	categoryName := "影集"
+	if isMovie { categoryName = "電影" }
+	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,CoverCandidates:coverFallbacks,OnlineDate:year,Tags:tags,TotalEpisode:ikanbotDisplayEpisodeCount(isMovie,len(chapters)),EpisodeCount:ikanbotDisplayEpisodeCount(isMovie,len(chapters)),ChannelName:"愛看機器人",CategoryName:categoryName}
+	return drama,chapters,nil
+}
 func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []Chapter {
 	type movieSelection struct {
 		episode  ikanbotEpisode
