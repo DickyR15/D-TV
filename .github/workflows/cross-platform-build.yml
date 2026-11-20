@@ -9,6 +9,8 @@ on:
       - build/pre-missav-and-advanced-reorder
       - feature/advanced-source-reorder-cross-platform
       - release/v1.0.8-candidate
+      - fix/**
+      - hotfix/**
     paths:
       - ".github/workflows/cross-platform-build.yml"
       - "CHANGELOG.md"
@@ -35,6 +37,7 @@ on:
       - ready_for_review
     branches:
       - main
+      - release/**
     paths:
       - ".github/workflows/cross-platform-build.yml"
       - ".github/workflows/duoduo-entry-probe.yml"
