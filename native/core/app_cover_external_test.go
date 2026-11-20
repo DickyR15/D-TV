@@ -414,6 +414,11 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 			want: xiyouURL,
 		},
 		{
+			name: "Duoduo 2026 anime 萬人之上 uses verified iQIYI artwork",
+			drama: nativeDrama{ID: "duoduo:123456", Title: "萬人之上", Category: "動漫", OnlineDate: "2026"},
+			want: "https://pic2.iqiyipic.com/image/20251205/9b/cd/a_100570559_m_601_m4_400_400.jpg",
+		},
+		{
 			name: "Duoduo 87221 Single's Inferno Season 5 uses Netflix key art",
 			drama: nativeDrama{ID: "duoduo:87221", Title: "单身即地狱 第五季", Category: "剧集", OnlineDate: "2026"},
 			want: "https://resource02.ulifestyle.com.hk/ulcms/content/article/image/w1280/2026/01/20260106180130_adf32c82e8e9ede7a5f96d795e9f224666da43bd.jpg",
@@ -1322,6 +1327,14 @@ func TestValidNativeCoverURLRejectsZXKIImageAPI(t *testing.T) {
 	}
 	if validNativeCoverURL(address) {
 		t.Fatal("paid API gateway must not be treated as a public image CDN")
+	}
+	for _, invalid := range []nativeDrama{
+		{ID: "duoduo:123456", Title: "萬人之上", Category: "劇集", OnlineDate: "2026"},
+		{ID: "duoduo:123456", Title: "萬人之上", Category: "動漫", OnlineDate: "2025"},
+	} {
+		if _, ok := nativeVerifiedOfficialPosterAddress(invalid); ok {
+			t.Fatalf("unverified category/year received the 萬人之上 artwork: %+v", invalid)
+		}
 	}
 }
 
