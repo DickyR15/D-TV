@@ -83,6 +83,15 @@ void main() {
       episode(2),
       quality: 1080,
     );
+
+    // The player may request the prepared session before the scheduled
+    // preload has started. That early miss must not cancel the pending work.
+    expect(
+      preloader.take(FixtureRepository.free, episode(2), quality: 1080),
+      isNull,
+    );
+    expect(DiaryService.fullText, contains('reason=still_loading'));
+
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump();
 
