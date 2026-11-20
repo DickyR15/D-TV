@@ -251,6 +251,9 @@ var nativePosterTitleAliasGroups = [][]string{
 	{
 		"斗羅大陸", "斗罗大陆", "Douluo Dalu", "Soul Land",
 	},
+	{
+		"奉子成婚", "デキちゃうまで婚", "Deki Chau Made Kon", "Marry Me, Let's Have a Baby!",
+	},
 }
 
 func nativePosterTitleAliasGroup(value string) []string {
@@ -549,6 +552,7 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		// Duplicate catalogue IDs are common, so match the exact title, Duoduo
 		// source, anime type and year rather than pinning one catalogue ID.
 		title: "奉子成婚",
+		titleAliases: []string{"デキちゃうまで婚", "Deki Chau Made Kon", "Marry Me, Let's Have a Baby!"},
 		source: sourceDuoduo,
 		year: "2025",
 		workType: "anime",
@@ -612,7 +616,11 @@ func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficia
 		if candidate.workType == "anime" {
 			// Anime artwork must match the exact source, programme title,
 			// category and release year to avoid selecting a different season.
-			if !nativePosterIsAnime(drama) || year == "" || year != candidate.year {
+			// Some Duoduo rows omit vod_year. An exact title, Duoduo
+			// source and anime category still identify this verified artwork;
+			// reject any conflicting year when the catalogue does provide one.
+			if !nativePosterIsAnime(drama) ||
+				(year != "" && year != candidate.year) {
 				continue
 			}
 		} else if candidate.workType == "tv" {
