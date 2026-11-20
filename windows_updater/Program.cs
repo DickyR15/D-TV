@@ -190,9 +190,11 @@ internal static class Program
                 if (File.Exists(ackPath))
                 {
                     var lines = await File.ReadAllLinesAsync(ackPath);
-                    if (lines.Length >= 2
+                    if (lines.Length >= 3
                         && string.Equals(lines[0].Trim(), options.ExpectedVersion, StringComparison.Ordinal)
-                        && string.Equals(lines[1].Trim(), token, StringComparison.Ordinal))
+                        && string.Equals(lines[1].Trim(), token, StringComparison.Ordinal)
+                        && int.TryParse(lines[2].Trim(), out var acknowledgedProcessId)
+                        && acknowledgedProcessId == newProcess.Id)
                     {
                         success = true;
                         Log("New D TV process acknowledged version " + options.ExpectedVersion + ".");
