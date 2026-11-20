@@ -83,6 +83,28 @@ func TestAdultCardParsingAndLazyCoverFallback(t *testing.T) {
 	}
 }
 
+func TestAdultMissAVPosterSelectionSkipsFlagsAndSiteLogos(t *testing.T) {
+	body := `<div class="thumbnail">
+		<img class="country-flag" src="/images/flags/china-flag.png" alt="China flag" width="32" height="20">
+		<img class="site-logo" src="/images/d-tv-logo.webp" alt="site logo" width="120" height="32">
+		<img class="poster" data-src="/covers/sample.webp" alt="video poster" width="225" height="338">
+	</div>`
+	items := adultParseCards(body, missAVBaseURL, sourceMissAV)
+	if len(items) != 1 {
+		t.Fatalf("MISS AV cards = %d, want 1", len(items))
+	}
+	if items[0].Cover != "https://missav.ws/covers/sample.webp" {
+		t.Fatalf("MISS AV selected a flag/logo instead of the poster: %#v", items[0])
+	}
+}
+
+func TestAdultImageCandidatesRejectFlagAndPlaceholderURLs(t *testing.T) {
+	covers := adultImageCandidates(`<img src="/images/flags/cn.png"><img src="/images/placeholder.jpg"><img src="/covers/right.webp" class="poster">`, missAVBaseURL, sourceMissAV)
+	if len(covers) != 1 || covers[0] != "https://missav.ws/covers/right.webp" {
+		t.Fatalf("unexpected filtered adult image candidates: %v", covers)
+	}
+}
+
 func TestAdultPlaybackURLsResolveRelativeToTheActualPlayerPage(t *testing.T) {
 	got := adultFindM3U8(
 		"<script>var player={source:'/media/master.m3u8?token=abc'};</script>",
