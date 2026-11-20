@@ -370,6 +370,39 @@ func extraAdultFrame(page, body string) string {
 	return adultResolvePlaybackURL(page, strings.TrimRight(raw, "/>"))
 }
 
+func extraAdultPPPIsPreviewMediaURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return true
+	}
+	lowerPath := strings.ToLower(parsed.Path)
+	for _, segment := range strings.Split(lowerPath, "/") {
+		switch strings.TrimSpace(segment) {
+		case "preview", "previews", "trailer", "trailers", "teaser", "teasers", "sample", "samples", "thumb", "thumbnail":
+			return true
+		}
+	}
+	base := strings.ToLower(path.Base(lowerPath))
+	for _, marker := range []string{"preview", "trailer", "teaser", "sample"} {
+		if strings.Contains(base, marker) {
+			return true
+		}
+	}
+	query := parsed.Query()
+	for key, values := range query {
+		normalizedKey := strings.ToLower(strings.ReplaceAll(key, "-", "_"))
+		if normalizedKey == "preview" || normalizedKey == "is_preview" || normalizedKey == "teaser" {
+			for _, value := range values {
+				switch strings.ToLower(strings.TrimSpace(value)) {
+				case "1", "true", "yes", "preview", "teaser":
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func extraAdultPPPStreamURLs(body, page string) []string {
 	body = strings.NewReplacer("\\/", "/", "\\u002F", "/", "\\u0026", "&").Replace(html.UnescapeString(body))
 	patterns := []*regexp.Regexp{
@@ -398,7 +431,10 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 		parsed, err := url.Parse(media)
 		if err != nil || !isProviderHTTPMediaURL(media) || parsed.User != nil { continue }
 		mediaPath := strings.ToLower(parsed.Path)
-		if !(strings.HasSuffix(mediaPath, ".m3u8") || strings.HasSuffix(mediaPath, ".mp4")) || seen[media] { continue }
+		if !(strings.HasSuffix(mediaPath, ".m3u8") || strings.HasSuffix(mediaPath, ".mp4")) ||
+			extraAdultPPPIsPreviewMediaURL(media) || seen[media] {
+			continue
+		}
 		seen[media] = true
 		result = append(result, media)
 		if len(result) >= 16 { break }
