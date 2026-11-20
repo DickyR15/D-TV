@@ -26,15 +26,21 @@ adaptive/video.m3u8
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, rejected := range []string{"360x360", "640x360", "854x480", "iframe-360"} {
+	for _, rejected := range []string{"RESOLUTION=640x360", "RESOLUTION=854x480"} {
 		if strings.Contains(got, rejected) {
 			t.Fatalf("below-720p variant %q remained in rewritten playlist: %s", rejected, got)
 		}
 	}
-	for _, kept := range []string{"1280x720", "1920x1080", "adaptive/video.m3u8", "iframe-720"} {
+	for _, kept := range []string{"RESOLUTION=1280x720", "RESOLUTION=1920x1080"} {
 		if !strings.Contains(got, kept) {
-			t.Fatalf("720p-or-higher or unknown-quality variant %q was removed: %s", kept, got)
+			t.Fatalf("720p-or-higher variant %q was removed: %s", kept, got)
 		}
+	}
+	if count := strings.Count(got, "#EXT-X-STREAM-INF:"); count != 3 {
+		t.Fatalf("kept %d stream variants, want 720p, 1080p and unknown-quality: %s", count, got)
+	}
+	if count := strings.Count(got, "#EXT-X-I-FRAME-STREAM-INF:"); count != 1 {
+		t.Fatalf("kept %d I-frame variants, want only the 720p variant: %s", count, got)
 	}
 	if quality := nativeHLSVariantQuality("RESOLUTION=720x1280", "portrait.m3u8"); quality != 720 {
 		t.Fatalf("portrait 720x1280 visible quality = %d, want 720", quality)
