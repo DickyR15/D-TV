@@ -49,6 +49,7 @@ type providerCompatibilityEntry struct {
 	APIBaseURL       string            `json:"apiBaseUrl,omitempty"`
 	PlaybackBaseURL  string            `json:"playbackBaseUrl,omitempty"`
 	Endpoints        map[string]string `json:"endpoints,omitempty"`
+	PlaybackRouteOrder []string         `json:"playbackRouteOrder,omitempty"`
 	AllowedHosts     []string          `json:"allowedHosts,omitempty"`
 	FallbackBaseURLs []string          `json:"fallbackBaseUrls,omitempty"`
 	Paths            map[string]string `json:"paths,omitempty"`
@@ -99,7 +100,13 @@ func compatibilityPathNames(source string) map[string]bool {
 func compatibilityEndpointNames(source string) map[string]bool {
 	switch canonicalProviderSource(source) {
 	case sourceHongguo:
-		return map[string]bool{"deviceRegister": true}
+		return map[string]bool{
+			"deviceRegister": true,
+			"playbackPrimary": true,
+			"playbackReadingMulti": true,
+			"playbackReadingSingle": true,
+			"playbackFqMulti": true,
+		}
 	default:
 		return map[string]bool{}
 	}
@@ -213,7 +220,7 @@ func validateProviderCompatibilityManifest(manifest providerCompatibilityManifes
 		if !knownCompatibilityProvider(source) || canonicalProviderSource(source) != source {
 			return fmt.Errorf("遠端相容性設定包含未知片源：%s", source)
 		}
-		if len(entry.AllowedHosts) > 32 || len(entry.FallbackBaseURLs) > 8 || len(entry.Paths) > 16 || len(entry.Endpoints) > 8 {
+		if len(entry.AllowedHosts) > 32 || len(entry.FallbackBaseURLs) > 8 || len(entry.Paths) > 16 || len(entry.Endpoints) > 8 || len(entry.PlaybackRouteOrder) > 8 {
 			return errors.New("遠端相容性設定項目數量超過限制")
 		}
 		hostSet := map[string]bool{}
@@ -251,6 +258,15 @@ func validateProviderCompatibilityManifest(manifest providerCompatibilityManifes
 			if err := validateCompatibilityURL(raw, entry.AllowedHosts); err != nil {
 				return fmt.Errorf("%s 端點 %s：%w", source, name, err)
 			}
+		}
+		seenPlaybackRoutes := map[string]bool{}
+		for _, name := range entry.PlaybackRouteOrder {
+			if source != sourceHongguo ||
+				!compatibilityEndpointNames(source)[name] ||
+				name == "deviceRegister" || seenPlaybackRoutes[name] {
+				return fmt.Errorf("%s 包含無效或重複的播放路線：%s", source, name)
+			}
+			seenPlaybackRoutes[name] = true
 		}
 		allowedPaths := compatibilityPathNames(source)
 		for name, template := range entry.Paths {
@@ -531,6 +547,14 @@ func (d *Downloader) providerCompatibilityEndpointURL(source, name, fallback str
 		return address
 	}
 	return fallback
+}
+
+func (d *Downloader) providerCompatibilityPlaybackRouteOrder(source string, fallback []string) []string {
+	entry := d.compatibilityEntry(source)
+	if len(entry.PlaybackRouteOrder) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return append([]string(nil), entry.PlaybackRouteOrder...)
 }
 
 func (d *Downloader) providerCompatibilityPath(source, name string, values map[string]string, fallback string) string {
