@@ -7,6 +7,7 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
+	"math/bits"
 	"testing"
 )
 
@@ -16,11 +17,8 @@ func fixtureHongguoSpadeA(key []byte) string {
 	previousEven, previousOdd := byte(246), byte(85)
 	for index, desired := range target {
 		previous := previousEven
-		if index&1 == 0 {
-			previousEven = 0
-		} else {
+		if index&1 != 0 {
 			previous = previousOdd
-			previousOdd = 0
 		}
 		value := byte(int(desired) + 21 + bits.OnesCount(uint(index)))
 		current := previous ^ value
