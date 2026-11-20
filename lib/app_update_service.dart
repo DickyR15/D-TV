@@ -53,6 +53,13 @@ class AppUpdateInfo {
     return null;
   }
 
+  AppUpdateAsset? get windowsUpdaterAsset {
+    for (final asset in assets) {
+      if (asset.name.toLowerCase() == 'dtv-updater.exe') return asset;
+    }
+    return null;
+  }
+
   AppUpdateAsset? get currentPlatformAsset =>
       assetForPlatform(Platform.operatingSystem);
 }
@@ -247,6 +254,8 @@ class AppUpdateService {
 
   Future<void> launchWindowsUpdater(
     File archive, {
+    File? updaterFile,
+    required String expectedVersion,
     required String releaseUrl,
   }) async {
     if (!Platform.isWindows) {
@@ -266,321 +275,93 @@ class AppUpdateService {
       throw const FormatException('Windows 更新頁網址無效');
     }
 
+    final targetVersion = expectedVersion.trim().replaceFirst(
+      RegExp(r'^[vV]'),
+      '',
+    );
+    if (!RegExp(r'^\\d+\\.\\d+\\.\\d+$').hasMatch(targetVersion)) {
+      throw const FormatException('Windows 更新版本號格式無效');
+    }
+
     final executable = File(Platform.resolvedExecutable);
     if (!await executable.exists()) {
-      throw const FileSystemException('找不到目前執行中的 D TV.exe');
+      throw const FileSystemException('找不到目前執行中的 DTV.exe');
     }
     final installDirectory = executable.parent.path;
     final executableName = path.basename(executable.path);
-    final workDirectory =
-        await Directory.systemTemp.createTemp('dtv-update-');
-    final script = File(path.join(workDirectory.path, 'apply-update.ps1'));
-    final readyMarker = File(path.join(workDirectory.path, 'updater.ready'));
-    final errorMarker = File(path.join(workDirectory.path, 'updater.error'));
-    const logHint = r'%LOCALAPPDATA%\D TV\updater.log';
-
-    await script.writeAsString(r'''
-param(
-  [int]$ProcessId,
-  [string]$ArchivePath,
-  [string]$ReleaseUrl,
-  [string]$TargetDirectory,
-  [string]$ExecutableName,
-  [string]$WorkDirectory
-)
-$ErrorActionPreference = 'Stop'
-$logDirectory = Join-Path $env:LOCALAPPDATA 'D TV'
-$logPath = Join-Path $logDirectory 'updater.log'
-$readyPath = Join-Path $WorkDirectory 'updater.ready'
-$errorPath = Join-Path $WorkDirectory 'updater.error'
-$stage = Join-Path $WorkDirectory 'package'
-$backupRoot = Join-Path $WorkDirectory 'backup'
-$changedFiles = New-Object 'System.Collections.Generic.List[string]'
-$createdFiles = New-Object 'System.Collections.Generic.List[string]'
-$success = $false
-$newProcess = $null
-
-function Write-UpdateLog([string]$Message) {
-  $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-  Add-Content -LiteralPath $logPath -Value "[$stamp] $Message" -Encoding UTF8
-}
-
-try {
-  New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
-  Write-UpdateLog 'Updater started.'
-  if (!(Test-Path -LiteralPath $ArchivePath -PathType Leaf)) {
-    throw '找不到已下載的更新 ZIP。'
-  }
-  if (!(Test-Path -LiteralPath $TargetDirectory -PathType Container)) {
-    throw "找不到 D TV 安裝資料夾：$TargetDirectory"
-  }
-
-  $writeProbe = Join-Path $TargetDirectory ('.dtv-update-write-' + [guid]::NewGuid().ToString('N') + '.tmp')
-  try {
-    [System.IO.File]::WriteAllText($writeProbe, 'write-test')
-    Remove-Item -LiteralPath $writeProbe -Force
-  } catch {
-    throw "D TV 安裝資料夾沒有寫入權限：$TargetDirectory。請將免安裝版解壓到目前使用者可寫入的位置，再重新更新。"
-  }
-
-  Add-Type -AssemblyName System.IO.Compression.FileSystem
-  $zip = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
-  try {
-    foreach ($entry in $zip.Entries) {
-      $entryName = $entry.FullName.Replace('\', '/')
-      if ([System.IO.Path]::IsPathRooted($entryName) -or
-          (($entryName -split '/') -contains '..')) {
-        throw "更新 ZIP 含有不安全的檔案路徑：$entryName"
-      }
+    if (executableName.toLowerCase() != 'dtv.exe') {
+      throw const FormatException('目前執行檔不是受支援的 DTV.exe');
     }
-  } finally {
-    $zip.Dispose()
-  }
 
-  New-Item -ItemType Directory -Path $stage -Force | Out-Null
-  Expand-Archive -LiteralPath $ArchivePath -DestinationPath $stage -Force
-  $stagedExecutable = Join-Path $stage $ExecutableName
-  if (!(Test-Path -LiteralPath $stagedExecutable -PathType Leaf)) {
-    throw '更新 ZIP 缺少 DTV.exe，已取消更新。'
-  }
-  foreach ($requiredFile in @(
-    'DTV.exe',
-    'duanju_core.dll',
-    'flutter_windows.dll',
-    'libffmpegkit.dll',
-    'libmpv-2.dll',
-    'msvcp140.dll',
-    'vcruntime140.dll',
-    'data/icudtl.dat',
-    'data/app.so'
-  )) {
-    if (!(Test-Path -LiteralPath (Join-Path $stage $requiredFile) -PathType Leaf)) {
-      throw "更新 ZIP 缺少必要檔案：$requiredFile"
-    }
-  }
-  $stagedFiles = @(Get-ChildItem -LiteralPath $stage -File -Recurse)
-  if ($stagedFiles.Count -eq 0) {
-    throw '更新 ZIP 沒有可安裝的檔案。'
-  }
-
-  # Signal readiness only after extraction and package validation have passed.
-  [System.IO.File]::WriteAllText($readyPath, 'ready')
-  Write-UpdateLog "Package validated; waiting for process $ProcessId to exit."
-
-  $deadline = (Get-Date).AddMinutes(3)
-  while ($null -ne (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)) {
-    if ((Get-Date) -ge $deadline) {
-      throw '等待 D TV 關閉逾時，尚未修改任何程式檔案。'
-    }
-    Start-Sleep -Milliseconds 300
-  }
-
-  # Back up every destination file before changing any installed file.
-  foreach ($sourceFile in $stagedFiles) {
-    $relative = $sourceFile.FullName.Substring($stage.Length).TrimStart([char[]](92, 47))
-    $destination = Join-Path $TargetDirectory $relative
-    if (Test-Path -LiteralPath $destination -PathType Leaf) {
-      $backupFile = Join-Path $backupRoot $relative
-      $backupDirectory = Split-Path -Parent $backupFile
-      New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
-      Copy-Item -LiteralPath $destination -Destination $backupFile -Force
-      $changedFiles.Add($relative) | Out-Null
+    // Prefer the updater already shipped in the portable bundle. Older
+    // installations (for example 1.0.7) bootstrap it from the Release asset.
+    final bundledUpdater = File(
+      path.join(installDirectory, 'DTV-Updater.exe'),
+    );
+    final File updaterSource;
+    if (await bundledUpdater.exists()) {
+      updaterSource = bundledUpdater;
+    } else if (updaterFile != null && await updaterFile.exists()) {
+      updaterSource = updaterFile;
     } else {
-      $createdFiles.Add($relative) | Out-Null
+      throw const FileSystemException(
+        '找不到 DTV-Updater.exe；請確認此版本 Release 已附上獨立更新器。',
+      );
     }
-  }
 
-  foreach ($sourceFile in $stagedFiles) {
-    $relative = $sourceFile.FullName.Substring($stage.Length).TrimStart([char[]](92, 47))
-    $destination = Join-Path $TargetDirectory $relative
-    $destinationDirectory = Split-Path -Parent $destination
-    New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
-    Copy-Item -LiteralPath $sourceFile.FullName -Destination $destination -Force
-  }
-
-  $installedExecutable = Join-Path $TargetDirectory $ExecutableName
-  if (!(Test-Path -LiteralPath $installedExecutable -PathType Leaf)) {
-    throw '更新後找不到 DTV.exe。'
-  }
-  if (!(Test-Path -LiteralPath (Join-Path $TargetDirectory 'duanju_core.dll') -PathType Leaf)) {
-    throw '更新後找不到 duanju_core.dll。'
-  }
-
-  $newProcess = Start-Process -FilePath $installedExecutable -WorkingDirectory $TargetDirectory -PassThru
-  $startupDeadline = (Get-Date).AddSeconds(20)
-  do {
-    Start-Sleep -Milliseconds 500
-    $newProcess.Refresh()
-    if ($newProcess.HasExited) {
-      throw "新版 D TV 啟動後立即結束，結束代碼：$($newProcess.ExitCode)"
+    if (await updaterSource.length() < 1024) {
+      throw const FormatException('DTV-Updater.exe 檔案無效或不完整');
     }
-  } while ((Get-Date) -lt $startupDeadline)
 
-  $success = $true
-  Write-UpdateLog 'Update completed and the new D TV process is running.'
-
-  # The downloaded ZIP is no longer needed after the new process has
-  # survived the startup check. Remove it without making cleanup failure
-  # undo an otherwise successful update.
-  try {
-    if (Test-Path -LiteralPath $ArchivePath -PathType Leaf) {
-      Remove-Item -LiteralPath $ArchivePath -Force
-      Write-UpdateLog 'Removed downloaded update archive.'
+    final localAppData = Platform.environment['LOCALAPPDATA'];
+    if (localAppData == null || localAppData.trim().isEmpty) {
+      throw const FileSystemException('無法取得 Windows 使用者的 LOCALAPPDATA 路徑');
     }
-    $archiveDirectory = Split-Path -Parent $ArchivePath
-    if (Test-Path -LiteralPath $archiveDirectory -PathType Container) {
-      $remainingItems = @(Get-ChildItem -LiteralPath $archiveDirectory -Force)
-      if ($remainingItems.Count -eq 0) {
-        Remove-Item -LiteralPath $archiveDirectory -Force
-        Write-UpdateLog 'Removed empty update download directory.'
-      }
-    }
-  } catch {
-    Write-UpdateLog "ARCHIVE CLEANUP WARNING: $($_.Exception.Message)"
-  }
-}
-catch {
-  $failure = $_.Exception.Message
-  $rollbackFailures = New-Object 'System.Collections.Generic.List[string]'
-  try {
-    Write-UpdateLog "UPDATE FAILED: $failure"
-  } catch {}
-
-  if ($null -ne $newProcess) {
-    try {
-      $newProcess.Refresh()
-      if (!$newProcess.HasExited) {
-        Stop-Process -Id $newProcess.Id -Force -ErrorAction SilentlyContinue
-      }
-    } catch {}
-  }
-
-  foreach ($relative in $changedFiles) {
-    try {
-      $backupFile = Join-Path $backupRoot $relative
-      $destination = Join-Path $TargetDirectory $relative
-      if (Test-Path -LiteralPath $backupFile -PathType Leaf) {
-        Copy-Item -LiteralPath $backupFile -Destination $destination -Force
-      }
-    } catch {
-      $rollbackFailures.Add($relative) | Out-Null
-      try { Write-UpdateLog "ROLLBACK FAILED: $relative - $($_.Exception.Message)" } catch {}
-    }
-  }
-  foreach ($relative in $createdFiles) {
-    try {
-      $destination = Join-Path $TargetDirectory $relative
-      if (Test-Path -LiteralPath $destination -PathType Leaf) {
-        Remove-Item -LiteralPath $destination -Force
-      }
-    } catch {
-      $rollbackFailures.Add($relative) | Out-Null
-      try { Write-UpdateLog "CLEANUP FAILED: $relative - $($_.Exception.Message)" } catch {}
-    }
-  }
-
-  $parentStillRunning = $null -ne (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
-  if (!$parentStillRunning) {
-    try {
-      $oldExecutable = Join-Path $TargetDirectory $ExecutableName
-      if (Test-Path -LiteralPath $oldExecutable -PathType Leaf) {
-        Start-Process -FilePath $oldExecutable -WorkingDirectory $TargetDirectory | Out-Null
-      }
-    } catch {
-      try { Write-UpdateLog "OLD VERSION RESTART FAILED: $($_.Exception.Message)" } catch {}
-    }
-  }
-
-  try {
-    [System.IO.File]::WriteAllText($errorPath, $failure)
-    if (!$parentStillRunning) {
-      $recoveryMessage = if ($rollbackFailures.Count -eq 0) {
-        '更新失敗，已還原舊版程式並重新啟動。'
-      } else {
-        '更新失敗，部分檔案還原未完成。原始備份已保留，請先勿刪除更新暫存資料夾。'
-      }
-      if ($ReleaseUrl -match '^https://github\.com/DickyR15/D-TV/releases/tag/') {
-        try { Start-Process -FilePath $ReleaseUrl | Out-Null } catch {}
-      }
-      Add-Type -AssemblyName System.Windows.Forms
-      [System.Windows.Forms.MessageBox]::Show(
-        $recoveryMessage + [Environment]::NewLine + [Environment]::NewLine + $failure + [Environment]::NewLine + [Environment]::NewLine + "詳細紀錄：" + $logPath + [Environment]::NewLine + "備份位置：" + $backupRoot,
-        'D TV 更新',
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Warning
-      ) | Out-Null
-    }
-  } catch {}
-}
-finally {
-  if ($success) {
-    Start-Sleep -Seconds 2
-    Remove-Item -LiteralPath $WorkDirectory -Recurse -Force -ErrorAction SilentlyContinue
-  }
-}
-''', flush: true);
-
-    final updaterProcess = await Process.start(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-WindowStyle',
-        'Hidden',
-        '-File',
-        script.path,
-        '-ProcessId',
-        pid.toString(),
-        '-ArchivePath',
-        archive.path,
-        '-ReleaseUrl',
-        releaseUri.toString(),
-        '-TargetDirectory',
-        installDirectory,
-        '-ExecutableName',
-        executableName,
-        '-WorkDirectory',
-        workDirectory.path,
-      ],
-      mode: ProcessStartMode.normal,
+    final updaterDirectory = Directory(
+      path.join(localAppData, 'D TV', 'Updater'),
     );
-    // Drain both pipes so a PowerShell diagnostic cannot block the updater.
-    unawaited(updaterProcess.stdout.drain<void>());
-    unawaited(updaterProcess.stderr.drain<void>());
+    await updaterDirectory.create(recursive: true);
+    final updaterTarget = File(
+      path.join(updaterDirectory.path, 'DTV-Updater.exe'),
+    );
+    final updaterStaged = File(
+      path.join(updaterDirectory.path, 'DTV-Updater.exe.new'),
+    );
 
-    // Do not close D TV until PowerShell confirms that the archive has been
-    // extracted and all required files have passed validation. A normal child
-    // process continues running when the app exits after the ready marker.
-    final updaterExitCode = updaterProcess.exitCode;
-    final deadline = DateTime.now().add(const Duration(minutes: 2));
-    while (DateTime.now().isBefore(deadline)) {
-      if (await readyMarker.exists()) return;
-      if (await errorMarker.exists()) {
-        final message = (await errorMarker.readAsString()).trim();
-        throw StateError(
-          message.isEmpty
-              ? 'Windows 更新程序準備失敗；D TV 尚未關閉。'
-              : 'Windows 更新程序準備失敗：$message',
-        );
-      }
-      final exitCode = await Future.any<int?>([
-        updaterExitCode.then<int?>((value) => value),
-        Future<void>.delayed(const Duration(milliseconds: 400))
-            .then<int?>((_) => null),
-      ]);
-      if (exitCode != null) {
-        throw StateError(
-          'Windows 更新程序提前結束（代碼 $exitCode），D TV 尚未關閉。'
-          '請檢查 $logHint。',
-        );
+    if (await updaterStaged.exists()) await updaterStaged.delete();
+    await updaterSource.copy(updaterStaged.path);
+    if (await updaterTarget.exists()) await updaterTarget.delete();
+    await updaterStaged.rename(updaterTarget.path);
+
+    final archiveDigest = await sha256.bind(archive.openRead()).first;
+    final digest = archiveDigest.toString().toLowerCase();
+    final arguments = [
+      '--process-id=' + pid.toString(),
+      '--archive-path=' + archive.absolute.path,
+      '--install-directory=' + executable.parent.absolute.path,
+      '--executable-name=' + executableName,
+      '--expected-version=' + targetVersion,
+      '--archive-sha256=' + digest,
+      '--release-url=' + releaseUri.toString(),
+    ];
+
+    // The helper is cached outside the install directory so it can replace
+    // the bundled DTV-Updater.exe without attempting to overwrite itself.
+    await Process.start(
+      updaterTarget.path,
+      arguments,
+      mode: ProcessStartMode.detached,
+    );
+
+    if (updaterFile != null &&
+        updaterFile.path != updaterSource.path &&
+        await updaterFile.exists()) {
+      try {
+        await updaterFile.delete();
+      } catch (_) {
+        // The updater will clean the archive directory when the ZIP succeeds.
       }
     }
-    updaterProcess.kill();
-    throw TimeoutException(
-      'Windows 更新程序準備逾時（2 分鐘）；D TV 尚未關閉，請檢查網路磁碟、防毒軟體及資料夾權限。'
-      '詳細紀錄：$logHint。',
-    );
   }
 
   Future<void> openMacDmg(File image) async {
