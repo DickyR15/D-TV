@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
+	"net/http"
 	"net/url"
 	"path"
 	"regexp"
@@ -158,8 +160,20 @@ func extraAdultDetailURL(source,id string)string{
 	case source91Porna:return base+"/comic/index/detail?video_key="+url.QueryEscape(id)
 	};return ""
 }
+func extraAdultDetailURLs(source,id string)[]string {
+	primary:=extraAdultDetailURL(source,id)
+	if primary=="" { return nil }
+	if canonicalProviderSource(source)!=source91Porna { return []string{primary} }
+	legacy:=extraAdultBaseURL(source)+"/comic/index/avdetail?video_key="+url.QueryEscape(id)
+	if legacy==primary { return []string{primary} }
+	return []string{primary,legacy}
+}
+func extraAdultUserAgent(source string) string {
+	if canonicalProviderSource(source)==source91Porna { return ninetyOneMobileUserAgent }
+	return adultUserAgent
+}
 func extraAdultFetch(ctx context.Context,d *Downloader,source,address,referer string)(string,string,error){
-	return extraAdultFetchWithUserAgent(ctx,d,source,address,referer,adultUserAgent)
+	return extraAdultFetchWithUserAgent(ctx,d,source,address,referer,extraAdultUserAgent(source))
 }
 
 func extraAdultFetchWithUserAgent(ctx context.Context,d *Downloader,source,address,referer,agent string)(string,string,error){
@@ -250,6 +264,75 @@ func extraAdultHasNextPage(body, baseURL string, currentPage int, source string)
 	return false
 }
 
+// extraAdult91PornaDetailLink normalizes both relative and absolute
+// links returned by the live catalogue. The old selector only matched
+// href="/comic/index/detail?..."; absolute hrefs (and //host/... links) were
+// silently dropped, leaving stale cached video_key values to be diagnosed.
+func extraAdult91PornaDetailLink(raw, base string) (string, bool) {
+	raw = strings.TrimSpace(html.UnescapeString(raw))
+	if raw == "" || strings.ContainsAny(raw, "\r\n\x00") {
+		return "", false
+	}
+	baseURL, err := url.Parse(strings.TrimSpace(base))
+	if err != nil || baseURL.Scheme != "https" ||
+		(baseURL.Hostname() != "91porna.com" && baseURL.Hostname() != "www.91porna.com") {
+		return "", false
+	}
+	reference, err := url.Parse(raw)
+	if err != nil || reference.User != nil {
+		return "", false
+	}
+	target := baseURL.ResolveReference(reference)
+	if target.Scheme != "https" || target.User != nil ||
+		(target.Hostname() != "91porna.com" && target.Hostname() != "www.91porna.com") {
+		return "", false
+	}
+	if target.Path != "/comic/index/detail" && target.Path != "/comic/index/avdetail" {
+		return "", false
+	}
+	id := strings.TrimSpace(target.Query().Get("video_key"))
+	if !extraAdultValidID(source91Porna, id) {
+		return "", false
+	}
+	return id, true
+}
+
+// extraAdult91PornaDetailPageError avoids treating a 200 challenge/login shell
+// or a redirect to a different page as a valid detail result. It also makes a
+// route fallback meaningful: a failed /detail candidate can be followed by
+// /avdetail, rather than stopping on the first non-empty HTTP response.
+func extraAdult91PornaDetailPageError(id, body, page string) error {
+	parsed, err := url.Parse(strings.TrimSpace(page))
+	if err != nil || parsed.Scheme != "https" ||
+		(parsed.Hostname() != "91porna.com" && parsed.Hostname() != "www.91porna.com") ||
+		(parsed.Path != "/comic/index/detail" && parsed.Path != "/comic/index/avdetail") ||
+		parsed.Query().Get("video_key") != id {
+		return errors.New("91Porna 詳情頁網址與作品 video_key 不相符")
+	}
+	lower := strings.ToLower(body)
+	for _, marker := range []string{
+		"just a moment", "cf-chl-", "challenge-platform",
+		"checking your browser", "access denied", "video not found",
+		"video has been removed", "該影片已刪除", "影片不存在",
+		"視頻不存在", "视频不存在",
+	} {
+		if strings.Contains(lower, strings.ToLower(marker)) {
+			return fmt.Errorf("91Porna 詳情頁回傳驗證頁或作品不存在訊息：%s", marker)
+		}
+	}
+	hasDetailMarker := strings.Contains(lower, "<h1") ||
+		strings.Contains(lower, "<title") ||
+		strings.Contains(lower, "og:title") ||
+		strings.Contains(lower, "data-video") ||
+		strings.Contains(lower, "embed_play.js") ||
+		strings.Contains(lower, "/comic/index/embed")
+	if !hasDetailMarker {
+		return errors.New("91Porna 回應不是可辨識的作品詳情頁")
+	}
+	return nil
+}
+
+
 func extraAdultParseCard(source,chunk,base string)(Drama,bool){
 	var id,title,cover,remark string
 	switch source{
@@ -281,7 +364,25 @@ func extraAdultParseCard(source,chunk,base string)(Drama,bool){
 			title = adultClean(match[1])
 		}
 	case source91Porna:
-		m:=regexp.MustCompile("(?i)href=['\\x22]/comic/index/(?:avdetail|detail)\\?video_key=([A-Za-z0-9_-]+)['\\x22]").FindStringSubmatch(chunk);if len(m)<2{return Drama{},false};id=m[1];img:=regexp.MustCompile("(?is)<img\\b[^>]*>").FindString(chunk);if img!=""{cover=adultAttribute(img,"data-src");if cover==""{cover=adultAttribute(img,"src")};title=adultAttribute(img,"alt")};if m:=regexp.MustCompile("(?i)([0-9]{1,3}:[0-9]{2})").FindStringSubmatch(chunk);len(m)>1{remark=m[1]}
+		for _, anchor := range adultAnchorPattern.FindAllStringSubmatch(chunk, -1) {
+			if len(anchor) < 3 { continue }
+			href := adultAttribute("<a "+anchor[1]+">", "href")
+			if candidate, ok := extraAdult91PornaDetailLink(href, base); ok {
+				id = candidate
+				break
+			}
+		}
+		if id == "" { return Drama{}, false }
+		img := regexp.MustCompile("(?is)<img\\b[^>]*>").FindString(chunk)
+		if img != "" {
+			cover = adultAttribute(img, "data-src")
+			if cover == "" { cover = adultAttribute(img, "data-original") }
+			if cover == "" { cover = adultAttribute(img, "src") }
+			title = adultAttribute(img, "alt")
+		}
+		if m := regexp.MustCompile("(?i)([0-9]{1,3}:[0-9]{2})").FindStringSubmatch(chunk); len(m) > 1 {
+			remark = m[1]
+		}
 	}
 	if !extraAdultValidID(source,id){return Drama{},false};title=adultClean(title);if title==""{title=id};cover=adultSafeImageURL(base,cover)
 	return Drama{ID:providerDramaID(source,id),Source:source,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,ChannelName:extraAdultSourceName(source),CategoryName:extraAdultSourceName(source),Remark:truncate(remark,64),TotalEpisode:1,EpisodeCount:1},true
@@ -333,7 +434,20 @@ func extraAdultTitle(body,fallback string)string{
 	t:=adultClean(adultMetaValue(body,"og:title"));if t==""{t=adultClean(adultMetaValue(body,"twitter:title"))};if t==""{if m:=regexp.MustCompile("(?is)<h1\\b[^>]*>(.*?)</h1>").FindStringSubmatch(body);len(m)>1{t=adultClean(m[1])}};if t==""{if m:=regexp.MustCompile("(?is)<title\\b[^>]*>(.*?)</title>").FindStringSubmatch(body);len(m)>1{t=adultClean(m[1])}};if t==""{t=fallback};t=regexp.MustCompile("(?i)\\s*[-|]\\s*(?:SupJav|PPP\\.Porn|麻豆.*|91porna|91視頻).*$").ReplaceAllString(t,"");return strings.TrimSpace(t)
 }
 func (d *Downloader) fetchExtraAdultDetail(ctx context.Context,source,id string)(Drama,[]Chapter,error){
-	source=canonicalProviderSource(source);if !extraAdultValidID(source,id){return Drama{},nil,errors.New("作品識別碼無效")};base:=extraAdultBaseURL(source);body,final,e:=extraAdultFetch(ctx,d,source,extraAdultDetailURL(source,id),base+"/");if e!=nil{return Drama{},nil,fmt.Errorf("%s 作品詳情讀取失敗：%w",extraAdultSourceName(source),e)}
+	source=canonicalProviderSource(source);if !extraAdultValidID(source,id){return Drama{},nil,errors.New("作品識別碼無效")};base:=extraAdultBaseURL(source)
+	var body,final string
+	var e error
+	for _,address:=range extraAdultDetailURLs(source,id) {
+		body,final,e=extraAdultFetch(ctx,d,source,address,base+"/")
+		if e == nil && source == source91Porna {
+			if validationErr := extraAdult91PornaDetailPageError(id, body, final); validationErr != nil {
+				e = validationErr
+			}
+		}
+		if e==nil { break }
+		if ctx.Err()!=nil { return Drama{},nil,ctx.Err() }
+	}
+	if e!=nil{return Drama{},nil,fmt.Errorf("%s 作品詳情讀取失敗：%w",extraAdultSourceName(source),e)}
 	title:=extraAdultTitle(body,id);desc:=adultClean(adultMetaValue(body,"description"))
 	if source==source91Porna && extraAdultMobileScanRequired(body) {
 		const note = "網站頁面顯示手機掃碼入口；D-TV 會另外解析作品嵌入播放器，若頁面沒有提供可用串流才會無法播放。"
@@ -470,7 +584,8 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 		parsed, err := url.Parse(media)
 		if err != nil || !isProviderHTTPMediaURL(media) || parsed.User != nil { continue }
 		mediaPath := strings.ToLower(parsed.Path)
-		if !(strings.HasSuffix(mediaPath, ".m3u8") || strings.HasSuffix(mediaPath, ".mp4")) ||
+		if !strings.Contains(mediaPath, "/stream/") ||
+			!strings.HasSuffix(mediaPath, ".m3u8") ||
 			extraAdultPPPIsPreviewMediaURL(media) || seen[media] {
 			continue
 		}
@@ -493,7 +608,10 @@ func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page
 	add := func(address, referer string) {
 		address = strings.TrimSpace(address)
 		parsed, err := url.Parse(address)
-		if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil || seen[address] {
+		if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil ||
+			!strings.Contains(strings.ToLower(parsed.Path), "/stream/") ||
+			!strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8") ||
+			extraAdultPPPIsPreviewMediaURL(address) || seen[address] {
 			return
 		}
 		seen[address] = true
@@ -549,7 +667,7 @@ func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page
 		}
 	}
 	if len(routes) == 0 {
-		return nil, errors.New("PPP 播放器沒有找到有效的 HLS／MP4 網址")
+		return nil, errors.New("PPP 頁面沒有找到完整的 /stream/ HLS 播放清單（已略過預覽影片）")
 	}
 	// Keep real streams first and reserve 144p/180p/240p renditions for
 	// fallback only when the page exposes no better stream.
@@ -971,6 +1089,156 @@ func extraAdult91PornaMediaURL(body, page string) string {
 	return ""
 }
 
+var extraAdult91PornaMediaIDPattern = regexp.MustCompile(`(?i)\bdata-video\s*=\s*['"]([0-9]{1,20})['"]`)
+
+// The current upstream module resolves detail -> data-video media ID ->
+// POST /api/videos/{id}/playback. Prefer that documented API path; the older
+// embed_play.js flow remains a compatibility fallback below.
+func extraAdult91PornaMediaID(body string) string {
+	match := extraAdult91PornaMediaIDPattern.FindStringSubmatch(body)
+	if len(match) < 2 {
+		return ""
+	}
+	return match[1]
+}
+
+func extraAdult91PornaPlaybackURLs(payload map[string]any, page string) []string {
+	streams := nestedMap(payload, "data", "streams")
+	seen := make(map[string]bool, 3)
+	var result []string
+	for _, field := range []string{"main", "hevc", "preview"} {
+		raw, _ := streams[field].(string)
+		address := adultResolvePlaybackURL(page, raw)
+		parsed, err := url.Parse(address)
+		if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil {
+			continue
+		}
+		path := strings.ToLower(parsed.Path)
+		if !(strings.HasSuffix(path, ".m3u8") || strings.HasSuffix(path, ".mp4")) || seen[address] {
+			continue
+		}
+		seen[address] = true
+		result = append(result, address)
+	}
+	return result
+}
+
+func (d *Downloader) fetchExtraAdult91PornaPlayback(ctx context.Context, mediaID, page string) (providerMedia, error) {
+	if !regexp.MustCompile("^[0-9]{1,20}$").MatchString(strings.TrimSpace(mediaID)) {
+		return providerMedia{}, errors.New("91Porna 媒體 ID 無效")
+	}
+	parsedPage, err := url.Parse(strings.TrimSpace(page))
+	if err != nil || parsedPage.Scheme != "https" || parsedPage.User != nil ||
+		(parsedPage.Hostname() != "91porna.com" && parsedPage.Hostname() != "www.91porna.com") {
+		return providerMedia{}, errors.New("91Porna 播放頁網址無效")
+	}
+	if d == nil || d.client == nil {
+		return providerMedia{}, errors.New("91Porna 播放 API 用戶端尚未初始化")
+	}
+	requestCtx, cancel := context.WithTimeout(ctx, providerTimeout)
+	defer cancel()
+	requestCtx = context.WithValue(requestCtx, nativeRPZFallbackKey{}, true)
+	endpoint := ninetyOneBaseURL + "/api/videos/" + mediaID + "/playback"
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, strings.NewReader("{}"))
+	if err != nil {
+		return providerMedia{}, err
+	}
+	request.Header.Set("User-Agent", ninetyOneMobileUserAgent)
+	request.Header.Set("Accept", "application/json, text/plain, */*")
+	request.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+	request.Header.Set("Referer", page)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := d.client.Do(request)
+	if err != nil {
+		return providerMedia{}, fmt.Errorf("91Porna 播放 API 請求失敗：%w", err)
+	}
+	defer response.Body.Close()
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, 4<<20+1))
+	if readErr != nil {
+		return providerMedia{}, readErr
+	}
+	if len(body) > 4<<20 {
+		return providerMedia{}, errors.New("91Porna 播放 API 回應過大")
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return providerMedia{}, fmt.Errorf("91Porna 播放 API 回應 HTTP %d", response.StatusCode)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return providerMedia{}, errors.New("91Porna 播放 API 回應不是有效 JSON")
+	}
+	addresses := extraAdult91PornaPlaybackURLs(payload, page)
+	if len(addresses) == 0 {
+		return providerMedia{}, errors.New("91Porna 播放 API 沒有提供 main、hevc 或 preview 串流")
+	}
+	credentials := &providerMediaCredentials{referer: page, userAgent: ninetyOneMobileUserAgent}
+	media := providerMedia{
+		URL: addresses[0], Referer: page, credentials: credentials,
+		StandardHTTP: runtime.GOOS == "android",
+	}
+	for _, address := range addresses[1:] {
+		media.Variants = append(media.Variants, providerMedia{
+			URL: address, Referer: page, credentials: credentials,
+			StandardHTTP: runtime.GOOS == "android",
+		})
+	}
+	return media, nil
+}
+
+func (d *Downloader) resolveExtraAdult91PornaAPI(ctx context.Context, sourceID string, body, page string) (providerMedia, error) {
+	tryPage := func(candidateBody, candidateURL string) (providerMedia, bool, error) {
+		mediaID := extraAdult91PornaMediaID(candidateBody)
+		if mediaID == "" {
+			return providerMedia{}, false, nil
+		}
+		media, err := d.fetchExtraAdult91PornaPlayback(ctx, mediaID, candidateURL)
+		if err != nil {
+			return providerMedia{}, false, err
+		}
+		return media, true, nil
+	}
+	var lastErr error
+	if media, ok, err := tryPage(body, page); ok {
+		return media, nil
+	} else if err != nil {
+		lastErr = err
+	}
+	for _, detailPath := range []string{
+		"/comic/index/detail?video_key=" + url.QueryEscape(sourceID),
+		"/comic/index/avdetail?video_key=" + url.QueryEscape(sourceID),
+	} {
+		address := ninetyOneBaseURL + detailPath
+		if address == page {
+			continue
+		}
+		candidateBody, finalURL, fetchErr := extraAdultFetchWithUserAgent(
+			ctx, d, source91Porna, address, ninetyOneBaseURL+"/", ninetyOneMobileUserAgent,
+		)
+		if fetchErr != nil {
+			lastErr = fetchErr
+			if ctx.Err() != nil {
+				return providerMedia{}, ctx.Err()
+			}
+			continue
+		}
+		media, ok, resolveErr := tryPage(candidateBody, finalURL)
+		if ok {
+			return media, nil
+		}
+		if resolveErr != nil {
+			lastErr = resolveErr
+			if ctx.Err() != nil {
+				return providerMedia{}, ctx.Err()
+			}
+		}
+	}
+	if lastErr != nil {
+		return providerMedia{}, lastErr
+	}
+	return providerMedia{}, errors.New("91Porna 詳情頁沒有 data-video 媒體 ID")
+}
+
+
 func extraAdultHLS(body,page string)string{
 	body=strings.ReplaceAll(body,"\\/","/")
 	patterns:=[]*regexp.Regexp{regexp.MustCompile("(?i)setVideoHLS\\s*\\(\\s*['\\x22]([^'\\x22]+)['\\x22]"),regexp.MustCompile("(?i)\\bvar\\s+m3u8\\s*=\\s*['\\x22]([^'\\x22]+)['\\x22]"),regexp.MustCompile("(?i)['\\x22](?:m3u8|hls|file)['\\x22]\\s*:\\s*['\\x22]([^'\\x22]*\\.m3u8[^'\\x22]*)['\\x22]")}
@@ -978,8 +1246,7 @@ func extraAdultHLS(body,page string)string{
 }
 func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(providerMedia,error){
 	source,id,ok:=splitProviderDramaID(task.DramaID);prefix:=providerChapterID(source,id,"");if !ok||!extraAdultValidID(source,id)||!strings.HasPrefix(task.Chapter.ID,prefix){return providerMedia{},errors.New("進階片源分集資訊無效，請重新整理")}
-	userAgent:=adultUserAgent
-	if source==source91Porna { userAgent=ninetyOneMobileUserAgent }
+	userAgent:=extraAdultUserAgent(source)
 	base:=extraAdultBaseURL(source);page:=firstNonEmpty(task.Chapter.PageURL,strings.TrimPrefix(task.Chapter.ID,prefix));if page==""{page=extraAdultDetailURL(source,id)};body,final,e:=extraAdultFetchWithUserAgent(ctx,d,source,page,base+"/",userAgent);if e!=nil{return providerMedia{},fmt.Errorf("%s 播放頁讀取失敗：%w",extraAdultSourceName(source),e)}
 	switch source{
 	case sourcePPP:
@@ -995,6 +1262,10 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 	case sourceSupJav:
 		media:=extraAdultHLS(body,final);referer:=final;if media==""{frame:=extraAdultFrame(final,body);u,err:=url.Parse(frame);if err!=nil||u.Scheme!="https"||u.User!=nil{return providerMedia{},errors.New("SupJav 播放器網址無效")};embed,eu,err:=extraAdultFetch(ctx,d,source,frame,final);if err!=nil{return providerMedia{},err};referer=eu;media=extraAdultHLS(embed,eu);if media==""{if m:=regexp.MustCompile("(?is)window\\.PLAYER_CONFIG\\s*=\\s*(\\{[\\s\\S]*?\\})\\s*;").FindStringSubmatch(embed);len(m)>1{var cfg map[string]any;if json.Unmarshal([]byte(m[1]),&cfg)==nil{for _,k:=range []string{"m3u8","url","hls","file"}{if s,ok:=cfg[k].(string);ok{media=adultResolvePlaybackURL(eu,s);if media!=""{break}}}}}}};if media==""{return providerMedia{},errors.New("SupJav 播放器沒有提供 HLS 網址")};cred:=&providerMediaCredentials{referer:referer,userAgent:adultUserAgent};return d.prepareWebProviderMedia(ctx,providerMedia{URL:media,Referer:referer,credentials:cred,StandardHTTP:runtime.GOOS=="android"},"SupJav")
 	case source91Porna:
+		apiMedia, apiErr := d.resolveExtraAdult91PornaAPI(ctx, id, body, final)
+		if apiErr == nil {
+			return d.prepareWebProviderMediaWithFallback(ctx, apiMedia, "91Porna")
+		}
 		media := extraAdult91PornaMediaURL(body, final)
 		referer := final
 		scanOnly := extraAdultMobileScanRequired(body)
@@ -1040,7 +1311,7 @@ func (d *Downloader) resolveExtraAdultMedia(ctx context.Context,task Task)(provi
 			if scanOnly {
 				return providerMedia{}, errors.New("91Porna 目前仍要求以手機瀏覽器開啟掃碼頁面；這次回應沒有提供 D-TV 可直接使用的 HLS／MP4 網址")
 			}
-			return providerMedia{}, errors.New("91Porna 播放腳本沒有回傳有效的 HLS／MP4 網址")
+			return providerMedia{}, fmt.Errorf("91Porna 官方播放 API 與嵌入備援均未取得有效串流（API：%v）", apiErr)
 		}
 		cred := &providerMediaCredentials{referer: referer, userAgent: ninetyOneMobileUserAgent}
 		return d.prepareWebProviderMedia(ctx, providerMedia{URL: media, Referer: referer, credentials: cred, StandardHTTP: runtime.GOOS == "android"}, "91Porna")

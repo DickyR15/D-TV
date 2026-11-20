@@ -422,7 +422,7 @@ func TestCDNTransportRetriesUnknownAuthorityThroughVerifiedDoHForMediaHosts(t *t
 
 
 func TestHostDoHTransportRetriesRegistrationPostAndPreservesTLSIdentity(t *testing.T) {
-	const host = "log.snssdk.com"
+	const host = "applog.snssdk.com"
 	const fallbackIP = "93.184.216.34"
 	var directAttempts, dohLookups, recoveredRequests atomic.Int32
 	var receivedBody string

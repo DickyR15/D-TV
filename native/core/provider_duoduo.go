@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -380,6 +381,7 @@ func (d *Downloader) fetchDuoduoAPI(ctx context.Context, route string, params ur
 			}
 		}
 	}
+	hosts = d.orderProviderHostNames(sourceDuoduo, "api", duoduoUniqueStrings(hosts))
 	var lastErr error
 	for _, host := range duoduoUniqueStrings(hosts) {
 		if err := ctx.Err(); err != nil {
@@ -400,27 +402,33 @@ func (d *Downloader) fetchDuoduoAPI(ctx context.Context, route string, params ur
 		request.Header.Set("web-sign", duoduoWebSign)
 		request.Header.Set("Origin", base)
 		request.Header.Set("Referer", base+"/")
+		started := time.Now()
 		response, err := d.doCatalogRequestWithTimeout(request, providerTimeout)
 		if err != nil {
+			d.recordProviderEndpoint(sourceDuoduo, "api", address, time.Since(started), err)
 			lastErr = err
 			continue
 		}
 		body, readErr := io.ReadAll(io.LimitReader(response.Body, 4<<20+1))
 		closeErr := response.Body.Close()
 		if readErr != nil {
+			d.recordProviderEndpoint(sourceDuoduo, "api", address, time.Since(started), readErr)
 			lastErr = readErr
 			continue
 		}
 		if closeErr != nil {
+			d.recordProviderEndpoint(sourceDuoduo, "api", address, time.Since(started), closeErr)
 			lastErr = closeErr
 			continue
 		}
 		if len(body) > 4<<20 {
 			lastErr = errors.New("多多追劇 API 回應超過大小限制")
+			d.recordProviderEndpoint(sourceDuoduo, "api", address, time.Since(started), lastErr)
 			continue
 		}
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			lastErr = fmt.Errorf("多多追劇 API HTTP %d", response.StatusCode)
+			d.recordProviderEndpoint(sourceDuoduo, "api", address, time.Since(started), lastErr)
 			continue
 		}
 		var payload map[string]any
@@ -428,12 +436,20 @@ func (d *Downloader) fetchDuoduoAPI(ctx context.Context, route string, params ur
 		decoder.UseNumber()
 		if err := decoder.Decode(&payload); err != nil {
 			lastErr = fmt.Errorf("多多追劇 API JSON 格式錯誤：%w", err)
+			d.recordProviderEndpoint(sourceDuoduo, "api", address, time.Since(started), lastErr)
 			continue
 		}
 		if duoduoString(payload["code"]) != "200" {
 			lastErr = fmt.Errorf("多多追劇 API：%s", firstNonEmpty(duoduoString(payload["msg"]), "回應失敗"))
+			d.recordProviderEndpoint(sourceDuoduo, "api", address, time.Since(started), lastErr)
 			continue
 		}
+		if _, ok := payload["data"]; !ok {
+			lastErr = errors.New("多多追劇 API 缺少 data 欄位")
+			d.recordProviderEndpoint(sourceDuoduo, "api", address, time.Since(started), lastErr)
+			continue
+		}
+		d.recordProviderEndpoint(sourceDuoduo, "api", address, time.Since(started), nil)
 		d.providerMu.Lock()
 		if d.providerHosts == nil {
 			d.providerHosts = map[string]string{}

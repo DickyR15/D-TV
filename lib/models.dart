@@ -19,7 +19,7 @@ class SourceSite {
       id == 'duoduo' ||
       id == 'hanxiaoquan' ||
       id == 'heitao' ||
-      id == 'missav' || id == 'supjav' || id == 'ppp' || id == 'madou' || id == 'ikanbot';
+      id == 'missav' || id == 'supjav' || id == 'ppp' || id == 'madou' || id == 'ikanbot' || id == 'chaoliu';
   bool get searchSuggestions => id == 'hongguo';
   // These providers must remain independent in
   // source switching and ranking filters.
@@ -58,6 +58,7 @@ class SourceSite {
     '恐怖片 · 電影 · 電視劇 · 動畫',
   );
   static const ikanbot = SourceSite('ikanbot', '愛看機器人', '電影 · 影集 · 動畫 · 綜藝');
+  static const chaoliu = SourceSite('chaoliu', '潮流 AV', '分類 · 搜尋 · 多畫質播放', adult: true);
   static const missav = SourceSite(
     'missav',
     'MissAV',
@@ -81,6 +82,7 @@ class SourceSite {
     SourceSite('supjav', 'SupJav', '分類 · 搜尋 · 播放', adult: true),
     SourceSite('ppp', 'ppp', '分類 · 搜尋 · 播放', adult: true),
     SourceSite('madou', 'madou', '分類 · 搜尋 · 多線播放', adult: true),
+    chaoliu,
   ];
   /// Retired providers remain recognizable for saved library records only.
   /// They are not available for new catalog browsing or source management.

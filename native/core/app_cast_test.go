@@ -57,6 +57,75 @@ func castTestRenderer(t *testing.T, calls *[]string) *httptest.Server {
 	}))
 }
 
+
+func TestCastSearchTargetsCoverCommonUPnPRenderers(t *testing.T) {
+	want := []string{
+		"urn:schemas-upnp-org:service:AVTransport:1",
+		"urn:schemas-upnp-org:device:MediaRenderer:1",
+		"upnp:rootdevice",
+		"ssdp:all",
+	}
+	if len(castSearchTargets) != len(want) {
+		t.Fatalf("SSDP search target count = %d, want %d", len(castSearchTargets), len(want))
+	}
+	for index, target := range want {
+		if castSearchTargets[index] != target {
+			t.Fatalf("SSDP target[%d] = %q, want %q", index, castSearchTargets[index], target)
+		}
+		request := string(castSearchRequest(target))
+		for _, part := range []string{
+			"M-SEARCH * HTTP/1.1",
+			"HOST: 239.255.255.250:1900",
+			`MAN: "ssdp:discover"`,
+			"MX: 2",
+			"ST: " + target,
+			"\r\n\r\n",
+		} {
+			if !strings.Contains(request, part) {
+				t.Errorf("SSDP request for %q omitted %q: %q", target, part, request)
+			}
+		}
+	}
+}
+
+func TestCastSearchBindAddressesStartsWithWildcardAndUsesUniqueIPv4(t *testing.T) {
+	addresses := castSearchBindAddresses()
+	if len(addresses) == 0 || addresses[0] != nil {
+		t.Fatalf("SSDP bind list must include the wildcard socket first: %#v", addresses)
+	}
+	seen := map[string]bool{}
+	for _, address := range addresses[1:] {
+		if address == nil || address.To4() == nil || address.IsLoopback() || address.IsUnspecified() || address.IsMulticast() {
+			t.Fatalf("invalid SSDP interface bind address: %v", address)
+		}
+		key := address.String()
+		if seen[key] {
+			t.Fatalf("duplicate SSDP interface bind address: %s", key)
+		}
+		seen[key] = true
+	}
+}
+
+func TestCastDescriptionModelUsesNestedRendererModel(t *testing.T) {
+	first := castDescriptionDevice{
+		Name: "Amlogic_GTKing_PRO", Manufacturer: "Amlogic",
+		Devices: []castDescriptionDevice{{ModelName: "GT-KING PRO"}},
+	}
+	second := castDescriptionDevice{
+		Name: "GTKing_PRO-95[DLNA]", Manufacturer: "Amlogic", ModelName: "GT-KING PRO",
+	}
+	firstKeys := castDeviceIdentityKeys("http://192.168.50.95:49152/desc.xml", first)
+	secondKeys := castDeviceIdentityKeys("http://192.168.50.95:49153/root.xml", second)
+	seen := map[string]bool{}
+	for _, key := range firstKeys { seen[key] = true }
+	for _, key := range secondKeys {
+		if seen[key] {
+			return
+		}
+	}
+	t.Fatalf("nested renderer model failed to identify two descriptions from the same host: %v / %v", firstKeys, secondKeys)
+}
+
 func TestCastControlsRenderer(t *testing.T) {
 	var calls []string
 	renderer := castTestRenderer(t, &calls)

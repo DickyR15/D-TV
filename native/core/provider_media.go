@@ -49,6 +49,11 @@ func (d *Downloader) providerBaseURL(source string) string {
 		fallback = ikanbotBaseURL
 	case sourceSupJav, sourcePPP, sourceMadou, source91Porna:
 		fallback = extraAdultBaseURL(source)
+	case sourceChaoliu:
+		d.providerMu.Lock()
+		configured = strings.TrimRight(d.providerHosts[sourceChaoliu], "/")
+		d.providerMu.Unlock()
+		fallback = chaoliuSites[0]
 	case sourceDuoduo:
 		d.providerMu.Lock()
 		configured = strings.TrimRight(d.providerHosts[sourceDuoduo], "/")
@@ -104,6 +109,8 @@ func providerSourceForURL(raw string) string {
 		return sourceMadou
 	case host == "91porna.com" || strings.HasSuffix(host, ".91porna.com"):
 		return source91Porna
+	case isChaoliuHost(host):
+		return sourceChaoliu
 	case host == "missav.ai" || host == "www.missav.ai" ||
 		host == "missav.ws" || host == "www.missav.ws" ||
 		host == "missav.live" || host == "www.missav.live" ||
@@ -125,15 +132,41 @@ func isHuangguoAIMirrorHost(host string) bool {
 
 func (d *Downloader) providerURLCandidates(raw string) []string {
 	source := providerSourceForURL(raw)
+	parsed, parseErr := url.Parse(raw)
+	if parseErr == nil && source == sourceChaoliu {
+		if !isChaoliuSiteHost(strings.ToLower(parsed.Hostname())) { return []string{raw} }
+		candidates := make([]string, 0, len(chaoliuSites)+1)
+		d.providerMu.Lock()
+		preferred := d.providerHosts[sourceChaoliu]
+		d.providerMu.Unlock()
+		for _, root := range append([]string{preferred}, chaoliuSites...) {
+			if root == "" { continue }
+			candidate := rehostProviderURL(parsed, root)
+			if candidate != "" && !containsString(candidates, candidate) { candidates = append(candidates, candidate) }
+		}
+		return d.orderProviderEndpoints(sourceChaoliu, "site", candidates)
+	}
+	if parseErr == nil && source == sourceHuangguoAI {
+		candidates := make([]string, 0, len(huangguoAIBaseMirrors)+1)
+		d.providerMu.Lock()
+		preferred := d.providerHosts[sourceHuangguoAI]
+		d.providerMu.Unlock()
+		for _, root := range append([]string{preferred}, huangguoAIBaseMirrors...) {
+			if root == "" { continue }
+			candidate := rehostProviderURL(parsed, root)
+			if candidate != "" && !containsString(candidates, candidate) { candidates = append(candidates, candidate) }
+		}
+		return d.orderProviderEndpoints(sourceHuangguoAI, "site", candidates)
+	}
 	if source == "" || source == sourceHuangju || source == sourceYeguo ||
 		source == sourceIkanBot || source == sourceSupJav || source == sourcePPP ||
 		source == sourceMadou || source == source91Porna {
 		return []string{raw}
 	}
-	parsed, _ := url.Parse(raw)
 	d.providerMu.Lock()
 	preferred := d.providerHosts[source]
 	d.providerMu.Unlock()
+	parsed, _ = url.Parse(raw)
 	var candidates []string
 	seen := map[string]bool{}
 	add := func(candidate string) {
@@ -185,6 +218,7 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 		return d.resolveAdultMedia(ctx, task)
 	}
 	if chapter.Source == sourceIkanBot { return d.resolveIkanbotMedia(ctx, task) }
+	if chapter.Source == sourceChaoliu { return d.resolveChaoliuMedia(ctx, task) }
 	if chapter.Source == sourceSupJav || chapter.Source == sourcePPP || chapter.Source == sourceMadou || chapter.Source == source91Porna {
 		return d.resolveAdultMedia(ctx, task)
 	}

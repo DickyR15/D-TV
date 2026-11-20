@@ -327,6 +327,17 @@ func posterTitleVariants(value string) []string {
 			break
 		}
 	}
+	// Duoduo may append a bare release year, e.g. "死亡筆記 2026".
+	// Search the title without that suffix too; the result still passes year checks.
+	if withoutYear == value {
+		separator := strings.LastIndexAny(value, " _-")
+		if separator >= 0 {
+			suffix := strings.TrimSpace(value[separator+1:])
+			if len(suffix) == 4 && bangumiPosterYear(suffix) == suffix {
+				withoutYear = strings.TrimSpace(value[:separator])
+			}
+		}
+	}
 	baseTitle := bangumiPosterBaseTitle(value)
 	candidates := []string{value, baseTitle, withoutYear}
 	candidates = append(candidates, nativePosterTitleAliasGroup(value)...)
@@ -360,6 +371,48 @@ func posterTitleVariants(value string) []string {
 	return result
 }
 
+
+func normalizeBangumiPosterExactTitle(value string) string {
+	return normalizeBangumiPosterTitle(value)
+}
+
+// Duoduo labels the fifth 永生 season with episode-arc subtitles. Bind only
+// those exact source titles to the verified fifth-season Bangumi subject.
+func nativeDuoduoBangumiPosterAlias(drama nativeDrama) (string, bool) {
+	source, _, valid := splitProviderDramaID(drama.ID)
+	if !valid || source != sourceDuoduo || !nativePosterIsAnime(drama) {
+		return "", false
+	}
+	switch normalizeBangumiPosterExactTitle(drama.Title) {
+	case normalizeBangumiPosterExactTitle("永生之大道歸一"),
+		normalizeBangumiPosterExactTitle("永生之太元仙府"):
+		year := bangumiPosterYear(drama.OnlineDate)
+		if year != "" && year != "2025" && year != "2026" {
+			return "", false
+		}
+		return "永生 第五季", true
+	default:
+		return "", false
+	}
+}
+
+func nativeDuoduoBangumiPosterAliasMatches(drama nativeDrama, candidate bangumiPosterSubject) bool {
+	canonicalTitle, ok := nativeDuoduoBangumiPosterAlias(drama)
+	if !ok || candidate.ID != 487853 || candidate.Type != 2 {
+		return false
+	}
+	expected := normalizeBangumiPosterExactTitle(canonicalTitle)
+	return normalizeBangumiPosterExactTitle(candidate.NameCN) == expected ||
+		normalizeBangumiPosterExactTitle(candidate.Name) == expected
+}
+
+func bangumiPosterSearchKeywords(drama nativeDrama) []string {
+	if canonicalTitle, ok := nativeDuoduoBangumiPosterAlias(drama); ok {
+		return []string{canonicalTitle}
+	}
+	return posterTitleVariants(drama.Title)
+}
+
 func nativePosterTitleMatches(sourceTitle string, candidates ...string) bool {
 	wanted := map[string]bool{}
 	for _, variant := range posterTitleVariants(sourceTitle) {
@@ -381,7 +434,7 @@ func nativePosterTypeCompatible(drama nativeDrama, kind string) bool {
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
 	isMovie := bangumiPosterContainsAny(category, "電影", "电影", "movie", "film")
 	isTV := bangumiPosterContainsAny(category, "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "韓劇", "韩剧", "日劇", "日剧", "美劇", "美剧", "短劇", "短剧", "series", "tv")
-	isAnime := bangumiPosterContainsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
+	isAnime := bangumiPosterContainsAny(category, "動漫", "动漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
 	isVariety := bangumiPosterContainsAny(category, "綜藝", "综艺", "真人秀", "實境秀", "真人實境", "variety")
 	if isAnime || isVariety || (!isMovie && !isTV) {
 		return true
@@ -831,7 +884,7 @@ func nativePreferredOfficialPosterAddress(drama nativeDrama) (string, bool) {
 
 func nativePosterIsAnime(drama nativeDrama) bool {
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
-	return bangumiPosterContainsAny(category, "動漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
+	return bangumiPosterContainsAny(category, "動漫", "动漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
 }
 
 func nativePosterIsTVSeries(drama nativeDrama) bool {
@@ -1211,7 +1264,7 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 	}
 	matchesByID := make(map[int]bangumiPosterSubject)
 	var lastErr error
-	for _, keyword := range posterTitleVariants(title) {
+	for _, keyword := range bangumiPosterSearchKeywords(drama) {
 		if err := searchCtx.Err(); err != nil {
 			lastErr = err
 			break
@@ -1257,9 +1310,21 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 			lastErr = errors.New("外部海報搜尋回應格式無效")
 			continue
 		}
+		knownDuoduoAlias := false
+		if _, ok := nativeDuoduoBangumiPosterAlias(drama); ok {
+			knownDuoduoAlias = true
+		}
 		for _, candidate := range result.Data {
-			if candidate.ID <= 0 || !allowedTypes[candidate.Type] ||
-				!nativePosterTitleMatches(title, candidate.NameCN, candidate.Name) {
+			if candidate.ID <= 0 || !allowedTypes[candidate.Type] {
+				continue
+			}
+			if knownDuoduoAlias {
+				if nativeDuoduoBangumiPosterAliasMatches(drama, candidate) {
+					matchesByID[candidate.ID] = candidate
+				}
+				continue
+			}
+			if !nativePosterTitleMatches(title, candidate.NameCN, candidate.Name) {
 				continue
 			}
 			matchesByID[candidate.ID] = candidate
@@ -1280,6 +1345,10 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 	if year := bangumiPosterYear(drama.OnlineDate); year != "" {
 		var yearMatches, unknownYearMatches []bangumiPosterSubject
 		for _, candidate := range matches {
+			if nativeDuoduoBangumiPosterAliasMatches(drama, candidate) {
+				yearMatches = append(yearMatches, candidate)
+				continue
+			}
 			candidateYear := bangumiPosterYear(candidate.Date)
 			switch candidateYear {
 			case year:

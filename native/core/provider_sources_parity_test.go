@@ -66,6 +66,25 @@ func TestProviderSourceParsesTextFixturesAndRejectsMismatchedIdentity(t *testing
 	}
 }
 
+func TestChaoliuSourceAliasesAndModuleHosts(t *testing.T) {
+	if canonicalProviderSource("chaoliu") != sourceChaoliu || canonicalProviderSource("mjv011.com") != sourceChaoliu {
+		t.Fatal("潮流 AV source aliases are not canonicalized")
+	}
+	for _, host := range []string{
+		"https://mjv001.com/zh/chinese_list/all/1.html",
+		"https://mjv015.com/zh/chinese_content/1/sample.html",
+		"https://imgstream1.com/poster.jpg",
+		"https://streamfastpro.com/video/index.m3u8",
+	} {
+		if got := providerSourceForURL(host); got != sourceChaoliu {
+			t.Fatalf("潮流 AV host was not mapped: %s -> %s", host, got)
+		}
+	}
+	if got := (&Downloader{cfg: defaultConfig()}).providerBaseURL(sourceChaoliu); got != chaoliuSites[0] {
+		t.Fatalf("潮流 AV default main site = %q", got)
+	}
+}
+
 func TestYeguoDomainAliasesAndDefaultEndpoint(t *testing.T) {
 	if got := (&Downloader{cfg: defaultConfig()}).providerBaseURL(sourceYeguo); got != "https://attract.vgbyziuz.cc" {
 		t.Fatalf("unexpected default yeguo endpoint: %s", got)

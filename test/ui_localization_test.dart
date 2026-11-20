@@ -143,7 +143,7 @@ void main() {
   test('source names and descriptions use Taiwan Traditional Chinese', () {
     expect(
       SourceSite.allValues.map((source) => source.name).toList(),
-      ['紅果', '韓小圈', '鬼片', '多多追劇', '愛看機器人', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', 'MissAV', '黑桃', 'SupJav', 'ppp', 'madou', '黃果舊版'],
+      ['紅果', '韓小圈', '鬼片', '多多追劇', '愛看機器人', '黃豆', '劇果', '野果', '帝果', '黃果影片', '黃果 AI', 'MissAV', '黑桃', 'SupJav', 'ppp', 'madou', '潮流 AV', '黃果舊版'],
     );
     expect(SourceSite.duoduo.description, '電影 · 電視劇 · 動漫 · 綜藝');
     expect(SourceSite.ikanbot.name, '愛看機器人');

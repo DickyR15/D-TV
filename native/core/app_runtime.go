@@ -56,6 +56,8 @@ type Downloader struct {
 	huangdouDetailPending map[string]*huangdouDetailCall
 	providerMu            sync.Mutex
 	providerHosts         map[string]string
+	providerHealthMu      sync.Mutex
+	providerHealth        map[string]providerEndpointHealth
 	huangguoEdgeMu        sync.Mutex
 	huangguoEdgeSession   *huangguoEdgeSession
 	limiter               *requestLimiter
