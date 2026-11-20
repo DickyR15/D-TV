@@ -417,16 +417,16 @@ func (d *Downloader) refreshProviderCompatibility(ctx context.Context) error {
 	}
 	var lastErr error
 	for _, manifestURL := range providerCompatibilityManifestURLs {
-		requestContext, cancel := context.WithTimeout(ctx, 8*time.Second)
-		body, fetchErr := fetchProviderCompatibilityResource(requestContext, client, manifestURL)
+		manifestContext, manifestCancel := context.WithTimeout(ctx, 8*time.Second)
+		body, fetchErr := fetchProviderCompatibilityResource(manifestContext, client, manifestURL)
+		manifestCancel()
 		if fetchErr != nil {
-			cancel()
 			lastErr = fetchErr
 			continue
 		}
-		signatureURL := manifestURL + ".sig"
-		signatureBody, signatureErr := fetchProviderCompatibilityResource(requestContext, client, signatureURL)
-		cancel()
+		signatureContext, signatureCancel := context.WithTimeout(ctx, 8*time.Second)
+		signatureBody, signatureErr := fetchProviderCompatibilityResource(signatureContext, client, manifestURL+".sig")
+		signatureCancel()
 		if signatureErr != nil {
 			lastErr = signatureErr
 			continue
