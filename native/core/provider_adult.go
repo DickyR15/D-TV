@@ -25,7 +25,6 @@ const (
 
 var (
 	adultAnchorPattern = regexp.MustCompile("(?is)<a\\b([^>]*)>(.*?)</a>")
-	adultImagePattern  = regexp.MustCompile("(?is)<img\\b[^>]*>")
 	adultMetaPattern   = regexp.MustCompile("(?is)<meta\\b[^>]*>")
 	adultTagPattern    = regexp.MustCompile("(?is)<[^>]+>")
 	adultM3U8Pattern   = regexp.MustCompile("(?i)https?://[^\"'<>\\s]+\\.m3u8(?:\\?[^\"'<>\\s]*)?")
