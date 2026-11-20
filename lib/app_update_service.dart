@@ -354,7 +354,7 @@ class AppUpdateService {
     );
 
     if (updaterFile != null &&
-        updaterFile.path != updaterSource.path &&
+        updaterFile.path != updaterTarget.path &&
         await updaterFile.exists()) {
       try {
         await updaterFile.delete();
