@@ -265,7 +265,7 @@ func validateProviderCompatibilityManifest(manifest providerCompatibilityManifes
 	return nil
 }
 
-const providerCompatibilityPublicKeyHex = "2db63a7d05b8c645c5f53a73a815e71827c0adbedfc3e4f7d301d864a5f41668"
+const providerCompatibilityPublicKeyHex = "2dc718db121ac8f87fe0eff584e8c9904c9a3aba091d1168af4ce0e3582394cf"
 
 func verifyProviderCompatibilitySignatureWithKey(body []byte, encodedSignature string, publicKey ed25519.PublicKey) error {
 	if len(publicKey) != ed25519.PublicKeySize {
@@ -407,9 +407,10 @@ func (d *Downloader) refreshProviderCompatibility(ctx context.Context) error {
 		currentVersion = d.compatibilityManifest.ManifestVersion
 	}
 	d.compatibilityMu.RUnlock()
-	if !lastFetch.IsZero() && now.Sub(lastFetch) < providerCompatibilityRefreshEvery {
-		return nil
-	}
+	// App startup always fetches and verifies the current GitHub manifest.
+	// Cached values are available only as diagnostics/recovery data; they do
+	// not satisfy the startup gate for a new app session.
+	_ = lastFetch
 
 	client := d.client
 	if client == nil {
