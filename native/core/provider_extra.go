@@ -551,57 +551,7 @@ func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page
 	}
 	// Keep real streams first and reserve 144p/180p/240p renditions for
 	// fallback only when the page exposes no better stream.
-	sort.SliceStable(routes, func(i, j int) bool {
-		return !routes[i].lowResolution && routes[j].lowResolution
-	})
-	media := make([]providerMedia, 0, len(routes))
-	for _, candidate := range routes {
-		credentials := &providerMediaCredentials{referer: candidate.referer, userAgent: adultUserAgent}
-		media = append(media, providerMedia{
-			URL: candidate.address, Referer: candidate.referer,
-			credentials: credentials, StandardHTTP: runtime.GOOS == "android",
-		})
-	}
-	return media, nil
-}
-
-func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page string) ([]providerMedia, error) {
-	type route struct { address, referer string }
-	var routes []route
-	seen := map[string]bool{}
-	add := func(address, referer string) {
-		address = strings.TrimSpace(address)
-		parsed, err := url.Parse(address)
-		if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil || seen[address] { return }
-		seen[address] = true
-		routes = append(routes, route{address: address, referer: referer})
-	}
-	addPage := func(sourceBody, sourcePage string) {
-		candidates := extraAdultPPPStreamURLs(sourceBody, sourcePage)
-		if len(candidates) == 0 {
-			if candidate := extraAdultHLS(sourceBody, sourcePage); candidate != "" { candidates = append(candidates, candidate) }
-		}
-		for _, address := range candidates { add(address, sourcePage) }
-	}
-	addPage(body, page)
-	for _, frame := range extraAdultFrames(page, body, sourcePPP) {
-		if len(routes) >= 12 { break }
-		embed, embedURL, err := extraAdultFetch(ctx, d, sourcePPP, frame, page)
-		if err != nil { continue }
-		before := len(routes)
-		addPage(embed, embedURL)
-		if len(routes) == before {
-			for _, nestedFrame := range extraAdultFrames(embedURL, embed, sourcePPP) {
-				if len(routes) >= 12 { break }
-				nested, nestedURL, nestedErr := extraAdultFetch(ctx, d, sourcePPP, nestedFrame, embedURL)
-				if nestedErr != nil { continue }
-				addPage(nested, nestedURL)
-			}
-		}
-	}
-	if len(routes) == 0 {
-		return nil, errors.New("PPP 播放器沒有找到有效的 HLS／MP4 網址")
-	}
+	extraAdultPPPPreferFullStreams(routes)
 	media := make([]providerMedia, 0, len(routes))
 	for _, candidate := range routes {
 		credentials := &providerMediaCredentials{referer: candidate.referer, userAgent: adultUserAgent}
