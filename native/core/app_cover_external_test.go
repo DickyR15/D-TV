@@ -572,6 +572,16 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 			drama: nativeDrama{ID: "duoduo:99124", Title: "デキちゃうまで婚", Category: "動漫", Tags: []string{"日本動漫"}},
 			want: "https://image.pmgstatic.com/cache/resized/w663/files/images/film/posters/170/203/170203811_rde8py.jpg",
 		},
+		{
+			name: "萬人之上 exact Duoduo 2026 anime",
+			drama: nativeDrama{ID: "duoduo:99201", Title: "萬人之上", Category: "動漫", OnlineDate: "2026"},
+			want: "https://pic2.iqiyipic.com/image/20251205/9b/cd/a_100570559_m_601_m4_400_400.jpg",
+		},
+		{
+			name: "死亡筆記-1 exact Duoduo 2026 item",
+			drama: nativeDrama{ID: "duoduo:99202", Title: "死亡筆記-1", OnlineDate: "2026"},
+			want: "https://m.iqiyipic.com/u1/image/20260416/d8/20/pv_8099969920810500_d_601_720_405.webp",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -620,6 +630,7 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{ID: "duoduo:66452", Title: "其他作品", Category: "愛情", OnlineDate: "2014"},
 		{ID: "duoduo:99200", Title: "死亡筆記-1", OnlineDate: "2006"},
 		{ID: "duoduo:99200", Title: "死亡筆記-1"},
+		{ID: "duoduo:99200", Title: "死亡筆記 2026", OnlineDate: "2025"},
 		{ID: "ikanbot:99200", Title: "死亡筆記-1", OnlineDate: "2026"},
 		{ID: "retired-source:99200", Title: "死亡筆記", OnlineDate: "2026"},
 		{ID: "ikanbot:99201", Title: "萬人之上", Category: "動漫", OnlineDate: "2026"},
