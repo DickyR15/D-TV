@@ -531,106 +531,30 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 		variants []string
 		seenURLs map[string]bool
 	}
+
+	// The upstream movie API commonly returns dozens of CDN/source rows.
+	// They are transport fallbacks, not dozens of user-selectable episodes.
+	// Sort known qualities first, while keeping upstream order for unnamed
+	// routes (which is the only useful preference signal when quality is absent).
 	orderedLines := append([]ikanbotLine(nil), lines...)
 	sort.SliceStable(orderedLines, func(i, j int) bool {
 		left, right := ikanbotQuality(orderedLines[i].Flag), ikanbotQuality(orderedLines[j].Flag)
-		if left != right {
-			return left > right
-		}
-		return len(orderedLines[i].Episodes) > len(orderedLines[j].Episodes)
+		return left > right
 	})
-
-	sourceFlagCounts := make(map[string]int)
-	for _, line := range orderedLines {
-		flag := strings.TrimSpace(line.Flag)
-		base := ikanbotMovieSourceFlagBase(flag)
-		if base != "" {
-			sourceFlagCounts[base]++
-		}
-	}
-	sourceFlagOrdinals := make(map[int]int)
-	sourceCounters := make(map[string]int)
-	for lineIndex, line := range orderedLines {
-		base := ikanbotMovieSourceFlagBase(line.Flag)
-		if base != "" {
-			sourceCounters[base]++
-			sourceFlagOrdinals[lineIndex] = sourceCounters[base]
-		}
-	}
 
 	selections := make([]movieSelection, 0, len(orderedLines))
 	selectionIndexes := make(map[string]int)
-	for lineIndex, line := range orderedLines {
-		flag := strings.TrimSpace(line.Flag)
-		flagBase := ikanbotMovieSourceFlagBase(flag)
-		flagLanguage := ikanbotMovieLanguageLabel(flag, "")
-		flagHasResolution := ikanbotQuality(flag) > 0
-		flagIsQualityOnly := flagBase == ""
-
+	for _, line := range orderedLines {
 		for _, episode := range line.Episodes {
 			if !isProviderHTTPMediaURL(episode.URL) {
 				continue
 			}
-			language := ikanbotMovieLanguageLabel(episode.Name, flag)
-			groupKey := ""
-			label := ""
-			switch {
-			case language != "":
+			language := ikanbotMovieLanguageLabel(episode.Name, line.Flag)
+			groupKey := "movie:default"
+			label := "電影版"
+			if language != "" {
+				groupKey = "audio:" + language
 				label = language
-				switch {
-				case flagIsQualityOnly:
-					// 1080P/720P versions of the same audio track are backups.
-					groupKey = "audio:" + language
-				case flagHasResolution && (flagLanguage == language || flagBase == normalizeBangumiPosterTitle(language)):
-					// A flag such as 國語1080P still describes one language track.
-					groupKey = "audio:" + language
-				case flagLanguage == language:
-					// Repeated source lines with the same language are distinct
-					// providers unless their only difference is resolution.
-					groupKey = fmt.Sprintf("audio:%s:source:%d", language, lineIndex)
-					if sourceFlagCounts[flagBase] > 1 {
-						label = fmt.Sprintf("%s（片源 %d）", language, sourceFlagOrdinals[lineIndex])
-					}
-				default:
-					// The episode is language-labelled and the line identifies
-					// a provider. Merge only resolution variants of that same
-					// provider; keep other providers independently selectable.
-					if flagHasResolution && flagBase != "" {
-						groupKey = "audio:" + language + ":source:" + flagBase
-						label = language + "（" + truncate(flagBase, 32) + "）"
-					} else {
-						groupKey = fmt.Sprintf("audio:%s:source:%d", language, lineIndex)
-						if flag != "" {
-						label = language + "（" + truncate(flagBase, 32) + "）"
-							if sourceFlagCounts[flagBase] > 1 {
-								label = fmt.Sprintf("%s（%s · 片源 %d）", language, truncate(flagBase, 24), sourceFlagOrdinals[lineIndex])
-							}
-						}
-					}
-				}
-			case flagIsQualityOnly:
-				// An unlabelled 1080P/720P movie is one movie with quality
-				// fallbacks, not two consecutive episodes.
-				groupKey = "movie:quality"
-				label = "電影版"
-			case flagHasResolution && flagBase != "":
-				// Preserve a named provider while merging only its resolution
-				// variants (e.g. SourceA 1080P + SourceA 720P).
-				groupKey = "movie:source:" + flagBase
-				label = "片源 " + strconv.Itoa(lineIndex+1)
-				if flagBase != "" {
-					label += "（" + truncate(flagBase, 32) + "）"
-				}
-			default:
-				// Non-quality flags identify distinct upstream source lines.
-				groupKey = fmt.Sprintf("movie:source-line:%d", lineIndex)
-				label = fmt.Sprintf("片源 %d", sourceFlagOrdinals[lineIndex])
-				if label == "片源 0" {
-					label = fmt.Sprintf("片源 %d", lineIndex+1)
-				}
-				if flag != "" {
-					label += "（" + truncate(flag, 32) + "）"
-				}
 			}
 
 			if index, found := selectionIndexes[groupKey]; found {
@@ -642,6 +566,7 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 				entry.variants = append(entry.variants, fmt.Sprintf("%d:%s", ikanbotQuality(line.Flag), episode.URL))
 				continue
 			}
+
 			selectionIndexes[groupKey] = len(selections)
 			selections = append(selections, movieSelection{
 				episode: episode,
@@ -655,14 +580,10 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 	chapters := make([]Chapter, 0, len(selections))
 	for index, entry := range selections {
 		order := index + 1
-		label := strings.TrimSpace(entry.label)
-		if label == "" {
-			label = fmt.Sprintf("片源 %d", order)
-		}
 		chapters = append(chapters, Chapter{
 			ID: providerChapterID(sourceIkanBot, sourceID, strconv.Itoa(order)),
 			Source: sourceIkanBot,
-			Title: truncate(label, 128),
+			Title: truncate(entry.label, 128),
 			VideoURL: entry.episode.URL,
 			PlaybackVariants: entry.variants,
 			PlayLine: entry.lineFlag,
@@ -672,211 +593,4 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 		})
 	}
 	return chapters
-}
-
-// ikanbotDisplayEpisodeCount keeps selectable movie tracks out of the TV episode count.
-// The movie's chapters are source/audio choices, not numbered episodes.
-func ikanbotDisplayEpisodeCount(isMovie bool, choiceCount int) int {
-	if isMovie || choiceCount < 0 {
-		return 0
-	}
-	return choiceCount
-}
-
-func ikanbotIsMovieMType(mtype string) bool {
-	mtype = strings.ToLower(strings.TrimSpace(mtype))
-	return mtype == "1" || mtype == "movie" || mtype == "film"
-}
-
-func ikanbotBuildChapters(sourceID, pageURL string, lines []ikanbotLine, movie ...bool) []Chapter {
-	if len(movie) > 0 && movie[0] {
-		return ikanbotBuildMovieChapters(sourceID, pageURL, lines)
-	}
-	type selectedEpisode struct {
-		episode  ikanbotEpisode
-		lineFlag string
-		variants []string
-		seenURLs map[string]bool
-	}
-	selected := make(map[int]*selectedEpisode)
-	orderedLines := append([]ikanbotLine(nil), lines...)
-	sort.SliceStable(orderedLines, func(i, j int) bool {
-		left, right := ikanbotQuality(orderedLines[i].Flag), ikanbotQuality(orderedLines[j].Flag)
-		if left != right {
-			return left > right
-		}
-		return len(orderedLines[i].Episodes) > len(orderedLines[j].Episodes)
-	})
-	for _, line := range orderedLines {
-		for index, episode := range line.Episodes {
-			order := episode.Order
-			if order <= 0 {
-				order = ikanbotEpisodeOrder(episode.Name, index+1)
-			}
-			if order <= 0 || !isProviderHTTPMediaURL(episode.URL) {
-				continue
-			}
-			entry := selected[order]
-			if entry == nil {
-				entry = &selectedEpisode{
-					episode: episode,
-					lineFlag: line.Flag,
-					seenURLs: map[string]bool{episode.URL: true},
-				}
-				selected[order] = entry
-				continue
-			}
-			if entry.seenURLs[episode.URL] {
-				continue
-			}
-			entry.seenURLs[episode.URL] = true
-			entry.variants = append(
-				entry.variants,
-				fmt.Sprintf("%d:%s", ikanbotQuality(line.Flag), episode.URL),
-			)
-		}
-	}
-	orders := make([]int, 0, len(selected))
-	for order := range selected {
-		orders = append(orders, order)
-	}
-	sort.Ints(orders)
-	chapters := make([]Chapter, 0, len(orders))
-	for _, order := range orders {
-		entry := selected[order]
-		name := strings.TrimSpace(entry.episode.Name)
-		if name == "" || ikanbotQualityOnlyLabel(name) {
-			// Some line APIs put a resolution label (e.g. "720") in the
-			// episode-name slot. The position is the actual episode.
-			name = strconv.Itoa(order)
-		}
-		chapters = append(chapters, Chapter{
-			ID: providerChapterID(sourceIkanBot, sourceID, strconv.Itoa(order)),
-			Source: sourceIkanBot,
-			Title: truncate(name, 128),
-			VideoURL: entry.episode.URL,
-			PlaybackVariants: entry.variants,
-			PlayLine: entry.lineFlag,
-			PageURL: pageURL,
-			Referer: pageURL,
-			CurrentEpisode: json.RawMessage(strconv.Itoa(order)),
-		})
-	}
-	return chapters
-}
-
-// ikanbotPreferHighestHLS locks the master playlist to the resolution
-// selected by the source line. Without this step MPV adaptive selection can
-// start at a smaller variant even though Auto chose a 1080P source line.
-func (d *Downloader) ikanbotPreferHighestHLS(ctx context.Context, media providerMedia) providerMedia {
-	if media.Playlist == "" || !ikanbotIsHLSURL(media.URL) {
-		return media
-	}
-	for depth := 0; depth < 6; depth++ {
-		lines := strings.Split(strings.ReplaceAll(media.Playlist, "\r\n", "\n"), "\n")
-		selectedLines, height, master := nativeHLSSelect(lines, media.Quality)
-		if !master {
-			return media
-		}
-		selectedURI := ""
-		for _, line := range selectedLines {
-			line = strings.TrimSpace(line)
-			if line != "" && !strings.HasPrefix(line, "#") {
-				selectedURI = line
-				break
-			}
-		}
-		base, err := url.Parse(media.URL)
-		if err != nil || selectedURI == "" {
-			return media
-		}
-		reference, err := url.Parse(selectedURI)
-		if err != nil {
-			return media
-		}
-		nextURL := base.ResolveReference(reference).String()
-		if !isProviderHTTPMediaURL(nextURL) {
-			return media
-		}
-		playlist, finalURL, err := d.fetchProviderMediaPlaylist(ctx, media, nextURL)
-		if err != nil {
-			return media
-		}
-		media.Playlist, media.URL = playlist, finalURL
-		if height > 0 {
-			media.Quality = height
-		}
-	}
-	return media
-}
-
-func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Drama,[]Chapter,error){
-	if !ikanbotNumericID(sourceID){return Drama{},nil,errors.New("愛看機器人作品識別碼無效")}
-	pageURL:=ikanbotBaseURL+"/play/"+sourceID
-	doc,body,final,err:=fetchIkanbotPage(ctx,d,pageURL,ikanbotBaseURL+"/");if err!=nil{return Drama{},nil,fmt.Errorf("愛看機器人作品詳情讀取失敗：%w",err)}
-	title:="";for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="h1"&&providerHTMLAttr(n,"id")=="video_title"}){title=providerHTMLText(n);break}
-	if title==""{title=providerHTMLPlainText(adultMetaValue(body,"og:title"))};if title==""{return Drama{},nil,errors.New("愛看機器人詳情缺少標題")}
-	var coverCandidates []string
-	seenCover := map[string]bool{}
-	addCover := func(address string) {
-		address = strings.TrimSpace(address)
-		if address != "" && isProviderHTTPMediaURL(address) && !seenCover[address] {
-			seenCover[address] = true
-			coverCandidates = append(coverCandidates, address)
-		}
-	}
-	for _, node := range providerHTMLNodes(doc, func(n *htmlnet.Node) bool {
-		return n.Type == htmlnet.ElementNode && n.Data == "img" && providerHTMLClass(n, "cover")
-	}) {
-		for _, address := range ikanbotImageCandidates(node, final) { addCover(address) }
-	}
-	for _, key := range []string{"og:image", "twitter:image"} {
-		if raw := adultMetaValue(body, key); raw != "" {
-			addCover(resolveProviderURL(final, raw))
-		}
-	}
-	for _, node := range providerHTMLNodes(doc, func(n *htmlnet.Node) bool {
-		return n.Type == htmlnet.ElementNode && n.Data == "img"
-	}) {
-		for _, address := range ikanbotImageCandidates(node, final) { addCover(address) }
-	}
-	cover := ""
-	var coverFallbacks []string
-	if len(coverCandidates) > 0 {
-		cover = coverCandidates[0]
-		if len(coverCandidates) > 1 {
-			coverFallbacks = append([]string(nil), coverCandidates[1:]...)
-		}
-	}
-	currentID:=ikanbotInput(doc,"current_id");if currentID==""{currentID=sourceID};token:=ikanbotInput(doc,"e_token");mtype:=ikanbotInput(doc,"mtype");if token==""{return Drama{},nil,errors.New("愛看機器人缺少播放驗證資訊")}
-	lines,err:=d.fetchIkanbotLines(ctx,sourceID,currentID,token,mtype,final);if err!=nil{return Drama{},nil,err}
-	meta:=[]string{};for _,n:=range providerHTMLNodes(doc,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="h3"&&providerHTMLClass(n,"meta")}){v:=providerHTMLText(n);if v!=""{meta=append(meta,v)}}
-	tags:=[]string{};year:="";for _,v:=range meta{if year==""&&regexp.MustCompile("^(19|20)[0-9]{2}$").MatchString(v){year=v};if strings.Contains(v,"/"){tags=append(tags,truncate(v,64))}}
-	isMovie := ikanbotIsMovieMType(mtype)
-	chapters := ikanbotBuildChapters(sourceID, final, lines, isMovie)
-	if len(chapters)==0{return Drama{},nil,errors.New("愛看機器人目前沒有可播放分集")}
-	categoryName := "影集"
-	if isMovie { categoryName = "電影" }
-	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,CoverCandidates:coverFallbacks,OnlineDate:year,Tags:tags,TotalEpisode:ikanbotDisplayEpisodeCount(isMovie,len(chapters)),EpisodeCount:ikanbotDisplayEpisodeCount(isMovie,len(chapters)),ChannelName:"愛看機器人",CategoryName:categoryName}
-	return drama,chapters,nil
-}
-func ikanbotIsHLSURL(raw string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	return err == nil && strings.HasSuffix(strings.ToLower(parsed.Path), ".m3u8")
-}
-
-func (d *Downloader) resolveIkanbotMedia(ctx context.Context,task Task)(providerMedia,error){
-	source,id,ok:=splitProviderDramaID(task.DramaID);prefix:=providerChapterID(sourceIkanBot,id,"");if !ok||source!=sourceIkanBot||!ikanbotNumericID(id)||!strings.HasPrefix(task.Chapter.ID,prefix){return providerMedia{},errors.New("愛看機器人播放分集資訊無效，請重新整理")}
-	mediaURL:=strings.TrimSpace(task.Chapter.VideoURL);if !isProviderHTTPMediaURL(mediaURL){return providerMedia{},errors.New("愛看機器人播放網址無效")}
-	ref:=firstNonEmpty(task.Chapter.Referer,task.Chapter.PageURL,ikanbotBaseURL+"/");cred:=&providerMediaCredentials{referer:ref,userAgent:ikanbotUserAgent}
-	media:=providerMedia{URL:mediaURL,Referer:ref,credentials:cred,StandardHTTP:runtime.GOOS=="android",Quality:ikanbotQuality(task.Chapter.PlayLine)}
-	for _,item:=range task.Chapter.PlaybackVariants{qualityText,address,found:=strings.Cut(item,":");if !found||!isProviderHTTPMediaURL(address){continue};quality,_:=strconv.Atoi(qualityText);media.Variants=append(media.Variants,providerMedia{URL:address,Referer:ref,credentials:cred,Quality:quality})}
-	if ikanbotIsHLSURL(mediaURL) {
-		prepared, err := d.prepareWebProviderMediaWithFallback(ctx, media, "愛看機器人")
-		if err != nil {
-			return providerMedia{}, err
-		}
-		return d.ikanbotPreferHighestHLS(ctx, prepared), nil
-	}
-	return media,nil
 }
