@@ -674,6 +674,15 @@ func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []
 	return chapters
 }
 
+// ikanbotDisplayEpisodeCount keeps selectable movie tracks out of the TV episode count.
+// The movie's chapters are source/audio choices, not numbered episodes.
+func ikanbotDisplayEpisodeCount(isMovie bool, choiceCount int) int {
+	if isMovie || choiceCount < 0 {
+		return 0
+	}
+	return choiceCount
+}
+
 func ikanbotIsMovieMType(mtype string) bool {
 	mtype = strings.ToLower(strings.TrimSpace(mtype))
 	return mtype == "1" || mtype == "movie" || mtype == "film"
@@ -848,7 +857,7 @@ func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Dra
 	if len(chapters)==0{return Drama{},nil,errors.New("愛看機器人目前沒有可播放分集")}
 	categoryName := "影集"
 	if isMovie { categoryName = "電影" }
-	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,CoverCandidates:coverFallbacks,OnlineDate:year,Tags:tags,TotalEpisode:len(chapters),EpisodeCount:len(chapters),ChannelName:"愛看機器人",CategoryName:categoryName}
+	drama:=Drama{ID:providerDramaID(sourceIkanBot,sourceID),Source:sourceIkanBot,SourceID:sourceID,Title:truncate(providerHTMLPlainText(title),512),Name:truncate(providerHTMLPlainText(title),512),Desc:truncate(strings.Join(meta," · "),12000),Intro:truncate(strings.Join(meta," · "),12000),Cover:cover,CoverURL:cover,CoverCandidates:coverFallbacks,OnlineDate:year,Tags:tags,TotalEpisode:ikanbotDisplayEpisodeCount(isMovie,len(chapters)),EpisodeCount:ikanbotDisplayEpisodeCount(isMovie,len(chapters)),ChannelName:"愛看機器人",CategoryName:categoryName}
 	return drama,chapters,nil
 }
 func ikanbotIsHLSURL(raw string) bool {
