@@ -9,6 +9,7 @@ on:
       - build/pre-missav-and-advanced-reorder
       - feature/advanced-source-reorder-cross-platform
       - release/v1.0.8-candidate
+      - fix/hongguo-registration-diagnostics
     paths:
       - ".github/workflows/cross-platform-build.yml"
       - "CHANGELOG.md"
