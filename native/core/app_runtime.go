@@ -408,15 +408,19 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	transport.MaxIdleConnsPerHost = 8
 	transport.ResponseHeaderTimeout = 20 * time.Second
 	transport.Proxy = router.proxy
-	cdn := newCDNTransport(transport, newDNSResolver(transport))
+	resolver := newDNSResolver(transport)
+	cdn := newCDNTransport(transport, resolver)
 	// Media requests may be redirected to a DNS-RPZ landing IP by the system
 	// resolver. Only requests marked by doMediaRequestWithClient retry unknown-
 	// authority TLS failures via public DoH, without weakening certificate checks.
 	cdn.fallbackOnUnknownAuthority = true
-	// Keep the normal CDN-aware transport for every supported first-party
-	// provider route. The retired third-party Hongguo playback host no longer
-	// needs a dedicated HTTP/1.1 ALPN fallback.
-	providerTransport := cdn
+	// Registration is a POST, so route only the two known Redfruit aliases
+	// through a host-scoped verified DoH fallback. All other requests keep the
+	// normal CDN-aware transport and proxy behaviour.
+	providerTransport := &hostDoHTransport{
+		base: transport, resolver: resolver, router: router,
+		hosts: hongguoDeviceRegisterHosts(), upstream: cdn,
+	}
 	checkRedirect := func(request *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return errors.New("片源重新導向次數過多")
