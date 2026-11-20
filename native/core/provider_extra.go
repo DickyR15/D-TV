@@ -408,7 +408,7 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`(?is)\b(?:var|let|const)\s+(?:stream|m3u8|videoUrl|video_url|url|file|hls|backup|backup_url)\s*=\s*['"]([^'"]+)['"]`),
 		regexp.MustCompile(`(?is)['"](?:m3u8|hls|file|url|videoUrl|video_url|backup|backup_url)['"]\s*:\s*['"]([^'"]+)['"]`),
-		regexp.MustCompile(`(?is)\b(?:src|file|url)\s*:\s*['"]([^'"]+)['"]`),
+		regexp.MustCompile(`(?is)\b(?:src|file|url|backup|backup_url|stream|m3u8|hls)\s*:\s*['"]([^'"]+)['"]`),
 	}
 	candidates := make([]string, 0, 24)
 	for _, pattern := range patterns {
