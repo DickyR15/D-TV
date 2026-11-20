@@ -29,6 +29,11 @@ subprocess.run([sys.executable, str(root / 'scripts' / 'build_native.py'), '--pl
 subprocess.run([flutter, 'pub', 'get'], cwd=root, env=env, check=True)
 subprocess.run([flutter, 'build', 'windows', '--release', '--no-pub', *variant.flutter_arguments], cwd=root, env=env, check=True)
 
+# Reuse the exact multi-size ICO generated for the main D TV executable.
+updater_icon = root / 'windows' / 'runner' / 'resources' / 'app_icon.ico'
+if not updater_icon.is_file() or updater_icon.stat().st_size < 1024:
+    raise SystemExit('DTV-Updater.exe 缺少主程式共用圖示 app_icon.ico。')
+
 # Publish a self-contained helper so the app can update its own Windows bundle.
 dotnet = shutil.which('dotnet')
 if not dotnet:
