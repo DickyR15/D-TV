@@ -133,8 +133,8 @@ type hongguoRegistrationPayload struct {
 
 func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string, string, error) {
 	header := hongguoRegistrationHeader{
-		DisplayName: "红果免费短剧", Aid: 8662, AppVersion: "7.3.5.32", VersionCode: 73532,
-		ManifestVersionCode: 73532, UpdateVersionCode: 73532, Channel: "update_64", Package: "com.phoenix.read",
+		DisplayName: "红果免费短剧", Aid: 8662, AppVersion: "7.4.3.32", VersionCode: 74332,
+		ManifestVersionCode: 74332, UpdateVersionCode: 74332, Channel: "update_64", Package: "com.phoenix.read",
 		AppLanguage: "zh", OS: "Android", OSVersion: "16", OSAPI: 36, DeviceModel: "25053RT47C",
 		DeviceBrand: "Redmi", DeviceManufacturer: "Xiaomi", CPUABI: "arm64-v8a", DensityDPI: 520,
 		DisplayDensity: "xxhdpi", Resolution: "2772x1280", Language: "zh", Timezone: 8, Access: "wifi",
