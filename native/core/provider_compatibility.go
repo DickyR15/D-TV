@@ -282,7 +282,7 @@ func validateProviderCompatibilityManifest(manifest providerCompatibilityManifes
 	return nil
 }
 
-const providerCompatibilityPublicKeyHex = "2dc718db121ac8f87fe0eff584e8c9904c9a3aba091d1168af4ce0e3582394cf"
+const providerCompatibilityPublicKeyHex = "6f6a51adb7bbff60284a140573cca567e711ed7b6e6ffff584f73da6f7cb2950"
 
 func verifyProviderCompatibilitySignatureWithKey(body []byte, encodedSignature string, publicKey ed25519.PublicKey) error {
 	if len(publicKey) != ed25519.PublicKeySize {
