@@ -83,6 +83,15 @@ void main() {
       episode(2),
       quality: 1080,
     );
+
+    // The player may request the prepared session before the scheduled
+    // preload has started. That early miss must not cancel the pending work.
+    expect(
+      preloader.take(FixtureRepository.free, episode(2), quality: 1080),
+      isNull,
+    );
+    expect(DiaryService.fullText, contains('reason=still_loading'));
+
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump();
 
@@ -132,6 +141,7 @@ void main() {
   testWidgets('an expired detail plan is released instead of transferred', (
     tester,
   ) async {
+    DiaryService.clear();
     var now = DateTime(2026, 11, 13, 12);
     final repository = DetailPreloadRepository(
       const PlaybackPlan(
@@ -148,6 +158,12 @@ void main() {
 
     now = now.add(const Duration(minutes: 3));
     expect(preloader.take(FixtureRepository.free, episode(1)), isNull);
+    // A second query for the same episode should not become an identity
+    // mismatch just because the previous session expired.
+    expect(preloader.take(FixtureRepository.free, episode(1)), isNull);
+    expect(DiaryService.fullText, contains('reason=expired'));
+    expect(DiaryService.fullText, contains('reason=not_ready'));
+    expect(DiaryService.fullText, isNot(contains('reason=identity_mismatch')));
     expect(repository.released, ['expired-detail-plan']);
   });
 
