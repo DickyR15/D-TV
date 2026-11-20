@@ -286,6 +286,15 @@ func (downloader *Downloader) recordHongguoRegistrationResponse(
 	})
 }
 
+func hongguoShouldTryAlternateRegistrationHost(err error) bool {
+	switch hongguoRegistrationTransportStage(err) {
+	case "dns", "tls", "connect":
+		return true
+	default:
+		return false
+	}
+}
+
 func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string, string, error) {
 	header := hongguoRegistrationHeader{
 		DisplayName: "红果免费短剧", Aid: 8662, AppVersion: "7.3.5.32", VersionCode: 73532,
@@ -304,7 +313,6 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 	}
 
 	var failures []error
-	allRejected := true
 	hosts := hongguoDeviceRegisterHosts()
 	for hostIndex, host := range hosts {
 		attempt := hostIndex + 1
@@ -323,10 +331,7 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 			bytes.NewReader(body),
 		)
 		if err != nil {
-			allRejected = false
-			downloader.recordHongguoRegistrationTransportFailure(host, attempt, time.Since(started), err)
-			failures = append(failures, fmt.Errorf("%s: %w", host, err))
-			continue
+			return "", "", err
 		}
 		request.Header.Set("User-Agent", hongguoAppUserAgent)
 		request.Header.Set("Accept", "application/json")
@@ -339,68 +344,72 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 			if ctx.Err() != nil {
 				return "", "", ctx.Err()
 			}
-			allRejected = false
-			downloader.recordHongguoRegistrationTransportFailure(host, attempt, time.Since(started), requestErr)
+			elapsed := time.Since(started)
+			downloader.recordHongguoRegistrationTransportFailure(host, attempt, elapsed, requestErr)
 			failures = append(failures, fmt.Errorf("%s: %w", host, requestErr))
-			continue
+			if hostIndex+1 < len(hosts) && hongguoShouldTryAlternateRegistrationHost(requestErr) {
+				continue
+			}
+			return "", "", errors.Join(failures...)
 		}
 
 		content, readErr := io.ReadAll(io.LimitReader(response.Body, 64<<10))
 		response.Body.Close()
 		if readErr != nil {
-			allRejected = false
 			readFailure := fmt.Errorf("讀取註冊回應失敗：%w", readErr)
-			downloader.recordHongguoRegistrationTransportFailure(host, attempt, time.Since(started), readFailure)
-			failures = append(failures, fmt.Errorf("%s: %w", host, readFailure))
-			continue
+			elapsed := time.Since(started)
+			downloader.recordHongguoRegistrationTransportFailure(host, attempt, elapsed, readFailure)
+			return "", "", errors.Join(append(failures, fmt.Errorf("%s: %w", host, readFailure))...)
 		}
 		if response.StatusCode != http.StatusOK {
 			statusErr := fmt.Errorf("紅果設備註冊 HTTP %d", response.StatusCode)
-			downloader.recordHongguoRegistrationResponse(response, content, attempt, time.Since(started), hongguoRegistrationHTTPStage(response.StatusCode), false)
+			elapsed := time.Since(started)
+			downloader.recordHongguoRegistrationResponse(response, content, attempt, elapsed, hongguoRegistrationHTTPStage(response.StatusCode), false)
 			if details := hongguoRegistrationResponseDetails(response, content); details != "" {
 				statusErr = fmt.Errorf("%w（%s）", statusErr, details)
 			}
-			// A host-specific 4xx (including edge HTTP 444) must not stop
-			// trying the alternate registration hostname.
-			rejected := response.StatusCode == http.StatusUnauthorized ||
-				response.StatusCode == http.StatusForbidden ||
-				(response.StatusCode >= 400 && response.StatusCode < 500 &&
-					response.StatusCode != http.StatusRequestTimeout &&
-					response.StatusCode != http.StatusTooEarly &&
-					response.StatusCode != http.StatusTooManyRequests)
-			if !rejected {
-				allRejected = false
-			}
 			failures = append(failures, fmt.Errorf("%s: %w", host, statusErr))
-			continue
+
+			// HTTP 444 is treated as a hostname/edge-path failure only:
+			// try the known first-party alias with the same request identity.
+			// Explicit 401/403 policy rejections are never bypassed by changing
+			// the hostname. Rate limits, 5xx and timeouts preserve backoff.
+			if response.StatusCode == 444 && hostIndex+1 < len(hosts) {
+				continue
+			}
+			if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden || response.StatusCode == 444 {
+				return "", "", hongguoRegisterRejection{errors.Join(failures...)}
+			}
+			return "", "", errors.Join(failures...)
 		}
 
 		var result map[string]any
 		decoder := json.NewDecoder(bytes.NewReader(content))
 		decoder.UseNumber()
 		if err := decoder.Decode(&result); err != nil {
-			allRejected = false
-			downloader.recordHongguoRegistrationResponse(response, content, attempt, time.Since(started), "invalid_json", false)
-			decodeFailure := errors.New("紅果裝置註冊回傳格式異常")
-			failures = append(failures, fmt.Errorf("%s: %w", host, decodeFailure))
-			continue
+			allFailures := fmt.Errorf("%s: 紅果裝置註冊回傳格式異常", host)
+			elapsed := time.Since(started)
+			downloader.recordHongguoRegistrationResponse(response, content, attempt, elapsed, "invalid_json", false)
+			failures = append(failures, allFailures)
+			if hostIndex+1 < len(hosts) {
+				continue
+			}
+			return "", "", errors.Join(failures...)
 		}
 		deviceID := mapString(result, "device_id_str", "device_id")
 		installID := mapString(result, "install_id_str", "install_id")
 		if !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0" {
-			allRejected = false
-			downloader.recordHongguoRegistrationResponse(response, content, attempt, time.Since(started), "invalid_device_identity", false)
-			identityFailure := errors.New("紅果裝置註冊未提供有效裝置編號")
-			failures = append(failures, fmt.Errorf("%s: %w", host, identityFailure))
-			continue
+			identityFailure := fmt.Errorf("%s: 紅果裝置註冊未提供有效裝置編號", host)
+			elapsed := time.Since(started)
+			downloader.recordHongguoRegistrationResponse(response, content, attempt, elapsed, "invalid_device_identity", false)
+			failures = append(failures, identityFailure)
+			if hostIndex+1 < len(hosts) {
+				continue
+			}
+			return "", "", errors.Join(failures...)
 		}
 		downloader.recordHongguoRegistrationResponse(response, content, attempt, time.Since(started), "registered", true)
 		return deviceID, installID, nil
 	}
-
-	combined := errors.Join(failures...)
-	if allRejected && len(failures) == len(hosts) {
-		return "", "", hongguoRegisterRejection{combined}
-	}
-	return "", "", combined
+	return "", "", errors.Join(failures...)
 }
