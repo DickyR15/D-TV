@@ -419,6 +419,57 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 	}
 }
 
+func TestDuoduoKnownMissingAnimeTitlesUseVerifiedKeyArt(t *testing.T) {
+	cases := []struct {
+		name  string
+		title string
+		year  string
+		want  string
+	}{
+		{
+			name: "Takamine-san",
+			title: "鷹峰同學請穿上衣服",
+			year: "2025",
+			want: "https://thetv.jp/i/pgw/series_images/0001051910_k.jpg?w=716",
+		},
+		{
+			name: "Share House's Secret Rule",
+			title: "只能觸控一分鐘哦",
+			year: "2025",
+			want: "https://animeanime.jp/imgs/zoom/722848.jpg",
+		},
+		{
+			name: "Attack on Titan Season 1",
+			title: "進擊的巨人第一季",
+			year: "2013",
+			want: "https://images.justwatch.com/poster/130288291/s718/season-1.jpg",
+		},
+		{
+			name: "Soul Land 2",
+			title: "斗羅大陸第二季",
+			year: "2023",
+			want: "https://media.animeoshi.com/anime/images/jikan/1080/1813129939.jpg?w=3840",
+		},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			drama := nativeDrama{
+				ID: fmt.Sprintf("duoduo:%d", 99000+i), Source: sourceDuoduo,
+				Title: tc.title, Category: "動漫", OnlineDate: tc.year,
+			}
+			addresses := nativePreferredOfficialPosterAddresses(drama)
+			if len(addresses) == 0 || addresses[0] != tc.want {
+				t.Fatalf("preferred artwork = %#v, want first address %q", addresses, tc.want)
+			}
+			wrongSource := drama
+			wrongSource.ID = fmt.Sprintf("ikanbot:%d", 99000+i)
+			if _, ok := nativeVerifiedOfficialPosterEntry(wrongSource); ok {
+				t.Fatalf("title %q unexpectedly matched outside Duoduo", tc.title)
+			}
+		})
+	}
+}
+
 func TestDuoduoOfficialPosterRetriesVerifiedMirrorWhenOfficialHostFails(t *testing.T) {
 	image := posterTestJPEG(t)
 	var requestedHosts []string
