@@ -20,35 +20,92 @@ type nativeDramaSeason struct {
 	Playable    bool        `json:"playable"`
 }
 
-var hongguoOfficialSeasonLabel = regexp.MustCompile(`^第([1-9][0-9]*)季$`)
+const (
+	hongguoAppSeasonPlanPath      = "/reading/bookapi/plan/v1/"
+	hongguoShowTypeSeriesSeasons = "547"
+)
 
-// This is the official same-series selector. It returns related series IDs,
-// not title-based guesses; keep the complete list in the API's own order.
+type hongguoSeasonPlanRequestKey struct{}
+
+var hongguoOfficialSeasonLabel = regexp.MustCompile(`^第([1-9][0-9]*)季package core
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+type nativeDramaSeason struct {
+	Drama       nativeDrama `json:"drama"`
+	Number      int         `json:"number"`
+	Label       string      `json:"label"`
+	Subtitle    string      `json:"subtitle,omitempty"`
+	Upcoming    bool        `json:"upcoming"`
+	Playable    bool        `json:"playable"`
+}
+
+)
+
+// The official detail-page selector is a plan feed. Keep the API's exact
+// discriminator and session fields; the response's show_type=547 cell is the
+// only cell that represents the series-season relationship.
 func hongguoAppSeasonQuery(seriesID string) url.Values {
 	return url.Values{
-		"scene":                 {"10"},
-		"from":                  {"single_col_same_ip_series"},
-		"offset":                {"0"},
-		"limit":                 {"0"},
-		"total_chapter_num":     {"0"},
-		"current_chapter_num":  {"0"},
-		"post_id":               {"0"},
-		"is_horizontal_screen":  {"false"},
-		"bookstore_tab":         {"0"},
-		"bookstore_tab_type":    {"0"},
-		"book_id":               {seriesID},
-		"filter_ids":            {seriesID},
+		"from":                     {"single_col_same_ip_series"},
+		"scene":                    {"10"},
+		"book_id":                  {seriesID},
+		"session_uuid":             {uuidLike()},
+		"user_is_login":            {"0"},
+		"filter_ids":               {seriesID},
+		"cdid":                     {uuidLike()},
+		"openudid":                 {randomHex(8)},
+		"dragon_device_type":       {"phone"},
+		"pv_player":                {"74332"},
+		"compliance_status":        {"0"},
+		"need_personal_recommend":  {"1"},
+		"player_so_load":           {"1"},
+		"is_android_pad_screen":    {"0"},
 	}
 }
 
 func hongguoAppNextSeasonQuery(seriesID string) url.Values {
 	query := hongguoAppSeasonQuery(seriesID)
 	query.Set("from", "series_short_play_info")
+	query.Set("session_uuid", uuidLike())
 	return query
 }
 
 func hongguoNeedsSeasonFallback(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "101116")
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	if strings.Contains(message, "HTTP 444") ||
+		strings.Contains(message, "HTTP 403") ||
+		strings.Contains(message, "HTTP 429") {
+		return false
+	}
+	return strings.Contains(message, "101116") ||
+		strings.Contains(message, "介面未提供有效資料") ||
+		strings.Contains(message, "介面未返回有效資料") ||
+		strings.Contains(message, "接口未返回有效資料")
+}
+
+func hongguoShouldUseCurrentSeasonFallback(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return hongguoRegistrationWasRateLimited(err) ||
+		strings.Contains(message, "101116") ||
+		strings.Contains(message, "介面未提供有效資料") ||
+		strings.Contains(message, "介面未返回有效資料") ||
+		strings.Contains(message, "接口未返回有效資料")
 }
 
 func (downloader *Downloader) hongguoAppSeasons(
@@ -58,10 +115,11 @@ func (downloader *Downloader) hongguoAppSeasons(
 	if !hongguoNumericID.MatchString(seriesID) || seriesID == "0" {
 		return nil, errors.New("紅果系列 ID 無效")
 	}
+	ctx = context.WithValue(ctx, hongguoSeasonPlanRequestKey{}, true)
 	result, err := downloader.hongguoAppRequest(
 		ctx,
 		http.MethodGet,
-		"/reading/bookapi/plan/v",
+		hongguoAppSeasonPlanPath,
 		hongguoAppSeasonQuery(seriesID),
 		nil,
 	)
@@ -71,7 +129,7 @@ func (downloader *Downloader) hongguoAppSeasons(
 		fallback, fallbackErr := downloader.hongguoAppRequest(
 			ctx,
 			http.MethodGet,
-			"/reading/bookapi/plan/v",
+			hongguoAppSeasonPlanPath,
 			hongguoAppNextSeasonQuery(seriesID),
 			nil,
 		)
@@ -102,6 +160,9 @@ seasonRows:
 		block, ok := rawBlock.(map[string]any)
 		if !ok {
 			return nil, errors.New("紅果系列季別區塊格式無效")
+		}
+		if showType := mapString(block, "show_type"); showType != "" && showType != hongguoShowTypeSeriesSeasons {
+			continue
 		}
 		if block["video_data"] == nil {
 			continue
