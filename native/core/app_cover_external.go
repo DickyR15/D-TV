@@ -519,6 +519,18 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		address: "https://i0.hdslb.com/bfs/bangumi/image/1c697e41f5e2524b2610ec895cead5c25f494e87.png",
 	},
 	{
+		// Duoduo's 2026 anime 萬人之上 is listed on iQIYI with this programme
+		// artwork. Require the exact title, source, anime category and year.
+		title: "萬人之上",
+		titleAliases: []string{"万人之上"},
+		source: sourceDuoduo,
+		year: "2026",
+		workType: "anime",
+		preferred: true,
+		overrideProvider: true,
+		address: "https://pic2.iqiyipic.com/image/20251205/9b/cd/a_100570559_m_601_m4_400_400.jpg",
+	},
+	{
 		title: "花兒與少年同心季",
 		year: "2025",
 		address: "https://k.sinaimg.cn/n/sinakd20250816s/450/w800h450/20250816/ec1c-4c5fc3ef466113eb1d27a75cc8c37fcf.jpg/w700d1q75cms.jpg?by=cms_fixed_width",
