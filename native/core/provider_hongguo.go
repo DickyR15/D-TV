@@ -200,9 +200,18 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		return providerMedia{}, fmt.Errorf("紅果章節 ID 無效，請重新取得章節")
 	}
 
-	// Current Hongguo v1.0.2 playback uses the dedicated V5 endpoint and
-	// Medusa/Helios signatures. Keep older first-party paths as fallbacks
-	// for episodes or devices that the newer endpoint does not serve.
+	// Prefer the independently registered 7.3.9.32/Xiaomi pure-player
+	// identity and Current Player signer. This is separate from catalog IDs
+	// and from the older 7.4.3.32/Vivo V5 playback identity.
+	media, currentPlayerErr := d.resolveHongguoCurrentPlayerMedia(ctx, videoID)
+	if currentPlayerErr == nil {
+		return media, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return providerMedia{}, err
+	}
+
+	// Keep the previously integrated V5 endpoint as a compatibility fallback.
 	media, v5Err := d.resolveHongguoV5Media(ctx, videoID)
 	if v5Err == nil {
 		return media, nil
@@ -231,7 +240,7 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if err := ctx.Err(); err != nil {
 		return providerMedia{}, err
 	}
-	if errors.Is(nativeErr, errHongguoH266Only) || errors.Is(multiModelErr, errHongguoH266Only) {
+	if errors.Is(currentPlayerErr, errHongguoH266Only) || errors.Is(nativeErr, errHongguoH266Only) || errors.Is(multiModelErr, errHongguoH266Only) {
 		helperMedia, helperErr := d.resolveHongguoHelperMedia(ctx, seriesID, videoID)
 		if helperErr == nil {
 			return helperMedia, nil
@@ -246,7 +255,8 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		return providerMedia{}, err
 	}
 	return providerMedia{}, fmt.Errorf(
-		"紅果取流失敗：新版 V5 App：%v；快捷網頁：%v；舊版 App：%v；多清晰度：%v；官網網頁：%w",
+		"紅果取流失敗：Current Player：%v；新版 V5 App：%v；快捷網頁：%v；舊版 App：%v；多清晰度：%v；官網網頁：%w",
+		publicError(currentPlayerErr),
 		publicError(v5Err),
 		publicError(quickWebErr),
 		publicError(nativeErr),
