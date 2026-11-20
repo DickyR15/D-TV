@@ -382,10 +382,15 @@ func hongguoCurrentKS(pb, material, t4 []byte) []byte {
 	reg := ^(((uint32(t4[2]) << 11) | uint32(t4[3])) ^ uint32(t4[2]) ^ (uint32(t4[2]) >> 5))
 	mask := hongguoCurrentBe32(reg)
 	stream := append(make([]byte, 8), out...)
+	// The reference maps over the original stream while writing to a new
+	// buffer. Do not reverse-transform in place: later reads would observe
+	// bytes already XORed by earlier iterations and produce a different
+	// X-Medusa value for the second half of the payload.
+	result := make([]byte, len(stream))
 	for i := range stream {
-		stream[i] = mask[i%4] ^ stream[len(stream)-1-i]
+		result[i] = mask[i%4] ^ stream[len(stream)-1-i]
 	}
-	return stream
+	return result
 }
 
 var hongguoCurrentCon = [4][4]int{{2, 0, 3, 1}, {1, 3, 2, 0}, {3, 2, 1, 0}, {2, 3, 1, 0}}
