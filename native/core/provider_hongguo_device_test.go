@@ -142,6 +142,50 @@ func TestHongguoDeviceRegistrationFallsBackToLegacyHostAfterAlternateHTTP444(t *
 	}
 }
 
+
+func TestHongguoDeviceRegistrationFallsBackAfterTengineTLB404(t *testing.T) {
+	var hosts []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPost || request.URL.Path != hongguoDeviceRegisterPath {
+			t.Fatalf("unexpected registration request: %s %s", request.Method, request.URL)
+		}
+		hosts = append(hosts, request.URL.Host)
+		if request.URL.Host == "applog.snssdk.com" {
+			response := sourceFixtureResponse(request, http.StatusNotFound, "<html><body>404 Not Found TLB</body></html>")
+			response.Header.Set("Server", "Tengine")
+			response.Header.Set("Content-Type", "text/html")
+			response.Header.Set("Via", "cache12.edge[13,0]")
+			return response, nil
+		}
+		if request.URL.Host != "log.snssdk.com" {
+			t.Fatalf("unexpected fallback host %q", request.URL.Host)
+		}
+		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"2001","install_id_str":"20019"}`), nil
+	})
+	d.hongguoClient().state.Registered = false
+	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 2 || hosts[0] != "applog.snssdk.com" || hosts[1] != "log.snssdk.com" {
+		t.Fatalf("registration host order = %#v, want applog then legacy log", hosts)
+	}
+}
+
+func TestHongguoDeviceRegistrationDoesNotFailoverForApplication404(t *testing.T) {
+	var hosts []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		hosts = append(hosts, request.URL.Host)
+		return sourceFixtureResponse(request, http.StatusNotFound, `{"code":404,"message":"endpoint not found"}`), nil
+	})
+	d.hongguoClient().state.Registered = false
+	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
+		t.Fatal("application 404 must remain a hard failure")
+	}
+	if len(hosts) != 1 || hosts[0] != "applog.snssdk.com" {
+		t.Fatalf("application 404 unexpectedly triggered host failover: %#v", hosts)
+	}
+}
+
 func TestHongguoRegistrationHTTP444WritesPerHostDiagnostics(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		response := sourceFixtureResponse(request, 444, `{"message":"request blocked by edge","code":"device_policy"}`)
