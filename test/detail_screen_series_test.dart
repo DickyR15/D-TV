@@ -35,6 +35,63 @@ class _SeriesFixtureRepository extends FixtureRepository {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('Ikanbot movie merge clears stale episode count metadata', () {
+    const cached = Drama(
+      id: 'ikanbot:movie-1',
+      source: 'ikanbot',
+      title: '電影測試',
+      episodes: 31,
+      episodesVerified: true,
+      category: '電影',
+    );
+    const fresh = Drama(
+      id: 'ikanbot:movie-1',
+      source: 'ikanbot',
+      title: '電影測試',
+      category: '電影',
+    );
+    final merged = cached.merge(fresh);
+    expect(merged.episodes, 0);
+    expect(merged.episodesVerified, isFalse);
+  });
+
+  testWidgets('Ikanbot movie choices use source labels instead of episode numbers', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = testStore(await SharedPreferences.getInstance());
+    addTearDown(store.dispose);
+    const movie = Drama(
+      id: 'ikanbot:movie-ui-test',
+      source: 'ikanbot',
+      title: '測試電影',
+      category: '電影',
+      episodes: 31,
+    );
+    final repository = _SeriesFixtureRepository(const [], episodes: [
+      Episode({'title': '國語版', 'currentEpisode': 1}, 1),
+      Episode({'title': '日語版', 'currentEpisode': 2}, 2),
+      Episode({'title': '片源 2（來源乙）', 'currentEpisode': 3}, 3),
+    ]);
+    await tester.pumpWidget(
+      AppLayout(
+        television: false,
+        formFactor: FormFactor.phone,
+        child: MaterialApp(
+          home: DetailScreen(drama: movie, repository: repository, store: store),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('片源 · 3 個選項'), findsOneWidget);
+    expect(find.text('國語版'), findsOneWidget);
+    expect(find.text('日語版'), findsOneWidget);
+    expect(find.text('片源 2（來源乙）'), findsOneWidget);
+    expect(find.text('選集 · 3 集'), findsNothing);
+    expect(find.text('共 31 集'), findsNothing);
+    expect(find.text('第 1 集'), findsNothing);
+    expect(find.text('播放電影'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'TV can select an upcoming Redfruit season when current season has no episodes',
     (tester) async {
