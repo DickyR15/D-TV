@@ -200,37 +200,42 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		return providerMedia{}, fmt.Errorf("紅果章節 ID 無效，請重新取得章節")
 	}
 
-	// Current Hongguo v1.0.2 playback uses the dedicated V5 endpoint and
-	// Medusa/Helios signatures. Keep older first-party paths as fallbacks
-	// for episodes or devices that the newer endpoint does not serve.
-	media, v5Err := d.resolveHongguoV5Media(ctx, videoID)
-	if v5Err == nil {
-		return media, nil
+	// The manifest can change the order among parser/transport strategies
+	// already shipped in the app. It cannot inject executable parser code.
+	type attempt struct {
+		name string
+		run  func() (providerMedia, error)
 	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
+	v5 := attempt{"v5", func() (providerMedia, error) { return d.resolveHongguoV5Media(ctx, videoID) }}
+	quick := attempt{"quick", func() (providerMedia, error) { return d.resolveHongguoQuickAppMedia(ctx, seriesID, videoID) }}
+	native := attempt{"native", func() (providerMedia, error) { return d.resolveHongguoAppMedia(ctx, videoID) }}
+	multi := attempt{"multi", func() (providerMedia, error) { return d.resolveHongguoMultiModelMedia(ctx, videoID) }}
+	web := attempt{"web", func() (providerMedia, error) { return d.resolveHongguoWebMedia(ctx, seriesID, videoID) }}
+
+	profile := d.providerParserProfile(sourceHongguo, "hongguo_v5_first")
+	var attempts []attempt
+	switch profile {
+	case "hongguo_legacy_first":
+		attempts = []attempt{native, multi, v5, quick, web}
+	case "hongguo_web_first":
+		attempts = []attempt{quick, web, v5, native, multi}
+	default:
+		attempts = []attempt{v5, quick, native, multi, web}
 	}
-	media, quickWebErr := d.resolveHongguoQuickAppMedia(ctx, seriesID, videoID)
-	if quickWebErr == nil {
-		return media, nil
+
+	errs := map[string]error{}
+	for _, candidate := range attempts {
+		media, err := candidate.run()
+		if err == nil {
+			return media, nil
+		}
+		errs[candidate.name] = err
+		if ctx.Err() != nil {
+			return providerMedia{}, ctx.Err()
+		}
 	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
-	media, nativeErr := d.resolveHongguoAppMedia(ctx, videoID)
-	if nativeErr == nil {
-		return media, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
-	media, multiModelErr := d.resolveHongguoMultiModelMedia(ctx, videoID)
-	if multiModelErr == nil {
-		return media, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
+
+	nativeErr, multiModelErr := errs["native"], errs["multi"]
 	if errors.Is(nativeErr, errHongguoH266Only) || errors.Is(multiModelErr, errHongguoH266Only) {
 		helperMedia, helperErr := d.resolveHongguoHelperMedia(ctx, seriesID, videoID)
 		if helperErr == nil {
@@ -238,15 +243,10 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		}
 		multiModelErr = fmt.Errorf("%w；輔助設備 H.265 備援失敗：%v", errHongguoH266Only, publicError(helperErr))
 	}
-	media, pageErr := d.resolveHongguoWebMedia(ctx, seriesID, videoID)
-	if pageErr == nil {
-		return media, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
+	quickWebErr, v5Err, pageErr := errs["quick"], errs["v5"], errs["web"]
 	return providerMedia{}, fmt.Errorf(
-		"紅果取流失敗：新版 V5 App：%v；快捷網頁：%v；舊版 App：%v；多清晰度：%v；官網網頁：%w",
+		"紅果取流失敗：解析設定 %s；新版 V5 App：%v；快捷網頁：%v；舊版 App：%v；多清晰度：%v；官網網頁：%w",
+		profile,
 		publicError(v5Err),
 		publicError(quickWebErr),
 		publicError(nativeErr),
