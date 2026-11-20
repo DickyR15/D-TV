@@ -279,7 +279,7 @@ class AppUpdateService {
       RegExp(r'^[vV]'),
       '',
     );
-    if (!RegExp(r'^\d+\.\d+\.\d+.hasMatch(targetVersion)) {
+    if (!RegExp(r'^\d+\.\d+\.\d+$').hasMatch(targetVersion)) {
       throw const FormatException('Windows 更新版本號格式無效');
     }
 
