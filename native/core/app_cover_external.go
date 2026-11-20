@@ -604,10 +604,11 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		preferred: true,
 		overrideProvider: true,
 		allowMissingYear: true,
-		// TMDB supplies a direct poster endpoint; the exact Anime! Anime!
-		// key visual remains a fallback from the 2025 broadcast announcement.
-		address: "https://image.tmdb.org/t/p/w500/pJ8ls5yuBPPYdS7kbZd3yzJdxKx.jpg",
+		// NamiComi links the original 2024 Suiseisha broadcast key visual
+		// directly. Prefer its WebP asset, then use the other verified mirrors.
+		address: "https://nami.news/wordpress/wp-content/uploads/2024/11/1-funkan-Dake-Iretemo-Ii-yo%E2%80%A6Share-House-no-Himitsu-Rule-Anime-Key-Visual.webp",
 		fallbackAddresses: []string{
+			"https://image.tmdb.org/t/p/w500/pJ8ls5yuBPPYdS7kbZd3yzJdxKx.jpg",
 			"https://animeanime.jp/imgs/p/jtKDOVlKAvjRrNw8SXAVejagI61Nrq_oqaqr/722848.jpg",
 			"https://d28s5ztqvkii64.cloudfront.net/images/anime/5586/tY1J5NJscN.webp",
 		},
