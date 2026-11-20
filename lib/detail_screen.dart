@@ -855,7 +855,13 @@ class _DetailScreenState extends State<DetailScreen> {
     bool movieOptions = false,
   }) {
     final colors = Theme.of(context).colorScheme;
-    final currentEpisode = episodes.where((episode) => episode.number == currentNumber).firstOrNull;
+    Episode? currentEpisode;
+    for (final episode in episodes) {
+      if (episode.number == currentNumber) {
+        currentEpisode = episode;
+        break;
+      }
+    }
     final current = currentNumber == null
         ? ''
         : movieOptions
