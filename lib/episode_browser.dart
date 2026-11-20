@@ -62,7 +62,10 @@ class EpisodeRangeBar extends StatelessWidget {
                 onPressed: () => Navigator.pop(context),
                 child: const Text('取消'),
               ),
-              FilledButton(onPressed: submit, child: const Text('跳至該集')),
+              FilledButton(
+                onPressed: submit,
+                child: Text(movieOptions ? '跳至該片源' : '跳至該集'),
+              ),
             ],
           );
         },
@@ -111,7 +114,7 @@ class EpisodeRangeBar extends StatelessWidget {
             Row(
               children: [
                 IconButton(
-                  tooltip: '上一組選集',
+                  tooltip: movieOptions ? '上一組片源' : '上一組選集',
                   onPressed: page > 0
                       ? () => onLocate((page - 1) * episodePageSize)
                       : null,
@@ -141,7 +144,7 @@ class EpisodeRangeBar extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: '下一組選集',
+                  tooltip: movieOptions ? '下一組片源' : '下一組選集',
                   onPressed: page + 1 < count
                       ? () => onLocate((page + 1) * episodePageSize)
                       : null,
