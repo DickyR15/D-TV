@@ -462,14 +462,13 @@ func TestExtraAdult91PornaUsesOfficialDisplayName(t *testing.T) {
 func TestExtraAdultPPPSkipsBlurredPreviewMediaAndKeepsFullStream(t *testing.T) {
 	body := `<script>
 		var preview = 'https://cdn.ppp.porn/video/preview/teaser.mp4?token=blurred';
-		var stream = 'https://cdn.ppp.porn/video/full/index.m3u8?token=real';
+		var stream = 'https://cdn.ppp.porn/video/stream/full/index.m3u8?token=real';
 	</script>`
 	got := extraAdultPPPStreamURLs(body, pppBaseURL+"/v/example/")
-	if len(got) != 1 || got[0] != "https://cdn.ppp.porn/video/full/index.m3u8?token=real" {
+	if len(got) != 1 || got[0] != "https://cdn.ppp.porn/video/stream/full/index.m3u8?token=real" {
 		t.Fatalf("PPP preview was not excluded or full stream was lost: %#v", got)
 	}
 }
-
 func TestExtraAdultPPPLowResolutionPreviewIsLastResort(t *testing.T) {
 	for _, address := range []string{
 		"https://cdn.ppp.porn/video/180p/clip.mp4",
