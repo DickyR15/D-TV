@@ -3,8 +3,11 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,7 +25,7 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV102(t *testing.T) {
 	var calls int
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		calls++
-		if request.Method != http.MethodPost || request.URL.Host != "log.snssdk.com" || request.URL.Path != "/service/2/device_register/" {
+		if request.Method != http.MethodPost || request.URL.Host != "applog.snssdk.com" || request.URL.Path != "/service/2/device_register/" {
 			t.Fatalf("unexpected registration request: %s %s", request.Method, request.URL.String())
 		}
 		if got := request.Header.Get("User-Agent"); got != hongguoAppUserAgent {
@@ -108,6 +111,118 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV102(t *testing.T) {
 	state := d.hongguoCatalogSnapshot()
 	if !state.Registered || state.DeviceID != "1001" || state.InstallID != "10019" {
 		t.Fatalf("registered state = %#v", state)
+	}
+}
+
+func TestHongguoDeviceRegistrationFallsBackToLegacyHostAfterAlternateHTTP444(t *testing.T) {
+	var hosts []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPost || request.URL.Path != hongguoDeviceRegisterPath {
+			t.Fatalf("unexpected registration request: %s %s", request.Method, request.URL)
+		}
+		hosts = append(hosts, request.URL.Host)
+		if request.URL.Host == "applog.snssdk.com" {
+			return sourceFixtureResponse(request, 444, `{"message":"request blocked by edge","code":"device_policy"}`), nil
+		}
+		if request.URL.Host != "log.snssdk.com" {
+			t.Fatalf("unexpected fallback host %q", request.URL.Host)
+		}
+		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
+	})
+	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 2 || hosts[0] != "applog.snssdk.com" || hosts[1] != "log.snssdk.com" {
+		t.Fatalf("registration host order = %#v, want applog then legacy log", hosts)
+	}
+	state := d.hongguoCatalogSnapshot()
+	if !state.Registered || state.DeviceID != "1001" || state.InstallID != "10019" {
+		t.Fatalf("alternate registration did not persist: %#v", state)
+	}
+}
+
+func TestHongguoRegistrationHTTP444WritesPerHostDiagnostics(t *testing.T) {
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		response := sourceFixtureResponse(request, 444, `{"message":"request blocked by edge","code":"device_policy"}`)
+		response.Header.Set("Server", "edge-filter")
+		response.Header.Set("Content-Type", "application/json")
+		response.Header.Set("CF-Ray", "abc123-HKG")
+		response.Header.Set("X-Tt-Logid", "trace-456")
+		return response, nil
+	})
+	logPath := filepath.Join(t.TempDir(), "app.log")
+	d.diagnostics = &diagnosticLog{path: logPath, limit: diagnosticLogBytes}
+	err := d.ensureHongguoDevice(context.Background(), "")
+	if err == nil {
+		t.Fatal("HTTP 444 registration rejection was accepted")
+	}
+	for _, hint := range []string{"applog.snssdk.com", "log.snssdk.com", "HTTP 444", "device_policy"} {
+		if !strings.Contains(err.Error(), hint) {
+			t.Errorf("registration error omitted %q: %v", hint, err)
+		}
+	}
+	logged, readErr := os.ReadFile(logPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	for _, hint := range []string{
+		`"event":"hongguo.device_registration"`,
+		`"host":"applog.snssdk.com"`,
+		`"host":"log.snssdk.com"`,
+		`"httpStatus":444`,
+		`"attempt":1`,
+		"stage=http_444_edge_reject", "elapsedMs=", "server=edge-filter",
+		"request blocked by edge", "abc123-HKG", "trace-456",
+	} {
+		if !strings.Contains(string(logged), hint) {
+			t.Errorf("registration log omitted %q: %s", hint, logged)
+		}
+	}
+	if strings.Contains(string(logged), `"magic_tag"`) ||
+		strings.Contains(string(logged), `"clientudid"`) ||
+		strings.Contains(string(logged), `"openudid"`) {
+		t.Fatal("registration payload or generated identifiers leaked into diagnostics")
+	}
+}
+
+func TestHongguoInvalidRegistrationPayloadDoesNotCreateDeviceRejectionCooldown(t *testing.T) {
+	var calls int
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		calls++
+		if calls <= 2 {
+			return sourceFixtureResponse(request, http.StatusOK, "not-json"), nil
+		}
+		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
+	})
+	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
+		t.Fatal("invalid registration payload was accepted")
+	}
+	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+		t.Fatalf("invalid response must not create device-rejection cooldown: %v", err)
+	}
+	if calls != 3 {
+		t.Fatalf("registration calls = %d, want 3 (two bad hosts, then immediate retry)", calls)
+	}
+}
+
+func TestHongguoRegistrationTransportStageClassifiesNetworkFailures(t *testing.T) {
+	cases := []struct {
+		name string
+		err error
+		want string
+	}{
+		{name: "dns", err: errors.New("紅果設備註冊 DNS 解析失敗"), want: "dns"},
+		{name: "tls", err: errors.New("x509: certificate signed by unknown authority"), want: "tls"},
+		{name: "timeout", err: context.DeadlineExceeded, want: "timeout"},
+		{name: "connect", err: errors.New("dial tcp: connection refused"), want: "connect"},
+		{name: "other", err: errors.New("unexpected response"), want: "network"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hongguoRegistrationTransportStage(tc.err); got != tc.want {
+				t.Fatalf("failure stage = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
