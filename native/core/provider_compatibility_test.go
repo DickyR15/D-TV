@@ -97,8 +97,8 @@ func TestProviderCompatibilityManifestRejectsVersionRollbackAndExpiry(t *testing
 	manifest := providerCompatibilityManifest{
 		SchemaVersion: 1,
 		ManifestVersion: 1,
-		GeneratedAt: now.Add(-48 * time.Hour),
-		ExpiresAt: now.Add(-24 * time.Hour),
+		GeneratedAt: now.Add(-17 * 24 * time.Hour),
+		ExpiresAt: now.Add(-16 * 24 * time.Hour),
 		Providers: map[string]providerCompatibilityEntry{},
 	}
 	if err := validateProviderCompatibilityManifest(manifest, now, false); err == nil {
