@@ -33,8 +33,8 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV102(t *testing.T) {
 		}
 		query := request.URL.Query()
 		expected := map[string]string{
-			"aid": "8662", "app_name": "novelread", "version_code": "73532", "version_name": "7.3.5.32",
-			"manifest_version_code": "73532", "update_version_code": "73532", "channel": "update_64",
+			"aid": "8662", "app_name": "novelread", "version_code": "74332", "version_name": "7.4.3.32",
+			"manifest_version_code": "74332", "update_version_code": "74332", "channel": "update_64",
 			"device_platform": "android", "os": "android", "ssmix": "a", "device_type": "25053RT47C",
 			"device_brand": "Redmi", "language": "zh", "os_api": "36", "os_version": "16",
 			"resolution": "1280*2772", "dpi": "520", "ac": "wifi",
@@ -66,7 +66,7 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV102(t *testing.T) {
 			t.Fatalf("registration envelope mismatch: %#v", payload)
 		}
 		for name, want := range map[string]string{
-			"display_name": "红果免费短剧", "app_version": "7.3.5.32", "channel": "update_64",
+			"display_name": "红果免费短剧", "app_version": "7.4.3.32", "channel": "update_64",
 			"package": "com.phoenix.read", "os": "Android", "os_version": "16",
 			"device_model": "25053RT47C", "device_brand": "Redmi", "device_manufacturer": "Xiaomi",
 			"cpu_abi": "arm64-v8a", "resolution": "2772x1280", "tz_name": "Asia/Shanghai",
