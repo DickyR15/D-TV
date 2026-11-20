@@ -520,9 +520,8 @@ func ikanbotMovieSourceFlagBase(flag string) string {
 	return strings.TrimSpace(value)
 }
 
-// Movie listings are not episodes. Audio-language variants use language names;
-// different source lines remain separate options; resolution-only rows for the
-// same language/source are retained as automatic playback fallbacks.
+// Movie listings are not episodes. Keep one selectable entry per explicit
+// audio language; treat every unlabelled CDN/source row as an automatic fallback.
 func ikanbotBuildMovieChapters(sourceID, pageURL string, lines []ikanbotLine) []Chapter {
 	type movieSelection struct {
 		episode  ikanbotEpisode
