@@ -629,7 +629,7 @@ class DuanjuApp extends StatelessWidget {
                                         const SizedBox(height: 20),
                                         FilledButton(
                                           onPressed: onRetry,
-                                          child: const Text('重新開啟'),
+                                          child: const Text('重新更新設定並重試'),
                                         ),
                                       ],
                                     ),
