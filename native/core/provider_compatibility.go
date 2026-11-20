@@ -106,6 +106,7 @@ func compatibilityEndpointNames(source string) map[string]bool {
 			"playbackReadingMulti": true,
 			"playbackReadingSingle": true,
 			"playbackFqMulti": true,
+			"playbackLegacy": true,
 		}
 	default:
 		return map[string]bool{}
