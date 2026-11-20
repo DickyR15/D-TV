@@ -1,8 +1,10 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -51,27 +53,29 @@ func TestHongguoCurrentSeasonFallbackKeepsKnownEpisodeCountAndDoesNotInventSibli
 }
 
 func TestHongguoAppSeasonQueryUsesOfficialSelector(t *testing.T) {
-	query := hongguoAppSeasonQuery("7690163276214176792")
+	const seriesID = "7690163276214176792"
+	query := hongguoAppSeasonQuery(seriesID)
 	expected := map[string]string{
 		"scene": "10",
 		"from": "single_col_same_ip_series",
-		"offset": "0",
-		"limit": "0",
-		"total_chapter_num": "0",
-		"current_chapter_num": "0",
-		"post_id": "0",
-		"is_horizontal_screen": "false",
-		"bookstore_tab": "0",
-		"bookstore_tab_type": "0",
-		"book_id": "7690163276214176792",
-		"filter_ids": "7690163276214176792",
-	}
-	if len(query) != len(expected) {
-		t.Fatalf("unexpected query fields: %v", query)
+		"book_id": seriesID,
+		"filter_ids": seriesID,
+		"user_is_login": "0",
+		"dragon_device_type": "phone",
+		"pv_player": "74332",
+		"compliance_status": "0",
+		"need_personal_recommend": "1",
+		"player_so_load": "1",
+		"is_android_pad_screen": "0",
 	}
 	for key, value := range expected {
 		if query.Get(key) != value {
 			t.Fatalf("query %q = %q, want %q", key, query.Get(key), value)
+		}
+	}
+	for _, key := range []string{"session_uuid", "cdid", "openudid"} {
+		if query.Get(key) == "" {
+			t.Fatalf("required plan request field %q is missing: %v", key, query)
 		}
 	}
 	if _, err := url.ParseQuery(query.Encode()); err != nil {
@@ -79,10 +83,47 @@ func TestHongguoAppSeasonQueryUsesOfficialSelector(t *testing.T) {
 	}
 }
 
+func TestHongguoAppSeasonsUsesVersionedPlanEndpointAndRequiredHeaders(t *testing.T) {
+	const seriesID = "7690163276214176792"
+	var calls int
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		calls++
+		if request.Method != http.MethodGet || request.URL.Path != hongguoAppSeasonPlanPath {
+			t.Fatalf("season request = %s %s, want GET %s", request.Method, request.URL.Path, hongguoAppSeasonPlanPath)
+		}
+		query := request.URL.Query()
+		for key, want := range map[string]string{
+			"from": "single_col_same_ip_series", "scene": "10",
+			"book_id": seriesID, "filter_ids": seriesID, "user_is_login": "0",
+		} {
+			if query.Get(key) != want { t.Errorf("query %s=%q, want %q", key, query.Get(key), want) }
+		}
+		for _, key := range []string{"session_uuid", "cdid", "openudid"} {
+			if query.Get(key) == "" { t.Errorf("missing query %s: %v", key, query) }
+		}
+		if request.Header.Get("x-ss-dp") != "8662" || request.Header.Get("lc") != "101" {
+			t.Errorf("missing reading app headers: %v", request.Header)
+		}
+		if request.Header.Get("x-reading-request") == "" {
+			t.Error("missing x-reading-request header")
+		}
+		body := `{"code":0,"data":[{"show_type":547,"video_data":[{"series_id":"12345678","vid":"12345679","title":"測試系列第一季","episode_cnt":12,"secondary_info_list":[{"content":"第1季"}]}]}]}`
+		return sourceFixtureResponse(request, http.StatusOK, body), nil
+	})
+	d.cfg.Retries = 1
+	client := d.hongguoClient()
+	client.state.DeviceID, client.state.InstallID, client.state.Registered = "9001", "9002", true
+	items, err := d.hongguoAppSeasons(context.Background(), seriesID)
+	if err != nil { t.Fatal(err) }
+	if calls != 1 || len(items) != 1 || items[0].Drama.ID != "hongguo:12345678" || items[0].Number != 1 {
+		t.Fatalf("season result mismatch: calls=%d items=%+v", calls, items)
+	}
+}
 func TestParseHongguoAppSeasonsKeepsOfficialIDsAndUpcomingRows(t *testing.T) {
 	raw := `{
 		"code": 0,
 		"data": [{
+			"show_type": 547,
 			"video_data": [
 				{
 					"series_id": "7621200213801176126",
@@ -158,6 +199,21 @@ func TestParseHongguoAppSeasonsKeepsOfficialIDsAndUpcomingRows(t *testing.T) {
 	}
 }
 
+func TestParseHongguoAppSeasonsIgnoresNonSeasonPlanCells(t *testing.T) {
+	raw := `{"code":0,"data":[
+		{"show_type":401,"video_data":[{"series_id":"11111111","vid":"11111112","title":"推薦影片第一季","episode_cnt":10}]},
+		{"show_type":547,"video_data":[{"series_id":"22222222","vid":"22222223","title":"正式系列第一季","episode_cnt":12,"secondary_info_list":[{"content":"第1季"}]}]}
+	]}`
+	var response map[string]any
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&response); err != nil { t.Fatal(err) }
+	items, err := parseHongguoAppSeasons(response)
+	if err != nil { t.Fatal(err) }
+	if len(items) != 1 || items[0].Drama.ID != "hongguo:22222222" {
+		t.Fatalf("non-season plan cells were not excluded: %+v", items)
+	}
+}
 func TestParseHongguoAppSeasonsDoesNotMergeBySameTitle(t *testing.T) {
 	raw := `{"code":0,"data":[{"video_data":[
 		{"series_id":"1111111111111111111","vid":"1","title":"同名短劇","episode_cnt":10},
@@ -225,6 +281,11 @@ func TestHongguoNeedsSeasonFallbackOnlyFor101116(t *testing.T) {
 		want    bool
 	}{
 		{message: "紅果 App 接口暫不可用（101116）", want: true},
+		{message: "紅果 App 介面未提供有效資料", want: true},
+		{message: "紅果 App 接口未返回有效資料", want: true},
+		{message: "紅果設備註冊 HTTP 444", want: false},
+		{message: "紅果 App 接口 HTTP 403", want: false},
+		{message: "紅果 App 接口 HTTP 429", want: false},
 		{message: "紅果 App 接口暫不可用（100001）", want: false},
 		{message: "context deadline exceeded", want: false},
 		{message: "", want: false},
