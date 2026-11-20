@@ -74,6 +74,13 @@ type Downloader struct {
 	legacy                *legacyAPIClient
 	previewMu             sync.Mutex
 	previewSessions       map[string]*huangguoPreviewSession
+	compatibilityMu       sync.RWMutex
+	compatibilityRefreshMu sync.Mutex
+	compatibilityRefreshOnce sync.Once
+	compatibilityManifest *providerCompatibilityManifest
+	compatibilityLastFetch time.Time
+	compatibilityLastError string
+	compatibilityOrigin    string
 }
 
 func defaultConfig() Config { return Config{MaxPagesPerSort: 50, PageSize: 30, Retries: 2} }
@@ -403,6 +410,7 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	router := &proxyRouter{}
 	d := &Downloader{cfg: cfg, providerHosts: map[string]string{}, proxyRouter: router,
 		limiter: newRequestLimiter(3, 250*time.Millisecond), diagnostics: newDiagnosticLog(directory)}
+	d.loadProviderCompatibilityCache()
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	transport.MaxIdleConnsPerHost = 8
@@ -515,8 +523,15 @@ func nativeDispatch(input nativeInput) (any, error) {
 			}
 			nativeState.engine = engine
 		}
+		engine := nativeState.engine
 		nativeState.Unlock()
-		return map[string]any{"version": "0.2.17", "standalone": true, "allSources": buildAllSources == "true"}, nil
+		engine.downloader.startProviderCompatibilityRefresh()
+		return map[string]any{
+			"version": "0.2.17",
+			"standalone": true,
+			"allSources": buildAllSources == "true",
+			"providerCompatibility": engine.downloader.providerCompatibilityStatus(),
+		}, nil
 	}
 	engine := nativeState.engine
 	nativeState.Unlock()
@@ -541,6 +556,13 @@ func nativeDispatch(input nativeInput) (any, error) {
 		ctx = work
 	}
 	switch input.Action {
+	case "providerCompatibility":
+		if input.Command == "refresh" {
+			if err := engine.downloader.refreshProviderCompatibility(ctx); err != nil {
+				return engine.downloader.providerCompatibilityStatus(), err
+			}
+		}
+		return engine.downloader.providerCompatibilityStatus(), nil
 	case "lan":
 		return engine.nativeLAN(ctx, input.Command, input.LAN)
 	case "cast":
