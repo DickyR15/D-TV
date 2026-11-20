@@ -400,7 +400,6 @@ func (d *Downloader) refreshProviderCompatibility(ctx context.Context) error {
 	defer d.compatibilityRefreshMu.Unlock()
 
 	d.compatibilityStartupVerified.Store(false)
-	now := time.Now()
 	d.compatibilityMu.RLock()
 	lastFetch := d.compatibilityLastFetch
 	currentVersion := 0
