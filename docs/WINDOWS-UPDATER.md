@@ -25,4 +25,4 @@ GitHub Actions 的 Windows job 會建置 updater、執行 self-test，將它放�
 
 ## 首次升級相容性
 
-D TV 1.0.7 及更早版本沒有獨立 updater。首次更新時，舊版內建的 ZIP 更新流程仍可用；在新版程式下載 ZIP 後，會額外從同一個正式 Release 下載 DTV-Updater.exe 並完成首次切換。更新完成後，安裝目錄也會包含 updater，後續版本即可優先使用本機快取副本。
+D TV 1.0.7 及更早版本沒有獨立 updater。首次更新仍由當時版本內建的更新流程下載完整 Portable ZIP；新版 ZIP 內已包含 DTV-Updater.exe，因此這次升級完成後就會安裝 updater。後續版本即可使用獨立更新器。若遇到程式版本已具備 updater bootstrap、但安裝資料夾尚未有 updater 的過渡版本，則會從同一個正式 Release 下載並驗證 updater。
