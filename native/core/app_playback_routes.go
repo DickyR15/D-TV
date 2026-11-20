@@ -25,12 +25,20 @@ type nativePlaybackChoice struct {
 // retain every not-yet-tried route from the previous list as a last resort.
 const nativeEarlyPlaybackRefreshAfterFailedRoutes = 3
 
+const nativeMinimumPlaybackQuality = 720
+
+// Quality zero means the provider did not expose dependable metadata. Keep
+// those routes; reject only known variants below the 720p floor.
+func nativePlaybackQualityAllowed(quality int) bool {
+	return quality == 0 || quality >= nativeMinimumPlaybackQuality
+}
+
 func nativePlaybackChoices(media providerMedia, quality int) nativePlaybackChoice {
 	choice := nativePlaybackChoice{qualities: []int{}}
 	seen := map[string]bool{}
 	qualities := map[int]bool{}
 	for _, option := range append([]providerMedia{media}, media.Variants...) {
-		if !isProviderHTTPMediaURL(option.URL) {
+		if !isProviderHTTPMediaURL(option.URL) || !nativePlaybackQualityAllowed(option.Quality) {
 			continue
 		}
 		identity := nativePlaybackMediaIdentity(option)
@@ -288,7 +296,7 @@ func nativeExcludeAttemptedPlaybackRoutes(candidates, attempted []providerMedia)
 	seen := make(map[string]bool, len(candidates))
 	result := make([]providerMedia, 0, len(candidates))
 	for _, option := range candidates {
-		if !isProviderHTTPMediaURL(option.URL) {
+		if !isProviderHTTPMediaURL(option.URL) || !nativePlaybackQualityAllowed(option.Quality) {
 			continue
 		}
 		identity := nativePlaybackMediaIdentity(option)
@@ -307,7 +315,7 @@ func nativeMergePlaybackRoutes(primary, fallback []providerMedia) []providerMedi
 	result := make([]providerMedia, 0, len(primary)+len(fallback))
 	for _, group := range [][]providerMedia{primary, fallback} {
 		for _, option := range group {
-			if !isProviderHTTPMediaURL(option.URL) {
+			if !isProviderHTTPMediaURL(option.URL) || !nativePlaybackQualityAllowed(option.Quality) {
 				continue
 			}
 			identity := nativePlaybackMediaIdentity(option)
@@ -327,7 +335,7 @@ func nativeMergePlaybackQualities(primary, fallback []int) []int {
 	var result []int
 	for _, values := range [][]int{primary, fallback} {
 		for _, quality := range values {
-			if quality <= 0 || seen[quality] {
+			if quality < nativeMinimumPlaybackQuality || seen[quality] {
 				continue
 			}
 			seen[quality] = true
