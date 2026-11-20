@@ -21,6 +21,7 @@ type hongguoHelperDeviceKey struct{}
 
 const (
 	hongguoDeviceRegisterURL   = "https://log.snssdk.com/service/2/device_register/"
+	hongguoDeviceRegisterPath  = "/service/2/device_register/"
 	hongguoDeviceRotations     = 3
 	hongguoDeviceRegisterPause = 10 * time.Minute
 )
@@ -218,6 +219,17 @@ func (downloader *Downloader) recordHongguoRegistrationResponse(response *http.R
 	})
 }
 
+func hongguoDeviceRegisterHosts() []string {
+	// applog is the currently working alternative reported for environments
+	// where log.snssdk.com no longer resolves or is rejected by an edge node.
+	// Keep the original host as a compatibility fallback.
+	return []string{"applog.snssdk.com", "log.snssdk.com"}
+}
+
+func hongguoDeviceRegisterURLForHost(host string) string {
+	return "https://" + host + hongguoDeviceRegisterPath
+}
+
 func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string, string, error) {
 	header := hongguoRegistrationHeader{
 		DisplayName: "红果免费短剧", Aid: 8662, AppVersion: "7.3.5.32", VersionCode: 73532,
@@ -234,61 +246,98 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 	if err != nil {
 		return "", "", err
 	}
-	query := hongguoAppQuery("", "")
-	query.Del("device_id")
-	query.Del("iid")
-	query.Set("req_id", uuidLike())
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, hongguoDeviceRegisterURL, bytes.NewReader(body))
-	if err != nil {
-		return "", "", err
-	}
-	request.Header.Set("User-Agent", hongguoAppUserAgent)
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Content-Type", "application/json; charset=utf-8")
-	// GuoApp app-v2.0.0-112 executes module host.fetch through the shared
-	// Host HTTP client. Keep registration on that same route rather than
-	// introducing a separate DNS transport just for log.snssdk.com.
-	response, err := downloader.doPreparedCatalogRequest(request, 20*time.Second, func(prepared *http.Request) {
-		query.Set("_rticket", strconv.FormatInt(time.Now().UnixMilli(), 10))
-		prepared.URL.RawQuery = query.Encode()
-	})
-	if err != nil {
-		return "", "", err
-	}
-	content, err := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-	response.Body.Close()
-	if err != nil {
-		return "", "", err
-	}
-	if response.StatusCode != http.StatusOK {
-		downloader.recordHongguoRegistrationResponse(response, content, false)
-		statusErr := fmt.Errorf("紅果設備註冊 HTTP %d", response.StatusCode)
-		if details := hongguoRegistrationResponseDetails(response, content); details != "" {
-			statusErr = fmt.Errorf("%w（%s）", statusErr, details)
+
+	var failures []error
+	allRejected := true
+	hosts := hongguoDeviceRegisterHosts()
+	for _, host := range hosts {
+		if err := ctx.Err(); err != nil {
+			return "", "", err
 		}
-		// 只有明確的客戶端拒絕才進入 10 分鐘冷卻；逾時、限流及伺服器錯誤都應允許下一次請求立即重試。
-		if response.StatusCode == http.StatusUnauthorized ||
-			response.StatusCode == http.StatusForbidden ||
-			(response.StatusCode >= 400 && response.StatusCode < 500 &&
-				response.StatusCode != http.StatusRequestTimeout &&
-				response.StatusCode != http.StatusTooEarly &&
-				response.StatusCode != http.StatusTooManyRequests) {
-			return "", "", hongguoRegisterRejection{statusErr}
+		query := hongguoAppQuery("", "")
+		query.Del("device_id")
+		query.Del("iid")
+		query.Set("req_id", uuidLike())
+		request, err := http.NewRequestWithContext(
+			ctx,
+			http.MethodPost,
+			hongguoDeviceRegisterURLForHost(host),
+			bytes.NewReader(body),
+		)
+		if err != nil {
+			allRejected = false
+			failures = append(failures, fmt.Errorf("%s: %w", host, err))
+			continue
 		}
-		return "", "", statusErr
+		request.Header.Set("User-Agent", hongguoAppUserAgent)
+		request.Header.Set("Accept", "application/json")
+		request.Header.Set("Content-Type", "application/json; charset=utf-8")
+		// Keep each candidate on the shared Host HTTP client. Its dedicated
+		// host-DoH route preserves Host/SNI/certificate validation for both
+		// registration aliases when the system resolver is broken.
+		response, requestErr := downloader.doPreparedCatalogRequest(request, 20*time.Second, func(prepared *http.Request) {
+			query.Set("_rticket", strconv.FormatInt(time.Now().UnixMilli(), 10))
+			prepared.URL.RawQuery = query.Encode()
+		})
+		if requestErr != nil {
+			if ctx.Err() != nil {
+				return "", "", ctx.Err()
+			}
+			allRejected = false
+			failures = append(failures, fmt.Errorf("%s: %w", host, requestErr))
+			continue
+		}
+
+		content, readErr := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+		response.Body.Close()
+		if readErr != nil {
+			allRejected = false
+			failures = append(failures, fmt.Errorf("%s: 讀取註冊回應失敗：%w", host, readErr))
+			continue
+		}
+		if response.StatusCode != http.StatusOK {
+			downloader.recordHongguoRegistrationResponse(response, content, false)
+			statusErr := fmt.Errorf("紅果設備註冊 HTTP %d", response.StatusCode)
+			if details := hongguoRegistrationResponseDetails(response, content); details != "" {
+				statusErr = fmt.Errorf("%w（%s）", statusErr, details)
+			}
+			// A host-specific 4xx (including edge HTTP 444) must not stop
+			// trying the alternate registration hostname.
+			rejected := response.StatusCode == http.StatusUnauthorized ||
+				response.StatusCode == http.StatusForbidden ||
+				(response.StatusCode >= 400 && response.StatusCode < 500 &&
+					response.StatusCode != http.StatusRequestTimeout &&
+					response.StatusCode != http.StatusTooEarly &&
+					response.StatusCode != http.StatusTooManyRequests)
+			if !rejected {
+				allRejected = false
+			}
+			failures = append(failures, fmt.Errorf("%s: %w", host, statusErr))
+			continue
+		}
+
+		var result map[string]any
+		decoder := json.NewDecoder(bytes.NewReader(content))
+		decoder.UseNumber()
+		if err := decoder.Decode(&result); err != nil {
+			downloader.recordHongguoRegistrationResponse(response, content, false)
+			failures = append(failures, fmt.Errorf("%s: 紅果裝置註冊回傳格式異常", host))
+			continue
+		}
+		deviceID := mapString(result, "device_id_str", "device_id")
+		installID := mapString(result, "install_id_str", "install_id")
+		if !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0" {
+			downloader.recordHongguoRegistrationResponse(response, content, false)
+			failures = append(failures, fmt.Errorf("%s: 紅果裝置註冊未提供有效裝置編號", host))
+			continue
+		}
+		downloader.recordHongguoRegistrationResponse(response, content, true)
+		return deviceID, installID, nil
 	}
-	var result map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(content))
-	decoder.UseNumber()
-	if err := decoder.Decode(&result); err != nil {
-		downloader.recordHongguoRegistrationResponse(response, content, false)
-		return "", "", hongguoRegisterRejection{errors.New("紅果裝置註冊回傳格式異常")}
+
+	combined := errors.Join(failures...)
+	if allRejected && len(failures) == len(hosts) {
+		return "", "", hongguoRegisterRejection{combined}
 	}
-	deviceID, installID := mapString(result, "device_id_str", "device_id"), mapString(result, "install_id_str", "install_id")
-	if !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0" {
-		downloader.recordHongguoRegistrationResponse(response, content, false)
-		return "", "", hongguoRegisterRejection{errors.New("紅果裝置註冊未提供裝置編號")}
-	}
-	downloader.recordHongguoRegistrationResponse(response, content, true)
-	return deviceID, installID, nil
+	return "", "", combined
 }
