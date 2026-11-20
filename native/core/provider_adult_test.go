@@ -102,6 +102,12 @@ func TestMissAVPosterParserSkipsSharedCountryFlags(t *testing.T) {
 	if adultSafePosterImageURL(missAVBaseURL, "/assets/site-logo.webp", "og:image") != "" {
 		t.Fatal("site logo was accepted as a poster")
 	}
+	if adultSafePosterImageURL(missAVBaseURL, "/thumbs/shared.webp", `class="logo"`) != "" {
+		t.Fatal("generic logo class was accepted as a poster")
+	}
+	if adultSafePosterImageURL(missAVBaseURL, "/thumbs/shared.webp", `class="icon"`) != "" {
+		t.Fatal("generic icon class was accepted as a poster")
+	}
 }
 
 func TestAdultPlaybackURLsResolveRelativeToTheActualPlayerPage(t *testing.T) {
