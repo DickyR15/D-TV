@@ -327,10 +327,9 @@ func TestSourceHealthChecksHLSKeyAndBoundedMedia(t *testing.T) {
 		t.Fatal(err)
 	}
 	health := engine.sourceStatus(sourceHuangguoVideo).Health
-	// The route selector probes the first segment once to choose a playable
-	// fallback, then the final health stage probes it again and records the
-	// explicit media-connectivity result. Both requests are range-bounded above.
-	if health.State != "ok" || len(health.Steps) != 5 || segments.Load() != 2 {
+	// The route selector probes the first segment once. The final health stage
+	// reuses its bounded bytes instead of issuing a duplicate CDN request.
+	if health.State != "ok" || len(health.Steps) != 5 || segments.Load() != 1 {
 		t.Fatalf("incomplete health report: segments=%d health=%+v", segments.Load(), health)
 	}
 	body, err := os.ReadFile(filepath.Join(engine.directory, "sources.json"))
