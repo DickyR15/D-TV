@@ -278,6 +278,50 @@ func (stream *nativeStreamServer) nativeRequest(request *http.Request, standardH
 
 var nativePlaylistURI = regexp.MustCompile(`URI="([^"]+)"`)
 
+var (
+	nativeHLSResolutionPattern = regexp.MustCompile(`(?i)RESOLUTION\\s*=\\s*([0-9]+)x([0-9]+)`)
+	nativeHLSURLQualityPattern = regexp.MustCompile(`(?i)(?:^|[^0-9])([0-9]{3,4})p(?:[^a-z0-9]|$)`)
+	nativeHLSURLDimensionsPattern = regexp.MustCompile(`(?i)(?:^|[^0-9])([0-9]{3,4})x([0-9]{3,4})(?:[^0-9]|$)`)
+	nativeHLSQualityParameterPattern = regexp.MustCompile(`(?i)(?:quality|resolution|definition|height)[=_-]?([0-9]{3,4})`)
+)
+
+// nativeHLSVariantQuality returns the visible pixel height for a master-playlist
+// variant. Portrait streams use their shorter edge, matching the quality labels
+// used by the provider resolvers. Zero means the playlist did not disclose a
+// dependable resolution and must be preserved.
+func nativeHLSVariantQuality(streamInfo, uri string) int {
+	if match := nativeHLSResolutionPattern.FindStringSubmatch(streamInfo); len(match) == 3 {
+		width, widthErr := strconv.Atoi(match[1])
+		height, heightErr := strconv.Atoi(match[2])
+		if widthErr == nil && heightErr == nil && width > 0 && height > 0 {
+			return min(width, height)
+		}
+	}
+	if match := nativeHLSURLDimensionsPattern.FindStringSubmatch(uri); len(match) == 3 {
+		width, widthErr := strconv.Atoi(match[1])
+		height, heightErr := strconv.Atoi(match[2])
+		if widthErr == nil && heightErr == nil && width > 0 && height > 0 {
+			return min(width, height)
+		}
+	}
+	if match := nativeHLSURLQualityPattern.FindStringSubmatch(uri); len(match) == 2 {
+		if quality, err := strconv.Atoi(match[1]); err == nil && quality > 0 {
+			return quality
+		}
+	}
+	if match := nativeHLSQualityParameterPattern.FindStringSubmatch(uri); len(match) == 2 {
+		if quality, err := strconv.Atoi(match[1]); err == nil && quality > 0 {
+			return quality
+		}
+	}
+	return 0
+}
+
+func nativeHLSVariantBelowMinimum(streamInfo, uri string) bool {
+	quality := nativeHLSVariantQuality(streamInfo, uri)
+	return quality > 0 && quality < 720
+}
+
 func newNativeStreamServer(d *Downloader) (*nativeStreamServer, error) {
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -383,8 +427,32 @@ func (stream *nativeStreamServer) nativeAsset(token string, session *nativeStrea
 func (stream *nativeStreamServer) nativeRewrite(token string, session *nativeStreamSession, body, base string) (string, error) {
 	var output []string
 	nextPlaylist := false
-	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
+	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
+	for lineIndex := 0; lineIndex < len(lines); lineIndex++ {
+		line := lines[lineIndex]
 		text := strings.TrimSpace(line)
+
+		// Filter only master-playlist video variants with a known resolution.
+		// Unknown-quality streams remain available, and audio/subtitle renditions
+		// are never treated as video variants.
+		if strings.HasPrefix(text, "#EXT-X-STREAM-INF:") {
+			uriIndex := lineIndex + 1
+			for uriIndex < len(lines) && strings.TrimSpace(lines[uriIndex]) == "" {
+				uriIndex++
+			}
+			if uriIndex < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[uriIndex]), "#") &&
+				nativeHLSVariantBelowMinimum(text, strings.TrimSpace(lines[uriIndex])) {
+					lineIndex = uriIndex
+					nextPlaylist = false
+					continue
+				}
+		}
+		if strings.HasPrefix(text, "#EXT-X-I-FRAME-STREAM-INF:") {
+			if match := nativePlaylistURI.FindStringSubmatch(text); len(match) == 2 &&
+				nativeHLSVariantBelowMinimum(text, match[1]) {
+				continue
+			}
+		}
 		rewrite := func(reference string, key bool, contentType string) string {
 			if strings.HasPrefix(reference, "data:") {
 				return reference
