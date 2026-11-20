@@ -102,6 +102,7 @@ elif options.platform == "windows":
     bundle = root / "build" / "windows" / "x64" / "runner" / "Release"
     required = [
         "DTV.exe",
+        "DTV-Updater.exe",
         "duanju_core.dll",
         "flutter_windows.dll",
         "libffmpegkit.dll",
