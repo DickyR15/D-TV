@@ -117,6 +117,9 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV102(t *testing.T) {
 func TestHongguoDeviceRegistrationFallsBackToLegacyHostAfterAlternateHTTP444(t *testing.T) {
 	var hosts []string
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+	// sourceFixtureDownloader starts with a valid registered flag; force the
+	// unregistered state so this test exercises the registration transport.
+	d.hongguoClient().state.Registered = false
 		if request.Method != http.MethodPost || request.URL.Path != hongguoDeviceRegisterPath {
 			t.Fatalf("unexpected registration request: %s %s", request.Method, request.URL)
 		}
@@ -143,6 +146,9 @@ func TestHongguoDeviceRegistrationFallsBackToLegacyHostAfterAlternateHTTP444(t *
 
 func TestHongguoRegistrationHTTP444WritesPerHostDiagnostics(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+	// sourceFixtureDownloader starts with a valid registered flag; force the
+	// unregistered state so this test exercises the registration transport.
+	d.hongguoClient().state.Registered = false
 		response := sourceFixtureResponse(request, 444, `{"message":"request blocked by edge","code":"device_policy"}`)
 		response.Header.Set("Server", "edge-filter")
 		response.Header.Set("Content-Type", "application/json")
@@ -188,6 +194,9 @@ func TestHongguoRegistrationHTTP444WritesPerHostDiagnostics(t *testing.T) {
 func TestHongguoInvalidRegistrationPayloadDoesNotCreateDeviceRejectionCooldown(t *testing.T) {
 	var calls int
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+	// sourceFixtureDownloader starts with a valid registered flag; force the
+	// unregistered state so this test exercises the registration transport.
+	d.hongguoClient().state.Registered = false
 		calls++
 		if calls <= 2 {
 			return sourceFixtureResponse(request, http.StatusOK, "not-json"), nil
