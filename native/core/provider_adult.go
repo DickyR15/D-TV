@@ -314,7 +314,7 @@ func adultImageSrcsetValues(value string) []string {
 
 func adultAppendImageChoice(
 	choices *[]adultImageChoice,
-	base, source, raw, context string,
+	base, raw, context string,
 	width, height int,
 ) {
 	address := adultSafeImageURL(base, raw)
@@ -435,13 +435,13 @@ func adultNodeImages(card *htmlnet.Node, base, source string) []string {
 		height := adultImageDimension(providerHTMLAttr(node, "height"))
 		for _, attr := range []string{"data-original", "data-src", "data-lazy-src", "data-lazyload", "src"} {
 			if raw := providerHTMLAttr(node, attr); raw != "" {
-				adultAppendImageChoice(&choices, base, source, raw, context, width, height)
+				adultAppendImageChoice(&choices, base, raw, context, width, height)
 			}
 		}
 		for _, attr := range []string{"data-srcset", "srcset"} {
 			if raw := providerHTMLAttr(node, attr); raw != "" {
 				for _, candidate := range adultImageSrcsetValues(raw) {
-					adultAppendImageChoice(&choices, base, source, candidate, context, width, height)
+					adultAppendImageChoice(&choices, base, candidate, context, width, height)
 				}
 			}
 		}
