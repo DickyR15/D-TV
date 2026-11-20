@@ -8,6 +8,48 @@ import (
 	"testing"
 )
 
+func TestHongguoRegistrationWasRateLimitedOnlyForHTTP444(t *testing.T) {
+	for _, tc := range []struct {
+		message string
+		want bool
+	}{
+		{message: "取得紅果系列季別失敗：紅果 App 介面未提供有效資料（裝置註冊失敗：紅果設備註冊 HTTP 444）", want: true},
+		{message: "紅果設備註冊 HTTP 403", want: false},
+		{message: "紅果設備註冊 HTTP 429", want: false},
+		{message: "context deadline exceeded", want: false},
+		{message: "", want: false},
+	} {
+		var err error
+		if tc.message != "" {
+			err = errors.New(tc.message)
+		}
+		if got := hongguoRegistrationWasRateLimited(err); got != tc.want {
+			t.Errorf("hongguoRegistrationWasRateLimited(%q) = %v, want %v", tc.message, got, tc.want)
+		}
+	}
+}
+
+func TestHongguoCurrentSeasonFallbackKeepsKnownEpisodeCountAndDoesNotInventSiblings(t *testing.T) {
+	drama := nativeDrama{
+		ID: "hongguo:7690163276214176792",
+		Source: sourceHongguo,
+		Title: "少夫人來自東北3",
+		Episodes: 96,
+		SeriesSeasonNumber: 3,
+		SeriesSeasonUnit: "季",
+	}
+	items := hongguoCurrentSeasonFallback(drama)
+	if len(items) != 1 {
+		t.Fatalf("fallback should preserve only the currently known season: %+v", items)
+	}
+	item := items[0]
+	if item.Drama.ID != drama.ID || item.Drama.Episodes != 96 ||
+		item.Number != 3 || item.Label != "第3季" ||
+		!item.Playable || item.Upcoming {
+		t.Fatalf("current season fallback lost known playable metadata: %+v", item)
+	}
+}
+
 func TestHongguoAppSeasonQueryUsesOfficialSelector(t *testing.T) {
 	query := hongguoAppSeasonQuery("7690163276214176792")
 	expected := map[string]string{
