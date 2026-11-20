@@ -186,4 +186,19 @@ void main() {
     expect(DiaryService.fullText, contains('errorType=TimeoutException'));
   });
 
+  test('an empty preloader reports not_prepared rather than identity_mismatch', () {
+    DiaryService.clear();
+    final repository = DetailPreloadRepository(
+      const PlaybackPlan(
+        url: 'https://example.test/prepared.m3u8',
+        session: 'unused',
+      ),
+    );
+    final preloader = PlaybackPreloader(repository);
+    addTearDown(preloader.dispose);
+
+    expect(preloader.take(FixtureRepository.free, episode(1)), isNull);
+    expect(DiaryService.fullText, contains('reason=not_prepared'));
+    expect(DiaryService.fullText, isNot(contains('reason=identity_mismatch')));
+  });
 }

@@ -300,7 +300,7 @@ func (downloader *Downloader) recordHongguoRegistrationResponse(
 	downloader.recordDiagnostic(diagnosticEvent{
 		Level: level, Event: "hongguo.device_registration", Source: sourceHongguo,
 		Host: host, HTTPStatus: response.StatusCode, Attempt: attempt,
-		Client: "Android 16 / Redmi 25053RT47C / App 7.3.5.32",
+		Client: "Android 16 / Redmi 25053RT47C / App 7.4.3.32",
 		CFRay: truncate(strings.TrimSpace(response.Header.Get("CF-Ray")), 128),
 		ResponseType: truncate(strings.TrimSpace(response.Header.Get("Content-Type")), 128),
 		Message: message,
@@ -318,8 +318,8 @@ func hongguoShouldTryAlternateRegistrationHost(err error) bool {
 
 func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string, string, error) {
 	header := hongguoRegistrationHeader{
-		DisplayName: "红果免费短剧", Aid: 8662, AppVersion: "7.3.5.32", VersionCode: 73532,
-		ManifestVersionCode: 73532, UpdateVersionCode: 73532, Channel: "update_64", Package: "com.phoenix.read",
+		DisplayName: "红果免费短剧", Aid: 8662, AppVersion: "7.4.3.32", VersionCode: 74332,
+		ManifestVersionCode: 74332, UpdateVersionCode: 74332, Channel: "update_64", Package: "com.phoenix.read",
 		AppLanguage: "zh", OS: "Android", OSVersion: "16", OSAPI: 36, DeviceModel: "25053RT47C",
 		DeviceBrand: "Redmi", DeviceManufacturer: "Xiaomi", CPUABI: "arm64-v8a", DensityDPI: 520,
 		DisplayDensity: "xxhdpi", Resolution: "2772x1280", Language: "zh", Timezone: 8, Access: "wifi",
@@ -345,10 +345,14 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 		query.Del("device_id")
 		query.Del("iid")
 		query.Set("req_id", uuidLike())
+		registerURL := hongguoDeviceRegisterURLForHost(host)
+		if hostIndex == 0 {
+			registerURL = downloader.providerCompatibilityEndpointURL(sourceHongguo, "deviceRegister", registerURL)
+		}
 		request, err := http.NewRequestWithContext(
 			ctx,
 			http.MethodPost,
-			hongguoDeviceRegisterURLForHost(host),
+			registerURL,
 			bytes.NewReader(body),
 		)
 		if err != nil {
@@ -408,7 +412,7 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 			if hongguoShouldTryAlternateRegistrationResponse(response, content) && hostIndex+1 < len(hosts) {
 				continue
 			}
-			if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden || response.StatusCode == 444 {
+			if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
 				return "", "", hongguoRegisterRejection{errors.Join(failures...)}
 			}
 			return "", "", errors.Join(failures...)

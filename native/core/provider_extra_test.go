@@ -453,3 +453,78 @@ func TestExtraAdult91PornaUsesOfficialDisplayName(t *testing.T) {
 		t.Fatalf("91Porna display name = %q", got)
 	}
 }
+
+
+func TestExtraAdultPPPSkipsBlurredPreviewMediaAndKeepsFullStream(t *testing.T) {
+	body := `<script>
+		var preview = 'https://cdn.ppp.porn/video/preview/teaser.mp4?token=blurred';
+		var stream = 'https://cdn.ppp.porn/video/full/index.m3u8?token=real';
+	</script>`
+	got := extraAdultPPPStreamURLs(body, pppBaseURL+"/v/example/")
+	if len(got) != 1 || got[0] != "https://cdn.ppp.porn/video/full/index.m3u8?token=real" {
+		t.Fatalf("PPP preview was not excluded or full stream was lost: %#v", got)
+	}
+}
+
+func TestExtraAdultPPPLowResolutionPreviewIsLastResort(t *testing.T) {
+	for _, address := range []string{
+		"https://cdn.ppp.porn/video/180p/clip.mp4",
+		"https://cdn.ppp.porn/video/clip-240p.mp4",
+		"https://cdn.ppp.porn/video/clip.mp4?quality=180",
+		"https://cdn.ppp.porn/video/index.m3u8?resolution=180p",
+	} {
+		if !extraAdultPPPLowResolutionMediaURL(address) {
+			t.Errorf("low-resolution stream was not detected: %s", address)
+		}
+	}
+	for _, address := range []string{
+		"https://cdn.ppp.porn/video/360p/episode.mp4",
+		"https://cdn.ppp.porn/video/episode.mp4?quality=720",
+		"https://cdn.ppp.porn/video/index.m3u8?token=180p-is-part-of-token",
+	} {
+		if extraAdultPPPLowResolutionMediaURL(address) {
+			t.Errorf("normal stream was incorrectly marked low resolution: %s", address)
+		}
+	}
+}
+
+func TestExtraAdultPPPPrefersFullStreamEvenWhen180pCandidateAppearsFirst(t *testing.T) {
+	routes := []extraAdultPPPStreamRoute{
+		{address: "https://cdn.ppp.porn/video/180p/teaser.mp4", lowResolution: true},
+		{address: "https://cdn.ppp.porn/video/full/index.m3u8"},
+		{address: "https://cdn.ppp.porn/video/720p/episode.mp4"},
+	}
+	extraAdultPPPPreferFullStreams(routes)
+	if routes[0].address != "https://cdn.ppp.porn/video/full/index.m3u8" ||
+		routes[1].address != "https://cdn.ppp.porn/video/720p/episode.mp4" ||
+		routes[2].address != "https://cdn.ppp.porn/video/180p/teaser.mp4" {
+		t.Fatalf("PPP did not put full streams ahead of the low-resolution fallback: %+v", routes)
+	}
+	fallbackOnly := []extraAdultPPPStreamRoute{
+		{address: "https://cdn.ppp.porn/video/180p/teaser.mp4", lowResolution: true},
+	}
+	extraAdultPPPPreferFullStreams(fallbackOnly)
+	if len(fallbackOnly) != 1 {
+		t.Fatalf("low-resolution fallback should be retained when it is the only route: %+v", fallbackOnly)
+	}
+}
+
+func TestExtraAdultPPPDetectsPreviewMarkersWithoutRejectingNormalMedia(t *testing.T) {
+	for _, address := range []string{
+		"https://cdn.ppp.porn/video/preview/clip.mp4",
+		"https://cdn.ppp.porn/trailers/clip.mp4",
+		"https://cdn.ppp.porn/video/clip.mp4?is_preview=1",
+	} {
+		if !extraAdultPPPIsPreviewMediaURL(address) {
+			t.Errorf("preview media was not identified: %s", address)
+		}
+	}
+	for _, address := range []string{
+		"https://cdn.ppp.porn/video/episode-01.mp4",
+		"https://cdn.ppp.porn/video/index.m3u8?token=preview-proof-but-not-a-preview-flag",
+	} {
+		if extraAdultPPPIsPreviewMediaURL(address) {
+			t.Errorf("normal media was incorrectly identified as preview: %s", address)
+		}
+	}
+}

@@ -38,6 +38,10 @@ Releases 同時提供 `SHA256SUMS.txt`，可用來核對下載檔案的 SHA-256 
 
 本版四平台自動化建置與封裝檢查已通過。播放器功能仍應以實際裝置測試結果為準；CI 建置成功不等同所有電視盒與手機型號均已完成播放驗證。完整更新內容請參閱 [CHANGELOG](CHANGELOG.md)。
 
+## Windows 線上更新
+
+Windows 免安裝版使用獨立的 `DTV-Updater.exe` 更新程序，但每次仍會下載並替換完整 Portable ZIP，以確保 Flutter 執行環境及原生 DLL 一致。更新器會驗證 SHA-256、備份舊檔，並要求新版回報正確版本後才清除備份；更新失敗時會嘗試還原舊版。詳細流程請參閱 [Windows 獨立更新器說明](docs/WINDOWS-UPDATER.md)。
+
 ## 開發與建置
 
 本專案使用 Flutter 作為跨平台介面，並以 `native/core` 作為共用 Go 核心。

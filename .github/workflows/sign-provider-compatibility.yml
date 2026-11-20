@@ -1,0 +1,45 @@
+name: Sign Provider Compatibility Manifest
+
+on:
+  push:
+    branches:
+      - main
+      - release/**
+    paths:
+      - "config/provider-compatibility.json"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dtv-provider-compatibility-sign-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    name: Sign compatibility manifest
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install Ed25519 signing dependency
+        run: python -m pip install --disable-pip-version-check "cryptography>=42,<47"
+      - name: Sign manifest
+        env:
+          DTV_PROVIDER_COMPAT_SIGNING_PRIVATE_KEY: ${{ secrets.DTV_PROVIDER_COMPAT_SIGNING_PRIVATE_KEY }}
+        run: python scripts/sign_provider_compatibility.py
+      - name: Commit updated signature
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add config/provider-compatibility.json.sig
+          if git diff --cached --quiet; then
+            echo "Manifest signature is already current."
+            exit 0
+          fi
+          git commit -m "chore: sign provider compatibility manifest"
+          git push

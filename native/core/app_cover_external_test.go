@@ -1803,6 +1803,42 @@ func TestPosterTitleVariantsIncludeVerifiedLocalizedAnimeAliases(t *testing.T) {
 			title: "奉子成婚",
 			aliases: []string{"デキちゃうまで婚", "Deki Chau Made Kon", "Marry Me, Let's Have a Baby!"},
 		},
+		{
+			title: "永生之大道歸一",
+			aliases: []string{"永生之大道归一", "永生大道归一", "Immortality: Tao Returns to One"},
+		},
+		{
+			title: "25歲的女高中生",
+			aliases: []string{"25岁的女高中生", "25歳の女子高生", "25-sai no Joshi Kousei"},
+		},
+		{
+			title: "蘇東坡與杭州的故事",
+			aliases: []string{"苏东坡与杭州的故事", "Su Dongpo and the Story of Hangzhou"},
+		},
+		{
+			title: "電鋸人",
+			aliases: []string{"电锯人", "鏈鋸人", "チェンソーマン", "Chainsaw Man"},
+		},
+		{
+			title: "死亡筆記 2006",
+			aliases: []string{"死亡筆記", "死亡笔记", "デスノート", "Death Note", "Death Note (2006)"},
+		},
+		{
+			title: "凡人修先傳：虛天戰紀",
+			aliases: []string{"凡人修仙傳：虛天戰紀", "凡人修仙传：虚天战纪", "凡人修仙傳之虛天戰紀"},
+		},
+		{
+			title: "凡人修仙傳(重製版)",
+			aliases: []string{"凡人修仙傳（重製版）", "凡人修仙传(重制版)"},
+		},
+		{
+			title: "相親物件是自己的學生",
+			aliases: []string{"相親對象是自己的學生", "相亲对象是自己的学生"},
+		},
+		{
+			title: "強勢的問題兒童",
+			aliases: []string{"强势的问题儿童", "強勢問題兒童"},
+		},
 	}
 	for _, test := range cases {
 		variants := posterTitleVariants(test.title)

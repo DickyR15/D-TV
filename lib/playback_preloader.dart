@@ -134,6 +134,15 @@ class PlaybackPreloader extends ChangeNotifier {
     int quality = 0,
     bool online = false,
   }) {
+    final hasIdentity = _identity != null;
+    if (!hasIdentity) {
+      _lastTakeResolveMs = 0;
+      DiaryService.add(
+        '[NextEpisodePreload] take hit=false source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality reason=not_prepared preloadResolveMs=0',
+      );
+      clear();
+      return null;
+    }
     final identityMatches =
         _identity == _key(drama, episode, quality, online);
     if (!identityMatches) {

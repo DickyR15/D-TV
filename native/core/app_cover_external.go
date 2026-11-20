@@ -254,6 +254,43 @@ var nativePosterTitleAliasGroups = [][]string{
 	{
 		"奉子成婚", "デキちゃうまで婚", "Deki Chau Made Kon", "Marry Me, Let's Have a Baby!",
 	},
+	{
+		"永生之大道歸一", "永生之大道归一", "永生大道归一",
+		"永生之太元仙府", "Immortality: Tao Returns to One",
+	},
+	{
+		"25歲的女高中生", "25岁的女高中生", "25歳の女子高生",
+		"25-sai no Joshi Kousei", "A 25-Year-Old High School Girl",
+	},
+	{
+		"蘇東坡與杭州的故事", "苏东坡与杭州的故事",
+		"Su Dongpo and the Story of Hangzhou",
+	},
+	{
+		"電鋸人", "电锯人", "鏈鋸人", "链锯人",
+		"チェンソーマン", "Chainsaw Man",
+	},
+	{
+		"死亡筆記 2006", "死亡筆記", "死亡笔记", "デスノート",
+		"Death Note", "Death Note (2006)",
+	},
+	{
+		"凡人修仙傳：虛天戰紀", "凡人修仙传：虚天战纪",
+		"凡人修仙傳之虛天戰紀", "凡人修仙传之虚天战纪",
+		"凡人修先傳：虛天戰紀",
+	},
+	{
+		"凡人修仙傳（重製版）", "凡人修仙传（重制版）",
+		"凡人修仙傳(重製版)", "凡人修仙传(重制版)",
+	},
+	{
+		"相親物件是自己的學生", "相親對象是自己的學生",
+		"相亲对象是自己的学生", "相親對象是自己的學生！",
+	},
+	{
+		"強勢的問題兒童", "强势的问题儿童",
+		"強勢問題兒童", "强势问题儿童",
+	},
 }
 
 func nativePosterTitleAliasGroup(value string) []string {

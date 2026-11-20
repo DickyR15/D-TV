@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"sort"
 	"runtime"
 	"strconv"
 	"strings"
@@ -370,12 +371,83 @@ func extraAdultFrame(page, body string) string {
 	return adultResolvePlaybackURL(page, strings.TrimRight(raw, "/>"))
 }
 
+func extraAdultPPPIsPreviewMediaURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return true
+	}
+	lowerPath := strings.ToLower(parsed.Path)
+	for _, segment := range strings.Split(lowerPath, "/") {
+		switch strings.TrimSpace(segment) {
+		case "preview", "previews", "trailer", "trailers", "teaser", "teasers", "sample", "samples", "thumb", "thumbnail":
+			return true
+		}
+	}
+	base := strings.ToLower(path.Base(lowerPath))
+	for _, marker := range []string{"preview", "trailer", "teaser", "sample"} {
+		if strings.Contains(base, marker) {
+			return true
+		}
+	}
+	query := parsed.Query()
+	for key, values := range query {
+		normalizedKey := strings.ToLower(strings.ReplaceAll(key, "-", "_"))
+		if normalizedKey == "preview" || normalizedKey == "is_preview" || normalizedKey == "teaser" {
+			for _, value := range values {
+				switch strings.ToLower(strings.TrimSpace(value)) {
+				case "1", "true", "yes", "preview", "teaser":
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+type extraAdultPPPStreamRoute struct {
+	address, referer string
+	lowResolution    bool
+}
+
+func extraAdultPPPPreferFullStreams(routes []extraAdultPPPStreamRoute) {
+	sort.SliceStable(routes, func(i, j int) bool {
+		return !routes[i].lowResolution && routes[j].lowResolution
+	})
+}
+
+// PPP occasionally exposes a short, low-resolution teaser before the actual
+// player stream. Keep these URLs as a last-resort fallback, but never let a
+// 180p/240p rendition outrank a normal-resolution stream.
+func extraAdultPPPLowResolutionMediaURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return true
+	}
+	qualityPattern := regexp.MustCompile(`(?i)(?:^|[^0-9])(144|180|240)(?:p|[^0-9]|$)`)
+	if qualityPattern.MatchString(parsed.Path) {
+		return true
+	}
+	for key, values := range parsed.Query() {
+		switch strings.ToLower(strings.ReplaceAll(key, "-", "_")) {
+		case "quality", "resolution", "definition", "height", "video_height":
+			for _, value := range values {
+				value = strings.ToLower(strings.TrimSpace(value))
+				value = strings.TrimSuffix(value, "p")
+				if height, parseErr := strconv.Atoi(value); parseErr == nil && height > 0 && height <= 240 {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func extraAdultPPPStreamURLs(body, page string) []string {
 	body = strings.NewReplacer("\\/", "/", "\\u002F", "/", "\\u0026", "&").Replace(html.UnescapeString(body))
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`(?is)\b(?:var|let|const)\s+(?:stream|m3u8|videoUrl|video_url|url|file|hls|backup|backup_url)\s*=\s*['"]([^'"]+)['"]`),
 		regexp.MustCompile(`(?is)['"](?:m3u8|hls|file|url|videoUrl|video_url|backup|backup_url)['"]\s*:\s*['"]([^'"]+)['"]`),
-		regexp.MustCompile(`(?is)\b(?:src|file|url)\s*:\s*['"]([^'"]+)['"]`),
+		regexp.MustCompile(`(?is)\b(?:src|file|url|backup|backup_url|stream|m3u8|hls)\s*:\s*['"]([^'"]+)['"]`),
 	}
 	candidates := make([]string, 0, 24)
 	for _, pattern := range patterns {
@@ -383,7 +455,7 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 			if len(match) > 1 { candidates = append(candidates, match[1]) }
 		}
 	}
-	tagPattern := regexp.MustCompile(`(?is)<(?:video|source)[^>]*>`)
+	tagPattern := regexp.MustCompile(`(?is)<(?:video|source)\b[^>]*>`)
 	for _, tag := range tagPattern.FindAllString(body, 64) {
 		if raw := firstNonEmpty(adultAttribute(tag, "src"), adultAttribute(tag, "data-src")); raw != "" {
 			candidates = append(candidates, raw)
@@ -398,7 +470,10 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 		parsed, err := url.Parse(media)
 		if err != nil || !isProviderHTTPMediaURL(media) || parsed.User != nil { continue }
 		mediaPath := strings.ToLower(parsed.Path)
-		if !(strings.HasSuffix(mediaPath, ".m3u8") || strings.HasSuffix(mediaPath, ".mp4")) || seen[media] { continue }
+		if !(strings.HasSuffix(mediaPath, ".m3u8") || strings.HasSuffix(mediaPath, ".mp4")) ||
+			extraAdultPPPIsPreviewMediaURL(media) || seen[media] {
+			continue
+		}
 		seen[media] = true
 		result = append(result, media)
 		if len(result) >= 16 { break }
@@ -413,35 +488,62 @@ func extraAdultPPPStreamURL(body, page string) string {
 }
 
 func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page string) ([]providerMedia, error) {
-	type route struct { address, referer string }
-	var routes []route
+	var routes []extraAdultPPPStreamRoute
 	seen := map[string]bool{}
 	add := func(address, referer string) {
 		address = strings.TrimSpace(address)
 		parsed, err := url.Parse(address)
-		if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil || seen[address] { return }
+		if err != nil || !isProviderHTTPMediaURL(address) || parsed.User != nil || seen[address] {
+			return
+		}
 		seen[address] = true
-		routes = append(routes, route{address: address, referer: referer})
+		routes = append(routes, extraAdultPPPStreamRoute{
+			address: address, referer: referer,
+			lowResolution: extraAdultPPPLowResolutionMediaURL(address),
+		})
+	}
+	preferredRouteCount := func() int {
+		count := 0
+		for _, candidate := range routes {
+			if !candidate.lowResolution {
+				count++
+			}
+		}
+		return count
 	}
 	addPage := func(sourceBody, sourcePage string) {
 		candidates := extraAdultPPPStreamURLs(sourceBody, sourcePage)
 		if len(candidates) == 0 {
-			if candidate := extraAdultHLS(sourceBody, sourcePage); candidate != "" { candidates = append(candidates, candidate) }
+			if candidate := extraAdultHLS(sourceBody, sourcePage); candidate != "" {
+				candidates = append(candidates, candidate)
+			}
 		}
-		for _, address := range candidates { add(address, sourcePage) }
+		for _, address := range candidates {
+			add(address, sourcePage)
+		}
 	}
 	addPage(body, page)
 	for _, frame := range extraAdultFrames(page, body, sourcePPP) {
-		if len(routes) >= 12 { break }
+		if preferredRouteCount() >= 12 {
+			break
+		}
 		embed, embedURL, err := extraAdultFetch(ctx, d, sourcePPP, frame, page)
-		if err != nil { continue }
-		before := len(routes)
+		if err != nil {
+			continue
+		}
+		beforePreferred := preferredRouteCount()
 		addPage(embed, embedURL)
-		if len(routes) == before {
+		// A short 180p preview must not stop the parser from following the
+		// actual player iframe (and its nested iframe) to the full stream.
+		if preferredRouteCount() == beforePreferred {
 			for _, nestedFrame := range extraAdultFrames(embedURL, embed, sourcePPP) {
-				if len(routes) >= 12 { break }
+				if preferredRouteCount() >= 12 {
+					break
+				}
 				nested, nestedURL, nestedErr := extraAdultFetch(ctx, d, sourcePPP, nestedFrame, embedURL)
-				if nestedErr != nil { continue }
+				if nestedErr != nil {
+					continue
+				}
 				addPage(nested, nestedURL)
 			}
 		}
@@ -449,6 +551,9 @@ func (d *Downloader) resolveExtraAdultPPPStreams(ctx context.Context, body, page
 	if len(routes) == 0 {
 		return nil, errors.New("PPP 播放器沒有找到有效的 HLS／MP4 網址")
 	}
+	// Keep real streams first and reserve 144p/180p/240p renditions for
+	// fallback only when the page exposes no better stream.
+	extraAdultPPPPreferFullStreams(routes)
 	media := make([]providerMedia, 0, len(routes))
 	for _, candidate := range routes {
 		credentials := &providerMediaCredentials{referer: candidate.referer, userAgent: adultUserAgent}

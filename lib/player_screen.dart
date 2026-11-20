@@ -2997,7 +2997,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         return;
       }
       final resolveClock = Stopwatch()..start();
-      if (retained != null) {
+      if (handoffPlan != null) {
+        // DetailScreen already resolved this exact episode. Consume the
+        // transferred plan instead of resolving it a second time on Android
+        // and iOS, where an unnecessary API round-trip can add seconds.
+        prepared = await _loader.use(handoffPlan);
+      } else if (retained != null) {
         prepared = await _loader.fallback(retained!);
       } else if (warmed != null) {
         prepared = await _loader.use(warmed);
@@ -3060,9 +3065,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         final setupClock = Stopwatch()..start();
         final platform = _player.platform;
         if (platform is NativePlayer) {
-          if (Platform.isWindows) {
-            // The Windows log repeatedly reports file-cache creation failures.
-            // Keep short-form streaming cache in RAM and use display-clock pacing.
+          if (Platform.isWindows || Platform.isIOS) {
+            // Windows and iOS traces report MPV file-cache creation failures.
+            // Keep streaming cache in RAM on these sandboxes.
             try {
               await _setPlaybackProperty(platform, 'cache-on-disk', 'no');
               DiaryService.add('[MPV] cache_on_disk=no');

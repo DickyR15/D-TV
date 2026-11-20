@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:screen_retriever/screen_retriever.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'desktop_window_state.dart';
 
@@ -60,7 +61,61 @@ Future<void> main(List<String> args) async {
   runApp(const AppBootstrap());
   WidgetsBinding.instance.addPostFrameCallback((_) {
     unawaited(_initializeUiLocalizationSafely());
+    unawaited(_acknowledgeWindowsUpdaterStartup(args));
   });
+}
+
+String? _updaterArgument(List<String> args, String name) {
+  final prefix = name + '=';
+  for (final argument in args) {
+    if (argument.startsWith(prefix)) {
+      return argument.substring(prefix.length);
+    }
+  }
+  return null;
+}
+
+/// The standalone Windows updater waits for this version/token handshake
+/// before it removes the previous bundle and its rollback backup.
+Future<void> _acknowledgeWindowsUpdaterStartup(List<String> args) async {
+  if (!Platform.isWindows) return;
+  final ackPath = _updaterArgument(args, '--dtv-updater-ack');
+  final expectedVersion = _updaterArgument(args, '--dtv-updater-version');
+  final token = _updaterArgument(args, '--dtv-updater-token');
+  final localAppData = Platform.environment['LOCALAPPDATA'];
+  if (ackPath == null ||
+      expectedVersion == null ||
+      token == null ||
+      localAppData == null ||
+      !RegExp(r'^\d+\.\d+\.\d+$').hasMatch(expectedVersion) ||
+      !RegExp(r'^[a-fA-F0-9]{32}$').hasMatch(token)) {
+    return;
+  }
+
+  try {
+    final allowedDirectory = Directory(
+      localAppData +
+          Platform.pathSeparator +
+          'D TV' +
+          Platform.pathSeparator +
+          'UpdaterHealth',
+    ).absolute.path.toLowerCase();
+    final acknowledgement = File(ackPath).absolute;
+    if (acknowledgement.parent.path.toLowerCase() != allowedDirectory ||
+        !acknowledgement.path.toLowerCase().endsWith('.ack')) {
+      return;
+    }
+
+    final package = await PackageInfo.fromPlatform();
+    if (package.version != expectedVersion) return;
+    await acknowledgement.parent.create(recursive: true);
+    await acknowledgement.writeAsString(
+      package.version + '\n' + token + '\n' + pid.toString(),
+      flush: true,
+    );
+  } catch (_) {
+    // The updater will time out and roll back if the handshake cannot be written.
+  }
 }
 
 Future<void> _initializeUiLocalizationSafely() async {
@@ -629,7 +684,7 @@ class DuanjuApp extends StatelessWidget {
                                         const SizedBox(height: 20),
                                         FilledButton(
                                           onPressed: onRetry,
-                                          child: const Text('重新開啟'),
+                                          child: const Text('重新更新設定並重試'),
                                         ),
                                       ],
                                     ),

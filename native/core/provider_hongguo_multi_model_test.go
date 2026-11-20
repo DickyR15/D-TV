@@ -74,6 +74,51 @@ func TestHongguoFallbackResponseSelectsPlayableMedia(t *testing.T) {
 	}
 }
 
+func TestResolveHongguoMultiModelResultUsesValidatedFallbackAPIWhenVideoListCannotPlay(t *testing.T) {
+	const videoID = "123456"
+	const fallbackURL = "https://api5-normal-sinfonlineb.fqnovel.com/aweme/v1/play/?force_fids=legacy"
+	var fallbackCalls int
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		fallbackCalls++
+		if request.URL.Host != "api5-normal-sinfonlineb.fqnovel.com" ||
+			request.URL.Path != "/aweme/v1/play/" {
+			t.Errorf("unexpected fallback host/path: %s", request.URL)
+		}
+		query := request.URL.Query()
+		if query.Get("force_fids") != "" || query.Get("format_type") != "mp4" || query.Get("codec_type") != "1" {
+			t.Errorf("fallback query was not normalized: %v", query)
+		}
+		body := `{"code":0,"video_info":{"data":{"video_list":[{"main_url":"https://media.test/from-fallback.mp4","video_meta":{"codec_type":"h264","definition":"720p"}}]}}}`
+		return sourceFixtureResponse(request, http.StatusOK, body), nil
+	})
+	response := map[string]any{
+		"code": 0,
+		"data": map[string]any{
+			videoID: map[string]any{
+				"video_model": map[string]any{
+					"fallback_api": fallbackURL,
+					"video_list": []any{
+						map[string]any{
+							"main_url": "https://media.test/h266-only.mp4",
+							"video_meta": map[string]any{"codec_type": "bytevc2"},
+						},
+					},
+				},
+			},
+		},
+	}
+	media, err := d.resolveHongguoMultiModelResult(context.Background(), response, videoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if media.URL != "https://media.test/from-fallback.mp4" {
+		t.Fatalf("fallback media URL=%q", media.URL)
+	}
+	if fallbackCalls != 1 {
+		t.Fatalf("fallback API calls=%d, want one", fallbackCalls)
+	}
+}
+
 func TestResolveHongguoMultiModelMediaUsesDocumentedV1Endpoint(t *testing.T) {
 	const videoID = "123456"
 	var calls []string

@@ -238,6 +238,32 @@ func mapBool(values map[string]any, key string) bool {
 	return value
 }
 
+func hongguoRegistrationWasRateLimited(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "紅果設備註冊 HTTP 444")
+}
+
+// When the official same-series endpoint is temporarily blocked at device
+// registration (HTTP 444), keep the already-loaded current work available.
+// This is a one-item fallback only; never infer or fabricate sibling seasons.
+func hongguoCurrentSeasonFallback(drama nativeDrama) []nativeDramaSeason {
+	label := "目前作品"
+	if drama.SeriesSeasonNumber > 0 {
+		unit := drama.SeriesSeasonUnit
+		if unit != "部" {
+			unit = "季"
+		}
+		label = fmt.Sprintf("第%d%s", drama.SeriesSeasonNumber, unit)
+	}
+	return []nativeDramaSeason{{
+		Drama: drama,
+		Number: drama.SeriesSeasonNumber,
+		Label: label,
+		Subtitle: "紅果季別服務暫時無法連線，先保留目前作品",
+		Playable: drama.Episodes > 0,
+		Upcoming: false,
+	}}
+}
+
 func (engine *nativeEngine) nativeSeasons(
 	ctx context.Context,
 	drama nativeDrama,
@@ -250,6 +276,12 @@ func (engine *nativeEngine) nativeSeasons(
 	case sourceHongguo:
 		items, err := engine.downloader.hongguoAppSeasons(ctx, sourceID)
 		if err != nil {
+			if hongguoRegistrationWasRateLimited(err) {
+				return map[string]any{
+					"items": hongguoCurrentSeasonFallback(drama),
+					"warning": err.Error(),
+				}, nil
+			}
 			return nil, err
 		}
 		return map[string]any{"items": items}, nil

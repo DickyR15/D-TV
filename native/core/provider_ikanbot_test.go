@@ -1,4 +1,39 @@
-package core
+func TestIkanbotAutomaticRouteSelectionPrefersHighestQuality(t *testing.T) {
+	const pageURL = "https://admin-api.aikanbot.com/play/1023900"
+	chapter := Chapter{
+		ID: providerChapterID(sourceIkanBot, "1023900", "1"),
+		Source: sourceIkanBot,
+		VideoURL: "https://cdn.example.test/720/episode.mp4",
+		PlayLine: "720P",
+		Referer: pageURL,
+		PageURL: pageURL,
+		PlaybackVariants: []string{
+			"1080:https://cdn.example.test/1080/episode.mp4",
+			"480:https://cdn.example.test/480/episode.mp4",
+		},
+	}
+	media, err := (&Downloader{}).resolveIkanbotMedia(context.Background(), Task{
+		DramaID: providerDramaID(sourceIkanBot, "1023900"),
+		Chapter: chapter,
+		Index: 1,
+	})
+	if err != nil {
+		t.Fatalf("resolveIkanbotMedia failed: %v", err)
+	}
+	choice := nativePlaybackChoices(media, 0)
+	want := []string{
+		"https://cdn.example.test/1080/episode.mp4",
+		"https://cdn.example.test/720/episode.mp4",
+	}
+	if len(choice.media) != len(want) {
+		t.Fatalf("automatic routes = %d, want %d (sub-720P backup intentionally filtered)", len(choice.media), len(want))
+	}
+	for index, address := range want {
+		if choice.media[index].URL != address {
+			t.Fatalf("automatic route %d = %q, want %q", index, choice.media[index].URL, address)
+		}
+	}
+}package core
 
 import (
 	"context"
@@ -545,7 +580,7 @@ func TestIkanbotImageCandidatesSupportsLazyAndSrcset(t *testing.T) {
 
 
 
-func TestIkanbotMovieChaptersUseLanguageLabelsAndKeepDifferentSourcesSeparate(t *testing.T) {
+func TestIkanbotMovieChaptersUseLanguageChoicesAndMergeCDNFallbacks(t *testing.T) {
 	lines := []ikanbotLine{
 		{Flag: "1080P", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://cdn.example.test/mandarin-1080.mp4", Order: 1}}},
 		{Flag: "1080P", Episodes: []ikanbotEpisode{{Name: "日語版", URL: "https://cdn.example.test/japanese.mp4", Order: 1}}},
@@ -554,11 +589,11 @@ func TestIkanbotMovieChaptersUseLanguageLabelsAndKeepDifferentSourcesSeparate(t 
 		{Flag: "來源乙", Episodes: []ikanbotEpisode{{Name: "第1集", URL: "https://cdn-b.example.test/movie.mp4", Order: 1}}},
 	}
 	chapters := ikanbotBuildChapters("1023901", "https://admin-api.aikanbot.com/play/1023901", lines, true)
-	if len(chapters) != 4 {
-		t.Fatalf("movie choices = %d, want two audio versions plus two separate sources: %#v", len(chapters), chapters)
+	if len(chapters) != 3 {
+		t.Fatalf("movie choices = %d, want two audio choices plus one automatic route group: %#v", len(chapters), chapters)
 	}
-	if chapters[0].Title != "國語版" || chapters[1].Title != "日語版" {
-		t.Fatalf("audio versions were not shown by language: %#v", chapters[:2])
+	if chapters[0].Title != "國語版" || chapters[1].Title != "日語版" || chapters[2].Title != "電影版" {
+		t.Fatalf("language choices or default movie label are incorrect: %#v", chapters)
 	}
 	if chapters[0].VideoURL != "https://cdn.example.test/mandarin-1080.mp4" ||
 		chapters[0].PlayLine != "1080P" || len(chapters[0].PlaybackVariants) != 1 ||
@@ -566,9 +601,9 @@ func TestIkanbotMovieChaptersUseLanguageLabelsAndKeepDifferentSourcesSeparate(t 
 		t.Fatalf("same-language alternate route was not retained as a fallback: %#v", chapters[0])
 	}
 	if chapters[2].VideoURL != "https://cdn-a.example.test/movie.mp4" ||
-		chapters[3].VideoURL != "https://cdn-b.example.test/movie.mp4" ||
-		chapters[2].Title == chapters[3].Title {
-		t.Fatalf("different movie sources were merged instead of listed separately: %#v", chapters[2:])
+		len(chapters[2].PlaybackVariants) != 1 ||
+		chapters[2].PlaybackVariants[0] != "0:https://cdn-b.example.test/movie.mp4" {
+		t.Fatalf("unlabelled source lines were not merged as automatic fallbacks: %#v", chapters[2])
 	}
 }
 
@@ -629,35 +664,32 @@ func TestGetHuangguoChaptersDispatchesIkanbotMovieAsSingleSelectableVersions(t *
 }
 
 
-func TestIkanbotMovieKeepsSameLanguageFromDifferentSourcesSeparate(t *testing.T) {
+func TestIkanbotMovieMergesSameLanguageAcrossDifferentSources(t *testing.T) {
 	lines := []ikanbotLine{
 		{Flag: "來源甲", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-a.example.test/movie.mp4", Order: 1}}},
 		{Flag: "來源乙", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-b.example.test/movie.mp4", Order: 1}}},
 	}
 	chapters := ikanbotBuildChapters("1023902", "https://admin-api.aikanbot.com/play/1023902", lines, true)
-	if len(chapters) != 2 {
-		t.Fatalf("same-language different sources = %d choices, want 2: %#v", len(chapters), chapters)
-	}
-	if chapters[0].Title != "國語版（來源甲）" || chapters[1].Title != "國語版（來源乙）" {
-		t.Fatalf("different movie source names were not preserved: %#v", chapters)
+	if len(chapters) != 1 || chapters[0].Title != "國語版" ||
+		chapters[0].VideoURL != "https://source-a.example.test/movie.mp4" ||
+		len(chapters[0].PlaybackVariants) != 1 ||
+		chapters[0].PlaybackVariants[0] != "0:https://source-b.example.test/movie.mp4" {
+		t.Fatalf("same-language CDN lines were not merged into one language choice: %#v", chapters)
 	}
 }
 
 
-func TestIkanbotMovieKeepsRepeatedLanguageSourceFlagsAsSeparateChoices(t *testing.T) {
+func TestIkanbotMovieMergesRepeatedLanguageRowsAsFallbacks(t *testing.T) {
 	lines := []ikanbotLine{
 		{Flag: "國語", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-a.example.test/movie.mp4", Order: 1}}},
 		{Flag: "國語", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-b.example.test/movie.mp4", Order: 1}}},
 	}
 	chapters := ikanbotBuildChapters("1023903", "https://admin-api.aikanbot.com/play/1023903", lines, true)
-	if len(chapters) != 2 {
-		t.Fatalf("repeated language source flags = %d choices, want 2: %#v", len(chapters), chapters)
-	}
-	if chapters[0].Title != "國語版（片源 1）" || chapters[1].Title != "國語版（片源 2）" {
-		t.Fatalf("same-language source numbering is incorrect: %#v", chapters)
-	}
-	if chapters[0].VideoURL == chapters[1].VideoURL {
-		t.Fatalf("distinct source URLs were collapsed: %#v", chapters)
+	if len(chapters) != 1 || chapters[0].Title != "國語版" ||
+		chapters[0].VideoURL != "https://source-a.example.test/movie.mp4" ||
+		len(chapters[0].PlaybackVariants) != 1 ||
+		chapters[0].PlaybackVariants[0] != "0:https://source-b.example.test/movie.mp4" {
+		t.Fatalf("repeated language rows were not merged as fallbacks: %#v", chapters)
 	}
 }
 
@@ -680,41 +712,65 @@ func TestIkanbotMovieQualityOnlyRowsBecomeOneMovieChoice(t *testing.T) {
 	}
 }
 
-func TestIkanbotMovieSameSourceQualityRowsStayTogetherButDifferentSourcesSplit(t *testing.T) {
+func TestIkanbotMovieMergesAllNamedAndQualityCDNsIntoOneChoice(t *testing.T) {
 	lines := []ikanbotLine{
 		{Flag: "來源甲 1080P", Episodes: []ikanbotEpisode{{Name: "第1集", URL: "https://source-a.example.test/1080.mp4", Order: 1}}},
 		{Flag: "來源甲 720P", Episodes: []ikanbotEpisode{{Name: "第1集", URL: "https://source-a.example.test/720.mp4", Order: 1}}},
 		{Flag: "來源乙 1080P", Episodes: []ikanbotEpisode{{Name: "第1集", URL: "https://source-b.example.test/1080.mp4", Order: 1}}},
 	}
 	chapters := ikanbotBuildChapters("1023905", "https://admin-api.aikanbot.com/play/1023905", lines, true)
-	if len(chapters) != 2 {
-		t.Fatalf("movie source/quality choices = %d, want 2 sources: %#v", len(chapters), chapters)
+	if len(chapters) != 1 || chapters[0].Title != "電影版" ||
+		chapters[0].VideoURL != "https://source-a.example.test/1080.mp4" {
+		t.Fatalf("all unlabelled movie CDN lines should form one selection: %#v", chapters)
 	}
-	if chapters[0].Title != "片源 1（來源甲）" || chapters[1].Title != "片源 2（來源乙）" {
-		t.Fatalf("movie source labels are incorrect: %#v", chapters)
-	}
-	if len(chapters[0].PlaybackVariants) != 1 ||
-		chapters[0].PlaybackVariants[0] != "720:https://source-a.example.test/720.mp4" {
-		t.Fatalf("same-source resolution fallback was not retained: %#v", chapters[0].PlaybackVariants)
+	if len(chapters[0].PlaybackVariants) != 2 ||
+		chapters[0].PlaybackVariants[0] != "1080:https://source-b.example.test/1080.mp4" ||
+		chapters[0].PlaybackVariants[1] != "720:https://source-a.example.test/720.mp4" {
+		t.Fatalf("automatic movie fallback order is incorrect: %#v", chapters[0].PlaybackVariants)
 	}
 }
 
 
-func TestIkanbotMovieLanguageTracksKeepSameSourceQualityFallback(t *testing.T) {
+func TestIkanbotMovieLanguageTracksMergeAcrossCDNQualityVariants(t *testing.T) {
 	lines := []ikanbotLine{
 		{Flag: "來源甲 1080P", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-a.example.test/mandarin-1080.mp4", Order: 1}}},
 		{Flag: "來源甲 720P", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-a.example.test/mandarin-720.mp4", Order: 1}}},
 		{Flag: "來源乙 1080P", Episodes: []ikanbotEpisode{{Name: "國語", URL: "https://source-b.example.test/mandarin-1080.mp4", Order: 1}}},
 	}
 	chapters := ikanbotBuildChapters("1023906", "https://admin-api.aikanbot.com/play/1023906", lines, true)
-	if len(chapters) != 2 {
-		t.Fatalf("language/source grouping = %d choices, want two providers: %#v", len(chapters), chapters)
+	if len(chapters) != 1 || chapters[0].Title != "國語版" {
+		t.Fatalf("all Mandarin CDN rows should be one language choice: %#v", chapters)
 	}
-	if chapters[0].Title != "國語版（來源甲）" || chapters[1].Title != "國語版（來源乙）" {
-		t.Fatalf("language/source labels are incorrect: %#v", chapters)
+	if chapters[0].VideoURL != "https://source-a.example.test/mandarin-1080.mp4" ||
+		len(chapters[0].PlaybackVariants) != 2 ||
+		chapters[0].PlaybackVariants[0] != "1080:https://source-b.example.test/mandarin-1080.mp4" ||
+		chapters[0].PlaybackVariants[1] != "720:https://source-a.example.test/mandarin-720.mp4" {
+		t.Fatalf("language fallback order is incorrect: %#v", chapters[0])
 	}
-	if len(chapters[0].PlaybackVariants) != 1 ||
-		chapters[0].PlaybackVariants[0] != "720:https://source-a.example.test/mandarin-720.mp4" {
-		t.Fatalf("same-source language quality fallback was not retained: %#v", chapters[0].PlaybackVariants)
+}
+
+
+func TestIkanbotMovieThirtyOneSourceRowsUseOnePrimaryAndThirtyFallbacks(t *testing.T) {
+	lines := make([]ikanbotLine, 31)
+	for index := range lines {
+		lines[index] = ikanbotLine{
+			Flag: fmt.Sprintf("source-%02d", index+1),
+			Episodes: []ikanbotEpisode{{
+				Name: "正片",
+				URL: fmt.Sprintf("https://cdn.example.test/source-%02d/movie.m3u8", index+1),
+				Order: 1,
+			}},
+		}
+	}
+	chapters := ikanbotBuildChapters("1023907", "https://admin-api.aikanbot.com/play/1023907", lines, true)
+	if len(chapters) != 1 {
+		t.Fatalf("31 CDN rows should become one movie selection, got %d: %#v", len(chapters), chapters)
+	}
+	if chapters[0].Title != "電影版" ||
+		chapters[0].VideoURL != "https://cdn.example.test/source-01/movie.m3u8" ||
+		len(chapters[0].PlaybackVariants) != 30 ||
+		chapters[0].PlaybackVariants[0] != "0:https://cdn.example.test/source-02/movie.m3u8" ||
+		chapters[0].PlaybackVariants[29] != "0:https://cdn.example.test/source-31/movie.m3u8" {
+		t.Fatalf("31-row fallback plan did not preserve preferred order: %#v", chapters[0])
 	}
 }
