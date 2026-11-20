@@ -279,7 +279,7 @@ func (stream *nativeStreamServer) nativeRequest(request *http.Request, standardH
 var nativePlaylistURI = regexp.MustCompile(`URI="([^"]+)"`)
 
 var (
-	nativeHLSResolutionPattern    = regexp.MustCompile(`(?i)RESOLUTION\\s*=\\s*([0-9]+)x([0-9]+)`)
+	nativeHLSResolutionPattern    = regexp.MustCompile(`(?i)RESOLUTION\s*=\s*([0-9]+)x([0-9]+)`)
 	nativeHLSURLQualityPattern    = regexp.MustCompile(`(?i)(?:^|[^0-9])([0-9]{3,4})p(?:[^a-z0-9]|$)`)
 	nativeHLSURLDimensionsPattern = regexp.MustCompile(`(?i)(?:^|[^0-9])([0-9]{3,4})x([0-9]{3,4})(?:[^0-9]|$)`)
 )
