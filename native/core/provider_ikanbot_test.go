@@ -701,6 +701,7 @@ func TestIkanbotMovieThirtyOneSourceRowsUseOnePrimaryAndThirtyFallbacks(t *testi
 		chapters[0].PlaybackVariants[29] != "0:https://cdn.example.test/source-31/movie.m3u8" {
 		t.Fatalf("31-row fallback plan did not preserve preferred order: %#v", chapters[0])
 	}
+}
 
 func TestIkanbotAutomaticRouteSelectionPrefersHighestQuality(t *testing.T) {
 	const pageURL = "https://admin-api.aikanbot.com/play/1023900"
