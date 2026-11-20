@@ -525,7 +525,15 @@ func nativeDispatch(input nativeInput) (any, error) {
 		}
 		engine := nativeState.engine
 		nativeState.Unlock()
-		engine.downloader.startProviderCompatibilityRefresh()
+
+		// D-TV blocks the main application until a fresh, signed compatibility
+		// manifest has been downloaded from the owner's GitHub repository.
+		// A cached manifest never bypasses this startup check.
+		refreshContext, cancel := context.WithTimeout(context.Background(), 24*time.Second)
+		defer cancel()
+		if err := engine.downloader.refreshProviderCompatibility(refreshContext); err != nil {
+			return nil, fmt.Errorf("必須先更新 D-TV 片源相容性設定才能繼續使用：%w", err)
+		}
 		return map[string]any{
 			"version": "0.2.17",
 			"standalone": true,
