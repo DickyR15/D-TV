@@ -453,3 +453,35 @@ func TestExtraAdult91PornaUsesOfficialDisplayName(t *testing.T) {
 		t.Fatalf("91Porna display name = %q", got)
 	}
 }
+
+
+func TestExtraAdultPPPSkipsBlurredPreviewMediaAndKeepsFullStream(t *testing.T) {
+	body := `<script>
+		var preview = 'https://cdn.ppp.porn/video/preview/teaser.mp4?token=blurred';
+		var stream = 'https://cdn.ppp.porn/video/full/index.m3u8?token=real';
+	</script>`
+	got := extraAdultPPPStreamURLs(body, pppBaseURL+"/v/example/")
+	if len(got) != 1 || got[0] != "https://cdn.ppp.porn/video/full/index.m3u8?token=real" {
+		t.Fatalf("PPP preview was not excluded or full stream was lost: %#v", got)
+	}
+}
+
+func TestExtraAdultPPPDetectsPreviewMarkersWithoutRejectingNormalMedia(t *testing.T) {
+	for _, address := range []string{
+		"https://cdn.ppp.porn/video/preview/clip.mp4",
+		"https://cdn.ppp.porn/trailers/clip.mp4",
+		"https://cdn.ppp.porn/video/clip.mp4?is_preview=1",
+	} {
+		if !extraAdultPPPIsPreviewMediaURL(address) {
+			t.Errorf("preview media was not identified: %s", address)
+		}
+	}
+	for _, address := range []string{
+		"https://cdn.ppp.porn/video/episode-01.mp4",
+		"https://cdn.ppp.porn/video/index.m3u8?token=preview-proof-but-not-a-preview-flag",
+	} {
+		if extraAdultPPPIsPreviewMediaURL(address) {
+			t.Errorf("normal media was incorrectly identified as preview: %s", address)
+		}
+	}
+}
