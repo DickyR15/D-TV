@@ -80,17 +80,39 @@ func newHTTP1NoALPNTransport(base *http.Transport) *http.Transport {
 // hostDoHTransport retries only one HTTPS host through verified DoH.
 // It preserves the request hostname for Host/SNI/certificate verification.
 type hostDoHTransport struct {
-	base *http.Transport
-	resolver *dnsResolver
-	router *proxyRouter
-	host string
-	mu sync.Mutex
-	preferred cdnRoute
+	base      *http.Transport
+	resolver  *dnsResolver
+	router    *proxyRouter
+	host      string
+	hosts     []string
+	upstream  http.RoundTripper
+	mu        sync.Mutex
+	preferred map[string]cdnRoute
+}
+
+func (transport *hostDoHTransport) handlesHost(host string) bool {
+	if strings.EqualFold(host, transport.host) && transport.host != "" {
+		return true
+	}
+	for _, candidate := range transport.hosts {
+		if strings.EqualFold(host, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func (transport *hostDoHTransport) upstreamTransport() http.RoundTripper {
+	if transport.upstream != nil {
+		return transport.upstream
+	}
+	return transport.base
 }
 
 func (transport *hostDoHTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if !strings.EqualFold(request.URL.Hostname(), transport.host) || request.URL.Scheme != "https" {
-		return transport.base.RoundTrip(request)
+	host := request.URL.Hostname()
+	if request.URL.Scheme != "https" || !transport.handlesHost(host) {
+		return transport.upstreamTransport().RoundTrip(request)
 	}
 	if transport.router != nil {
 		proxy, proxyErr := transport.router.proxy(request)
@@ -99,20 +121,31 @@ func (transport *hostDoHTransport) RoundTrip(request *http.Request) (*http.Respo
 		}
 	}
 	transport.mu.Lock()
-	preferred := transport.preferred
+	if transport.preferred == nil {
+		transport.preferred = map[string]cdnRoute{}
+	}
+	preferred := transport.preferred[strings.ToLower(host)]
 	transport.mu.Unlock()
 	if preferred.address != "" && time.Now().Before(preferred.expires) {
 		response, err := transport.roundTripAddress(request, preferred.address)
-		if err == nil { return response, nil }
-		if request.Context().Err() != nil { return nil, request.Context().Err() }
+		if err == nil {
+			return response, nil
+		}
+		if request.Context().Err() != nil {
+			return nil, request.Context().Err()
+		}
 	}
 	response, err := transport.base.RoundTrip(request)
-	if err == nil { return response, nil }
-	if request.Context().Err() != nil { return nil, request.Context().Err() }
+	if err == nil {
+		return response, nil
+	}
+	if request.Context().Err() != nil {
+		return nil, request.Context().Err()
+	}
 	if !isRecoverableHostDNSFailure(err) {
 		return nil, err
 	}
-	entry, lookupErr := transport.resolver.lookupEntry(request.Context(), request.URL.Hostname(), "")
+	entry, lookupErr := transport.resolver.lookupEntry(request.Context(), host, "")
 	if lookupErr != nil {
 		return nil, fmt.Errorf("紅果設備註冊 DNS 解析失敗：%w", publicError(errors.Join(err, lookupErr)))
 	}
@@ -121,16 +154,20 @@ func (transport *hostDoHTransport) RoundTrip(request *http.Request) (*http.Respo
 		response, retryErr := transport.roundTripAddress(request, address)
 		if retryErr == nil {
 			transport.mu.Lock()
-			transport.preferred = cdnRoute{address: address, expires: entry.expires}
+			if transport.preferred == nil {
+				transport.preferred = map[string]cdnRoute{}
+			}
+			transport.preferred[strings.ToLower(host)] = cdnRoute{address: address, expires: entry.expires}
 			transport.mu.Unlock()
 			return response, nil
 		}
-		if request.Context().Err() != nil { return nil, request.Context().Err() }
+		if request.Context().Err() != nil {
+			return nil, request.Context().Err()
+		}
 		lastErr = retryErr
 	}
-	return nil, fmt.Errorf("紅果設備註冊 %s 連線失敗（已嘗試備用 DNS）: %w", request.URL.Hostname(), publicError(lastErr))
+	return nil, fmt.Errorf("紅果設備註冊 %s 連線失敗（已嘗試備用 DNS）: %w", host, publicError(lastErr))
 }
-
 func isRecoverableHostDNSFailure(err error) bool {
 	if err == nil {
 		return false
@@ -163,7 +200,9 @@ func (transport *hostDoHTransport) roundTripAddress(request *http.Request, addre
 			return nil, errors.New("紅果註冊請求不支援安全重試")
 		}
 		body, err := request.GetBody()
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		attempt.Body = body
 	}
 	return clone.RoundTrip(attempt)
@@ -171,6 +210,9 @@ func (transport *hostDoHTransport) roundTripAddress(request *http.Request, addre
 
 func (transport *hostDoHTransport) CloseIdleConnections() {
 	transport.base.CloseIdleConnections()
+	if closer, ok := transport.upstream.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
 	if transport.resolver != nil && transport.resolver.client != nil {
 		transport.resolver.client.CloseIdleConnections()
 	}
