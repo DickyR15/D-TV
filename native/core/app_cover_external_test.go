@@ -455,6 +455,11 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 			drama: nativeDrama{ID: "duoduo:99123", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
 			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 		},
+		{
+			name: "奉子成婚 accepts missing Duoduo catalogue year with exact anime title",
+			drama: nativeDrama{ID: "duoduo:99124", Title: "デキちゃうまで婚", Category: "動漫", Tags: []string{"日本動漫"}},
+			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -488,7 +493,6 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{ID: "duoduo:1193", Title: "奉子成婚", Category: "劇集", OnlineDate: "2001"},
 		{ID: "duoduo:1192", Title: "奉子成婚", Category: "劇集", OnlineDate: "2025"},
 		{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2001"},
-		{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}},
 		{ID: "duoduo:87222", Title: "單身即地獄 第五季", Category: "劇集", OnlineDate: "2026"},
 		{ID: "duoduo:87221", Title: "單身即地獄 第四季", Category: "劇集", OnlineDate: "2025"},
 		{ID: "duoduo:59903", Title: "明星大偵探 第二季", Category: "綜藝", OnlineDate: "2017"},
@@ -1664,6 +1668,10 @@ func TestPosterTitleVariantsIncludeVerifiedLocalizedAnimeAliases(t *testing.T) {
 		{
 			title: "斗羅大陸第二季",
 			aliases: []string{"斗罗大陆", "Soul Land", "Douluo Dalu"},
+		},
+		{
+			title: "奉子成婚",
+			aliases: []string{"デキちゃうまで婚", "Deki Chau Made Kon", "Marry Me, Let's Have a Baby!"},
 		},
 	}
 	for _, test := range cases {
