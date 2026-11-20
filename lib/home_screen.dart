@@ -1640,9 +1640,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     if (Platform.isWindows && asset.sha256 == null) {
-      throw const FormatException(
-        '此 Windows Release 沒有提供 ZIP SHA-256，已停止自動更新以保護現有程式。',
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '此 Windows Release 沒有提供 ZIP SHA-256，已停止自動更新以保護現有程式。',
+            ),
+          ),
+        );
+      }
+      return;
     }
 
     var progressDialogOpen = true;
