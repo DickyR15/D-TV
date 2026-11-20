@@ -319,8 +319,7 @@ func nativeDuoduoBangumiPosterAlias(drama nativeDrama) (string, bool) {
 	}
 	switch normalizeBangumiPosterExactTitle(drama.Title) {
 	case normalizeBangumiPosterExactTitle("永生之大道歸一"),
-		normalizeBangumiPosterExactTitle("永生之太元仙府"),
-		normalizeBangumiPosterExactTitle("永生新篇章"):
+		normalizeBangumiPosterExactTitle("永生之太元仙府"):
 		year := bangumiPosterYear(drama.OnlineDate)
 		if year != "" && year != "2025" && year != "2026" {
 			return "", false
