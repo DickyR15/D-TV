@@ -55,7 +55,10 @@ func nativeCoverAttemptTimeout(source, address string, cacheClass ...string) tim
 		if err == nil && strings.EqualFold(parsed.Hostname(), "wsrv.nl") {
 			return 6 * time.Second
 		}
-		if len(cacheClass) > 0 && cacheClass[0] == "provider" {
+		// Calls without an explicit cache class are the original provider
+		// poster path; keep its existing 2.5s budget. Only explicit external
+		// artwork receives the shorter 4s failover window.
+		if len(cacheClass) == 0 || cacheClass[0] == "provider" {
 			return 2500 * time.Millisecond
 		}
 		// Curated/external mirrors must fail over quickly. A dead official
