@@ -239,7 +239,7 @@ func adultSafeImageURL(base, raw string) string {
 var (
 	adultDecorativeImagePathPattern = regexp.MustCompile("(?i)(?:^|[/_.-])(flags?|countries?|languages?|locales?|logos?|avatars?|icons?|badges?|sprites?|placeholders?|no[-_]?image|default)(?:$|[/_.-])")
 	adultLocaleFlagFilenamePattern = regexp.MustCompile("(?i)^(?:flag[-_]?)?(?:zh(?:[-_]?(?:cn|tw))?|cn|tw|us|jp|kr|ko|en)\\.(?:svg|png|webp|gif|jpe?g)$")
-	adultDecorativeImageAttrPattern = regexp.MustCompile("(?i)(?:^|[\\s_-])(flag|country|language|locale|logo|avatar|icon|badge|sprite|placeholder)(?:$|[\\s_-])")
+	adultDecorativeImageAttrPattern = regexp.MustCompile("(?i)(?:^|[^a-z0-9])(flag|country|language|locale|logo|avatar|icon|badge|sprite|placeholder)(?:$|[^a-z0-9])")
 )
 
 // adultSafePosterImageURL rejects shared UI artwork before it enters the poster
