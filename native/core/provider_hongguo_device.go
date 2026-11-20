@@ -193,7 +193,69 @@ func hongguoRegistrationResponseDetails(response *http.Response, body []byte) st
 	return strings.Join(details, "; ")
 }
 
-func (downloader *Downloader) recordHongguoRegistrationResponse(response *http.Response, body []byte, successful bool) {
+func hongguoRegistrationHTTPStage(status int) string {
+	switch status {
+	case http.StatusOK:
+		return "http_200"
+	case http.StatusUnauthorized:
+		return "http_401_auth"
+	case http.StatusForbidden:
+		return "http_403_policy"
+	case http.StatusTooManyRequests:
+		return "http_429_rate_limit"
+	case 444:
+		return "http_444_edge_reject"
+	default:
+		if status >= 500 {
+			return fmt.Sprintf("http_%d_server_error", status)
+		}
+		return fmt.Sprintf("http_%d", status)
+	}
+}
+
+func hongguoRegistrationTransportStage(err error) string {
+	if err == nil {
+		return "unknown"
+	}
+	message := strings.ToLower(err.Error())
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), strings.Contains(message, "timeout"), strings.Contains(message, "timed out"):
+		return "timeout"
+	case strings.Contains(message, "dns"), strings.Contains(message, "no such host"), strings.Contains(message, "name resolution"):
+		return "dns"
+	case strings.Contains(message, "tls"), strings.Contains(message, "certificate"), strings.Contains(message, "x509"):
+		return "tls"
+	case strings.Contains(message, "connect"), strings.Contains(message, "connection"), strings.Contains(message, "連線"):
+		return "connect"
+	default:
+		return "network"
+	}
+}
+
+func (downloader *Downloader) recordHongguoRegistrationTransportFailure(host string, attempt int, elapsed time.Duration, err error) {
+	if err == nil {
+		return
+	}
+	downloader.recordDiagnostic(diagnosticEvent{
+		Level: "warning", Event: "hongguo.device_registration_attempt",
+		Source: sourceHongguo, Host: strings.ToLower(host), Attempt: attempt,
+		Message: fmt.Sprintf(
+			"stage=%s elapsedMs=%d error=%s",
+			hongguoRegistrationTransportStage(err),
+			elapsed.Milliseconds(),
+			truncate(redactErrorString(err.Error()), 512),
+		),
+	})
+}
+
+func (downloader *Downloader) recordHongguoRegistrationResponse(
+	response *http.Response,
+	body []byte,
+	attempt int,
+	elapsed time.Duration,
+	stage string,
+	successful bool,
+) {
 	if response == nil {
 		return
 	}
@@ -202,16 +264,16 @@ func (downloader *Downloader) recordHongguoRegistrationResponse(response *http.R
 		host = strings.ToLower(response.Request.URL.Hostname())
 	}
 	level := "warning"
-	message := "紅果裝置註冊回應"
+	message := fmt.Sprintf("stage=%s elapsedMs=%d", stage, elapsed.Milliseconds())
 	if successful {
 		level = "info"
-		message = "紅果裝置註冊請求成功"
+		message += " registration=success"
 	} else if details := hongguoRegistrationResponseDetails(response, body); details != "" {
 		message += "；" + details
 	}
 	downloader.recordDiagnostic(diagnosticEvent{
 		Level: level, Event: "hongguo.device_registration", Source: sourceHongguo,
-		Host: host, HTTPStatus: response.StatusCode,
+		Host: host, HTTPStatus: response.StatusCode, Attempt: attempt,
 		Client: "Android 16 / Redmi 25053RT47C / App 7.3.5.32",
 		CFRay: truncate(strings.TrimSpace(response.Header.Get("CF-Ray")), 128),
 		ResponseType: truncate(strings.TrimSpace(response.Header.Get("Content-Type")), 128),
@@ -250,7 +312,9 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 	var failures []error
 	allRejected := true
 	hosts := hongguoDeviceRegisterHosts()
-	for _, host := range hosts {
+	for hostIndex, host := range hosts {
+		attempt := hostIndex + 1
+		started := time.Now()
 		if err := ctx.Err(); err != nil {
 			return "", "", err
 		}
@@ -266,6 +330,7 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 		)
 		if err != nil {
 			allRejected = false
+			downloader.recordHongguoRegistrationTransportFailure(host, attempt, time.Since(started), err)
 			failures = append(failures, fmt.Errorf("%s: %w", host, err))
 			continue
 		}
@@ -284,6 +349,7 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 				return "", "", ctx.Err()
 			}
 			allRejected = false
+			downloader.recordHongguoRegistrationTransportFailure(host, attempt, time.Since(started), requestErr)
 			failures = append(failures, fmt.Errorf("%s: %w", host, requestErr))
 			continue
 		}
@@ -292,11 +358,12 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 		response.Body.Close()
 		if readErr != nil {
 			allRejected = false
+			downloader.recordHongguoRegistrationTransportFailure(host, attempt, time.Since(started), fmt.Errorf("讀取註冊回應失敗：%w", readErr))
 			failures = append(failures, fmt.Errorf("%s: 讀取註冊回應失敗：%w", host, readErr))
 			continue
 		}
 		if response.StatusCode != http.StatusOK {
-			downloader.recordHongguoRegistrationResponse(response, content, false)
+			downloader.recordHongguoRegistrationResponse(response, content, attempt, time.Since(started), hongguoRegistrationHTTPStage(response.StatusCode), false)
 			statusErr := fmt.Errorf("紅果設備註冊 HTTP %d", response.StatusCode)
 			if details := hongguoRegistrationResponseDetails(response, content); details != "" {
 				statusErr = fmt.Errorf("%w（%s）", statusErr, details)
@@ -320,18 +387,20 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 		decoder := json.NewDecoder(bytes.NewReader(content))
 		decoder.UseNumber()
 		if err := decoder.Decode(&result); err != nil {
-			downloader.recordHongguoRegistrationResponse(response, content, false)
+			allRejected = false
+			downloader.recordHongguoRegistrationResponse(response, content, attempt, time.Since(started), "invalid_json", false)
 			failures = append(failures, fmt.Errorf("%s: 紅果裝置註冊回傳格式異常", host))
 			continue
 		}
 		deviceID := mapString(result, "device_id_str", "device_id")
 		installID := mapString(result, "install_id_str", "install_id")
 		if !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0" {
-			downloader.recordHongguoRegistrationResponse(response, content, false)
+			allRejected = false
+			downloader.recordHongguoRegistrationResponse(response, content, attempt, time.Since(started), "invalid_device_identity", false)
 			failures = append(failures, fmt.Errorf("%s: 紅果裝置註冊未提供有效裝置編號", host))
 			continue
 		}
-		downloader.recordHongguoRegistrationResponse(response, content, true)
+		downloader.recordHongguoRegistrationResponse(response, content, attempt, time.Since(started), "registered", true)
 		return deviceID, installID, nil
 	}
 
