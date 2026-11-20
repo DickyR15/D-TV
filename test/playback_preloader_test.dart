@@ -157,6 +157,12 @@ void main() {
 
     now = now.add(const Duration(minutes: 3));
     expect(preloader.take(FixtureRepository.free, episode(1)), isNull);
+    // A second query for the same episode should not become an identity
+    // mismatch just because the previous session expired.
+    expect(preloader.take(FixtureRepository.free, episode(1)), isNull);
+    expect(DiaryService.fullText, contains('reason=expired'));
+    expect(DiaryService.fullText, contains('reason=not_ready'));
+    expect(DiaryService.fullText, isNot(contains('reason=identity_mismatch')));
     expect(repository.released, ['expired-detail-plan']);
   });
 
