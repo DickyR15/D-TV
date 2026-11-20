@@ -740,4 +740,3 @@ func TestIkanbotAutomaticRouteSelectionPrefersHighestQuality(t *testing.T) {
 	}
 }
 
-}
