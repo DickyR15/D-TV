@@ -141,3 +141,52 @@ func TestResolveHongguoCurrentPlayerUsesCurrentPlayerV1AndSixHeaders(t *testing.
 	}
 	if playbackRequests != 1 { t.Fatalf("playback requests=%d, want 1", playbackRequests) }
 }
+
+
+func TestHongguoCurrentPlayerRegistrationCoolsDownAfter444ThenTLB404(t *testing.T) {
+	hongguoCurrentPlayerRegisterState.Lock()
+	oldNext, oldBlocked, oldErr := hongguoCurrentPlayerRegisterState.next,
+		hongguoCurrentPlayerRegisterState.blockedUntil,
+		hongguoCurrentPlayerRegisterState.blockedErr
+	hongguoCurrentPlayerRegisterState.next = time.Time{}
+	hongguoCurrentPlayerRegisterState.blockedUntil = time.Time{}
+	hongguoCurrentPlayerRegisterState.blockedErr = nil
+	hongguoCurrentPlayerRegisterState.Unlock()
+	t.Cleanup(func() {
+		hongguoCurrentPlayerRegisterState.Lock()
+		hongguoCurrentPlayerRegisterState.next = oldNext
+		hongguoCurrentPlayerRegisterState.blockedUntil = oldBlocked
+		hongguoCurrentPlayerRegisterState.blockedErr = oldErr
+		hongguoCurrentPlayerRegisterState.Unlock()
+	})
+
+	requests := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		requests++
+		switch request.URL.Host {
+		case "log.snssdk.com":
+			return sourceFixtureResponse(request, 444, `<html>Access Denied X-TT-System-Error: 3</html>`), nil
+		case "applog.snssdk.com":
+			return sourceFixtureResponse(request, http.StatusNotFound, `<html><body>404 Not Found TLB</body></html>`), nil
+		default:
+			t.Fatalf("unexpected Current Player registration host %q", request.URL.Host)
+			return nil, nil
+		}
+	})
+	_, err := d.registerHongguoCurrentPlayerIdentity(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "HTTP 444") || !strings.Contains(err.Error(), "HTTP 404") {
+		t.Fatalf("registration error should retain both edge failures, got %v", err)
+	}
+	hongguoCurrentPlayerRegisterState.Lock()
+	blockedUntil := hongguoCurrentPlayerRegisterState.blockedUntil
+	hongguoCurrentPlayerRegisterState.Unlock()
+	if !blockedUntil.After(time.Now()) {
+		t.Fatal("primary HTTP 444 followed by TLB 404 did not start registration cooldown")
+	}
+	if _, err := d.registerHongguoCurrentPlayerIdentity(context.Background()); err == nil || !strings.Contains(err.Error(), "冷卻中") {
+		t.Fatalf("second registration should be blocked by cooldown, got %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("registration requests=%d, want primary and one alternate host only", requests)
+	}
+}
