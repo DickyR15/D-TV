@@ -473,6 +473,7 @@ type nativeVerifiedOfficialPoster struct {
 	titleAliases    []string
 	fallbackAddresses []string
 	allowMissingYear bool
+	requireYearMatch bool
 }
 
 // These two assets were independently identified from programme-owner /
@@ -561,10 +562,11 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		preferred: true,
 		overrideProvider: true,
 		allowMissingYear: true,
-		address: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
-		// The official site image may be blocked by some CDN/network paths.
-		// Keep the same exact key visual as a second source, not a title search.
+		// Prefer a responsive poster mirror; the original official host can
+		// take several seconds to answer from some networks.
+		address: "https://image.pmgstatic.com/cache/resized/w663/files/images/film/posters/170/203/170203811_rde8py.jpg",
 		fallbackAddresses: []string{
+			"https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
 			"https://images.anime-sommelier.com/img/PK1rLZIoZ2eoqvWk0XXG8Q/7530-ODM5MWUwMjIxOG-10610899209241630/pub",
 		},
 	},
@@ -602,7 +604,13 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		preferred: true,
 		overrideProvider: true,
 		allowMissingYear: true,
-		address: "https://animeanime.jp/imgs/zoom/722848.jpg",
+		// TMDB supplies a direct poster endpoint; the exact Anime! Anime!
+		// key visual remains a fallback from the 2025 broadcast announcement.
+		address: "https://image.tmdb.org/t/p/w500/pJ8ls5yuBPPYdS7kbZd3yzJdxKx.jpg",
+		fallbackAddresses: []string{
+			"https://animeanime.jp/imgs/p/jtKDOVlKAvjRrNw8SXAVejagI61Nrq_oqaqr/722848.jpg",
+			"https://d28s5ztqvkii64.cloudfront.net/images/anime/5586/tY1J5NJscN.webp",
+		},
 	},
 	{
 		// Duoduo anime: Attack on Titan Season 1 (2013).
@@ -634,7 +642,36 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 		preferred: true,
 		overrideProvider: true,
 		allowMissingYear: true,
-		address: "https://media.animeoshi.com/anime/images/jikan/1080/1813129939.jpg?w=3840",
+		// Use a compressed season-two key visual rather than a 3840px image.
+		address: "https://storage.moegirl.org.cn/moegirl/commons/9/93/Dldl2jstm.jpg",
+		fallbackAddresses: []string{
+			"https://pbcdnw.aoneroom.com/image/2026/01/21/ce0f71fe51952fc228aba96c7e3b943b.jpg",
+		},
+	},
+	{
+		// iQIYI's exact 2026 Duoduo catalogue title is 死亡筆記-1.
+		// Keep this match source- and year-specific; never reuse it for the
+		// original 2006 Death Note film or another similarly named short.
+		title: "死亡筆記-1",
+		titleAliases: []string{"死亡笔记-1", "死亡筆記", "死亡笔记"},
+		source: sourceDuoduo,
+		year: "2026",
+		preferred: true,
+		overrideProvider: true,
+		requireYearMatch: true,
+		address: "https://m.iqiyipic.com/u1/image/20260416/d8/20/pv_8099969920810500_d_601_720_405.webp",
+	},
+	{
+		// iQIYI's 2026, 14-episode anime catalogue artwork for 萬人之上.
+		title: "萬人之上",
+		titleAliases: []string{"万人之上"},
+		source: sourceDuoduo,
+		year: "2026",
+		workType: "anime",
+		preferred: true,
+		overrideProvider: true,
+		allowMissingYear: true,
+		address: "https://pic2.iqiyipic.com/image/20251205/9b/cd/a_100570559_m_601_m4_400_400.jpg",
 	},
 	{
 		// Duoduo ID 66452 is the 2014 micro-film 逆愛2後會無期.
@@ -687,6 +724,9 @@ func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficia
 			continue
 		}
 		if candidate.sourceID != "" && (!hasSourceID || sourceID != candidate.sourceID) {
+			continue
+		}
+		if candidate.requireYearMatch && (year == "" || year != candidate.year) {
 			continue
 		}
 		if candidate.workType == "anime" {
