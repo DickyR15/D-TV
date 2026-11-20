@@ -23,7 +23,7 @@ import (
 // existing App API signing path.
 const hongguoPlaybackBaseURL = "https://api5-normal-sinfonlinea.fqnovel.com"
 const hongguoPlaybackPath = "/novel/player/multi_video_model/player/v1"
-const hongguoPlaybackUserAgent = "com.phoenix.read/73932 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
+const hongguoPlaybackUserAgent = "com.phoenix.read/74332 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 
 var (
 	hongguoV5Magic = mustHongguoHex("2d4b4fca49750d433fb5ae2c226dcc56")
@@ -457,11 +457,11 @@ func hongguoPlaybackQuery(deviceID, installID string) map[string]string {
 	return map[string]string{
 		"aid": "8662",
 		"app_name": "novelread",
-		"version_code": "73932",
-		"version_name": "7.3.9.32",
-		"manifest_version_code": "73932",
-		"update_version_code": "73932",
-		"pv_player": "73932",
+		"version_code": "74332",
+		"version_name": "7.4.3.32",
+		"manifest_version_code": "74332",
+		"update_version_code": "74332",
+		"pv_player": "74332",
 		"channel": "update_64",
 		"device_platform": "android",
 		"os": "android",
