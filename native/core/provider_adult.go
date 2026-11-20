@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -236,21 +237,122 @@ func adultSafeImageURL(base, raw string) string {
 	return resolved.String()
 }
 
-func adultImageCandidates(fragment, base, source string) []string {
-	seen := map[string]bool{}
+type adultImageChoice struct {
+	address string
+	score   int
+}
+
+var adultImageDimensionPattern = regexp.MustCompile(`^[^0-9]*([0-9]{1,5})`)
+
+func adultImageDimension(value string) int {
+	match := adultImageDimensionPattern.FindStringSubmatch(strings.TrimSpace(value))
+	if len(match) != 2 {
+		return 0
+	}
+	number, _ := strconv.Atoi(match[1])
+	return number
+}
+
+func adultImageCandidateScore(address string, width, height int, context string) int {
+	parsed, err := url.Parse(address)
+	if err != nil {
+		return -1
+	}
+	path := strings.ToLower(parsed.EscapedPath())
+	for _, marker := range []string{
+		"flag", "country", "language", "logo", "avatar", "placeholder",
+		"default-cover", "default_cover", "no-image", "no_image", "noimage",
+		"empty", "loading", "sprite", "favicon", "/icons/", "/icon/",
+	} {
+		if strings.Contains(path, marker) {
+			return -1
+		}
+	}
+	if strings.HasSuffix(path, ".svg") {
+		return -1
+	}
+	context = strings.ToLower(context)
+	for _, marker := range []string{
+		"flag", "country", "language", "logo", "avatar", "placeholder",
+		"default-cover", "default_cover", "no-image", "no_image", "noimage",
+		"empty", "loading", "sprite", "favicon", "icon", "badge",
+	} {
+		if strings.Contains(context, marker) {
+			return -1
+		}
+	}
+	score := 0
+	for _, marker := range []string{"poster", "cover", "thumbnail", "thumb", "video-image", "video_cover"} {
+		if strings.Contains(context, marker) {
+			score += 12
+			break
+		}
+	}
+	if width > 0 && height > 0 {
+		if width < 72 || height < 96 {
+			return -1
+		}
+		if height >= width {
+			score += 8
+		} else if width*10 > height*14 {
+			score -= 4
+		}
+	}
+	return score
+}
+
+func adultImageSrcsetValues(value string) []string {
 	var result []string
-	for _, tag := range adultImagePattern.FindAllString(fragment, -1) {
-		for _, attr := range []string{"data-original", "data-src", "data-lazy-src", "data-lazyload", "src"} {
-			if raw := adultAttribute(tag, attr); raw != "" {
-				address := adultSafeImageURL(base, raw)
-				if address != "" && !seen[address] {
-					seen[address] = true
-					result = append(result, address)
-				}
-			}
+	for _, candidate := range strings.Split(value, ",") {
+		fields := strings.Fields(strings.TrimSpace(candidate))
+		if len(fields) > 0 {
+			result = append(result, fields[0])
 		}
 	}
 	return result
+}
+
+func adultAppendImageChoice(
+	choices *[]adultImageChoice,
+	base, source, raw, context string,
+	width, height int,
+) {
+	address := adultSafeImageURL(base, raw)
+	if address == "" {
+		return
+	}
+	score := adultImageCandidateScore(address, width, height, context)
+	if score < 0 {
+		return
+	}
+	for index := range *choices {
+		if (*choices)[index].address == address {
+			if score > (*choices)[index].score {
+				(*choices)[index].score = score
+			}
+			return
+		}
+	}
+	*choices = append(*choices, adultImageChoice{address: address, score: score})
+}
+
+func adultImageChoicesToURLs(choices []adultImageChoice) []string {
+	sort.SliceStable(choices, func(left, right int) bool {
+		return choices[left].score > choices[right].score
+	})
+	result := make([]string, 0, len(choices))
+	for _, choice := range choices {
+		result = append(result, choice.address)
+	}
+	return result
+}
+
+func adultImageCandidates(fragment, base, source string) []string {
+	document, err := htmlnet.Parse(strings.NewReader(fragment))
+	if err != nil {
+		return nil
+	}
+	return adultNodeImages(document, base, source)
 }
 
 func adultMetaValue(body, wanted string) string {
@@ -314,23 +416,37 @@ func adultHTMLCardNodes(document *htmlnet.Node, source string) []*htmlnet.Node {
 }
 
 func adultNodeImages(card *htmlnet.Node, base, source string) []string {
-	seen := map[string]bool{}
-	var covers []string
+	var choices []adultImageChoice
 	adultHTMLWalk(card, func(node *htmlnet.Node) {
 		if node.Type != htmlnet.ElementNode || node.Data != "img" {
 			return
 		}
+		contextParts := []string{
+			providerHTMLAttr(node, "class"),
+			providerHTMLAttr(node, "id"),
+			providerHTMLAttr(node, "alt"),
+			providerHTMLAttr(node, "title"),
+		}
+		for parent, depth := node.Parent, 0; parent != nil && depth < 3; parent, depth = parent.Parent, depth+1 {
+			contextParts = append(contextParts, providerHTMLAttr(parent, "class"), providerHTMLAttr(parent, "id"))
+		}
+		context := strings.Join(contextParts, " ")
+		width := adultImageDimension(providerHTMLAttr(node, "width"))
+		height := adultImageDimension(providerHTMLAttr(node, "height"))
 		for _, attr := range []string{"data-original", "data-src", "data-lazy-src", "data-lazyload", "src"} {
 			if raw := providerHTMLAttr(node, attr); raw != "" {
-				address := adultSafeImageURL(base, raw)
-				if address != "" && !seen[address] {
-					seen[address] = true
-					covers = append(covers, address)
+				adultAppendImageChoice(&choices, base, source, raw, context, width, height)
+			}
+		}
+		for _, attr := range []string{"data-srcset", "srcset"} {
+			if raw := providerHTMLAttr(node, attr); raw != "" {
+				for _, candidate := range adultImageSrcsetValues(raw) {
+					adultAppendImageChoice(&choices, base, source, candidate, context, width, height)
 				}
 			}
 		}
 	})
-	return covers
+	return adultImageChoicesToURLs(choices)
 }
 
 func adultParseCards(body, base, source string) []Drama {
@@ -763,9 +879,12 @@ func (d *Downloader) fetchAdultDetail(ctx context.Context, source, sourceID stri
 		return Drama{}, nil, fmt.Errorf("%s 詳情頁缺少作品標題", adultSourceName(source))
 	}
 	covers := adultImageCandidates(body, base, source)
+	// Keep og:image as a fallback instead of blindly preferring it: some
+	// MissAV pages expose a generic language/flag image in their metadata.
 	if raw := adultMetaValue(body, "og:image"); raw != "" {
-		if cover := adultSafeImageURL(base, raw); cover != "" {
-			covers = append([]string{cover}, covers...)
+		if cover := adultSafeImageURL(base, raw); cover != "" &&
+			adultImageCandidateScore(cover, 0, 0, "") >= 0 {
+			covers = append(covers, cover)
 		}
 	}
 	unique := make([]string, 0, len(covers))
