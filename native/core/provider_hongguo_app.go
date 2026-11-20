@@ -206,9 +206,12 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	base := client.baseURL
 	deviceID, installID, registered := client.deviceLocked(helper)
 	client.mu.Unlock()
-	base = downloader.providerCompatibilityBaseURL(sourceHongguo, base)
+	base = downloader.providerCompatibilityAPIBaseURL(
+		sourceHongguo,
+		downloader.providerCompatibilityBaseURL(sourceHongguo, base),
+	)
 	if playback {
-		base = downloader.providerCompatibilityAPIBaseURL(sourceHongguo, hongguoPlaybackBaseURL)
+		base = downloader.providerCompatibilityPlaybackBaseURL(sourceHongguo, hongguoPlaybackBaseURL)
 	}
 	if helper && (!signed || !registered || !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0") {
 		return nil, errors.New("紅果輔助設備尚未完成註冊")
