@@ -3065,9 +3065,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         final setupClock = Stopwatch()..start();
         final platform = _player.platform;
         if (platform is NativePlayer) {
-          if (Platform.isWindows) {
-            // The Windows log repeatedly reports file-cache creation failures.
-            // Keep short-form streaming cache in RAM and use display-clock pacing.
+          if (Platform.isWindows || Platform.isIOS) {
+            // Windows and iOS traces report MPV file-cache creation failures.
+            // Keep streaming cache in RAM on these sandboxes.
             try {
               await _setPlaybackProperty(platform, 'cache-on-disk', 'no');
               DiaryService.add('[MPV] cache_on_disk=no');
