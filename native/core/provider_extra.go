@@ -416,7 +416,7 @@ func extraAdultPPPStreamURLs(body, page string) []string {
 			if len(match) > 1 { candidates = append(candidates, match[1]) }
 		}
 	}
-	tagPattern := regexp.MustCompile(`(?is)<(?:video|source)[^>]*>`)
+	tagPattern := regexp.MustCompile(`(?is)<(?:video|source)\b[^>]*>`)
 	for _, tag := range tagPattern.FindAllString(body, 64) {
 		if raw := firstNonEmpty(adultAttribute(tag, "src"), adultAttribute(tag, "data-src")); raw != "" {
 			candidates = append(candidates, raw)
