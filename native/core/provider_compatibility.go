@@ -15,7 +15,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -421,8 +420,14 @@ func (d *Downloader) providerCompatibilityPath(source, name string, values map[s
 	if template == "" {
 		return fallback
 	}
-	replacements := make([]string, 0, len(values)*2)
-	for key, value := range values {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	// Replace longer placeholder names first to avoid overlapping tokens.
+	sort.Slice(keys, func(i, j int) bool { return len(keys[i]) > len(keys[j]) })
+	for _, key := range keys {
+		value := values[key]
 		switch key {
 		case "query":
 			value = url.QueryEscape(value)
@@ -433,15 +438,7 @@ func (d *Downloader) providerCompatibilityPath(source, name string, values map[s
 		default:
 			value = url.PathEscape(value)
 		}
-		replacements = append(replacements, "{"+key+"}", value)
-	}
-	// Stable replacement order prevents shorter placeholder names from
-	// accidentally changing a longer token.
-	sort.Slice(replacements, func(i, j int) bool {
-		return len(replacements[i]) > len(replacements[j])
-	})
-	for i := 0; i+1 < len(replacements); i += 2 {
-		template = strings.ReplaceAll(template, replacements[i], replacements[i+1])
+		template = strings.ReplaceAll(template, "{"+key+"}", value)
 	}
 	if strings.ContainsAny(template, "{}") || !validResolvedCompatibilityPath(template) {
 		return fallback
@@ -498,4 +495,3 @@ func (d *Downloader) providerCompatibilityStatus() map[string]any {
 	return result
 }
 
-var _ sync.Locker = (*sync.Mutex)(nil)
