@@ -1324,7 +1324,7 @@ class DuanjuApp extends StatelessWidget {
     if (package.version != expectedVersion) return;
     await acknowledgement.parent.create(recursive: true);
     await acknowledgement.writeAsString(
-      package.version + '\\n' + token + '\\n' + pid.toString(),
+      package.version + '\n' + token + '\n' + pid.toString(),
       flush: true,
     );
   } catch (_) {
