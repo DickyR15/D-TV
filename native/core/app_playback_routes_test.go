@@ -79,6 +79,28 @@ func TestNativePlaybackChoicesKeep720PAndHigherForEveryProvider(t *testing.T) {
 	}
 }
 
+func TestNativePlaybackChoicesInferQualityFromDirectProviderURLs(t *testing.T) {
+	choice := nativePlaybackChoices(providerMedia{
+		URL: "https://cdn.test/360p/video.mp4",
+		Variants: []providerMedia{
+			{URL: "https://cdn.test/480p/video.mp4"},
+			{URL: "https://cdn.test/720p/video.mp4"},
+			{URL: "https://cdn.test/video_1080p.mp4"},
+			{URL: "https://cdn.test/adaptive/video.mp4"},
+		},
+	}, 0)
+	var got []int
+	for _, option := range choice.media {
+		got = append(got, option.Quality)
+	}
+	if !reflect.DeepEqual(got, []int{1080, 720, 0}) {
+		t.Fatalf("direct URL qualities=%v, want [1080 720 0]", got)
+	}
+	if !reflect.DeepEqual(choice.qualities, []int{1080, 720}) {
+		t.Fatalf("direct URL quality menu=%v, want [1080 720]", choice.qualities)
+	}
+}
+
 func TestNativePlaybackRefreshCannotReintroduceBelow720PRoutes(t *testing.T) {
 	primary := []providerMedia{
 		{URL: "https://fresh.test/480p.m3u8", Quality: 480},
