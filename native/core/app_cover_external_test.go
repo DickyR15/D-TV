@@ -437,7 +437,7 @@ func TestDuoduoKnownMissingAnimeTitlesUseVerifiedKeyArt(t *testing.T) {
 			name: "Share House's Secret Rule",
 			title: "只能觸控一分鐘哦",
 			year: "2025",
-			want: "https://image.tmdb.org/t/p/w500/pJ8ls5yuBPPYdS7kbZd3yzJdxKx.jpg",
+			want: "https://nami.news/wordpress/wp-content/uploads/2024/11/1-funkan-Dake-Iretemo-Ii-yo%E2%80%A6Share-House-no-Himitsu-Rule-Anime-Key-Visual.webp",
 		},
 		{
 			name: "Attack on Titan Season 1",
