@@ -24,7 +24,7 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV104(t *testing.T) {
 	var calls int
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		calls++
-		if request.Method != http.MethodPost || request.URL.Host != "log.snssdk.com" || request.URL.Path != "/service/2/device_register/" {
+		if request.Method != http.MethodPost || request.URL.Host != "applog.snssdk.com" || request.URL.Path != hongguoDeviceRegisterPath {
 			t.Fatalf("unexpected registration request: %s %s", request.Method, request.URL.String())
 		}
 		if got := request.Header.Get("User-Agent"); got != hongguoAppUserAgent {
@@ -114,6 +114,33 @@ func TestHongguoDeviceRegistrationMatchesGuoAppModuleV104(t *testing.T) {
 }
 
 
+func TestHongguoDeviceRegistrationFallsBackToLegacyHostAfterAlternateHTTP444(t *testing.T) {
+	var hosts []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPost || request.URL.Path != hongguoDeviceRegisterPath {
+			t.Fatalf("unexpected registration request: %s %s", request.Method, request.URL)
+		}
+		hosts = append(hosts, request.URL.Host)
+		if request.URL.Host == "applog.snssdk.com" {
+			return sourceFixtureResponse(request, 444, `{"message":"request blocked by edge","code":"device_policy"}`), nil
+		}
+		if request.URL.Host != "log.snssdk.com" {
+			t.Fatalf("unexpected registration fallback host %q", request.URL.Host)
+		}
+		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
+	})
+	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 2 || hosts[0] != "applog.snssdk.com" || hosts[1] != "log.snssdk.com" {
+		t.Fatalf("registration host order = %#v, want applog then legacy log", hosts)
+	}
+	state := d.hongguoCatalogSnapshot()
+	if !state.Registered || state.DeviceID != "1001" || state.InstallID != "10019" {
+		t.Fatalf("alternate registration did not persist: %#v", state)
+	}
+}
+
 func TestHongguoRegistrationHTTP444IncludesEdgeDiagnostics(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		response := sourceFixtureResponse(request, 444, `{"message":"request blocked by edge","code":"device_policy"}`)
@@ -164,7 +191,10 @@ func hongguoDeviceFixture(t *testing.T, rejected map[string]bool, registerFails 
 	var requests []string
 	registered := 0
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
-		if request.URL.String() == hongguoDeviceRegisterURL+"?"+request.URL.RawQuery {
+		if request.URL.Path == hongguoDeviceRegisterPath {
+			if request.URL.Host != "applog.snssdk.com" && request.URL.Host != "log.snssdk.com" {
+				t.Fatalf("unexpected registration host %q", request.URL.Host)
+			}
 			registered++
 			requests = append(requests, "register")
 			if request.URL.Query().Get("device_id") != "" || request.Header.Get("X-Argus") != "" {
