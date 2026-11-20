@@ -83,6 +83,27 @@ func TestAdultCardParsingAndLazyCoverFallback(t *testing.T) {
 	}
 }
 
+func TestMissAVPosterParserSkipsSharedCountryFlags(t *testing.T) {
+	body := `<div class="thumbnail">
+		<a href="/en/sone-543" title="SAMPLE-543"></a>
+		<img class="country-flag" src="/assets/flags/cn.png" alt="CN">
+		<img class="video-cover" data-src="/covers/sample-543.webp" width="640" height="360">
+	</div>`
+	items := adultParseCards(body, missAVBaseURL, sourceMissAV)
+	if len(items) != 1 {
+		t.Fatalf("MISS AV cards=%d, want 1", len(items))
+	}
+	if got, want := items[0].Cover, "https://missav.ws/covers/sample-543.webp"; got != want {
+		t.Fatalf("MISS AV selected poster=%q, want %q", got, want)
+	}
+	if adultSafePosterImageURL(missAVBaseURL, "/assets/zh_CN.png", "og:image") != "" {
+		t.Fatal("locale flag was accepted as a poster")
+	}
+	if adultSafePosterImageURL(missAVBaseURL, "/assets/site-logo.webp", "og:image") != "" {
+		t.Fatal("site logo was accepted as a poster")
+	}
+}
+
 func TestAdultPlaybackURLsResolveRelativeToTheActualPlayerPage(t *testing.T) {
 	got := adultFindM3U8(
 		"<script>var player={source:'/media/master.m3u8?token=abc'};</script>",
