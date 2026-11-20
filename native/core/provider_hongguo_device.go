@@ -151,7 +151,8 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 	query.Del("device_id")
 	query.Del("iid")
 	query.Set("req_id", uuidLike())
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, hongguoDeviceRegisterURL, bytes.NewReader(body))
+	registerURL := downloader.providerCompatibilityEndpointURL(sourceHongguo, "deviceRegister", hongguoDeviceRegisterURL)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, registerURL, bytes.NewReader(body))
 	if err != nil {
 		return "", "", err
 	}
@@ -181,7 +182,8 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 			(response.StatusCode >= 400 && response.StatusCode < 500 &&
 				response.StatusCode != http.StatusRequestTimeout &&
 				response.StatusCode != http.StatusTooEarly &&
-				response.StatusCode != http.StatusTooManyRequests) {
+				response.StatusCode != http.StatusTooManyRequests &&
+				response.StatusCode != 444) {
 			return "", "", hongguoRegisterRejection{statusErr}
 		}
 		return "", "", statusErr
