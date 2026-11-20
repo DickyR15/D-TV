@@ -139,9 +139,9 @@ type hongguoRegistrationPayload struct {
 var hongguoRegistrationHTMLTags = regexp.MustCompile(`(?s)<[^>]*>`)
 
 func hongguoDeviceRegisterHosts() []string {
-	// applog is a current alternate alias for environments where the legacy
-	// log hostname no longer resolves or is rejected by an edge node.
-	return []string{"applog.snssdk.com", "log.snssdk.com"}
+	// The working reference registers against the legacy log hostname. Keep
+	// applog as a single bounded fallback for edge-route differences.
+	return []string{"log.snssdk.com", "applog.snssdk.com"}
 }
 
 func hongguoDeviceRegisterURLForHost(host string) string {
@@ -357,10 +357,16 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 		request.Header.Set("User-Agent", hongguoAppUserAgent)
 		request.Header.Set("Accept", "application/json")
 		request.Header.Set("Content-Type", "application/json; charset=utf-8")
+		var signatureErr error
 		response, requestErr := downloader.doPreparedCatalogRequest(request, 20*time.Second, func(prepared *http.Request) {
-			query.Set("_rticket", strconv.FormatInt(time.Now().UnixMilli(), 10))
+			now := time.Now()
+			query.Set("_rticket", strconv.FormatInt(now.UnixMilli(), 10))
 			prepared.URL.RawQuery = query.Encode()
+			signatureErr = signHongguoDeviceRegistration(prepared, body, now)
 		})
+		if signatureErr != nil {
+			return "", "", fmt.Errorf("紅果裝置註冊簽名失敗：%w", signatureErr)
+		}
 		if requestErr != nil {
 			if ctx.Err() != nil {
 				return "", "", ctx.Err()
