@@ -164,7 +164,7 @@ func (downloader *Downloader) registerHongguoCurrentPlayerIdentity(ctx context.C
 			return hongguoCurrentPlayerIdentity{}, fmt.Errorf("%s: 讀取播放器註冊回應失敗：%w", host, readErr)
 		}
 		if response.StatusCode != http.StatusOK {
-			if policyRejected || response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusForbidden || response.StatusCode == 444 {
+			if response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusForbidden || response.StatusCode == 444 {
 				policyRejected = true
 			}
 			stage := hongguoRegistrationHTTPStage(response.StatusCode)
@@ -177,7 +177,7 @@ func (downloader *Downloader) registerHongguoCurrentPlayerIdentity(ctx context.C
 			failures = append(failures, fmt.Errorf("%s: %w", host, statusErr))
 			if hongguoShouldTryAlternateRegistrationResponse(response, content) && index+1 < len(hosts) { continue }
 			err := errors.Join(failures...)
-			if response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusForbidden || response.StatusCode == 444 {
+			if policyRejected {
 				hongguoCurrentPlayerRegisterState.Lock()
 				hongguoCurrentPlayerRegisterState.blockedUntil = time.Now().Add(30*time.Second)
 				hongguoCurrentPlayerRegisterState.blockedErr = err
