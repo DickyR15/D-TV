@@ -1197,11 +1197,16 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 		if strings.HasPrefix(address, "//") {
 			address = "https:" + address
 		}
-		if validBangumiPosterAddress(address) {
-			return address, nil
+		parsed, parseErr := url.Parse(address)
+		if parseErr != nil || !validNativeCoverURL(parsed) {
+			continue
 		}
+		if strings.Contains(strings.ToLower(parsed.Path), "no_icon_subject") {
+			continue
+		}
+		return parsed.String(), nil
 	}
-	return "", errors.New("外部作品沒有可用的海報網址")
+	return "", errors.New("外部作品條目沒有可用海報")
 }
 
 func bangumiPosterSubjectTypes(drama nativeDrama) []int {
