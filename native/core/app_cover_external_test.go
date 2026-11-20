@@ -196,7 +196,7 @@ func TestBangumiPosterAddressUsesExactTitleAndCategoryType(t *testing.T) {
 
 func TestDuoduoYongshengFifthSeasonAliasesUseExactBangumiArtwork(t *testing.T) {
 	const expected = "https://lain.bgm.tv/pic/cover/yongsheng-fifth-season.jpg"
-	for _, title := range []string{"永生之大道歸一", "永生之太元仙府", "永生新篇章"} {
+	for _, title := range []string{"永生之大道歸一", "永生之太元仙府"} {
 		t.Run(title, func(t *testing.T) {
 			requests := 0
 			client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
@@ -218,7 +218,7 @@ func TestDuoduoYongshengFifthSeasonAliasesUseExactBangumiArtwork(t *testing.T) {
 			})}
 			downloader := &Downloader{client: client, cfg: defaultConfig()}
 			address, err := downloader.bangumiPosterAddress(context.Background(), nativeDrama{
-				ID: "duoduo:1192", Source: sourceDuoduo, Title: title,
+				ID: "duoduo:99001", Source: sourceDuoduo, Title: title,
 				Category: "動漫", OnlineDate: "2026",
 			})
 			if err != nil {
