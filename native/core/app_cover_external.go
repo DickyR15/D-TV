@@ -498,9 +498,9 @@ type nativeVerifiedOfficialPoster struct {
 	titleAliases    []string
 }
 
-// These two assets were independently identified from programme-owner /
-// official-platform materials. They are used only for an exact Chinese title
-// and the variety/real-world work type, after normal provider artwork fails.
+// These assets were independently identified from programme-owner and
+// official-platform materials. Each entry is restricted by exact title and,
+// where available, source, media category and release year.
 // "這是我的西遊 第二季" intentionally has no year gate: Duoduo currently
 // labels this exact second-season title as 2025, while Youku's official
 // catalogue identifies the second season as a 2026 programme.
