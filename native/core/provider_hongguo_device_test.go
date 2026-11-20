@@ -132,6 +132,7 @@ func TestHongguoDeviceRegistrationFallsBackToLegacyHostAfterAlternateHTTP444(t *
 		}
 		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
 	})
+	d.hongguoClient().state.Registered = false
 	if err := d.ensureHongguoDevice(context.Background(), ""); err != nil {
 		t.Fatal(err)
 	}
@@ -158,6 +159,7 @@ func TestHongguoRegistrationHTTP444WritesPerHostDiagnostics(t *testing.T) {
 	})
 	logPath := filepath.Join(t.TempDir(), "app.log")
 	d.diagnostics = &diagnosticLog{path: logPath, limit: diagnosticLogBytes}
+	d.hongguoClient().state.Registered = false
 	err := d.ensureHongguoDevice(context.Background(), "")
 	if err == nil {
 		t.Fatal("HTTP 444 registration rejection was accepted")
@@ -203,6 +205,7 @@ func TestHongguoInvalidRegistrationPayloadDoesNotCreateDeviceRejectionCooldown(t
 		}
 		return sourceFixtureResponse(request, http.StatusOK, `{"device_id_str":"1001","install_id_str":"10019"}`), nil
 	})
+	d.hongguoClient().state.Registered = false
 	if err := d.ensureHongguoDevice(context.Background(), ""); err == nil {
 		t.Fatal("invalid registration payload was accepted")
 	}
