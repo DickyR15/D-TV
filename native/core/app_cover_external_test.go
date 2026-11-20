@@ -397,7 +397,7 @@ func TestNativeVerifiedOfficialPosterUsesExactTitleTypeAndYear(t *testing.T) {
 		{
 			name: "Duoduo 1192 奉子成婚 uses the official 2025 anime key visual",
 			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
-			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+			want: "https://image.pmgstatic.com/cache/resized/w663/files/images/film/posters/170/203/170203811_rde8py.jpg",
 		},
 		{
 			name: "Duoduo 66452 逆愛2後會無期 uses exact-record archive artwork as fallback",
@@ -437,7 +437,7 @@ func TestDuoduoKnownMissingAnimeTitlesUseVerifiedKeyArt(t *testing.T) {
 			name: "Share House's Secret Rule",
 			title: "只能觸控一分鐘哦",
 			year: "2025",
-			want: "https://animeanime.jp/imgs/zoom/722848.jpg",
+			want: "https://image.tmdb.org/t/p/w500/pJ8ls5yuBPPYdS7kbZd3yzJdxKx.jpg",
 		},
 		{
 			name: "Attack on Titan Season 1",
@@ -449,7 +449,19 @@ func TestDuoduoKnownMissingAnimeTitlesUseVerifiedKeyArt(t *testing.T) {
 			name: "Soul Land 2",
 			title: "斗羅大陸第二季",
 			year: "2023",
-			want: "https://media.animeoshi.com/anime/images/jikan/1080/1813129939.jpg?w=3840",
+			want: "https://storage.moegirl.org.cn/moegirl/commons/9/93/Dldl2jstm.jpg",
+		},
+		{
+			name: "Wan Ren Zhi Shang 2026",
+			title: "萬人之上",
+			year: "2026",
+			want: "https://pic2.iqiyipic.com/image/20251205/9b/cd/a_100570559_m_601_m4_400_400.jpg",
+		},
+		{
+			name: "Death Note 2026 Duoduo item",
+			title: "死亡筆記-1",
+			year: "2026",
+			want: "https://m.iqiyipic.com/u1/image/20260416/d8/20/pv_8099969920810500_d_601_720_405.webp",
 		},
 	}
 	for i, tc := range cases {
@@ -476,18 +488,19 @@ func TestDuoduoOfficialPosterRetriesVerifiedMirrorWhenOfficialHostFails(t *testi
 	var requestedHosts []string
 	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
 		requestedHosts = append(requestedHosts, request.URL.Host)
-		if request.URL.Host == "dekichaumade-kon.af-original.com" {
+		switch request.URL.Host {
+		case "image.pmgstatic.com", "dekichaumade-kon.af-original.com":
 			return &http.Response{
 				StatusCode: http.StatusForbidden,
 				Header: make(http.Header),
-				Body: io.NopCloser(strings.NewReader("hotlink blocked")),
+				Body: io.NopCloser(strings.NewReader("poster mirror unavailable")),
 				Request: request,
 			}, nil
-		}
-		if request.URL.Host == "images.anime-sommelier.com" {
+		case "images.anime-sommelier.com":
 			return posterLookupJSONResponse(request, string(image)), nil
+		default:
+			return nil, errors.New("unexpected poster host: " + request.URL.Host)
 		}
-		return nil, errors.New("unexpected poster host: " + request.URL.Host)
 	})}
 	downloader := &Downloader{client: client, cfg: defaultConfig()}
 	cache := newNativeCoverCache(t.TempDir(), downloader)
@@ -503,10 +516,18 @@ func TestDuoduoOfficialPosterRetriesVerifiedMirrorWhenOfficialHostFails(t *testi
 	if err != nil || !bytes.Equal(body, image) {
 		t.Fatalf("verified mirror artwork was not cached: %v", err)
 	}
-	if len(requestedHosts) != 2 ||
-		requestedHosts[0] != "dekichaumade-kon.af-original.com" ||
-		requestedHosts[1] != "images.anime-sommelier.com" {
-		t.Fatalf("poster fallback hosts = %#v, want official host then verified mirror", requestedHosts)
+	wantHosts := []string{
+		"image.pmgstatic.com",
+		"dekichaumade-kon.af-original.com",
+		"images.anime-sommelier.com",
+	}
+	if len(requestedHosts) != len(wantHosts) {
+		t.Fatalf("poster fallback hosts = %#v, want %#v", requestedHosts, wantHosts)
+	}
+	for i, host := range wantHosts {
+		if requestedHosts[i] != host {
+			t.Fatalf("poster fallback host %d = %q, want %q", i, requestedHosts[i], host)
+		}
 	}
 }
 
@@ -539,17 +560,17 @@ func TestNativePreferredOfficialPosterIsRestrictedToExactUserReportedRecords(t *
 		{
 			name: "奉子成婚 2025 Japanese anime",
 			drama: nativeDrama{ID: "duoduo:1192", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
-			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+			want: "https://image.pmgstatic.com/cache/resized/w663/files/images/film/posters/170/203/170203811_rde8py.jpg",
 		},
 		{
 			name: "奉子成婚 duplicate Duoduo ID with verified title/type/year",
 			drama: nativeDrama{ID: "duoduo:99123", Title: "奉子成婚", Category: "動漫", Tags: []string{"日本動漫"}, OnlineDate: "2025"},
-			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+			want: "https://image.pmgstatic.com/cache/resized/w663/files/images/film/posters/170/203/170203811_rde8py.jpg",
 		},
 		{
 			name: "奉子成婚 accepts missing Duoduo catalogue year with exact anime title",
 			drama: nativeDrama{ID: "duoduo:99124", Title: "デキちゃうまで婚", Category: "動漫", Tags: []string{"日本動漫"}},
-			want: "https://dekichaumade-kon.af-original.com/wp-content/themes/template/img/visual.jpg",
+			want: "https://image.pmgstatic.com/cache/resized/w663/files/images/film/posters/170/203/170203811_rde8py.jpg",
 		},
 	}
 	for _, tc := range tests {
@@ -597,6 +618,13 @@ func TestNativeVerifiedOfficialPosterRejectsWrongTitleTypeAndYear(t *testing.T) 
 		{ID: "duoduo:1192", Title: "奉子不成婚", Category: "電影", OnlineDate: "2016"},
 		{ID: "duoduo:66453", Title: "逆愛2後會無期", Category: "愛情", OnlineDate: "2014"},
 		{ID: "duoduo:66452", Title: "其他作品", Category: "愛情", OnlineDate: "2014"},
+		{ID: "duoduo:99200", Title: "死亡筆記-1", OnlineDate: "2006"},
+		{ID: "duoduo:99200", Title: "死亡筆記-1"},
+		{ID: "ikanbot:99200", Title: "死亡筆記-1", OnlineDate: "2026"},
+		{ID: "retired-source:99200", Title: "死亡筆記", OnlineDate: "2026"},
+		{ID: "ikanbot:99201", Title: "萬人之上", Category: "動漫", OnlineDate: "2026"},
+		{ID: "duoduo:99201", Title: "萬人之上", Category: "電影", OnlineDate: "2026"},
+		{ID: "duoduo:99201", Title: "萬人之上", Category: "動漫", OnlineDate: "2025"},
 	}
 	for _, drama := range cases {
 		if address, ok := nativeVerifiedOfficialPosterAddress(drama); ok {
