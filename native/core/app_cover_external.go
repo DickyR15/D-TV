@@ -233,6 +233,20 @@ func validDoubanPosterAddress(raw string) string {
 // posterTitleVariants adds only conservative, title-like alternatives. It
 // does not accept fuzzy similarity: every external candidate must still equal
 // one of these normalized variants exactly.
+func normalizeBangumiPosterExactTitle(value string) string {
+	value = bangumiPosterChineseVariants.Replace(strings.TrimSpace(value))
+	var normalized strings.Builder
+	for _, character := range strings.ToLower(value) {
+		if unicode.IsLetter(character) || unicode.IsDigit(character) {
+			normalized.WriteRune(character)
+		}
+	}
+	return normalized.String()
+}
+
+// posterTitleVariants adds only conservative, title-like alternatives. It
+// does not accept fuzzy similarity: every external candidate must still equal
+// one of these normalized variants exactly.
 func posterTitleVariants(value string) []string {
 	value = strings.TrimSpace(value)
 	withoutYear := value
@@ -248,6 +262,18 @@ func posterTitleVariants(value string) []string {
 		if len(suffix) == 4 && bangumiPosterYear(suffix) != "" {
 			withoutYear = strings.TrimSpace(withoutYear[:index])
 			break
+		}
+	}
+	// Duoduo titles sometimes append a bare release year, e.g. "死亡筆記 2026".
+	// Search the un-suffixed title too, but the result still has to pass the
+	// release-year check below before its artwork can be accepted.
+	if withoutYear == value {
+		separator := strings.LastIndexAny(value, " _-")
+		if separator >= 0 {
+			suffix := strings.TrimSpace(value[separator+1:])
+			if len(suffix) == 4 && bangumiPosterYear(suffix) == suffix {
+				withoutYear = strings.TrimSpace(value[:separator])
+			}
 		}
 	}
 	baseTitle := bangumiPosterBaseTitle(value)
@@ -269,17 +295,57 @@ func posterTitleVariants(value string) []string {
 	seen := map[string]bool{}
 	var result []string
 	for _, candidate := range candidates {
-		normalized := normalizeBangumiPosterTitle(candidate)
+		normalized := normalizeBangumiPosterExactTitle(candidate)
 		if normalized == "" || len([]rune(normalized)) < 2 || seen[normalized] {
 			continue
 		}
 		seen[normalized] = true
 		result = append(result, strings.TrimSpace(candidate))
-		if len(result) >= 4 {
+		if len(result) >= 5 {
 			break
 		}
 	}
 	return result
+}
+
+// A known Duoduo subtitle names the current 永生 season by an episode-arc
+// title rather than the Bangumi season title. Bind only those exact aliases to
+// the independently verified fifth-season subject; never fall back to the
+// original 2022 永生 entry.
+func nativeDuoduoBangumiPosterAlias(drama nativeDrama) (string, bool) {
+	source, _, valid := splitProviderDramaID(drama.ID)
+	if !valid || source != sourceDuoduo || !nativePosterIsAnime(drama) {
+		return "", false
+	}
+	switch normalizeBangumiPosterExactTitle(drama.Title) {
+	case normalizeBangumiPosterExactTitle("永生之大道歸一"),
+		normalizeBangumiPosterExactTitle("永生之太元仙府"),
+		normalizeBangumiPosterExactTitle("永生新篇章"):
+		year := bangumiPosterYear(drama.OnlineDate)
+		if year != "" && year != "2025" && year != "2026" {
+			return "", false
+		}
+		return "永生 第五季", true
+	default:
+		return "", false
+	}
+}
+
+func nativeDuoduoBangumiPosterAliasMatches(drama nativeDrama, candidate bangumiPosterSubject) bool {
+	canonicalTitle, ok := nativeDuoduoBangumiPosterAlias(drama)
+	if !ok || candidate.ID != 487853 || candidate.Type != 2 {
+		return false
+	}
+	expected := normalizeBangumiPosterExactTitle(canonicalTitle)
+	return normalizeBangumiPosterExactTitle(candidate.NameCN) == expected ||
+		normalizeBangumiPosterExactTitle(candidate.Name) == expected
+}
+
+func bangumiPosterSearchKeywords(drama nativeDrama) []string {
+	if canonicalTitle, ok := nativeDuoduoBangumiPosterAlias(drama); ok {
+		return []string{canonicalTitle}
+	}
+	return posterTitleVariants(drama.Title)
 }
 
 func nativePosterTitleMatches(sourceTitle string, candidates ...string) bool {
@@ -991,68 +1057,113 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 	query.Set("offset", "0")
 	endpoint.RawQuery = query.Encode()
 
-	payload := bangumiPosterSearchRequest{Keyword: title, Sort: "match"}
-	payload.Filter.Type = types
-	payload.Filter.NSFW = false
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
 	searchCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
-	request, err := http.NewRequestWithContext(
-		context.WithValue(searchCtx, nativeCoverNetworkKey{}, true),
-		http.MethodPost,
-		endpoint.String(),
-		strings.NewReader(string(body)),
-	)
-	if err != nil {
-		return "", err
-	}
-	request.Header.Set("User-Agent", userAgent)
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Content-Type", "application/json")
-
 	client := *d.client
-	response, err := client.Do(request)
-	if err != nil {
-		return "", err
+	keywords := bangumiPosterSearchKeywords(drama)
+	if len(keywords) == 0 {
+		return "", errors.New("沒有可用的海報搜尋片名")
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("外部海報搜尋回應 HTTP %d", response.StatusCode)
+	candidatesByID := make(map[int]bangumiPosterSubject)
+	var lastSearchErr error
+	successfulSearches := 0
+	for _, keyword := range keywords {
+		if err := searchCtx.Err(); err != nil {
+			lastSearchErr = err
+			break
+		}
+		payload := bangumiPosterSearchRequest{Keyword: keyword, Sort: "match"}
+		payload.Filter.Type = types
+		payload.Filter.NSFW = false
+		body, err := json.Marshal(payload)
+		if err != nil {
+			return "", err
+		}
+		request, err := http.NewRequestWithContext(
+			context.WithValue(searchCtx, nativeCoverNetworkKey{}, true),
+			http.MethodPost,
+			endpoint.String(),
+			strings.NewReader(string(body)),
+		)
+		if err != nil {
+			return "", err
+		}
+		request.Header.Set("User-Agent", userAgent)
+		request.Header.Set("Accept", "application/json")
+		request.Header.Set("Content-Type", "application/json")
+
+		response, requestErr := client.Do(request)
+		if requestErr != nil {
+			lastSearchErr = requestErr
+			continue
+		}
+		data, readErr := io.ReadAll(io.LimitReader(response.Body, (2<<20)+1))
+		response.Body.Close()
+		if readErr != nil {
+			lastSearchErr = readErr
+			continue
+		}
+		if response.StatusCode != http.StatusOK {
+			lastSearchErr = fmt.Errorf("外部海報搜尋回應 HTTP %d", response.StatusCode)
+			continue
+		}
+		if len(data) > 2<<20 {
+			lastSearchErr = errors.New("外部海報搜尋回應超過大小限制")
+			continue
+		}
+		var result bangumiPosterSearchResponse
+		if err := json.Unmarshal(data, &result); err != nil {
+			lastSearchErr = errors.New("外部海報搜尋回應格式無效")
+			continue
+		}
+		successfulSearches++
+		for _, candidate := range result.Data {
+			if candidate.ID > 0 {
+				candidatesByID[candidate.ID] = candidate
+			}
+		}
 	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
-	if err != nil {
-		return "", err
-	}
-	var result bangumiPosterSearchResponse
-	if err := json.Unmarshal(data, &result); err != nil {
-		return "", errors.New("外部海報搜尋回應格式無效")
+	if successfulSearches == 0 {
+		if lastSearchErr != nil {
+			return "", lastSearchErr
+		}
+		return "", errors.New("外部海報搜尋沒有成功回應")
 	}
 
-	queryTitle := normalizeBangumiPosterTitle(title)
-	matches := make([]bangumiPosterSubject, 0, len(result.Data))
+	knownDuoduoAlias := false
+	if _, ok := nativeDuoduoBangumiPosterAlias(drama); ok {
+		knownDuoduoAlias = true
+	}
+	matches := make([]bangumiPosterSubject, 0, len(candidatesByID))
 	allowedTypes := make(map[int]bool, len(types))
 	for _, subjectType := range types {
 		allowedTypes[subjectType] = true
 	}
-	for _, candidate := range result.Data {
+	for _, candidate := range candidatesByID {
 		if candidate.ID <= 0 || !allowedTypes[candidate.Type] {
 			continue
 		}
-		if normalizeBangumiPosterTitle(candidate.NameCN) != queryTitle &&
-			normalizeBangumiPosterTitle(candidate.Name) != queryTitle {
+		if knownDuoduoAlias {
+			if nativeDuoduoBangumiPosterAliasMatches(drama, candidate) {
+				matches = append(matches, candidate)
+			}
 			continue
 		}
-		matches = append(matches, candidate)
+		if nativePosterTitleMatches(title, candidate.NameCN, candidate.Name) {
+			matches = append(matches, candidate)
+		}
 	}
 
 	// A source release year can disambiguate same-title seasons or versions.
-	// When both sides expose a year, a mismatch is never accepted.
+	// Only the exact, verified 永生 fifth-season alias may use its known 2025
+	// premiere year when Duoduo labels the current episode arc as 2026.
 	if year := bangumiPosterYear(drama.OnlineDate); year != "" {
 		var yearMatches, unknownYearMatches []bangumiPosterSubject
 		for _, candidate := range matches {
+			if nativeDuoduoBangumiPosterAliasMatches(drama, candidate) {
+				yearMatches = append(yearMatches, candidate)
+				continue
+			}
 			candidateYear := bangumiPosterYear(candidate.Date)
 			switch candidateYear {
 			case year:
@@ -1072,6 +1183,9 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 	}
 	if len(matches) != 1 {
 		if len(matches) == 0 {
+			if lastSearchErr != nil {
+				return "", errors.Join(errors.New("找不到片名與類型完全相符的外部海報"), lastSearchErr)
+			}
 			return "", errors.New("找不到片名與類型完全相符的外部海報")
 		}
 		return "", errors.New("外部海報有多個同名候選，為避免錯配已略過")
@@ -1083,16 +1197,11 @@ func (d *Downloader) bangumiPosterAddress(ctx context.Context, drama nativeDrama
 		if strings.HasPrefix(address, "//") {
 			address = "https:" + address
 		}
-		parsed, parseErr := url.Parse(address)
-		if parseErr != nil || !validNativeCoverURL(parsed) {
-			continue
+		if validBangumiPosterAddress(address) {
+			return address, nil
 		}
-		if strings.Contains(strings.ToLower(parsed.Path), "no_icon_subject") {
-			continue
-		}
-		return parsed.String(), nil
 	}
-	return "", errors.New("外部作品條目沒有可用海報")
+	return "", errors.New("外部作品沒有可用的海報網址")
 }
 
 func bangumiPosterSubjectTypes(drama nativeDrama) []int {
