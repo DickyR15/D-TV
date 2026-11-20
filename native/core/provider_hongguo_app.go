@@ -173,11 +173,30 @@ func (downloader *Downloader) hongguoHelperAppRequest(ctx context.Context, metho
 	return downloader.hongguoAppRequest(helperCtx, method, path, extra, payload)
 }
 
+func (downloader *Downloader) hongguoCompatibilityPath(path string) string {
+	name := ""
+	switch path {
+	case "/novel/player/video_detail/v1/":
+		name = "videoDetail"
+	case "/novel/player/video_model/v1/":
+		name = "videoModel"
+	case hongguoPlaybackPath:
+		name = "playback"
+	case hongguoSearchTabPath:
+		name = "searchTab"
+	}
+	if name == "" {
+		return path
+	}
+	return downloader.providerCompatibilityPath(sourceHongguo, name, nil, path)
+}
+
 func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
 	client := downloader.hongguoClient()
 	helper, _ := ctx.Value(hongguoHelperDeviceKey{}).(bool)
 	signed := path != hongguoBookmallTabPath
 	playback := path == hongguoPlaybackPath
+	path = downloader.hongguoCompatibilityPath(path)
 	var registerErr error
 	if signed {
 		// 暫時性註冊失敗仍可沿用既有設備識別碼；首次啟動閘門會要求完成雙設備註冊。
@@ -187,8 +206,9 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	base := client.baseURL
 	deviceID, installID, registered := client.deviceLocked(helper)
 	client.mu.Unlock()
+	base = downloader.providerCompatibilityBaseURL(sourceHongguo, base)
 	if playback {
-		base = hongguoPlaybackBaseURL
+		base = downloader.providerCompatibilityAPIBaseURL(sourceHongguo, hongguoPlaybackBaseURL)
 	}
 	if helper && (!signed || !registered || !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0") {
 		return nil, errors.New("紅果輔助設備尚未完成註冊")
