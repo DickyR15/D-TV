@@ -23,13 +23,21 @@ func TestResolveHongguoV5MediaUsesPlayerV1Endpoint(t *testing.T) {
 		if request.URL.Path != "/novel/player/multi_video_model/v1/" {
 			t.Errorf("path=%s, want official multi_video_model endpoint", request.URL.Path)
 		}
-		for _, name := range []string{"X-Khronos", "X-Helios", "X-Medusa", "X-SS-STUB"} {
+		for _, name := range []string{
+			"X-Khronos", "X-Gorgon", "X-Ladon", "X-Argus",
+			"X-Helios", "X-Medusa", "X-SS-STUB", "X-SS-Req-Ticket",
+			"X-XS-From-Web", "X-TT-Request-Tag", "Passport-SDK-Version",
+			"X-Vc-Bdturing-Sdk-Version",
+		} {
 			if request.Header.Get(name) == "" {
-				t.Errorf("missing V5 header %s", name)
+				t.Errorf("missing official compatibility header %s", name)
 			}
 		}
-		if request.Header.Get("X-Gorgon") != "" || request.Header.Get("X-Argus") != "" {
-			t.Error("legacy signatures must not be sent to the V5 playback endpoint")
+		if request.Header.Get("Accept") != "application/json; charset=utf-8,application/x-protobuf" {
+			t.Errorf("playback Accept header=%q", request.Header.Get("Accept"))
+		}
+		if request.Header.Get("X-SS-Req-Ticket") != request.URL.Query().Get("_rticket") {
+			t.Errorf("request ticket header=%q query=%q", request.Header.Get("X-SS-Req-Ticket"), request.URL.Query().Get("_rticket"))
 		}
 		if request.Header.Get("User-Agent") != hongguoPlaybackUserAgent {
 			t.Errorf("playback user-agent mismatch: %q", request.Header.Get("User-Agent"))
