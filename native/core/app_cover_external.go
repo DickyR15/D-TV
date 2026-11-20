@@ -781,6 +781,7 @@ var nativeVerifiedOfficialPosters = []nativeVerifiedOfficialPoster{
 }
 
 func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficialPoster, bool) {
+	source, sourceID, hasSourceID := splitProviderDramaID(drama.ID)
 	if !hasSourceID && strings.TrimSpace(drama.ID) == "" {
 		// Curated artwork must never be selected for an unscoped title alone.
 		return nativeVerifiedOfficialPoster{}, false
@@ -794,7 +795,6 @@ func nativeVerifiedOfficialPosterEntry(drama nativeDrama) (nativeVerifiedOfficia
 		"真人秀", "實境秀", "真人實境", "真人实境",
 		"脫口秀", "脱口秀", "variety",
 	)
-	source, sourceID, hasSourceID := splitProviderDramaID(drama.ID)
 	for _, candidate := range nativeVerifiedOfficialPosters {
 		matchesTitle := title == normalizeBangumiPosterExactTitle(candidate.title)
 		if !matchesTitle {
