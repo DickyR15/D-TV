@@ -113,36 +113,57 @@ func (d *Downloader) fetchDSDCategories(ctx context.Context, force bool) ([]nati
 	return categories, nil
 }
 
-func dsdCardCover(card *html.Node, pageURL string) string {
-	images := providerHTMLNodes(card, func(node *html.Node) bool { return node.Data == "img" })
+func dsdCardCoverCandidates(card *html.Node, pageURL string) []string {
+	if card == nil {
+		return nil
+	}
+	var addresses []string
+	images := providerHTMLNodes(card, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && node.Data == "img"
+	})
 	for _, image := range images {
-		for _, attribute := range []string{"data-src", "data-original"} {
-			if address := providerCoverAddress(providerHTMLAttr(image, attribute), pageURL); address != "" {
-				return address
+		for _, attribute := range []string{
+			"data-original", "data-src", "data-lazy-src", "data-lazyload",
+			"data-image", "data-url", "data-poster",
+		} {
+			addresses = append(addresses, providerCoverAddresses(providerHTMLAttr(image, attribute), pageURL)...)
+		}
+		for _, attribute := range []string{"data-srcset", "data-lazy-srcset", "srcset"} {
+			for _, candidate := range strings.Split(providerHTMLAttr(image, attribute), ",") {
+				fields := strings.Fields(strings.TrimSpace(candidate))
+				if len(fields) > 0 {
+					addresses = append(addresses, providerCoverAddresses(fields[0], pageURL)...)
+				}
 			}
 		}
 	}
 	for _, node := range providerHTMLNodes(card, func(node *html.Node) bool {
-		return node == card || providerHTMLClass(node, "img-bg") || providerHTMLClass(node, "surface-img") ||
-			providerHTMLClass(node, "openVip") || providerHTMLClass(node, "video-before-ad")
+		return node == card || providerHTMLClass(node, "img-bg") ||
+			providerHTMLClass(node, "surface-img") || providerHTMLClass(node, "openVip") ||
+			providerHTMLClass(node, "video-before-ad")
 	}) {
 		if match := dsdBackgroundURL.FindStringSubmatch(providerHTMLAttr(node, "style")); len(match) > 1 {
-			if address := providerCoverAddress(strings.TrimSpace(match[1]), pageURL); address != "" {
-				return address
-			}
+			addresses = append(addresses, providerCoverAddresses(strings.TrimSpace(match[1]), pageURL)...)
 		}
 	}
 	for _, image := range images {
 		raw := providerHTMLAttr(image, "src")
 		if strings.HasPrefix(raw, "/video") || strings.Contains(raw, "/upload") {
-			if address := providerCoverAddress(raw, pageURL); address != "" {
-				return address
-			}
+			addresses = append(addresses, providerCoverAddresses(raw, pageURL)...)
 		}
 	}
-	return ""
+	for _, video := range providerHTMLNodes(card, func(node *html.Node) bool {
+		return node.Type == html.ElementNode && node.Data == "video"
+	}) {
+		addresses = append(addresses,
+			providerCoverAddresses(firstNonEmpty(providerHTMLAttr(video, "poster"), providerHTMLAttr(video, "data-poster")), pageURL)...)
+	}
+	return nativeUniqueCoverAddresses(addresses...)
 }
 
+func dsdCardCover(card *html.Node, pageURL string) string {
+	return firstNonEmpty(dsdCardCoverCandidates(card, pageURL)...)
+}
 func parseDSDCards(document *html.Node, pageURL, category string) ([]Drama, error) {
 	items := []Drama{}
 	seen := map[string]bool{}
@@ -166,10 +187,12 @@ func parseDSDCards(document *html.Node, pageURL, category string) ([]Drama, erro
 			return nil, errors.New("帝果目錄缺少影片名稱")
 		}
 		seen[id] = true
-		cover := dsdCardCover(card, pageURL)
+		coverCandidates := dsdCardCoverCandidates(card, pageURL)
+		cover := firstNonEmpty(coverCandidates...)
 		views := strings.TrimSuffix(providerHTMLText(providerHTMLFirstClass(card, "video-item-tag-hits", "counts")), "次")
 		drama := Drama{ID: providerDramaID(sourceDSD, id), Source: sourceDSD, SourceID: id,
 			Title: truncate(title, 1024), Name: truncate(title, 1024), Cover: cover, CoverURL: cover,
+			CoverCandidates: append([]string(nil), coverCandidates[1:]...),
 			CategoryName: firstNonEmpty(category, "影片"), ChannelName: "帝果", Views: views}
 		if providerHTMLFirstClass(card, "video-item-tag-is-vip", "vip-tag") != nil {
 			vip := true
