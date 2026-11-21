@@ -238,7 +238,7 @@ func parseHanxiaoquanCards(body string, baseURLs ...string) []Drama {
 			ID: providerDramaID(sourceHanxiaoquan, id), Source: sourceHanxiaoquan, SourceID: id,
 			Title: truncate(title, 512), Name: truncate(title, 512),
 			Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...),
-			ChannelName: "韩小圈", CategoryName: "韓劇", Remark: truncate(note, 64),
+			ChannelName: "韩小圈", CategoryName: "韩剧", Remark: truncate(note, 64),
 		})
 		if len(items) > 500 {
 			break
@@ -286,7 +286,7 @@ func (d *Downloader) fetchHanxiaoquanCatalogPage(ctx context.Context, page int, 
 	if err != nil {
 		return nil, false, err
 	}
-	items := parseHanxiaoquanCards(body)
+	items := parseHanxiaoquanCards(body, d.providerBaseURL(sourceHanxiaoquan))
 	if len(items) == 0 {
 		return []Drama{}, false, nil
 	}
@@ -442,7 +442,7 @@ func (d *Downloader) fetchHanxiaoquanDetail(ctx context.Context, sourceID string
 		Title: truncate(name, 512), Name: truncate(name, 512),
 		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
 		Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...),
-		ChannelName: "韓小圈", CategoryName: "韓劇",
+		ChannelName: "韩小圈", CategoryName: "韩剧",
 		Remark:     truncate(firstNonEmpty(fields["更新"], fields["状态"]), 64),
 		OnlineDate: truncate(fields["更新"], 32),
 	}
@@ -535,5 +535,5 @@ func (d *Downloader) searchHanxiaoquan(ctx context.Context, page int, query stri
 	if err != nil {
 		return nil, false, err
 	}
-	return parseHanxiaoquanCards(body), false, nil
+	return parseHanxiaoquanCards(body, d.providerBaseURL(sourceHanxiaoquan)), false, nil
 }
