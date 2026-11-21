@@ -466,7 +466,7 @@ func (d *Downloader) fetchProviderText(ctx context.Context, rawURL, referer stri
 				effectiveURL = resp.Request.URL
 			}
 			if source == sourceChaoliu && !isChaoliuSiteHost(effectiveURL.Hostname()) {
-				lastErr = fmt.Errorf("潮流 AV 請求重新導向至未允許的站點：%s", effectiveURL.Hostname())
+				lastErr = fmt.Errorf("chaoliu 請求重新導向至未允許的站點：%s", effectiveURL.Hostname())
 				recordAttempt(lastErr)
 				continue
 			}
