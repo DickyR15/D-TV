@@ -38,6 +38,40 @@ func TestChaoliuListAcceptsReorderedAttributesAndArticleCards(t *testing.T) {
 	}
 }
 
+func TestChaoliuQualityParserKeepsUnknownAndRejectsKnownLowRes(t *testing.T) {
+	const token = "AbcdefghijklmnopqrstUVWX"
+	body := "mvarr['q360p'] = ['" + token + "'];" +
+		"mvarr['q720p'] = ['" + token + "'];" +
+		"mvarr['q1080p'] = ['" + token + "'];" +
+		"mvarr['opaque'] = ['" + token + "'];" +
+		"mvarr['auto'] = {numresolution=480, token:'" + token + "'};"
+
+	qualities := parseChaoliuQualities(body)
+	got := map[string]int{}
+	for _, quality := range qualities {
+		got[quality.Key] = quality.Resolution
+	}
+	want := map[string]int{
+		"q360p": 360, "q720p": 720, "q1080p": 1080,
+		"opaque": 0, "auto": 480,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("parsed chaoliu quality labels = %#v, want %#v", got, want)
+	}
+	for key, resolution := range want {
+		if got[key] != resolution {
+			t.Fatalf("chaoliu quality %q = %d, want %d (%#v)", key, got[key], resolution, got)
+		}
+	}
+	if chaoliuQualityAllowed(got["q360p"]) || chaoliuQualityAllowed(got["auto"]) {
+		t.Fatal("known 360P/480P routes must be rejected")
+	}
+	if !chaoliuQualityAllowed(got["q720p"]) || !chaoliuQualityAllowed(got["q1080p"]) ||
+		!chaoliuQualityAllowed(got["opaque"]) {
+		t.Fatal("720P+, and genuinely unknown quality labels, should remain eligible")
+	}
+}
+
 func TestChaoliuHostRoleSeparation(t *testing.T) {
 	for _,host:=range []string{"mjv011.com","www.mjv001.com","cdn.mjv015.com"}{if !isChaoliuSiteHost(host){t.Fatalf("主站網域未辨識：%s",host)}}
 	for _,host:=range []string{"mavrtracktor.com","imgstream1.com","video.streamfastpro.com"}{if !isChaoliuHost(host)||isChaoliuSiteHost(host){t.Fatalf("播放器/CDN 網域角色錯誤：%s",host)}}
