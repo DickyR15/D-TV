@@ -274,6 +274,23 @@ func (downloader *Downloader) recordHongguoRegistrationTransportFailure(host str
 	})
 }
 
+func hongguoRegistrationClientLabel(response *http.Response) string {
+	if response == nil || response.Request == nil {
+		return "unknown"
+	}
+	ua := response.Request.UserAgent()
+	switch {
+	case strings.Contains(ua, "com.phoenix.read/74332") &&
+		strings.Contains(ua, "Android 16") && strings.Contains(ua, "25053RT47C"):
+		return "Android 16 / Redmi 25053RT47C / App 7.4.3.32"
+	case strings.Contains(ua, "com.phoenix.read/73932") &&
+		strings.Contains(ua, "Android 14") && strings.Contains(ua, "23127PN0CC"):
+		return "Android 14 / Xiaomi 23127PN0CC / App 7.3.9.32"
+	default:
+		return "unknown"
+	}
+}
+
 func (downloader *Downloader) recordHongguoRegistrationResponse(
 	response *http.Response,
 	body []byte,
@@ -300,7 +317,7 @@ func (downloader *Downloader) recordHongguoRegistrationResponse(
 	downloader.recordDiagnostic(diagnosticEvent{
 		Level: level, Event: "hongguo.device_registration", Source: sourceHongguo,
 		Host: host, HTTPStatus: response.StatusCode, Attempt: attempt,
-		Client: "Android 16 / Redmi 25053RT47C / App 7.4.3.32",
+		Client: hongguoRegistrationClientLabel(response),
 		CFRay: truncate(strings.TrimSpace(response.Header.Get("CF-Ray")), 128),
 		ResponseType: truncate(strings.TrimSpace(response.Header.Get("Content-Type")), 128),
 		Message: message,
