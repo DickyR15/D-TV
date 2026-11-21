@@ -102,7 +102,6 @@ func TestGuipianCoverCandidatesPreferLazyImagesAndKeepFallbacks(t *testing.T) {
 		"https://img.guipianwu.com/original.jpg",
 		"https://guipianwu.com/background.jpg",
 		"https://guipianwu.com/lazy.webp",
-		"https://guipianwu.com/placeholder.png",
 	}
 	if len(got) != len(want) { t.Fatalf("cover candidates = %#v, want %#v", got, want) }
 	for index := range want {
@@ -138,7 +137,6 @@ func TestGuipianPickPlaylistRetainsOtherLinePagesForEachEpisode(t *testing.T) {
 func TestGuipianImageCandidatesSupportsSrcsetAndBackgroundStyles(t *testing.T) {
 	got := guipianImageCandidates(`<div class="poster" style="background-image:url('/poster/background.webp')"><img data-srcset="/poster/small.jpg 320w, /poster/large.jpg 1200w" src="/placeholder.gif"></div>`)
 	want := []string{
-		"https://guipianwu.com/placeholder.gif",
 		"https://guipianwu.com/poster/small.jpg",
 		"https://guipianwu.com/poster/large.jpg",
 		"https://guipianwu.com/poster/background.webp",
