@@ -68,7 +68,7 @@ func TestProviderSourceParsesTextFixturesAndRejectsMismatchedIdentity(t *testing
 
 func TestChaoliuSourceAliasesAndModuleHosts(t *testing.T) {
 	if canonicalProviderSource("chaoliu") != sourceChaoliu || canonicalProviderSource("mjv011.com") != sourceChaoliu {
-		t.Fatal("潮流 AV source aliases are not canonicalized")
+		t.Fatal("chaoliu source aliases are not canonicalized")
 	}
 	for _, host := range []string{
 		"https://mjv001.com/zh/chinese_list/all/1.html",
@@ -77,11 +77,11 @@ func TestChaoliuSourceAliasesAndModuleHosts(t *testing.T) {
 		"https://streamfastpro.com/video/index.m3u8",
 	} {
 		if got := providerSourceForURL(host); got != sourceChaoliu {
-			t.Fatalf("潮流 AV host was not mapped: %s -> %s", host, got)
+			t.Fatalf("chaoliu host was not mapped: %s -> %s", host, got)
 		}
 	}
 	if got := (&Downloader{cfg: defaultConfig()}).providerBaseURL(sourceChaoliu); got != chaoliuSites[0] {
-		t.Fatalf("潮流 AV default main site = %q", got)
+		t.Fatalf("chaoliu default main site = %q", got)
 	}
 }
 
