@@ -672,3 +672,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 # validation-retrigger-1
+
+# CI retrigger: verify D-TV 1.0.8 candidate across all platforms
