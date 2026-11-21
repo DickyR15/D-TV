@@ -259,12 +259,8 @@ func chaoliuImageCandidates(fragment, pageURL string) []string {
 				}
 			}
 		}
-		if style := extractAttr(tag, "style"); style != "" {
-			for _, match := range adultCSSImagePattern.FindAllStringSubmatch(style, -1) {
-				if len(match) > 1 {
-					add(match[1])
-				}
-			}
+		if style := providerHTMLStyle(tag); style != "" {
+			addresses = append(addresses, providerCSSImageAddresses(style, pageURL)...)
 		}
 	}
 	for _, tag := range chaoliuVideoTag.FindAllString(fragment, -1) {
