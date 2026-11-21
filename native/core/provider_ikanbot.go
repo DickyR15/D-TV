@@ -590,9 +590,16 @@ func (d *Downloader) fetchIkanbotDetail(ctx context.Context,sourceID string)(Dra
 		}
 	}
 	for _, node := range providerHTMLNodes(doc, func(n *htmlnet.Node) bool {
-		return n.Type == htmlnet.ElementNode && n.Data == "img" && providerHTMLClass(n, "cover")
+		if n.Type != htmlnet.ElementNode {
+			return false
+		}
+		return providerHTMLClass(n, "cover") ||
+			providerHTMLClass(n, "poster") ||
+			providerHTMLClass(n, "video-cover")
 	}) {
-		for _, address := range ikanbotImageCandidates(node, final) { addCover(address) }
+		for _, address := range ikanbotImageCandidates(node, final) {
+			addCover(address)
+		}
 	}
 	for _, key := range []string{"og:image", "twitter:image"} {
 		if raw := adultMetaValue(body, key); raw != "" {
