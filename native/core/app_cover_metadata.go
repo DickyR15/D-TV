@@ -464,7 +464,7 @@ func providerCoverAddresses(value any, pageURL string) []string {
 			}
 		case string:
 			raw := strings.TrimSpace(typed)
-			if raw == "" || len(raw) > 8192 || providerCoverLooksLikePlaceholder(raw) {
+			if raw == "" || len(raw) > 8192 {
 				return
 			}
 			address, err := url.Parse(raw)
