@@ -67,3 +67,36 @@ func TestAPIProviderDramaRowsRetainAlternatePosters(t *testing.T) {
 		t.Fatalf("Yeguo posters = %#v, err=%v", yeguo, err)
 	}
 }
+
+func TestPosterCandidateFallbacksAllowMissingArtwork(t *testing.T) {
+	if got := nativeCoverBackupAddresses(nil); len(got) != 0 {
+		t.Fatalf("empty poster list returned backups: %#v", got)
+	}
+	if got := nativeCoverBackupAddresses([]string{"https://img.example/main.jpg"}); len(got) != 0 {
+		t.Fatalf("single poster list returned backups: %#v", got)
+	}
+
+	hongguo := hongguoDramaFromAny(map[string]any{
+		"video_data": map[string]any{"series_id_str": "12345", "series_title": "紅果無海報"},
+	}, "短劇")
+	if hongguo.ID == "" || hongguo.Cover != "" || len(hongguo.CoverCandidates) != 0 {
+		t.Fatalf("Hongguo without artwork should remain valid: %#v", hongguo)
+	}
+
+	huangdou := huangdouDramaFromMap(map[string]any{"id": "rp_89", "name": "黃豆無海報"})
+	if huangdou.ID == "" || huangdou.Cover != "" || len(huangdou.CoverCandidates) != 0 {
+		t.Fatalf("Huangdou without artwork should remain valid: %#v", huangdou)
+	}
+
+	huangju, err := huangjuDramaFromMap(map[string]any{
+		"id": "9", "slug": "no-poster", "title": "劇果無海報",
+	}, "https://huangju.net", "no-poster-9")
+	if err != nil || huangju.Cover != "" || len(huangju.CoverCandidates) != 0 {
+		t.Fatalf("Huangju without artwork = %#v, err=%v", huangju, err)
+	}
+
+	yeguo, err := yeguoDramaFromMap(map[string]any{"video_id": "100", "title": "野果無海報"}, "https://www.ygdj7.com")
+	if err != nil || yeguo.Cover != "" || len(yeguo.CoverCandidates) != 0 {
+		t.Fatalf("Yeguo without artwork = %#v, err=%v", yeguo, err)
+	}
+}
