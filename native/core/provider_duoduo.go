@@ -521,12 +521,19 @@ func duoduoCategoryName(category string) string {
 // duoduoHomeSupplement returns the curated videos shown by the source website's
 // home page. Those rows are separate from /filter/vod pagination and otherwise
 // never appear in D TV's catalog, even though they are visible on the website.
+func duoduoApplyCatalogCategory(drama Drama, categoryName string) Drama {
+	if strings.TrimSpace(drama.CategoryName) == "" {
+		drama.CategoryName = strings.TrimSpace(categoryName)
+	}
+	return drama
+}
+
 func duoduoHomeSupplement(data map[string]any, category string) []Drama {
 	seen := map[string]bool{}
 	var items []Drama
-	addRows := func(rows []map[string]any) {
+	addRows := func(rows []map[string]any, fallbackCategory string) {
 		for _, row := range rows {
-			drama := duoduoDramaFromRow(row)
+			drama := duoduoApplyCatalogCategory(duoduoDramaFromRow(row), fallbackCategory)
 			if drama.ID == "" || seen[drama.ID] {
 				continue
 			}
@@ -535,14 +542,20 @@ func duoduoHomeSupplement(data map[string]any, category string) []Drama {
 		}
 	}
 	for _, group := range duoduoRows(data["categories"]) {
-		if category != "" && duoduoString(group["type_id"]) != category {
+		groupID := duoduoString(group["type_id"])
+		if category != "" && groupID != category {
 			continue
 		}
-		addRows(duoduoRows(group["videos"]))
+		groupCategory := firstNonEmpty(
+			duoduoString(group["type_name"]),
+			duoduoString(group["typeName"]),
+			duoduoCategoryName(groupID),
+		)
+		addRows(duoduoRows(group["videos"]), groupCategory)
 	}
 	if category == "" {
-		addRows(duoduoRows(data["recommend"]))
-		addRows(duoduoRows(data["videos"]))
+		addRows(duoduoRows(data["recommend"]), "")
+		addRows(duoduoRows(data["videos"]), "")
 	}
 	return items
 }
@@ -568,6 +581,15 @@ func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, categ
 		// catalog page, even when its independent category endpoint omits them.
 		homeData, _ = d.fetchDuoduoHomeData(ctx)
 	}
+	catalogCategoryName := duoduoCategoryName(category)
+	if category != "" && homeData != nil {
+		for _, item := range duoduoCategoriesFromHome(homeData) {
+			if item.ID == category {
+				catalogCategoryName = item.Name
+				break
+			}
+		}
+	}
 	if query != "" {
 		route = "/api.php/web/search/index"
 		params.Set("wd", query)
@@ -579,19 +601,10 @@ func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, categ
 		if category != "" {
 			// The upstream web API filters by type_name; type_id is only the
 			// identifier used by its category menu and is ignored by the filter.
-			name := duoduoCategoryName(category)
-			if homeData != nil {
-				for _, item := range duoduoCategoriesFromHome(homeData) {
-					if item.ID == category {
-						name = item.Name
-						break
-					}
-				}
-			}
-			if name == "" {
+			if catalogCategoryName == "" {
 				return nil, false, errors.New("多多追劇分類名稱無效")
 			}
-			params.Set("type_name", name)
+			params.Set("type_name", catalogCategoryName)
 		}
 	}
 	payload, _, err := d.fetchDuoduoAPI(ctx, route, params)
@@ -603,7 +616,7 @@ func (d *Downloader) fetchDuoduoCatalogPage(ctx context.Context, page int, categ
 	seen := make(map[string]bool, len(rows)+24)
 	appendRows := func(values []map[string]any) {
 		for _, row := range values {
-			drama := duoduoDramaFromRow(row)
+			drama := duoduoApplyCatalogCategory(duoduoDramaFromRow(row), catalogCategoryName)
 			if drama.ID == "" || seen[drama.ID] {
 				continue
 			}
