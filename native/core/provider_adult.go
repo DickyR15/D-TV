@@ -124,7 +124,11 @@ func adultSafeURL(base, raw, source string) string {
 	case sourceMissAV:
 		if host != "missav.ai" && host != "www.missav.ai" && host != "missav.ws" && host != "www.missav.ws" && host != "missav.live" && host != "www.missav.live" && host != "missav123.com" && host != "www.missav123.com" { return "" }
 	case sourceSupJav:
-		if host != "supjav.blog" && !strings.HasSuffix(host, ".supjav.blog") { return "" }
+		if host != "supjav.blog" && !strings.HasSuffix(host, ".supjav.blog") &&
+			host != "supjav.com" && !strings.HasSuffix(host, ".supjav.com") &&
+			host != "lk1.supremejav.com" {
+			return ""
+		}
 	case sourcePPP:
 		if host != "ppp.porn" && !strings.HasSuffix(host, ".ppp.porn") && host != "cdnlab.live" && !strings.HasSuffix(host, ".cdnlab.live") { return "" }
 	case sourceMadou:
