@@ -563,10 +563,20 @@ func TestHongguoRegistrationClientLabelUsesActualRequestUserAgent(t *testing.T) 
 	}
 }
 
+type hongguoSDKFixtureRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTrip hongguoSDKFixtureRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
 func TestHongguoSDKRegistrationEdgeRejectionDoesNotRetryLegacyRegistrationHosts(t *testing.T) {
 	var mu sync.Mutex
 	var requestedHosts []string
-	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+	d := sourceFixtureDownloader(t, nil)
+	// SDK requests use Downloader.client directly; replace the fixture's
+	// prepared-catalog transport so registration and the web fallbacks share
+	// one deterministic request recorder.
+	d.client = &http.Client{Transport: hongguoSDKFixtureRoundTripper(func(request *http.Request) (*http.Response, error) {
 		host := strings.ToLower(request.URL.Hostname())
 		mu.Lock()
 		requestedHosts = append(requestedHosts, host)
@@ -582,10 +592,11 @@ func TestHongguoSDKRegistrationEdgeRejectionDoesNotRetryLegacyRegistrationHosts(
 			t.Errorf("legacy registration host must not be retried after SDK edge rejection: %s", host)
 			return sourceFixtureResponse(request, 444, "Access Denied"), nil
 		default:
-			// Let the non-registration quick/web fallbacks fail deterministically.
+			// Let non-registration quick/web fallbacks fail deterministically.
 			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
 		}
-	})
+	})}
+	t.Cleanup(d.client.CloseIdleConnections)
 
 	_, err := d.resolveHongguoMedia(context.Background(), Task{
 		DramaID: "hongguo:100",
