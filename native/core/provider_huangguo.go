@@ -633,7 +633,7 @@ func parseHuangguoAIDramaCards(rawHTML, pageURL, category string) []Drama {
 		cover := resolveProviderURL(pageURL, extractAttr(block, "data-src", "data-original", "src"))
 		add(Drama{ID: providerDramaID(sourceHuangguoAI, sourceID), Source: sourceHuangguoAI, SourceID: sourceID, Title: title, Name: title, Cover: cover, CoverURL: cover, CategoryName: category, ChannelName: "huangguoai.com"})
 	}
-	for _, dr := range parseHuangguoAIJSONLDDramas(rawHTML, category) {
+	for _, dr := range parseHuangguoAIJSONLDDramas(rawHTML, category, pageURL) {
 		add(dr)
 	}
 	return out
@@ -652,7 +652,11 @@ func splitHuangguoAICardBlocks(raw string) []string {
 	return blocks
 }
 
-func parseHuangguoAIJSONLDDramas(raw, category string) []Drama {
+func parseHuangguoAIJSONLDDramas(raw, category string, pageURLs ...string) []Drama {
+	pageURL := ""
+	if len(pageURLs) > 0 {
+		pageURL = pageURLs[0]
+	}
 	var out []Drama
 	seen := map[string]bool{}
 	for _, block := range regexp.MustCompile(`(?is)<script[^>]*type=["']application/ld\+json["'][^>]*>(.*?)</script>`).FindAllStringSubmatch(raw, -1) {
@@ -677,7 +681,24 @@ func parseHuangguoAIJSONLDDramas(raw, category string) []Drama {
 				if id != "" && !huangguoTitleNeedsRepair(name, id) && !seen[id] {
 					seen[id] = true
 					title := cleanText(name)
-					out = append(out, Drama{ID: providerDramaID(sourceHuangguoAI, id), Source: sourceHuangguoAI, SourceID: id, Title: title, Name: title, CategoryName: category, ChannelName: "huangguoai.com"})
+					var coverAddresses []string
+					for _, key := range []string{"image", "thumbnailUrl", "thumbnail", "poster"} {
+						if image, ok := x[key]; ok {
+							coverAddresses = append(coverAddresses, providerCoverAddresses(image, pageURL)...)
+						}
+					}
+					coverAddresses = nativeUniqueCoverAddresses(coverAddresses...)
+					cover := ""
+					var candidates []string
+					if len(coverAddresses) > 0 {
+						cover = coverAddresses[0]
+						candidates = append(candidates, coverAddresses[1:]...)
+					}
+					out = append(out, Drama{
+						ID: providerDramaID(sourceHuangguoAI, id), Source: sourceHuangguoAI, SourceID: id,
+						Title: title, Name: title, Cover: cover, CoverURL: cover, CoverCandidates: candidates,
+						CategoryName: category, ChannelName: "huangguoai.com",
+					})
 				}
 				for _, child := range x {
 					walk(child)
