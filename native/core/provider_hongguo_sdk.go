@@ -80,9 +80,24 @@ func (downloader *Downloader) hongguoSDKRegistrationCooldownError() error {
 	return downloader.hongguoSDKSession.registrationCooldownError()
 }
 
+func (downloader *Downloader) recordHongguoSDKPlaybackResponse(
+	method, host, path string, status, responseBytes int, contentType, contentEncoding string,
+) {
+	responseType := strings.TrimSpace(strings.SplitN(contentType, ";", 2)[0])
+	downloader.recordDiagnostic(diagnosticEvent{
+		Level: "info", Event: "hongguo.sdk_playback_http_response",
+		Source: sourceHongguo, Host: host, HTTPStatus: status, ResponseType: responseType,
+		Message: fmt.Sprintf(
+			"method=%s path=%s response_bytes=%d content_encoding=%s",
+			method, path, responseBytes, strings.TrimSpace(contentEncoding),
+		),
+	})
+}
+
 type hongguoSDKTransport struct {
 	client               *http.Client
 	onRegistrationStatus func(int)
+	onPlaybackResponse   func(method, host, path string, status, responseBytes int, contentType, contentEncoding string)
 }
 
 func (t hongguoSDKTransport) Do(ctx context.Context, input *openhongguo.Request) (*openhongguo.Response, error) {
@@ -134,6 +149,15 @@ func (t hongguoSDKTransport) Do(ctx context.Context, input *openhongguo.Request)
 		if cookie.Name != "" {
 			cookies[cookie.Name] = cookie.Value
 		}
+	}
+	if t.onPlaybackResponse != nil &&
+		request.URL.Hostname() == "api5-normal-sinfonlinea.fqnovel.com" &&
+		strings.HasPrefix(request.URL.Path, "/novel/player/") {
+		t.onPlaybackResponse(
+			method, request.URL.Hostname(), request.URL.Path,
+			response.StatusCode, len(body),
+			response.Header.Get("Content-Type"), response.Header.Get("Content-Encoding"),
+		)
 	}
 	return &openhongguo.Response{
 		StatusCode: response.StatusCode,
@@ -316,6 +340,7 @@ func (downloader *Downloader) hongguoSDKClient() (*openhongguo.Client, error) {
 			Transport: hongguoSDKTransport{
 				client: downloader.client,
 				onRegistrationStatus: downloader.hongguoSDKSession.recordRegistrationStatus,
+				onPlaybackResponse: downloader.recordHongguoSDKPlaybackResponse,
 			},
 			ProfileStore:  profiles,
 			APIOrigin:     hongguoSDKAPIOrigin,
@@ -447,13 +472,17 @@ func (downloader *Downloader) fetchHongguoSDKSeasons(ctx context.Context, series
 	return hongguoSDKAlbumToNativeSeasons(album)
 }
 
+// hongguoSDKPlaybackRegistrationRejected also covers anonymous empty responses:
+// after both SDK playback endpoints return empty data, the legacy App paths
+ // only repeat the retired registration flow and cannot provide a new stream.
 func hongguoSDKPlaybackRegistrationRejected(err error) bool {
 	if err == nil {
 		return false
 	}
 	if errors.Is(err, openhongguo.ErrAuthenticationRequired) ||
 		errors.Is(err, openhongguo.ErrDeviceRejected) ||
-		errors.Is(err, openhongguo.ErrRateLimited) {
+		errors.Is(err, openhongguo.ErrRateLimited) ||
+		errors.Is(err, openhongguo.ErrAnonymousLimited) {
 		return true
 	}
 	var apiErr *openhongguo.APIError
