@@ -186,6 +186,16 @@ func (d *Downloader) providerURLCandidates(raw string) []string {
 	return candidates
 }
 
+func huangguoVideoPageMediaURL(currentURL, pageBody, pageURL string) string {
+	// The detail resolver may already have extracted a valid HLS URL from the
+	// episode card. Only replace it when the fetched page yields another valid
+	// media URL; a markup change must not erase the known-good candidate.
+	if refreshed := parseDataHLS(pageBody, pageURL); refreshed != "" {
+		return refreshed
+	}
+	return currentURL
+}
+
 func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (providerMedia, error) {
 	chapter := task.Chapter
 	chapter.Source = canonicalProviderSource(chapter.Source)
@@ -284,7 +294,7 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 		if actual, ok := responses.values.Load(chapter.PageURL); ok {
 			pageURL = actual.(string)
 		}
-		media.URL = parseDataHLS(body, pageURL)
+		media.URL = huangguoVideoPageMediaURL(media.URL, body, pageURL)
 		media.Referer = pageURL
 	}
 	if !isProviderHTTPMediaURL(media.URL) {
