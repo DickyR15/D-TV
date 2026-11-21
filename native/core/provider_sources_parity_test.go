@@ -85,6 +85,24 @@ func TestChaoliuSourceAliasesAndModuleHosts(t *testing.T) {
 	}
 }
 
+func TestSupJavLegacyDomainsRemainRecognized(t *testing.T) {
+	for _, alias := range []string{"supjav", "supjav.blog", "www.supjav.blog", "supjav.com", "www.supjav.com", "lk1.supremejav.com"} {
+		if got := canonicalProviderSource(alias); got != sourceSupJav {
+			t.Fatalf("SupJav source alias %q = %q, want %q", alias, got, sourceSupJav)
+		}
+	}
+	for _, address := range []string{
+		"https://supjav.blog/",
+		"https://www.supjav.com/video/legacy",
+		"https://lk1.supremejav.com/playlist.m3u8",
+		"https://cdn.supjav.com/stream/playlist.m3u8",
+	} {
+		if got := providerSourceForURL(address); got != sourceSupJav {
+			t.Fatalf("SupJav legacy/current host %q = %q, want %q", address, got, sourceSupJav)
+		}
+	}
+}
+
 func TestYeguoDomainAliasesAndDefaultEndpoint(t *testing.T) {
 	if got := (&Downloader{cfg: defaultConfig()}).providerBaseURL(sourceYeguo); got != "https://attract.vgbyziuz.cc" {
 		t.Fatalf("unexpected default yeguo endpoint: %s", got)
