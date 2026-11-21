@@ -141,12 +141,9 @@ func hanxiaoquanImageCandidates(fragment string, baseURLs ...string) []string {
 				}
 			}
 		}
-		if style := extractAttr(tag, "style"); style != "" {
-			for _, match := range hanxiaoquanStyleImage.FindAllStringSubmatch(style, -1) {
-				if len(match) > 1 {
-					candidates = append(candidates, hanxiaoquanFixURL(match[1], baseURLs...))
-				}
-			}
+		if style := providerHTMLStyle(tag); style != "" {
+			base := firstNonEmpty(append(baseURLs, hanxiaoquanSiteBaseURL)...)
+			candidates = append(candidates, providerCSSImageAddresses(style, base)...)
 		}
 	}
 	return nativeUniqueCoverAddresses(candidates...)
