@@ -58,7 +58,7 @@ class SourceSite {
     '恐怖片 · 電影 · 電視劇 · 動畫',
   );
   static const ikanbot = SourceSite('ikanbot', '愛看機器人', '電影 · 影集 · 動畫 · 綜藝');
-  static const chaoliu = SourceSite('chaoliu', '潮流 AV', '分類 · 搜尋 · 多畫質播放', adult: true);
+  static const chaoliu = SourceSite('chaoliu', 'chaoliu', '分類 · 搜尋 · 多畫質播放', adult: true);
   static const missav = SourceSite(
     'missav',
     'MissAV',
