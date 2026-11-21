@@ -91,25 +91,37 @@ func ikanbotImageCandidates(node *htmlnet.Node, pageURL string) []string {
 		seen[address] = true
 		result = append(result, address)
 	}
+	// Posters may be on an <img>, its source element, or a wrapper with a
+	// CSS background/data-bg. Walk the selected card subtree instead of only
+	// reading the first <img> node.
+	nodes := []*htmlnet.Node{node}
+	nodes = append(nodes, providerHTMLNodes(node, func(candidate *htmlnet.Node) bool {
+		return candidate.Type == htmlnet.ElementNode
+	})...)
 	for _, attribute := range []string{
 		"data-original", "data-original-src", "data-src", "data-lazy-src",
-		"data-lazyload", "data-image", "data-url", "data-bg", "src",
+		"data-lazyload", "data-image", "data-url", "data-bg", "data-background",
+		"src",
 	} {
-		add(providerHTMLAttr(node, attribute))
+		for _, candidate := range nodes {
+			add(providerHTMLAttr(candidate, attribute))
+		}
 	}
 	for _, attribute := range []string{"data-srcset", "data-lazy-srcset", "srcset"} {
-		for _, candidate := range strings.Split(providerHTMLAttr(node, attribute), ",") {
-			fields := strings.Fields(strings.TrimSpace(candidate))
-			if len(fields) > 0 {
-				add(fields[0])
+		for _, candidate := range nodes {
+			for _, entry := range strings.Split(providerHTMLAttr(candidate, attribute), ",") {
+				fields := strings.Fields(strings.TrimSpace(entry))
+				if len(fields) > 0 {
+					add(fields[0])
+				}
 			}
 		}
 	}
-	style := providerHTMLAttr(node, "style")
-	backgroundPattern := regexp.MustCompile("(?i)url\\(\\s*['\\x22]?([^'\\x22)]+)")
-	for _, match := range backgroundPattern.FindAllStringSubmatch(style, 8) {
-		if len(match) > 1 {
-			add(match[1])
+	for _, candidate := range nodes {
+		if style := providerHTMLAttr(candidate, "style"); style != "" {
+			for _, address := range providerCSSImageAddresses(style, pageURL) {
+				add(address)
+			}
 		}
 	}
 	return result
@@ -155,10 +167,18 @@ func ikanbotParseCards(root *htmlnet.Node,pageURL,category string)[]Drama{
 		id:=ikanbotCardIDFromHref(providerHTMLAttr(anchor,"href"))
 		if id==""||seen[id]{continue}
 		var image *htmlnet.Node
-		// Current iKanBot templates put the poster inside the title link. Keep
-		// checking nearby card ancestors for older layouts where it is a sibling.
-		for current,depth:=anchor,0;current!=nil&&depth<4&&image==nil;current,depth=current.Parent,depth+1{
-			image=ikanbotFirstImage(current)
+		var posterRoot *htmlnet.Node
+		// Current iKanBot templates put the poster inside the title link. Older
+		// layouts may place it in a sibling image or on the card's CSS background.
+		for current, depth := anchor, 0; current != nil && depth < 4 && posterRoot == nil; current, depth = current.Parent, depth+1 {
+			image = ikanbotFirstImage(current)
+			if image != nil {
+				posterRoot = current
+				break
+			}
+			if len(ikanbotImageCandidates(current, pageURL)) > 0 {
+				posterRoot = current
+			}
 		}
 		title:=providerHTMLPlainText(providerHTMLAttr(anchor,"title"))
 		if title==""&&image!=nil{title=providerHTMLPlainText(providerHTMLAttr(image,"alt"))}
@@ -175,7 +195,7 @@ func ikanbotParseCards(root *htmlnet.Node,pageURL,category string)[]Drama{
 			}
 		}
 		if title==""{continue}
-		coverCandidates := ikanbotImageCandidates(image, pageURL)
+		coverCandidates := ikanbotImageCandidates(firstHTMLNode(posterRoot, image), pageURL)
 		cover := ""
 		if len(coverCandidates) > 0 {
 			cover = coverCandidates[0]
@@ -186,7 +206,35 @@ func ikanbotParseCards(root *htmlnet.Node,pageURL,category string)[]Drama{
 	}
 	return out
 }
-func ikanbotCategoryKind(category string)string{if strings.HasPrefix(category,"movie-"){return "電影"};return "影集"}
+func ikanbotCategoryKind(category string) string {
+	switch strings.TrimSpace(category) {
+	case "movie-熱門":
+		return "電影"
+	case "tv-日本动画":
+		return "動漫"
+	case "tv-综艺":
+		return "綜藝"
+	case "tv-纪录片":
+		return "紀錄片"
+	case "tv-韩剧":
+		return "韓劇"
+	case "tv-日剧":
+		return "日劇"
+	case "tv-美剧", "tv-英剧":
+		return "劇集"
+	case "tv-港剧":
+		return "港劇"
+	case "tv-国产剧":
+		return "陸劇"
+	case "tv-热门":
+		return "影集"
+	default:
+		if strings.HasPrefix(category, "movie-") {
+			return "電影"
+		}
+		return "影集"
+	}
+}
 func ikanbotParseSearch(root *htmlnet.Node,pageURL string)[]Drama{
 	if items:=ikanbotParseCards(root,pageURL,"");len(items)>0{return items}
 	out:=[]Drama{};seen:=map[string]bool{}
@@ -200,7 +248,7 @@ func ikanbotParseSearch(root *htmlnet.Node,pageURL string)[]Drama{
 		for _,node:=range providerHTMLNodes(block,func(n *htmlnet.Node)bool{return n.Type==htmlnet.ElementNode&&n.Data=="img"}){image=node;break}
 		if title==""&&image!=nil{title=providerHTMLAttr(image,"alt")}
 		title=providerHTMLPlainText(title);if title==""{continue};seen[m[1]]=true
-		coverCandidates := ikanbotImageCandidates(image, pageURL)
+		coverCandidates := ikanbotImageCandidates(block, pageURL)
 		cover := ""
 		if len(coverCandidates) > 0 { cover = coverCandidates[0] }
 		out=append(out,Drama{ID:providerDramaID(sourceIkanBot,m[1]),Source:sourceIkanBot,SourceID:m[1],Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,CoverCandidates:append([]string(nil),coverCandidates[1:]...),ChannelName:"愛看機器人",CategoryName:"影集"})
