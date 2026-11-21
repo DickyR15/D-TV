@@ -147,7 +147,7 @@ func guipianUnescape(text string) string {
 
 func guipianFixURL(raw string) string {
 	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	if raw == "" || providerCoverLooksLikePlaceholder(raw) {
 		return ""
 	}
 	if strings.HasPrefix(raw, "//") {
@@ -181,7 +181,7 @@ func guipianImageCandidates(fragment string) []string {
 	for _, attribute := range []string{
 		"data-original", "data-original-src", "data-background", "data-bg",
 		"data-src", "data-lazy-src", "data-lazyload", "data-image",
-		"data-url", "src",
+		"data-url",
 	} {
 		for _, tag := range tags {
 			add(extractAttr(tag, attribute))
@@ -203,6 +203,10 @@ func guipianImageCandidates(fragment string) []string {
 				add(address)
 			}
 		}
+	}
+	// Ordinary src is last because many templates leave a loading GIF there.
+	for _, tag := range tags {
+		add(extractAttr(tag, "src"))
 	}
 	return result
 }
