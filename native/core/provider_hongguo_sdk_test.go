@@ -128,6 +128,7 @@ func TestHongguoSDKPlaybackRegistrationRejectedClassifiesEdgeAndPolicyResponses(
 		{name: "rate limited", err: &openhongguo.APIError{HTTPStatus: 429}, want: true},
 		{name: "device rejected", err: openhongguo.ErrDeviceRejected, want: true},
 		{name: "authentication", err: openhongguo.ErrAuthenticationRequired, want: true},
+		{name: "anonymous playback response empty", err: openhongguo.ErrAnonymousLimited, want: true},
 		{name: "server error", err: &openhongguo.APIError{HTTPStatus: 503}, want: false},
 		{name: "timeout", err: errors.New("context deadline exceeded"), want: false},
 		{name: "nil", err: nil, want: false},
