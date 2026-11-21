@@ -89,6 +89,15 @@ void main() {
     expect(drama.sourceId, 'bfzy.tv~12345');
   });
 
+  test('chaoliu uses its canonical source name in the UI', () {
+    final chaoliu = SourceSite.byId('chaoliu');
+    expect(chaoliu.id, 'chaoliu');
+    expect(chaoliu.name, 'chaoliu');
+    expect(chaoliu.adult, isTrue);
+    expect(chaoliu.pagedSearch, isTrue);
+    expect(SourceSite.isKnown('潮流 AV'), isFalse);
+  });
+
   test('Heitao is registered as an advanced searchable source', () {
     final heitao = SourceSite.byId('heitao');
     expect(SourceSite.isKnown('heitao'), isTrue);
