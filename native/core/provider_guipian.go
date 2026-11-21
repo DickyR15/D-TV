@@ -166,22 +166,60 @@ func guipianFixURL(raw string) string {
 // All unique candidates are retained so the shared cover cache can retry when
 // the first upstream image is expired or blocked.
 func guipianImageCandidates(fragment string) []string {
-	attributes := []string{"data-original", "data-background", "data-src", "data-lazy-src", "src"}
+	// CMS templates have used ordinary <img> attributes, lazy-load aliases,
+	// srcset and CSS background images. Preserve preferred artwork fields
+	// before placeholder src values and keep all valid candidates for retries.
+	tags := reGuipianTag.FindAllString(fragment, -1)
 	seen := map[string]bool{}
 	var result []string
-	for _, attribute := range attributes {
-		pattern := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(attribute) + `\s*=\s*["']([^"']+)["']`)
-		for _, match := range pattern.FindAllStringSubmatch(fragment, -1) {
-			if len(match) < 2 { continue }
-			address := guipianFixURL(match[1])
-			if address != "" && !seen[address] {
-				seen[address] = true
-				result = append(result, address)
+	add := func(raw string) {
+		if address := guipianFixURL(raw); address != "" && !seen[address] {
+			seen[address] = true
+			result = append(result, address)
+		}
+	}
+	for _, attribute := range []string{
+		"data-original", "data-original-src", "data-background", "data-bg",
+		"data-src", "data-lazy-src", "data-lazyload", "data-image",
+		"data-url", "src",
+	} {
+		for _, tag := range tags {
+			add(extractAttr(tag, attribute))
+		}
+	}
+	for _, attribute := range []string{"data-srcset", "data-lazy-srcset", "srcset"} {
+		for _, tag := range tags {
+			for _, entry := range strings.Split(extractAttr(tag, attribute), ",") {
+				fields := strings.Fields(strings.TrimSpace(entry))
+				if len(fields) > 0 {
+					add(fields[0])
+				}
+			}
+		}
+	}
+	for _, tag := range tags {
+		if style := extractAttr(tag, "style"); style != "" {
+			for _, address := range providerCSSImageAddresses(style, guipianSiteBaseURL) {
+				add(address)
 			}
 		}
 	}
 	return result
 }
+
+func guipianCategoryName(category string) string {
+	switch strings.TrimSpace(category) {
+	case "3", "6", "7", "8", "9", "10", "11", "31":
+		return "電影"
+	case "12", "13", "14", "15", "16", "17", "18":
+		return "劇集"
+	case "23", "24", "25", "26":
+		return "動漫"
+	default:
+		return "影視"
+	}
+}
+
 func (d *Downloader) fetchGuipianCategories() []nativeCategory {
 	return append([]nativeCategory(nil), guipianCategories...)
 }
@@ -197,7 +235,11 @@ func (d *Downloader) guipianGet(ctx context.Context, path string) (string, error
 }
 
 // parseGuipianCards 从主列表容器解析卡片。
-func parseGuipianCards(body string) []Drama {
+func parseGuipianCards(body string, selectedCategory ...string) []Drama {
+	categoryName := "影視"
+	if len(selectedCategory) > 0 {
+		categoryName = guipianCategoryName(selectedCategory[0])
+	}
 	segment := body
 	if match := reGuipianMainList.FindStringSubmatch(body); len(match) > 1 {
 		segment = match[1]
@@ -228,7 +270,7 @@ func parseGuipianCards(body string) []Drama {
 			ID: providerDramaID(sourceGuipian, id), Source: sourceGuipian, SourceID: id,
 			Title: truncate(title, 512), Name: truncate(title, 512),
 			Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), covers[1:]...), ChannelName: "鬼片网",
-			CategoryName: "影视", Remark: truncate(remark, 64),
+			CategoryName: categoryName, Remark: truncate(remark, 64),
 		})
 		if len(items) > 500 {
 			break
@@ -276,7 +318,7 @@ func (d *Downloader) fetchGuipianCatalogPage(ctx context.Context, page int, cate
 	if err != nil {
 		return nil, false, err
 	}
-	items := parseGuipianCards(body)
+	items := parseGuipianCards(body, category)
 	if len(items) == 0 {
 		return []Drama{}, false, nil
 	}
@@ -443,14 +485,25 @@ func (d *Downloader) fetchGuipianDetail(ctx context.Context, sourceID string) (D
 		return Drama{}, nil, errors.New("鬼片网详情缺少视频名称")
 	}
 	var covers []string
-	for _, block := range reGuipianDetailImageBlock.FindAllString(body, -1) {
-		covers = append(covers, guipianImageCandidates(block)... )
+	for _, tag := range coverMetaTag.FindAllString(body, -1) {
+		key := firstNonEmpty(extractAttr(tag, "property"), extractAttr(tag, "name"))
+		if strings.EqualFold(key, "og:image") || strings.EqualFold(key, "twitter:image") {
+			covers = append(covers, guipianFixURL(extractAttr(tag, "content")))
+		}
 	}
-	// Keep the older exact selectors as a compatibility fallback for templates
-	// that move the image outside the expected detail containers.
+	for _, block := range reGuipianDetailImageBlock.FindAllString(body, -1) {
+		covers = append(covers, guipianImageCandidates(block)...)
+	}
+	// Some templates move the poster outside detail-img/detail-cover.
+	// Broaden to the whole page only if the scoped candidates are absent.
 	if len(covers) == 0 {
-		if match := reGuipianDetailPic2.FindStringSubmatch(body); len(match) > 1 { covers = append(covers, guipianFixURL(match[1])) }
-		if match := reGuipianDetailPic.FindStringSubmatch(body); len(match) > 1 { covers = append(covers, guipianFixURL(match[1])) }
+		covers = append(covers, guipianImageCandidates(body)...)
+		if match := reGuipianDetailPic2.FindStringSubmatch(body); len(match) > 1 {
+			covers = append(covers, guipianFixURL(match[1]))
+		}
+		if match := reGuipianDetailPic.FindStringSubmatch(body); len(match) > 1 {
+			covers = append(covers, guipianFixURL(match[1]))
+		}
 	}
 	uniqueCovers := make([]string, 0, len(covers))
 	seenCovers := map[string]bool{}
