@@ -1,10 +1,13 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,5 +141,65 @@ func TestHongguoSDKPlaybackRegistrationRejectedClassifiesEdgeAndPolicyResponses(
 				t.Fatalf("registration rejection = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+
+type hongguoSDKTestRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTrip hongguoSDKTestRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
+func TestHongguoSDKPlaybackRefreshesRejectedAnonymousDeviceTwice(t *testing.T) {
+	var registrations int
+	const registerHost = "log5-applog-lq.fqnovel.com"
+	const apiHost = "api5-normal-sinfonlinea.fqnovel.com"
+	playbackDeviceIDs := map[string]bool{}
+	transport := hongguoSDKTestRoundTripper(func(request *http.Request) (*http.Response, error) {
+		var body string
+		switch {
+		case request.URL.Host == registerHost && request.URL.Path == hongguoDeviceRegisterPath:
+			registrations++
+			body = fmt.Sprintf(
+				`{"new_user":1,"device_id_str":"%d","install_id_str":"%d"}`,
+				7100000000000000+registrations, 7200000000000000+registrations,
+			)
+		case request.URL.Host == apiHost && strings.HasPrefix(request.URL.Path, "/novel/player/"):
+			deviceID := request.URL.Query().Get("device_id")
+			if deviceID == "" {
+				t.Fatalf("playback request missing device_id: %s", request.URL.Path)
+			}
+			playbackDeviceIDs[deviceID] = true
+			body = ""
+		default:
+			t.Fatalf("unexpected Redfruit SDK request: %s %s", request.Method, request.URL.Host+request.URL.Path)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+			},
+			Body: io.NopCloser(strings.NewReader(body)),
+			Request: request,
+		}, nil
+	})
+	downloader := &Downloader{
+		cfg: Config{dataDir: t.TempDir()},
+		client: &http.Client{Transport: transport},
+	}
+	client, err := downloader.hongguoSDKClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.ResolvePlayback(context.Background(), "7690163276214176792", openhongguo.PlaybackOptions{})
+	if !errors.Is(err, openhongguo.ErrAnonymousLimited) {
+		t.Fatalf("ResolvePlayback error = %v, want anonymous empty response", err)
+	}
+	if registrations != 3 {
+		t.Fatalf("device registrations = %d, want initial registration plus two refreshes", registrations)
+	}
+	if len(playbackDeviceIDs) != 3 {
+		t.Fatalf("unique playback device IDs = %d, want three refreshed identities", len(playbackDeviceIDs))
 	}
 }
