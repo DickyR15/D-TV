@@ -34,6 +34,32 @@ func huangguoEdgeReply(data any) string {
 	return string(body)
 }
 
+func TestHuangguoAIJSONLDFallbackCarriesPosterCandidates(t *testing.T) {
+	body := `<script type="application/ld+json">{
+		"@context":"https://schema.org",
+		"@type":"VideoObject",
+		"name":"JSON-LD 海報作品",
+		"url":"/detail/905/",
+		"image":["/images/poster-primary.webp","/images/poster-backup.jpg"],
+		"thumbnailUrl":"/images/poster-thumb.jpg"
+	}</script>`
+	items := parseHuangguoAIJSONLDDramas(body, "AI 短劇", "https://huangguoai.com/")
+	if len(items) != 1 {
+		t.Fatalf("JSON-LD catalogue items = %d, want 1", len(items))
+	}
+	want := []string{
+		"https://huangguoai.com/images/poster-primary.webp",
+		"https://huangguoai.com/images/poster-backup.jpg",
+		"https://huangguoai.com/images/poster-thumb.jpg",
+	}
+	if items[0].Cover != want[0] || items[0].CoverURL != want[0] ||
+		len(items[0].CoverCandidates) != 2 ||
+		items[0].CoverCandidates[0] != want[1] ||
+		items[0].CoverCandidates[1] != want[2] {
+		t.Fatalf("JSON-LD poster candidates = %#v", items[0])
+	}
+}
+
 func TestHuangguoAIDetailUsesEdgeAPI(t *testing.T) {
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
 		if request.URL.Hostname() != "huangguoai.com" {
