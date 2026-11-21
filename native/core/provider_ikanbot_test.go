@@ -765,10 +765,14 @@ func TestIkanbotCardPosterCanComeFromSiblingWrapperBackground(t *testing.T) {
 		"https://v.ikanbot.com/posters/large.jpg",
 		"https://v.ikanbot.com/posters/wrapper.webp",
 	}
-	if len(items[0].CoverCandidates)+1 != len(want) || items[0].Cover != want[0] {
-		t.Fatalf("wrapper poster candidates = %#v / %q", items[0].CoverCandidates, items[0].Cover)
+	cover, ok := items[0].Cover.(string)
+	if !ok {
+		t.Fatalf("wrapper primary poster has type %T, want string: %#v", items[0].Cover, items[0].Cover)
 	}
-	got := append([]string{items[0].Cover}, items[0].CoverCandidates...)
+	if len(items[0].CoverCandidates)+1 != len(want) || cover != want[0] {
+		t.Fatalf("wrapper poster candidates = %#v / %q", items[0].CoverCandidates, cover)
+	}
+	got := append([]string{cover}, items[0].CoverCandidates...)
 	for index := range want {
 		if got[index] != want[index] {
 			t.Fatalf("candidate %d = %q, want %q", index, got[index], want[index])
