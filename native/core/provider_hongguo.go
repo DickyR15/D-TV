@@ -200,22 +200,21 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		return providerMedia{}, fmt.Errorf("紅果章節 ID 無效，請重新取得章節")
 	}
 
-	// Try the independently registered Current Player identity before the signed compatibility routes.
-	media, currentPlayerErr := d.resolveHongguoCurrentPlayerMedia(ctx, videoID)
-	if currentPlayerErr == nil {
-		return media, nil
+	// The OpenHongguo SDK owns guest registration, V5 signing, and the
+	// single-model fallback. Do not first register a second independent
+	// Current Player device against the retired log.snssdk.com aliases.
+	sdkMedia, sdkErr := d.resolveHongguoSDKMedia(ctx, videoID)
+	if sdkErr == nil {
+		return sdkMedia, nil
 	}
 	if err := ctx.Err(); err != nil {
 		return providerMedia{}, err
 	}
 
-	// The manifest can change the order among parser/transport strategies
-	// already shipped in the app. It cannot inject executable parser code.
 	type attempt struct {
 		name string
 		run  func() (providerMedia, error)
 	}
-	v5 := attempt{"v5", func() (providerMedia, error) { return d.resolveHongguoV5Media(ctx, videoID) }}
 	quick := attempt{"quick", func() (providerMedia, error) { return d.resolveHongguoQuickAppMedia(ctx, seriesID, videoID) }}
 	native := attempt{"native", func() (providerMedia, error) { return d.resolveHongguoAppMedia(ctx, videoID) }}
 	multi := attempt{"multi", func() (providerMedia, error) { return d.resolveHongguoMultiModelMedia(ctx, videoID) }}
@@ -223,13 +222,19 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 
 	profile := d.providerParserProfile(sourceHongguo, "hongguo_v5_first")
 	var attempts []attempt
-	switch profile {
-	case "hongguo_legacy_first":
-		attempts = []attempt{native, multi, v5, quick, web}
-	case "hongguo_web_first":
-		attempts = []attempt{quick, web, v5, native, multi}
-	default:
-		attempts = []attempt{v5, quick, native, multi, web}
+	if hongguoSDKPlaybackRegistrationRejected(sdkErr) {
+		// Once the new guest-registration path has been rejected, avoid
+		// cascading into legacy App routes that try the same retired hosts.
+		attempts = []attempt{quick, web}
+	} else {
+		switch profile {
+		case "hongguo_legacy_first":
+			attempts = []attempt{native, multi, quick, web}
+		case "hongguo_web_first":
+			attempts = []attempt{quick, web, native, multi}
+		default:
+			attempts = []attempt{quick, native, multi, web}
+		}
 	}
 
 	errs := map[string]error{}
@@ -245,19 +250,20 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	}
 
 	nativeErr, multiModelErr := errs["native"], errs["multi"]
-	if errors.Is(currentPlayerErr, errHongguoH266Only) || errors.Is(nativeErr, errHongguoH266Only) || errors.Is(multiModelErr, errHongguoH266Only) {
+	if errors.Is(sdkErr, errHongguoH266Only) ||
+		errors.Is(nativeErr, errHongguoH266Only) ||
+		errors.Is(multiModelErr, errHongguoH266Only) {
 		helperMedia, helperErr := d.resolveHongguoHelperMedia(ctx, seriesID, videoID)
 		if helperErr == nil {
 			return helperMedia, nil
 		}
 		multiModelErr = fmt.Errorf("%w；輔助設備 H.265 備援失敗：%v", errHongguoH266Only, publicError(helperErr))
 	}
-	quickWebErr, v5Err, pageErr := errs["quick"], errs["v5"], errs["web"]
+	quickWebErr, pageErr := errs["quick"], errs["web"]
 	return providerMedia{}, fmt.Errorf(
-		"紅果取流失敗：Current Player：%v；解析設定 %s；新版 V5 App：%v；快捷網頁：%v；舊版 App：%v；多清晰度：%v；官網網頁：%w",
-		publicError(currentPlayerErr),
+		"紅果取流失敗：新版匿名 SDK V5：%v；解析設定 %s；快捷網頁：%v；舊版 App：%v；多清晰度：%v；官網網頁：%w",
+		publicError(sdkErr),
 		profile,
-		publicError(v5Err),
 		publicError(quickWebErr),
 		publicError(nativeErr),
 		publicError(multiModelErr),
