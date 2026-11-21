@@ -599,12 +599,9 @@ func huangguoPosterCandidates(fragment, pageURL string) []string {
 				add(raw)
 			}
 		}
-		if style := extractAttr(tag, "style"); style != "" {
-			for _, match := range adultCSSImagePattern.FindAllStringSubmatch(style, -1) {
-				if len(match) > 1 {
-					add(match[1])
-				}
-			}
+		if style := providerHTMLStyle(tag); style != "" {
+			addrs := providerCSSImageAddresses(style, pageURL)
+			addresses = append(addresses, addrs...)
 		}
 	}
 	for _, tag := range huangguoVideoTagPattern.FindAllString(fragment, -1) {
