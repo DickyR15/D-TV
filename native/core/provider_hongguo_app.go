@@ -194,7 +194,6 @@ func (downloader *Downloader) hongguoCompatibilityPath(path string) string {
 func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, path string, extra url.Values, payload any) (map[string]any, error) {
 	client := downloader.hongguoClient()
 	helper, _ := ctx.Value(hongguoHelperDeviceKey{}).(bool)
-	seasonPlan, _ := ctx.Value(hongguoSeasonPlanRequestKey{}).(bool)
 	signed := path != hongguoBookmallTabPath
 	playback := path == hongguoPlaybackPath
 	path = downloader.hongguoCompatibilityPath(path)
@@ -216,12 +215,6 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 	}
 	if helper && (!signed || !registered || !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0") {
 		return nil, errors.New("紅果輔助設備尚未完成註冊")
-	}
-	if seasonPlan && (!registered || !hongguoNumericID.MatchString(deviceID) || !hongguoNumericID.MatchString(installID) || deviceID == "0" || installID == "0") {
-		if registerErr != nil {
-			return nil, fmt.Errorf("紅果系列季別設備註冊失敗：%w", registerErr)
-		}
-		return nil, errors.New("紅果系列季別設備尚未完成註冊")
 	}
 	query := hongguoAppQuery(deviceID, installID)
 	if playback {
@@ -288,10 +281,6 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 			request.Header.Set("Accept", "application/json")
 			request.Header.Set("X-XS-From-Web", "0")
 			request.Header.Set("Sdk-Version", "2")
-			if seasonPlan {
-				request.Header.Set("x-ss-dp", "8662")
-				request.Header.Set("lc", "101")
-			}
 			if payload != nil {
 				request.Header.Set("Content-Type", "application/json; charset=utf-8")
 			}
@@ -301,12 +290,8 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 				return
 			}
 			now := time.Now()
-			ticket := strconv.FormatInt(now.UnixMilli(), 10)
-			query.Set("_rticket", ticket)
+			query.Set("_rticket", strconv.FormatInt(now.UnixMilli(), 10))
 			prepared.URL.RawQuery = query.Encode()
-			if seasonPlan {
-				prepared.Header.Set("x-reading-request", ticket+"-"+strconv.FormatInt(time.Now().UnixNano()&0x7fffffff, 10))
-			}
 			if signed {
 				signHongguoPlayerRequest(prepared, body, now)
 			}
@@ -353,7 +338,7 @@ func (downloader *Downloader) hongguoAppRequest(ctx context.Context, method, pat
 		}
 		if len(content) == 0 {
 			lastErr = errors.New("紅果 App 接口未返回有效資料")
-			if signed && !seasonPlan && rotations < hongguoDeviceRotations {
+			if signed && rotations < hongguoDeviceRotations {
 				registerErr = downloader.ensureHongguoDeviceFor(ctx, helper, deviceID)
 				if registerErr == nil {
 					rotations++
