@@ -149,3 +149,57 @@ func TestHuangguoAIRejectsInvalidSourceIDBeforeRequest(t *testing.T) {
 		t.Fatal("invalid source ID reached the site API", err, requests)
 	}
 }
+
+func TestHuangguoPosterParserKeepsLazySrcsetAndVideoPoster(t *testing.T) {
+	fragment := `<div class="video-card" data-cover="/poster/card.webp"
+		style="background-image:url('/poster/background.jpg')">
+		<img src="/loading.gif" data-original="/poster/original.webp"
+			data-src="/poster/lazy.jpg"
+			data-srcset="/poster/small.jpg 320w, /poster/large.jpg 1200w">
+		<video poster="/poster/video-poster.webp"></video>
+	</div>`
+	got := huangguoPosterCandidates(fragment, "https://huangguoai.com")
+	for _, want := range []string{
+		"https://huangguoai.com/poster/original.webp",
+		"https://huangguoai.com/poster/lazy.jpg",
+		"https://huangguoai.com/poster/small.jpg",
+		"https://huangguoai.com/poster/large.jpg",
+		"https://huangguoai.com/poster/video-poster.webp",
+		"https://huangguoai.com/poster/card.webp",
+		"https://huangguoai.com/poster/background.jpg",
+	} {
+		if !containsString(got, want) {
+			t.Fatalf("Huangguo poster candidate %q missing from %#v", want, got)
+		}
+	}
+}
+
+func TestHuangguoAIDetailKeepsJSONLDPosterBackups(t *testing.T) {
+	pageURL := "https://huangguoai.com/detail/905/"
+	body := `<script type="application/ld+json">{
+		"@type":"VideoObject",
+		"url":"https://huangguoai.com/detail/905/",
+		"name":"AI 詳情海報測試",
+		"image":["/images/main.webp","/images/backup.jpg"],
+		"thumbnailUrl":"/images/thumb.jpg"
+	}</script>`
+	patch := Drama{
+		ID: providerDramaID(sourceHuangguoAI, "905"),
+		Source: sourceHuangguoAI,
+		SourceID: "905",
+		Title: "AI 詳情海報測試",
+	}
+	got, err := parseHuangguoSortDetail(body, pageURL, patch)
+	if err != nil {
+		t.Fatalf("parseHuangguoSortDetail failed: %v", err)
+	}
+	want := []string{
+		"https://huangguoai.com/images/main.webp",
+		"https://huangguoai.com/images/backup.jpg",
+		"https://huangguoai.com/images/thumb.jpg",
+	}
+	if got.Cover != want[0] || len(got.CoverCandidates) != 2 ||
+		got.CoverCandidates[0] != want[1] || got.CoverCandidates[1] != want[2] {
+		t.Fatalf("Huangguo AI detail poster candidates = %#v", got)
+	}
+}
