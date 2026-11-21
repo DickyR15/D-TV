@@ -80,6 +80,15 @@ func dsdDetailIdentity(document *html.Node, sourceID string, player map[string]a
 	return errors.New("帝果未提供要求影片的詳情")
 }
 
+func dsdDetailCoverCandidates(player map[string]any, box *html.Node, pageURL string) []string {
+	var addresses []string
+	if poster, exists := player["poster"]; exists {
+		addresses = append(addresses, providerCoverAddresses(poster, pageURL)...)
+	}
+	addresses = append(addresses, dsdCardCoverCandidates(box, pageURL)...)
+	return nativeUniqueCoverAddresses(addresses...)
+}
+
 func parseDSDDetail(document *html.Node, pageURL, sourceID, site string) (Drama, []Chapter, error) {
 	player, found, err := parseDSDPlayer(document)
 	if err != nil {
@@ -108,11 +117,12 @@ func parseDSDDetail(document *html.Node, pageURL, sourceID, site string) (Drama,
 	if title == "" {
 		return Drama{}, nil, errors.New("帝果詳情缺少影片名稱")
 	}
-	cover := firstNonEmpty(providerCoverAddress(player["poster"], pageURL), dsdCardCover(box, pageURL))
+	coverCandidates := dsdDetailCoverCandidates(player, box, pageURL)
+	cover := firstNonEmpty(coverCandidates...)
 	description := truncate(providerHTMLText(providerHTMLFirstClass(info, "desc")), 12000)
 	drama := Drama{ID: providerDramaID(sourceDSD, sourceID), Source: sourceDSD, SourceID: sourceID,
 		Title: truncate(title, 1024), Name: truncate(title, 1024), Desc: description, Intro: description,
-		Cover: cover, CoverURL: cover, ChannelName: "帝果"}
+		Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...), ChannelName: "帝果"}
 	vip := providerHTMLFirstClass(box, "noVip", "openVip") != nil
 	if vip {
 		drama.VIP = &vip
