@@ -122,7 +122,7 @@ func parseDSDDetail(document *html.Node, pageURL, sourceID, site string) (Drama,
 	description := truncate(providerHTMLText(providerHTMLFirstClass(info, "desc")), 12000)
 	drama := Drama{ID: providerDramaID(sourceDSD, sourceID), Source: sourceDSD, SourceID: sourceID,
 		Title: truncate(title, 1024), Name: truncate(title, 1024), Desc: description, Intro: description,
-		Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...), ChannelName: "帝果"}
+		Cover: cover, CoverURL: cover, CoverCandidates: nativeCoverBackupAddresses(coverCandidates), ChannelName: "帝果"}
 	vip := providerHTMLFirstClass(box, "noVip", "openVip") != nil
 	if vip {
 		drama.VIP = &vip
