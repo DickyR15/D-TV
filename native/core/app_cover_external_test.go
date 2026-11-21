@@ -2100,7 +2100,7 @@ func TestNativePosterMatcherRecognizesTaiwanSeriesCategoryAliases(t *testing.T) 
 }
 
 
-func TestProviderCoverCandidatesRejectCommonCMSPlaceholders(t *testing.T) {
+func TestProviderCoverPlaceholderFilterIsSourceScoped(t *testing.T) {
 	for _, address := range []string{
 		"https://img.example.test/loading.gif",
 		"https://img.example.test/placeholder.png",
@@ -2108,7 +2108,7 @@ func TestProviderCoverCandidatesRejectCommonCMSPlaceholders(t *testing.T) {
 		"https://img.example.test/blank.gif",
 	} {
 		if !providerCoverLooksLikePlaceholder(address) {
-			t.Errorf("placeholder address %q was not rejected", address)
+			t.Errorf("placeholder address %q was not recognized", address)
 		}
 	}
 	for _, address := range []string{
@@ -2119,11 +2119,15 @@ func TestProviderCoverCandidatesRejectCommonCMSPlaceholders(t *testing.T) {
 			t.Errorf("valid artwork address %q was rejected", address)
 		}
 	}
+	// Shared metadata normalization must remain neutral: only an individual
+	// provider parser may decide whether a URL is a known placeholder.
 	got := providerCoverAddresses([]any{
 		"https://img.example.test/loading.gif",
 		"https://img.example.test/poster.webp",
 	}, "https://img.example.test/")
-	if len(got) != 1 || got[0] != "https://img.example.test/poster.webp" {
-		t.Fatalf("normalized poster candidates = %#v", got)
+	if len(got) != 2 ||
+		got[0] != "https://img.example.test/loading.gif" ||
+		got[1] != "https://img.example.test/poster.webp" {
+		t.Fatalf("shared cover URL normalization filtered provider data: %#v", got)
 	}
 }
