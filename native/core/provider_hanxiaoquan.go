@@ -151,7 +151,11 @@ func hanxiaoquanImageCandidates(fragment string, baseURLs ...string) []string {
 	base := firstNonEmpty(append(baseURLs, hanxiaoquanSiteBaseURL)...)
 	for _, tag := range tags {
 		if style := providerHTMLStyle(tag); style != "" {
-			candidates = append(candidates, providerCSSImageAddresses(style, base)...)
+			for _, address := range providerCSSImageAddresses(style, base) {
+				if normalized := hanxiaoquanFixURL(address, base); normalized != "" {
+					candidates = append(candidates, normalized)
+				}
+			}
 		}
 	}
 	// The regular src attribute is last because it is often a loading placeholder.
