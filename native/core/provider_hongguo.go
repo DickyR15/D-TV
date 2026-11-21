@@ -348,7 +348,9 @@ func hongguoDramaFromAny(v any, category string) Drama {
 		return Drama{}
 	}
 	title := firstNonEmpty(mapString(vd, "series_title", "series_name", "title"), mapString(m, "series_name", "name"), sourceID)
-	cover := firstNonEmpty(mapString(vd, "series_cover", "cover"), mapString(m, "series_cover"))
+	coverCandidates := append(providerCoverAddresses(vd, hongguoBaseURL+"/"), providerCoverAddresses(m, hongguoBaseURL+"/")...)
+	coverCandidates = nativeUniqueCoverAddresses(coverCandidates...)
+	cover := firstNonEmpty(coverCandidates...)
 	intro := firstNonEmpty(mapString(vd, "series_intro", "video_desc"), mapString(m, "series_intro"))
 	count := firstNonEmpty(mapString(vd, "episode_cnt"), mapString(m, "episode_cnt"))
 	remark := firstNonEmpty(mapString(vd, "episode_right_text"), mapString(m, "episode_right_text"))
@@ -382,7 +384,7 @@ func hongguoDramaFromAny(v any, category string) Drama {
 	if genre == "" && len(tags) > 0 {
 		genre = tags[0]
 	}
-	return Drama{ID: providerDramaID(sourceHongguo, sourceID), Source: sourceHongguo, SourceID: sourceID, Title: title, Name: title, Desc: intro, Intro: intro, Cover: cover, CoverURL: cover, CategoryName: firstNonEmpty(genre, category), ChannelName: "红果", Remark: remark, TotalEpisode: count, EpisodeCount: count, Tags: tags, ReleaseStatus: releaseStatus, Score: mapString(vd, "score"), Views: mapString(vd, "series_play_cnt", "play_cnt"), Heat: hongguoHeat(vd), OnlineDate: hongguoOnlineDate(vd, time.Now())}
+	return Drama{ID: providerDramaID(sourceHongguo, sourceID), Source: sourceHongguo, SourceID: sourceID, Title: title, Name: title, Desc: intro, Intro: intro, Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...), CategoryName: firstNonEmpty(genre, category), ChannelName: "红果", Remark: remark, TotalEpisode: count, EpisodeCount: count, Tags: tags, ReleaseStatus: releaseStatus, Score: mapString(vd, "score"), Views: mapString(vd, "series_play_cnt", "play_cnt"), Heat: hongguoHeat(vd), OnlineDate: hongguoOnlineDate(vd, time.Now())}
 }
 
 func nestedMap(v any, keys ...string) map[string]any {
