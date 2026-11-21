@@ -297,3 +297,23 @@ func TestNativePlaybackRouteProbeMovesUntestedRoutesAheadOfTimedOutRoutes(t *tes
 		}
 	}
 }
+
+
+func TestNativePlaybackRouteProbePolicyCoversEveryNonRedfruitProvider(t *testing.T) {
+	for _, source := range []string{
+		sourceDuoduo, sourceGuipian, sourceIkanBot, sourceMissAV, sourceSupJav,
+		sourcePPP, sourceMadou, source91Porna, sourceChaoliu, sourceHanxiaoquan,
+		sourceHeitao, sourceDSD, sourceHuangdou, sourceHuangju, sourceYeguo,
+		sourceHuangguoAI, sourceHuangguoVideo,
+	} {
+		if !nativePlaybackRouteProbeEnabled(source) {
+			t.Errorf("non-Redfruit source %q was excluded from bounded route ranking", source)
+		}
+	}
+	if nativePlaybackRouteProbeEnabled(sourceHongguo) {
+		t.Fatal("Redfruit must keep its existing app-specific startup route policy")
+	}
+	if !nativePlaybackRouteProbeEnabled("潮流 AV") && !nativePlaybackRouteProbeEnabled("chaoliu") {
+		t.Fatal("legacy Chaoliu display alias or canonical ID was not included")
+	}
+}
