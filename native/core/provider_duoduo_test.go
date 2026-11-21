@@ -1310,3 +1310,48 @@ func TestDuoduoDetailFallsBackToPlayableVerifiedSameSeasonAlias(t *testing.T) {
 	}
 }
 
+
+
+func TestDuoduoAnimeCategoryFallbackEnablesPosterMatchingWhenRowsOmitTypeName(t *testing.T) {
+	row := map[string]any{
+		"vod_id": "99123",
+		"vod_name": "萬人之上",
+		"vod_year": "2026",
+		"vod_pic": "",
+	}
+	drama := duoduoDramaFromRow(row)
+	if drama.CategoryName != "" {
+		t.Fatalf("fixture unexpectedly includes a category: %q", drama.CategoryName)
+	}
+	drama = duoduoApplyCatalogCategory(drama, duoduoCategoryName("3"))
+	native := nativeNormalize(drama)
+	if native.Category != "动漫" || !nativePosterIsAnime(native) {
+		t.Fatalf("catalogue's selected anime category was not preserved for poster matching: %+v", native)
+	}
+	address, ok := nativeVerifiedOfficialPosterAddress(native)
+	const want = "https://pic2.iqiyipic.com/image/20251205/9b/cd/a_100570559_m_601_m4_400_400.jpg"
+	if !ok || address != want {
+		t.Fatalf("anime poster fallback = %q, %t; want %q", address, ok, want)
+	}
+}
+
+func TestDuoduoHomeAnimeSupplementPreservesGroupCategoryForPosterMatching(t *testing.T) {
+	items := duoduoHomeSupplement(map[string]any{
+		"categories": []any{map[string]any{
+			"type_id": "3",
+			"type_name": "动漫",
+			"videos": []any{map[string]any{
+				"vod_id": "99124",
+				"vod_name": "萬人之上",
+				"vod_year": "2026",
+			}},
+		}},
+	}, "3")
+	if len(items) != 1 {
+		t.Fatalf("anime home supplement returned %d items, want 1", len(items))
+	}
+	native := nativeNormalize(items[0])
+	if !nativePosterIsAnime(native) {
+		t.Fatalf("anime group category was lost from the home supplement: %+v", native)
+	}
+}
