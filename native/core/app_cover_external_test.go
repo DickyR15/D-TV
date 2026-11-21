@@ -2044,3 +2044,44 @@ func TestDuoduoSimplifiedAnimeCategoryEnablesPosterRecovery(t *testing.T) {
 		t.Fatalf("official anime image missing from fallback addresses: %#v", addresses)
 	}
 }
+
+
+func TestExternalPosterAddressUsesAniListBeforeBroadDoubanAnimeSearch(t *testing.T) {
+	const expected = "https://anilist.co/file/anilistcdn/media/anime/cover/large/frieren.jpg"
+	var bangumiCalls, aniListCalls int
+	client := &http.Client{Transport: posterLookupRoundTripper(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Host {
+		case "api.bgm.tv":
+			bangumiCalls++
+			return posterLookupJSONResponse(request, `{"data":[]}`), nil
+		case "graphql.anilist.co":
+			aniListCalls++
+			return posterLookupJSONResponse(request, `{
+				"data":{"Page":{"media":[{
+					"id":154587,
+					"title":{"native":"葬送のフリーレン","romaji":"Sousou no Frieren","english":"Frieren: Beyond Journey's End"},
+					"synonyms":["葬送的芙莉莲"],
+					"startDate":{"year":2023},
+					"coverImage":{"extraLarge":"https://anilist.co/file/anilistcdn/media/anime/cover/large/frieren.jpg"}
+				}]}}
+			}`), nil
+		case "movie.douban.com":
+			t.Fatal("anime-specific AniList lookup should run before broad Douban suggestions")
+		}
+		return nil, fmt.Errorf("unexpected poster lookup host: %s", request.URL.Host)
+	})}
+	downloader := &Downloader{client: client, cfg: defaultConfig()}
+	address, err := downloader.externalPosterAddress(context.Background(), nativeDrama{
+		ID: "duoduo:154587", Source: sourceDuoduo,
+		Title: "葬送的芙莉蓮", Category: "動漫", OnlineDate: "2023",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != expected {
+		t.Fatalf("external anime poster = %q, want %q", address, expected)
+	}
+	if bangumiCalls == 0 || aniListCalls == 0 {
+		t.Fatalf("anime poster fallback order was not exercised: Bangumi=%d AniList=%d", bangumiCalls, aniListCalls)
+	}
+}
