@@ -532,6 +532,36 @@ func TestHongguoDeviceRotationClearsOnlyForbiddenHostCooldown(t *testing.T) {
 }
 
 
+func TestHongguoRegistrationClientLabelUsesActualRequestUserAgent(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ua string
+		want string
+	}{
+		{
+			name: "legacy app profile",
+			ua: "com.phoenix.read/74332 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3)",
+			want: "Android 16 / Redmi 25053RT47C / App 7.4.3.32",
+		},
+		{
+			name: "SDK current player profile",
+			ua: "com.phoenix.read/73932 (Linux; U; Android 14; zh_CN; 23127PN0CC; Build/UKQ1.230804.001)",
+			want: "Android 14 / Xiaomi 23127PN0CC / App 7.3.9.32",
+		},
+		{name: "unknown client", ua: "Mozilla/5.0", want: "unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := http.NewRequest(http.MethodPost, "https://log5-applog-lq.fqnovel.com/service/2/device_register/", nil)
+			if err != nil { t.Fatal(err) }
+			request.Header.Set("User-Agent", tc.ua)
+			response := &http.Response{Request: request}
+			if got := hongguoRegistrationClientLabel(response); got != tc.want {
+				t.Fatalf("client label = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHongguoPlaybackDoesNotCallRetiredThirdPartyAPI(t *testing.T) {
 	var requested []string
 	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
