@@ -16,7 +16,6 @@ func TestHanxiaoquanImageCandidatesHandleLazyAndConfiguredHosts(t *testing.T) {
 	want := []string{
 		"https://mirror.example/posters/original.webp",
 		"https://mirror.example/posters/lazy.jpg",
-		"https://mirror.example/loading.gif",
 		"https://mirror.example/posters/small.jpg",
 		"https://mirror.example/posters/large.jpg",
 		"https://mirror.example/posters/background.jpg",
