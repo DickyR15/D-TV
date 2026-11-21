@@ -299,22 +299,22 @@ func TestNativePlaybackRouteProbeMovesUntestedRoutesAheadOfTimedOutRoutes(t *tes
 }
 
 
-func TestNativePlaybackRouteProbePolicyCoversEveryNonRedfruitProvider(t *testing.T) {
+func TestNativePlaybackRouteProbePolicyPreservesExistingSourceScope(t *testing.T) {
 	for _, source := range []string{
-		sourceDuoduo, sourceGuipian, sourceIkanBot, sourceMissAV, sourceSupJav,
-		sourcePPP, sourceMadou, source91Porna, sourceChaoliu, sourceHanxiaoquan,
-		sourceHeitao, sourceDSD, sourceHuangdou, sourceHuangju, sourceYeguo,
-		sourceHuangguoAI, sourceHuangguoVideo,
+		sourceIkanBot, sourcePPP, sourceDuoduo, sourceGuipian,
 	} {
 		if !nativePlaybackRouteProbeEnabled(source) {
-			t.Errorf("non-Redfruit source %q was excluded from bounded route ranking", source)
+			t.Errorf("previously supported source %q lost bounded route ranking", source)
 		}
 	}
-	if nativePlaybackRouteProbeEnabled(sourceHongguo) {
-		t.Fatal("Redfruit must keep its existing app-specific startup route policy")
-	}
-	if canonicalProviderSource("chaoliu") != sourceChaoliu ||
-		!nativePlaybackRouteProbeEnabled(sourceChaoliu) {
-		t.Fatal("canonical Chaoliu source was not included in playback route ranking")
+	for _, source := range []string{
+		sourceMissAV, sourceSupJav, sourceMadou, source91Porna,
+		sourceChaoliu, sourceHanxiaoquan, sourceHeitao, sourceDSD,
+		sourceHuangdou, sourceHuangju, sourceYeguo,
+		sourceHuangguoAI, sourceHuangguoVideo, sourceHongguo,
+	} {
+		if nativePlaybackRouteProbeEnabled(source) {
+			t.Errorf("source %q unexpectedly enabled route probing", source)
+		}
 	}
 }
