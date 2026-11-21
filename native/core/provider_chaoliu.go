@@ -336,11 +336,79 @@ func chaoliuParseConstants(body string) chaoliuConstants {
 	if v:=find("(?i)hadeedg252\\s*=\\s*(\\d+)");v!=""{if n,e:=strconv.Atoi(v);e==nil{result.XOR=n}}
 	if result.Base>25{result.Base%=25};if result.Base<2{result.Base=11};return result
 }
+var (
+	chaoliuQualityMarker = regexp.MustCompile("(?i)(?:^|[^0-9])(2160|1440|1080|720|576|540|480|360|240|180|144)(?:p\\b|[^0-9]|$)")
+	chaoliuNumResolution = regexp.MustCompile("(?i)numresolution\\s*=\\s*(\\d+)")
+)
+
+func chaoliuQualityResolution(key, payload string) int {
+	if match := chaoliuNumResolution.FindStringSubmatch(payload); len(match) > 1 {
+		if value, err := strconv.Atoi(match[1]); err == nil && value > 0 {
+			return value
+		}
+	}
+	if match := chaoliuQualityMarker.FindStringSubmatch(key); len(match) > 1 {
+		if value, err := strconv.Atoi(match[1]); err == nil && value > 0 {
+			return value
+		}
+	}
+	// Unknown labels stay unknown; do not silently promote them to 720P.
+	return 0
+}
+
+func chaoliuQualityAllowed(resolution int) bool {
+	return resolution == 0 || resolution >= nativeMinimumPlaybackQuality
+}
+
 func parseChaoliuQualities(body string) []chaoliuQuality {
-	out:=[]chaoliuQuality{};seen:=map[string]bool{}
-	for _,m:=range chaoliuMvarrArray.FindAllStringSubmatch(body,-1){if len(m)<3||strings.TrimSpace(m[2])==""{continue};encoded:="";for _,s:=range chaoliuEncryptedString.FindAllStringSubmatch(m[2],-1){if len(s)>1 && len(s[1])>=20 && regexp.MustCompile("^[0-9A-Za-z]+$").MatchString(s[1]) && len(s[1])>len(encoded){encoded=s[1]}};if encoded==""||seen[m[1]]{continue};seen[m[1]]=true;res:=720;if strings.Contains(m[1],"1080")||strings.Contains(m[2],"1080"){res=1080}else if strings.Contains(m[1],"480"){res=480};out=append(out,chaoliuQuality{m[1],encoded,res})}
-	for _,m:=range chaoliuMvarrObject.FindAllStringSubmatch(body,-1){if len(m)<3||seen[m[1]]{continue};encoded:="";for _,s:=range chaoliuEncryptedString.FindAllStringSubmatch(m[2],-1){if len(s)>1 && len(s[1])>=20 && regexp.MustCompile("^[0-9A-Za-z]+$").MatchString(s[1]){encoded=s[1];break}};if encoded==""{continue};seen[m[1]]=true;res:=1080;if v:=regexp.MustCompile("numresolution=(\\d+)").FindStringSubmatch(m[2]);len(v)>1{if n,e:=strconv.Atoi(v[1]);e==nil{res=n}};out=append(out,chaoliuQuality{m[1],encoded,res})}
-	sort.SliceStable(out,func(i,j int)bool{return out[i].Resolution>out[j].Resolution});return out
+	out := []chaoliuQuality{}
+	seen := map[string]bool{}
+	for _, match := range chaoliuMvarrArray.FindAllStringSubmatch(body, -1) {
+		if len(match) < 3 || strings.TrimSpace(match[2]) == "" || seen[match[1]] {
+			continue
+		}
+		encoded := ""
+		for _, value := range chaoliuEncryptedString.FindAllStringSubmatch(match[2], -1) {
+			if len(value) > 1 && len(value[1]) >= 20 &&
+				regexp.MustCompile("^[0-9A-Za-z]+$").MatchString(value[1]) &&
+				len(value[1]) > len(encoded) {
+				encoded = value[1]
+			}
+		}
+		if encoded == "" {
+			continue
+		}
+		seen[match[1]] = true
+		out = append(out, chaoliuQuality{
+			Key: match[1], Encrypted: encoded,
+			Resolution: chaoliuQualityResolution(match[1], match[2]),
+		})
+	}
+	for _, match := range chaoliuMvarrObject.FindAllStringSubmatch(body, -1) {
+		if len(match) < 3 || seen[match[1]] {
+			continue
+		}
+		encoded := ""
+		for _, value := range chaoliuEncryptedString.FindAllStringSubmatch(match[2], -1) {
+			if len(value) > 1 && len(value[1]) >= 20 &&
+				regexp.MustCompile("^[0-9A-Za-z]+$").MatchString(value[1]) {
+				encoded = value[1]
+				break
+			}
+		}
+		if encoded == "" {
+			continue
+		}
+		seen[match[1]] = true
+		out = append(out, chaoliuQuality{
+			Key: match[1], Encrypted: encoded,
+			Resolution: chaoliuQualityResolution(match[1], match[2]),
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].Resolution > out[j].Resolution
+	})
+	return out
 }
 func chaoliuDecrypto(encoded string,base,xor int) string {
 	if base<2||base>36{return ""};parts:=strings.Split(encoded,string(rune(base+97)));var out strings.Builder
@@ -393,10 +461,11 @@ func (d *Downloader) resolveChaoliuMedia(ctx context.Context,task Task)(provider
 	parsed,e:=url.Parse(pageURL);if e!=nil||parsed.Scheme!="https"||!isChaoliuSiteHost(parsed.Hostname()){return providerMedia{},errors.New("chaoliu 播放頁網址無效")}
 	body,final,e:=d.fetchChaoliuText(ctx,pageURL,firstNonEmpty(task.Chapter.Referer,parsed.Scheme+"://"+parsed.Host+"/"));if e!=nil{return providerMedia{},fmt.Errorf("chaoliu 播放頁讀取失敗：%w",e)}
 	qualities:=parseChaoliuQualities(body);if len(qualities)==0{return providerMedia{},errors.New("chaoliu 作品沒有可用的播放密文")}
-	constants:=chaoliuParseConstants(body);var lastErr error
+	constants:=chaoliuParseConstants(body);var lastErr error;skippedLowQuality:=false
 	for _,quality:=range qualities {
+		if !chaoliuQualityAllowed(quality.Resolution) { skippedLowQuality=true; continue }
 		playID,decodeErr:=chaoliuDecodePlayID(quality.Encrypted,constants);if decodeErr!=nil{lastErr=decodeErr;continue}
-		baseParsed,_:=url.Parse(final);playPath:=fmt.Sprintf("/js/player/play.php?numresolution=%d&id=%s",max(quality.Resolution,480),url.QueryEscape(playID))
+		baseParsed,_:=url.Parse(final);playPath:=fmt.Sprintf("/js/player/play.php?numresolution=%d&id=%s",max(quality.Resolution,nativeMinimumPlaybackQuality),url.QueryEscape(playID))
 		playerURL:=baseParsed.Scheme+"://"+baseParsed.Host+playPath
 		playerBody,playerFinal,fetchErr:=d.fetchChaoliuText(ctx,playerURL,final);if fetchErr!=nil{lastErr=fetchErr;continue}
 		sources:=parseChaoliuSources(playerBody,playerFinal);if len(sources)==0{lastErr=errors.New("chaoliu 播放頁沒有提供有效的 HLS 或 MP4 網址");continue}
@@ -409,11 +478,12 @@ func (d *Downloader) resolveChaoliuMedia(ctx context.Context,task Task)(provider
 		for index,mediaURL:=range orderedURLs {
 			started:=time.Now()
 			candidate,prepareErr:=d.prepareWebProviderMedia(ctx,providerMedia{URL:mediaURL,Referer:baseParsed.Scheme+"://"+baseParsed.Host+"/"},"chaoliu")
+			candidate.Quality=quality.Resolution
 			d.recordProviderEndpoint(sourceChaoliu,"media",mediaURL,time.Since(started),prepareErr)
 			if prepareErr!=nil {lastErr=prepareErr;if ctx.Err()!=nil{return providerMedia{},ctx.Err()};continue}
 			for _,fallbackURL:=range orderedURLs[index+1:] {
 				fallback:=sourceByURL[fallbackURL]
-				candidate.Variants=append(candidate.Variants,providerMedia{URL:fallback.URL,Referer:baseParsed.Scheme+"://"+baseParsed.Host+"/"})
+				candidate.Variants=append(candidate.Variants,providerMedia{URL:fallback.URL,Referer:baseParsed.Scheme+"://"+baseParsed.Host+"/",Quality:quality.Resolution})
 			}
 			prepared=candidate
 			preparedOK=true
@@ -421,5 +491,5 @@ func (d *Downloader) resolveChaoliuMedia(ctx context.Context,task Task)(provider
 		}
 		if preparedOK{return prepared,nil}
 	}
-	if lastErr==nil{lastErr=errors.New("chaoliu 所有畫質線路皆無法解析")};return providerMedia{},lastErr
+	if lastErr==nil { if skippedLowQuality { lastErr=errors.New("chaoliu 目前只提供低於 720P 的播放線路") } else { lastErr=errors.New("chaoliu 所有畫質線路皆無法解析") } };return providerMedia{},lastErr
 }
