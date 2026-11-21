@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	openhongguo "github.com/beilunyang/openhongguo/sdk"
@@ -155,6 +157,46 @@ func TestHongguoHTTPRegistrationHostsIncludeCurrentSDKEndpoint(t *testing.T) {
 	}
 	if !seen["log.snssdk.com"] || !seen["applog.snssdk.com"] {
 		t.Fatalf("legacy registration hosts should remain available to the old app path: %v", hosts)
+	}
+}
+
+func TestHongguoSDKFileProfileStorePersistsAndResetsPrivateGuestProfile(t *testing.T) {
+	directory := t.TempDir()
+	store := newHongguoSDKProfileStore(directory)
+	profile := &openhongguo.DeviceProfile{
+		CDID: "cdid", OpenUDID: "openudid", DeviceID: "12345", InstallID: "67890",
+		Device: func() *openhongguomodel.Device {
+			device := openhongguomodel.DefaultDevice
+			return &device
+		}(),
+	}
+	if err := store.Save(context.Background(), profile); err != nil {
+		t.Fatal(err)
+	}
+	profilePath := filepath.Join(directory, hongguoSDKProfileFileName)
+	info, err := os.Stat(profilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Fatalf("guest profile file permissions = %o, want 600", info.Mode().Perm())
+	}
+
+	reloadedStore := newHongguoSDKProfileStore(directory)
+	loaded, err := reloadedStore.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.DeviceID != "12345" || loaded.InstallID != "67890" ||
+		loaded.CDID != "cdid" || loaded.Device == nil ||
+		loaded.Device.Model != openhongguomodel.DefaultDevice.Model {
+		t.Fatalf("persisted guest profile mismatch: %+v", loaded)
+	}
+	if err := reloadedStore.Reset(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reloadedStore.Load(context.Background()); !errors.Is(err, openhongguo.ErrProfileNotFound) {
+		t.Fatalf("reset guest profile load error = %v", err)
 	}
 }
 
