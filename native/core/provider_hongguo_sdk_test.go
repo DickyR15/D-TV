@@ -179,6 +179,7 @@ func TestHongguoSDKPlaybackRefreshesRejectedAnonymousDeviceTwice(t *testing.T) {
 			StatusCode: http.StatusOK,
 			Header: http.Header{
 				"Content-Type": []string{"application/json"},
+				"Set-Cookie": []string{"ttreq=unit-test-ticket; Path=/"},
 			},
 			Body: io.NopCloser(strings.NewReader(body)),
 			Request: request,
