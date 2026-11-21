@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,8 +12,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	openhongguo "github.com/beilunyang/openhongguo/sdk"
 	"github.com/beilunyang/openhongguo/sdk/model"
@@ -392,4 +395,125 @@ func (downloader *Downloader) fetchHongguoSDKSeasons(ctx context.Context, series
 		return nil, fmt.Errorf("紅果系列季別 API 失敗：%w", err)
 	}
 	return hongguoSDKAlbumToNativeSeasons(album)
+}
+
+func hongguoSDKPlaybackRegistrationRejected(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, openhongguo.ErrAuthenticationRequired) ||
+		errors.Is(err, openhongguo.ErrDeviceRejected) ||
+		errors.Is(err, openhongguo.ErrRateLimited) {
+		return true
+	}
+	var apiErr *openhongguo.APIError
+	return errors.As(err, &apiErr) &&
+		(apiErr.HTTPStatus == http.StatusUnauthorized ||
+			apiErr.HTTPStatus == http.StatusForbidden ||
+			apiErr.HTTPStatus == http.StatusTooManyRequests ||
+			apiErr.HTTPStatus == 444)
+}
+
+func hongguoSDKCodecRank(codec string) int {
+	switch strings.ToLower(strings.TrimSpace(codec)) {
+	case "h264", "avc", "avc1":
+		return 3
+	case "hevc", "h265", "hvc1", "hev1", "bytevc1":
+		return 2
+	case "", "mp4", "mpeg":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func hongguoSDKPlaybackToNativeMedia(playback *model.Playback) (providerMedia, error) {
+	if playback == nil || len(playback.Streams) == 0 {
+		return providerMedia{}, errors.New("紅果 SDK 沒有回傳可用的播放串流")
+	}
+	protected := playback.Protected
+	hasH266 := false
+	for _, stream := range playback.Streams {
+		protected = protected || stream.Protected
+		if strings.Contains(strings.ToLower(stream.Codec), "bytevc2") {
+			hasH266 = true
+		}
+	}
+	var cencKey []byte
+	if protected {
+		contentKey, err := openhongguo.ContentKey(playback)
+		if err != nil {
+			return providerMedia{}, fmt.Errorf("紅果 SDK CENC 金鑰解析失敗：%w", err)
+		}
+		cencKey, err = hex.DecodeString(contentKey.Hex)
+		if err != nil || len(cencKey) != 16 {
+			return providerMedia{}, errors.New("紅果 SDK CENC 金鑰格式無效")
+		}
+	}
+	duration := time.Duration(max(playback.DurationSeconds, 0)) * time.Second
+	type scored struct {
+		media providerMedia
+		score int
+	}
+	var choices []scored
+	seen := map[string]bool{}
+	for _, stream := range playback.Streams {
+		codecRank := hongguoSDKCodecRank(stream.Codec)
+		if codecRank == 0 || strings.Contains(strings.ToLower(stream.Codec), "bytevc2") {
+			continue
+		}
+		definition := firstNonEmpty(stream.Definition, stream.Quality)
+		definitionHeight, _ := strconv.Atoi(hongguoQualityNumber.FindString(definition))
+		quality := hongguoMediaShortEdgeQuality(stream.Width, stream.Height, definitionHeight)
+		addresses := []string{stream.URL, stream.BackupURL}
+		for _, rawAddress := range addresses {
+			address := strings.TrimSpace(rawAddress)
+			if address == "" || seen[address] || !isProviderHTTPMediaURL(address) {
+				continue
+			}
+			seen[address] = true
+			media := providerMedia{
+				URL: address, Referer: "https://novelquickapp.com/",
+				Duration: duration, Quality: quality,
+				CENCKey: append([]byte(nil), cencKey...),
+			}
+			score := quality*100 + codecRank
+			choices = append(choices, scored{media: media, score: score})
+		}
+	}
+	if len(choices) == 0 {
+		if hasH266 {
+			return providerMedia{}, errHongguoH266Only
+		}
+		return providerMedia{}, errors.New("紅果 SDK 回傳的播放網址或編碼不受支援")
+	}
+	sort.SliceStable(choices, func(i, j int) bool { return choices[i].score > choices[j].score })
+	selected := choices[0].media
+	for _, choice := range choices {
+		selected.Variants = append(selected.Variants, choice.media)
+	}
+	return selected, nil
+}
+
+func (downloader *Downloader) resolveHongguoSDKMedia(ctx context.Context, videoID string) (providerMedia, error) {
+	if !hongguoNumericID.MatchString(videoID) || videoID == "0" {
+		return providerMedia{}, errors.New("紅果 SDK 播放集數 ID 無效")
+	}
+	client, err := downloader.hongguoSDKClient()
+	if err != nil {
+		return providerMedia{}, fmt.Errorf("紅果播放 SDK 初始化失敗：%w", err)
+	}
+	playback, err := client.ResolvePlayback(ctx, videoID, openhongguo.PlaybackOptions{})
+	if err != nil && !errors.Is(err, openhongguo.ErrDRMProtected) {
+		return providerMedia{}, fmt.Errorf("紅果 SDK V5 播放請求失敗：%w", err)
+	}
+	media, mapErr := hongguoSDKPlaybackToNativeMedia(playback)
+	if mapErr != nil {
+		return providerMedia{}, mapErr
+	}
+	downloader.recordDiagnostic(diagnosticEvent{
+		Level: "info", Event: "hongguo.sdk_playback_success",
+		Source: sourceHongguo, Message: fmt.Sprintf("streams=%d protected=%t", len(media.Variants), playback.Protected),
+	})
+	return media, nil
 }
