@@ -22,7 +22,32 @@ func providerDoubanSubjectID(values ...string) string {
 	return ""
 }
 
-var coverMetaTag = regexp.MustCompile(`(?is)<meta\b[^>]*>`)
+var (
+	coverMetaTag = regexp.MustCompile(`(?is)<meta\b[^>]*>`)
+	coverStyleAttribute = regexp.MustCompile(`(?is)\bstyle\s*=\s*(?:"([^"]*)"|'([^']*)')`)
+	coverCSSImageURL = regexp.MustCompile(`(?i)url\(\s*['"]?([^'")]+?)['"]?\s*\)`)
+)
+
+// providerHTMLStyle reads a complete style attribute even when CSS url() values
+// use the opposite quote type inside the HTML attribute.
+func providerHTMLStyle(tag string) string {
+	match := coverStyleAttribute.FindStringSubmatch(tag)
+	if len(match) < 3 {
+		return ""
+	}
+	return firstNonEmpty(match[1], match[2])
+}
+
+func providerCSSImageAddresses(style, pageURL string) []string {
+	var addresses []string
+	for _, match := range coverCSSImageURL.FindAllStringSubmatch(style, 12) {
+		if len(match) > 1 {
+			raw := strings.Trim(strings.TrimSpace(match[1]), `"'`)
+			addresses = append(addresses, providerCoverAddresses(raw, pageURL)...)
+		}
+	}
+	return nativeUniqueCoverAddresses(addresses...)
+}
 
 func (d *Downloader) nativeCoverAddress(ctx context.Context, drama nativeDrama) (string, error) {
 	addresses, err := d.nativeCoverAddresses(ctx, drama)
