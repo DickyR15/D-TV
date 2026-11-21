@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+
+	openhongguo "github.com/beilunyang/openhongguo/sdk"
+	openhongguomodel "github.com/beilunyang/openhongguo/sdk/model"
 )
 
 func TestHongguoRegistrationWasRateLimitedOnlyForHTTP444(t *testing.T) {
@@ -15,7 +19,8 @@ func TestHongguoRegistrationWasRateLimitedOnlyForHTTP444(t *testing.T) {
 		message string
 		want bool
 	}{
-		{message: "取得紅果系列季別失敗：紅果 App 介面未提供有效資料（裝置註冊失敗：紅果設備註冊 HTTP 444）", want: true},
+		{message: "取得紅果系列季別失敗：紅果設備註冊 HTTP 444", want: true},
+		{message: "openhongguo: HTTP 444", want: true},
 		{message: "紅果設備註冊 HTTP 403", want: false},
 		{message: "紅果設備註冊 HTTP 429", want: false},
 		{message: "context deadline exceeded", want: false},
@@ -83,40 +88,66 @@ func TestHongguoAppSeasonQueryUsesOfficialSelector(t *testing.T) {
 	}
 }
 
-func TestHongguoAppSeasonsUsesVersionedPlanEndpointAndRequiredHeaders(t *testing.T) {
-	const seriesID = "7690163276214176792"
-	var calls int
-	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
-		calls++
-		if request.Method != http.MethodGet || request.URL.Path != hongguoAppSeasonPlanPath {
-			t.Fatalf("season request = %s %s, want GET %s", request.Method, request.URL.Path, hongguoAppSeasonPlanPath)
-		}
-		query := request.URL.Query()
-		for key, want := range map[string]string{
-			"from": "single_col_same_ip_series", "scene": "10",
-			"book_id": seriesID, "filter_ids": seriesID, "user_is_login": "0",
-		} {
-			if query.Get(key) != want { t.Errorf("query %s=%q, want %q", key, query.Get(key), want) }
-		}
-		for _, key := range []string{"session_uuid", "cdid", "openudid"} {
-			if query.Get(key) == "" { t.Errorf("missing query %s: %v", key, query) }
-		}
-		if request.Header.Get("x-ss-dp") != "8662" || request.Header.Get("lc") != "101" {
-			t.Errorf("missing reading app headers: %v", request.Header)
-		}
-		if request.Header.Get("x-reading-request") == "" {
-			t.Error("missing x-reading-request header")
-		}
-		body := `{"code":0,"data":[{"show_type":547,"video_data":[{"series_id":"12345678","vid":"12345679","title":"測試系列第一季","episode_cnt":12,"secondary_info_list":[{"content":"第1季"}]}]}]}`
-		return sourceFixtureResponse(request, http.StatusOK, body), nil
-	})
-	d.cfg.Retries = 1
-	client := d.hongguoClient()
-	client.state.DeviceID, client.state.InstallID, client.state.Registered = "9001", "9002", true
-	items, err := d.hongguoAppSeasons(context.Background(), seriesID)
+func TestHongguoSDKAlbumToNativeSeasonsPreservesOfficialIDsAndProgressMetadata(t *testing.T) {
+	album := &openhongguomodel.Album{Seasons: []openhongguomodel.Season{
+		{SeriesID: "7628202881140657177", Title: "萬妖圖錄傳第二季", Index: 2, CoverURL: "https://img.example.test/season-2.jpg", EpisodeCount: 53, Status: openhongguomodel.SeriesUpdating},
+		{SeriesID: "7621200213801176126", Title: "萬妖圖錄傳第一季", Index: 1, CoverURL: "https://img.example.test/season-1.jpg", EpisodeCount: 81, Status: openhongguomodel.SeriesEnd},
+		{SeriesID: "7691518344146455576", Title: "萬妖圖錄傳第十四季", Index: 14, EpisodeCount: 0, Status: openhongguomodel.SeriesUpdating},
+	}}
+	items, err := hongguoSDKAlbumToNativeSeasons(album)
 	if err != nil { t.Fatal(err) }
-	if calls != 1 || len(items) != 1 || items[0].Drama.ID != "hongguo:12345678" || items[0].Number != 1 {
-		t.Fatalf("season result mismatch: calls=%d items=%+v", calls, items)
+	if len(items) != 3 { t.Fatalf("expected three official seasons, got %+v", items) }
+	if items[0].Drama.SourceID != "7621200213801176126" || items[0].Number != 1 || items[0].Drama.Episodes != 81 || !items[0].Playable {
+		t.Fatalf("season one metadata mismatch: %+v", items[0])
+	}
+	if items[1].Drama.SourceID != "7628202881140657177" || items[1].Number != 2 || items[1].Drama.Episodes != 53 || !items[1].Playable {
+		t.Fatalf("season two metadata mismatch: %+v", items[1])
+	}
+	if items[2].Number != 14 || items[2].Playable || !items[2].Upcoming {
+		t.Fatalf("upcoming season must remain visible but unplayable: %+v", items[2])
+	}
+	for _, item := range items {
+		if item.Drama.SeriesGroupID != "7621200213801176126" {
+			t.Fatalf("season favorite group is not canonical: %+v", item)
+		}
+	}
+}
+
+func TestHongguoSDKProfileStoreClonesAndResetsProfiles(t *testing.T) {
+	store := &hongguoSDKMemoryProfileStore{}
+	if _, err := store.Load(context.Background()); err != openhongguo.ErrProfileNotFound {
+		t.Fatalf("empty profile store error = %v", err)
+	}
+	device := openhongguomodel.Device{Brand: "Redmi", Model: "25053RT47C", OSVersion: "16", OSAPI: 36, Build: "BP2A.250605.031.A3", Resolution: "2772*1280", DPI: 520, Channel: "update_64"}
+	profile := &openhongguo.DeviceProfile{CDID: "cdid", OpenUDID: "openudid", DeviceID: "12345", InstallID: "67890", Device: &device}
+	if err := store.Save(context.Background(), profile); err != nil { t.Fatal(err) }
+	profile.Device.Model = "mutated"
+	loaded, err := store.Load(context.Background())
+	if err != nil { t.Fatal(err) }
+	if loaded.Device == nil || loaded.Device.Model != "25053RT47C" || loaded.DeviceID != "12345" {
+		t.Fatalf("profile was not safely cloned: %+v", loaded)
+	}
+	if err := store.Reset(context.Background()); err != nil { t.Fatal(err) }
+	if _, err := store.Load(context.Background()); err != openhongguo.ErrProfileNotFound {
+		t.Fatalf("reset profile store error = %v", err)
+	}
+}
+
+func TestHongguoSDKTransportForwardsResponseHeadersAndCookies(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Test-Header") != "season-sdk" { t.Errorf("request header was not forwarded: %v", r.Header) }
+		w.Header().Set("X-Test-Response", "ok")
+		http.SetCookie(w, &http.Cookie{Name: "ttreq", Value: "guest-ticket"})
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+	transport := hongguoSDKTransport{client: server.Client()}
+	response, err := transport.Do(context.Background(), &openhongguo.Request{
+		Method: http.MethodGet, URL: server.URL, Headers: map[string]string{"X-Test-Header": "season-sdk"},
+	})
+	if err != nil { t.Fatal(err) }
+	if response.StatusCode != http.StatusOK || string(response.Body) != `{"ok":true}` || response.Headers["X-Test-Response"] != "ok" || response.Cookies["ttreq"] != "guest-ticket" {
+		t.Fatalf("unexpected SDK transport response: %+v", response)
 	}
 }
 func TestParseHongguoAppSeasonsKeepsOfficialIDsAndUpcomingRows(t *testing.T) {
