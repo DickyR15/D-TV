@@ -2,6 +2,8 @@ package core
 
 import (
 	"errors"
+	"fmt"
+	"net/http"
 	"reflect"
 	"testing"
 	"time"
@@ -75,6 +77,41 @@ func TestHongguoSDKPlaybackRejectsInvalidAndUnsupportedStreams(t *testing.T) {
 			if errors.Is(err, errHongguoH266Only) != tc.wantH266 {
 				t.Fatalf("H.266 classification = %v, want %v (err=%v)",
 					errors.Is(err, errHongguoH266Only), tc.wantH266, err)
+			}
+		})
+	}
+}
+
+func TestHongguoSDKRegistrationCooldownBlocksRepeatedGuestRegistration(t *testing.T) {
+	session := &hongguoSDKClientSession{}
+	if err := session.registrationCooldownError(); err != nil {
+		t.Fatalf("new SDK session unexpectedly starts in cooldown: %v", err)
+	}
+	session.recordRegistrationStatus(444)
+	err := session.registrationCooldownError()
+	if !errors.Is(err, errHongguoSDKRegistrationCooling) {
+		t.Fatalf("HTTP 444 did not enter registration cooldown: %v", err)
+	}
+	if !hongguoSDKPlaybackRegistrationRejected(err) {
+		t.Fatal("cooldown error must suppress legacy App registration fallbacks")
+	}
+	session.recordRegistrationStatus(http.StatusOK)
+	if err := session.registrationCooldownError(); err != nil {
+		t.Fatalf("successful registration did not clear cooldown: %v", err)
+	}
+}
+
+func TestHongguoSDKRegistrationCooldownClassifiesEdgeStatuses(t *testing.T) {
+	for _, status := range []int{
+		http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound,
+		http.StatusTooManyRequests, 444,
+	} {
+		t.Run(fmt.Sprintf("HTTP-%d", status), func(t *testing.T) {
+			session := &hongguoSDKClientSession{}
+			session.recordRegistrationStatus(status)
+			err := session.registrationCooldownError()
+			if !errors.Is(err, errHongguoSDKRegistrationCooling) {
+				t.Fatalf("HTTP %d did not enter SDK registration cooldown: %v", status, err)
 			}
 		})
 	}
