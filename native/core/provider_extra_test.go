@@ -20,22 +20,22 @@ func TestExtraAdultImportedModuleCards(t *testing.T) {
 	}{
 		{
 			name: "SupJav", source: sourceSupJav, base: supjavBaseURL,
-			html: `<div class="box-item"><a href="/video/sample-123"><img src="https://img.supjav.blog/sample.jpg" alt="SupJav 海報"><div class="detail">SupJav 測試作品</div></a></div>`,
+			html: `<div class="box-item"><a href="/video/sample-123"><img src="https://img.supjav.blog/sample.jpg" alt="SupJav 海報"><img data-original="https://img.supjav.blog/backup.jpg" alt="備用海報"><div class="detail">SupJav 測試作品</div></a></div>`,
 			wantID: "video/sample-123", wantTitle: "SupJav 測試作品",
 		},
 		{
 			name: "PPP", source: sourcePPP, base: pppBaseURL,
-			html: `<div class="item card-video"><a href="https://ppp.porn/v/abc123/"><img data-src="https://cdnlab.live/abc.jpg" alt="PPP 測試作品"><figcaption class="card-video__duration">6:57</figcaption></a></div>`,
+			html: `<div class="item card-video"><a href="https://ppp.porn/v/abc123/"><img data-src="https://cdnlab.live/abc.jpg" alt="PPP 測試作品"><img data-original="https://cdnlab.live/abc-backup.jpg"><figcaption class="card-video__duration">6:57</figcaption></a></div>`,
 			wantID: "abc123", wantTitle: "PPP 測試作品",
 		},
 		{
 			name: "Madou", source: sourceMadou, base: madouBaseURL,
-			html: `<article class="excerpt"><a class="thumbnail" href="https://madou.club/sample-123.html"><img data-src="https://madou.club/poster.jpg"></a><h2>麻豆測試作品</h2></article>`,
+			html: `<article class="excerpt"><a class="thumbnail" href="https://madou.club/sample-123.html"><img data-src="https://madou.club/poster.jpg"><img data-original="https://madou.club/poster-backup.jpg"></a><h2>麻豆測試作品</h2></article>`,
 			wantID: "sample-123.html", wantTitle: "麻豆測試作品",
 		},
 		{
 			name: "91Porna", source: source91Porna, base: ninetyOneBaseURL,
-			html: `<div class="video-item"><a href="/comic/index/avdetail?video_key=key_123"><img data-src="https://91porna.com/poster.jpg" alt="91 測試作品"></a><span>12:34</span></div>`,
+			html: `<div class="video-item"><a href="/comic/index/avdetail?video_key=key_123"><img data-src="https://91porna.com/poster.jpg" alt="91 測試作品"><img data-original="https://91porna.com/poster-backup.jpg"></a><span>12:34</span></div>`,
 			wantID: "key_123", wantTitle: "91 測試作品",
 		},
 	}
@@ -48,7 +48,31 @@ func TestExtraAdultImportedModuleCards(t *testing.T) {
 			if item.SourceID != test.wantID { t.Fatalf("source ID = %q, want %q", item.SourceID, test.wantID) }
 			if item.Title != test.wantTitle { t.Fatalf("title = %q, want %q", item.Title, test.wantTitle) }
 			if item.Cover == "" { t.Fatal("poster URL was not parsed") }
+			if len(item.CoverCandidates) == 0 {
+				t.Fatalf("backup poster candidates were not retained: %#v", item)
+			}
 		})
+	}
+}
+
+func TestExtraAdultDetailPostersRetainMultipleFallbacks(t *testing.T) {
+	body := `<meta content="/meta/poster.webp" property="og:image">
+		<video data-poster="/video/poster.jpg"></video>
+		<div class="poster"><img src="/loading.gif" data-original="/images/original.webp" data-src="/images/lazy.jpg"></div>`
+	got := extraAdultDetailCoverCandidates(body, "https://supjav.blog", sourceSupJav)
+	want := []string{
+		"https://supjav.blog/meta/poster.webp",
+		"https://supjav.blog/video/poster.jpg",
+		"https://supjav.blog/images/original.webp",
+		"https://supjav.blog/images/lazy.jpg",
+	}
+	if len(got) < len(want) {
+		t.Fatalf("detail poster candidates = %#v, want at least %#v", got, want)
+	}
+	for _, address := range want {
+		if !containsString(got, address) {
+			t.Fatalf("detail poster candidate %q was not retained: %#v", address, got)
+		}
 	}
 }
 
