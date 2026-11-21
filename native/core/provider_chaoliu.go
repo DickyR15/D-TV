@@ -232,6 +232,64 @@ func chaoliuCardNode(node *htmlparser.Node) bool {
 	return false
 }
 
+var (
+	chaoliuImageTag = regexp.MustCompile(`(?is)<img\b[^>]*>`)
+	chaoliuVideoTag = regexp.MustCompile(`(?is)<video\b[^>]*>`)
+)
+
+func chaoliuImageCandidates(fragment, pageURL string) []string {
+	var addresses []string
+	add := func(raw string) {
+		address := resolveProviderURL(pageURL, html.UnescapeString(strings.TrimSpace(raw)))
+		parsed, err := url.Parse(address)
+		if err == nil && parsed.User == nil && validNativeCoverURL(parsed) {
+			addresses = append(addresses, address)
+		}
+	}
+	for _, tag := range chaoliuImageTag.FindAllString(fragment, -1) {
+		for _, attribute := range []string{"data-original", "data-lazy-src", "data-src", "data-url", "src"} {
+			if raw := extractAttr(tag, attribute); raw != "" {
+				add(raw)
+			}
+		}
+		for _, attribute := range []string{"data-srcset", "data-lazy-srcset", "srcset"} {
+			if raw := extractAttr(tag, attribute); raw != "" {
+				for _, entry := range adultImageSrcsetCandidates(raw) {
+					add(entry)
+				}
+			}
+		}
+		if style := extractAttr(tag, "style"); style != "" {
+			for _, match := range adultCSSImagePattern.FindAllStringSubmatch(style, -1) {
+				if len(match) > 1 {
+					add(match[1])
+				}
+			}
+		}
+	}
+	for _, tag := range chaoliuVideoTag.FindAllString(fragment, -1) {
+		add(firstNonEmpty(extractAttr(tag, "poster"), extractAttr(tag, "data-poster")))
+	}
+	return nativeUniqueCoverAddresses(addresses...)
+}
+
+func chaoliuDetailCoverCandidates(body, pageURL string) []string {
+	var addresses []string
+	metadata := chaoliuJSONLD(body)
+	for _, key := range []string{"image", "thumbnailUrl", "thumbnail"} {
+		if value, exists := metadata[key]; exists {
+			addresses = append(addresses, providerCoverAddresses(value, pageURL)...)
+		}
+	}
+	for _, key := range []string{"og:image", "twitter:image"} {
+		if raw := extractMetaContent(body, key); raw != "" {
+			addresses = append(addresses, resolveProviderURL(pageURL, html.UnescapeString(raw)))
+		}
+	}
+	addresses = append(addresses, chaoliuImageCandidates(body, pageURL)...)
+	return nativeUniqueCoverAddresses(addresses...)
+}
+
 func parseChaoliuList(body, pageURL string) []Drama {
 	document, err := htmlparser.Parse(strings.NewReader(body))
 	if err != nil {
@@ -280,15 +338,16 @@ func parseChaoliuList(body, pageURL string) []Drama {
 			title = strings.ReplaceAll(slug, "-", " ")
 		}
 
+		coverCandidates := chaoliuImageCandidates(chunk, pageURL)
 		cover := ""
-		if image := regexp.MustCompile("(?is)<img\\b[^>]*>").FindString(chunk); image != "" {
-			cover = extractAttr(image, "data-original", "data-lazy-src", "data-src", "src")
+		if len(coverCandidates) > 0 {
+			cover = coverCandidates[0]
 		}
-		cover = resolveProviderURL(pageURL, html.UnescapeString(cover))
 		out = append(out, Drama{
 			ID: providerDramaID(sourceChaoliu, sourceID), Source: sourceChaoliu, SourceID: sourceID,
 			Title: truncate(title, 512), Name: truncate(title, 512),
-			Cover: cover, CoverURL: cover, ChannelName: "chaoliu", CategoryName: "chaoliu",
+			Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...),
+			ChannelName: "chaoliu", CategoryName: "chaoliu",
 			TotalEpisode: 1, EpisodeCount: 1,
 		})
 	}
@@ -431,11 +490,13 @@ func parseChaoliuSources(body,pageURL string) []chaoliuMediaSource {
 	sort.SliceStable(out,func(i,j int)bool{return out[i].Size>out[j].Size});return out
 }
 func chaoliuDetailTitle(body,baseURL,sourceID string)(string,string,string) {
-	ld:=chaoliuJSONLD(body);title,_:=ld["name"].(string);cover,_:=ld["thumbnailUrl"].(string);desc,_:=ld["description"].(string)
+	ld:=chaoliuJSONLD(body);title,_:=ld["name"].(string);desc,_:=ld["description"].(string)
 	if title==""{if m:=regexp.MustCompile("(?is)<h1[^>]*>([\\s\\S]{1,300}?)</h1>").FindStringSubmatch(body);len(m)>1{title=cleanText(m[1])}}
-	if title==""{title=sourceID};if cover==""{cover=firstNonEmpty(extractMetaContent(body,"og:image"),extractMetaContent(body,"twitter:image"))}
+	if title==""{title=sourceID}
 	if desc==""{desc=extractMetaContent(body,"description")}
-	cover=resolveProviderURL(baseURL,html.UnescapeString(cover));return truncate(cleanText(title),512),cover,truncate(cleanText(desc),12000)
+	covers:=chaoliuDetailCoverCandidates(body,baseURL);cover:=""
+	if len(covers)>0{cover=covers[0]}
+	return truncate(cleanText(title),512),cover,truncate(cleanText(desc),12000)
 }
 func extractMetaContent(body,key string) string {
 	for _,tag:=range regexp.MustCompile("(?is)<meta\\b[^>]*>").FindAllString(body,-1){name:=firstNonEmpty(extractAttr(tag,"property"),extractAttr(tag,"name"));if strings.EqualFold(name,key){return extractAttr(tag,"content")}}
@@ -450,7 +511,8 @@ func (d *Downloader) fetchChaoliuDetail(ctx context.Context,sourceID string)(Dra
 	if v:=chaoliuMetaField(body,"發行商");v!=""&&v!="未知"{desc=strings.TrimSpace(desc+"\n發行商："+v)}
 	if v:=chaoliuMetaField(body,"製作商");v!=""&&v!="未知"{desc=strings.TrimSpace(desc+"\n製作商："+v)}
 	if len(parseChaoliuQualities(body))==0{desc=strings.TrimSpace(desc+"\n站方未提供播放密文，目前無法直接播放。")}
-	drama:=Drama{ID:providerDramaID(sourceChaoliu,sourceID),Source:sourceChaoliu,SourceID:sourceID,Title:title,Name:title,Desc:desc,Intro:desc,Cover:cover,CoverURL:cover,ChannelName:"chaoliu",CategoryName:"chaoliu",TotalEpisode:1,EpisodeCount:1}
+	coverCandidates:=chaoliuDetailCoverCandidates(body,final)
+	drama:=Drama{ID:providerDramaID(sourceChaoliu,sourceID),Source:sourceChaoliu,SourceID:sourceID,Title:title,Name:title,Desc:desc,Intro:desc,Cover:cover,CoverURL:cover,CoverCandidates:append([]string(nil),coverCandidates[1:]...),ChannelName:"chaoliu",CategoryName:"chaoliu",TotalEpisode:1,EpisodeCount:1}
 	chapter:=Chapter{ID:providerChapterID(sourceChaoliu,sourceID,final),Source:sourceChaoliu,Title:"正片",PageURL:final,Referer:final,VideoURL:"chaoliu-page://"+final,CurrentEpisode:json.RawMessage("1")}
 	return drama,[]Chapter{chapter},nil
 }
