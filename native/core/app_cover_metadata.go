@@ -32,6 +32,15 @@ func (d *Downloader) nativeCoverAddress(ctx context.Context, drama nativeDrama) 
 	return addresses[0], nil
 }
 
+// nativeCoverBackupAddresses returns fallback posters after the preferred image.
+ // An empty or single-item list is valid and must never panic.
+func nativeCoverBackupAddresses(addresses []string) []string {
+	if len(addresses) < 2 {
+		return nil
+	}
+	return append([]string(nil), addresses[1:]...)
+}
+
 func nativeCoverAddressesFromDrama(drama Drama) []string {
 	normalized := nativeNormalize(drama)
 	addresses := append([]string{}, normalized.CoverCandidates...)
