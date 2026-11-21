@@ -22,12 +22,16 @@ import (
 )
 
 const (
-	hongguoSDKAPIOrigin      = "https://api5-normal-sinfonlinea.fqnovel.com"
-	hongguoSDKRegisterOrigin = "https://log5-applog-lq.fqnovel.com"
-	hongguoSDKRegisterPause  = 10 * time.Minute
+	hongguoSDKAPIOrigin       = "https://api5-normal-sinfonlinea.fqnovel.com"
+	hongguoSDKRegisterOrigin  = "https://log5-applog-lq.fqnovel.com"
+	hongguoSDKRegisterPause   = 10 * time.Minute
+	hongguoSDKPlaybackPause   = 30 * time.Second
 )
 
-var errHongguoSDKRegistrationCooling = errors.New("紅果 SDK 設備註冊冷卻中")
+var (
+	errHongguoSDKRegistrationCooling = errors.New("紅果 SDK 設備註冊冷卻中")
+	errHongguoSDKPlaybackCooling     = errors.New("紅果 SDK 播放空回應冷卻中")
+)
 
 func hongguoHTTPRegistrationHosts() []string {
 	hosts := append([]string(nil), hongguoDeviceRegisterHosts()...)
@@ -41,11 +45,12 @@ func hongguoHTTPRegistrationHosts() []string {
 }
 
 type hongguoSDKClientSession struct {
-	client              *openhongguo.Client
-	err                 error
-	mu                  sync.Mutex
-	registerPausedUntil time.Time
-	registerPauseStatus int
+	client                *openhongguo.Client
+	err                   error
+	mu                    sync.Mutex
+	registerPausedUntil   time.Time
+	registerPauseStatus   int
+	playbackPausedUntil   time.Time
 }
 
 func (session *hongguoSDKClientSession) recordRegistrationStatus(status int) {
@@ -78,6 +83,29 @@ func (session *hongguoSDKClientSession) registrationCooldownError() error {
 
 func (downloader *Downloader) hongguoSDKRegistrationCooldownError() error {
 	return downloader.hongguoSDKSession.registrationCooldownError()
+}
+
+func (session *hongguoSDKClientSession) recordPlaybackResult(err error) {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if errors.Is(err, openhongguo.ErrAnonymousLimited) {
+		session.playbackPausedUntil = time.Now().Add(hongguoSDKPlaybackPause)
+		return
+	}
+	if err == nil || !errors.Is(err, errHongguoSDKPlaybackCooling) {
+		session.playbackPausedUntil = time.Time{}
+	}
+}
+
+func (session *hongguoSDKClientSession) playbackCooldownError() error {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if session.playbackPausedUntil.IsZero() || !time.Now().Before(session.playbackPausedUntil) {
+		session.playbackPausedUntil = time.Time{}
+		return nil
+	}
+	return fmt.Errorf("%w：設備輪替後仍收到空回應，暫停 30 秒避免重複註冊",
+		errHongguoSDKPlaybackCooling)
 }
 
 func (downloader *Downloader) recordHongguoSDKPlaybackResponse(
@@ -487,6 +515,7 @@ func hongguoSDKPlaybackRegistrationRejected(err error) bool {
 	}
 	var apiErr *openhongguo.APIError
 	return errors.Is(err, errHongguoSDKRegistrationCooling) ||
+		errors.Is(err, errHongguoSDKPlaybackCooling) ||
 		(errors.As(err, &apiErr) &&
 			(apiErr.HTTPStatus == http.StatusUnauthorized ||
 				apiErr.HTTPStatus == http.StatusForbidden ||
@@ -587,7 +616,18 @@ func (downloader *Downloader) resolveHongguoSDKMedia(ctx context.Context, videoI
 	if err := downloader.hongguoSDKRegistrationCooldownError(); err != nil {
 		return providerMedia{}, err
 	}
+	if err := downloader.hongguoSDKSession.playbackCooldownError(); err != nil {
+		return providerMedia{}, err
+	}
 	playback, err := client.ResolvePlayback(ctx, videoID, openhongguo.PlaybackOptions{})
+	downloader.hongguoSDKSession.recordPlaybackResult(err)
+	if errors.Is(err, openhongguo.ErrAnonymousLimited) {
+		downloader.recordDiagnostic(diagnosticEvent{
+			Level: "warn", Event: "hongguo.sdk_playback_soft_reject",
+			Source: sourceHongguo,
+			Message: "anonymous playback empty after two automatic device refreshes; suppressing retries for 30 seconds",
+		})
+	}
 	if err != nil && !errors.Is(err, openhongguo.ErrDRMProtected) {
 		return providerMedia{}, fmt.Errorf("紅果 SDK V5 播放請求失敗：%w", err)
 	}
