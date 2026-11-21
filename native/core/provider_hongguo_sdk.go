@@ -347,7 +347,7 @@ func (downloader *Downloader) hongguoSDKClient() (*openhongguo.Client, error) {
 			RegisterOrigin: hongguoSDKRegisterOrigin,
 			Device:        device,
 			RetryAttempts: 1,
-			DeviceResets:  openhongguo.Int(0),
+			DeviceResets:  openhongguo.Int(2),
 		})
 		downloader.hongguoSDKSession.client = client
 		downloader.hongguoSDKSession.err = err
