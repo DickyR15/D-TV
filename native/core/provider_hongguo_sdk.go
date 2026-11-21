@@ -141,16 +141,9 @@ func (downloader *Downloader) hongguoSDKClient() (*openhongguo.Client, error) {
 			return
 		}
 		profiles := &hongguoSDKMemoryProfileStore{}
-		device := model.Device{
-			Brand:      "Redmi",
-			Model:      "25053RT47C",
-			OSVersion:  "16",
-			OSAPI:      36,
-			Build:      "BP2A.250605.031.A3",
-			Resolution: "2772*1280",
-			DPI:        520,
-			Channel:    "update_64",
-		}
+		// Keep the SDK's captured 7.3.9.32 app identity and its matching
+		// default device together; do not mix it with D-TV's 7.4.3.32 profile.
+		device := model.DefaultDevice
 		client, err := openhongguo.NewClient(openhongguo.Options{
 			Transport:     hongguoSDKTransport{client: downloader.client},
 			ProfileStore:  profiles,
