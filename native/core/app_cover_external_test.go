@@ -2098,3 +2098,32 @@ func TestNativePosterMatcherRecognizesTaiwanSeriesCategoryAliases(t *testing.T) 
 		}
 	}
 }
+
+
+func TestProviderCoverCandidatesRejectCommonCMSPlaceholders(t *testing.T) {
+	for _, address := range []string{
+		"https://img.example.test/loading.gif",
+		"https://img.example.test/placeholder.png",
+		"https://img.example.test/default-cover.jpg",
+		"https://img.example.test/blank.gif",
+	} {
+		if !providerCoverLooksLikePlaceholder(address) {
+			t.Errorf("placeholder address %q was not rejected", address)
+		}
+	}
+	for _, address := range []string{
+		"https://img.example.test/anime-poster.webp",
+		"https://img.example.test/poster-2026.jpg?token=loading",
+	} {
+		if providerCoverLooksLikePlaceholder(address) {
+			t.Errorf("valid artwork address %q was rejected", address)
+		}
+	}
+	got := providerCoverAddresses([]any{
+		"https://img.example.test/loading.gif",
+		"https://img.example.test/poster.webp",
+	}, "https://img.example.test/")
+	if len(got) != 1 || got[0] != "https://img.example.test/poster.webp" {
+		t.Fatalf("normalized poster candidates = %#v", got)
+	}
+}
