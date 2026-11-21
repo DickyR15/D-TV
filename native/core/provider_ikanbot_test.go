@@ -761,7 +761,6 @@ func TestIkanbotCardPosterCanComeFromSiblingWrapperBackground(t *testing.T) {
 		t.Fatalf("anime category = %q, want 動漫", items[0].CategoryName)
 	}
 	want := []string{
-		"https://v.ikanbot.com/loading.gif",
 		"https://v.ikanbot.com/posters/small.jpg",
 		"https://v.ikanbot.com/posters/large.jpg",
 		"https://v.ikanbot.com/posters/wrapper.webp",
