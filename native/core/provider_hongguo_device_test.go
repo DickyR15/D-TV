@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -559,6 +560,50 @@ func TestHongguoRegistrationClientLabelUsesActualRequestUserAgent(t *testing.T) 
 				t.Fatalf("client label = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestHongguoSDKRegistrationEdgeRejectionDoesNotRetryLegacyRegistrationHosts(t *testing.T) {
+	var mu sync.Mutex
+	var requestedHosts []string
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		host := strings.ToLower(request.URL.Hostname())
+		mu.Lock()
+		requestedHosts = append(requestedHosts, host)
+		mu.Unlock()
+
+		switch host {
+		case "log5-applog-lq.fqnovel.com":
+			if request.Method != http.MethodPost || request.URL.Path != "/service/2/device_register/" {
+				t.Errorf("unexpected current SDK registration request: %s %s", request.Method, request.URL)
+			}
+			return sourceFixtureResponse(request, 444, "Access Denied"), nil
+		case "log.snssdk.com", "applog.snssdk.com":
+			t.Errorf("legacy registration host must not be retried after SDK edge rejection: %s", host)
+			return sourceFixtureResponse(request, 444, "Access Denied"), nil
+		default:
+			// Let the non-registration quick/web fallbacks fail deterministically.
+			return sourceFixtureResponse(request, http.StatusServiceUnavailable, "unavailable"), nil
+		}
+	})
+
+	_, err := d.resolveHongguoMedia(context.Background(), Task{
+		DramaID: "hongguo:100",
+		Chapter: Chapter{VideoURL: "hongguo-cenc://200"},
+	})
+	if err == nil {
+		t.Fatal("expected SDK registration edge rejection and unavailable web fallbacks")
+	}
+	mu.Lock()
+	hosts := append([]string(nil), requestedHosts...)
+	mu.Unlock()
+	if !containsString(hosts, "log5-applog-lq.fqnovel.com") {
+		t.Fatalf("new SDK registration host was not used: %#v", hosts)
+	}
+	for _, host := range []string{"log.snssdk.com", "applog.snssdk.com"} {
+		if containsString(hosts, host) {
+			t.Fatalf("legacy registration host %s was requested after SDK rejection: %#v", host, hosts)
+		}
 	}
 }
 
