@@ -1212,17 +1212,21 @@ func (d *Downloader) externalPosterAddress(ctx context.Context, drama nativeDram
 	} else {
 		failures = append(failures, fmt.Errorf("Bangumi 備援查詢失敗：%w", err))
 	}
-	if address, err := d.doubanSuggestedPosterAddress(ctx, drama); err == nil {
-		return address, nil
-	} else {
-		failures = append(failures, fmt.Errorf("豆瓣片名備援查詢失敗：%w", err))
-	}
+	// AniList is anime-specific and often indexes the original Japanese title
+	// and Chinese synonyms more reliably than Douban's general suggestion
+	// endpoint. Try it before the broader title search so missing anime posters
+	// do not spend the full Douban-search budget first.
 	if nativePosterIsAnime(drama) {
 		if address, err := d.aniListPosterAddress(ctx, drama); err == nil {
 			return address, nil
 		} else {
 			failures = append(failures, fmt.Errorf("AniList 備援查詢失敗：%w", err))
 		}
+	}
+	if address, err := d.doubanSuggestedPosterAddress(ctx, drama); err == nil {
+		return address, nil
+	} else {
+		failures = append(failures, fmt.Errorf("豆瓣片名備援查詢失敗：%w", err))
 	}
 	if nativePosterIsTVSeries(drama) {
 		if address, err := d.tvMazePosterAddress(ctx, drama); err == nil {
