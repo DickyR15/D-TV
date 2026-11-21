@@ -613,12 +613,8 @@ func huangguoPosterCandidates(fragment, pageURL string) []string {
 		for _, attribute := range []string{"data-poster", "data-cover", "data-image", "data-background-image", "data-bg"} {
 			add(extractAttr(tag, attribute))
 		}
-		if style := extractAttr(tag, "style"); style != "" {
-			for _, match := range adultCSSImagePattern.FindAllStringSubmatch(style, -1) {
-				if len(match) > 1 {
-					add(match[1])
-				}
-			}
+		if style := providerHTMLStyle(tag); style != "" {
+			addresses = append(addresses, providerCSSImageAddresses(style, pageURL)...)
 		}
 	}
 	return nativeUniqueCoverAddresses(addresses...)
