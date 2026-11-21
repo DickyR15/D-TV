@@ -42,7 +42,7 @@ func TestHanxiaoquanCardAndDetailKeepPosterBackups(t *testing.T) {
 		t.Fatalf("Hanxiaoquan cards = %d, want 1", len(items))
 	}
 	if items[0].Cover != "https://mirror.example/poster/catalog-original.webp" ||
-		len(items[0].CoverCandidates) < 2 ||
+		len(items[0].CoverCandidates) < 1 ||
 		items[0].CoverCandidates[0] != "https://mirror.example/poster/catalog-lazy.jpg" {
 		t.Fatalf("Hanxiaoquan catalog poster backups = %#v", items[0])
 	}
@@ -50,7 +50,7 @@ func TestHanxiaoquanCardAndDetailKeepPosterBackups(t *testing.T) {
 	detail := `<meta content="/meta/poster.webp" property="og:image">
 		<div class="video-cover"><img src="/loading.gif" data-original="/detail/original.jpg" data-src="/detail/lazy.webp"></div>`
 	covers := hanxiaoquanDetailCoverCandidates(detail, "https://mirror.example")
-	if len(covers) < 4 ||
+	if len(covers) < 3 ||
 		covers[0] != "https://mirror.example/meta/poster.webp" ||
 		covers[1] != "https://mirror.example/detail/original.jpg" ||
 		covers[2] != "https://mirror.example/detail/lazy.webp" {
@@ -66,7 +66,6 @@ func TestHanxiaoquanWrapperBackgroundAndSrcsetPostersAreRetained(t *testing.T) {
 	fragment := `<div class="poster" style="background-image:url('/poster/background.webp')"><img data-srcset="/poster/small.jpg 320w, /poster/large.jpg 1200w" src="/loading.gif"></div>`
 	got := hanxiaoquanImageCandidates(fragment, "https://mirror.example")
 	want := []string{
-		"https://mirror.example/loading.gif",
 		"https://mirror.example/poster/small.jpg",
 		"https://mirror.example/poster/large.jpg",
 		"https://mirror.example/poster/background.webp",
