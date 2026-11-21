@@ -198,7 +198,7 @@ func guipianImageCandidates(fragment string) []string {
 		}
 	}
 	for _, tag := range tags {
-		if style := extractAttr(tag, "style"); style != "" {
+		if style := providerHTMLStyle(tag); style != "" {
 			for _, address := range providerCSSImageAddresses(style, guipianSiteBaseURL) {
 				add(address)
 			}
