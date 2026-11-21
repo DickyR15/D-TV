@@ -2085,3 +2085,16 @@ func TestExternalPosterAddressUsesAniListBeforeBroadDoubanAnimeSearch(t *testing
 		t.Fatalf("anime poster fallback order was not exercised: Bangumi=%d AniList=%d", bangumiCalls, aniListCalls)
 	}
 }
+
+
+func TestNativePosterMatcherRecognizesTaiwanSeriesCategoryAliases(t *testing.T) {
+	for _, category := range []string{"影集", "連續劇", "韓劇", "日劇", "劇集"} {
+		drama := nativeDrama{Title: "測試影集", Category: category}
+		if !nativePosterIsTVSeries(drama) {
+			t.Errorf("category %q was not recognized as a TV series", category)
+		}
+		if !nativePosterTypeCompatible(drama, "tv") {
+			t.Errorf("category %q was rejected as a TV poster type", category)
+		}
+	}
+}
