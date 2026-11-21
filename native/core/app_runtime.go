@@ -437,7 +437,7 @@ func newNativeEngine(directory string) (*nativeEngine, error) {
 	// normal CDN-aware transport and proxy behaviour.
 	providerTransport := &hostDoHTransport{
 		base: transport, resolver: resolver, router: router,
-		hosts: hongguoDeviceRegisterHosts(), upstream: cdn,
+		hosts: hongguoHTTPRegistrationHosts(), upstream: cdn,
 	}
 	checkRedirect := func(request *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
