@@ -346,7 +346,7 @@ func parseChaoliuList(body, pageURL string) []Drama {
 		out = append(out, Drama{
 			ID: providerDramaID(sourceChaoliu, sourceID), Source: sourceChaoliu, SourceID: sourceID,
 			Title: truncate(title, 512), Name: truncate(title, 512),
-			Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...),
+			Cover: cover, CoverURL: cover, CoverCandidates: nativeCoverBackupAddresses(coverCandidates),
 			ChannelName: "chaoliu", CategoryName: "chaoliu",
 			TotalEpisode: 1, EpisodeCount: 1,
 		})
