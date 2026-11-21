@@ -37,8 +37,14 @@ func TestAdultProviderRegistrationAndCategories(t *testing.T) {
 	if got := providerSourceForURL("https://supjav.blog/"); got != sourceSupJav {
 		t.Fatalf("providerSourceForURL(%q) = %q, want SupJav", "https://supjav.blog/", got)
 	}
-	if got := providerSourceForURL("https://supjav.com/"); got != "" {
-		t.Fatalf("legacy SupJav entry domain should remain disabled, got %q", got)
+	if got := providerSourceForURL("https://supjav.com/"); got != sourceSupJav {
+		t.Fatalf("legacy SupJav bookmark host = %q, want %q", got, sourceSupJav)
+	}
+	if got := providerSourceForURL("https://lk1.supremejav.com/"); got != sourceSupJav {
+		t.Fatalf("legacy SupJav media host = %q, want %q", got, sourceSupJav)
+	}
+	if got := (&Downloader{cfg: defaultConfig()}).providerBaseURL(sourceSupJav); got != supjavBaseURL {
+		t.Fatalf("SupJav default site changed to a legacy host: %q", got)
 	}
 	if !validNativeCategory(sourceMissAV, "") || !validAdultProviderCategory(sourceMissAV, "") ||
 		validAdultProviderCategory(sourceMissAV, "../bad") {
