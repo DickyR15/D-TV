@@ -35,8 +35,8 @@ func TestAPIProviderDramaRowsRetainAlternatePosters(t *testing.T) {
 			"cover":         "/hongguo/backup.jpg",
 		},
 	}, "短劇")
-	if hongguo.Cover != "https://api.hongguoduanju.com/hongguo/main.jpg" ||
-		!containsString(hongguo.CoverCandidates, "https://api.hongguoduanju.com/hongguo/backup.jpg") {
+	if hongguo.Cover != "https://hongguoduanju.com/hongguo/main.jpg" ||
+		!containsString(hongguo.CoverCandidates, "https://hongguoduanju.com/hongguo/backup.jpg") {
 		t.Fatalf("Hongguo posters = %#v", hongguo)
 	}
 
@@ -44,8 +44,8 @@ func TestAPIProviderDramaRowsRetainAlternatePosters(t *testing.T) {
 		"id": "rp_88", "name": "黃豆測試作品",
 		"img_y": "/huangdou/main.jpg", "img_x": "/huangdou/backup.jpg",
 	})
-	if huangdou.Cover != "https://huangdou.com/huangdou/main.jpg" ||
-		!containsString(huangdou.CoverCandidates, "https://huangdou.com/huangdou/backup.jpg") {
+	if huangdou.Cover != "https://ferncider.cc/huangdou/main.jpg" ||
+		!containsString(huangdou.CoverCandidates, "https://ferncider.cc/huangdou/backup.jpg") {
 		t.Fatalf("Huangdou posters = %#v", huangdou)
 	}
 
