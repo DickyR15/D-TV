@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	htmlnet "golang.org/x/net/html"
 )
 
 func dsdTestAaChar(octal string) string {
@@ -46,5 +48,34 @@ func TestDSDVplayerMediaPathDropsOrigin(t *testing.T) {
 	}
 	if dsdVplayerMediaPath("/video/a/index.m3u8") != "/video/a/index.m3u8" {
 		t.Fatal("relative media path changed")
+	}
+}
+
+func TestDSDDetailPosterCandidatesKeepPlayerAndCardFallbacks(t *testing.T) {
+	document, err := htmlnet.Parse(strings.NewReader(`<div class="video-box">
+		<img src="/loading.gif" data-original="/poster/original.webp"
+			data-src="/poster/lazy.jpg" data-srcset="/poster/small.jpg 320w, /poster/large.jpg 1200w">
+		<div class="img-bg" style="background-image:url('/poster/background.jpg')"></div>
+	</div>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	box := providerHTMLFirstClass(document, "video-box")
+	player := map[string]any{
+		"poster": []any{"/player/poster.webp", "/player/poster-backup.jpg"},
+	}
+	got := dsdDetailCoverCandidates(player, box, "https://dsd.com.se/play/123")
+	for _, want := range []string{
+		"https://dsd.com.se/player/poster.webp",
+		"https://dsd.com.se/player/poster-backup.jpg",
+		"https://dsd.com.se/poster/original.webp",
+		"https://dsd.com.se/poster/lazy.jpg",
+		"https://dsd.com.se/poster/small.jpg",
+		"https://dsd.com.se/poster/large.jpg",
+		"https://dsd.com.se/poster/background.jpg",
+	} {
+		if !containsString(got, want) {
+			t.Fatalf("DSD poster candidate %q missing from %#v", want, got)
+		}
 	}
 }
