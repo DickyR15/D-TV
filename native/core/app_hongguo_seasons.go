@@ -86,37 +86,7 @@ func (downloader *Downloader) hongguoAppSeasons(
 	ctx context.Context,
 	seriesID string,
 ) ([]nativeDramaSeason, error) {
-	if !hongguoNumericID.MatchString(seriesID) || seriesID == "0" {
-		return nil, errors.New("紅果系列 ID 無效")
-	}
-	ctx = context.WithValue(ctx, hongguoSeasonPlanRequestKey{}, true)
-	result, err := downloader.hongguoAppRequest(
-		ctx,
-		http.MethodGet,
-		hongguoAppSeasonPlanPath,
-		hongguoAppSeasonQuery(seriesID),
-		nil,
-	)
-	if hongguoNeedsSeasonFallback(err) {
-		// Some works reject the full-series selector with 101116 even though
-		// their signed short-play relationship query still returns season rows.
-		fallback, fallbackErr := downloader.hongguoAppRequest(
-			ctx,
-			http.MethodGet,
-			hongguoAppSeasonPlanPath,
-			hongguoAppNextSeasonQuery(seriesID),
-			nil,
-		)
-		if fallbackErr == nil {
-			result, err = fallback, nil
-		} else {
-			err = fmt.Errorf("%w（備援季別查詢失敗：%v）", err, fallbackErr)
-		}
-	}
-	if err != nil {
-		return nil, fmt.Errorf("取得紅果系列季別失敗：%w", err)
-	}
-	return parseHongguoAppSeasons(result)
+	return downloader.fetchHongguoSDKSeasons(ctx, seriesID)
 }
 
 func parseHongguoAppSeasons(result map[string]any) ([]nativeDramaSeason, error) {
