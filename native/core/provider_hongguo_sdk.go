@@ -20,6 +20,17 @@ const (
 	hongguoSDKRegisterOrigin = "https://log5-applog-lq.fqnovel.com"
 )
 
+func hongguoHTTPRegistrationHosts() []string {
+	hosts := append([]string(nil), hongguoDeviceRegisterHosts()...)
+	host := strings.TrimPrefix(hongguoSDKRegisterOrigin, "https://")
+	for _, existing := range hosts {
+		if strings.EqualFold(existing, host) {
+			return hosts
+		}
+	}
+	return append(hosts, host)
+}
+
 type hongguoSDKClientSession struct {
 	client *openhongguo.Client
 	err    error
