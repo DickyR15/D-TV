@@ -101,7 +101,9 @@ func providerSourceForURL(raw string) string {
 		return sourceGuipian
 	case host == "www1.ikanbot.com" || host == "www.ikanbot.com" || host == "ikanbot.com" || strings.HasSuffix(host, ".ikanbot.com") || host == "admin-api.aikanbot.com":
 		return sourceIkanBot
-	case host == "supjav.blog" || strings.HasSuffix(host, ".supjav.blog"):
+	case host == "supjav.blog" || strings.HasSuffix(host, ".supjav.blog") ||
+		host == "supjav.com" || strings.HasSuffix(host, ".supjav.com") ||
+		host == "lk1.supremejav.com":
 		return sourceSupJav
 	case host == "ppp.porn" || strings.HasSuffix(host, ".ppp.porn") || host == "cdnlab.live" || strings.HasSuffix(host, ".cdnlab.live"):
 		return sourcePPP
