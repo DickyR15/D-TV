@@ -1234,11 +1234,11 @@ func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput
 		return nativePlan{}, err
 	}
 	choice := nativeInitialPlaybackChoice(media, input.Quality, task)
-	switch source {
-	case sourceIkanBot, sourcePPP, sourceDuoduo, sourceGuipian:
-		// These providers can return several signed/CDN routes for the same
-		// episode. A bounded probe selects a responsive first route before
-		// the viewer enters the player, avoiding a visible extra source switch.
+	if nativePlaybackRouteProbeEnabled(source) {
+		// Non-Redfruit sources may return multiple same-quality signed/CDN
+		// routes. Probe them concurrently with a short budget before MPV opens,
+		// so an unresponsive first URL is less likely to trigger repeated
+		// loading overlays and serial player restarts.
 		choice = engine.rankNativePlaybackRoutes(ctx, choice, task)
 	}
 	return engine.nativeOpenPlayback(ctx, choice)
