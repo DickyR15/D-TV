@@ -141,7 +141,7 @@ func canonicalProviderSource(source string) string {
 		return sourceGuipian
 	case "ikanbot", "ikanbot.com", "www.ikanbot.com", "www1.ikanbot.com", "admin-api.aikanbot.com":
 		return sourceIkanBot
-	case "supjav", "supjav.blog", "www.supjav.blog":
+	case "supjav", "supjav.blog", "www.supjav.blog", "supjav.com", "www.supjav.com", "lk1.supremejav.com":
 		return sourceSupJav
 	case "ppp", "ppp.porn", "www.ppp.porn", "cdnlab.live":
 		return sourcePPP
