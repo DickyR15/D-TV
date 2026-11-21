@@ -133,3 +133,37 @@ func TestGuipianPickPlaylistRetainsOtherLinePagesForEachEpisode(t *testing.T) {
 	}
 }
 
+
+
+func TestGuipianImageCandidatesSupportsSrcsetAndBackgroundStyles(t *testing.T) {
+	got := guipianImageCandidates(`<div class="poster" style="background-image:url('/poster/background.webp')"><img data-srcset="/poster/small.jpg 320w, /poster/large.jpg 1200w" src="/placeholder.gif"></div>`)
+	want := []string{
+		"https://guipianwu.com/placeholder.gif",
+		"https://guipianwu.com/poster/small.jpg",
+		"https://guipianwu.com/poster/large.jpg",
+		"https://guipianwu.com/poster/background.webp",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("srcset/background candidates = %#v, want %#v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("candidate %d = %q, want %q", index, got[index], want[index])
+		}
+	}
+}
+
+func TestGuipianCategoryIsPreservedForPosterMatching(t *testing.T) {
+	cases := map[string]string{
+		"3": "電影", "14": "劇集", "23": "動漫", "26": "動漫",
+	}
+	for category, want := range cases {
+		if got := guipianCategoryName(category); got != want {
+			t.Errorf("category %s = %q, want %q", category, got, want)
+		}
+	}
+	items := parseGuipianCards(`<ul class="row video-list video-film-list"><a class="video-link" href="/nv/123.html" title="動漫測試"><img data-src="/poster.jpg"></a></ul>`, "23")
+	if len(items) != 1 || items[0].CategoryName != "動漫" {
+		t.Fatalf("anime catalogue category was lost: %#v", items)
+	}
+}
