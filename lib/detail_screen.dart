@@ -1165,13 +1165,19 @@ class _DetailScreenState extends State<DetailScreen> {
         ),
       );
     }
-    if (seasons.length < 2) return const SizedBox.shrink();
+    final currentSeasonOnly = seasons.length == 1 && seasons.first.number > 1;
+    if (seasons.length < 2 && !currentSeasonOnly) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('系列劇', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            currentSeasonOnly ? '目前季別' : '系列劇',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           if (AppLayout.isTelevision(context))
             FocusTraversalGroup(
@@ -1224,6 +1230,8 @@ class _DetailScreenState extends State<DetailScreen> {
       if (season.upcoming) '即將上線',
       if (!season.playable && !season.upcoming) '集數待確認',
       if (watched != null && !current) '有觀看紀錄',
+      if (AppLayout.isTelevision(context) && season.subtitle.isNotEmpty)
+        uiTraditional(season.subtitle),
     ];
     final text = [
       label,
