@@ -54,8 +54,20 @@ func parseHuangguoSortDetail(body, pageURL string, patch Drama) (Drama, error) {
 			}
 			matched = true
 			patch.Title = row.Name
-			if address := firstNonEmpty(providerCoverAddress(row.Image, pageURL), providerCoverAddress(row.Thumbnail, pageURL)); address != "" {
-				patch.Cover, patch.CoverURL = address, address
+			posterAddresses := append(
+				providerCoverAddresses(row.Image, pageURL),
+				providerCoverAddresses(row.Thumbnail, pageURL)...,
+			)
+			posterAddresses = nativeUniqueCoverAddresses(posterAddresses...)
+			if len(posterAddresses) > 0 {
+				previousCover := patch.Cover
+				patch.Cover, patch.CoverURL = posterAddresses[0], posterAddresses[0]
+				candidates := nativeCoverBackupAddresses(posterAddresses)
+				candidates = append(candidates, patch.CoverCandidates...)
+				if previousCover != "" && previousCover != patch.Cover {
+					candidates = append(candidates, previousCover)
+				}
+				patch.CoverCandidates = nativeUniqueCoverAddresses(candidates...)
 			}
 			if date := providerReleaseDate(firstNonEmpty(row.Uploaded, row.Published)); date != "" && (patch.OnlineDate == "" || row.Type == "VideoObject") {
 				patch.OnlineDate = date
