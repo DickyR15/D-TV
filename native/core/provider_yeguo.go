@@ -116,11 +116,13 @@ func yeguoDramaFromMap(row map[string]any, site string) (Drama, error) {
 			}
 		}
 	}
-	cover := providerCoverAddress(row["cover"], site+"/")
+	coverCandidates := providerCoverAddresses(row, site+"/")
+	cover := firstNonEmpty(coverCandidates...)
 	description := truncate(mapString(row, "description"), 12000)
 	drama := Drama{ID: providerDramaID(sourceYeguo, id), Source: sourceYeguo, SourceID: id,
 		Title: truncate(title, 512), Name: truncate(title, 512), Desc: description, Intro: description,
-		Cover: cover, CoverURL: cover, EpisodeCount: episodes, TotalEpisode: episodes,
+		Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...),
+		EpisodeCount: episodes, TotalEpisode: episodes,
 		CategoryName: "短剧", ChannelName: "野果", Views: normalizeViews(mapString(row, "play_count", "play_count_text")),
 		Tags: tags, ReleaseStatus: status, OnlineDate: providerReleaseDate(mapString(row, "published_at", "created_at"))}
 	if vip, known := yeguoFlag(row["is_vip"]); known {
