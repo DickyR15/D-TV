@@ -35,7 +35,11 @@ func hongguoShouldUseCurrentSeasonFallback(err error) bool {
 	}
 	message := strings.ToLower(err.Error())
 	return hongguoRegistrationWasRateLimited(err) ||
+		strings.Contains(message, "http 401") ||
+		strings.Contains(message, "http 403") ||
 		strings.Contains(message, "http 404") ||
+		strings.Contains(message, "authentication required") ||
+		strings.Contains(message, "album is not available anonymously") ||
 		strings.Contains(message, "anonymous response was empty") ||
 		strings.Contains(message, "device rejected") ||
 		strings.Contains(message, "101116")
