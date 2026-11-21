@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -15,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	htmlparser "golang.org/x/net/html"
 )
 
 type providerTextValidatorKey struct{}
@@ -210,18 +213,85 @@ func (d *Downloader) fetchChaoliuText(ctx context.Context,rawURL,referer string)
 	}
 	return body,finalURL,nil
 }
-func parseChaoliuList(body,pageURL string) []Drama {
-	starts:=chaoliuCardStart.FindAllStringIndex(body,-1);out:=make([]Drama,0,len(starts));seen:=map[string]bool{}
-	for index,span:=range starts {
-		end:=len(body);if index+1<len(starts){end=starts[index+1][0]};if end-span[0]>5000{end=span[0]+5000}
-		chunk:=body[span[0]:end];match:=chaoliuCardHref.FindStringSubmatch(chunk);if len(match)<7{continue}
-		kind,num,slug:=match[1],match[2],match[3];if kind==""{kind,num,slug=match[4],match[5],match[6]}
-		sourceID:=kind+"_content/"+num+"/"+slug;if !validChaoliuID(sourceID)||seen[sourceID]{continue};seen[sourceID]=true
-		title:="";if heading:=regexp.MustCompile("(?is)<h3[^>]*>([\\s\\S]{1,500}?)</h3>").FindStringSubmatch(chunk);len(heading)>1{title=cleanText(heading[1])}
-		if title==""{title=strings.ReplaceAll(slug,"-"," ")}
-		cover:="";if image:=regexp.MustCompile("(?is)<img\\b[^>]*>").FindString(chunk);image!=""{cover=extractAttr(image,"data-original","data-src","src")}
-		cover=resolveProviderURL(pageURL,html.UnescapeString(cover))
-		out=append(out,Drama{ID:providerDramaID(sourceChaoliu,sourceID),Source:sourceChaoliu,SourceID:sourceID,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,ChannelName:"chaoliu",CategoryName:"chaoliu",TotalEpisode:1,EpisodeCount:1})
+func chaoliuCardNode(node *htmlparser.Node) bool {
+	if node == nil || node.Type != htmlparser.ElementNode ||
+		(node.Data != "div" && node.Data != "article" && node.Data != "li") {
+		return false
+	}
+	for _, attribute := range node.Attr {
+		if !strings.EqualFold(attribute.Key, "class") {
+			continue
+		}
+		for _, className := range strings.Fields(strings.ToLower(attribute.Val)) {
+			if className == "post" || className == "post-item" ||
+				className == "video-item" || className == "item-video" ||
+				strings.HasPrefix(className, "post-") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func parseChaoliuList(body, pageURL string) []Drama {
+	document, err := htmlparser.Parse(strings.NewReader(body))
+	if err != nil {
+		return nil
+	}
+	cards := make([]*htmlparser.Node, 0, 24)
+	var collect func(*htmlparser.Node)
+	collect = func(node *htmlparser.Node) {
+		if chaoliuCardNode(node) {
+			cards = append(cards, node)
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			collect(child)
+		}
+	}
+	collect(document)
+
+	out := make([]Drama, 0, len(cards))
+	seen := map[string]bool{}
+	for _, card := range cards {
+		var fragment bytes.Buffer
+		if err := htmlparser.Render(&fragment, card); err != nil {
+			continue
+		}
+		chunk := fragment.String()
+		match := chaoliuCardHref.FindStringSubmatch(chunk)
+		if len(match) < 7 {
+			continue
+		}
+		kind, number, slug := match[1], match[2], match[3]
+		if kind == "" {
+			kind, number, slug = match[4], match[5], match[6]
+		}
+		sourceID := kind + "_content/" + number + "/" + slug
+		if !validChaoliuID(sourceID) || seen[sourceID] {
+			continue
+		}
+		seen[sourceID] = true
+
+		title := ""
+		if heading := regexp.MustCompile("(?is)<h[1-3][^>]*>([\\s\\S]{1,500}?)</h[1-3]>").FindStringSubmatch(chunk); len(heading) > 1 {
+			title = cleanText(heading[1])
+		}
+		if title == "" {
+			title = strings.ReplaceAll(slug, "-", " ")
+		}
+
+		cover := ""
+		if image := regexp.MustCompile("(?is)<img\\b[^>]*>").FindString(chunk); image != "" {
+			cover = extractAttr(image, "data-original", "data-lazy-src", "data-src", "src")
+		}
+		cover = resolveProviderURL(pageURL, html.UnescapeString(cover))
+		out = append(out, Drama{
+			ID: providerDramaID(sourceChaoliu, sourceID), Source: sourceChaoliu, SourceID: sourceID,
+			Title: truncate(title, 512), Name: truncate(title, 512),
+			Cover: cover, CoverURL: cover, ChannelName: "chaoliu", CategoryName: "chaoliu",
+			TotalEpisode: 1, EpisodeCount: 1,
+		})
 	}
 	return out
 }
