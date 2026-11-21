@@ -443,7 +443,7 @@ func nativePosterTypeCompatible(drama nativeDrama, kind string) bool {
 	}
 	category := strings.ToLower(strings.TrimSpace(drama.Category + " " + strings.Join(drama.Tags, " ")))
 	isMovie := bangumiPosterContainsAny(category, "電影", "电影", "movie", "film")
-	isTV := bangumiPosterContainsAny(category, "劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧", "韓劇", "韩剧", "日劇", "日剧", "美劇", "美剧", "短劇", "短剧", "series", "tv")
+	isTV := bangumiPosterContainsAny(category, "劇集", "剧集", "影集", "連續劇", "连续剧", "電視劇", "电视剧", "真人劇", "真人剧", "韓劇", "韩剧", "日劇", "日剧", "美劇", "美剧", "短劇", "短剧", "series", "tv")
 	isAnime := bangumiPosterContainsAny(category, "動漫", "动漫", "動畫", "动画", "番劇", "番剧", "漫劇", "漫剧", "anime")
 	isVariety := bangumiPosterContainsAny(category, "綜藝", "综艺", "真人秀", "實境秀", "真人實境", "variety")
 	if isAnime || isVariety || (!isMovie && !isTV) {
@@ -900,7 +900,7 @@ func nativePosterIsTVSeries(drama nativeDrama) bool {
 	}
 	return bangumiPosterContainsAny(
 		category,
-		"劇集", "剧集", "電視劇", "电视剧", "真人劇", "真人剧",
+		"劇集", "剧集", "影集", "連續劇", "连续剧", "電視劇", "电视剧", "真人劇", "真人剧",
 		"韓劇", "韩剧", "日劇", "日剧", "美劇", "美剧",
 		"台劇", "台剧", "港劇", "港剧", "短劇", "短剧",
 		"綜藝", "综艺", "真人秀", "實境秀", "variety", "series", "tv",
