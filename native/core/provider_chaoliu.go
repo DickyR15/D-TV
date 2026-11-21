@@ -36,7 +36,6 @@ var chaoliuCategories = []nativeCategory{
 	{ID:"UncensoredAnimation",Name:"H 無碼動畫"},{ID:"tdAnimation",Name:"H 3D 動畫"},
 }
 var (
-	chaoliuCardStart=regexp.MustCompile("(?is)<div\\s+class=['\\x22]post\\b")
 	chaoliuCardHref=regexp.MustCompile("(?is)href=['\\x22](?:https?:)?//[^'\\x22]*?/zh/([A-Za-z0-9-]+)_content/([0-9]+)/([^'\\x22/?#]+?)\\.html|href=['\\x22]/?zh/([A-Za-z0-9-]+)_content/([0-9]+)/([^'\\x22/?#]+?)\\.html")
 	chaoliuIDPattern=regexp.MustCompile("^[A-Za-z0-9-]+_content/[0-9]+/[A-Za-z0-9-]+$")
 	chaoliuMvarrArray=regexp.MustCompile("(?is)mvarr\\[['\\x22]?([\\w.]+)['\\x22]?\\]\\s*=\\s*\\[([\\s\\S]*?)\\];")
