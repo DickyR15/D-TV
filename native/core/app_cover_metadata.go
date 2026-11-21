@@ -11,6 +11,35 @@ import (
 
 var providerDoubanSubjectPattern = regexp.MustCompile(`(?i)(?:douban\.com/(?:movie/)?subject/|/(?:douban|subject)/)(\d{6,12})(?:\.[a-z0-9]{2,5})?(?:[/?#]|$)`)
 
+// providerCoverLooksLikePlaceholder rejects common CMS loading/default artwork
+// so a 1x1 placeholder never outranks a real srcset or CSS poster candidate.
+func providerCoverLooksLikePlaceholder(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	value := strings.ToLower(parsed.Path)
+	for _, marker := range []string{
+		"placeholder", "loading", "no-image", "no_image", "noimage",
+		"default-cover", "default_cover", "transparent", "spacer",
+	} {
+		if strings.Contains(value, marker) {
+			return true
+		}
+	}
+	base := value
+	if index := strings.LastIndex(base, "/"); index >= 0 {
+		base = base[index+1:]
+	}
+	switch base {
+	case "default.jpg", "default.jpeg", "default.png", "default.webp", "default.gif",
+		"blank.gif", "pixel.gif", "1x1.gif", "1x1.png", "no.jpg", "no.png":
+		return true
+	default:
+		return false
+	}
+}
+
 func providerDoubanSubjectID(values ...string) string {
 	for _, value := range values {
 		for _, match := range providerDoubanSubjectPattern.FindAllStringSubmatch(value, -1) {
@@ -435,7 +464,7 @@ func providerCoverAddresses(value any, pageURL string) []string {
 			}
 		case string:
 			raw := strings.TrimSpace(typed)
-			if raw == "" || len(raw) > 8192 {
+			if raw == "" || len(raw) > 8192 || providerCoverLooksLikePlaceholder(raw) {
 				return
 			}
 			address, err := url.Parse(raw)
