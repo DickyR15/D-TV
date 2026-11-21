@@ -389,9 +389,11 @@ func providerCoverAddresses(value any, pageURL string) []string {
 			}
 		case map[string]any:
 			for _, key := range []string{
-				"url", "contentUrl", "thumbnailUrl", "src", "cover", "cover_url",
-				"image", "imageUrl", "image_url", "pic", "poster", "thumbnail",
-				"large", "medium", "small", "original", "origin", "common", "grid",
+				"url", "contentUrl", "thumbnailUrl", "thumbnail_url", "src",
+				"series_cover", "img_y", "img_x", "img", "cover", "coverUrl", "cover_url",
+				"coverImage", "cover_image", "image", "imageUrl", "image_url",
+				"pic", "picture", "poster", "posterUrl", "poster_url", "thumb",
+				"thumbnail", "large", "medium", "small", "original", "origin", "common", "grid",
 			} {
 				if child, ok := typed[key]; ok {
 					collect(child, depth+1)
