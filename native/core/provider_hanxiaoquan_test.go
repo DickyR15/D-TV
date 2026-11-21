@@ -60,3 +60,37 @@ func TestHanxiaoquanCardAndDetailKeepPosterBackups(t *testing.T) {
 		t.Fatalf("configured host was ignored for relative poster URLs: %#v", covers)
 	}
 }
+
+
+func TestHanxiaoquanWrapperBackgroundAndSrcsetPostersAreRetained(t *testing.T) {
+	fragment := `<div class="poster" style="background-image:url('/poster/background.webp')"><img data-srcset="/poster/small.jpg 320w, /poster/large.jpg 1200w" src="/loading.gif"></div>`
+	got := hanxiaoquanImageCandidates(fragment, "https://mirror.example")
+	want := []string{
+		"https://mirror.example/loading.gif",
+		"https://mirror.example/poster/small.jpg",
+		"https://mirror.example/poster/large.jpg",
+		"https://mirror.example/poster/background.webp",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("wrapper poster candidates = %#v, want %#v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("candidate %d = %q, want %q", index, got[index], want[index])
+		}
+	}
+}
+
+func TestHanxiaoquanSelectedCategoryIsPreservedForPosterMatching(t *testing.T) {
+	body := `<a href="/hanxiaoquan/123.html" title="韓國動畫測試" class="module-item-pic"><img data-src="/poster.webp"></a>`
+	items := parseHanxiaoquanCardsWithCategory(body, "4", "https://mirror.example")
+	if len(items) != 1 || items[0].CategoryName != "動漫" {
+		t.Fatalf("anime category was not preserved: %#v", items)
+	}
+	if got := hanxiaoquanCategoryName("2"); got != "電影" {
+		t.Fatalf("movie category = %q, want 電影", got)
+	}
+	if got := hanxiaoquanCategoryName("3"); got != "綜藝" {
+		t.Fatalf("variety category = %q, want 綜藝", got)
+	}
+}
