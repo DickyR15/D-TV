@@ -20,6 +20,24 @@ func TestChaoliuListAndSafeIdentity(t *testing.T) {
 	if len(items)!=1||items[0].Source!=sourceChaoliu||items[0].SourceID!="chinese_content/19/sample-title"||items[0].Title!="測試作品"||items[0].Cover!="https://mjv011.com/images/test.jpg"||items[0].ChannelName!="chaoliu"||items[0].CategoryName!="chaoliu"{t.Fatalf("潮流 AV 卡片解析失敗：%+v",items)}
 	if !validChaoliuID("chinese_content/19/sample-title")||validChaoliuID("../other/content")||validChaoliuID("https://evil.example/x"){t.Fatal("潮流 AV 識別碼驗證錯誤")}
 }
+func TestChaoliuListAcceptsReorderedAttributesAndArticleCards(t *testing.T) {
+	body := `<!doctype html><html><body>
+		<article data-layout="new" class="entry post type-post">
+			<h2><a href="/zh/uncensored_content/22/layout-updated.html">新版卡片標題</a></h2>
+			<img alt="新版卡片" src="/placeholder.jpg" data-src="/images/updated-poster.jpg">
+		</article>
+	</body></html>`
+	items := parseChaoliuList(body, "https://mjv011.com/zh/uncensored_list/all/1.html")
+	if len(items) != 1 {
+		t.Fatalf("updated chaoliu card markup parsed %d items, want 1", len(items))
+	}
+	if items[0].SourceID != "uncensored_content/22/layout-updated" ||
+		items[0].Title != "新版卡片標題" ||
+		items[0].Cover != "https://mjv011.com/images/updated-poster.jpg" {
+		t.Fatalf("updated chaoliu card parsed incorrectly: %#v", items[0])
+	}
+}
+
 func TestChaoliuHostRoleSeparation(t *testing.T) {
 	for _,host:=range []string{"mjv011.com","www.mjv001.com","cdn.mjv015.com"}{if !isChaoliuSiteHost(host){t.Fatalf("主站網域未辨識：%s",host)}}
 	for _,host:=range []string{"mavrtracktor.com","imgstream1.com","video.streamfastpro.com"}{if !isChaoliuHost(host)||isChaoliuSiteHost(host){t.Fatalf("播放器/CDN 網域角色錯誤：%s",host)}}
