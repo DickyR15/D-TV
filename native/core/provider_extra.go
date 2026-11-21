@@ -333,6 +333,30 @@ func extraAdult91PornaDetailPageError(id, body, page string) error {
 }
 
 
+func extraAdultCardCoverCandidates(source, chunk, base, primary string) []string {
+	candidates := adultImageCandidates(chunk, base, source)
+	if address := adultSafeImageURL(base, primary); address != "" {
+		candidates = append(candidates, address)
+	}
+	return nativeUniqueCoverAddresses(candidates...)
+}
+
+func extraAdultDetailCoverCandidates(body, base, source string) []string {
+	var candidates []string
+	for _, key := range []string{"og:image", "twitter:image"} {
+		if raw := adultMetaValue(body, key); raw != "" {
+			if address := adultSafeImageURL(base, raw); address != "" {
+				candidates = append(candidates, address)
+			}
+		}
+	}
+	if address := adultVideoPoster(body, base); address != "" {
+		candidates = append(candidates, address)
+	}
+	candidates = append(candidates, adultImageCandidates(body, base, source)...)
+	return nativeUniqueCoverAddresses(candidates...)
+}
+
 func extraAdultParseCard(source,chunk,base string)(Drama,bool){
 	var id,title,cover,remark string
 	switch source{
@@ -384,8 +408,12 @@ func extraAdultParseCard(source,chunk,base string)(Drama,bool){
 			remark = m[1]
 		}
 	}
-	if !extraAdultValidID(source,id){return Drama{},false};title=adultClean(title);if title==""{title=id};cover=adultSafeImageURL(base,cover)
-	return Drama{ID:providerDramaID(source,id),Source:source,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,ChannelName:extraAdultSourceName(source),CategoryName:extraAdultSourceName(source),Remark:truncate(remark,64),TotalEpisode:1,EpisodeCount:1},true
+	if !extraAdultValidID(source,id){return Drama{},false}
+	title=adultClean(title);if title==""{title=id}
+	coverCandidates:=extraAdultCardCoverCandidates(source,chunk,base,cover)
+	cover:=""
+	if len(coverCandidates)>0{cover=coverCandidates[0]}
+	return Drama{ID:providerDramaID(source,id),Source:source,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,CoverCandidates:append([]string(nil),coverCandidates[1:]...),ChannelName:extraAdultSourceName(source),CategoryName:extraAdultSourceName(source),Remark:truncate(remark,64),TotalEpisode:1,EpisodeCount:1},true
 }
 func (d *Downloader) fetchExtraAdultCatalog(ctx context.Context, source string, page int, category, query string) ([]Drama, bool, error) {
 	source = canonicalProviderSource(source)
@@ -454,8 +482,10 @@ func (d *Downloader) fetchExtraAdultDetail(ctx context.Context,source,id string)
 		if desc!="" { desc += "\n\n" }
 		desc += note
 	}
-	cover:="";for _,k:=range []string{"og:image","twitter:image"}{if v:=adultSafeImageURL(base,adultMetaValue(body,k));v!=""{cover=v;break}};if cover==""{images:=adultImageCandidates(body,base,source);if len(images)>0{cover=images[0]}}
-	drama:=Drama{ID:providerDramaID(source,id),Source:source,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Desc:truncate(desc,12000),Intro:truncate(desc,12000),Cover:cover,CoverURL:cover,ChannelName:extraAdultSourceName(source),CategoryName:extraAdultSourceName(source),TotalEpisode:1,EpisodeCount:1}
+	coverCandidates:=extraAdultDetailCoverCandidates(body,base,source)
+	cover:=""
+	if len(coverCandidates)>0{cover=coverCandidates[0]}
+	drama:=Drama{ID:providerDramaID(source,id),Source:source,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Desc:truncate(desc,12000),Intro:truncate(desc,12000),Cover:cover,CoverURL:cover,CoverCandidates:append([]string(nil),coverCandidates[1:]...),ChannelName:extraAdultSourceName(source),CategoryName:extraAdultSourceName(source),TotalEpisode:1,EpisodeCount:1}
 	ch:=Chapter{ID:providerChapterID(source,id,final),Source:source,Title:"正片",PageURL:final,Referer:final,VideoURL:"adult-page://"+final,CurrentEpisode:json.RawMessage("1")};return drama,[]Chapter{ch},nil
 }
 func extraAdultFrames(page, body, source string) []string {
