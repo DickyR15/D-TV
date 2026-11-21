@@ -80,7 +80,8 @@ func ikanbotImageCandidates(node *htmlnet.Node, pageURL string) []string {
 	var result []string
 	add := func(raw string) {
 		raw = strings.TrimSpace(html.UnescapeString(raw))
-		if raw == "" || strings.HasPrefix(strings.ToLower(raw), "data:") ||
+		if raw == "" || providerCoverLooksLikePlaceholder(raw) ||
+			strings.HasPrefix(strings.ToLower(raw), "data:") ||
 			strings.HasPrefix(strings.ToLower(raw), "blob:") {
 			return
 		}
@@ -101,7 +102,6 @@ func ikanbotImageCandidates(node *htmlnet.Node, pageURL string) []string {
 	for _, attribute := range []string{
 		"data-original", "data-original-src", "data-src", "data-lazy-src",
 		"data-lazyload", "data-image", "data-url", "data-bg", "data-background",
-		"src",
 	} {
 		for _, candidate := range nodes {
 			add(providerHTMLAttr(candidate, attribute))
@@ -122,6 +122,13 @@ func ikanbotImageCandidates(node *htmlnet.Node, pageURL string) []string {
 			for _, address := range providerCSSImageAddresses(style, pageURL) {
 				add(address)
 			}
+		}
+	}
+	// Standard src is deliberately last; CMS cards often put a spinner there
+	// while the real art is available in data-srcset or a CSS background.
+	for _, candidate := range nodes {
+		if candidate.Data == "img" || candidate.Data == "source" || candidate.Data == "video" {
+			add(providerHTMLAttr(candidate, "src"))
 		}
 	}
 	return result
