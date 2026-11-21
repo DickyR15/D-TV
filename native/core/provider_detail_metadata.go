@@ -60,12 +60,19 @@ func parseHuangguoSortDetail(body, pageURL string, patch Drama) (Drama, error) {
 			)
 			posterAddresses = nativeUniqueCoverAddresses(posterAddresses...)
 			if len(posterAddresses) > 0 {
-				previousCover := patch.Cover
-				patch.Cover, patch.CoverURL = posterAddresses[0], posterAddresses[0]
+				// Cover is intentionally an any value because provider APIs may
+				// return a URL string, a nested image object, or a list. Resolve
+				// the existing value before replacing it so every valid prior
+				// poster remains a string fallback candidate.
+				previousCovers := providerCoverAddresses(patch.Cover, pageURL)
+				primaryCover := posterAddresses[0]
+				patch.Cover, patch.CoverURL = primaryCover, primaryCover
 				candidates := nativeCoverBackupAddresses(posterAddresses)
 				candidates = append(candidates, patch.CoverCandidates...)
-				if previousCover != "" && previousCover != patch.Cover {
-					candidates = append(candidates, previousCover)
+				for _, previousCover := range previousCovers {
+					if previousCover != "" && previousCover != primaryCover {
+						candidates = append(candidates, previousCover)
+					}
 				}
 				patch.CoverCandidates = nativeUniqueCoverAddresses(candidates...)
 			}
