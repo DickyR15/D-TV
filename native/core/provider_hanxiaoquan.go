@@ -94,21 +94,90 @@ func hanxiaoquanClean(text string) string {
 	return strings.Join(strings.Fields(text), " ")
 }
 
-func hanxiaoquanFixURL(raw string) string {
-	raw = strings.TrimSpace(raw)
+func hanxiaoquanFixURL(raw string, baseURLs ...string) string {
+	raw = html.UnescapeString(strings.TrimSpace(raw))
 	if raw == "" {
 		return ""
 	}
-	if strings.HasPrefix(raw, "//") {
-		raw = "https:" + raw
-	} else if strings.HasPrefix(raw, "/") {
-		raw = hanxiaoquanSiteBaseURL + raw
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil || !validNativeCoverURL(parsed) {
+	base := strings.TrimRight(firstNonEmpty(append(baseURLs, hanxiaoquanSiteBaseURL)...), "/") + "/"
+	baseURL, err := url.Parse(base)
+	if err != nil {
 		return ""
 	}
-	return parsed.String()
+	reference, err := url.Parse(raw)
+	if err != nil || reference.User != nil {
+		return ""
+	}
+	resolved := baseURL.ResolveReference(reference)
+	if resolved.User != nil || !validNativeCoverURL(resolved) {
+		return ""
+	}
+	return resolved.String()
+}
+
+var (
+	hanxiaoquanImageTag = regexp.MustCompile(`(?is)<img\\b[^>]*>`)
+	hanxiaoquanStyleImage = regexp.MustCompile(`(?i)url\\(\\s*['"]?([^'")]+)`)
+	hanxiaoquanVideoCoverBlock = regexp.MustCompile(`(?is)<div\\b[^>]*class=['"](?:[^'"]*\\s)?video-cover(?:\\s[^'"]*)?['"][^>]*>([\\s\\S]*?)</div>`)
+)
+
+func hanxiaoquanImageCandidates(fragment string, baseURLs ...string) []string {
+	var candidates []string
+	for _, tag := range hanxiaoquanImageTag.FindAllString(fragment, -1) {
+		for _, attribute := range []string{
+			"data-original", "data-original-src", "data-src", "data-lazy-src",
+			"data-lazyload", "data-url", "data-echo", "src",
+		} {
+			if raw := extractAttr(tag, attribute); raw != "" {
+				candidates = append(candidates, hanxiaoquanFixURL(raw, baseURLs...))
+			}
+		}
+		for _, attribute := range []string{"data-srcset", "data-lazy-srcset", "srcset"} {
+			if raw := extractAttr(tag, attribute); raw != "" {
+				for _, entry := range strings.Split(raw, ",") {
+					if fields := strings.Fields(strings.TrimSpace(entry)); len(fields) > 0 {
+						candidates = append(candidates, hanxiaoquanFixURL(fields[0], baseURLs...))
+					}
+				}
+			}
+		}
+		if style := extractAttr(tag, "style"); style != "" {
+			for _, match := range hanxiaoquanStyleImage.FindAllStringSubmatch(style, -1) {
+				if len(match) > 1 {
+					candidates = append(candidates, hanxiaoquanFixURL(match[1], baseURLs...))
+				}
+			}
+		}
+	}
+	return nativeUniqueCoverAddresses(candidates...)
+}
+
+func hanxiaoquanMetaValue(body, wanted string) string {
+	metaTags := regexp.MustCompile(`(?is)<meta\\b[^>]*>`)
+	for _, tag := range metaTags.FindAllString(body, -1) {
+		name := firstNonEmpty(extractAttr(tag, "property"), extractAttr(tag, "name"))
+		if strings.EqualFold(name, wanted) {
+			return extractAttr(tag, "content")
+		}
+	}
+	return ""
+}
+
+func hanxiaoquanDetailCoverCandidates(body, base string) []string {
+	var candidates []string
+	if raw := hanxiaoquanMetaValue(body, "og:image"); raw != "" {
+		candidates = append(candidates, hanxiaoquanFixURL(raw, base))
+	}
+	if raw := hanxiaoquanMetaValue(body, "twitter:image"); raw != "" {
+		candidates = append(candidates, hanxiaoquanFixURL(raw, base))
+	}
+	if match := hanxiaoquanVideoCoverBlock.FindStringSubmatch(body); len(match) > 1 {
+		candidates = append(candidates, hanxiaoquanImageCandidates(match[1], base)...)
+	}
+	if len(candidates) == 0 {
+		candidates = append(candidates, hanxiaoquanImageCandidates(body, base)...)
+	}
+	return nativeUniqueCoverAddresses(candidates...)
 }
 
 func (d *Downloader) fetchHanxiaoquanCategories() []nativeCategory {
@@ -126,10 +195,11 @@ func (d *Downloader) hanxiaoquanGet(ctx context.Context, path string) (string, e
 }
 
 // parseHanxiaoquanCards 解析 module-item 卡片列表。
-func parseHanxiaoquanCards(body string) []Drama {
+func parseHanxiaoquanCards(body string, baseURLs ...string) []Drama {
 	items := make([]Drama, 0, hanxiaoquanPageSize)
 	seen := map[string]bool{}
-	for _, match := range reHanxiaoquanCardPic.FindAllStringSubmatchIndex(body, -1) {
+	matches := reHanxiaoquanCardPic.FindAllStringSubmatchIndex(body, -1)
+	for matchIndex, match := range matches {
 		if len(match) < 6 {
 			continue
 		}
@@ -138,13 +208,18 @@ func parseHanxiaoquanCards(body string) []Drama {
 		if !hanxiaoquanNumericID(id) || seen[id] {
 			continue
 		}
-		chunk := body[match[1]:]
-		if end := len(chunk); end > 600 {
-			chunk = chunk[:600]
+		chunkEnd := len(body)
+		if matchIndex+1 < len(matches) && matches[matchIndex+1][0] < chunkEnd {
+			chunkEnd = matches[matchIndex+1][0]
 		}
+		if maxEnd := match[1] + 2400; chunkEnd > maxEnd {
+			chunkEnd = maxEnd
+		}
+		chunk := body[match[1]:chunkEnd]
+		coverCandidates := hanxiaoquanImageCandidates(chunk, baseURLs...)
 		cover := ""
-		if coverMatch := reHanxiaoquanCardImg.FindStringSubmatch(chunk); len(coverMatch) > 1 {
-			cover = hanxiaoquanFixURL(coverMatch[1])
+		if len(coverCandidates) > 0 {
+			cover = coverCandidates[0]
 		}
 		note := ""
 		if noteMatch := reHanxiaoquanCardNote.FindStringSubmatch(chunk); len(noteMatch) > 1 {
@@ -162,8 +237,8 @@ func parseHanxiaoquanCards(body string) []Drama {
 		items = append(items, Drama{
 			ID: providerDramaID(sourceHanxiaoquan, id), Source: sourceHanxiaoquan, SourceID: id,
 			Title: truncate(title, 512), Name: truncate(title, 512),
-			Cover: cover, CoverURL: cover, ChannelName: "韩小圈",
-			CategoryName: "韩剧", Remark: truncate(note, 64),
+			Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...),
+			ChannelName: "韩小圈", CategoryName: "韓劇", Remark: truncate(note, 64),
 		})
 		if len(items) > 500 {
 			break
@@ -348,14 +423,11 @@ func (d *Downloader) fetchHanxiaoquanDetail(ctx context.Context, sourceID string
 	if name == "" {
 		return Drama{}, nil, errors.New("韓小圈詳情缺少影片名稱")
 	}
+	base := d.providerBaseURL(sourceHanxiaoquan)
+	coverCandidates := hanxiaoquanDetailCoverCandidates(body, base)
 	cover := ""
-	if match := reHanxiaoquanOgImage.FindStringSubmatch(body); len(match) > 1 {
-		cover = hanxiaoquanFixURL(match[1])
-	}
-	if cover == "" {
-		if match := reHanxiaoquanCoverSrc.FindStringSubmatch(body); len(match) > 1 {
-			cover = hanxiaoquanFixURL(match[1])
-		}
+	if len(coverCandidates) > 0 {
+		cover = coverCandidates[0]
 	}
 	fields := hanxiaoquanInfoFields(body)
 	description := fields["剧情"]
@@ -369,7 +441,8 @@ func (d *Downloader) fetchHanxiaoquanDetail(ctx context.Context, sourceID string
 		ID: providerDramaID(sourceHanxiaoquan, sourceID), Source: sourceHanxiaoquan, SourceID: sourceID,
 		Title: truncate(name, 512), Name: truncate(name, 512),
 		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
-		Cover: cover, CoverURL: cover, ChannelName: "韩小圈", CategoryName: "韩剧",
+		Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...),
+		ChannelName: "韓小圈", CategoryName: "韓劇",
 		Remark:     truncate(firstNonEmpty(fields["更新"], fields["状态"]), 64),
 		OnlineDate: truncate(fields["更新"], 32),
 	}
