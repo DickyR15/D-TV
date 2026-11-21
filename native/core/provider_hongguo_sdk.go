@@ -24,7 +24,10 @@ import (
 const (
 	hongguoSDKAPIOrigin      = "https://api5-normal-sinfonlinea.fqnovel.com"
 	hongguoSDKRegisterOrigin = "https://log5-applog-lq.fqnovel.com"
+	hongguoSDKRegisterPause  = 10 * time.Minute
 )
+
+var errHongguoSDKRegistrationCooling = errors.New("紅果 SDK 設備註冊冷卻中")
 
 func hongguoHTTPRegistrationHosts() []string {
 	hosts := append([]string(nil), hongguoDeviceRegisterHosts()...)
@@ -38,12 +41,48 @@ func hongguoHTTPRegistrationHosts() []string {
 }
 
 type hongguoSDKClientSession struct {
-	client *openhongguo.Client
-	err    error
+	client              *openhongguo.Client
+	err                 error
+	mu                  sync.Mutex
+	registerPausedUntil time.Time
+	registerPauseStatus int
+}
+
+func (session *hongguoSDKClientSession) recordRegistrationStatus(status int) {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if status >= http.StatusOK && status < http.StatusMultipleChoices {
+		session.registerPausedUntil = time.Time{}
+		session.registerPauseStatus = 0
+		return
+	}
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound,
+		http.StatusTooManyRequests, 444:
+		session.registerPausedUntil = time.Now().Add(hongguoSDKRegisterPause)
+		session.registerPauseStatus = status
+	}
+}
+
+func (session *hongguoSDKClientSession) registrationCooldownError() error {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if session.registerPausedUntil.IsZero() || !time.Now().Before(session.registerPausedUntil) {
+		session.registerPausedUntil = time.Time{}
+		session.registerPauseStatus = 0
+		return nil
+	}
+	return fmt.Errorf("%w：HTTP %d，暫停重試 10 分鐘",
+		errHongguoSDKRegistrationCooling, session.registerPauseStatus)
+}
+
+func (downloader *Downloader) hongguoSDKRegistrationCooldownError() error {
+	return downloader.hongguoSDKSession.registrationCooldownError()
 }
 
 type hongguoSDKTransport struct {
-	client *http.Client
+	client               *http.Client
+	onRegistrationStatus func(int)
 }
 
 func (t hongguoSDKTransport) Do(ctx context.Context, input *openhongguo.Request) (*openhongguo.Response, error) {
@@ -69,6 +108,11 @@ func (t hongguoSDKTransport) Do(ctx context.Context, input *openhongguo.Request)
 		return nil, err
 	}
 	defer response.Body.Close()
+	if input.URL != "" && t.onRegistrationStatus != nil &&
+		request.URL.Hostname() == "log5-applog-lq.fqnovel.com" &&
+		request.URL.Path == hongguoDeviceRegisterPath {
+		t.onRegistrationStatus(response.StatusCode)
+	}
 
 	const maxResponseBytes = 8 << 20
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
@@ -269,7 +313,10 @@ func (downloader *Downloader) hongguoSDKClient() (*openhongguo.Client, error) {
 		// default device together; do not mix it with D-TV's 7.4.3.32 profile.
 		device := model.DefaultDevice
 		client, err := openhongguo.NewClient(openhongguo.Options{
-			Transport:     hongguoSDKTransport{client: downloader.client},
+			Transport: hongguoSDKTransport{
+				client: downloader.client,
+				onRegistrationStatus: downloader.hongguoSDKSession.recordRegistrationStatus,
+			},
 			ProfileStore:  profiles,
 			APIOrigin:     hongguoSDKAPIOrigin,
 			RegisterOrigin: hongguoSDKRegisterOrigin,
@@ -390,6 +437,9 @@ func (downloader *Downloader) fetchHongguoSDKSeasons(ctx context.Context, series
 	if err != nil {
 		return nil, fmt.Errorf("紅果系列季別 SDK 初始化失敗：%w", err)
 	}
+	if err := downloader.hongguoSDKRegistrationCooldownError(); err != nil {
+		return nil, err
+	}
 	album, err := client.Seasons(ctx, seriesID)
 	if err != nil {
 		return nil, fmt.Errorf("紅果系列季別 API 失敗：%w", err)
@@ -407,11 +457,13 @@ func hongguoSDKPlaybackRegistrationRejected(err error) bool {
 		return true
 	}
 	var apiErr *openhongguo.APIError
-	return errors.As(err, &apiErr) &&
-		(apiErr.HTTPStatus == http.StatusUnauthorized ||
-			apiErr.HTTPStatus == http.StatusForbidden ||
-			apiErr.HTTPStatus == http.StatusTooManyRequests ||
-			apiErr.HTTPStatus == 444)
+	return errors.Is(err, errHongguoSDKRegistrationCooling) ||
+		(errors.As(err, &apiErr) &&
+			(apiErr.HTTPStatus == http.StatusUnauthorized ||
+				apiErr.HTTPStatus == http.StatusForbidden ||
+				apiErr.HTTPStatus == http.StatusNotFound ||
+				apiErr.HTTPStatus == http.StatusTooManyRequests ||
+				apiErr.HTTPStatus == 444))
 }
 
 func hongguoSDKCodecRank(codec string) int {
@@ -502,6 +554,9 @@ func (downloader *Downloader) resolveHongguoSDKMedia(ctx context.Context, videoI
 	client, err := downloader.hongguoSDKClient()
 	if err != nil {
 		return providerMedia{}, fmt.Errorf("紅果播放 SDK 初始化失敗：%w", err)
+	}
+	if err := downloader.hongguoSDKRegistrationCooldownError(); err != nil {
+		return providerMedia{}, err
 	}
 	playback, err := client.ResolvePlayback(ctx, videoID, openhongguo.PlaybackOptions{})
 	if err != nil && !errors.Is(err, openhongguo.ErrDRMProtected) {
