@@ -195,7 +195,11 @@ func ikanbotParseCards(root *htmlnet.Node,pageURL,category string)[]Drama{
 			}
 		}
 		if title==""{continue}
-		coverCandidates := ikanbotImageCandidates(firstHTMLNode(posterRoot, image), pageURL)
+		coverRoot := posterRoot
+		if coverRoot == nil {
+			coverRoot = image
+		}
+		coverCandidates := ikanbotImageCandidates(coverRoot, pageURL)
 		cover := ""
 		if len(coverCandidates) > 0 {
 			cover = coverCandidates[0]
