@@ -10,15 +10,15 @@ import (
 )
 
 func TestChaoliuCategoriesAndPaths(t *testing.T) {
-	if !validChaoliuCategory("") || !validChaoliuCategory("chinese") || validChaoliuCategory("../admin") { t.Fatal("潮流 AV 分類驗證錯誤") }
+	if !validChaoliuCategory("") || !validChaoliuCategory("chinese") || validChaoliuCategory("../admin") { t.Fatal("chaoliu 分類驗證錯誤") }
 	path,err:=chaoliuCategoryPath(3,"uncensored");if err!=nil||path!="/zh/uncensored_list/all/3.html"{t.Fatalf("分類路徑=%q err=%v",path,err)}
 	search,err:=chaoliuSearchPath(2,"女優/測試");if err!=nil||!strings.Contains(search,"/2.html")||strings.Contains(search,"女優/測試"){t.Fatalf("搜尋路徑=%q err=%v",search,err)}
 }
 func TestChaoliuListAndSafeIdentity(t *testing.T) {
 	body:=`<div class="post"><h3><a href="/zh/chinese_content/19/sample-title.html">測試作品</a></h3><img data-original="/images/test.jpg"></div>`
 	items:=parseChaoliuList(body,"https://mjv011.com/zh/chinese_list/all/1.html")
-	if len(items)!=1||items[0].Source!=sourceChaoliu||items[0].SourceID!="chinese_content/19/sample-title"||items[0].Title!="測試作品"||items[0].Cover!="https://mjv011.com/images/test.jpg"||items[0].ChannelName!="chaoliu"||items[0].CategoryName!="chaoliu"{t.Fatalf("潮流 AV 卡片解析失敗：%+v",items)}
-	if !validChaoliuID("chinese_content/19/sample-title")||validChaoliuID("../other/content")||validChaoliuID("https://evil.example/x"){t.Fatal("潮流 AV 識別碼驗證錯誤")}
+	if len(items)!=1||items[0].Source!=sourceChaoliu||items[0].SourceID!="chinese_content/19/sample-title"||items[0].Title!="測試作品"||items[0].Cover!="https://mjv011.com/images/test.jpg"||items[0].ChannelName!="chaoliu"||items[0].CategoryName!="chaoliu"{t.Fatalf("chaoliu 卡片解析失敗：%+v",items)}
+	if !validChaoliuID("chinese_content/19/sample-title")||validChaoliuID("../other/content")||validChaoliuID("https://evil.example/x"){t.Fatal("chaoliu 識別碼驗證錯誤")}
 }
 func TestChaoliuListAcceptsReorderedAttributesAndArticleCards(t *testing.T) {
 	body := `<!doctype html><html><body>
@@ -63,8 +63,8 @@ func TestGetHuangguoChaptersDispatchesGuipianAndChaoliu(t *testing.T) {
 		t.Fatalf("鬼片健康檢查未進入專屬分集解析：%v", err)
 	}
 	_, _, err = d.GetHuangguoChapters(context.Background(), sourceChaoliu, "invalid-id")
-	if err == nil || strings.Contains(err.Error(), "unsupported provider source") || !strings.Contains(err.Error(), "潮流 AV 作品識別碼無效") {
-		t.Fatalf("潮流 AV 健康檢查未進入專屬分集解析：%v", err)
+	if err == nil || strings.Contains(err.Error(), "unsupported provider source") || !strings.Contains(err.Error(), "chaoliu 作品識別碼無效") {
+		t.Fatalf("chaoliu 健康檢查未進入專屬分集解析：%v", err)
 	}
 }
 
