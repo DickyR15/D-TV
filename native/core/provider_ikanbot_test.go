@@ -740,3 +740,55 @@ func TestIkanbotAutomaticRouteSelectionPrefersHighestQuality(t *testing.T) {
 	}
 }
 
+
+
+func TestIkanbotCardPosterCanComeFromSiblingWrapperBackground(t *testing.T) {
+	body := `<div class="module-item">
+		<a href="/play/1023999" title="背景海報動漫">背景海報動漫</a>
+		<div class="poster" style="background-image:url('/posters/wrapper.webp')">
+			<img data-srcset="/posters/small.jpg 320w, /posters/large.jpg 1200w" src="/loading.gif">
+		</div>
+	</div>`
+	doc, err := htmlnet.Parse(strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := ikanbotParseCards(doc, "https://v.ikanbot.com/hot/index-tv-日本动画.html", "tv-日本动画")
+	if len(items) != 1 {
+		t.Fatalf("parsed cards = %d, want 1: %#v", len(items), items)
+	}
+	if items[0].CategoryName != "動漫" {
+		t.Fatalf("anime category = %q, want 動漫", items[0].CategoryName)
+	}
+	want := []string{
+		"https://v.ikanbot.com/loading.gif",
+		"https://v.ikanbot.com/posters/small.jpg",
+		"https://v.ikanbot.com/posters/large.jpg",
+		"https://v.ikanbot.com/posters/wrapper.webp",
+	}
+	if len(items[0].CoverCandidates)+1 != len(want) || items[0].Cover != want[0] {
+		t.Fatalf("wrapper poster candidates = %#v / %q", items[0].CoverCandidates, items[0].Cover)
+	}
+	got := append([]string{items[0].Cover}, items[0].CoverCandidates...)
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("candidate %d = %q, want %q", index, got[index], want[index])
+		}
+	}
+}
+
+func TestIkanbotCategoryKindPreservesWorkType(t *testing.T) {
+	cases := map[string]string{
+		"movie-热门": "電影",
+		"tv-日本动画": "動漫",
+		"tv-综艺": "綜藝",
+		"tv-纪录片": "紀錄片",
+		"tv-韩剧": "韓劇",
+		"tv-日剧": "日劇",
+	}
+	for category, want := range cases {
+		if got := ikanbotCategoryKind(category); got != want {
+			t.Errorf("category %q = %q, want %q", category, got, want)
+		}
+	}
+}
