@@ -3,10 +3,13 @@ package core
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -145,13 +148,120 @@ func (s *hongguoSDKMemoryProfileStore) Reset(ctx context.Context) error {
 	return nil
 }
 
+const hongguoSDKProfileFileName = "hongguo-sdk-profile.json"
+
+// hongguoSDKFileProfileStore keeps only the anonymous guest profile in D-TV's
+// private data directory. It never stores account credentials or writes profile
+// contents to diagnostics.
+type hongguoSDKFileProfileStore struct {
+	mu   sync.Mutex
+	path string
+}
+
+func newHongguoSDKProfileStore(directory string) openhongguo.ProfileStore {
+	if strings.TrimSpace(directory) == "" {
+		return &hongguoSDKMemoryProfileStore{}
+	}
+	return &hongguoSDKFileProfileStore{
+		path: filepath.Join(directory, hongguoSDKProfileFileName),
+	}
+}
+
+func (s *hongguoSDKFileProfileStore) Load(ctx context.Context) (*openhongguo.DeviceProfile, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := os.ReadFile(s.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, openhongguo.ErrProfileNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("讀取紅果匿名設備檔案失敗：%w", err)
+	}
+	var profile openhongguo.DeviceProfile
+	if err := json.Unmarshal(data, &profile); err != nil {
+		return nil, fmt.Errorf("紅果匿名設備檔案格式無效：%w", err)
+	}
+	return cloneHongguoSDKProfile(&profile), nil
+}
+
+func (s *hongguoSDKFileProfileStore) Save(ctx context.Context, profile *openhongguo.DeviceProfile) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if profile == nil {
+		return errors.New("紅果 SDK device profile 不可為空")
+	}
+	data, err := json.Marshal(profile)
+	if err != nil {
+		return fmt.Errorf("序列化紅果匿名設備檔案失敗：%w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	directory := filepath.Dir(s.path)
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		return fmt.Errorf("建立紅果匿名設備目錄失敗：%w", err)
+	}
+	file, err := os.CreateTemp(directory, ".hongguo-sdk-profile-*")
+	if err != nil {
+		return fmt.Errorf("建立紅果匿名設備暫存檔失敗：%w", err)
+	}
+	tempPath := file.Name()
+	defer os.Remove(tempPath)
+	if err := file.Chmod(0600); err != nil {
+		file.Close()
+		return fmt.Errorf("設定紅果匿名設備檔案權限失敗：%w", err)
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return fmt.Errorf("寫入紅果匿名設備檔案失敗：%w", err)
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return fmt.Errorf("同步紅果匿名設備檔案失敗：%w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("關閉紅果匿名設備暫存檔失敗：%w", err)
+	}
+	if err := os.Rename(tempPath, s.path); err != nil {
+		// Windows may not replace an existing destination with Rename.
+		if removeErr := os.Remove(s.path); removeErr == nil || errors.Is(removeErr, os.ErrNotExist) {
+			if retryErr := os.Rename(tempPath, s.path); retryErr == nil {
+				return nil
+			} else {
+				return fmt.Errorf("替換紅果匿名設備檔案失敗：%w", retryErr)
+			}
+		}
+		return fmt.Errorf("保存紅果匿名設備檔案失敗：%w", err)
+	}
+	return nil
+}
+
+func (s *hongguoSDKFileProfileStore) Reset(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	err := os.Remove(s.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("清除紅果匿名設備檔案失敗：%w", err)
+	}
+	return nil
+}
+
 func (downloader *Downloader) hongguoSDKClient() (*openhongguo.Client, error) {
 	downloader.hongguoSDKOnce.Do(func() {
 		if downloader.client == nil {
 			downloader.hongguoSDKSession.err = errors.New("紅果 SDK 無法使用：HTTP client 尚未初始化")
 			return
 		}
-		profiles := &hongguoSDKMemoryProfileStore{}
+		profiles := newHongguoSDKProfileStore(downloader.cfg.dataDir)
 		// Keep the SDK's captured 7.3.9.32 app identity and its matching
 		// default device together; do not mix it with D-TV's 7.4.3.32 profile.
 		device := model.DefaultDevice
