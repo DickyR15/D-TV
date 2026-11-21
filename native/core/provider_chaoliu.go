@@ -234,7 +234,17 @@ func (d *Downloader) fetchChaoliuCatalogPage(ctx context.Context,page int,catego
 	if strings.TrimSpace(query)!=""{path,err=chaoliuSearchPath(page,query)}else{path,err=chaoliuCategoryPath(page,category)}
 	if err!=nil{return nil,false,err}
 	base:=d.providerBaseURL(sourceChaoliu);body,final,err:=d.fetchChaoliuText(ctx,strings.TrimRight(base,"/")+path,base+"/")
-	if err!=nil{return nil,false,err};return parseChaoliuList(body,final),chaoliuHasNextPage(body,page),nil
+	if err!=nil{return nil,false,err}
+	items:=parseChaoliuList(body,final)
+	// A successful HTTP response is not proof that the catalogue parser still
+	// matches the page. On the first catalogue page, fail closed when no cards
+	// were parsed so a site redesign or access-denied shell cannot replace a
+	// previously populated cache with an empty catalogue. Empty search results
+	// remain valid and are returned as an empty list.
+	if len(items)==0 && page==1 && strings.TrimSpace(query)=="" {
+		return nil,false,errors.New("潮流 AV 目錄頁已連線，但未解析到作品卡片；已保留既有快取")
+	}
+	return items,chaoliuHasNextPage(body,page),nil
 }
 func chaoliuJSONLD(body string) map[string]any {
 	pattern:=regexp.MustCompile("(?is)<script[^>]*type=['\\x22]application/ld\\+json['\\x22][^>]*>([\\s\\S]*?)</script>")
