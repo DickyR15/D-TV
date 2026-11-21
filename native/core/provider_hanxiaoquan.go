@@ -165,11 +165,12 @@ func hanxiaoquanMetaValue(body, wanted string) string {
 
 func hanxiaoquanDetailCoverCandidates(body, base string) []string {
 	var candidates []string
-	if raw := hanxiaoquanMetaValue(body, "og:image"); raw != "" {
-		candidates = append(candidates, hanxiaoquanFixURL(raw, base))
-	}
-	if raw := hanxiaoquanMetaValue(body, "twitter:image"); raw != "" {
-		candidates = append(candidates, hanxiaoquanFixURL(raw, base))
+	for _, key := range []string{"og:image", "twitter:image"} {
+		if raw := hanxiaoquanMetaValue(body, key); raw != "" {
+			if address := hanxiaoquanFixURL(raw, base); address != "" {
+				candidates = append(candidates, address)
+			}
+		}
 	}
 	if match := hanxiaoquanVideoCoverBlock.FindStringSubmatch(body); len(match) > 1 {
 		candidates = append(candidates, hanxiaoquanImageCandidates(match[1], base)...)
