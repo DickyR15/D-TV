@@ -144,6 +144,20 @@ func TestHongguoSDKProfileStoreClonesAndResetsProfiles(t *testing.T) {
 	}
 }
 
+func TestHongguoHTTPRegistrationHostsIncludeCurrentSDKEndpoint(t *testing.T) {
+	hosts := hongguoHTTPRegistrationHosts()
+	seen := make(map[string]bool, len(hosts))
+	for _, host := range hosts {
+		seen[host] = true
+	}
+	if !seen["log5-applog-lq.fqnovel.com"] {
+		t.Fatalf("current SDK registration host is missing from DoH routing: %v", hosts)
+	}
+	if !seen["log.snssdk.com"] || !seen["applog.snssdk.com"] {
+		t.Fatalf("legacy registration hosts should remain available to the old app path: %v", hosts)
+	}
+}
+
 func TestHongguoSDKTransportForwardsResponseHeadersAndCookies(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Test-Header") != "season-sdk" {
