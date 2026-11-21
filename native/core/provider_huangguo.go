@@ -570,6 +570,66 @@ func providerRefererForURL(candidate, fallback string) string {
 	return previous.String()
 }
 
+var (
+	huangguoImageTagPattern = regexp.MustCompile(`(?is)<img\b[^>]*>`)
+	huangguoVideoTagPattern = regexp.MustCompile(`(?is)<video\b[^>]*>`)
+)
+
+func huangguoPosterCandidates(fragment, pageURL string) []string {
+	var addresses []string
+	add := func(raw string) {
+		addresses = append(addresses, providerCoverAddresses(raw, pageURL)...)
+	}
+	for _, tag := range huangguoImageTagPattern.FindAllString(fragment, -1) {
+		for _, attribute := range []string{
+			"data-original", "data-original-src", "data-lazy-src", "data-src",
+			"data-lazyload", "data-url", "data-image", "data-srcset", "srcset", "src",
+		} {
+			raw := extractAttr(tag, attribute)
+			if raw == "" {
+				continue
+			}
+			if strings.Contains(attribute, "srcset") {
+				for _, entry := range strings.Split(raw, ",") {
+					if fields := strings.Fields(strings.TrimSpace(entry)); len(fields) > 0 {
+						add(fields[0])
+					}
+				}
+			} else {
+				add(raw)
+			}
+		}
+		if style := extractAttr(tag, "style"); style != "" {
+			for _, match := range adultCSSImagePattern.FindAllStringSubmatch(style, -1) {
+				if len(match) > 1 {
+					add(match[1])
+				}
+			}
+		}
+	}
+	for _, tag := range huangguoVideoTagPattern.FindAllString(fragment, -1) {
+		add(firstNonEmpty(extractAttr(tag, "poster"), extractAttr(tag, "data-poster")))
+	}
+	// Some of the AI cards put the lazy image URL on a picture/source element
+	// or directly on the card as a background/data attribute.
+	for _, tag := range huangguoHTMLTag.FindAllString(fragment, -1) {
+		if strings.EqualFold(extractTagName(tag), "img") {
+			continue
+		}
+		for _, attribute := range []string{"data-poster", "data-cover", "data-image", "data-background-image", "data-bg"} {
+			add(extractAttr(tag, attribute))
+		}
+		if style := extractAttr(tag, "style"); style != "" {
+			for _, match := range adultCSSImagePattern.FindAllStringSubmatch(style, -1) {
+				if len(match) > 1 {
+					add(match[1])
+				}
+			}
+		}
+	}
+	return nativeUniqueCoverAddresses(addresses...)
+}
+
 func parseHuangguoAIDramaCards(rawHTML, pageURL, category string) []Drama {
 	positions := map[string]int{}
 	var out []Drama
@@ -596,7 +656,8 @@ func parseHuangguoAIDramaCards(rawHTML, pageURL, category string) []Drama {
 			continue
 		}
 		title := huangguoCardTitle(block, sourceID)
-		cover := resolveProviderURL(pageURL, firstNonEmpty(extractAttr(block, "data-src"), extractAttr(block, "data-original"), extractAttr(block, "src")))
+		coverCandidates := huangguoPosterCandidates(block, pageURL)
+		cover := firstNonEmpty(coverCandidates...)
 		desc := firstNonEmpty(extractByClassText(block, "hg-drama-card__desc"), extractDescription(block))
 		score := firstNonEmpty(extractByClassText(block, "hg-drama-card__score"), firstMatchText(reScoreText, block))
 		episodeBlock := huangguoClassBlock(block, "hg-drama-card__episode")
@@ -613,7 +674,7 @@ func parseHuangguoAIDramaCards(rawHTML, pageURL, category string) []Drama {
 		if title == "" {
 			title = sourceID
 		}
-		dr := Drama{ID: providerDramaID(sourceHuangguoAI, sourceID), Source: sourceHuangguoAI, SourceID: sourceID, Title: title, Name: title, Desc: desc, Intro: desc, Cover: cover, CoverURL: cover, CategoryName: typeName, ChannelName: "huangguoai.com", Remark: remark, Score: score, Views: views, OnlineDate: online, Tags: tags}
+		dr := Drama{ID: providerDramaID(sourceHuangguoAI, sourceID), Source: sourceHuangguoAI, SourceID: sourceID, Title: title, Name: title, Desc: desc, Intro: desc, Cover: cover, CoverURL: cover, CoverCandidates: nativeCoverBackupAddresses(coverCandidates), CategoryName: typeName, ChannelName: "huangguoai.com", Remark: remark, Score: score, Views: views, OnlineDate: online, Tags: tags}
 		if n := episodeIndex(episode, 0); n > 0 {
 			dr.TotalEpisode = n
 			dr.EpisodeCount = n
@@ -630,8 +691,9 @@ func parseHuangguoAIDramaCards(rawHTML, pageURL, category string) []Drama {
 		if title == "" {
 			continue
 		}
-		cover := resolveProviderURL(pageURL, extractAttr(block, "data-src", "data-original", "src"))
-		add(Drama{ID: providerDramaID(sourceHuangguoAI, sourceID), Source: sourceHuangguoAI, SourceID: sourceID, Title: title, Name: title, Cover: cover, CoverURL: cover, CategoryName: category, ChannelName: "huangguoai.com"})
+		coverCandidates := huangguoPosterCandidates(block, pageURL)
+		cover := firstNonEmpty(coverCandidates...)
+		add(Drama{ID: providerDramaID(sourceHuangguoAI, sourceID), Source: sourceHuangguoAI, SourceID: sourceID, Title: title, Name: title, Cover: cover, CoverURL: cover, CoverCandidates: nativeCoverBackupAddresses(coverCandidates), CategoryName: category, ChannelName: "huangguoai.com"})
 	}
 	for _, dr := range parseHuangguoAIJSONLDDramas(rawHTML, category, pageURL) {
 		add(dr)
@@ -764,7 +826,8 @@ func dramaFromAIMap(m map[string]any, pageURL, category string) (Drama, bool) {
 	if huangguoTitleNeedsRepair(title, sourceID) {
 		return Drama{}, false
 	}
-	cover := resolveProviderURL(pageURL, firstNonEmpty(mapString(m, "cover"), mapString(m, "coverUrl"), mapString(m, "cover_url"), mapString(m, "coverImage"), mapString(m, "cover_image"), mapString(m, "image"), mapString(m, "imageUrl"), mapString(m, "thumbnail"), mapString(m, "poster"), mapString(m, "posterUrl")))
+	coverCandidates := providerCoverAddresses(m, pageURL)
+	cover := firstNonEmpty(coverCandidates...)
 	desc := firstNonEmpty(mapString(m, "desc"), mapString(m, "description"), mapString(m, "intro"), mapString(m, "summary"))
 	eps := huangguoMapEpisodes(m)
 	status := ""
@@ -789,7 +852,7 @@ func dramaFromAIMap(m map[string]any, pageURL, category string) (Drama, bool) {
 	views := normalizeViews(firstNonEmpty(mapString(m, "views"), mapString(m, "view_count"), mapString(m, "viewCount"), mapString(m, "view_num"), mapString(m, "viewNum"), mapString(m, "views_text"), mapString(m, "view_count_text"), mapString(m, "play_count"), mapString(m, "playCount"), mapString(m, "play_num"), mapString(m, "playNum"), mapString(m, "play_count_text"), mapString(m, "hits"), mapString(m, "hit_count"), mapString(m, "plays"), mapString(m, "play")))
 	online := providerReleaseDate(firstNonEmpty(mapString(m, "onlineDate"), mapString(m, "online_date"), mapString(m, "online_time"), mapString(m, "onlineTime"), mapString(m, "publish_date"), mapString(m, "publishDate"), mapString(m, "publish_time"), mapString(m, "publishTime"), mapString(m, "release_date"), mapString(m, "releaseDate")))
 	tags := mapStringSlice(m, "tags", "tag", "categories", "category")
-	return Drama{ID: providerDramaID(sourceHuangguoAI, sourceID), Source: sourceHuangguoAI, SourceID: sourceID, Title: title, Name: title, Desc: desc, Intro: desc, Cover: cover, CoverURL: cover, TotalEpisode: eps, EpisodeCount: eps, CategoryName: category, ChannelName: "huangguoai.com", Remark: remark, Score: score, Views: views, OnlineDate: online, Tags: tags, ReleaseStatus: status}, true
+	return Drama{ID: providerDramaID(sourceHuangguoAI, sourceID), Source: sourceHuangguoAI, SourceID: sourceID, Title: title, Name: title, Desc: desc, Intro: desc, Cover: cover, CoverURL: cover, CoverCandidates: nativeCoverBackupAddresses(coverCandidates), TotalEpisode: eps, EpisodeCount: eps, CategoryName: category, ChannelName: "huangguoai.com", Remark: remark, Score: score, Views: views, OnlineDate: online, Tags: tags, ReleaseStatus: status}, true
 }
 
 func parseHuangguoVideoCards(rawHTML, pageURL string) []Drama {
@@ -814,13 +877,14 @@ func parseHuangguoVideoCards(rawHTML, pageURL string) []Drama {
 		}
 		seen[sourceID] = true
 		title := firstNonEmpty(extractClosestAttr(block, 0, len(block), "title", "alt", "aria-label"), cleanText(block))
-		cover := resolveProviderURL(pageURL, extractClosestAttr(block, 0, len(block), "data-src", "data-original", "src"))
+		coverCandidates := huangguoPosterCandidates(block, pageURL)
+		cover := firstNonEmpty(coverCandidates...)
 		category := "video"
 		if strings.HasPrefix(path, "series/") {
 			category = "series"
 		}
 		desc := firstNonEmpty(extractClosestAttr(block, 0, len(block), "data-description", "description"), extractDescription(block))
-		out = append(out, Drama{ID: providerDramaID(sourceHuangguoVideo, sourceID), Source: sourceHuangguoVideo, SourceID: sourceID, Title: title, Name: title, Desc: desc, Intro: desc, Cover: cover, CoverURL: cover, CategoryName: category, ChannelName: "huangguo.video", Remark: firstNonEmpty(extractByClassText(block, "bg-black/55"), extractByClassText(block, "text-gold-dim"))})
+		out = append(out, Drama{ID: providerDramaID(sourceHuangguoVideo, sourceID), Source: sourceHuangguoVideo, SourceID: sourceID, Title: title, Name: title, Desc: desc, Intro: desc, Cover: cover, CoverURL: cover, CoverCandidates: nativeCoverBackupAddresses(coverCandidates), CategoryName: category, ChannelName: "huangguo.video", Remark: firstNonEmpty(extractByClassText(block, "bg-black/55"), extractByClassText(block, "text-gold-dim"))})
 	}
 	return out
 }
