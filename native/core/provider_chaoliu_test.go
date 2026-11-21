@@ -38,6 +38,45 @@ func TestChaoliuListAcceptsReorderedAttributesAndArticleCards(t *testing.T) {
 	}
 }
 
+func TestChaoliuPosterCandidatesIncludeLazySrcsetAndJSONLDImages(t *testing.T) {
+	fragment := `<img src="/loading.gif" data-original="/poster/original.webp"
+		data-src="/poster/lazy.jpg"
+		data-srcset="/poster/small.jpg 320w, /poster/large.jpg 1200w"
+		style="background-image:url('/poster/background.jpg')">`
+	got := chaoliuImageCandidates(fragment, "https://mjv011.com/zh/detail.html")
+	for _, want := range []string{
+		"https://mjv011.com/poster/original.webp",
+		"https://mjv011.com/poster/lazy.jpg",
+		"https://mjv011.com/poster/small.jpg",
+		"https://mjv011.com/poster/large.jpg",
+		"https://mjv011.com/poster/background.jpg",
+	} {
+		if !containsString(got, want) {
+			t.Fatalf("chaoliu poster candidate %q missing from %#v", want, got)
+		}
+	}
+
+	body := `<script type="application/ld+json">{
+		"@type":"VideoObject","name":"JSON-LD 作品",
+		"image":["/poster/main.webp","/poster/backup.jpg"],
+		"thumbnailUrl":"/poster/thumb.jpg"
+	}</script><meta content="/poster/og.jpg" property="og:image">
+		<img data-src="/poster/html.jpg">`
+	covers := chaoliuDetailCoverCandidates(body, "https://mjv011.com/zh/detail.html")
+	want := []string{
+		"https://mjv011.com/poster/main.webp",
+		"https://mjv011.com/poster/backup.jpg",
+		"https://mjv011.com/poster/thumb.jpg",
+		"https://mjv011.com/poster/og.jpg",
+		"https://mjv011.com/poster/html.jpg",
+	}
+	for _, address := range want {
+		if !containsString(covers, address) {
+			t.Fatalf("chaoliu detail poster %q missing from %#v", address, covers)
+		}
+	}
+}
+
 func TestChaoliuQualityParserKeepsUnknownAndRejectsKnownLowRes(t *testing.T) {
 	const token = "AbcdefghijklmnopqrstUVWX"
 	body := "mvarr['q360p'] = ['" + token + "'];" +
