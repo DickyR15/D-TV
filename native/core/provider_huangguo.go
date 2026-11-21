@@ -613,9 +613,6 @@ func huangguoPosterCandidates(fragment, pageURL string) []string {
 	// Some of the AI cards put the lazy image URL on a picture/source element
 	// or directly on the card as a background/data attribute.
 	for _, tag := range huangguoHTMLTag.FindAllString(fragment, -1) {
-		if strings.EqualFold(extractTagName(tag), "img") {
-			continue
-		}
 		for _, attribute := range []string{"data-poster", "data-cover", "data-image", "data-background-image", "data-bg"} {
 			add(extractAttr(tag, attribute))
 		}
