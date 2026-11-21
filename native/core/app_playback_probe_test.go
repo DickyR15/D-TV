@@ -313,7 +313,8 @@ func TestNativePlaybackRouteProbePolicyCoversEveryNonRedfruitProvider(t *testing
 	if nativePlaybackRouteProbeEnabled(sourceHongguo) {
 		t.Fatal("Redfruit must keep its existing app-specific startup route policy")
 	}
-	if !nativePlaybackRouteProbeEnabled("潮流 AV") && !nativePlaybackRouteProbeEnabled("chaoliu") {
-		t.Fatal("legacy Chaoliu display alias or canonical ID was not included")
+	if canonicalProviderSource("chaoliu") != sourceChaoliu ||
+		!nativePlaybackRouteProbeEnabled(sourceChaoliu) {
+		t.Fatal("canonical Chaoliu source was not included in playback route ranking")
 	}
 }
