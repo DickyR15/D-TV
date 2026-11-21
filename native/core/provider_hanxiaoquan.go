@@ -238,7 +238,7 @@ func parseHanxiaoquanCards(body string, baseURLs ...string) []Drama {
 		items = append(items, Drama{
 			ID: providerDramaID(sourceHanxiaoquan, id), Source: sourceHanxiaoquan, SourceID: id,
 			Title: truncate(title, 512), Name: truncate(title, 512),
-			Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...),
+			Cover: cover, CoverURL: cover, CoverCandidates: nativeCoverBackupAddresses(coverCandidates),
 			ChannelName: "韩小圈", CategoryName: "韩剧", Remark: truncate(note, 64),
 		})
 		if len(items) > 500 {
@@ -442,7 +442,7 @@ func (d *Downloader) fetchHanxiaoquanDetail(ctx context.Context, sourceID string
 		ID: providerDramaID(sourceHanxiaoquan, sourceID), Source: sourceHanxiaoquan, SourceID: sourceID,
 		Title: truncate(name, 512), Name: truncate(name, 512),
 		Desc: truncate(description, 12000), Intro: truncate(description, 12000),
-		Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...),
+		Cover: cover, CoverURL: cover, CoverCandidates: nativeCoverBackupAddresses(coverCandidates),
 		ChannelName: "韩小圈", CategoryName: "韩剧",
 		Remark:     truncate(firstNonEmpty(fields["更新"], fields["状态"]), 64),
 		OnlineDate: truncate(fields["更新"], 32),
