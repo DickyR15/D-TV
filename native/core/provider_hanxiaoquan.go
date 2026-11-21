@@ -123,31 +123,55 @@ var (
 
 func hanxiaoquanImageCandidates(fragment string, baseURLs ...string) []string {
 	var candidates []string
-	for _, tag := range hanxiaoquanImageTag.FindAllString(fragment, -1) {
-		for _, attribute := range []string{
-			"data-original", "data-original-src", "data-src", "data-lazy-src",
-			"data-lazyload", "data-url", "data-echo", "src",
-		} {
+	// Some templates put the artwork on a wrapper's CSS background instead
+	// of the nested <img>. Scan image-bearing attributes on all HTML tags,
+	// preserving lazy/original attributes before placeholder src values.
+	tags := reGuipianTag.FindAllString(fragment, -1)
+	for _, attribute := range []string{
+		"data-original", "data-original-src", "data-src", "data-lazy-src",
+		"data-lazyload", "data-url", "data-echo", "data-bg", "data-background",
+		"data-image", "src",
+	} {
+		for _, tag := range tags {
 			if raw := extractAttr(tag, attribute); raw != "" {
 				candidates = append(candidates, hanxiaoquanFixURL(raw, baseURLs...))
 			}
 		}
-		for _, attribute := range []string{"data-srcset", "data-lazy-srcset", "srcset"} {
-			if raw := extractAttr(tag, attribute); raw != "" {
-				for _, entry := range strings.Split(raw, ",") {
-					if fields := strings.Fields(strings.TrimSpace(entry)); len(fields) > 0 {
-						candidates = append(candidates, hanxiaoquanFixURL(fields[0], baseURLs...))
-					}
+	}
+	for _, attribute := range []string{"data-srcset", "data-lazy-srcset", "srcset"} {
+		for _, tag := range tags {
+			for _, entry := range strings.Split(extractAttr(tag, attribute), ",") {
+				fields := strings.Fields(strings.TrimSpace(entry))
+				if len(fields) > 0 {
+					candidates = append(candidates, hanxiaoquanFixURL(fields[0], baseURLs...))
 				}
 			}
 		}
+	}
+	base := firstNonEmpty(append(baseURLs, hanxiaoquanSiteBaseURL)...)
+	for _, tag := range tags {
 		if style := providerHTMLStyle(tag); style != "" {
-			base := firstNonEmpty(append(baseURLs, hanxiaoquanSiteBaseURL)...)
 			candidates = append(candidates, providerCSSImageAddresses(style, base)...)
 		}
 	}
 	return nativeUniqueCoverAddresses(candidates...)
 }
+
+func hanxiaoquanCategoryName(category string) string {
+	switch strings.TrimSpace(category) {
+	case "1":
+		return "韓劇"
+	case "2":
+		return "電影"
+	case "3":
+		return "綜藝"
+	case "4":
+		return "動漫"
+	default:
+		return "韓劇"
+	}
+}
+
 
 func hanxiaoquanMetaValue(body, wanted string) string {
 	metaTags := regexp.MustCompile(`(?is)<meta\b[^>]*>`)
@@ -194,6 +218,11 @@ func (d *Downloader) hanxiaoquanGet(ctx context.Context, path string) (string, e
 
 // parseHanxiaoquanCards 解析 module-item 卡片列表。
 func parseHanxiaoquanCards(body string, baseURLs ...string) []Drama {
+	return parseHanxiaoquanCardsWithCategory(body, "", baseURLs...)
+}
+
+func parseHanxiaoquanCardsWithCategory(body, category string, baseURLs ...string) []Drama {
+	categoryName := hanxiaoquanCategoryName(category)
 	items := make([]Drama, 0, hanxiaoquanPageSize)
 	seen := map[string]bool{}
 	matches := reHanxiaoquanCardPic.FindAllStringSubmatchIndex(body, -1)
@@ -236,7 +265,7 @@ func parseHanxiaoquanCards(body string, baseURLs ...string) []Drama {
 			ID: providerDramaID(sourceHanxiaoquan, id), Source: sourceHanxiaoquan, SourceID: id,
 			Title: truncate(title, 512), Name: truncate(title, 512),
 			Cover: cover, CoverURL: cover, CoverCandidates: nativeCoverBackupAddresses(coverCandidates),
-			ChannelName: "韩小圈", CategoryName: "韩剧", Remark: truncate(note, 64),
+			ChannelName: "韩小圈", CategoryName: categoryName, Remark: truncate(note, 64),
 		})
 		if len(items) > 500 {
 			break
@@ -284,7 +313,7 @@ func (d *Downloader) fetchHanxiaoquanCatalogPage(ctx context.Context, page int, 
 	if err != nil {
 		return nil, false, err
 	}
-	items := parseHanxiaoquanCards(body, d.providerBaseURL(sourceHanxiaoquan))
+	items := parseHanxiaoquanCardsWithCategory(body, category, d.providerBaseURL(sourceHanxiaoquan))
 	if len(items) == 0 {
 		return []Drama{}, false, nil
 	}
