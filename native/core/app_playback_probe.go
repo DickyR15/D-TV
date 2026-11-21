@@ -15,14 +15,20 @@ import (
 // Route probing is only a ranking hint. Keep it short so stalled backups
 // cannot hold first-frame startup for four seconds; failed/untested routes
 // remain available for real playback failover.
-const nativePlaybackRouteProbeTimeout = 900 * time.Millisecond
+const nativePlaybackRouteProbeTimeout = 1500 * time.Millisecond
 const nativePlaybackRouteProbeLimit = 4
 const nativePlaybackRouteProbeBytes = 64 * 1024
 
-// Route ranking is a bounded startup optimisation for non-Redfruit sources.
-// Redfruit keeps its existing app-specific playback route policy.
+// Keep route probing limited to the providers that previously used
+// multi-route startup ranking. Other sources retain their original playback
+// startup path until they have provider-specific validation.
 func nativePlaybackRouteProbeEnabled(source string) bool {
-	return canonicalProviderSource(source) != sourceHongguo
+	switch canonicalProviderSource(source) {
+	case sourceIkanBot, sourcePPP, sourceDuoduo, sourceGuipian:
+		return true
+	default:
+		return false
+	}
 }
 
 type nativePlaybackRouteProbeResult struct {
