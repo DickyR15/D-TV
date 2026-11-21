@@ -203,3 +203,19 @@ func TestHongguoSDKPlaybackRefreshesRejectedAnonymousDeviceTwice(t *testing.T) {
 		t.Fatalf("unique playback device IDs = %d, want three refreshed identities", len(playbackDeviceIDs))
 	}
 }
+
+func TestHongguoSDKPlaybackSoftRejectCooldownPreventsRepeatedRegistration(t *testing.T) {
+	session := &hongguoSDKClientSession{}
+	session.recordPlaybackResult(openhongguo.ErrAnonymousLimited)
+	err := session.playbackCooldownError()
+	if !errors.Is(err, errHongguoSDKPlaybackCooling) {
+		t.Fatalf("empty playback response did not enter cooldown: %v", err)
+	}
+	if !hongguoSDKPlaybackRegistrationRejected(err) {
+		t.Fatal("playback cooldown must suppress legacy App registration fallbacks")
+	}
+	session.recordPlaybackResult(nil)
+	if err := session.playbackCooldownError(); err != nil {
+		t.Fatalf("successful playback did not clear cooldown: %v", err)
+	}
+}
