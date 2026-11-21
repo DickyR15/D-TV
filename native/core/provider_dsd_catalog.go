@@ -192,7 +192,7 @@ func parseDSDCards(document *html.Node, pageURL, category string) ([]Drama, erro
 		views := strings.TrimSuffix(providerHTMLText(providerHTMLFirstClass(card, "video-item-tag-hits", "counts")), "次")
 		drama := Drama{ID: providerDramaID(sourceDSD, id), Source: sourceDSD, SourceID: id,
 			Title: truncate(title, 1024), Name: truncate(title, 1024), Cover: cover, CoverURL: cover,
-			CoverCandidates: append([]string(nil), coverCandidates[1:]...),
+			CoverCandidates: nativeCoverBackupAddresses(coverCandidates),
 			CategoryName: firstNonEmpty(category, "影片"), ChannelName: "帝果", Views: views}
 		if providerHTMLFirstClass(card, "video-item-tag-is-vip", "vip-tag") != nil {
 			vip := true
