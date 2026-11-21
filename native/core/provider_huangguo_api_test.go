@@ -188,6 +188,9 @@ func TestHuangguoAIDetailKeepsJSONLDPosterBackups(t *testing.T) {
 		Source: sourceHuangguoAI,
 		SourceID: "905",
 		Title: "AI 詳情海報測試",
+		// Provider JSON may retain a structured cover value. It must be
+		// converted into a URL before it is appended to []string fallbacks.
+		Cover: map[string]any{"url": "/images/previous.webp"},
 	}
 	got, err := parseHuangguoSortDetail(body, pageURL, patch)
 	if err != nil {
@@ -197,9 +200,12 @@ func TestHuangguoAIDetailKeepsJSONLDPosterBackups(t *testing.T) {
 		"https://huangguoai.com/images/main.webp",
 		"https://huangguoai.com/images/backup.jpg",
 		"https://huangguoai.com/images/thumb.jpg",
+		"https://huangguoai.com/images/previous.webp",
 	}
-	if got.Cover != want[0] || len(got.CoverCandidates) != 2 ||
-		got.CoverCandidates[0] != want[1] || got.CoverCandidates[1] != want[2] {
+	if got.Cover != want[0] || len(got.CoverCandidates) != 3 ||
+		got.CoverCandidates[0] != want[1] ||
+		got.CoverCandidates[1] != want[2] ||
+		got.CoverCandidates[2] != want[3] {
 		t.Fatalf("Huangguo AI detail poster candidates = %#v", got)
 	}
 }
