@@ -599,8 +599,8 @@ func TestHongguoSDKRegistrationEdgeRejectionDoesNotRetryLegacyRegistrationHosts(
 	t.Cleanup(d.client.CloseIdleConnections)
 
 	_, err := d.resolveHongguoMedia(context.Background(), Task{
-		DramaID: "hongguo:100",
-		Chapter: Chapter{VideoURL: "hongguo-cenc://200"},
+		DramaID: "hongguo:7690163276214176792",
+		Chapter: Chapter{VideoURL: "hongguo-cenc://7690163276214176793"},
 	})
 	if err == nil {
 		t.Fatal("expected SDK registration edge rejection and unavailable web fallbacks")
@@ -609,7 +609,7 @@ func TestHongguoSDKRegistrationEdgeRejectionDoesNotRetryLegacyRegistrationHosts(
 	hosts := append([]string(nil), requestedHosts...)
 	mu.Unlock()
 	if !containsString(hosts, "log5-applog-lq.fqnovel.com") {
-		t.Fatalf("new SDK registration host was not used: %#v", hosts)
+		t.Fatalf("new SDK registration host was not used: hosts=%#v error=%v", hosts, err)
 	}
 	for _, host := range []string{"log.snssdk.com", "applog.snssdk.com"} {
 		if containsString(hosts, host) {
