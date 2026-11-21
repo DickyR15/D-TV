@@ -455,7 +455,8 @@ func huangdouDramaFromMap(item map[string]any) Drama {
 		return Drama{}
 	}
 	title := firstNonEmpty(mapString(item, "name", "title", "t"), sourceID)
-	cover := firstNonEmpty(mapString(item, "img_y", "img_x", "img", "cover", "pic"))
+	coverCandidates := providerCoverAddresses(item, huangdouBaseURL+"/")
+	cover := firstNonEmpty(coverCandidates...)
 	remark := firstNonEmpty(mapString(item, "update_label"), mapString(item, "corner"))
 	releaseStatus := releaseStatusFromRemark(remark)
 	if remark == "" {
@@ -464,7 +465,7 @@ func huangdouDramaFromMap(item map[string]any) Drama {
 		}
 	}
 	category := firstNonEmpty(mapString(item, "category", "category_name", "categoryName"), "未分类")
-	return Drama{VIP: huangdouVIPFlag(item), ID: providerDramaID(sourceHuangdou, sourceID), Source: sourceHuangdou, SourceID: sourceID, Title: title, Name: title, Desc: firstNonEmpty(mapString(item, "description"), mapString(item, "summary")), Intro: firstNonEmpty(mapString(item, "description"), mapString(item, "summary")), Cover: cover, CoverURL: cover, CategoryName: category, ChannelName: "黄豆", Remark: remark, TotalEpisode: mapString(item, "episode_count"), EpisodeCount: mapString(item, "episode_count"), Tags: mapStringSlice(item, "tags"), ReleaseStatus: releaseStatus, Heat: mapString(item, "hot_rate"), Views: normalizeViews(mapString(item, "click")), OnlineDate: providerReleaseDate(mapString(item, "issue_date"))}
+	return Drama{VIP: huangdouVIPFlag(item), ID: providerDramaID(sourceHuangdou, sourceID), Source: sourceHuangdou, SourceID: sourceID, Title: title, Name: title, Desc: firstNonEmpty(mapString(item, "description"), mapString(item, "summary")), Intro: firstNonEmpty(mapString(item, "description"), mapString(item, "summary")), Cover: cover, CoverURL: cover, CoverCandidates: append([]string(nil), coverCandidates[1:]...), CategoryName: category, ChannelName: "黄豆", Remark: remark, TotalEpisode: mapString(item, "episode_count"), EpisodeCount: mapString(item, "episode_count"), Tags: mapStringSlice(item, "tags"), ReleaseStatus: releaseStatus, Heat: mapString(item, "hot_rate"), Views: normalizeViews(mapString(item, "click")), OnlineDate: providerReleaseDate(mapString(item, "issue_date"))}
 }
 
 func huangdouDataMap(v any) map[string]any {
