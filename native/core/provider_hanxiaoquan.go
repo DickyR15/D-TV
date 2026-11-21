@@ -96,7 +96,7 @@ func hanxiaoquanClean(text string) string {
 
 func hanxiaoquanFixURL(raw string, baseURLs ...string) string {
 	raw = html.UnescapeString(strings.TrimSpace(raw))
-	if raw == "" {
+	if raw == "" || providerCoverLooksLikePlaceholder(raw) {
 		return ""
 	}
 	base := strings.TrimRight(firstNonEmpty(append(baseURLs, hanxiaoquanSiteBaseURL)...), "/") + "/"
@@ -130,7 +130,7 @@ func hanxiaoquanImageCandidates(fragment string, baseURLs ...string) []string {
 	for _, attribute := range []string{
 		"data-original", "data-original-src", "data-src", "data-lazy-src",
 		"data-lazyload", "data-url", "data-echo", "data-bg", "data-background",
-		"data-image", "src",
+		"data-image",
 	} {
 		for _, tag := range tags {
 			if raw := extractAttr(tag, attribute); raw != "" {
@@ -153,6 +153,10 @@ func hanxiaoquanImageCandidates(fragment string, baseURLs ...string) []string {
 		if style := providerHTMLStyle(tag); style != "" {
 			candidates = append(candidates, providerCSSImageAddresses(style, base)...)
 		}
+	}
+	// The regular src attribute is last because it is often a loading placeholder.
+	for _, tag := range tags {
+		candidates = append(candidates, hanxiaoquanFixURL(extractAttr(tag, "src"), baseURLs...))
 	}
 	return nativeUniqueCoverAddresses(candidates...)
 }
