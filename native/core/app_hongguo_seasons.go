@@ -77,6 +77,9 @@ func hongguoShouldUseCurrentSeasonFallback(err error) bool {
 	}
 	message := err.Error()
 	return hongguoRegistrationWasRateLimited(err) ||
+		strings.Contains(message, "HTTP 404") ||
+		strings.Contains(message, "anonymous response was empty") ||
+		strings.Contains(message, "device rejected") ||
 		strings.Contains(message, "101116") ||
 		strings.Contains(message, "介面未提供有效資料") ||
 		strings.Contains(message, "介面未返回有效資料") ||
@@ -244,7 +247,7 @@ func mapBool(values map[string]any, key string) bool {
 }
 
 func hongguoRegistrationWasRateLimited(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "紅果設備註冊 HTTP 444")
+	return err != nil && strings.Contains(err.Error(), "HTTP 444")
 }
 
 // When the official same-series endpoint is temporarily blocked at device
