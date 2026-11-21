@@ -411,7 +411,7 @@ func extraAdultParseCard(source,chunk,base string)(Drama,bool){
 	if !extraAdultValidID(source,id){return Drama{},false}
 	title=adultClean(title);if title==""{title=id}
 	coverCandidates:=extraAdultCardCoverCandidates(source,chunk,base,cover)
-	cover:=""
+	cover=""
 	if len(coverCandidates)>0{cover=coverCandidates[0]}
 	return Drama{ID:providerDramaID(source,id),Source:source,SourceID:id,Title:truncate(title,512),Name:truncate(title,512),Cover:cover,CoverURL:cover,CoverCandidates:append([]string(nil),coverCandidates[1:]...),ChannelName:extraAdultSourceName(source),CategoryName:extraAdultSourceName(source),Remark:truncate(remark,64),TotalEpisode:1,EpisodeCount:1},true
 }
