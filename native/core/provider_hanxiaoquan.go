@@ -116,9 +116,9 @@ func hanxiaoquanFixURL(raw string, baseURLs ...string) string {
 }
 
 var (
-	hanxiaoquanImageTag = regexp.MustCompile(`(?is)<img\\b[^>]*>`)
-	hanxiaoquanStyleImage = regexp.MustCompile(`(?i)url\\(\\s*['"]?([^'")]+)`)
-	hanxiaoquanVideoCoverBlock = regexp.MustCompile(`(?is)<div\\b[^>]*class=['"](?:[^'"]*\\s)?video-cover(?:\\s[^'"]*)?['"][^>]*>([\\s\\S]*?)</div>`)
+	hanxiaoquanImageTag = regexp.MustCompile(`(?is)<img\b[^>]*>`)
+	hanxiaoquanStyleImage = regexp.MustCompile(`(?i)url\(\s*['"]?([^'")]+)`)
+	hanxiaoquanVideoCoverBlock = regexp.MustCompile(`(?is)<div\b[^>]*class=['"](?:[^'"]*\s)?video-cover(?:\s[^'"]*)?['"][^>]*>([\s\S]*?)</div>`)
 )
 
 func hanxiaoquanImageCandidates(fragment string, baseURLs ...string) []string {
@@ -153,7 +153,7 @@ func hanxiaoquanImageCandidates(fragment string, baseURLs ...string) []string {
 }
 
 func hanxiaoquanMetaValue(body, wanted string) string {
-	metaTags := regexp.MustCompile(`(?is)<meta\\b[^>]*>`)
+	metaTags := regexp.MustCompile(`(?is)<meta\b[^>]*>`)
 	for _, tag := range metaTags.FindAllString(body, -1) {
 		name := firstNonEmpty(extractAttr(tag, "property"), extractAttr(tag, "name"))
 		if strings.EqualFold(name, wanted) {
