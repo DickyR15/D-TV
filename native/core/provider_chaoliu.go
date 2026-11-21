@@ -67,11 +67,11 @@ func validChaoliuID(id string) bool {
 	id=strings.Trim(strings.TrimSpace(id),"/");return len(id)<=240&&chaoliuIDPattern.MatchString(id)
 }
 func chaoliuCategoryPath(page int,category string)(string,error) {
-	if page<1||page>100000||!validChaoliuCategory(category){return "",errors.New("潮流 AV 分類或頁碼無效")}
+	if page<1||page>100000||!validChaoliuCategory(category){return "",errors.New("chaoliu 分類或頁碼無效")}
 	if category=="" {category="chinese"};return fmt.Sprintf("/zh/%s_list/all/%d.html",category,page),nil
 }
 func chaoliuSearchPath(page int,query string)(string,error) {
-	query=strings.TrimSpace(query);if page<1||page>100000||query==""||len([]rune(query))>128{return "",errors.New("潮流 AV 搜尋條件無效")}
+	query=strings.TrimSpace(query);if page<1||page>100000||query==""||len([]rune(query))>128{return "",errors.New("chaoliu 搜尋條件無效")}
 	query=strings.NewReplacer("/"," ","\\"," ","?"," ","#"," ","%"," ").Replace(query)
 	return "/zh/fc_search/all/"+url.PathEscape(query)+"/"+strconv.Itoa(page)+".html",nil
 }
@@ -81,7 +81,7 @@ func chaoliuPlayerEndpoint(candidate string) bool {
 }
 
 func chaoliuValidator(candidate string,status int,body []byte) error {
-	if status<200||status>=300{return fmt.Errorf("潮流 AV HTTP %d",status)}
+	if status<200||status>=300{return fmt.Errorf("chaoliu HTTP %d",status)}
 	text:=string(body)
 	// play.php is a media API, not an article/catalogue HTML page. Its JSON
 	// response can legitimately omit all site-shell markers. Validate it by
@@ -92,16 +92,16 @@ func chaoliuValidator(candidate string,status int,body []byte) error {
 		return errors.New("chaoliu 播放解析端點未回傳有效的 HLS／MP4 媒體網址")
 	}
 	if len(text) < 100 {
-		return errors.New("潮流 AV 回應內容過短")
+		return errors.New("chaoliu 回應內容過短")
 	}
 	if chaoliuLooksOffsite(text) {
-		return errors.New("潮流 AV 回應被導向廣告頁")
+		return errors.New("chaoliu 回應被導向廣告頁")
 	}
 	if chaoliuIsAgeGate(text) {
 		return nil
 	}
 	if !chaoliuLooksLikeSite(text) && !chaoliuLooksLikeDetailHTML(candidate, text) {
-		return errors.New("潮流 AV 回應不是有效的站點頁面")
+		return errors.New("chaoliu 回應不是有效的站點頁面")
 	}
 	return nil
 }
@@ -165,11 +165,11 @@ func chaoliuLooksOffsite(body string) bool {
 	return strings.Contains(lower,"window.location")&&len(body)<3000
 }
 func (d *Downloader) fetchChaoliuText(ctx context.Context,rawURL,referer string)(string,string,error) {
-	parsed,err:=url.Parse(rawURL);if err!=nil||parsed.Scheme!="https"||!isChaoliuSiteHost(parsed.Hostname())||parsed.User!=nil{return "","",errors.New("潮流 AV 網址不在允許的站點清單")}
+	parsed,err:=url.Parse(rawURL);if err!=nil||parsed.Scheme!="https"||!isChaoliuSiteHost(parsed.Hostname())||parsed.User!=nil{return "","",errors.New("chaoliu 網址不在允許的站點清單")}
 	ctx=context.WithValue(ctx,providerTextCookieKey{},"YES_Eighteen=IamOverEighteenYearsOld")
 	ctx=context.WithValue(ctx,providerTextUserAgentKey{},"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
 	ctx=context.WithValue(ctx,providerTextValidatorKey{},providerTextValidator(chaoliuValidator))
-	body,err:=d.fetchProviderText(ctx,rawURL,firstNonEmpty(referer,chaoliuSites[0]+"/"));if err!=nil{return "","",fmt.Errorf("潮流 AV 站點請求失敗：%w",err)}
+	body,err:=d.fetchProviderText(ctx,rawURL,firstNonEmpty(referer,chaoliuSites[0]+"/"));if err!=nil{return "","",fmt.Errorf("chaoliu 站點請求失敗：%w",err)}
 	finalURL:=d.providerBaseURL(sourceChaoliu)+parsed.RequestURI()
 	if chaoliuIsAgeGate(body) {
 		gatePaths := []string{}
@@ -201,13 +201,13 @@ func (d *Downloader) fetchChaoliuText(ctx context.Context,rawURL,referer string)
 				break
 			}
 		}
-		if !passed { return "", "", errors.New("潮流 AV 年齡確認頁無法通過") }
+		if !passed { return "", "", errors.New("chaoliu 年齡確認頁無法通過") }
 		finalURL = d.providerBaseURL(sourceChaoliu) + parsed.RequestURI()
 		body, err = d.fetchProviderText(ctx, rawURL, finalURL)
 		if err != nil { return "", "", err }
 		finalURL = d.providerBaseURL(sourceChaoliu) + parsed.RequestURI()
 		if chaoliuIsAgeGate(body) || chaoliuLooksOffsite(body) {
-			return "", "", errors.New("潮流 AV 年齡確認後仍未取得有效頁面")
+			return "", "", errors.New("chaoliu 年齡確認後仍未取得有效頁面")
 		}
 	}
 	return body,finalURL,nil
@@ -311,7 +311,7 @@ func (d *Downloader) fetchChaoliuCatalogPage(ctx context.Context,page int,catego
 	// previously populated cache with an empty catalogue. Empty search results
 	// remain valid and are returned as an empty list.
 	if len(items)==0 && page==1 && strings.TrimSpace(query)=="" {
-		return nil,false,errors.New("潮流 AV 目錄頁已連線，但未解析到作品卡片；已保留既有快取")
+		return nil,false,errors.New("chaoliu 目錄頁已連線，但未解析到作品卡片；已保留既有快取")
 	}
 	return items,chaoliuHasNextPage(body,page),nil
 }
@@ -350,9 +350,9 @@ func chaoliuDecodePlayID(encoded string,constants chaoliuConstants)(string,error
 	candidates:=[]string{};valid:=regexp.MustCompile("^[A-Za-z0-9+/]+={0,2}$")
 	primary:=chaoliuDecrypto(encoded,constants.Base,constants.XOR);if primary!=""&&valid.MatchString(primary){candidates=append(candidates,primary)}
 	for base:=2;base<=25&&len(candidates)<12;base++{for xor:=0;xor<=32&&len(candidates)<12;xor++{value:=chaoliuDecrypto(encoded,base,xor);if len(value)>=16&&valid.MatchString(value)&&!containsString(candidates,value){candidates=append(candidates,value)}}}
-	block,e:=aes.NewCipher([]byte(constants.Key));if e!=nil{return "",e};if len(constants.IV)!=block.BlockSize(){return "",errors.New("潮流 AV AES IV 長度錯誤")}
+	block,e:=aes.NewCipher([]byte(constants.Key));if e!=nil{return "",e};if len(constants.IV)!=block.BlockSize(){return "",errors.New("chaoliu AES IV 長度錯誤")}
 	for _,candidate:=range candidates{raw,e:=base64.StdEncoding.DecodeString(candidate);if e!=nil||len(raw)==0||len(raw)%block.BlockSize()!=0{continue};plain:=make([]byte,len(raw));cipher.NewCBCDecrypter(block,[]byte(constants.IV)).CryptBlocks(plain,raw);plain,e=pkcs7Unpad(plain,block.BlockSize());if e!=nil{continue};id:=regexp.MustCompile("[^A-Za-z0-9._-]").ReplaceAllString(string(plain),"");if len(id)>=12{return id,nil}}
-	return "",errors.New("潮流 AV 播放地址解密失敗")
+	return "",errors.New("chaoliu 播放地址解密失敗")
 }
 func parseChaoliuSources(body,pageURL string) []chaoliuMediaSource {
 	body=html.UnescapeString(strings.NewReplacer("\\/", "/", "\\u002F", "/", "\\u0026", "&").Replace(body))
@@ -374,9 +374,9 @@ func extractMetaContent(body,key string) string {
 	return ""
 }
 func (d *Downloader) fetchChaoliuDetail(ctx context.Context,sourceID string)(Drama,[]Chapter,error) {
-	if !validChaoliuID(sourceID){return Drama{},nil,errors.New("潮流 AV 作品識別碼無效")}
+	if !validChaoliuID(sourceID){return Drama{},nil,errors.New("chaoliu 作品識別碼無效")}
 	base:=d.providerBaseURL(sourceChaoliu);body,final,err:=d.fetchChaoliuText(ctx,strings.TrimRight(base,"/")+"/zh/"+sourceID+".html",base+"/")
-	if err!=nil{return Drama{},nil,fmt.Errorf("潮流 AV 作品詳情讀取失敗：%w",err)}
+	if err!=nil{return Drama{},nil,fmt.Errorf("chaoliu 作品詳情讀取失敗：%w",err)}
 	title,cover,desc:=chaoliuDetailTitle(body,final,sourceID)
 	if v:=chaoliuMetaField(body,"番號");v!=""{desc=strings.TrimSpace(desc+"\n番號："+v)}
 	if v:=chaoliuMetaField(body,"發行商");v!=""&&v!="未知"{desc=strings.TrimSpace(desc+"\n發行商："+v)}
@@ -388,18 +388,18 @@ func (d *Downloader) fetchChaoliuDetail(ctx context.Context,sourceID string)(Dra
 }
 func (d *Downloader) resolveChaoliuMedia(ctx context.Context,task Task)(providerMedia,error) {
 	source,sourceID,ok:=splitProviderDramaID(task.DramaID)
-	if !ok||source!=sourceChaoliu||!validChaoliuID(sourceID)||!strings.HasPrefix(task.Chapter.ID,providerChapterID(sourceChaoliu,sourceID,"")){return providerMedia{},errors.New("潮流 AV 分集資訊無效，請重新整理作品詳情")}
+	if !ok||source!=sourceChaoliu||!validChaoliuID(sourceID)||!strings.HasPrefix(task.Chapter.ID,providerChapterID(sourceChaoliu,sourceID,"")){return providerMedia{},errors.New("chaoliu 分集資訊無效，請重新整理作品詳情")}
 	pageURL:=strings.TrimSpace(task.Chapter.PageURL);if pageURL==""{pageURL=strings.TrimPrefix(task.Chapter.VideoURL,"chaoliu-page://")}
-	parsed,e:=url.Parse(pageURL);if e!=nil||parsed.Scheme!="https"||!isChaoliuSiteHost(parsed.Hostname()){return providerMedia{},errors.New("潮流 AV 播放頁網址無效")}
-	body,final,e:=d.fetchChaoliuText(ctx,pageURL,firstNonEmpty(task.Chapter.Referer,parsed.Scheme+"://"+parsed.Host+"/"));if e!=nil{return providerMedia{},fmt.Errorf("潮流 AV 播放頁讀取失敗：%w",e)}
-	qualities:=parseChaoliuQualities(body);if len(qualities)==0{return providerMedia{},errors.New("潮流 AV 作品沒有可用的播放密文")}
+	parsed,e:=url.Parse(pageURL);if e!=nil||parsed.Scheme!="https"||!isChaoliuSiteHost(parsed.Hostname()){return providerMedia{},errors.New("chaoliu 播放頁網址無效")}
+	body,final,e:=d.fetchChaoliuText(ctx,pageURL,firstNonEmpty(task.Chapter.Referer,parsed.Scheme+"://"+parsed.Host+"/"));if e!=nil{return providerMedia{},fmt.Errorf("chaoliu 播放頁讀取失敗：%w",e)}
+	qualities:=parseChaoliuQualities(body);if len(qualities)==0{return providerMedia{},errors.New("chaoliu 作品沒有可用的播放密文")}
 	constants:=chaoliuParseConstants(body);var lastErr error
 	for _,quality:=range qualities {
 		playID,decodeErr:=chaoliuDecodePlayID(quality.Encrypted,constants);if decodeErr!=nil{lastErr=decodeErr;continue}
 		baseParsed,_:=url.Parse(final);playPath:=fmt.Sprintf("/js/player/play.php?numresolution=%d&id=%s",max(quality.Resolution,480),url.QueryEscape(playID))
 		playerURL:=baseParsed.Scheme+"://"+baseParsed.Host+playPath
 		playerBody,playerFinal,fetchErr:=d.fetchChaoliuText(ctx,playerURL,final);if fetchErr!=nil{lastErr=fetchErr;continue}
-		sources:=parseChaoliuSources(playerBody,playerFinal);if len(sources)==0{lastErr=errors.New("潮流 AV 播放頁沒有提供有效的 HLS 或 MP4 網址");continue}
+		sources:=parseChaoliuSources(playerBody,playerFinal);if len(sources)==0{lastErr=errors.New("chaoliu 播放頁沒有提供有效的 HLS 或 MP4 網址");continue}
 		orderedURLs:=make([]string,0,len(sources))
 		sourceByURL:=make(map[string]chaoliuMediaSource,len(sources))
 		for _,candidate:=range sources{orderedURLs=append(orderedURLs,candidate.URL);sourceByURL[candidate.URL]=candidate}
@@ -421,5 +421,5 @@ func (d *Downloader) resolveChaoliuMedia(ctx context.Context,task Task)(provider
 		}
 		if preparedOK{return prepared,nil}
 	}
-	if lastErr==nil{lastErr=errors.New("潮流 AV 所有畫質線路皆無法解析")};return providerMedia{},lastErr
+	if lastErr==nil{lastErr=errors.New("chaoliu 所有畫質線路皆無法解析")};return providerMedia{},lastErr
 }
