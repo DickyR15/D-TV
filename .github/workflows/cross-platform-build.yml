@@ -92,7 +92,14 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: native/go.mod
-          cache-dependency-path: native/go.sum
+          cache-dependency-path: |
+            native/go.mod
+            native/go.sum
+      - name: Resolve and verify pinned Go SDK
+        working-directory: native
+        run: go mod download -json github.com/beilunyang/openhongguo
+        env:
+          GOSUMDB: sum.golang.org
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -131,7 +138,14 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: native/go.mod
-          cache-dependency-path: native/go.sum
+          cache-dependency-path: |
+            native/go.mod
+            native/go.sum
+      - name: Resolve and verify pinned Go SDK
+        working-directory: native
+        run: go mod download -json github.com/beilunyang/openhongguo
+        env:
+          GOSUMDB: sum.golang.org
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -270,7 +284,14 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: native/go.mod
-          cache-dependency-path: native/go.sum
+          cache-dependency-path: |
+            native/go.mod
+            native/go.sum
+      - name: Resolve and verify pinned Go SDK
+        working-directory: native
+        run: go mod download -json github.com/beilunyang/openhongguo
+        env:
+          GOSUMDB: sum.golang.org
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -408,7 +429,14 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: native/go.mod
-          cache-dependency-path: native/go.sum
+          cache-dependency-path: |
+            native/go.mod
+            native/go.sum
+      - name: Resolve and verify pinned Go SDK
+        working-directory: native
+        run: go mod download -json github.com/beilunyang/openhongguo
+        env:
+          GOSUMDB: sum.golang.org
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
@@ -497,7 +525,14 @@ jobs:
       - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: native/go.mod
-          cache-dependency-path: native/go.sum
+          cache-dependency-path: |
+            native/go.mod
+            native/go.sum
+      - name: Resolve and verify pinned Go SDK
+        working-directory: native
+        run: go mod download -json github.com/beilunyang/openhongguo
+        env:
+          GOSUMDB: sum.golang.org
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
