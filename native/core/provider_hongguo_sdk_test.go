@@ -307,6 +307,11 @@ func TestHongguoPlaybackAccessStatus(t *testing.T) {
 		{openhongguo.ErrSignatureRejected, "signature_rejected"},
 		{openhongguo.ErrRateLimited, "rate_limited"},
 		{&openhongguo.APIError{HTTPStatus: 403}, "access_rejected"},
+		{fmt.Errorf("wrapped: %w", &openhongguo.APIError{HTTPStatus: 403}), "access_rejected"},
+		{&openhongguo.APIError{HTTPStatus: 401}, "authentication_required"},
+		{&openhongguo.APIError{HTTPStatus: 403, Code: "auth_required"}, "authentication_required"},
+		{&openhongguo.APIError{HTTPStatus: 403, Code: "signature_rejected"}, "signature_rejected"},
+		{&openhongguo.APIError{HTTPStatus: 403, Code: "rate_limited"}, "rate_limited"},
 		{context.Canceled, "interrupted"},
 		{errors.New("network failure"), "request_failed"},
 	} {

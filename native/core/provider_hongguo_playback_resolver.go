@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	openhongguo "github.com/beilunyang/openhongguo/sdk"
@@ -12,21 +13,28 @@ import (
 // hongguoPlaybackAccessStatus reports observed failures, not an inferred
 // entitlement. An empty response alone does not prove login is required.
 func hongguoPlaybackAccessStatus(err error) (string, string) {
+	var apiErr *openhongguo.APIError
 	switch {
 	case err == nil:
 		return "available", "播放介接正常"
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return "interrupted", "播放請求已取消或逾時"
-	case errors.Is(err, openhongguo.ErrAuthenticationRequired):
-		return "authentication_required", "平台要求登入或授權；目前未建立可用的正式授權工作階段"
 	case errors.Is(err, openhongguo.ErrChallengeRequired):
 		return "verification_required", "平台要求額外驗證；請使用平台提供的驗證方式"
 	case errors.Is(err, openhongguo.ErrSignatureRejected):
 		return "signature_rejected", "平台拒絕播放請求驗證；目前沒有已確認的授權介接"
-	case errors.Is(err, openhongguo.ErrAnonymousLimited), errors.Is(err, errHongguoSDKPlaybackCooling):
-		return "anonymous_empty", "匿名播放未取得有效資料；實際授權要求尚未確認"
 	case errors.Is(err, openhongguo.ErrRateLimited):
 		return "rate_limited", "平台限制請求頻率"
+	// The SDK maps bare HTTP 403 to ErrAuthenticationRequired, but a
+	// forbidden response without an explicit auth code does not establish
+	// that signing in will restore access.
+	case errors.As(err, &apiErr) && apiErr != nil && apiErr.HTTPStatus == http.StatusForbidden &&
+		apiErr.Code != "auth_required" && apiErr.Code != "401" && apiErr.Code != "403":
+		return "access_rejected", "播放或裝置註冊遭拒絕；實際授權要求尚未確認"
+	case errors.Is(err, openhongguo.ErrAuthenticationRequired):
+		return "authentication_required", "平台要求登入或授權；目前未建立可用的正式授權工作階段"
+	case errors.Is(err, openhongguo.ErrAnonymousLimited), errors.Is(err, errHongguoSDKPlaybackCooling):
+		return "anonymous_empty", "匿名播放未取得有效資料；實際授權要求尚未確認"
 	case hongguoSDKPlaybackRegistrationRejected(err):
 		return "access_rejected", "播放或裝置註冊遭拒絕"
 	default:
