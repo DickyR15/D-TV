@@ -190,95 +190,6 @@ func parseRouterData(raw string) map[string]any {
 	return data
 }
 
-// A skipped resolver is not a successful request or an unexplained nil error.
-func hongguoAttemptDiagnostic(err error) string {
-	if err == nil {
-		return "未執行"
-	}
-	return fmt.Sprint(publicError(err))
-}
-
-func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (providerMedia, error) {
-	source, seriesID, ok := splitProviderDramaID(task.DramaID)
-	if !ok || source != sourceHongguo {
-		return providerMedia{}, fmt.Errorf("紅果章節缺少劇集 ID，請重新整理片庫後再試")
-	}
-	videoID := strings.TrimPrefix(task.Chapter.VideoURL, "hongguo-cenc://")
-	if !hongguoNumericID.MatchString(videoID) || !hongguoNumericID.MatchString(seriesID) {
-		return providerMedia{}, fmt.Errorf("紅果章節 ID 無效，請重新取得章節")
-	}
-
-	// The OpenHongguo SDK owns guest registration, V5 signing, and the
-	// single-model fallback. Do not first register a second independent
-	// Current Player device against the retired log.snssdk.com aliases.
-	sdkMedia, sdkErr := d.resolveHongguoSDKMedia(ctx, videoID)
-	if sdkErr == nil {
-		return sdkMedia, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return providerMedia{}, err
-	}
-
-	type attempt struct {
-		name string
-		run  func() (providerMedia, error)
-	}
-	quick := attempt{"quick", func() (providerMedia, error) { return d.resolveHongguoQuickAppMedia(ctx, seriesID, videoID) }}
-	native := attempt{"native", func() (providerMedia, error) { return d.resolveHongguoAppMedia(ctx, videoID) }}
-	multi := attempt{"multi", func() (providerMedia, error) { return d.resolveHongguoMultiModelMedia(ctx, videoID) }}
-	web := attempt{"web", func() (providerMedia, error) { return d.resolveHongguoWebMedia(ctx, seriesID, videoID) }}
-
-	profile := d.providerParserProfile(sourceHongguo, "hongguo_v5_first")
-	var attempts []attempt
-	if hongguoSDKPlaybackRegistrationRejected(sdkErr) {
-		// Once the new guest-registration path has been rejected, avoid
-		// cascading into legacy App routes that try the same retired hosts.
-		attempts = []attempt{quick, web}
-	} else {
-		switch profile {
-		case "hongguo_legacy_first":
-			attempts = []attempt{native, multi, quick, web}
-		case "hongguo_web_first":
-			attempts = []attempt{quick, web, native, multi}
-		default:
-			attempts = []attempt{quick, native, multi, web}
-		}
-	}
-
-	errs := map[string]error{}
-	for _, candidate := range attempts {
-		media, err := candidate.run()
-		if err == nil {
-			return media, nil
-		}
-		errs[candidate.name] = err
-		if ctx.Err() != nil {
-			return providerMedia{}, ctx.Err()
-		}
-	}
-
-	nativeErr, multiModelErr := errs["native"], errs["multi"]
-	if errors.Is(sdkErr, errHongguoH266Only) ||
-		errors.Is(nativeErr, errHongguoH266Only) ||
-		errors.Is(multiModelErr, errHongguoH266Only) {
-		helperMedia, helperErr := d.resolveHongguoHelperMedia(ctx, seriesID, videoID)
-		if helperErr == nil {
-			return helperMedia, nil
-		}
-		multiModelErr = fmt.Errorf("%w；輔助設備 H.265 備援失敗：%v", errHongguoH266Only, publicError(helperErr))
-	}
-	quickWebErr, pageErr := errs["quick"], errs["web"]
-	return providerMedia{}, fmt.Errorf(
-		"紅果取流失敗：新版匿名 SDK V5：%v；解析設定 %s；快捷網頁：%v；舊版 App：%v；多清晰度：%v；官網網頁：%w",
-		publicError(sdkErr),
-		profile,
-		hongguoAttemptDiagnostic(quickWebErr),
-		hongguoAttemptDiagnostic(nativeErr),
-		hongguoAttemptDiagnostic(multiModelErr),
-		pageErr,
-	)
-}
-
 func (d *Downloader) resolveHongguoQuickAppMedia(ctx context.Context, seriesID, videoID string) (providerMedia, error) {
 	if !hongguoNumericID.MatchString(seriesID) || !hongguoNumericID.MatchString(videoID) {
 		return providerMedia{}, errors.New("紅果快捷網頁劇集 ID 無效")
@@ -298,7 +209,7 @@ func hongguoQuickAppMediaFromPage(body string) (providerMedia, error) {
 	body = html.UnescapeString(body)
 	index := strings.Index(body, "video_player_info")
 	if index < 0 {
-		return providerMedia{}, errors.New("红果快捷网页未提供 video_player_info")
+		return providerMedia{}, errors.New("紅果快捷網頁未提供 video_player_info")
 	}
 	end := min(len(body), index+8192)
 	match := hongguoQuickAppMainURLPattern.FindStringSubmatch(body[index:end])

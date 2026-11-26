@@ -293,3 +293,26 @@ func TestHongguoSDKTransportPreservesRawCompressedResponse(t *testing.T) {
 		})
 	}
 }
+
+func TestHongguoPlaybackAccessStatus(t *testing.T) {
+	for _, tc := range []struct {
+		err error
+		want string
+	}{
+		{nil, "available"},
+		{fmt.Errorf("wrapped: %w", openhongguo.ErrAnonymousLimited), "anonymous_empty"},
+		{errHongguoSDKPlaybackCooling, "anonymous_empty"},
+		{openhongguo.ErrAuthenticationRequired, "authentication_required"},
+		{openhongguo.ErrChallengeRequired, "verification_required"},
+		{openhongguo.ErrSignatureRejected, "signature_rejected"},
+		{openhongguo.ErrRateLimited, "rate_limited"},
+		{&openhongguo.APIError{HTTPStatus: 403}, "access_rejected"},
+		{context.Canceled, "interrupted"},
+		{errors.New("network failure"), "request_failed"},
+	} {
+		got, explanation := hongguoPlaybackAccessStatus(tc.err)
+		if got != tc.want || explanation == "" {
+			t.Fatalf("status = %q (%q), want %q", got, explanation, tc.want)
+		}
+	}
+}
