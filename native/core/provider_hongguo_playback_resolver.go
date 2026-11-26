@@ -35,6 +35,8 @@ func hongguoPlaybackAccessStatus(err error) (string, string) {
 		return "authentication_required", "平台要求登入或授權；目前未建立可用的正式授權工作階段"
 	case errors.Is(err, openhongguo.ErrAnonymousLimited), errors.Is(err, errHongguoSDKPlaybackCooling):
 		return "anonymous_empty", "匿名播放未取得有效資料；實際授權要求尚未確認"
+	case errors.Is(err, openhongguo.ErrTransport):
+		return "transport_failed", "網路傳輸失敗；請查看紅果 SDK 連線診斷的主機與失敗階段"
 	case hongguoSDKPlaybackRegistrationRejected(err):
 		return "access_rejected", "播放或裝置註冊遭拒絕"
 	default:

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -314,10 +316,49 @@ func TestHongguoPlaybackAccessStatus(t *testing.T) {
 		{&openhongguo.APIError{HTTPStatus: 403, Code: "rate_limited"}, "rate_limited"},
 		{context.Canceled, "interrupted"},
 		{errors.New("network failure"), "request_failed"},
+		{openhongguo.ErrTransport, "transport_failed"},
 	} {
 		got, explanation := hongguoPlaybackAccessStatus(tc.err)
 		if got != tc.want || explanation == "" {
 			t.Fatalf("status = %q (%q), want %q", got, explanation, tc.want)
 		}
+	}
+}
+
+func TestHongguoSDKTransportFailureClassification(t *testing.T) {
+	for _, tc := range []struct {
+		err error
+		want string
+	}{
+		{context.Canceled, "cancelled"},
+		{context.DeadlineExceeded, "timeout"},
+		{&net.DNSError{Err: "no such host", Name: "example.invalid"}, "dns"},
+		{x509.UnknownAuthorityError{}, "tls_certificate"},
+		{&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection failed")}, "connection"},
+		{io.ErrUnexpectedEOF, "connection_closed"},
+		{errors.New("other"), "transport"},
+	} {
+		if got := hongguoSDKTransportFailureKind(fmt.Errorf("wrapped: %w", tc.err)); got != tc.want {
+			t.Errorf("classification = %q, want %q", got, tc.want)
+		}
+	}
+}
+
+func TestHongguoSDKTransportReportsFailureWithoutURL(t *testing.T) {
+	var host, stage, kind string
+	client := &http.Client{Transport: hongguoSDKTestRoundTripper(func(r *http.Request) (*http.Response, error) {
+		return nil, &net.DNSError{Err: "no such host", Name: r.URL.Hostname()}
+	})}
+	transport := hongguoSDKTransport{
+		client: client,
+		onTransportFailure: func(h, s, k string, elapsed time.Duration) {
+			host, stage, kind = h, s, k
+		},
+	}
+	_, err := transport.Do(context.Background(), &openhongguo.Request{
+		URL: "https://example.invalid/test?private=synthetic",
+	})
+	if err == nil || host != "example.invalid" || stage != "request" || kind != "dns" {
+		t.Fatalf("unexpected diagnostic host=%q stage=%q kind=%q err=%v", host, stage, kind, err)
 	}
 }

@@ -3,11 +3,14 @@ package core
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,7 +33,7 @@ const (
 )
 
 var (
-	errHongguoSDKRegistrationCooling = errors.New("紅果 SDK 設備註冊冷卻中")
+	errHongguoSDKRegistrationCooling = errors.New("紅果 SDK 裝置註冊冷卻中")
 	errHongguoSDKPlaybackCooling     = errors.New("紅果 SDK 播放空回應冷卻中")
 )
 
@@ -154,19 +157,66 @@ func (downloader *Downloader) recordHongguoSDKPlaybackResponse(
 	method, host, path string, status, responseBytes int, contentType, contentEncoding string,
 ) {
 	responseType := strings.TrimSpace(strings.SplitN(contentType, ";", 2)[0])
+	level := "info"
+	result := "received"
+	if status == http.StatusOK && responseBytes == 0 {
+		level, result = "warn", "empty_response"
+	} else if status >= 400 {
+		level, result = "warn", "http_error"
+	}
 	downloader.recordDiagnostic(diagnosticEvent{
-		Level: "info", Event: "hongguo.sdk_playback_http_response",
+		Level: level, Event: "hongguo.sdk_playback_http_response",
 		Source: sourceHongguo, Host: host, HTTPStatus: status, ResponseType: responseType,
 		Message: fmt.Sprintf(
-			"method=%s path=%s response_bytes=%d content_encoding=%s",
-			method, path, responseBytes, strings.TrimSpace(contentEncoding),
+			"method=%s path=%s response_bytes=%d content_encoding=%s result=%s",
+			method, path, responseBytes, strings.TrimSpace(contentEncoding), result,
 		),
+	})
+}
+
+// Classify actual transport failures without recording request URLs,
+// credentials, headers, response bodies, or raw error strings.
+func hongguoSDKTransportFailureKind(err error) string {
+	var dnsErr *net.DNSError
+	var certErr *tls.CertificateVerificationError
+	var unknownAuthority x509.UnknownAuthorityError
+	var hostnameErr x509.HostnameError
+	var invalidCert x509.CertificateInvalidError
+	var recordErr tls.RecordHeaderError
+	var netErr net.Error
+	var opErr *net.OpError
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "cancelled"
+	case errors.As(err, &dnsErr):
+		return "dns"
+	case errors.As(err, &certErr), errors.As(err, &unknownAuthority), errors.As(err, &hostnameErr), errors.As(err, &invalidCert):
+		return "tls_certificate"
+	case errors.As(err, &recordErr):
+		return "tls_protocol"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
+		return "timeout"
+	case errors.As(err, &opErr):
+		return "connection"
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		return "connection_closed"
+	default:
+		return "transport"
+	}
+}
+
+func (downloader *Downloader) recordHongguoSDKTransportFailure(host, stage, kind string, elapsed time.Duration) {
+	downloader.recordDiagnostic(diagnosticEvent{
+		Level: "warn", Event: "hongguo.sdk_transport_failure",
+		Source: sourceHongguo, Host: host,
+		Message: fmt.Sprintf("stage=%s kind=%s elapsed_ms=%d", stage, kind, elapsed.Milliseconds()),
 	})
 }
 
 type hongguoSDKTransport struct {
 	client               *http.Client
 	onRegistrationStatus func(int)
+	onTransportFailure   func(host, stage, kind string, elapsed time.Duration)
 	onPlaybackResponse   func(method, host, path string, status, responseBytes int, contentType, contentEncoding string)
 }
 
@@ -194,8 +244,15 @@ func (t hongguoSDKTransport) Do(ctx context.Context, input *openhongguo.Request)
 	if request.Header.Get("Accept-Encoding") == "" {
 		request.Header.Set("Accept-Encoding", "identity")
 	}
+	started := time.Now()
+	reportFailure := func(stage string, err error) {
+		if t.onTransportFailure != nil {
+			t.onTransportFailure(request.URL.Hostname(), stage, hongguoSDKTransportFailureKind(err), time.Since(started))
+		}
+	}
 	response, err := t.client.Do(request)
 	if err != nil {
+		reportFailure("request", err)
 		return nil, err
 	}
 	defer response.Body.Close()
@@ -208,6 +265,7 @@ func (t hongguoSDKTransport) Do(ctx context.Context, input *openhongguo.Request)
 	const maxResponseBytes = 8 << 20
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
 	if err != nil {
+		reportFailure("response_body", err)
 		return nil, err
 	}
 	if len(body) > maxResponseBytes {
@@ -421,6 +479,7 @@ func (downloader *Downloader) hongguoSDKClient() (*openhongguo.Client, error) {
 				client: downloader.client,
 				onRegistrationStatus: downloader.hongguoSDKSession.recordRegistrationStatus,
 				onPlaybackResponse: downloader.recordHongguoSDKPlaybackResponse,
+				onTransportFailure: downloader.recordHongguoSDKTransportFailure,
 			},
 			ProfileStore:  profiles,
 			APIOrigin:     hongguoSDKAPIOrigin,
