@@ -3605,8 +3605,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     await _retry();
   }
 
-  Future<void> _retry({int? quality}) async {
-    final position = _currentPosition;
+  Future<void> _retry({int? quality, bool fromBeginning = false}) async {
+    final position = playbackRetryPosition(
+      _currentPosition,
+      fromBeginning: fromBeginning,
+    );
+    if (fromBeginning) {
+      DiaryService.add('[Recovery] manual_restart_from_beginning');
+    }
     if (quality != null) {
       _requestedQuality = quality;
     }
@@ -4875,6 +4881,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                           icon: const Icon(Icons.receipt_long_rounded),
                           label: const Text('檢視播放紀錄'),
                         ),
+                        if (_currentPosition > 0)
+                          FilledButton.tonalIcon(
+                            onPressed: () => _retry(fromBeginning: true),
+                            icon: const Icon(Icons.restart_alt_rounded),
+                            label: const Text('從頭播放'),
+                          ),
                         if (_localFailure && widget.allowOnlineFallback)
                           TextButton.icon(
                             onPressed: _switchOnline,

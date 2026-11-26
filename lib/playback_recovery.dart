@@ -2,6 +2,10 @@ import 'models.dart';
 
 enum PlaybackRecoveryAction { alternative, refresh, recreatePlayer, stop }
 
+/// Manual restart must not inherit the failed stream's saved seek position.
+double playbackRetryPosition(double currentPosition, {bool fromBeginning = false}) =>
+    fromBeginning ? 0.0 : currentPosition;
+
 /// A completion event without duration metadata is not automatically a failure.
 /// Some short-drama sources omit duration but still report a valid final position.
 bool playbackCompletionNeedsRecovery({

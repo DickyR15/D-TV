@@ -3,6 +3,12 @@ import 'package:hgtv/playback_recovery.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('manual restart discards the failed seek; ordinary retry resumes', () {
+    expect(playbackRetryPosition(42.5), 42.5);
+    expect(playbackRetryPosition(42.5, fromBeginning: true), 0.0);
+    expect(playbackRetryPosition(0, fromBeginning: true), 0.0);
+  });
+
   test('unknown-duration completion is valid after playback has progressed', () {
     expect(
       playbackCompletionNeedsRecovery(
