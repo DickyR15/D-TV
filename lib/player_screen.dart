@@ -491,6 +491,13 @@ class _PlayerScreenState extends State<PlayerScreen>
           '[MPV] level=${log.level} prefix=${playbackDiagnosticLogText(log.prefix)} generation=$_generation text=$text',
         );
         final lowerLog = log.text.toLowerCase();
+        if (Platform.isWindows &&
+            log.prefix.toLowerCase().contains('dxva2-egl') &&
+            lowerLog.contains('failed to create egl surface')) {
+          DiaryService.add(
+            '[VideoOutput] windows_egl_surface_failure generation=$_generation phase=${_plan == null ? 'before_media' : 'media_prepared'}',
+          );
+        }
         if (Platform.isIOS &&
             !_iosVideoToolboxSoftwareFallbackApplied &&
             log.prefix.toLowerCase().contains('ffmpeg/video') &&

@@ -7,10 +7,16 @@ import 'diary_service.dart';
 import 'models.dart';
 
 class PlaybackPreloader extends ChangeNotifier {
-  PlaybackPreloader(this.repository, {DateTime Function()? now})
-    : _now = now ?? DateTime.now;
+  PlaybackPreloader(
+    this.repository, {
+    DateTime Function()? now,
+    this.detailPage = false,
+  }) : _now = now ?? DateTime.now;
 
   final AppRepository repository;
+  // Detail-page warming is speculative; next-episode warming after verified
+  // playback is a separate policy.
+  final bool detailPage;
   final DateTime Function() _now;
   PlaybackPlan? _ready;
   String? _identity;
@@ -50,6 +56,13 @@ class PlaybackPreloader extends ChangeNotifier {
     bool online = false,
   }) {
     if (_closed) return;
+    if (detailPage && drama.source == 'hongguo') {
+      clear();
+      DiaryService.add(
+        '[NextEpisodePreload] skipped source=hongguo dramaId=${drama.id} episode=${episode.number} reason=foreground_playback_required',
+      );
+      return;
+    }
     final identity = _key(drama, episode, quality, online);
     if (_identity != identity) {
       clear();

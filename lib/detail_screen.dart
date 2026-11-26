@@ -99,7 +99,7 @@ class _DetailScreenState extends State<DetailScreen> {
     super.initState();
     _profileEpoch = widget.store.profileEpoch;
     _activeDrama = widget.drama;
-    _detailPreloader = PlaybackPreloader(widget.repository);
+    _detailPreloader = PlaybackPreloader(widget.repository, detailPage: true);
     widget.store.addListener(_onStoreChanged);
     _load();
   }

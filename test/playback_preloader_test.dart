@@ -65,6 +65,45 @@ void main() {
     'currentEpisode': number,
   }, number);
 
+  testWidgets('hongguo detail warming defers to foreground playback', (
+    tester,
+  ) async {
+    DiaryService.clear();
+    final repository = DetailPreloadRepository(
+      const PlaybackPlan(
+        url: 'https://example.test/prepared.m3u8',
+        session: 'unused',
+      ),
+    );
+    final preloader = PlaybackPreloader(repository, detailPage: true);
+    addTearDown(preloader.dispose);
+    expect(FixtureRepository.free.source, 'hongguo');
+    preloader.prepare(FixtureRepository.free, episode(1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.preloadCalls, 0);
+    expect(preloader.loading, isFalse);
+    expect(preloader.take(FixtureRepository.free, episode(1)), isNull);
+    expect(DiaryService.fullText, contains('reason=foreground_playback_required'));
+  });
+
+  testWidgets('hongguo next-episode warming remains enabled in the player', (
+    tester,
+  ) async {
+    final repository = DetailPreloadRepository(
+      const PlaybackPlan(
+        url: 'https://example.test/prepared.m3u8',
+        session: 'next-episode',
+      ),
+    );
+    final preloader = PlaybackPreloader(repository);
+    addTearDown(preloader.dispose);
+    preloader.prepare(FixtureRepository.free, episode(2));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+    expect(repository.preloadCalls, 1);
+    expect(preloader.take(FixtureRepository.free, episode(2))?.session, 'next-episode');
+  });
+
   testWidgets('detail preload prepares and transfers only the selected episode', (
     tester,
   ) async {
