@@ -167,6 +167,22 @@ void main() {
     expect(repository.released, ['expired-detail-plan']);
   });
 
+  testWidgets('invalid preload URL releases its allocated session', (tester) async {
+    final repository = DetailPreloadRepository(
+      const PlaybackPlan(url: '', session: 'invalid-plan'),
+    );
+    final preloader = PlaybackPreloader(repository);
+    addTearDown(preloader.dispose);
+
+    preloader.prepare(FixtureRepository.free, episode(2));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+
+    expect(repository.released, ['invalid-plan']);
+    expect(preloader.error, isNotEmpty);
+    expect(preloader.take(FixtureRepository.free, episode(2)), isNull);
+  });
+
   testWidgets('failed next-episode preload records elapsed time and error type', (
     tester,
   ) async {

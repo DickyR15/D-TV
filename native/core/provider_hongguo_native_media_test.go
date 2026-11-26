@@ -29,3 +29,44 @@ func TestHongguoMediaShortEdgeQuality(t *testing.T) {
 		})
 	}
 }
+
+func TestHongguoCodecAliasesAndUnsupportedVVC(t *testing.T) {
+	for _, tc := range []struct {
+		codec string
+		rank int
+		vvc bool
+	}{
+		{" AVC1.640028 ", 3, false},
+		{"avc3.640028", 3, false},
+		{"h.264", 3, false},
+		{"hvc1.1.6.L120.B0", 2, false},
+		{"hev1.1.6.L120", 2, false},
+		{"H.265", 2, false},
+		{"bytevc1", 2, false},
+		{"bytevc2", 0, true},
+		{"h.266", 0, true},
+		{"vvc1.1.L120", 0, true},
+		{"vvi1", 0, true},
+		{"unknown", 0, false},
+		{"", 1, false},
+	} {
+		if rank := hongguoSDKCodecRank(tc.codec); rank != tc.rank {
+			t.Errorf("codec %q rank=%d want %d", tc.codec, rank, tc.rank)
+		}
+		if got := hongguoCodecIsH266(tc.codec); got != tc.vvc {
+			t.Errorf("codec %q VVC=%t want %t", tc.codec, got, tc.vvc)
+		}
+	}
+}
+
+func TestHongguoProfileQualifiedCodecMediaSelection(t *testing.T) {
+	model := map[string]any{"video_list": []any{
+		map[string]any{"main_url": "https://media.test/vvc.mp4", "video_meta": map[string]any{"codec_type": "vvc1.1.L120", "definition": "2160p"}},
+		map[string]any{"main_url": "https://media.test/hevc.mp4", "video_meta": map[string]any{"codec_type": "hvc1.1.6.L120", "definition": "1080p"}},
+		map[string]any{"main_url": "https://media.test/avc.mp4", "video_meta": map[string]any{"codec_type": "avc1.640028", "definition": "1080p"}},
+	}}
+	got, err := selectHongguoAppMedia(model)
+	if err != nil || got.URL != "https://media.test/avc.mp4" || len(got.Variants) != 2 {
+		t.Fatalf("compatible media selection=%+v err=%v", got, err)
+	}
+}

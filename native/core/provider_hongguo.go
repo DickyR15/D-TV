@@ -190,6 +190,14 @@ func parseRouterData(raw string) map[string]any {
 	return data
 }
 
+// A skipped resolver is not a successful request or an unexplained nil error.
+func hongguoAttemptDiagnostic(err error) string {
+	if err == nil {
+		return "未執行"
+	}
+	return fmt.Sprint(publicError(err))
+}
+
 func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (providerMedia, error) {
 	source, seriesID, ok := splitProviderDramaID(task.DramaID)
 	if !ok || source != sourceHongguo {
@@ -264,9 +272,9 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		"紅果取流失敗：新版匿名 SDK V5：%v；解析設定 %s；快捷網頁：%v；舊版 App：%v；多清晰度：%v；官網網頁：%w",
 		publicError(sdkErr),
 		profile,
-		publicError(quickWebErr),
-		publicError(nativeErr),
-		publicError(multiModelErr),
+		hongguoAttemptDiagnostic(quickWebErr),
+		hongguoAttemptDiagnostic(nativeErr),
+		hongguoAttemptDiagnostic(multiModelErr),
 		pageErr,
 	)
 }

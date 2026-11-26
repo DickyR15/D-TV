@@ -432,7 +432,7 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 		if codec == "" {
 			codec = strings.ToLower(mapString(meta, "codec_type", "codec"))
 		}
-		if strings.Contains(codec, "bytevc2") ||
+		if hongguoCodecIsH266(codec) ||
 			strings.Contains(strings.ToLower(mapString(variant, "gear_des_key")), "bytevc2") {
 			hasH266Variant = true
 			continue
@@ -479,17 +479,7 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 		}
 		definition, _ := strconv.Atoi(hongguoQualityNumber.FindString(definitionText))
 		media.Quality = hongguoMediaShortEdgeQuality(width, height, definition)
-		codecRank := 0
-		switch codec {
-		case "h264", "avc", "avc1":
-			codecRank = 3
-		case "hevc", "h265", "hvc1", "hev1", "bytevc1":
-			codecRank = 2
-		case "", "mp4", "mpeg":
-			codecRank = 1
-		default:
-			codecRank = 0
-		}
+		codecRank := hongguoSDKCodecRank(codec)
 		score := media.Quality*100 + codecRank
 		if codecRank == 0 {
 			continue

@@ -22,8 +22,10 @@ class PlaybackPreloader extends ChangeNotifier {
   int _generation = 0;
   bool _closed = false, loading = false;
   String error = '';
-  void _release(PlaybackPlan plan) =>
-      unawaited(repository.release(plan.session).catchError((Object _) {}));
+  void _release(PlaybackPlan plan) {
+    if (plan.session.isEmpty) return;
+    unawaited(repository.release(plan.session).catchError((Object _) {}));
+  }
 
   String get status {
     if (_ready != null && _now().isBefore(_expires)) {
@@ -87,10 +89,13 @@ class PlaybackPreloader extends ChangeNotifier {
           DiaryService.add(
             '[NextEpisodePreload] cancelled source=${drama.source} dramaId=${drama.id} episode=${episode.number} elapsedMs=${preloadClock.elapsedMilliseconds}',
           );
-          if (plan != null) await repository.release(plan.session);
+          if (plan != null) _release(plan);
           return;
         }
-        if (plan == null || plan.url.isEmpty) throw AppFailure('未取得預載入結果');
+        if (plan == null || plan.url.trim().isEmpty) {
+          if (plan != null) _release(plan);
+          throw AppFailure('未取得預載入結果');
+        }
         var expires = _now().add(const Duration(minutes: 2));
         if (plan.expiresAt > 0) {
           final authorizationExpiry = DateTime.fromMillisecondsSinceEpoch(

@@ -524,17 +524,35 @@ func hongguoSDKPlaybackRegistrationRejected(err error) bool {
 				apiErr.HTTPStatus == 444))
 }
 
+// Both response parsers accept standard codec aliases, including RFC 6381
+// profile-qualified values. Unsupported VVC must not reach the player.
+func hongguoCodecIsH266(codec string) bool {
+	codec = strings.ToLower(strings.TrimSpace(codec))
+	return strings.Contains(codec, "bytevc2") || codec == "h266" ||
+		codec == "h.266" || codec == "vvc" || codec == "vvc1" || codec == "vvi1" ||
+		strings.HasPrefix(codec, "vvc1.") || strings.HasPrefix(codec, "vvi1.")
+}
+
 func hongguoSDKCodecRank(codec string) int {
-	switch strings.ToLower(strings.TrimSpace(codec)) {
-	case "h264", "avc", "avc1":
+	codec = strings.ToLower(strings.TrimSpace(codec))
+	if hongguoCodecIsH266(codec) {
+		return 0
+	}
+	switch codec {
+	case "h264", "h.264", "avc", "avc1", "avc3":
 		return 3
-	case "hevc", "h265", "hvc1", "hev1", "bytevc1":
+	case "hevc", "h265", "h.265", "hvc1", "hev1", "bytevc1":
 		return 2
 	case "", "mp4", "mpeg":
 		return 1
-	default:
-		return 0
 	}
+	if strings.HasPrefix(codec, "avc1.") || strings.HasPrefix(codec, "avc3.") {
+		return 3
+	}
+	if strings.HasPrefix(codec, "hvc1.") || strings.HasPrefix(codec, "hev1.") {
+		return 2
+	}
+	return 0
 }
 
 func hongguoSDKPlaybackToNativeMedia(playback *model.Playback) (providerMedia, error) {
@@ -545,7 +563,7 @@ func hongguoSDKPlaybackToNativeMedia(playback *model.Playback) (providerMedia, e
 	hasH266 := false
 	for _, stream := range playback.Streams {
 		protected = protected || stream.Protected
-		if strings.Contains(strings.ToLower(stream.Codec), "bytevc2") {
+		if hongguoCodecIsH266(stream.Codec) {
 			hasH266 = true
 		}
 	}
@@ -569,7 +587,7 @@ func hongguoSDKPlaybackToNativeMedia(playback *model.Playback) (providerMedia, e
 	seen := map[string]bool{}
 	for _, stream := range playback.Streams {
 		codecRank := hongguoSDKCodecRank(stream.Codec)
-		if codecRank == 0 || strings.Contains(strings.ToLower(stream.Codec), "bytevc2") {
+		if codecRank == 0 {
 			continue
 		}
 		definition := firstNonEmpty(stream.Definition, stream.Quality)

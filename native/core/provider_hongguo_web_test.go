@@ -35,3 +35,9 @@ func TestHongguoQuickAppMediaFromPageRejectsMissingOrUnsafeAddress(t *testing.T)
 		})
 	}
 }
+
+func TestHongguoSkippedAttemptDiagnostic(t *testing.T) {
+	if got := hongguoAttemptDiagnostic(nil); got != "未執行" {
+		t.Fatalf("skipped attempt diagnostic = %q", got)
+	}
+}
