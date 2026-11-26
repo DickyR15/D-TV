@@ -898,7 +898,7 @@ class TelevisionSettingsDialog extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                '切換解碼方式仍沒畫面時可嘗試，需重啟應用生效',
+                '偏色、黑畫面或花屏時可嘗試，需重啟應用生效',
                 style: TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 20),

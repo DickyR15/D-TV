@@ -105,3 +105,21 @@ func TestNativeHLSVariantQualityIgnoresOpaqueSignedTokenValues(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeHLSVariantQualityConflictingQueryMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		uri string
+		want int
+	}{
+		{"https://cdn.example/master.m3u8?height=1280&resolution=720x1280&quality=1080", 720},
+		{"https://cdn.example/master.m3u8?quality=480&definition=1080p", 0},
+		{"https://cdn.example/master.m3u8?quality=480&quality=1080", 0},
+		{"https://cdn.example/master.m3u8?QUALITY=720&quality=720", 720},
+	} {
+		for i := 0; i < 30; i++ {
+			if got := nativeHLSVariantQuality("", tc.uri); got != tc.want {
+				t.Fatalf("quality for %s = %d, want %d", tc.uri, got, tc.want)
+			}
+		}
+	}
+}

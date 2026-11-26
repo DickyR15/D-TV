@@ -26,26 +26,18 @@ func (downloader *Downloader) resolveHongguoAppMedia(ctx context.Context, videoI
 	if err != nil {
 		return providerMedia{}, err
 	}
-	data := nestedMap(result, "data")
-	model, _ := data["video_model"].(map[string]any)
-	if encoded, ok := data["video_model"].(string); ok && encoded != "" {
-		if decoded, err := decodeHongguoBase64(encoded); err == nil && len(decoded) > 0 {
-			encoded = string(decoded)
-		}
-		decoder := json.NewDecoder(strings.NewReader(encoded))
-		decoder.UseNumber()
-		if err := decoder.Decode(&model); err != nil {
-			return providerMedia{}, errors.New("紅果 App 播放資訊格式異常")
-		}
+	return selectHongguoAppResponseMedia(nestedMap(result, "data"))
+}
+
+// Parse only the supplied response. Map-shaped video_list and JSON model
+// strings are supported without changing the request, identity or endpoint.
+func selectHongguoAppResponseMedia(data map[string]any) (providerMedia, error) {
+	model := decodeHongguoVideoModel(data["video_model"])
+	if !hongguoHasVideoList(model["video_list"]) && hongguoHasVideoList(data["video_list"]) {
+		model = data
 	}
 	if len(model) == 0 {
-		if rows := anyList(data["video_list"]); len(rows) > 0 {
-			model = map[string]any{
-				"video_list":     data["video_list"],
-				"video_duration": data["video_duration"],
-				"duration":       data["duration"],
-			}
-		}
+		return providerMedia{}, errors.New("紅果 App 播放資訊格式異常")
 	}
 	return selectHongguoAppMedia(model)
 }
@@ -433,7 +425,8 @@ func selectHongguoAppMedia(model map[string]any) (providerMedia, error) {
 			codec = strings.ToLower(mapString(meta, "codec_type", "codec"))
 		}
 		if hongguoCodecIsH266(codec) ||
-			strings.Contains(strings.ToLower(mapString(variant, "gear_des_key")), "bytevc2") {
+			strings.Contains(strings.ToLower(mapString(variant, "gear_des_key")), "bytevc2") ||
+			strings.Contains(strings.ToLower(mapString(meta, "gear_des_key")), "bytevc2") {
 			hasH266Variant = true
 			continue
 		}

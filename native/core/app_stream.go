@@ -336,16 +336,35 @@ func nativeHLSVariantQuality(streamInfo, uri string) int {
 		}
 	}
 
+	// Query maps have randomized iteration order. Prefer explicit resolution
+	// over quality/definition, then height. Conflicting values in one group
+	// are treated as unknown rather than arbitrarily rejecting a usable route.
 	values := parsed.Query()
-	for key, candidates := range values {
-		switch strings.ToLower(key) {
-		case "quality", "resolution", "definition", "height",
-			"video_quality", "video_resolution", "video_definition", "video_height":
-			for _, candidate := range candidates {
-				if quality := nativeHLSQualityFromValue(candidate); quality > 0 {
-					return quality
+	for _, group := range [][]string{
+		{"resolution", "video_resolution"},
+		{"quality", "video_quality", "definition", "video_definition"},
+		{"height", "video_height"},
+	} {
+		quality := 0
+		for key, candidates := range values {
+			for _, name := range group {
+				if !strings.EqualFold(key, name) {
+					continue
+				}
+				for _, candidate := range candidates {
+					got := nativeHLSQualityFromValue(candidate)
+					if got <= 0 {
+						continue
+					}
+					if quality > 0 && quality != got {
+						return 0
+					}
+					quality = got
 				}
 			}
+		}
+		if quality > 0 {
+			return quality
 		}
 	}
 	return 0

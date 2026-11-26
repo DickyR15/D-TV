@@ -70,3 +70,27 @@ func TestHongguoProfileQualifiedCodecMediaSelection(t *testing.T) {
 		t.Fatalf("compatible media selection=%+v err=%v", got, err)
 	}
 }
+
+func TestHongguoAppResponseAcceptsMapVideoListAndModelString(t *testing.T) {
+	video := map[string]any{"main_url": "https://media.test/full.mp4", "video_meta": map[string]any{"codec_type": "h264", "definition": "1080p"}}
+	for _, data := range []map[string]any{
+		{"video_list": map[string]any{"video_1": video}},
+		{"video_model": map[string]any{"video_list": []any{video}}},
+		{"video_model": `{"video_list":{"video_1":{"main_url":"https://media.test/full.mp4","video_meta":{"codec_type":"h264","definition":"1080p"}}}}`},
+		{"video_model": "invalid", "video_list": map[string]any{"video_1": video}},
+	} {
+		got, err := selectHongguoAppResponseMedia(data)
+		if err != nil || got.URL != "https://media.test/full.mp4" || got.Quality != 1080 {
+			t.Fatalf("compatible response selection=%+v err=%v", got, err)
+		}
+	}
+}
+
+func TestHongguoRejectsNestedUnsupportedGear(t *testing.T) {
+	_, err := selectHongguoAppMedia(map[string]any{"video_list": []any{
+		map[string]any{"main_url":"https://media.test/unsupported.mp4", "video_meta": map[string]any{"gear_des_key":"1080p_bytevc2","codec_type":"h264","definition":"1080p"}},
+	}})
+	if err != errHongguoH266Only {
+		t.Fatalf("nested unsupported gear should signal VVC: %v", err)
+	}
+}

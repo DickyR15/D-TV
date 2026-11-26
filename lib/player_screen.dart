@@ -4133,6 +4133,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  Future<void> _openCompatibleRenderingRecovery() async {
+    final enabled = await AppDevice.compatibleRendering();
+    if (!mounted || _closed) return;
+    await _switchCompatibleRendering(!enabled);
+  }
+
   Future<void> _switchCompatibleRendering(bool enabled) async {
     final accepted = await showDialog<bool>(
       context: context,
@@ -4141,7 +4147,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         data: televisionTheme(AppTheme.dark),
         child: AlertDialog(
           title: Text(enabled ? '開啟相容渲染模式？' : '關閉相容渲染模式？'),
-          content: const Text('需要重新啟動 App 才會生效，播放會中斷。'),
+          content: const Text('偏色、黑畫面或花屏時可嘗試切換；需要重新啟動 App 才會生效，播放會中斷。若無改善，可切回原模式。'),
           actions: [
             TextButton(
               autofocus: true,
@@ -4886,6 +4892,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                             onPressed: () => _retry(fromBeginning: true),
                             icon: const Icon(Icons.restart_alt_rounded),
                             label: const Text('從頭播放'),
+                          ),
+                        if (_televisionRenderingApplies)
+                          FilledButton.tonalIcon(
+                            onPressed: _openCompatibleRenderingRecovery,
+                            icon: const Icon(Icons.display_settings),
+                            label: const Text('切換相容渲染'),
                           ),
                         if (_localFailure && widget.allowOnlineFallback)
                           TextButton.icon(
