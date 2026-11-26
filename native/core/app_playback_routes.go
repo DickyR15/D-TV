@@ -199,6 +199,25 @@ func nextNativePlaybackRouteIndex(
 	return next
 }
 
+// Advance by one attempted route, moving a healthy candidate ahead of cooling
+// hosts without discarding the untried candidates. Copy before reordering so
+// concurrent recovery requests and the old playback session remain isolated.
+func nativeAdvancePlaybackChoice(choice nativePlaybackChoice, isCooling func(string) bool) nativePlaybackChoice {
+	next := choice.index + 1
+	selected := nextNativePlaybackRouteIndex(choice.media, choice.index, isCooling)
+	if selected > next && selected < len(choice.media) {
+		choice.media = append([]providerMedia(nil), choice.media...)
+		candidate := choice.media[selected]
+		copy(choice.media[next+1:selected+1], choice.media[next:selected])
+		choice.media[next] = candidate
+	}
+	choice.index = selected
+	if selected < len(choice.media) {
+		choice.index = next
+	}
+	return choice
+}
+
 func (engine *nativeEngine) nativeNextPlayback(ctx context.Context, session string) (nativePlan, error) {
 	engine.mu.Lock()
 	choice, exists := engine.playbacks[session]
@@ -214,9 +233,8 @@ func (engine *nativeEngine) nativeNextPlayback(ctx context.Context, session stri
 		choice.index+1 >= nativeEarlyPlaybackRefreshAfterFailedRoutes {
 		return engine.nativeRefreshPlaybackAfterFailures(ctx, choice)
 	}
-	choice.index = nextNativePlaybackRouteIndex(
-		choice.media,
-		choice.index,
+	choice = nativeAdvancePlaybackChoice(
+		choice,
 		func(address string) bool {
 			return engine.downloader != nil &&
 				engine.downloader.nativeStreamHostCoolingDown(address)
@@ -231,7 +249,7 @@ func (engine *nativeEngine) nativeRefreshPlaybackAfterFailures(
 ) (nativePlan, error) {
 	if engine.downloader == nil || previous.task.DramaID == "" {
 		previous.earlyRefreshUsed = true
-		previous.index = nextNativePlaybackRouteIndex(previous.media, previous.index, func(address string) bool {
+		previous = nativeAdvancePlaybackChoice(previous, func(address string) bool {
 			return engine.downloader != nil && engine.downloader.nativeStreamHostCoolingDown(address)
 		})
 		return engine.nativeOpenPlayback(ctx, previous)

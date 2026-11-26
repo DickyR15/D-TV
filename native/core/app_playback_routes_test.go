@@ -351,3 +351,29 @@ func TestNativePlaybackRefreshDoesNotDropOldRoutesWhenRefreshAddsNothing(t *test
 		t.Fatalf("refresh discarded the only untried old route: %+v", merged.media)
 	}
 }
+
+func TestNativeAdvancePlaybackChoicePreservesCoolingRoutes(t *testing.T) {
+	original := nativePlaybackChoice{media: []providerMedia{
+		{URL: "https://first.test/0.mp4", Quality: 1080},
+		{URL: "https://cool.test/1.mp4", Quality: 1080},
+		{URL: "https://cool.test/2.mp4", Quality: 720},
+		{URL: "https://healthy.test/3.mp4", Quality: 720},
+	}}
+	cooling := func(address string) bool { return strings.Contains(address, "cool.test") }
+	first := nativeAdvancePlaybackChoice(original, cooling)
+	if first.index != 1 || first.media[1].URL != original.media[3].URL {
+		t.Fatalf("healthy route was not prioritized: %+v", first)
+	}
+	if original.media[1].URL != "https://cool.test/1.mp4" {
+		t.Fatal("original session was mutated")
+	}
+	second := nativeAdvancePlaybackChoice(first, cooling)
+	third := nativeAdvancePlaybackChoice(second, cooling)
+	if second.index != 2 || second.media[2].URL != original.media[1].URL ||
+		third.index != 3 || third.media[3].URL != original.media[2].URL {
+		t.Fatalf("untried cooling routes were lost: %+v %+v", second, third)
+	}
+	if exhausted := nativeAdvancePlaybackChoice(third, cooling); exhausted.index != len(original.media) {
+		t.Fatal("exhausted route list did not terminate")
+	}
+}
