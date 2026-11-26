@@ -64,16 +64,16 @@ func (downloader *Downloader) ensureHongguoDeviceFor(ctx context.Context, helper
 	}
 	if time.Now().Before(client.registerPausedUntil) {
 		if client.registerPauseErr != nil {
-			return fmt.Errorf("紅果設備註冊暫不可用：%w", client.registerPauseErr)
+			return fmt.Errorf("紅果裝置註冊暫不可用：%w", client.registerPauseErr)
 		}
-		return errors.New("紅果設備註冊暫不可用，請檢查網路設定後重試")
+		return errors.New("紅果裝置註冊暫不可用，請檢查網路設定後重試")
 	}
 	deviceID, installID, err := downloader.registerHongguoDevice(ctx)
 	if err != nil {
 		var rejection hongguoRegisterRejection
 		if ctx.Err() == nil && errors.As(err, &rejection) {
 			client.registerPausedUntil = time.Now().Add(hongguoDeviceRegisterPause)
-			client.registerPauseErr = fmt.Errorf("紅果設備註冊遭拒絕：%w", err)
+			client.registerPauseErr = fmt.Errorf("紅果裝置註冊遭拒絕：%w", err)
 			return client.registerPauseErr
 		}
 		client.registerPausedUntil = time.Time{}
@@ -410,7 +410,7 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 			return "", "", errors.Join(append(failures, fmt.Errorf("%s: %w", host, readFailure))...)
 		}
 		if response.StatusCode != http.StatusOK {
-			statusErr := fmt.Errorf("紅果設備註冊 HTTP %d", response.StatusCode)
+			statusErr := fmt.Errorf("紅果裝置註冊 HTTP %d", response.StatusCode)
 			elapsed := time.Since(started)
 			stage := hongguoRegistrationHTTPStage(response.StatusCode)
 			if hongguoRegistrationIsTLBNotFound(response, content) {
@@ -429,7 +429,11 @@ func (downloader *Downloader) registerHongguoDevice(ctx context.Context) (string
 			if hongguoShouldTryAlternateRegistrationResponse(response, content) && hostIndex+1 < len(hosts) {
 				continue
 			}
-			if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+			if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden ||
+				response.StatusCode == 444 || hongguoRegistrationIsTLBNotFound(response, content) {
+				// Both eligible registration routes have now failed. Keep the
+				// existing cooldown instead of starting another registration
+				// batch for every background catalogue request.
 				return "", "", hongguoRegisterRejection{errors.Join(failures...)}
 			}
 			return "", "", errors.Join(failures...)

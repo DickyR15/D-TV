@@ -70,6 +70,10 @@ String _nativeRequest(String body) {
   }
 }
 
+// Background diagnostics must not consume Red Fruit playback requests.
+String automaticSourceCheckOperation(String source) =>
+    source == 'hongguo' ? 'checkCatalog' : 'check';
+
 bool supportsNativeSeriesSeasons(String source) =>
     source == 'hongguo' || source == 'duoduo';
 
@@ -148,7 +152,7 @@ abstract class AppRepository {
     Drama? drama,
   }) async => throw AppFailure('目前環境不支援片源管理');
   Future<SourceStatus> startAutomaticSourceCheck(String source) async =>
-      startSourceJob(source, 'check');
+      startSourceJob(source, automaticSourceCheckOperation(source));
   Future<SourceStatus> cancelSourceJob(String source) async =>
       throw AppFailure('目前環境不支援片源管理');
   Future<List<String>> suggestions(String query) async => const [];
@@ -528,7 +532,7 @@ class NativeRepository extends AppRepository {
       await _call({
         'action': 'sourceJob',
         'source': source,
-        'command': 'check',
+        'command': automaticSourceCheckOperation(source),
       }),
     );
   }

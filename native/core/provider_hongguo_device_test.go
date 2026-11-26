@@ -650,3 +650,28 @@ func TestHongguoPlaybackDoesNotCallRetiredThirdPartyAPI(t *testing.T) {
 		t.Fatalf("unexpected user-facing error: %v", err)
 	}
 }
+
+func TestHongguoRegistrationExhaustedEdgeRoutesPauseFurtherRequests(t *testing.T) {
+	requests := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		requests++
+		if request.URL.Host == "log.snssdk.com" {
+			return sourceFixtureResponse(request, 444, "Access Denied"), nil
+		}
+		response := sourceFixtureResponse(request, http.StatusNotFound, "<html>404 Not Found TLB</html>")
+		response.Header.Set("Server", "Tengine")
+		response.Header.Set("Content-Type", "text/html")
+		response.Header.Set("Via", "cache12.edge[13,0]")
+		return response, nil
+	})
+	d.hongguoClient().state.Registered = false
+	for i := 0; i < 3; i++ {
+		err := d.ensureHongguoDevice(context.Background(), "")
+		if err == nil || !strings.Contains(err.Error(), "遭拒絕") {
+			t.Fatalf("attempt %d must report rejection: %v", i, err)
+		}
+	}
+	if requests != 2 {
+		t.Fatalf("rejected routes must not be retried during cooldown: requests=%d", requests)
+	}
+}

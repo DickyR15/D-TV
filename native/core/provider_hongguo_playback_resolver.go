@@ -65,6 +65,16 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	// The OpenHongguo SDK owns guest registration, V5 signing, and the
 	// single-model fallback. Do not first register a second independent
 	// Current Player device against the retired log.snssdk.com aliases.
+	caller := "playback_or_other"
+	if _, ok := ctx.Value(sourceTraceKey{}).(*sourceResponseTrace); ok {
+		caller = "source_health_check"
+	} else if background, _ := ctx.Value(backgroundCatalogKey{}).(bool); background {
+		caller = "background_catalog"
+	}
+	d.recordDiagnostic(diagnosticEvent{
+		Level: "info", Event: "hongguo.playback_request_origin", Source: sourceHongguo,
+		Message: "caller=" + caller,
+	})
 	sdkMedia, sdkErr := d.resolveHongguoSDKMedia(ctx, videoID)
 	if sdkErr == nil {
 		return sdkMedia, nil

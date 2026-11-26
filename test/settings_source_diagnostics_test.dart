@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hgtv/core_bridge.dart';
 import 'package:hgtv/settings_screen.dart';
 import 'package:hgtv/sources_screen.dart';
 
@@ -8,6 +9,12 @@ import 'fixtures.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('automatic Hongguo health checks use catalog only', () {
+    expect(automaticSourceCheckOperation('hongguo'), 'checkCatalog');
+    expect(automaticSourceCheckOperation('duoduo'), 'check');
+    expect(automaticSourceCheckOperation('ikanbot'), 'check');
+  });
 
   testWidgets('source diagnostics is directly accessible from Settings', (
     tester,
