@@ -1,11 +1,14 @@
 package core
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -131,6 +134,8 @@ func TestHongguoSDKPlaybackRegistrationRejectedClassifiesEdgeAndPolicyResponses(
 		{name: "rate limited", err: &openhongguo.APIError{HTTPStatus: 429}, want: true},
 		{name: "device rejected", err: openhongguo.ErrDeviceRejected, want: true},
 		{name: "authentication", err: openhongguo.ErrAuthenticationRequired, want: true},
+		{name: "verification required", err: openhongguo.ErrChallengeRequired, want: true},
+		{name: "signature rejected", err: openhongguo.ErrSignatureRejected, want: true},
 		{name: "anonymous playback response empty", err: openhongguo.ErrAnonymousLimited, want: true},
 		{name: "server error", err: &openhongguo.APIError{HTTPStatus: 503}, want: false},
 		{name: "timeout", err: errors.New("context deadline exceeded"), want: false},
@@ -246,5 +251,45 @@ func TestHongguoSDKPlaybackGateHonorsCancellationAndCooldown(t *testing.T) {
 	defer nextRelease()
 	if err := session.playbackCooldownError(); !errors.Is(err, errHongguoSDKPlaybackCooling) {
 		t.Fatalf("queued playback must retain preceding rejection cooldown: %v", err)
+	}
+}
+
+func TestHongguoSDKTransportPreservesRawCompressedResponse(t *testing.T) {
+	var encoded bytes.Buffer
+	writer := gzip.NewWriter(&encoded)
+	if _, err := writer.Write([]byte("synthetic response")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		headers map[string]string
+		wantEncoding string
+	}{
+		{name: "no explicit encoding", wantEncoding: "identity"},
+		{name: "explicit gzip", headers: map[string]string{"Accept-Encoding": "gzip"}, wantEncoding: "gzip"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.Header.Get("Accept-Encoding"); got != tc.wantEncoding {
+					t.Errorf("Accept-Encoding = %q, want %q", got, tc.wantEncoding)
+				}
+				w.Header().Set("Content-Encoding", "gzip")
+				_, _ = w.Write(encoded.Bytes())
+			}))
+			defer server.Close()
+			transport := hongguoSDKTransport{client: server.Client()}
+			response, err := transport.Do(context.Background(), &openhongguo.Request{
+				Method: http.MethodGet, URL: server.URL, Headers: tc.headers,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if response.Headers["Content-Encoding"] != "gzip" || !bytes.Equal(response.Body, encoded.Bytes()) {
+				t.Fatal("SDK transport must preserve the encoded response and its header")
+			}
+		})
 	}
 }

@@ -188,6 +188,12 @@ func (t hongguoSDKTransport) Do(ctx context.Context, input *openhongguo.Request)
 	for name, value := range input.Headers {
 		request.Header.Set(name, value)
 	}
+	// The SDK expects raw response bytes and handles Content-Encoding itself.
+	// Prevent net/http from adding gzip and transparently decoding the body
+	// when the SDK did not specify an encoding. Preserve explicit SDK headers.
+	if request.Header.Get("Accept-Encoding") == "" {
+		request.Header.Set("Accept-Encoding", "identity")
+	}
 	response, err := t.client.Do(request)
 	if err != nil {
 		return nil, err
@@ -555,6 +561,8 @@ func hongguoSDKPlaybackRegistrationRejected(err error) bool {
 	}
 	if errors.Is(err, openhongguo.ErrAuthenticationRequired) ||
 		errors.Is(err, openhongguo.ErrDeviceRejected) ||
+		errors.Is(err, openhongguo.ErrChallengeRequired) ||
+		errors.Is(err, openhongguo.ErrSignatureRejected) ||
 		errors.Is(err, openhongguo.ErrRateLimited) ||
 		errors.Is(err, openhongguo.ErrAnonymousLimited) {
 		return true
