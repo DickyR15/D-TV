@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,6 +52,45 @@ type hongguoSDKClientSession struct {
 	registerPausedUntil   time.Time
 	registerPauseStatus   int
 	playbackPausedUntil   time.Time
+	playbackGate          chan struct{}
+}
+
+// Serialize SDK playback requests for this shared session. A queued request
+// must observe a preceding request's rejection/cooldown before contacting
+// the provider. Waiting is context-aware so cancelled preloads do not block
+// the foreground player.
+func (session *hongguoSDKClientSession) acquirePlayback(ctx context.Context) (func(), error) {
+	session.mu.Lock()
+	if session.playbackGate == nil {
+		session.playbackGate = make(chan struct{}, 1)
+	}
+	gate := session.playbackGate
+	session.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case gate <- struct{}{}:
+	}
+	if err := ctx.Err(); err != nil {
+		<-gate
+		return nil, err
+	}
+	return func() { <-gate }, nil
+}
+
+func hongguoSDKBuildVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, dependency := range info.Deps {
+			if dependency.Path == "github.com/beilunyang/openhongguo" {
+				if dependency.Replace != nil {
+					return dependency.Replace.Path + "@" + dependency.Replace.Version
+				}
+				return dependency.Version
+			}
+		}
+	}
+	return "unavailable"
 }
 
 func (session *hongguoSDKClientSession) recordRegistrationStatus(status int) {
@@ -92,7 +132,9 @@ func (session *hongguoSDKClientSession) recordPlaybackResult(err error) {
 		session.playbackPausedUntil = time.Now().Add(hongguoSDKPlaybackPause)
 		return
 	}
-	if err == nil || !errors.Is(err, errHongguoSDKPlaybackCooling) {
+	// A cancellation or unrelated failure must not clear an active
+	// provider rejection. Expiry is handled by playbackCooldownError.
+	if err == nil {
 		session.playbackPausedUntil = time.Time{}
 	}
 }
@@ -361,9 +403,13 @@ func (downloader *Downloader) hongguoSDKClient() (*openhongguo.Client, error) {
 			return
 		}
 		profiles := newHongguoSDKProfileStore(downloader.cfg.dataDir)
-		// Keep the SDK's captured 7.3.9.32 app identity and its matching
-		// default device together; do not mix it with D-TV's 7.4.3.32 profile.
+		// Keep the SDK's default configuration separate from the legacy
+		// D-TV profile. Report the linked module, not the legacy app label.
 		device := model.DefaultDevice
+		downloader.recordDiagnostic(diagnosticEvent{
+			Level: "info", Event: "hongguo.sdk_build_version", Source: sourceHongguo,
+			Message: "module_version=" + hongguoSDKBuildVersion(),
+		})
 		client, err := openhongguo.NewClient(openhongguo.Options{
 			Transport: hongguoSDKTransport{
 				client: downloader.client,
@@ -627,6 +673,11 @@ func (downloader *Downloader) resolveHongguoSDKMedia(ctx context.Context, videoI
 	if !hongguoNumericID.MatchString(videoID) || videoID == "0" {
 		return providerMedia{}, errors.New("紅果 SDK 播放集數 ID 無效")
 	}
+	release, err := downloader.hongguoSDKSession.acquirePlayback(ctx)
+	if err != nil {
+		return providerMedia{}, err
+	}
+	defer release()
 	client, err := downloader.hongguoSDKClient()
 	if err != nil {
 		return providerMedia{}, fmt.Errorf("紅果播放 SDK 初始化失敗：%w", err)

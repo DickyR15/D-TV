@@ -220,3 +220,31 @@ func TestHongguoSDKPlaybackSoftRejectCooldownPreventsRepeatedRegistration(t *tes
 		t.Fatalf("successful playback did not clear cooldown: %v", err)
 	}
 }
+
+func TestHongguoSDKPlaybackGateHonorsCancellationAndCooldown(t *testing.T) {
+	session := &hongguoSDKClientSession{}
+	release, err := session.acquirePlayback(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if unexpectedRelease, err := session.acquirePlayback(ctx); !errors.Is(err, context.Canceled) {
+		if unexpectedRelease != nil {
+			unexpectedRelease()
+		}
+		release()
+		t.Fatalf("cancelled wait error = %v", err)
+	}
+	session.recordPlaybackResult(openhongguo.ErrAnonymousLimited)
+	session.recordPlaybackResult(context.Canceled)
+	release()
+	nextRelease, err := session.acquirePlayback(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer nextRelease()
+	if err := session.playbackCooldownError(); !errors.Is(err, errHongguoSDKPlaybackCooling) {
+		t.Fatalf("queued playback must retain preceding rejection cooldown: %v", err)
+	}
+}
