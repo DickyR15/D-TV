@@ -137,6 +137,9 @@ func (engine *nativeEngine) nativeOpenPlayback(ctx context.Context, choice nativ
 		if err != nil {
 			return nativePlan{}, err
 		}
+		if err := stream.ensureLoopback(ctx); err != nil {
+			return nativePlan{}, err
+		}
 		plan.URL, choice.streamSession = stream.nativeOpen(media)
 	}
 	choice.created = time.Now()

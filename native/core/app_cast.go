@@ -480,12 +480,20 @@ func (engine *nativeEngine) castPlay(ctx context.Context, input nativeInput) (an
 	if err != nil {
 		return nil, err
 	}
+	if err := stream.ensureLoopback(ctx); err != nil {
+		return nil, err
+	}
 	local, token := stream.nativeOpen(*media)
+	localURL, err := url.Parse(local)
+	if err != nil {
+		stream.nativeRelease(token)
+		return nil, err
+	}
 	if len(media.CENCKey) > 0 {
 		stream.nativeRelease(token)
 		return nil, errors.New("此片源使用的加密格式暫不支援 DLNA 投屏")
 	}
-	address := origin + strings.TrimPrefix(local, stream.address)
+	address := origin + localURL.EscapedPath()
 	contentType := "video/mp4"
 	if strings.HasSuffix(local, ".m3u8") {
 		contentType = "application/vnd.apple.mpegurl"
@@ -576,7 +584,7 @@ func (stream *nativeStreamServer) lanOrigin(device string) (string, error) {
 			return "", fmt.Errorf("無法啟動區域網路投屏服務：%w", err)
 		}
 		stream.lan = &http.Server{
-			Handler: stream.server.Handler, ReadHeaderTimeout: 5 * time.Second,
+			Handler: http.HandlerFunc(stream.nativeServe), ReadHeaderTimeout: 5 * time.Second,
 			IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16384,
 		}
 		stream.lanPort = listener.Addr().(*net.TCPAddr).Port
@@ -595,10 +603,10 @@ func (stream *nativeStreamServer) lanClose() {
 	}
 }
 
-func (stream *nativeStreamServer) lanPlaylist(request *http.Request, body string) string {
+func (session *nativeStreamSession) lanPlaylist(request *http.Request, body string) string {
 	origin := "http://" + request.Host
-	if origin != stream.address {
-		return strings.ReplaceAll(body, stream.address+"/", origin+"/")
+	if origin != session.origin {
+		return strings.ReplaceAll(body, session.origin+"/", origin+"/")
 	}
 	return body
 }

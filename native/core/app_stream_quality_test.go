@@ -7,7 +7,7 @@ import (
 
 func TestNativeRewriteKeeps720PAndHigherHLSVariants(t *testing.T) {
 	stream := &nativeStreamServer{address: "http://127.0.0.1:12345"}
-	session := &nativeStreamSession{assets: map[string]nativeStreamAsset{}}
+	session := &nativeStreamSession{origin: stream.address, assets: map[string]nativeStreamAsset{}}
 	playlist := `#EXTM3U
 #EXT-X-STREAM-INF:BANDWIDTH=350000,RESOLUTION=640x360
 360p/video.m3u8

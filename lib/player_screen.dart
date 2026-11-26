@@ -2502,6 +2502,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         !_pictureInPictureActive) {
       _setPictureInPictureStatus(requested: false);
     }
+    // A preloaded URL can refer to the loopback listener invalidated while
+    // iOS was suspended. Release only the standby plan, not active PiP.
+    if (Platform.isIOS &&
+        state == AppLifecycleState.resumed &&
+        previous != AppLifecycleState.resumed) {
+      _preloader.clear();
+    }
     _applyLifecycleVisibility();
     if (state == AppLifecycleState.resumed &&
         Platform.isAndroid &&
