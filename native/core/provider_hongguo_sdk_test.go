@@ -307,6 +307,7 @@ func TestHongguoPlaybackAccessStatus(t *testing.T) {
 		{errHongguoSDKRegistrationCooling, "registration_cooldown"},
 		{openhongguo.ErrAuthenticationRequired, "authentication_required"},
 		{openhongguo.ErrChallengeRequired, "verification_required"},
+		{openhongguo.ErrDRMProtected, "protected_media"},
 		{openhongguo.ErrSignatureRejected, "signature_rejected"},
 		{openhongguo.ErrRateLimited, "rate_limited"},
 		{&openhongguo.APIError{HTTPStatus: 403}, "access_rejected"},
@@ -452,5 +453,74 @@ func TestHongguoPlaybackOriginDistinguishesPreloadAndForeground(t *testing.T) {
 	ctx := context.WithValue(context.Background(), sourceTraceKey{}, &sourceResponseTrace{})
 	if got := hongguoPlaybackRequestOrigin(ctx); got != "source_health_check" {
 		t.Fatalf("health origin = %q", got)
+	}
+}
+
+type hongguoFixturePlaybackBackend struct {
+	resolveFunc func(context.Context, hongguoPlaybackRequest) (providerMedia, error)
+}
+
+func (b hongguoFixturePlaybackBackend) name() string { return "fixture" }
+
+func (b hongguoFixturePlaybackBackend) resolve(ctx context.Context, request hongguoPlaybackRequest) (providerMedia, error) {
+	return b.resolveFunc(ctx, request)
+}
+
+func TestHongguoIndependentPlaybackBackend(t *testing.T) {
+	const series = "7710822671759461438"
+	const video = "7710822671759461439"
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected network request: %s", request.URL.Host)
+		return nil, errors.New("unexpected network request")
+	})
+	task := Task{
+		DramaID: "hongguo:" + series,
+		Chapter: Chapter{VideoURL: "hongguo-cenc://" + video},
+	}
+	calls := 0
+	backend := hongguoFixturePlaybackBackend{resolveFunc: func(ctx context.Context, request hongguoPlaybackRequest) (providerMedia, error) {
+		calls++
+		if request.seriesID != series || request.videoID != video {
+			t.Fatalf("incorrect episode identity: %+v", request)
+		}
+		return providerMedia{
+			URL: "https://example.test/video.mp4", Quality: 1080,
+			Variants: []providerMedia{{URL: "https://backup.example.test/video.mp4", Quality: 720}},
+		}, nil
+	}}
+	media, err := d.resolveHongguoMediaWithBackend(context.Background(), task, backend)
+	if err != nil || calls != 1 || media.Quality != 1080 || len(media.Variants) != 1 {
+		t.Fatalf("backend media was not preserved: %+v calls=%d err=%v", media, calls, err)
+	}
+	task.Chapter = Chapter{VIP: true}
+	if _, err := d.resolveHongguoMediaWithBackend(context.Background(), task, backend); err == nil || calls != 1 {
+		t.Fatalf("unavailable chapter reached backend: calls=%d err=%v", calls, err)
+	}
+}
+
+func TestHongguoBackendPolicyRejectionsDoNotUseLegacyRoutes(t *testing.T) {
+	for _, backendErr := range []error{
+		openhongguo.ErrAnonymousLimited, openhongguo.ErrAuthenticationRequired,
+		openhongguo.ErrChallengeRequired, openhongguo.ErrSignatureRejected,
+		openhongguo.ErrDRMProtected, openhongguo.ErrRateLimited,
+		&openhongguo.APIError{HTTPStatus: 403},
+		errHongguoSDKPlaybackCooling, errHongguoSDKRegistrationCooling,
+	} {
+		t.Run(backendErr.Error(), func(t *testing.T) {
+			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+				t.Fatalf("policy rejection reached legacy route: %s", request.URL.Host)
+				return nil, errors.New("unexpected network request")
+			})
+			backend := hongguoFixturePlaybackBackend{resolveFunc: func(context.Context, hongguoPlaybackRequest) (providerMedia, error) {
+				return providerMedia{}, backendErr
+			}}
+			_, err := d.resolveHongguoMediaWithBackend(context.Background(), Task{
+				DramaID: "hongguo:7710822671759461438",
+				Chapter: Chapter{VideoURL: "hongguo-cenc://7710822671759461439"},
+			}, backend)
+			if !errors.Is(err, backendErr) {
+				t.Fatalf("lost backend rejection: %v", err)
+			}
+		})
 	}
 }

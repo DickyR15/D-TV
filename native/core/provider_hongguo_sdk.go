@@ -843,7 +843,7 @@ func (downloader *Downloader) resolveHongguoSDKMedia(ctx context.Context, videoI
 			Message: "anonymous playback returned empty data; suppressing retries for 30 seconds; caller=" + hongguoPlaybackRequestOrigin(ctx),
 		})
 	}
-	if err != nil && !errors.Is(err, openhongguo.ErrDRMProtected) {
+	if err != nil {
 		return providerMedia{}, fmt.Errorf("紅果 SDK V5 播放請求失敗：%w", err)
 	}
 	media, mapErr := hongguoSDKPlaybackToNativeMedia(playback)

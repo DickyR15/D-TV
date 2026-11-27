@@ -18,6 +18,8 @@ func hongguoPlaybackAccessStatus(err error) (string, string) {
 		return "available", "播放介接正常"
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return "interrupted", "播放請求已取消或逾時"
+	case errors.Is(err, openhongguo.ErrDRMProtected):
+		return "protected_media", "此影片需要平台支援的授權播放環境"
 	case errors.Is(err, openhongguo.ErrChallengeRequired):
 		return "verification_required", "平台要求額外驗證；請使用平台提供的驗證方式"
 	case errors.Is(err, openhongguo.ErrSignatureRejected):
@@ -74,6 +76,15 @@ func hongguoPlaybackRequestOrigin(ctx context.Context) string {
 }
 
 func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (providerMedia, error) {
+	return d.resolveHongguoMediaWithBackend(ctx, task, hongguoSDKPlaybackBackend{downloader: d})
+}
+
+// Backend selection is a native integration boundary, not a remote script or
+// an endpoint that callers can change to bypass platform access decisions.
+func (d *Downloader) resolveHongguoMediaWithBackend(ctx context.Context, task Task, backend hongguoPlaybackBackend) (providerMedia, error) {
+	if err := ctx.Err(); err != nil {
+		return providerMedia{}, err
+	}
 	source, seriesID, ok := splitProviderDramaID(task.DramaID)
 	if !ok || source != sourceHongguo {
 		return providerMedia{}, fmt.Errorf("紅果章節缺少劇集 ID，請重新整理片庫後再試")
@@ -93,16 +104,18 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		return providerMedia{}, fmt.Errorf("紅果影片 ID 無效，請重新取得章節")
 	}
 
-	// The OpenHongguo SDK owns guest registration, V5 signing, and the
-	// single-model fallback. Do not first register a second independent
-	// Current Player device against the retired log.snssdk.com aliases.
+	// Keep episode identity validation in the shared provider boundary.
+	// The selected backend owns its session and request implementation.
 	caller := hongguoPlaybackRequestOrigin(ctx)
 	d.recordDiagnostic(diagnosticEvent{
 		Level: "info", Event: "hongguo.playback_request_origin", Source: sourceHongguo,
-		Message: "caller=" + caller,
+		Message: "caller=" + caller + " backend=" + backend.name(),
 	})
-	sdkMedia, sdkErr := d.resolveHongguoSDKMedia(ctx, videoID)
+	sdkMedia, sdkErr := backend.resolve(ctx, hongguoPlaybackRequest{seriesID: seriesID, videoID: videoID})
 	if sdkErr == nil {
+		if err := ctx.Err(); err != nil {
+			return providerMedia{}, err
+		}
 		return sdkMedia, nil
 	}
 	if err := ctx.Err(); err != nil {
@@ -124,16 +137,9 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		Level: "warn", Event: "hongguo.playback_access_status", Source: sourceHongguo,
 		Message: "status=" + status + "；" + explanation,
 	})
-	// A request already suppressed by cooldown is not a fresh upstream
-	// failure. Do not repeatedly probe the quick/web routes during this
-	// interval, or present their unrelated 404s as a new playback failure.
-	if errors.Is(sdkErr, errHongguoSDKPlaybackCooling) || errors.Is(sdkErr, errHongguoSDKRegistrationCooling) {
-		return providerMedia{}, fmt.Errorf("紅果暫時無法播放：%s；%w", explanation, sdkErr)
-	}
-	// An explicit authentication, verification, signature or rate-limit
-	// response is not a transport failure. Do not try another access route.
-	switch status {
-	case "authentication_required", "verification_required", "signature_rejected", "rate_limited":
+	// Never cascade into a different playback entry on a policy rejection
+	// or an ambiguous empty response. Keep the observed upstream error.
+	if hongguoPlaybackStopsFallback(status) {
 		return providerMedia{}, fmt.Errorf("紅果暫時無法播放：%s；%w", explanation, sdkErr)
 	}
 	var attempts []attempt
@@ -176,8 +182,9 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	}
 	quickWebErr, pageErr := errs["quick"], errs["web"]
 	return providerMedia{}, fmt.Errorf(
-		"紅果取流失敗：%s；新版匿名 SDK V5：%v；解析設定 %s；快捷網頁：%v；舊版 App：%v；多畫質：%v；官網網頁：%w",
+		"紅果取流失敗：%s；播放介接 %s：%v；解析設定 %s；快捷網頁：%v；舊版 App：%v；多畫質：%v；官網網頁：%w",
 		explanation,
+		backend.name(),
 		publicError(sdkErr),
 		profile,
 		hongguoAttemptDiagnostic(quickWebErr),
