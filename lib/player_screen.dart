@@ -221,6 +221,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   FormFactor _formFactor = FormFactor.phone;
   TelevisionDecoder _televisionDecoder = TelevisionDecoder.automatic;
   late final bool _useMpvEmbedForThisPlayer;
+  late final bool _windowsSoftwareRendering;
+  bool _windowsEglFailure = false;
+  static const _windowsSoftwareRenderingKey = 'windowsSoftwareVideoRendering';
   bool _tvDecoderPolicyMigrated = false;
   bool _portraitBlurDefaultMigrationRequested = false;
   // Android MPV Embed renders MediaCodec frames into the Flutter Texture
@@ -397,11 +400,16 @@ class _PlayerScreenState extends State<PlayerScreen>
       'android-surface-after-video-params=${Platform.isAndroid ? false : 'default'} '
       'emulatorDirectSurface=$useEmulatorDirectSurface',
     );
+    _windowsSoftwareRendering = Platform.isWindows &&
+        (widget.store.preferences.getBool(_windowsSoftwareRenderingKey) ?? false);
+    if (Platform.isWindows) {
+      DiaryService.add('[VideoOutput] windows_rendering=${_windowsSoftwareRendering ? 'software' : 'hardware'}');
+    }
     _video = widget.videoBuilder == null && !exoPlayer
         ? VideoController(
             _player,
             configuration: VideoControllerConfiguration(
-              enableHardwareAcceleration: !Platform.isIOS,
+              enableHardwareAcceleration: !Platform.isIOS && !_windowsSoftwareRendering,
               vo: useMpvEmbed ? 'mediacodec_embed' : null,
               hwdec: useMpvEmbed ? 'mediacodec' : null,
               // Prevent Android video decoding from racing a late Surface.
@@ -494,6 +502,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         if (Platform.isWindows &&
             log.prefix.toLowerCase().contains('dxva2-egl') &&
             lowerLog.contains('failed to create egl surface')) {
+          _windowsEglFailure = true;
           DiaryService.add(
             '[VideoOutput] windows_egl_surface_failure generation=$_generation phase=${_plan == null ? 'before_media' : 'media_prepared'}',
           );
@@ -3141,7 +3150,7 @@ class _PlayerScreenState extends State<PlayerScreen>
               );
             }
           }
-          final hwdec = playbackHwdecFor(
+          final hwdec = _windowsSoftwareRendering ? 'no' : playbackHwdecFor(
             decoder: _televisionDecoder,
             android: Platform.isAndroid,
             ios: Platform.isIOS,
@@ -4140,6 +4149,32 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  Future<void> _switchWindowsVideoRendering() async {
+    final enabled = !_windowsSoftwareRendering;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(enabled ? '改用軟體渲染？' : '恢復硬體渲染？'),
+        content: const Text('此設定只影響 Windows 影片播放器，重新進入播放器後生效。軟體渲染可能增加 CPU 使用率，不會改善片源未提供影片網址的問題。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('套用')),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted || _closed) return;
+    try {
+      if (!await widget.store.preferences.setBool(_windowsSoftwareRenderingKey, enabled)) {
+        _notice('渲染模式未能儲存，請重試');
+        return;
+      }
+      if (!mounted || _closed) return;
+      _notice('渲染模式已儲存，請退出後重新進入播放器');
+    } catch (_) {
+      if (mounted && !_closed) _notice('渲染模式未能儲存，請重試');
+    }
+  }
+
   Future<void> _openCompatibleRenderingRecovery() async {
     final enabled = await AppDevice.compatibleRendering();
     if (!mounted || _closed) return;
@@ -4899,6 +4934,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                             onPressed: () => _retry(fromBeginning: true),
                             icon: const Icon(Icons.restart_alt_rounded),
                             label: const Text('從頭播放'),
+                          ),
+                        if (Platform.isWindows && (_windowsEglFailure || _windowsSoftwareRendering))
+                          FilledButton.tonalIcon(
+                            onPressed: _switchWindowsVideoRendering,
+                            icon: const Icon(Icons.display_settings),
+                            label: Text(_windowsSoftwareRendering ? '恢復硬體渲染' : '改用軟體渲染'),
                           ),
                         if (_televisionRenderingApplies)
                           FilledButton.tonalIcon(

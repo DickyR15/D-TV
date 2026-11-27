@@ -4,6 +4,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hgtv/app_update_service.dart';
 
 void main() {
+  test('Windows TLS fallback only handles certificate verification failure', () {
+    const error = HandshakeException('CERTIFICATE_VERIFY_FAILED');
+    expect(AppUpdateService.shouldUseWindowsTLSFallback(error, windows: true), isTrue);
+    expect(AppUpdateService.shouldUseWindowsTLSFallback(error, windows: false), isFalse);
+    expect(AppUpdateService.shouldUseWindowsTLSFallback(const HandshakeException('connection reset'), windows: true), isFalse);
+  });
+
+  test('system curl preserves HTTPS and certificate validation', () {
+    final args = AppUpdateService.windowsTLSArguments(
+      Uri.parse(AppUpdateService.latestReleaseApi),
+    );
+    expect(args.first, '--disable');
+    expect(args[args.indexOf('--proto') + 1], '=https');
+    expect(args[args.indexOf('--proto-redir') + 1], '=https');
+    expect(args, isNot(contains('--insecure')));
+    expect(args, isNot(contains('-k')));
+    expect(() => AppUpdateService.windowsTLSArguments(Uri.parse('http://github.com/')), throwsFormatException);
+    expect(() => AppUpdateService.windowsTLSArguments(Uri.parse('https://example.com/')), throwsFormatException);
+  });
+
   test('only premature response-body closures are retryable', () {
     expect(
       AppUpdateService.isRetryableResponseBodyError(

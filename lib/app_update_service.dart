@@ -90,6 +90,70 @@ class AppUpdateService {
   static const latestReleaseApi =
       'https://api.github.com/repos/DickyR15/D-TV/releases/latest';
 
+  // Windows can retrieve a missing trusted root through its native TLS
+  // stack. Never accept an invalid certificate or disable verification.
+  static bool shouldUseWindowsTLSFallback(Object error, {required bool windows}) =>
+      windows &&
+      error is HandshakeException &&
+      error.toString().contains('CERTIFICATE_VERIFY_FAILED');
+
+  static List<String> windowsTLSArguments(Uri uri, {String? outputPath}) {
+    if (uri.scheme != 'https' ||
+        uri.userInfo.isNotEmpty ||
+        (uri.host != 'api.github.com' && uri.host != 'github.com')) {
+      throw const FormatException('GitHub 更新網址無效');
+    }
+    return [
+      '--disable', // Ignore per-user curl configuration, including insecure flags.
+      '--fail', '--silent', '--show-error', '--location',
+      '--proto', '=https', '--proto-redir', '=https', '--max-redirs', '5',
+      '--connect-timeout', '15', '--max-time', outputPath == null ? '25' : '600',
+      '--header', outputPath == null
+          ? 'Accept: application/vnd.github+json'
+          : 'Accept: application/octet-stream',
+      '--user-agent', 'D-TV-Updater',
+      if (outputPath == null) ...['--max-filesize', '4194304'],
+      if (outputPath != null) ...['--output', outputPath],
+      '--', uri.toString(),
+    ];
+  }
+
+  Future<String> _windowsTLSRequest(Uri uri, {String? outputPath}) async {
+    final systemRoot = Platform.environment['SystemRoot'];
+    if (systemRoot == null || systemRoot.isEmpty) {
+      throw StateError('找不到 Windows 系統目錄，請確認系統根憑證');
+    }
+    final executable = path.join(systemRoot, 'System32', 'curl.exe');
+    if (!await File(executable).exists()) {
+      throw StateError('找不到 Windows 系統 curl.exe，請更新系統根憑證');
+    }
+    final result = await Process.run(
+      executable,
+      windowsTLSArguments(uri, outputPath: outputPath),
+      runInShell: false,
+      stdoutEncoding: utf8,
+    );
+    if (result.exitCode != 0) {
+      throw StateError('Windows 系統 TLS 更新請求失敗（curl ${result.exitCode}），請確認網路及根憑證');
+    }
+    final content = result.stdout as String;
+    if (outputPath == null && content.length > 4194304) {
+      throw const FormatException('GitHub 更新資料超過大小限制');
+    }
+    return content;
+  }
+
+  AppUpdateInfo? _parseUpdateResponse(String content, String installedVersion) {
+    final decoded = jsonDecode(content);
+    if (decoded is! Map) {
+      throw const FormatException('GitHub 更新資訊格式無效');
+    }
+    return parseRelease(
+      Map<String, dynamic>.from(decoded),
+      currentVersion: installedVersion,
+    );
+  }
+
   Future<AppUpdateInfo?> checkForUpdate({String? currentVersion}) async {
     final installedVersion =
         currentVersion ?? (await PackageInfo.fromPlatform()).version;
@@ -119,14 +183,11 @@ class AppUpdateService {
           .transform(utf8.decoder)
           .join()
           .timeout(const Duration(seconds: 12));
-      final decoded = jsonDecode(content);
-      if (decoded is! Map) {
-        throw const FormatException('GitHub 更新資訊格式無效');
-      }
-      return parseRelease(
-        Map<String, dynamic>.from(decoded),
-        currentVersion: installedVersion,
-      );
+      return _parseUpdateResponse(content, installedVersion);
+    } on HandshakeException catch (error) {
+      if (!shouldUseWindowsTLSFallback(error, windows: Platform.isWindows)) rethrow;
+      final content = await _windowsTLSRequest(Uri.parse(latestReleaseApi));
+      return _parseUpdateResponse(content, installedVersion);
     } finally {
       client.close(force: true);
     }
@@ -208,22 +269,7 @@ class AppUpdateService {
         await sink.close();
         sink = null;
 
-        final downloadedBytes = await partial.length();
-        if (receivedBytes <= 0 ||
-            downloadedBytes != receivedBytes ||
-            (asset.size > 0 && downloadedBytes != asset.size)) {
-          throw const FormatException('更新檔下載不完整，請重新檢查更新');
-        }
-        final expectedDigest = asset.sha256;
-        if (expectedDigest != null) {
-          final actualDigest = await sha256.bind(partial.openRead()).first;
-          if (actualDigest.toString().toLowerCase() != expectedDigest) {
-            throw const FormatException(
-              '更新檔 SHA-256 校驗失敗，為保護程式完整性，已取消更新',
-            );
-          }
-        }
-        return await partial.rename(finalTarget.path);
+        return await _finishDownload(partial, finalTarget, asset, receivedBytes: receivedBytes);
       } catch (error) {
         lastError = error;
         try {
@@ -233,6 +279,19 @@ class AppUpdateService {
           try {
             await partial.delete();
           } catch (_) {}
+        }
+        if (shouldUseWindowsTLSFallback(error, windows: Platform.isWindows)) {
+          try {
+            await _windowsTLSRequest(uri, outputPath: partial.path);
+            return await _finishDownload(partial, finalTarget, asset);
+          } catch (_) {
+            if (await partial.exists()) {
+              try {
+                await partial.delete();
+              } catch (_) {}
+            }
+            rethrow;
+          }
         }
         final retryable = error is SocketException ||
             error is TimeoutException ||
@@ -250,6 +309,30 @@ class AppUpdateService {
       }
     }
     throw StateError('下載更新檔失敗：${lastError ?? '未知錯誤'}');
+  }
+
+  Future<File> _finishDownload(
+    File partial,
+    File finalTarget,
+    AppUpdateAsset asset, {
+    int? receivedBytes,
+  }) async {
+    final downloadedBytes = await partial.length();
+    if (downloadedBytes <= 0 ||
+        (receivedBytes != null && downloadedBytes != receivedBytes) ||
+        (asset.size > 0 && downloadedBytes != asset.size)) {
+      throw const FormatException('更新檔下載不完整，請重新檢查更新');
+    }
+    final expectedDigest = asset.sha256;
+    if (expectedDigest != null) {
+      final actualDigest = await sha256.bind(partial.openRead()).first;
+      if (actualDigest.toString().toLowerCase() != expectedDigest) {
+        throw const FormatException(
+          '更新檔 SHA-256 校驗失敗，為保護程式完整性，已取消更新',
+        );
+      }
+    }
+    return partial.rename(finalTarget.path);
   }
 
   Future<void> launchWindowsUpdater(
