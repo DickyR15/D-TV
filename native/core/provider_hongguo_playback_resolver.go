@@ -32,8 +32,12 @@ func hongguoPlaybackAccessStatus(err error) (string, string) {
 		return "access_rejected", "播放或裝置註冊遭拒絕；實際授權要求尚未確認"
 	case errors.Is(err, openhongguo.ErrAuthenticationRequired):
 		return "authentication_required", "平台要求登入或授權；目前未建立可用的正式授權工作階段"
-	case errors.Is(err, openhongguo.ErrAnonymousLimited), errors.Is(err, errHongguoSDKPlaybackCooling):
-		return "anonymous_empty", "匿名播放未取得有效資料；實際授權要求尚未確認"
+	case errors.Is(err, errHongguoSDKPlaybackCooling):
+		return "playback_cooldown", "先前播放空回應仍在冷卻；本次未發送播放請求"
+	case errors.Is(err, errHongguoSDKRegistrationCooling):
+		return "registration_cooldown", "裝置註冊仍在冷卻；本次未發送播放請求"
+	case errors.Is(err, openhongguo.ErrAnonymousLimited):
+		return "anonymous_empty", "本次匿名播放未取得有效資料；實際授權要求尚未確認"
 	case errors.Is(err, openhongguo.ErrTransport):
 		return "transport_failed", "網路傳輸失敗；請查看紅果 SDK 連線診斷的主機與失敗階段"
 	case hongguoSDKPlaybackRegistrationRejected(err):
@@ -49,6 +53,24 @@ func hongguoAttemptDiagnostic(err error) string {
 		return "未執行"
 	}
 	return fmt.Sprint(publicError(err))
+}
+
+type hongguoPlaybackOriginKey struct{}
+
+func hongguoPlaybackRequestOrigin(ctx context.Context) string {
+	if _, ok := ctx.Value(sourceTraceKey{}).(*sourceResponseTrace); ok {
+		return "source_health_check"
+	}
+	if background, _ := ctx.Value(backgroundCatalogKey{}).(bool); background {
+		return "background_catalog"
+	}
+	if action, _ := ctx.Value(hongguoPlaybackOriginKey{}).(string); action != "" {
+		switch action {
+		case "resolve", "preload", "prepareHandoff":
+			return action
+		}
+	}
+	return "playback_or_other"
 }
 
 func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (providerMedia, error) {
@@ -74,12 +96,7 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	// The OpenHongguo SDK owns guest registration, V5 signing, and the
 	// single-model fallback. Do not first register a second independent
 	// Current Player device against the retired log.snssdk.com aliases.
-	caller := "playback_or_other"
-	if _, ok := ctx.Value(sourceTraceKey{}).(*sourceResponseTrace); ok {
-		caller = "source_health_check"
-	} else if background, _ := ctx.Value(backgroundCatalogKey{}).(bool); background {
-		caller = "background_catalog"
-	}
+	caller := hongguoPlaybackRequestOrigin(ctx)
 	d.recordDiagnostic(diagnosticEvent{
 		Level: "info", Event: "hongguo.playback_request_origin", Source: sourceHongguo,
 		Message: "caller=" + caller,
@@ -107,6 +124,12 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 		Level: "warn", Event: "hongguo.playback_access_status", Source: sourceHongguo,
 		Message: "status=" + status + "；" + explanation,
 	})
+	// A request already suppressed by cooldown is not a fresh upstream
+	// failure. Do not repeatedly probe the quick/web routes during this
+	// interval, or present their unrelated 404s as a new playback failure.
+	if errors.Is(sdkErr, errHongguoSDKPlaybackCooling) || errors.Is(sdkErr, errHongguoSDKRegistrationCooling) {
+		return providerMedia{}, fmt.Errorf("紅果暫時無法播放：%s；%w", explanation, sdkErr)
+	}
 	var attempts []attempt
 	if hongguoSDKPlaybackRegistrationRejected(sdkErr) {
 		// Once the new guest-registration path has been rejected, avoid

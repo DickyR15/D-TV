@@ -1233,6 +1233,9 @@ func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput
 		}
 	}
 	task := Task{DramaID: input.Drama.ID, DramaTitle: input.Drama.Title, Chapter: input.Chapter, Index: input.Index}
+	if source == sourceHongguo {
+		ctx = context.WithValue(ctx, hongguoPlaybackOriginKey{}, input.Action)
+	}
 	media, err := engine.downloader.resolveProviderMedia(ctx, task)
 	if err != nil {
 		return nativePlan{}, err

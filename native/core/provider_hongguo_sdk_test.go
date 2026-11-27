@@ -303,7 +303,8 @@ func TestHongguoPlaybackAccessStatus(t *testing.T) {
 	}{
 		{nil, "available"},
 		{fmt.Errorf("wrapped: %w", openhongguo.ErrAnonymousLimited), "anonymous_empty"},
-		{errHongguoSDKPlaybackCooling, "anonymous_empty"},
+		{errHongguoSDKPlaybackCooling, "playback_cooldown"},
+		{errHongguoSDKRegistrationCooling, "registration_cooldown"},
 		{openhongguo.ErrAuthenticationRequired, "authentication_required"},
 		{openhongguo.ErrChallengeRequired, "verification_required"},
 		{openhongguo.ErrSignatureRejected, "signature_rejected"},
@@ -407,5 +408,49 @@ func TestHongguoUnavailableSDKEpisodeDoesNotResolve(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "不可播放") {
 		t.Fatalf("unavailable episode was not rejected: %v", err)
+	}
+}
+
+func TestHongguoCooldownSkipsAllPlaybackNetworkRequests(t *testing.T) {
+	requests := 0
+	d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		requests++
+		return sourceFixtureResponse(request, http.StatusNotFound, "unexpected request"), nil
+	})
+	d.hongguoSDKSession.recordPlaybackResult(openhongguo.ErrAnonymousLimited)
+	task := Task{
+		DramaID: "hongguo:7710822671759461438",
+		Chapter: Chapter{VideoURL: "hongguo-cenc://7710822671759461439"},
+	}
+	for i := 0; i < 2; i++ {
+		_, err := d.resolveHongguoMedia(context.Background(), task)
+		if !errors.Is(err, errHongguoSDKPlaybackCooling) ||
+			!strings.Contains(err.Error(), "秒後重試") {
+			t.Fatalf("expected cooldown and remaining time: %v", err)
+		}
+	}
+	if requests != 0 {
+		t.Fatalf("cooldown sent %d requests; want zero", requests)
+	}
+	d.hongguoSDKSession.recordPlaybackResult(nil)
+	d.hongguoSDKSession.recordRegistrationStatus(http.StatusForbidden)
+	if _, err := d.resolveHongguoMedia(context.Background(), task); !errors.Is(err, errHongguoSDKRegistrationCooling) {
+		t.Fatalf("expected registration cooldown: %v", err)
+	}
+	if requests != 0 {
+		t.Fatalf("registration cooldown sent %d requests; want zero", requests)
+	}
+}
+
+func TestHongguoPlaybackOriginDistinguishesPreloadAndForeground(t *testing.T) {
+	for _, action := range []string{"resolve", "preload", "prepareHandoff"} {
+		ctx := context.WithValue(context.Background(), hongguoPlaybackOriginKey{}, action)
+		if got := hongguoPlaybackRequestOrigin(ctx); got != action {
+			t.Fatalf("origin = %q, want %q", got, action)
+		}
+	}
+	ctx := context.WithValue(context.Background(), sourceTraceKey{}, &sourceResponseTrace{})
+	if got := hongguoPlaybackRequestOrigin(ctx); got != "source_health_check" {
+		t.Fatalf("health origin = %q", got)
 	}
 }

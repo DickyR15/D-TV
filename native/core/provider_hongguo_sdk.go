@@ -145,12 +145,14 @@ func (session *hongguoSDKClientSession) recordPlaybackResult(err error) {
 func (session *hongguoSDKClientSession) playbackCooldownError() error {
 	session.mu.Lock()
 	defer session.mu.Unlock()
-	if session.playbackPausedUntil.IsZero() || !time.Now().Before(session.playbackPausedUntil) {
+	remaining := time.Until(session.playbackPausedUntil)
+	if session.playbackPausedUntil.IsZero() || remaining <= 0 {
 		session.playbackPausedUntil = time.Time{}
 		return nil
 	}
-	return fmt.Errorf("%w：設備輪替後仍收到空回應，暫停 30 秒避免重複註冊",
-		errHongguoSDKPlaybackCooling)
+	seconds := int((remaining + time.Second - 1) / time.Second)
+	return fmt.Errorf("%w：先前請求收到空回應，本次未發送播放請求，請於 %d 秒後重試",
+		errHongguoSDKPlaybackCooling, seconds)
 }
 
 func (downloader *Downloader) recordHongguoSDKPlaybackResponse(
@@ -816,23 +818,27 @@ func (downloader *Downloader) resolveHongguoSDKMedia(ctx context.Context, videoI
 		return providerMedia{}, err
 	}
 	defer release()
-	client, err := downloader.hongguoSDKClient()
-	if err != nil {
-		return providerMedia{}, fmt.Errorf("紅果播放 SDK 初始化失敗：%w", err)
-	}
 	if err := downloader.hongguoSDKRegistrationCooldownError(); err != nil {
 		return providerMedia{}, err
 	}
 	if err := downloader.hongguoSDKSession.playbackCooldownError(); err != nil {
 		return providerMedia{}, err
 	}
+	client, err := downloader.hongguoSDKClient()
+	if err != nil {
+		return providerMedia{}, fmt.Errorf("紅果播放 SDK 初始化失敗：%w", err)
+	}
+	downloader.recordDiagnostic(diagnosticEvent{
+		Level: "info", Event: "hongguo.sdk_playback_request_start", Source: sourceHongguo,
+		Message: "caller=" + hongguoPlaybackRequestOrigin(ctx),
+	})
 	playback, err := client.ResolvePlayback(ctx, videoID, openhongguo.PlaybackOptions{})
 	downloader.hongguoSDKSession.recordPlaybackResult(err)
 	if errors.Is(err, openhongguo.ErrAnonymousLimited) {
 		downloader.recordDiagnostic(diagnosticEvent{
 			Level: "warn", Event: "hongguo.sdk_playback_soft_reject",
 			Source: sourceHongguo,
-			Message: "anonymous playback empty after two automatic device refreshes; suppressing retries for 30 seconds",
+			Message: "anonymous playback returned empty data; suppressing retries for 30 seconds; caller=" + hongguoPlaybackRequestOrigin(ctx),
 		})
 	}
 	if err != nil && !errors.Is(err, openhongguo.ErrDRMProtected) {
