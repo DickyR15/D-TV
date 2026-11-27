@@ -125,10 +125,76 @@ func (d *Downloader) fetchHongguoCategoryPage(ctx context.Context, route, catego
 	return out, pages, nil
 }
 
+// Preserve exact decimal IDs without rounding JSON numbers or accepting objects.
+func hongguoExactID(value any) string {
+	var id string
+	switch value := value.(type) {
+	case string:
+		id = strings.TrimSpace(value)
+	case json.Number:
+		id = string(value)
+	default:
+		return ""
+	}
+	if id == "0" || !hongguoNumericID.MatchString(id) {
+		return ""
+	}
+	return id
+}
+
+func hongguoChapterVideoID(seriesID string, chapter Chapter) string {
+	if hongguoExactID(seriesID) == "" {
+		return ""
+	}
+	const scheme = "hongguo-cenc://"
+	if strings.HasPrefix(chapter.VideoURL, scheme) {
+		if id := hongguoExactID(strings.TrimPrefix(chapter.VideoURL, scheme)); id != "" {
+			return id
+		}
+	}
+	// Recover only an exact canonical chapter identity for the same series.
+	// Never substitute an episode ordinal or an unrelated provider ID.
+	prefix := providerChapterID(sourceHongguo, seriesID, "")
+	if strings.HasPrefix(chapter.ID, prefix) {
+		id := hongguoExactID(strings.TrimPrefix(chapter.ID, prefix))
+		if id != "" && chapter.ID == providerChapterID(sourceHongguo, seriesID, id) {
+			return id
+		}
+	}
+	return ""
+}
+
+func hongguoChaptersValid(seriesID string, chapters []Chapter) bool {
+	if len(chapters) == 0 {
+		return false
+	}
+	seen := make(map[string]bool, len(chapters))
+	for _, chapter := range chapters {
+		id := hongguoChapterVideoID(seriesID, chapter)
+		if id == "" || seen[id] || chapter.ID != providerChapterID(sourceHongguo, seriesID, id) {
+			return false
+		}
+		seen[id] = true
+	}
+	return true
+}
+
+func hongguoWebChapterID(value any) string {
+	if row, ok := value.(map[string]any); ok {
+		for _, key := range []string{"vid", "vid_str", "video_id", "video_id_str"} {
+			if id := hongguoExactID(row[key]); id != "" {
+				return id
+			}
+		}
+		return ""
+	}
+	return hongguoExactID(value)
+}
+
 func (d *Downloader) fetchHongguoChapters(ctx context.Context, sourceID string) (string, []Chapter, error) {
 	sourceID = strings.TrimPrefix(strings.TrimSpace(sourceID), "hg-series-v1:")
-	if sourceID == "" {
-		return "", nil, fmt.Errorf("empty hongguo sourceID")
+	if hongguoExactID(sourceID) == "" {
+		return "", nil, errors.New("紅果劇集 ID 無效")
 	}
 	// Bound the slow App API route separately. If it stalls, keep enough of
 	// the overall detail deadline for the website fallback to respond.
@@ -136,7 +202,10 @@ func (d *Downloader) fetchHongguoChapters(ctx context.Context, sourceID string) 
 	entry, appErr := d.hongguoAppDetail(appCtx, sourceID)
 	cancelApp()
 	if appErr == nil {
-		return entry.Drama.DisplayTitle(), append([]Chapter(nil), entry.Chapters...), nil
+		if hongguoChaptersValid(sourceID, entry.Chapters) {
+			return entry.Drama.DisplayTitle(), append([]Chapter(nil), entry.Chapters...), nil
+		}
+		appErr = errors.New("紅果 App 分集識別資料無效")
 	}
 	if ctx.Err() != nil {
 		return "", nil, ctx.Err()
@@ -162,16 +231,18 @@ func (d *Downloader) fetchHongguoWebChapters(ctx context.Context, sourceID strin
 	title := firstNonEmpty(mapString(detail, "series_name", "series_title", "name"), sourceID)
 	vids := anyList(detail["vid_list"])
 	chapters := make([]Chapter, 0, len(vids))
+	seen := make(map[string]bool, len(vids))
 	for i, v := range vids {
-		vid := strings.TrimSpace(fmt.Sprint(v))
-		if vid == "" || vid == "<nil>" {
-			continue
+		vid := hongguoWebChapterID(v)
+		if vid == "" || seen[vid] {
+			return title, nil, fmt.Errorf("紅果網頁第 %d 集影片 ID 無效或重複", i+1)
 		}
+		seen[vid] = true
 		idx := i + 1
 		chapters = append(chapters, Chapter{ID: providerChapterID(sourceHongguo, sourceID, vid), Source: sourceHongguo, Title: fmt.Sprintf("第%d集", idx), VideoURL: "hongguo-cenc://" + vid, CurrentEpisode: rawEpisode(idx)})
 	}
 	if len(chapters) == 0 {
-		return title, nil, errors.New("红果详情没有返回剧集 ID")
+		return title, nil, errors.New("紅果詳情未回傳分集影片 ID")
 	}
 	return title, chapters, nil
 }

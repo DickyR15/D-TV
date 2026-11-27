@@ -1029,6 +1029,10 @@ func (engine *nativeEngine) nativeDetail(ctx context.Context, drama nativeDrama)
 	now := time.Now()
 	engine.mu.Lock()
 	cached, hasCached := engine.detailCache[drama.ID]
+	if hasCached && source == sourceHongguo && !hongguoChaptersValid(sourceID, cached.Chapters) {
+		delete(engine.detailCache, drama.ID)
+		hasCached = false
+	}
 	if hasCached && now.Before(cached.ExpiresAt) {
 		cachedDrama := mergeNativeDrama(cached.Drama, drama)
 		chapters := append([]Chapter(nil), cached.Chapters...)

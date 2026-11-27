@@ -57,9 +57,16 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if !ok || source != sourceHongguo {
 		return providerMedia{}, fmt.Errorf("紅果章節缺少劇集 ID，請重新整理片庫後再試")
 	}
-	videoID := strings.TrimPrefix(task.Chapter.VideoURL, "hongguo-cenc://")
-	if !hongguoNumericID.MatchString(videoID) || !hongguoNumericID.MatchString(seriesID) {
-		return providerMedia{}, fmt.Errorf("紅果章節 ID 無效，請重新取得章節")
+	if hongguoExactID(seriesID) == "" {
+		return providerMedia{}, fmt.Errorf("紅果劇集 ID 無效，請重新整理片庫")
+	}
+	videoID := hongguoChapterVideoID(seriesID, task.Chapter)
+	if videoID == "" {
+		d.recordDiagnostic(diagnosticEvent{
+			Level: "warn", Event: "hongguo.invalid_chapter_identity", Source: sourceHongguo,
+			Message: "影片 ID 無效；未發送播放請求",
+		})
+		return providerMedia{}, fmt.Errorf("紅果影片 ID 無效，請重新取得章節")
 	}
 
 	// The OpenHongguo SDK owns guest registration, V5 signing, and the

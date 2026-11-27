@@ -234,7 +234,7 @@ func (d *Downloader) resolveProviderMedia(ctx context.Context, task Task) (provi
 	if chapter.Source == sourceSupJav || chapter.Source == sourcePPP || chapter.Source == sourceMadou || chapter.Source == source91Porna {
 		return d.resolveAdultMedia(ctx, task)
 	}
-	if strings.HasPrefix(chapter.VideoURL, "hongguo-cenc://") {
+	if chapter.Source == sourceHongguo || strings.HasPrefix(chapter.VideoURL, "hongguo-cenc://") {
 		return d.resolveHongguoMedia(ctx, task)
 	}
 	if chapter.PageURL == "" && (chapter.Source == sourceHuangguoAI || chapter.Source == sourceHuangguoVideo) {

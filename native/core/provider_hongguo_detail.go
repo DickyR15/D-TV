@@ -23,12 +23,12 @@ type hongguoDetailCall struct {
 }
 
 func (downloader *Downloader) hongguoAppDetail(ctx context.Context, seriesID string) (hongguoDetailEntry, error) {
-	if !hongguoNumericID.MatchString(seriesID) {
+	if hongguoExactID(seriesID) == "" {
 		return hongguoDetailEntry{}, errors.New("紅果劇集 ID 無效")
 	}
 	client := downloader.hongguoClient()
 	client.mu.Lock()
-	if cached, found := client.details[seriesID]; found && time.Now().Before(cached.ExpiresAt) {
+	if cached, found := client.details[seriesID]; found && time.Now().Before(cached.ExpiresAt) && hongguoChaptersValid(seriesID, cached.Chapters) {
 		client.mu.Unlock()
 		return cached, nil
 	}
@@ -78,9 +78,9 @@ func parseHongguoAppDetail(result map[string]any, seriesID string) (hongguoDetai
 	episodes := map[int]bool{}
 	for _, row := range anyList(detail["video_list"]) {
 		video, _ := row.(map[string]any)
-		videoID := mapString(video, "vid")
+		videoID := hongguoWebChapterID(video)
 		index, err := strconv.Atoi(mapString(video, "vid_index"))
-		if err != nil || index < 1 || !hongguoNumericID.MatchString(videoID) {
+		if err != nil || index < 1 || videoID == "" {
 			return entry, errors.New("紅果 App 集數編號或影片 ID 無效")
 		}
 		if identifier := mapString(video, "series_id"); identifier != "" && identifier != seriesID {
