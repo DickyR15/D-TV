@@ -130,6 +130,12 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if errors.Is(sdkErr, errHongguoSDKPlaybackCooling) || errors.Is(sdkErr, errHongguoSDKRegistrationCooling) {
 		return providerMedia{}, fmt.Errorf("紅果暫時無法播放：%s；%w", explanation, sdkErr)
 	}
+	// An explicit authentication, verification, signature or rate-limit
+	// response is not a transport failure. Do not try another access route.
+	switch status {
+	case "authentication_required", "verification_required", "signature_rejected", "rate_limited":
+		return providerMedia{}, fmt.Errorf("紅果暫時無法播放：%s；%w", explanation, sdkErr)
+	}
 	var attempts []attempt
 	if hongguoSDKPlaybackRegistrationRejected(sdkErr) {
 		// Once the new guest-registration path has been rejected, avoid

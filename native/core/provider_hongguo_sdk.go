@@ -488,7 +488,9 @@ func (downloader *Downloader) hongguoSDKClient() (*openhongguo.Client, error) {
 			RegisterOrigin: hongguoSDKRegisterOrigin,
 			Device:        device,
 			RetryAttempts: 1,
-			DeviceResets:  openhongguo.Int(2),
+			// Repeated empty playback responses persisted across fresh devices.
+			// Keep a single guest identity instead of rotating it on rejection.
+			DeviceResets:  openhongguo.Int(0),
 		})
 		downloader.hongguoSDKSession.client = client
 		downloader.hongguoSDKSession.err = err

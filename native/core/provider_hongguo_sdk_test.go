@@ -158,7 +158,7 @@ func (roundTrip hongguoSDKTestRoundTripper) RoundTrip(request *http.Request) (*h
 	return roundTrip(request)
 }
 
-func TestHongguoSDKPlaybackRefreshesRejectedAnonymousDeviceTwice(t *testing.T) {
+func TestHongguoSDKPlaybackDoesNotRotateRejectedAnonymousDevice(t *testing.T) {
 	var registrations int
 	const registerHost = "log5-applog-lq.fqnovel.com"
 	const apiHost = "api5-normal-sinfonlinea.fqnovel.com"
@@ -204,11 +204,11 @@ func TestHongguoSDKPlaybackRefreshesRejectedAnonymousDeviceTwice(t *testing.T) {
 	if !errors.Is(err, openhongguo.ErrAnonymousLimited) {
 		t.Fatalf("ResolvePlayback error = %v, want anonymous empty response", err)
 	}
-	if registrations != 3 {
-		t.Fatalf("device registrations = %d, want initial registration plus two refreshes", registrations)
+	if registrations != 1 {
+		t.Fatalf("device registrations = %d, want only initial registration", registrations)
 	}
-	if len(playbackDeviceIDs) != 3 {
-		t.Fatalf("unique playback device IDs = %d, want three refreshed identities", len(playbackDeviceIDs))
+	if len(playbackDeviceIDs) != 1 {
+		t.Fatalf("unique playback device IDs = %d, want one stable identity", len(playbackDeviceIDs))
 	}
 }
 
