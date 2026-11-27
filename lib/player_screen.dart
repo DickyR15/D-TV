@@ -363,7 +363,10 @@ class _PlayerScreenState extends State<PlayerScreen>
               widget.playerFactory != null || widget.videoBuilder != null,
         );
     _loader = PlaybackLoader(widget.repository);
-    _preloader = PlaybackPreloader(widget.repository);
+    _preloader = PlaybackPreloader(
+      widget.repository,
+      prepareDelay: const Duration(milliseconds: 50),
+    );
     widget.store.addListener(_accessChanged);
     final useMpvEmbed = _mpvEmbedBackend;
     final useExoPlayer = shouldUseExoPlayerForAndroidPlayback(
@@ -2283,13 +2286,15 @@ class _PlayerScreenState extends State<PlayerScreen>
       _preloader.pause();
       return;
     }
-    final duration = state.duration.inMilliseconds;
-    final position = state.position.inMilliseconds;
-    // Prepare the next episode once playback is stable and has buffer headroom,
-    // instead of waiting until the final 45 seconds of the current episode.
-    if (duration <= 0 ||
-        position < 5000 ||
-        state.buffer.inMilliseconds - position < 8000) {
+    // Use the final 20 seconds of real playback time, adjusting for speed.
+    // Retain the buffer safety gate and native bounded media prefetch, so the
+    // next episode does not compete with the currently playing episode.
+    if (!PlaybackPreloader.shouldPrepareNext(
+      duration: state.duration,
+      position: state.position,
+      bufferedUntil: state.buffer,
+      rate: _speed,
+    )) {
       return;
     }
     _preloader.prepare(

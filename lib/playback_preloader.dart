@@ -11,12 +11,35 @@ class PlaybackPreloader extends ChangeNotifier {
     this.repository, {
     DateTime Function()? now,
     this.detailPage = false,
+    this.prepareDelay = const Duration(milliseconds: 600),
   }) : _now = now ?? DateTime.now;
+
+  // Schedule within the useful lifetime of signed media URLs. Only use spare
+  // bandwidth after the current episode has begun and has enough buffer.
+  static bool shouldPrepareNext({
+    required Duration duration,
+    required Duration position,
+    required Duration bufferedUntil,
+    double rate = 1,
+  }) {
+    if (duration <= Duration.zero ||
+        position < const Duration(milliseconds: 500) ||
+        position >= duration) return false;
+    final remainingMs = (duration - position).inMilliseconds;
+    final speed = rate.isFinite && rate > 0 ? rate.clamp(0.25, 4.0) : 1.0;
+    if (remainingMs / speed > 20000) return false;
+    final bufferedMs = (bufferedUntil - position).inMilliseconds;
+    // Near the end of a fully buffered episode, an eight-second fixed
+    // threshold is impossible. Allow the final half-second rounding margin.
+    final requiredMs = (remainingMs - 500).clamp(0, (8000 * speed).round());
+    return bufferedMs >= requiredMs;
+  }
 
   final AppRepository repository;
   // Detail-page warming is speculative; next-episode warming after verified
   // playback is a separate policy.
   final bool detailPage;
+  final Duration prepareDelay;
   final DateTime Function() _now;
   PlaybackPlan? _ready;
   String? _identity;
@@ -81,9 +104,9 @@ class PlaybackPreloader extends ChangeNotifier {
     }
     final ticket = _generation;
     DiaryService.add(
-      '[NextEpisodePreload] scheduled source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality online=$online delayMs=600',
+      '[NextEpisodePreload] scheduled source=${drama.source} dramaId=${drama.id} episode=${episode.number} quality=$quality online=$online delayMs=${prepareDelay.inMilliseconds}',
     );
-    _delay = Timer(const Duration(milliseconds: 600), () async {
+    _delay = Timer(prepareDelay, () async {
       _delay = null;
       loading = true;
       notifyListeners();

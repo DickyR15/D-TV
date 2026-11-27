@@ -65,6 +65,43 @@ void main() {
     'currentEpisode': number,
   }, number);
 
+  test('next-episode preparation uses remaining real time and buffer headroom', () {
+    bool ready(int duration, int position, int buffered, {double rate = 1}) =>
+        PlaybackPreloader.shouldPrepareNext(
+          duration: Duration(milliseconds: duration),
+          position: Duration(milliseconds: position),
+          bufferedUntil: Duration(milliseconds: buffered),
+          rate: rate,
+        );
+
+    expect(ready(120000, 1000, 120000), isFalse);
+    expect(ready(120000, 99000, 120000), isFalse);
+    expect(ready(120000, 100000, 108000), isTrue);
+    expect(ready(120000, 100000, 105000), isFalse);
+    expect(ready(120000, 80000, 96000, rate: 2), isTrue);
+    expect(ready(120000, 116000, 120000), isTrue);
+    expect(ready(120000, 116000, 117000), isFalse);
+    expect(ready(120000, 120000, 120000), isFalse);
+    expect(ready(0, 0, 0), isFalse);
+  });
+
+  testWidgets('player can schedule preparation after 50 milliseconds', (tester) async {
+    final repository = DetailPreloadRepository(
+      const PlaybackPlan(url: 'https://example.test/prepared.m3u8', session: 'fast'),
+    );
+    final preloader = PlaybackPreloader(
+      repository, prepareDelay: const Duration(milliseconds: 50),
+    );
+    addTearDown(preloader.dispose);
+    preloader.prepare(FixtureRepository.free, episode(2));
+    await tester.pump(const Duration(milliseconds: 49));
+    expect(repository.preloadCalls, 0);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    expect(repository.preloadCalls, 1);
+    expect(preloader.take(FixtureRepository.free, episode(2))?.session, 'fast');
+  });
+
   testWidgets('hongguo detail warming defers to foreground playback', (
     tester,
   ) async {
