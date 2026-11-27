@@ -1242,8 +1242,8 @@ func (engine *nativeEngine) nativeResolve(ctx context.Context, input nativeInput
 	}
 	choice := nativeInitialPlaybackChoice(media, input.Quality, task)
 	if nativePlaybackRouteProbeEnabled(source) {
-		// Non-Redfruit sources may return multiple same-quality signed/CDN
-		// routes. Probe them concurrently with a short budget before MPV opens,
+		// Supported sources, including Red Fruit, may return multiple
+		// same-quality CDN routes. Probe concurrently before MPV opens,
 		// so an unresponsive first URL is less likely to trigger repeated
 		// loading overlays and serial player restarts.
 		choice = engine.rankNativePlaybackRoutes(ctx, choice, task)

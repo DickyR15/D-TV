@@ -19,12 +19,13 @@ const nativePlaybackRouteProbeTimeout = 1500 * time.Millisecond
 const nativePlaybackRouteProbeLimit = 4
 const nativePlaybackRouteProbeBytes = 64 * 1024
 
-// Keep route probing limited to the providers that previously used
-// multi-route startup ranking. Other sources retain their original playback
-// startup path until they have provider-specific validation.
+// Red Fruit now uses the same bounded CDN transport ranking after a
+// successful media resolve. This probe measures bytes only; it does not
+// validate playback entitlement or decode encrypted media. Other sources
+// retain their original startup policy.
 func nativePlaybackRouteProbeEnabled(source string) bool {
 	switch canonicalProviderSource(source) {
-	case sourceIkanBot, sourcePPP, sourceDuoduo, sourceGuipian:
+	case sourceIkanBot, sourcePPP, sourceDuoduo, sourceGuipian, sourceHongguo:
 		return true
 	default:
 		return false

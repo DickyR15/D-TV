@@ -299,9 +299,9 @@ func TestNativePlaybackRouteProbeMovesUntestedRoutesAheadOfTimedOutRoutes(t *tes
 }
 
 
-func TestNativePlaybackRouteProbePolicyPreservesExistingSourceScope(t *testing.T) {
+func TestNativePlaybackRouteProbePolicyIncludesHongguoAndPreservesOtherSourceScope(t *testing.T) {
 	for _, source := range []string{
-		sourceIkanBot, sourcePPP, sourceDuoduo, sourceGuipian,
+		sourceIkanBot, sourcePPP, sourceDuoduo, sourceGuipian, sourceHongguo,
 	} {
 		if !nativePlaybackRouteProbeEnabled(source) {
 			t.Errorf("previously supported source %q lost bounded route ranking", source)
@@ -311,10 +311,54 @@ func TestNativePlaybackRouteProbePolicyPreservesExistingSourceScope(t *testing.T
 		sourceMissAV, sourceSupJav, sourceMadou, source91Porna,
 		sourceChaoliu, sourceHanxiaoquan, sourceHeitao, sourceDSD,
 		sourceHuangdou, sourceHuangju, sourceYeguo,
-		sourceHuangguoAI, sourceHuangguoVideo, sourceHongguo,
+		sourceHuangguoAI, sourceHuangguoVideo,
 	} {
 		if nativePlaybackRouteProbeEnabled(source) {
 			t.Errorf("source %q unexpectedly enabled route probing", source)
 		}
+	}
+}
+
+func TestHongguoRouteRankingPreservesMediaMetadataAndQuality(t *testing.T) {
+	const slow = "https://slow.example.test/episode.mp4"
+	const fast = "https://fast.example.test/episode.mp4"
+	const lower = "https://lower.example.test/episode.mp4"
+	const preview = "https://preview.example.test/episode.mp4"
+	client := &http.Client{Transport: playbackProbeFixtureTransport(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Host == "lower.example.test" || request.URL.Host == "preview.example.test" {
+			t.Errorf("lower quality candidate should not be probed: %s", request.URL.Host)
+		}
+		if request.URL.Host == "slow.example.test" {
+			<-request.Context().Done()
+			return nil, request.Context().Err()
+		}
+		if request.Header.Get("Referer") != "https://player.example.test/" {
+			t.Errorf("missing route referer")
+		}
+		return &http.Response{
+			StatusCode: http.StatusPartialContent,
+			Header: http.Header{"Content-Type": []string{"video/mp4"}},
+			Body: io.NopCloser(strings.NewReader("synthetic-media-prefix")),
+			Request: request,
+		}, nil
+	})}
+	choice := nativePlaybackChoices(providerMedia{
+		URL: slow, Quality: 1080, Referer: "https://player.example.test/",
+		Variants: []providerMedia{
+			{URL: fast, Quality: 1080, Referer: "https://player.example.test/", CENCKey: []byte{1, 2, 3}},
+			{URL: lower, Quality: 720},
+			{URL: preview, Quality: 180},
+		},
+	}, 0)
+	engine := &nativeEngine{downloader: &Downloader{client: client}}
+	ranked := engine.rankNativePlaybackRoutes(context.Background(), choice, Task{
+		DramaID: "hongguo:7710822671759461438", Index: 1,
+	})
+	if len(ranked.media) != 3 || ranked.media[0].URL != fast ||
+		ranked.media[0].Quality != 1080 || ranked.media[2].Quality != 720 {
+		t.Fatalf("unexpected route ordering: %+v", ranked.media)
+	}
+	if string(ranked.media[0].CENCKey) != string([]byte{1, 2, 3}) {
+		t.Fatal("route ranking changed the media metadata")
 	}
 }
