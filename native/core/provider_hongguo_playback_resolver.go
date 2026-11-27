@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	openhongguo "github.com/beilunyang/openhongguo/sdk"
 )
