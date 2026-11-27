@@ -524,3 +524,46 @@ func TestHongguoBackendPolicyRejectionsDoNotUseLegacyRoutes(t *testing.T) {
 		})
 	}
 }
+
+func TestHongguoIndependentBackendFailureDoesNotUseSDKRecovery(t *testing.T) {
+	for _, backendErr := range []error{
+		errors.New("provider unavailable"),
+		openhongguo.ErrTransport,
+		errHongguoH266Only,
+	} {
+		t.Run(backendErr.Error(), func(t *testing.T) {
+			d := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+				t.Fatalf("independent backend unexpectedly reached SDK recovery: %s", request.URL.Host)
+				return nil, errors.New("unexpected request")
+			})
+			backend := hongguoFixturePlaybackBackend{resolveFunc: func(context.Context, hongguoPlaybackRequest) (providerMedia, error) {
+				return providerMedia{}, backendErr
+			}}
+			_, err := d.resolveHongguoMediaWithBackend(context.Background(), Task{
+				DramaID: "hongguo:7710822671759461438",
+				Chapter: Chapter{VideoURL: "hongguo-cenc://7710822671759461439"},
+			}, backend)
+			if !errors.Is(err, backendErr) {
+				t.Fatalf("lost independent backend failure: %v", err)
+			}
+		})
+	}
+}
+
+func TestHongguoIndependentBackendRejectsEmptyMedia(t *testing.T) {
+	backend := hongguoFixturePlaybackBackend{resolveFunc: func(context.Context, hongguoPlaybackRequest) (providerMedia, error) {
+		return providerMedia{}, nil
+	}}
+	// Use the existing fixture so diagnostic recording is initialized.
+	fixture := sourceFixtureDownloader(t, func(request *http.Request) (*http.Response, error) {
+		t.Fatalf("empty media unexpectedly reached network: %s", request.URL.Host)
+		return nil, errors.New("unexpected request")
+	})
+	_, err := fixture.resolveHongguoMediaWithBackend(context.Background(), Task{
+		DramaID: "hongguo:7710822671759461438",
+		Chapter: Chapter{VideoURL: "hongguo-cenc://7710822671759461439"},
+	}, backend)
+	if err == nil || !strings.Contains(err.Error(), "未提供有效的影片網址") {
+		t.Fatalf("empty media was not rejected: %v", err)
+	}
+}

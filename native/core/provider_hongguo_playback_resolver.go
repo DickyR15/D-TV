@@ -116,11 +116,37 @@ func (d *Downloader) resolveHongguoMediaWithBackend(ctx context.Context, task Ta
 		if err := ctx.Err(); err != nil {
 			return providerMedia{}, err
 		}
+		if !isProviderHTTPMediaURL(sdkMedia.URL) {
+			return providerMedia{}, fmt.Errorf("紅果播放介接 %s 未提供有效的影片網址", backend.name())
+		}
 		return sdkMedia, nil
 	}
 	if err := ctx.Err(); err != nil {
 		return providerMedia{}, err
 	}
+
+	status, explanation := hongguoPlaybackAccessStatus(sdkErr)
+	d.recordDiagnostic(diagnosticEvent{
+		Level: "warn", Event: "hongguo.playback_access_status", Source: sourceHongguo,
+		Message: "status=" + status + "；" + explanation,
+	})
+	// Never cascade into a different playback entry on a policy rejection
+	// or an ambiguous empty response. Keep the observed upstream error.
+	if hongguoPlaybackStopsFallback(status) {
+		return providerMedia{}, fmt.Errorf("紅果暫時無法播放：%s；%w", explanation, sdkErr)
+	}
+	// A different backend must never implicitly call the old SDK's
+	// recovery routes. Only the existing adapter may opt into recovery.
+	if recovery, ok := backend.(hongguoPlaybackRecovery); ok {
+		return recovery.recover(ctx, hongguoPlaybackRequest{seriesID: seriesID, videoID: videoID}, sdkErr, explanation)
+	}
+	return providerMedia{}, fmt.Errorf("紅果播放介接 %s：%s；%w", backend.name(), explanation, sdkErr)
+}
+
+// Legacy recovery is owned exclusively by the existing SDK adapter.
+// A future supported provider does not depend on these routes.
+func (d *Downloader) recoverHongguoSDKMedia(ctx context.Context, request hongguoPlaybackRequest, sdkErr error, explanation string) (providerMedia, error) {
+	seriesID, videoID := request.seriesID, request.videoID
 
 	type attempt struct {
 		name string
@@ -132,16 +158,6 @@ func (d *Downloader) resolveHongguoMediaWithBackend(ctx context.Context, task Ta
 	web := attempt{"web", func() (providerMedia, error) { return d.resolveHongguoWebMedia(ctx, seriesID, videoID) }}
 
 	profile := d.providerParserProfile(sourceHongguo, "hongguo_v5_first")
-	status, explanation := hongguoPlaybackAccessStatus(sdkErr)
-	d.recordDiagnostic(diagnosticEvent{
-		Level: "warn", Event: "hongguo.playback_access_status", Source: sourceHongguo,
-		Message: "status=" + status + "；" + explanation,
-	})
-	// Never cascade into a different playback entry on a policy rejection
-	// or an ambiguous empty response. Keep the observed upstream error.
-	if hongguoPlaybackStopsFallback(status) {
-		return providerMedia{}, fmt.Errorf("紅果暫時無法播放：%s；%w", explanation, sdkErr)
-	}
 	var attempts []attempt
 	if hongguoSDKPlaybackRegistrationRejected(sdkErr) {
 		// Once the new guest-registration path has been rejected, avoid
@@ -184,7 +200,7 @@ func (d *Downloader) resolveHongguoMediaWithBackend(ctx context.Context, task Ta
 	return providerMedia{}, fmt.Errorf(
 		"紅果取流失敗：%s；播放介接 %s：%v；解析設定 %s；快捷網頁：%v；舊版 App：%v；多畫質：%v；官網網頁：%w",
 		explanation,
-		backend.name(),
+		"openhongguo",
 		publicError(sdkErr),
 		profile,
 		hongguoAttemptDiagnostic(quickWebErr),
