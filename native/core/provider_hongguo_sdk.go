@@ -593,6 +593,77 @@ func hongguoSDKAlbumToNativeSeasons(album *model.Album) ([]nativeDramaSeason, er
 	return items, nil
 }
 
+// Convert the SDK's typed list without rounding provider identifiers or
+// substituting another season's episode. Preserve unavailable episodes as
+// non-playable entries, including their original episode numbers.
+func hongguoSDKEpisodesToChapters(seriesID string, episodes []model.Episode) ([]Chapter, error) {
+	if hongguoExactID(seriesID) == "" || len(episodes) == 0 {
+		return nil, errors.New("紅果 SDK 未提供有效分集")
+	}
+	chapters := make([]Chapter, 0, len(episodes))
+	numbers := make(map[int]bool, len(episodes))
+	for _, episode := range episodes {
+		id := hongguoExactID(episode.ID)
+		if id == "" || episode.SeriesID != seriesID || episode.Number < 1 || numbers[episode.Number] {
+			return nil, errors.New("紅果 SDK 分集識別資料無效或重複")
+		}
+		numbers[episode.Number] = true
+		title := firstNonEmpty(episode.Title, fmt.Sprintf("第%d集", episode.Number))
+		chapter := Chapter{
+			ID: providerChapterID(sourceHongguo, seriesID, id),
+			Source: sourceHongguo,
+			Title: title,
+			CurrentEpisode: rawEpisode(episode.Number),
+			VIP: !episode.Playable,
+		}
+		if episode.Playable {
+			chapter.VideoURL = "hongguo-cenc://" + id
+		}
+		if episode.Vertical {
+			vertical := true
+			chapter.Vertical = &vertical
+		}
+		chapters = append(chapters, chapter)
+	}
+	sort.Slice(chapters, func(i, j int) bool {
+		return episodeNumberForHongguoSDK(chapters[i]) < episodeNumberForHongguoSDK(chapters[j])
+	})
+	if !hongguoChaptersValid(seriesID, chapters) {
+		return nil, errors.New("紅果 SDK 分集影片 ID 無效或重複")
+	}
+	return chapters, nil
+}
+
+func episodeNumberForHongguoSDK(chapter Chapter) int {
+	number, _ := strconv.Atoi(chapter.EpisodeString(0))
+	return number
+}
+
+func (downloader *Downloader) fetchHongguoSDKEpisodes(ctx context.Context, seriesID string) ([]Chapter, error) {
+	client, err := downloader.hongguoSDKClient()
+	if err != nil {
+		return nil, err
+	}
+	if err := downloader.hongguoSDKRegistrationCooldownError(); err != nil {
+		return nil, err
+	}
+	page, err := client.ListEpisodes(ctx, seriesID, openhongguo.EpisodeOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if page == nil {
+		return nil, errors.New("紅果 SDK 未回傳分集")
+	}
+	chapters, err := hongguoSDKEpisodesToChapters(seriesID, page.Items)
+	if err == nil {
+		downloader.recordDiagnostic(diagnosticEvent{
+			Level: "info", Event: "hongguo.sdk_episode_list", Source: sourceHongguo,
+			Message: fmt.Sprintf("episodes=%d", len(chapters)),
+		})
+	}
+	return chapters, err
+}
+
 func (downloader *Downloader) fetchHongguoSDKSeasons(ctx context.Context, seriesID string) ([]nativeDramaSeason, error) {
 	if !hongguoNumericID.MatchString(seriesID) || seriesID == "0" {
 		return nil, errors.New("紅果系列 ID 無效")

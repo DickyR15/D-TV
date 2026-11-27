@@ -210,11 +210,23 @@ func (d *Downloader) fetchHongguoChapters(ctx context.Context, sourceID string) 
 	if ctx.Err() != nil {
 		return "", nil, ctx.Err()
 	}
+	// The public SDK's typed episode list avoids the legacy web parser's
+	// ambiguous IDs. Keep App detail metadata when available, and keep the
+	// website fallback for ordinary metadata compatibility failures.
+	sdkCtx, cancelSDK := context.WithTimeout(ctx, 10*time.Second)
+	chapters, sdkErr := d.fetchHongguoSDKEpisodes(sdkCtx, sourceID)
+	cancelSDK()
+	if sdkErr == nil {
+		return entry.Drama.DisplayTitle(), chapters, nil
+	}
+	if ctx.Err() != nil {
+		return "", nil, ctx.Err()
+	}
 	title, chapters, webErr := d.fetchHongguoWebChapters(ctx, sourceID)
 	if webErr == nil {
 		return title, chapters, nil
 	}
-	return "", nil, fmt.Errorf("App 详情失败: %v；网页详情失败: %w", publicError(appErr), webErr)
+	return "", nil, fmt.Errorf("App 詳情失敗：%v；SDK 分集失敗：%v；網頁詳情失敗：%w", publicError(appErr), publicError(sdkErr), webErr)
 }
 
 func (d *Downloader) fetchHongguoWebChapters(ctx context.Context, sourceID string) (string, []Chapter, error) {

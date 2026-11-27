@@ -59,6 +59,9 @@ func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (provid
 	if hongguoExactID(seriesID) == "" {
 		return providerMedia{}, fmt.Errorf("紅果劇集 ID 無效，請重新整理片庫")
 	}
+	if task.Chapter.VIP && task.Chapter.VideoURL == "" {
+		return providerMedia{}, errors.New("紅果片源標示此分集目前不可播放")
+	}
 	videoID := hongguoChapterVideoID(seriesID, task.Chapter)
 	if videoID == "" {
 		d.recordDiagnostic(diagnosticEvent{

@@ -362,3 +362,50 @@ func TestHongguoSDKTransportReportsFailureWithoutURL(t *testing.T) {
 		t.Fatalf("unexpected diagnostic host=%q stage=%q kind=%q err=%v", host, stage, kind, err)
 	}
 }
+
+func TestHongguoSDKEpisodesPreserveIdentityOrderAndAvailability(t *testing.T) {
+	const series = "7710822671759461438"
+	const first = "7710822671759461439"
+	const second = "7710822671759461440"
+	rows := []model.Episode{
+		{ID: second, SeriesID: series, Number: 2, Playable: false},
+		{ID: first, SeriesID: series, Number: 1, Playable: true, Vertical: true},
+	}
+	chapters, err := hongguoSDKEpisodesToChapters(series, rows)
+	if err != nil || len(chapters) != 2 {
+		t.Fatalf("unexpected chapter list: %+v, %v", chapters, err)
+	}
+	if chapters[0].ID != providerChapterID(sourceHongguo, series, first) ||
+		chapters[0].VideoURL != "hongguo-cenc://" + first ||
+		chapters[0].VIP || chapters[0].Vertical == nil || !*chapters[0].Vertical {
+		t.Fatalf("playable episode mapping: %+v", chapters[0])
+	}
+	if chapters[1].EpisodeString(0) != "2" || !chapters[1].VIP || chapters[1].VideoURL != "" {
+		t.Fatalf("unavailable episode mapping: %+v", chapters[1])
+	}
+	for _, invalid := range [][]model.Episode{
+		{{ID: first, SeriesID: "9999999999999999999", Number: 1, Playable: true}},
+		{{ID: first, SeriesID: series, Number: 1}, {ID: second, SeriesID: series, Number: 1}},
+		{{ID: first, SeriesID: series, Number: 1}, {ID: first, SeriesID: series, Number: 2}},
+		{{ID: "0", SeriesID: series, Number: 1}},
+	} {
+		if _, err := hongguoSDKEpisodesToChapters(series, invalid); err == nil {
+			t.Fatalf("invalid SDK list accepted: %+v", invalid)
+		}
+	}
+}
+
+func TestHongguoUnavailableSDKEpisodeDoesNotResolve(t *testing.T) {
+	var downloader Downloader
+	_, err := downloader.resolveHongguoMedia(context.Background(), Task{
+		DramaID: "hongguo:7710822671759461438",
+		Chapter: Chapter{
+			ID: "hongguo:7710822671759461438:7710822671759461439",
+			Source: sourceHongguo,
+			VIP: true,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "不可播放") {
+		t.Fatalf("unavailable episode was not rejected: %v", err)
+	}
+}
