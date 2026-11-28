@@ -116,7 +116,7 @@ func (s *hongguoJSModuleSession) load(parent context.Context, request hongguoPla
 	if !ok || raw.Length() > hongguoModuleResultLimit {
 		return hongguoModuleResult{}, errors.New("紅果 JS 模組回傳格式無效")
 	}
-	result, err = decodeHongguoJSModuleResult(raw.String())
+	result, err = decodeHongguoJSPlaybackResult(raw.String(), request, time.Now())
 	if err != nil {
 		return hongguoModuleResult{}, err
 	}
@@ -158,6 +158,67 @@ func decodeHongguoJSModuleResult(raw string) (hongguoModuleResult, error) {
 		result.Streams = append(result.Streams, hongguoModuleStream{
 			URL: stream.URL, Quality: stream.Quality, Preview: stream.Preview,
 		})
+	}
+	return result, nil
+}
+
+
+// Reviewed modules may return either the versioned D-TV contract or the
+// THL-style play result. This is a data-format adapter only: no network,
+// device registration, signing, credentials or protected media are added.
+func decodeHongguoJSPlaybackResult(raw string, request hongguoPlaybackRequest, now time.Time) (hongguoModuleResult, error) {
+	if len(raw) > hongguoModuleResultLimit {
+		return hongguoModuleResult{}, errors.New("紅果 JS 模組資料過大")
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+		return hongguoModuleResult{}, errors.New("紅果 JS 模組回傳資料無效")
+	}
+	if _, ok := envelope["version"]; ok {
+		return decodeHongguoJSModuleResult(raw)
+	}
+	var wire struct {
+		Parse *int `json:"parse"`
+		URL string `json:"url"`
+		Header map[string]string `json:"header"`
+		DecryptionKey *string `json:"decryptionKey"`
+		MediaBytes int64 `json:"mediaBytes"`
+		Quality int `json:"quality"`
+		Qualities []int `json:"qualities"`
+		ExpiresAt int64 `json:"expiresAt"`
+		EpisodeID string `json:"episodeId"`
+		DanmakuID string `json:"danmakuId"`
+		Error string `json:"error"`
+	}
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&wire); err != nil || dec.Decode(new(any)) != io.EOF ||
+		wire.Parse == nil || *wire.Parse != 0 || wire.Error != "" ||
+		wire.EpisodeID != request.videoID || wire.DanmakuID != "hongguo:"+request.seriesID+":"+request.videoID {
+		return hongguoModuleResult{}, errors.New("紅果播放結果無效或分集不符")
+	}
+	if wire.DecryptionKey == nil || *wire.DecryptionKey != "" {
+		return hongguoModuleResult{}, errors.New("紅果播放結果未確認為未受保護媒體")
+	}
+	// Never forward headers from a module to the player. If a URL requires
+	// special credentials, use the platform's supported playback environment.
+	for name := range wire.Header {
+		switch strings.ToLower(strings.TrimSpace(name)) {
+		case "user-agent", "referer", "accept":
+		default:
+			return hongguoModuleResult{}, errors.New("紅果播放結果要求不受支援的請求標頭")
+		}
+	}
+	if wire.ExpiresAt <= now.Add(5*time.Second).UnixMilli() ||
+		wire.Quality < 720 || wire.Quality > 16384 {
+		return hongguoModuleResult{}, errors.New("紅果播放網址已過期、即將到期或畫質不符")
+	}
+	result := hongguoModuleResult{
+		Version: hongguoModuleContractVersion, SeriesID: request.seriesID, VideoID: request.videoID,
+		Streams: []hongguoModuleStream{{URL: wire.URL, Quality: wire.Quality}},
+	}
+	if _, err := hongguoModuleMedia(request, result); err != nil {
+		return hongguoModuleResult{}, err
 	}
 	return result, nil
 }
