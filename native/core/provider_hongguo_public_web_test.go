@@ -83,3 +83,23 @@ func TestHongguoPublicWebFallbackDuringSDKPlaybackCooldown(t *testing.T) {
 		t.Fatalf("non-public episode must stop at detail: requests=%d err=%v",requests,err)
 	}
 }
+
+func TestHongguoPublicWebPortraitQualityAndBackups(t *testing.T) {
+	const sid = "7710822671759461438"
+	const vid = "7710822671759461439"
+	body := strings.Replace(publicWebPlayerFixture, `"height":1080`, `"width":720,"height":1280,"backup_url":"https://b.qznovelvod.com/episode.mp4","backup_url_list":["https://b.qznovelvod.com/episode.mp4","https://c.qznovelvod.com/episode.mp4","https://qznovelvod.com.example.test/episode.mp4","https://d.qznovelvod.com:8080/episode.mp4"]`, 1)
+	media, err := hongguoPublicWebMediaFromPage(body, sid, vid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if media.Quality != 720 || len(media.Variants) != 3 {
+		t.Fatalf("quality=%d variants=%d", media.Quality, len(media.Variants))
+	}
+	if media.Variants[1].URL != "https://b.qznovelvod.com/episode.mp4" || media.Variants[2].URL != "https://c.qznovelvod.com/episode.mp4" {
+		t.Fatal("backup route order or filtering incorrect")
+	}
+	body = strings.Replace(body, `"width":720`, `"width":480`, 1)
+	if _, err := hongguoPublicWebMediaFromPage(body, sid, vid); err == nil {
+		t.Fatal("portrait video below 720p unexpectedly accepted")
+	}
+}
