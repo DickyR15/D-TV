@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -135,5 +136,45 @@ func TestHongguoJSModuleSessionSerializesConcurrentCalls(t *testing.T) {
 			t.Fatalf("unexpected concurrent result: %+v", got)
 		}
 		seen[got.duration] = true
+	}
+}
+
+func TestHongguoTHLStyleModuleResult(t *testing.T) {
+	backend, err := newHongguoJSModuleBackend(`
+		function resolveMedia(seriesId, videoId) {
+			return JSON.stringify({
+				parse:0, url:"https://example.test/full.mp4", header:{"User-Agent":"fixture"},
+				decryptionKey:"", mediaBytes:1000, quality:1080, qualities:[1080,720],
+				expiresAt:Date.now()+30000, episodeId:videoId, danmakuId:"hongguo:"+seriesId+":"+videoId
+			});
+		}
+	`)
+	if err != nil { t.Fatal(err) }
+	media, err := backend.resolve(context.Background(), hongguoPlaybackRequest{seriesID:"1",videoID:"2"})
+	if err != nil || media.Quality != 1080 || media.URL != "https://example.test/full.mp4" || len(media.Variants) != 1 {
+		t.Fatalf("unexpected THL-style result: %+v %v", media, err)
+	}
+}
+
+func TestHongguoTHLStyleModuleRejectsUnsafeOrStaleResults(t *testing.T) {
+	now := time.UnixMilli(1700000000000)
+	request := hongguoPlaybackRequest{seriesID:"1",videoID:"2"}
+	const good = `{"parse":0,"url":"https://example.test/full.mp4","header":{},"decryptionKey":"","quality":1080,"expiresAt":1700000030000,"episodeId":"2","danmakuId":"hongguo:1:2"}`
+	if _, err := decodeHongguoJSPlaybackResult(good, request, now); err != nil { t.Fatal(err) }
+	for _, tc := range []struct{ old, replacement string }{
+		{`"episodeId":"2"`, `"episodeId":"3"`},
+		{`"hongguo:1:2"`, `"hongguo:9:2"`},
+		{`"decryptionKey":""`, `"decryptionKey":"fixture"`},
+		{`"decryptionKey":"",`, ""},
+		{`"expiresAt":1700000030000`, `"expiresAt":1700000004000`},
+		{`"quality":1080`, `"quality":480`},
+		{`"header":{}`, `"header":{"Authorization":"fixture"}`},
+		{`"parse":0`, `"parse":1`},
+		{`"parse":0`, `"parse":0,"error":"EMPTY_RESPONSE"`},
+	} {
+		raw := strings.Replace(good, tc.old, tc.replacement, 1)
+		if _, err := decodeHongguoJSPlaybackResult(raw, request, now); err == nil {
+			t.Fatalf("invalid fixture accepted: %s", tc.old)
+		}
 	}
 }
