@@ -772,7 +772,6 @@ func hongguoSDKPlaybackToNativeMedia(playback *model.Playback) (providerMedia, e
 		score int
 	}
 	var choices []scored
-	seen := map[string]bool{}
 	for _, stream := range playback.Streams {
 		codecRank := hongguoSDKCodecRank(stream.Codec)
 		if codecRank == 0 {
@@ -784,10 +783,9 @@ func hongguoSDKPlaybackToNativeMedia(playback *model.Playback) (providerMedia, e
 		addresses := []string{stream.URL, stream.BackupURL}
 		for _, rawAddress := range addresses {
 			address := strings.TrimSpace(rawAddress)
-			if address == "" || seen[address] || !isProviderHTTPMediaURL(address) {
+			if address == "" || !isProviderHTTPMediaURL(address) {
 				continue
 			}
-			seen[address] = true
 			media := providerMedia{
 				URL: address, Referer: "https://novelquickapp.com/",
 				Duration: duration, Quality: quality,
@@ -804,8 +802,15 @@ func hongguoSDKPlaybackToNativeMedia(playback *model.Playback) (providerMedia, e
 		return providerMedia{}, errors.New("紅果 SDK 回傳的播放網址或編碼不受支援")
 	}
 	sort.SliceStable(choices, func(i, j int) bool { return choices[i].score > choices[j].score })
+	// Deduplicate after sorting: a URL repeated in multiple model entries
+	// must retain its best supported quality rather than the first entry.
 	selected := choices[0].media
+	seen := make(map[string]bool)
 	for _, choice := range choices {
+		if seen[choice.media.URL] {
+			continue
+		}
+		seen[choice.media.URL] = true
 		selected.Variants = append(selected.Variants, choice.media)
 	}
 	return selected, nil
