@@ -76,7 +76,32 @@ func hongguoPlaybackRequestOrigin(ctx context.Context) string {
 }
 
 func (d *Downloader) resolveHongguoMedia(ctx context.Context, task Task) (providerMedia, error) {
-	return d.resolveHongguoMediaWithBackend(ctx, task, hongguoSDKPlaybackBackend{downloader: d})
+	media, err := d.resolveHongguoMediaWithBackend(ctx, task, hongguoSDKPlaybackBackend{downloader: d})
+	if err == nil || ctx.Err() != nil {
+		return media, err
+	}
+	// Public website access is a separate, explicitly published scope.
+	// Do not retry signed App requests or fall back on authentication,
+	// verification, DRM, rate limits or registration rejection.
+	origin := hongguoPlaybackRequestOrigin(ctx)
+	if (origin != "resolve" && origin != "prepareHandoff") ||
+		(!errors.Is(err, openhongguo.ErrAnonymousLimited) && !errors.Is(err, errHongguoSDKPlaybackCooling)) {
+		return media, err
+	}
+	source, seriesID, ok := splitProviderDramaID(task.DramaID)
+	videoID := hongguoChapterVideoID(seriesID, task.Chapter)
+	if !ok || source != sourceHongguo || hongguoExactID(seriesID) == "" || videoID == "" || task.Chapter.VIP {
+		return media, err
+	}
+	publicMedia, publicErr := d.resolveHongguoPublicWebEpisode(ctx, seriesID, videoID)
+	if publicErr == nil {
+		d.recordDiagnostic(diagnosticEvent{Level: "info", Event: "hongguo.public_web_playback", Source: sourceHongguo, Message: "官網開放分集取得公開影片網址"})
+		return publicMedia, nil
+	}
+	if ctx.Err() != nil {
+		return providerMedia{}, ctx.Err()
+	}
+	return providerMedia{}, fmt.Errorf("%w；官網開放分集：%v", err, publicError(publicErr))
 }
 
 // Backend selection is a native integration boundary, not a remote script or
