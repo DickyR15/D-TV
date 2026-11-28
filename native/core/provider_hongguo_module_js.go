@@ -28,41 +28,104 @@ func newHongguoJSModuleBackend(script string) (hongguoModuleBackend, error) {
 	if err != nil {
 		return hongguoModuleBackend{}, errors.New("紅果 JS 模組編譯失敗")
 	}
-	return hongguoModuleBackend{load: func(ctx context.Context, request hongguoPlaybackRequest) (hongguoModuleResult, error) {
-		ctx, cancel := context.WithTimeout(ctx, hongguoModuleExecutionLimit)
-		defer cancel()
-		if err := ctx.Err(); err != nil {
-			return hongguoModuleResult{}, err
+	session := &hongguoJSModuleSession{program: program, gate: make(chan struct{}, 1)}
+	return hongguoModuleBackend{load: session.load}, nil
+}
+
+// Session ownership is local to one reviewed adapter instance. Callers must
+// create a new backend when replacing a module or changing user profiles.
+// No account credentials, device identity or playback keys are persisted.
+type hongguoJSModuleSession struct {
+	program *goja.Program
+	gate chan struct{}
+	vm *goja.Runtime
+	resolve goja.Callable
+	lastUsed time.Time
+	calls int
+}
+
+const (
+	hongguoJSModuleIdleLimit = 2 * time.Minute
+	hongguoJSModuleMaxCalls = 64
+)
+
+func (s *hongguoJSModuleSession) reset() {
+	s.vm = nil
+	s.resolve = nil
+	s.lastUsed = time.Time{}
+	s.calls = 0
+}
+
+func (s *hongguoJSModuleSession) load(parent context.Context, request hongguoPlaybackRequest) (result hongguoModuleResult, err error) {
+	ctx, cancel := context.WithTimeout(parent, hongguoModuleExecutionLimit)
+	defer cancel()
+	select {
+	case s.gate <- struct{}{}:
+		defer func() { <-s.gate }()
+	case <-ctx.Done():
+		return hongguoModuleResult{}, ctx.Err()
+	}
+	if err := ctx.Err(); err != nil {
+		return hongguoModuleResult{}, err
+	}
+	if s.vm != nil && (time.Since(s.lastUsed) >= hongguoJSModuleIdleLimit || s.calls >= hongguoJSModuleMaxCalls) {
+		s.reset()
+	}
+	fresh := s.vm == nil
+	if fresh {
+		s.vm = goja.New()
+		s.vm.SetMaxCallStackSize(256)
+	}
+	vm := s.vm
+	interruptDone := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		defer close(interruptDone)
+		vm.Interrupt(ctx.Err())
+	})
+	defer func() {
+		// Wait for any started interrupt before releasing the session gate.
+		// Never let a late cancellation interrupt a later request.
+		if !stop() {
+			<-interruptDone
 		}
-		vm := goja.New()
-		vm.SetMaxCallStackSize(256)
-		stop := context.AfterFunc(ctx, func() { vm.Interrupt(ctx.Err()) })
-		defer stop()
-		if _, err := vm.RunProgram(program); err != nil {
-			if ctx.Err() != nil {
-				return hongguoModuleResult{}, ctx.Err()
-			}
+		if ctx.Err() != nil {
+			result, err = hongguoModuleResult{}, ctx.Err()
+		}
+		if err != nil {
+			s.reset()
+		} else {
+			s.calls++
+			s.lastUsed = time.Now()
+		}
+	}()
+	if fresh {
+		if _, err := vm.RunProgram(s.program); err != nil {
 			return hongguoModuleResult{}, errors.New("紅果 JS 模組初始化失敗")
 		}
 		resolve, ok := goja.AssertFunction(vm.Get("resolveMedia"))
 		if !ok {
 			return hongguoModuleResult{}, errors.New("紅果 JS 模組缺少 resolveMedia")
 		}
-		value, err := resolve(goja.Undefined(), vm.ToValue(request.seriesID), vm.ToValue(request.videoID))
-		if ctx.Err() != nil {
-			return hongguoModuleResult{}, ctx.Err()
-		}
-		if err != nil {
-			return hongguoModuleResult{}, errors.New("紅果 JS 模組執行失敗")
-		}
-		// Only JSON strings cross the boundary. Never export an arbitrary
-		// JS object graph into Go, and do not log URLs or script exceptions.
-		raw, ok := value.(goja.String)
-		if !ok || raw.Length() > hongguoModuleResultLimit {
-			return hongguoModuleResult{}, errors.New("紅果 JS 模組回傳格式無效")
-		}
-		return decodeHongguoJSModuleResult(raw.String())
-	}}, nil
+		s.resolve = resolve
+	}
+	value, err := s.resolve(goja.Undefined(), vm.ToValue(request.seriesID), vm.ToValue(request.videoID))
+	if err != nil {
+		return hongguoModuleResult{}, errors.New("紅果 JS 模組執行失敗")
+	}
+	raw, ok := value.(goja.String)
+	if !ok || raw.Length() > hongguoModuleResultLimit {
+		return hongguoModuleResult{}, errors.New("紅果 JS 模組回傳格式無效")
+	}
+	result, err = decodeHongguoJSModuleResult(raw.String())
+	if err != nil {
+		return hongguoModuleResult{}, err
+	}
+	// Discard state after an invalid response, including an incorrect ID,
+	// a preview-only result or a protected-media response.
+	if _, err := hongguoModuleMedia(request, result); err != nil {
+		return hongguoModuleResult{}, err
+	}
+	return result, nil
 }
 
 func decodeHongguoJSModuleResult(raw string) (hongguoModuleResult, error) {
