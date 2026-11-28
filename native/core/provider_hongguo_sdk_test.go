@@ -567,3 +567,18 @@ func TestHongguoIndependentBackendRejectsEmptyMedia(t *testing.T) {
 		t.Fatalf("empty media was not rejected: %v", err)
 	}
 }
+
+func TestHongguoSDKDuplicateURLPreservesHighestQuality(t *testing.T) {
+	const shared = "https://media.test/shared.mp4"
+	playback := &model.Playback{Streams: []model.Stream{
+		{Definition: "720p", Codec: "h264", Width: 720, Height: 1280, URL: shared},
+		{Definition: "1080p", Codec: "h264", Width: 1080, Height: 1920, URL: shared, BackupURL: "https://backup.test/1080.mp4"},
+	}}
+	media, err := hongguoSDKPlaybackToNativeMedia(playback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if media.URL != shared || media.Quality != 1080 || len(media.Variants) != 2 || media.Variants[0].Quality != 1080 {
+		t.Fatalf("duplicate stream mapping: quality=%d routes=%d", media.Quality, len(media.Variants))
+	}
+}
