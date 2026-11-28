@@ -155,8 +155,55 @@ func (session *hongguoSDKClientSession) playbackCooldownError() error {
 		errHongguoSDKPlaybackCooling, seconds)
 }
 
+// The pinned SDK accepts absent Content-Encoding or gzip, but HTTP can
+// explicitly return identity. Normalize only equivalent representation
+// metadata; never change the signed request or the response payload.
+func hongguoSDKResponseEncoding(value string) string {
+	switch normalized := strings.ToLower(strings.TrimSpace(value)); normalized {
+	case "", "identity":
+		return ""
+	case "gzip":
+		return "gzip"
+	default:
+		return value
+	}
+}
+
+// Describe response shape without exposing media URLs, identifiers,
+// credentials, or response body content.
+func hongguoSDKPlaybackResponseShape(body []byte, encoding string) string {
+	if len(body) == 0 {
+		return "wire_empty"
+	}
+	if hongguoSDKResponseEncoding(encoding) != "" {
+		return "encoded_body"
+	}
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 {
+		return "whitespace_only"
+	}
+	if bytes.Equal(body, []byte("null")) {
+		return "json_null"
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(body, &object); err != nil {
+		return "non_object_or_invalid_json"
+	}
+	if len(object) == 0 {
+		return "empty_json_object"
+	}
+	if data, ok := object["data"]; ok {
+		data = bytes.TrimSpace(data)
+		if bytes.Equal(data, []byte("null")) || bytes.Equal(data, []byte("{}")) || bytes.Equal(data, []byte("[]")) {
+			return "empty_data"
+		}
+		return "data_present"
+	}
+	return "data_not_present"
+}
+
 func (downloader *Downloader) recordHongguoSDKPlaybackResponse(
-	method, host, path string, status, responseBytes int, contentType, contentEncoding string,
+	method, host, path string, status, responseBytes int, contentType, contentEncoding, responseShape string,
 ) {
 	responseType := strings.TrimSpace(strings.SplitN(contentType, ";", 2)[0])
 	level := "info"
@@ -170,8 +217,8 @@ func (downloader *Downloader) recordHongguoSDKPlaybackResponse(
 		Level: level, Event: "hongguo.sdk_playback_http_response",
 		Source: sourceHongguo, Host: host, HTTPStatus: status, ResponseType: responseType,
 		Message: fmt.Sprintf(
-			"method=%s path=%s response_bytes=%d content_encoding=%s result=%s",
-			method, path, responseBytes, strings.TrimSpace(contentEncoding), result,
+			"method=%s path=%s response_bytes=%d content_encoding=%s result=%s response_shape=%s",
+			method, path, responseBytes, strings.TrimSpace(contentEncoding), result, responseShape,
 		),
 	})
 }
@@ -219,7 +266,7 @@ type hongguoSDKTransport struct {
 	client               *http.Client
 	onRegistrationStatus func(int)
 	onTransportFailure   func(host, stage, kind string, elapsed time.Duration)
-	onPlaybackResponse   func(method, host, path string, status, responseBytes int, contentType, contentEncoding string)
+	onPlaybackResponse   func(method, host, path string, status, responseBytes int, contentType, contentEncoding, responseShape string)
 }
 
 func (t hongguoSDKTransport) Do(ctx context.Context, input *openhongguo.Request) (*openhongguo.Response, error) {
@@ -278,6 +325,12 @@ func (t hongguoSDKTransport) Do(ctx context.Context, input *openhongguo.Request)
 		if len(values) == 0 || strings.EqualFold(name, "Set-Cookie") || strings.EqualFold(name, "Cookie") {
 			continue
 		}
+		if strings.EqualFold(name, "Content-Encoding") {
+			if encoding := hongguoSDKResponseEncoding(values[0]); encoding != "" {
+				headers[name] = encoding
+			}
+			continue
+		}
 		headers[name] = values[0]
 	}
 	cookies := make(map[string]string)
@@ -293,6 +346,7 @@ func (t hongguoSDKTransport) Do(ctx context.Context, input *openhongguo.Request)
 			method, request.URL.Hostname(), request.URL.Path,
 			response.StatusCode, len(body),
 			response.Header.Get("Content-Type"), response.Header.Get("Content-Encoding"),
+			hongguoSDKPlaybackResponseShape(body, response.Header.Get("Content-Encoding")),
 		)
 	}
 	return &openhongguo.Response{
