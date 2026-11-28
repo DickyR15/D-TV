@@ -582,3 +582,48 @@ func TestHongguoSDKDuplicateURLPreservesHighestQuality(t *testing.T) {
 		t.Fatalf("duplicate stream mapping: quality=%d routes=%d", media.Quality, len(media.Variants))
 	}
 }
+
+func TestHongguoSDKTransportAcceptsExplicitIdentityEncoding(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Encoding", "identity")
+		_, _ = w.Write([]byte(`{"data":{"example":true}}`))
+	}))
+	defer server.Close()
+	transport := hongguoSDKTransport{client: server.Client()}
+	response, err := transport.Do(context.Background(), &openhongguo.Request{
+		Method: http.MethodGet, URL: server.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key := range response.Headers {
+		if strings.EqualFold(key, "Content-Encoding") {
+			t.Fatal("identity encoding must be normalized to absent")
+		}
+	}
+	if string(response.Body) != `{"data":{"example":true}}` {
+		t.Fatal("response body must remain unchanged")
+	}
+}
+
+func TestHongguoSDKPlaybackResponseShape(t *testing.T) {
+	for _, tc := range []struct {
+		body, encoding, want string
+	}{
+		{"", "", "wire_empty"},
+		{"  \n\t", "identity", "whitespace_only"},
+		{"null", "", "json_null"},
+		{"{}", "", "empty_json_object"},
+		{`{"data":null}`, "", "empty_data"},
+		{`{"data":[]}`, "", "empty_data"},
+		{`{"data":{}}`, "identity", "empty_data"},
+		{`{"data":{"example":true}}`, "", "data_present"},
+		{`{"code":1}`, "", "data_not_present"},
+		{"not json", "", "non_object_or_invalid_json"},
+		{"compressed bytes", "gzip", "encoded_body"},
+	} {
+		if got := hongguoSDKPlaybackResponseShape([]byte(tc.body), tc.encoding); got != tc.want {
+			t.Errorf("response shape=%q want=%q", got, tc.want)
+		}
+	}
+}
