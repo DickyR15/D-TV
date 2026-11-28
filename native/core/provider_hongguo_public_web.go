@@ -75,15 +75,10 @@ func hongguoPublicWebMediaFromPage(body, seriesID, videoID string) (providerMedi
 			return providerMedia{}, errors.New("官網未提供可確認的完整未加密影片")
 		}
 	}
-	address, _ := info["main_url"].(string)
-	u, err := url.Parse(address)
-	if err != nil || u.Scheme != "https" || u.User != nil || u.Fragment != "" ||
-		!strings.HasSuffix(strings.ToLower(u.Hostname()), ".qznovelvod.com") ||
-		!isProviderHTTPMediaURL(address) {
-		return providerMedia{}, errors.New("官網未提供有效的公開影片網址")
-	}
-	quality, _ := strconv.Atoi(mapString(info, "height"))
-	if quality < 0 || quality > 16384 || (quality > 0 && quality < 720) {
+	width, _ := strconv.Atoi(mapString(info, "width", "vwidth"))
+	height, _ := strconv.Atoi(mapString(info, "height", "vheight"))
+	quality := hongguoMediaShortEdgeQuality(width, height, 0)
+	if width < 0 || width > 16384 || height < 0 || height > 16384 || (quality > 0 && quality < 720) {
 		return providerMedia{}, errors.New("官網公開影片畫質低於要求或無效")
 	}
 	seconds, _ := strconv.ParseFloat(mapString(info, "duration"), 64)
@@ -91,5 +86,43 @@ func hongguoPublicWebMediaFromPage(body, seriesID, videoID string) (providerMedi
 	if seconds > 0 && seconds <= 86400 {
 		duration = time.Duration(seconds * float64(time.Second))
 	}
-	return providerMedia{URL: address, Referer: hongguoBaseURL+"/", Quality: quality, Duration: duration}, nil
+	// Only consider explicit, unencrypted URLs in this already validated
+	// public episode response. Do not synthesize a CDN URL or change tokens.
+	var variants []providerMedia
+	seen := make(map[string]bool)
+	add := func(raw any) {
+		address, ok := raw.(string)
+		if !ok {
+			return
+		}
+		address = strings.TrimSpace(address)
+		u, err := url.Parse(address)
+		if err != nil || u.Scheme != "https" || u.User != nil || u.Fragment != "" ||
+			(u.Port() != "" && u.Port() != "443") ||
+			!strings.HasSuffix(strings.ToLower(u.Hostname()), ".qznovelvod.com") ||
+			!isProviderHTTPMediaURL(address) || seen[address] {
+			return
+		}
+		seen[address] = true
+		variants = append(variants, providerMedia{URL: address, Referer: hongguoBaseURL + "/", Quality: quality, Duration: duration})
+	}
+	add(info["main_url"])
+	// The primary must still be a valid public URL before accepting backups.
+	if len(variants) == 0 {
+		return providerMedia{}, errors.New("官網未提供有效的公開影片網址")
+	}
+	for _, key := range []string{"backup_url", "backup_url_1", "backup_url_2"} {
+		add(info[key])
+	}
+	for _, key := range []string{"backup_url_list", "backup_urls"} {
+		for _, raw := range anyList(info[key]) {
+			if len(variants) >= 8 {
+				break
+			}
+			add(raw)
+		}
+	}
+	selected := variants[0]
+	selected.Variants = variants
+	return selected, nil
 }
